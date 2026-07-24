@@ -1,29 +1,28 @@
-//! Plugin discovery (PR21): listing the components in a directory and reading their genuinely
-//! declared metadata straight off the compiled component — no invented or hand-maintained manifest.
+//! Plugin discovery over the ADR 0014 §2 **bundle** format: each plugin is a directory `<id>/`
+//! holding a `plugin.toml` manifest, a `plugin.wasm` component, an optional `plugin.sig` detached
+//! signature, and any `i18n/` catalogue. Discovery reads the manifest, classifies the bundle into a
+//! [`TrustTier`] by verifying its signature against the trust roots (A2), and **cross-checks** the
+//! manifest against what the component genuinely imports/exports.
 //!
-//! **What is (and is not) readable today.** ADR 0007 §8 names a bundle-metadata format carrying a
-//! plugin's own stable id, its own semver version, and its declared capability *requests* — but that
-//! format is not implemented; it is deferred to ADR 0014 (bundles/signing/trust tiers), which this PR
-//! explicitly does not build. Until then:
+//! **The manifest is the authoritative grant-request** (ADR 0014 §2): its declared `capabilities`
+//! are what the grant UX surfaces, so [`PluginInfo::capabilities`] carries the *manifest's* declared
+//! set, not the component's imports. The cross-check guarantees the manifest cannot lie about what
+//! the code will attempt:
 //!
-//! - **id** is the component file's stem (the same convention [`crate::PluginHost::load_by_id`]
-//!   already uses to find a component by id) — genuine, but a filesystem convention, not a
-//!   self-declared identity.
-//! - **`host_api_version`** is the `genealogy:host-api@X.Y.Z` version embedded in the component's
-//!   *imported* WIT interface names (e.g. `genealogy:host-api/log@0.14.0`). This is the host-API
-//!   package version the plugin was compiled against (ADR 0007 §2) — **not** a plugin-owned semver
-//!   (no such field exists on the component).
-//! - **`role`** is inferred from which entry point the component *exports* (`run-import` →
-//!   [`PluginRole::BulkImport`], etc.) — genuine, derived from the WIT world it implements.
-//! - **`capabilities`** are the [`Capability`] variants whose WIT interface
-//!   (`genealogy:host-api/<name>`) the component *imports* — genuine, read via
-//!   [`wasmtime::component::types::Component::imports`], not guessed or hand-maintained per plugin.
+//! - `role` and `host_api` must match the component **exactly** (the role it exports, the
+//!   `genealogy:host-api@X.Y.Z` version it imports).
+//! - the component's genuinely imported capabilities must be a **subset** of the manifest's declared
+//!   capabilities. wit-bindgen tree-shakes unused capability imports out of a component, so a
+//!   component's *actual* imports are a subset of what its world/manifest declares (e.g. `ai` may be
+//!   declared/granted yet tree-shaken out). A manifest declaring **more** than the component imports
+//!   is therefore legitimate; only a component importing a capability the manifest does **not**
+//!   declare (under-declaration) is an error.
 //!
-//! This is honestly a **declared-by-the-component-itself** capability list, not a capability the user
-//! has granted (that remains a separate [`Grants`] the frontend builds — deny-by-default, ADR 0011
-//! §2) and not a verified/signed manifest (ADR 0007 §9, deferred).
+//! The three-layer override across workspace/app-dir/embedded lives one level up in
+//! `genealogy-app` (`plugins::resolve_bundles`), mirroring the i18n multiplexor; the host stays
+//! single-dir — [`PluginHost::discover`] scans one directory of bundles.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use wasmtime::Engine;
 use wasmtime::component::Component;
@@ -31,6 +30,7 @@ use wasmtime::component::Component;
 use crate::PluginHost;
 use crate::capability::Capability;
 use crate::error::PluginError;
+use crate::signing::PluginManifest;
 use crate::trust::{self, TrustRoots, TrustTier};
 
 /// The plugin role a component implements, inferred from the entry point(s) it exports (ADR 0011
@@ -51,49 +51,79 @@ pub enum PluginRole {
     Unknown,
 }
 
-/// A plugin component's genuinely declared metadata, read off the compiled `.wasm` itself.
-///
-/// See the module docs for exactly what is (and is not) self-declared today versus deferred to
-/// ADR 0014.
+/// A discovered plugin bundle's metadata: the manifest's authoritative declaration (ADR 0014 §2),
+/// cross-checked against the component and joined with the bundle's on-disk location and trust tier.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginInfo {
-    /// The plugin's id — the component file's stem (e.g. `gedcom-import`).
+    /// The plugin's id (the manifest's `id`; the bundle directory is named after it).
     pub id: String,
-    /// The role inferred from its exported entry point.
+    /// The role, verified to match both the manifest's `role` and the component's exported entry
+    /// point.
     pub role: PluginRole,
-    /// The `genealogy:host-api` package version this component was compiled against.
+    /// The `genealogy:host-api` package version, verified to match both the manifest's `host_api`
+    /// and the version embedded in the component's imported interfaces.
     pub host_api_version: String,
-    /// The capabilities this component's world imports (declared, not yet granted).
+    /// The capabilities the manifest **declares** — the authoritative grant-request the UX surfaces.
+    /// The component's genuinely imported capabilities were verified to be a subset of this set (the
+    /// manifest may declare more; wit-bindgen tree-shakes unused imports out of the component).
     pub capabilities: Vec<Capability>,
-    /// The trust tier its A1 signature sidecars place it in (ADR 0014 §3): unsigned → `Untrusted`,
-    /// a signature verifying against a sanctioned/user-pinned key → `Sanctioned`/`UserTrusted`.
+    /// The trust tier its signature places it in (ADR 0014 §3): unsigned → `Untrusted`, a signature
+    /// verifying against a sanctioned/user-pinned key → `Sanctioned`/`UserTrusted`.
     pub trust: TrustTier,
+    /// The bundle directory, so a caller can `load_bundle` the resolved plugin (ADR 0014 §2).
+    pub bundle_dir: PathBuf,
 }
 
 /// Maps a WIT interface import name (`genealogy:host-api/<name>@<version>`) to the [`Capability`] it
-/// represents, and — for the `log` interface, arbitrarily but consistently — the host-API version.
+/// represents and the host-API version it pins.
 fn capability_for_interface(name: &str) -> Option<(Capability, &str)> {
     let rest = name.strip_prefix("genealogy:host-api/")?;
     let (interface, version) = rest.split_once('@')?;
-    let capability = match interface {
-        "log" => Capability::Log,
-        "query" => Capability::Query,
-        "commands" => Capability::Commands,
-        "progress" => Capability::Progress,
-        "import-source" => Capability::ImportSource,
-        "export-sink" => Capability::ExportSink,
-        "net" => Capability::Net,
-        "media-store" => Capability::MediaStore,
-        "ai" => Capability::Ai,
-        "present" => Capability::Present,
-        _ => return None,
-    };
+    let capability = capability_from_name(interface)?;
     Some((capability, version))
 }
 
-/// Inspects `component`'s imports/exports and derives its [`PluginInfo`] (everything but `id`, which
-/// the caller supplies from the file name).
-fn inspect(engine: &Engine, component: &Component) -> PluginInfo {
+/// Maps a bare capability interface name (as it appears in a `plugin.toml` `capabilities` entry) to
+/// its [`Capability`], or `None` for an unknown name.
+fn capability_from_name(name: &str) -> Option<Capability> {
+    match name {
+        "log" => Some(Capability::Log),
+        "query" => Some(Capability::Query),
+        "commands" => Some(Capability::Commands),
+        "progress" => Some(Capability::Progress),
+        "import-source" => Some(Capability::ImportSource),
+        "export-sink" => Some(Capability::ExportSink),
+        "net" => Some(Capability::Net),
+        "media-store" => Some(Capability::MediaStore),
+        "ai" => Some(Capability::Ai),
+        "present" => Some(Capability::Present),
+        _ => None,
+    }
+}
+
+/// Maps a `plugin.toml` `role` string to the [`PluginRole`] it names, or `None` for an unknown role.
+fn role_from_manifest(role: &str) -> Option<PluginRole> {
+    match role {
+        "bulk-import" => Some(PluginRole::BulkImport),
+        "bulk-export" => Some(PluginRole::BulkExport),
+        "ui-panel" => Some(PluginRole::UiPanel),
+        "assisted-import" => Some(PluginRole::AssistedImport),
+        "test-fixture" => Some(PluginRole::TestFixture),
+        _ => None,
+    }
+}
+
+/// What [`inspect`] reads straight off the compiled component: its exported role, the host-API
+/// version its imports pin, and the capabilities it genuinely imports (post-tree-shake).
+struct Inspected {
+    role: PluginRole,
+    host_api_version: String,
+    capabilities: Vec<Capability>,
+}
+
+/// Inspects `component`'s imports/exports (the genuinely-declared-by-the-code facts the cross-check
+/// validates the manifest against).
+fn inspect(engine: &Engine, component: &Component) -> Inspected {
     let ty = component.component_type();
 
     let mut capabilities = Vec::new();
@@ -128,20 +158,17 @@ fn inspect(engine: &Engine, component: &Component) -> PluginInfo {
         _ => PluginRole::Unknown,
     };
 
-    PluginInfo {
-        id: String::new(),
+    Inspected {
         role,
         host_api_version,
         capabilities,
-        // Overwritten by `discover` once the bundle sidecars have been classified; `inspect` reads
-        // only the component itself and knows nothing of the on-disk signature.
-        trust: TrustTier::Untrusted,
     }
 }
 
-/// Reads a bundle sidecar (`<id>.plugin.toml` / `<id>.sig`), returning `None` when it is absent
-/// (an unsigned dev component) and a [`PluginError::Runtime`] on any other I/O failure.
-fn read_optional_sidecar(path: &Path) -> Result<Option<Vec<u8>>, PluginError> {
+/// Reads the optional `plugin.sig` beside the manifest, returning `None` when it is absent (an
+/// unsigned bundle → [`TrustTier::Untrusted`]) and a [`PluginError::Runtime`] on any other I/O
+/// failure.
+fn read_optional_signature(path: &Path) -> Result<Option<Vec<u8>>, PluginError> {
     match std::fs::read(path) {
         Ok(bytes) => Ok(Some(bytes)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -149,40 +176,106 @@ fn read_optional_sidecar(path: &Path) -> Result<Option<Vec<u8>>, PluginError> {
     }
 }
 
-/// Classifies the bundle for `id` from its A1 sidecars beside `wasm_path` (ADR 0014 §3). Both
-/// sidecars absent → `Untrusted` (unsigned, loadable); both present → verified via [`trust::classify`]
-/// (a present-but-unverifiable signature is a hard error); exactly one present → an incomplete bundle
-/// (an error).
-fn classify_bundle(dir: &Path, id: &str, wasm_path: &Path, roots: &TrustRoots) -> Result<TrustTier, PluginError> {
-    let manifest = read_optional_sidecar(&dir.join(format!("{id}.plugin.toml")))?;
-    let signature = read_optional_sidecar(&dir.join(format!("{id}.sig")))?;
-    match (manifest, signature) {
-        (None, None) => Ok(TrustTier::Untrusted),
-        (Some(manifest), Some(signature)) => {
-            let wasm = std::fs::read(wasm_path).map_err(|error| {
-                PluginError::Runtime(format!("reading plugin component {}: {error}", wasm_path.display()))
-            })?;
-            // A3: also cross-check the manifest's declared capabilities/role/host_api against the
-            // component's real imports/exports here; A2 verifies only the signature.
-            trust::classify(roots, &manifest, &wasm, Some(&signature))
-        }
-        _ => Err(PluginError::Runtime(format!(
-            "plugin {id} has an incomplete bundle: its .plugin.toml manifest and .sig signature must both be present or both absent"
-        ))),
+/// Cross-checks `manifest` against the `inspected` component facts (ADR 0014 §2), returning the
+/// manifest's declared capabilities mapped to [`Capability`] on success.
+///
+/// See the module docs: `role`/`host_api` must match exactly, and the component's imported
+/// capabilities must be a subset of the manifest's declared set (declaring more is legitimate;
+/// under-declaring is the error). An unknown capability or role string in the manifest is an error.
+fn cross_check(id: &str, manifest: &PluginManifest, inspected: &Inspected) -> Result<Vec<Capability>, PluginError> {
+    let declared_role = role_from_manifest(&manifest.role).ok_or_else(|| {
+        PluginError::Runtime(format!(
+            "plugin {id} manifest declares unknown role {:?} (ADR 0014 §2)",
+            manifest.role
+        ))
+    })?;
+    if declared_role != inspected.role {
+        return Err(PluginError::Runtime(format!(
+            "plugin {id} manifest declares role {:?} but the component exports the {:?} entry point",
+            manifest.role, inspected.role
+        )));
     }
+    if manifest.host_api != inspected.host_api_version {
+        return Err(PluginError::Runtime(format!(
+            "plugin {id} manifest declares host-api {:?} but the component imports host-api {:?}",
+            manifest.host_api, inspected.host_api_version
+        )));
+    }
+
+    let mut declared = Vec::with_capacity(manifest.capabilities.len());
+    for name in &manifest.capabilities {
+        let capability = capability_from_name(name).ok_or_else(|| {
+            PluginError::Runtime(format!(
+                "plugin {id} manifest declares unknown capability {name:?} (ADR 0014 §2)"
+            ))
+        })?;
+        declared.push(capability);
+    }
+
+    for capability in &inspected.capabilities {
+        if !declared.contains(capability) {
+            return Err(PluginError::Runtime(format!(
+                "plugin {id} imports capability {capability:?} that its manifest does not declare — the \
+                 manifest under-declares what the code will attempt (ADR 0014 §2)"
+            )));
+        }
+    }
+
+    Ok(declared)
 }
 
 impl PluginHost {
-    /// Scans `dir` for `.wasm` components and reads each one's genuinely declared metadata (see the
-    /// module docs for exactly what that covers), then classifies each into a [`TrustTier`] by
-    /// verifying its A1 signature sidecars against `roots` (ADR 0014 §3). Non-`.wasm` entries are
-    /// skipped. Plugins are returned in no particular order.
+    /// Discovers, verifies, and cross-checks the single bundle directory `bundle_dir` (ADR 0014 §2),
+    /// returning its [`PluginInfo`]. Reads `bundle_dir/plugin.toml`, loads `bundle_dir/plugin.wasm`,
+    /// classifies against `roots` via any `bundle_dir/plugin.sig`, and cross-checks the manifest
+    /// against the component (see the module docs).
     ///
     /// # Errors
     ///
-    /// [`PluginError::Runtime`] if `dir` cannot be read, or if a `.wasm` file is not a valid
-    /// component; [`PluginError::Signature`] if a bundle carries a present-but-unverifiable
-    /// signature (fails closed).
+    /// [`PluginError::Runtime`] if the manifest is missing/unparseable, the component is missing or
+    /// invalid, or the manifest cross-check fails; [`PluginError::Signature`] if a present signature
+    /// verifies against no trusted key (fails closed).
+    pub fn discover_bundle(&self, bundle_dir: &Path, roots: &TrustRoots) -> Result<PluginInfo, PluginError> {
+        let manifest_path = bundle_dir.join("plugin.toml");
+        let wasm_path = bundle_dir.join("plugin.wasm");
+        let signature_path = bundle_dir.join("plugin.sig");
+
+        let manifest_bytes = std::fs::read(&manifest_path)
+            .map_err(|error| PluginError::Runtime(format!("reading {}: {error}", manifest_path.display())))?;
+        let manifest_text = String::from_utf8(manifest_bytes.clone())
+            .map_err(|error| PluginError::Runtime(format!("{} is not UTF-8: {error}", manifest_path.display())))?;
+        let manifest: PluginManifest = toml::from_str(&manifest_text)
+            .map_err(|error| PluginError::Runtime(format!("parsing {}: {error}", manifest_path.display())))?;
+
+        let component = self.load(&wasm_path)?;
+        let inspected = inspect(self.engine(), &component);
+        let capabilities = cross_check(&manifest.id, &manifest, &inspected)?;
+
+        let wasm_bytes = std::fs::read(&wasm_path)
+            .map_err(|error| PluginError::Runtime(format!("reading {}: {error}", wasm_path.display())))?;
+        let signature = read_optional_signature(&signature_path)?;
+        let trust = trust::classify(roots, &manifest_bytes, &wasm_bytes, signature.as_deref())?;
+
+        Ok(PluginInfo {
+            id: manifest.id,
+            role: inspected.role,
+            host_api_version: inspected.host_api_version,
+            capabilities,
+            trust,
+            bundle_dir: bundle_dir.to_path_buf(),
+        })
+    }
+
+    /// Scans `dir` for bundle subdirectories (each carrying a `plugin.toml`) and discovers each via
+    /// [`Self::discover_bundle`] (ADR 0014 §2). Non-directory entries and directories without a
+    /// `plugin.toml` are skipped. Plugins are returned in no particular order — the three-layer
+    /// override across directories lives in `genealogy-app`; this scans one layer.
+    ///
+    /// # Errors
+    ///
+    /// [`PluginError::Runtime`] if `dir` cannot be read, or a bundle is malformed (missing/invalid
+    /// component, bad manifest, failed cross-check); [`PluginError::Signature`] if a bundle carries
+    /// a present-but-unverifiable signature (fails closed).
     pub fn discover(&self, dir: &Path, roots: &TrustRoots) -> Result<Vec<PluginInfo>, PluginError> {
         let entries = std::fs::read_dir(dir)
             .map_err(|error| PluginError::Runtime(format!("reading plugins directory {}: {error}", dir.display())))?;
@@ -191,17 +284,10 @@ impl PluginHost {
         for entry in entries {
             let entry = entry.map_err(|error| PluginError::Runtime(format!("reading directory entry: {error}")))?;
             let path = entry.path();
-            if path.extension().and_then(|ext| ext.to_str()) != Some("wasm") {
+            if !path.is_dir() || !path.join("plugin.toml").is_file() {
                 continue;
             }
-            let Some(id) = path.file_stem().and_then(|stem| stem.to_str()) else {
-                continue;
-            };
-            let component = self.load(&path)?;
-            let mut info = inspect(self.engine(), &component);
-            id.clone_into(&mut info.id);
-            info.trust = classify_bundle(dir, id, &path, roots)?;
-            found.push(info);
+            found.push(self.discover_bundle(&path, roots)?);
         }
         Ok(found)
     }

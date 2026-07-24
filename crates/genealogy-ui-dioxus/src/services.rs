@@ -62,12 +62,9 @@ pub struct Services {
     pub open_workspace: String,
     /// The plugin host (shared; reused across plugin runs).
     pub host: Rc<PluginHost>,
-    /// The directory holding every built plugin component (the discovery scan root, PR21).
+    /// The embedded plugin layer (`target/plugins` in dev): the lowest-precedence ADR 0014 §4
+    /// loading layer and the base for resolving bundles across the workspace/app-dir/embedded order.
     pub plugins_dir: PathBuf,
-    /// Path to the built `ui-panel` plugin component.
-    pub plugin_path: PathBuf,
-    /// Directory of the `ui-panel` plugin's shipped Fluent catalogue (`<locale>/ui-panel.ftl`).
-    pub plugin_catalogue_dir: PathBuf,
 }
 
 /// The result of loading a data screen: the loaded outcome, or a localized error to show.
@@ -112,6 +109,29 @@ impl Services {
     /// The chrome localizer for the open workspace, honouring the configured UI language.
     fn chrome(&self) -> Chrome {
         Chrome::for_workspace(&self.dir, self.config_ui_language().as_ref())
+    }
+
+    /// The ADR 0014 §4 plugin layers, highest precedence first: the open workspace's `plugins/`, the
+    /// shared app-dir, then the embedded fleet. Absent layers are skipped (as the i18n multiplexor
+    /// skips absent dirs).
+    fn plugin_layers(&self) -> Vec<PathBuf> {
+        let shared = config::shared_plugins_dir().ok();
+        genealogy_app::plugin_layers(Some(&self.dir), shared.as_deref(), &self.plugins_dir)
+    }
+
+    /// Resolves plugin `id` to its bundle directory across the layers (ADR 0014 §4).
+    fn plugin_bundle(&self, id: &str) -> Option<PathBuf> {
+        genealogy_app::resolve_bundle(&self.plugin_layers(), id)
+    }
+
+    /// The resolved plugin's Fluent catalogue directory (`<bundle>/i18n`, ADR 0012 §5), falling back
+    /// to the embedded-layout path when the bundle is unresolved so i18n simply resolves to message
+    /// keys rather than erroring.
+    #[must_use]
+    pub fn plugin_catalogue_dir(&self, id: &str) -> PathBuf {
+        self.plugin_bundle(id)
+            .unwrap_or_else(|| self.plugins_dir.join(id))
+            .join("i18n")
     }
 
     /// The plugin trust roots for classification (ADR 0014 §3): the embedded sanctioned key(s) plus
@@ -602,21 +622,22 @@ pub struct PluginRow {
 pub async fn discover_plugins(services: Services) -> Result<Vec<PluginRow>, String> {
     let chrome = services.chrome();
     let roots = services.trust_roots()?;
-    let found = services
-        .host
-        .discover(&services.plugins_dir, &roots)
-        .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    let bundles = genealogy_app::resolve_bundles(&services.plugin_layers());
     let prefs = genealogy_app::read_plugin_preferences(&services.dir);
-    let mut rows: Vec<PluginRow> = found
-        .into_iter()
-        .map(|info| PluginRow {
+    let mut rows: Vec<PluginRow> = Vec::with_capacity(bundles.len());
+    for bundle_dir in bundles.values() {
+        let info = services
+            .host
+            .discover_bundle(bundle_dir, &roots)
+            .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+        rows.push(PluginRow {
             enabled: prefs.is_enabled(&info.id),
             id: info.id,
             role: info.role,
             host_api_version: info.host_api_version,
             capabilities: info.capabilities,
-        })
-        .collect();
+        });
+    }
     rows.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(rows)
 }
@@ -642,9 +663,12 @@ pub async fn set_plugin_enabled(services: Services, id: String, enabled: bool) -
 pub async fn load_plugin_panel(services: Services) -> Result<Panel, String> {
     let chrome = services.chrome();
     let loc = services.localizer();
+    let bundle = services
+        .plugin_bundle(UI_PANEL_DOMAIN)
+        .ok_or_else(|| chrome.plugin_error(&format!("no plugin bundle found for {UI_PANEL_DOMAIN:?}")))?;
     let component = services
         .host
-        .load(&services.plugin_path)
+        .load_bundle(&bundle)
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
@@ -658,7 +682,7 @@ pub async fn load_plugin_panel(services: Services) -> Result<Panel, String> {
     let requested = services.requested_languages();
     Ok(genealogy_ui::resolve_panel(
         &panel,
-        &services.plugin_catalogue_dir,
+        &services.plugin_catalogue_dir(UI_PANEL_DOMAIN),
         UI_PANEL_DOMAIN,
         &requested,
     ))
@@ -672,9 +696,12 @@ pub async fn load_plugin_panel(services: Services) -> Result<Panel, String> {
 pub async fn submit_plugin_panel(services: Services, action: String, values: String) -> Result<SubmitResult, String> {
     let chrome = services.chrome();
     let loc = services.localizer();
+    let bundle = services
+        .plugin_bundle(UI_PANEL_DOMAIN)
+        .ok_or_else(|| chrome.plugin_error(&format!("no plugin bundle found for {UI_PANEL_DOMAIN:?}")))?;
     let component = services
         .host
-        .load(&services.plugin_path)
+        .load_bundle(&bundle)
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::software(UI_PANEL_DOMAIN, env!("CARGO_PKG_VERSION"));
@@ -696,7 +723,7 @@ pub async fn submit_plugin_panel(services: Services, action: String, values: Str
     let requested = services.requested_languages();
     Ok(genealogy_ui::resolve_submit_result(
         &result,
-        &services.plugin_catalogue_dir,
+        &services.plugin_catalogue_dir(UI_PANEL_DOMAIN),
         UI_PANEL_DOMAIN,
         &requested,
     ))
@@ -822,9 +849,12 @@ async fn run_assisted_session(
 ) -> Result<String, String> {
     let chrome = services.chrome();
     let loc = services.localizer();
+    let bundle = services
+        .plugin_bundle(&plugin_id)
+        .ok_or_else(|| chrome.plugin_error(&format!("no plugin bundle found for {plugin_id:?}")))?;
     let component = services
         .host
-        .load_by_id(&services.plugins_dir, &plugin_id)
+        .load_bundle(&bundle)
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let invocation = Invocation {

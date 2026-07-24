@@ -1,15 +1,16 @@
-//! Plugin discovery integration test (PR21): scanning a directory of built components and reading
-//! their genuinely declared metadata — role (from the exported entry point), the host-API version
-//! the component was compiled against (from its imported interfaces), and declared capabilities
-//! (from which `genealogy:host-api/<capability>` interfaces it imports).
+//! Plugin discovery integration test (ADR 0014 §2): scanning a directory of built **bundles**
+//! (`<id>/plugin.toml` + `plugin.wasm` + optional `plugin.sig`), reading each manifest's declared
+//! metadata (id, role, host-API, capabilities) and cross-checking it against what the component
+//! genuinely imports/exports. [`PluginInfo::capabilities`] carries the manifest's declared set (the
+//! authoritative grant-request); the component's actual imports were verified to be a subset of it.
 //!
-//! No plugin-owned id/version/capability manifest exists yet (that is ADR 0014, deferred); this test
-//! asserts only what [`PluginHost::discover`] can read from the component itself.
-//!
-//! Requires the plugin components: run `cargo xtask build-plugins`.
+//! Requires the plugin bundles: run `cargo xtask build-plugins`.
+
+#![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use std::path::PathBuf;
 
+use genealogy_plugin_host::signing::PluginManifest;
 use genealogy_plugin_host::{Capability, PluginRole, TrustRoots, TrustTier};
 
 mod common;
@@ -129,8 +130,9 @@ fn digitalarkivet_import_declares_the_assisted_import_role_and_its_capabilities(
         PluginRole::AssistedImport,
         "run-assisted export maps to AssistedImport"
     );
-    // Discovery reflects the capabilities the component actually imports (wit-bindgen tree-shakes the
-    // rest): the flow drives net, media-store, present, query, commands, progress, and log.
+    // Capabilities reflect the MANIFEST's declared grant-request (ADR 0014 §2), which includes `ai`
+    // even though the component tree-shakes the unused `ai` import — the manifest may declare more
+    // than the component imports (inspected ⊆ declared).
     for capability in [
         Capability::Log,
         Capability::Query,
@@ -138,19 +140,15 @@ fn digitalarkivet_import_declares_the_assisted_import_role_and_its_capabilities(
         Capability::Progress,
         Capability::Net,
         Capability::MediaStore,
+        Capability::Ai,
         Capability::Present,
     ] {
         assert!(
             info.capabilities.contains(&capability),
-            "the assisted-import component imports {capability:?}"
+            "the assisted-import manifest declares {capability:?}"
         );
     }
-    // `ai` is granted at the call site but never invoked in this flow (ADR 0017 §4), so it is
-    // tree-shaken from the component; `import-source` is a bulk-only capability.
-    assert!(
-        !info.capabilities.contains(&Capability::Ai),
-        "ai is unused and tree-shaken"
-    );
+    // `import-source` is a bulk-only capability the assisted manifest does not declare.
     assert!(
         !info.capabilities.contains(&Capability::ImportSource),
         "assisted import is not bulk"
@@ -177,14 +175,19 @@ fn discover_on_a_missing_directory_is_an_error_not_a_panic() {
 }
 
 #[test]
-fn discover_skips_non_wasm_files_in_the_directory() {
+fn discover_skips_non_bundle_entries_in_the_directory() {
     let host = common::host();
     let dir = tempfile::tempdir().expect("tempdir");
-    std::fs::write(dir.path().join("README.md"), b"not a plugin").expect("write");
+    // A loose file and a subdirectory without a `plugin.toml` are both not bundles.
+    std::fs::write(dir.path().join("README.md"), b"not a plugin").expect("write file");
+    std::fs::create_dir(dir.path().join("not-a-bundle")).expect("stray dir");
     let found = host
         .discover(dir.path(), &TrustRoots::embedded())
         .expect("discover an otherwise-empty dir");
-    assert!(found.is_empty(), "non-.wasm files must be ignored, not fail discovery");
+    assert!(
+        found.is_empty(),
+        "non-bundle entries must be ignored, not fail discovery"
+    );
 }
 
 #[test]
@@ -201,40 +204,115 @@ fn every_built_bundle_classifies_as_sanctioned_under_the_dev_trust_root() {
     }
 }
 
-#[test]
-fn an_unsigned_component_without_sidecars_is_untrusted() {
-    // A bare `.wasm` with no `.plugin.toml`/`.sig` beside it is unsigned — loadable but Untrusted.
-    let host = common::host();
-    let dir = tempfile::tempdir().expect("tempdir");
-    let source = common::plugin_path("fixture");
-    std::fs::copy(&source, dir.path().join("fixture.wasm")).expect("copy component");
+/// Copies the real `fixture` bundle (`plugin.toml` + `plugin.wasm` + `plugin.sig`) into a fresh
+/// `<root>/fixture/` bundle directory, returning the temp dir handle (kept alive by the caller) and
+/// the created bundle directory. The signature is copied only when `with_signature`.
+fn copy_fixture_bundle(with_signature: bool) -> (tempfile::TempDir, PathBuf) {
+    let src = common::plugins_dir().join("fixture");
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let bundle = tmp.path().join("fixture");
+    std::fs::create_dir(&bundle).expect("bundle dir");
+    std::fs::copy(src.join("plugin.toml"), bundle.join("plugin.toml")).expect("copy manifest");
+    std::fs::copy(src.join("plugin.wasm"), bundle.join("plugin.wasm")).expect("copy component");
+    if with_signature {
+        std::fs::copy(src.join("plugin.sig"), bundle.join("plugin.sig")).expect("copy signature");
+    }
+    (tmp, bundle)
+}
 
-    let found = host.discover(dir.path(), &TrustRoots::embedded()).expect("discover");
-    let info = found.iter().find(|info| info.id == "fixture").expect("fixture present");
+#[test]
+fn an_unsigned_bundle_is_untrusted() {
+    // A bundle with a manifest + component but no `plugin.sig` is unsigned — loadable but Untrusted.
+    let host = common::host();
+    let (_tmp, bundle) = copy_fixture_bundle(false);
+    let info = host
+        .discover_bundle(&bundle, &TrustRoots::embedded())
+        .expect("discover");
     assert_eq!(
         info.trust,
         TrustTier::Untrusted,
-        "an unsigned component is Untrusted, not an error"
+        "an unsigned bundle is Untrusted, not an error"
     );
 }
 
 #[test]
-fn a_tampered_bundle_component_fails_discovery() {
-    // Copy a real dev-signed bundle, then flip a byte of the component: the signature no longer
-    // verifies, so classification fails closed (a hard error, not Untrusted).
+fn a_tampered_bundle_fails_discovery_closed() {
+    // Copy a real dev-signed bundle, then append a comment to its manifest: the manifest still
+    // parses and cross-checks, but its digest changes, so the signature no longer verifies and
+    // classification fails closed (a hard error, not Untrusted).
     let host = common::host();
-    let src = common::plugins_dir();
-    let dir = tempfile::tempdir().expect("tempdir");
-    let mut wasm = std::fs::read(src.join("fixture.wasm")).expect("read component");
-    assert!(!wasm.is_empty(), "fixture.wasm is empty");
-    wasm[0] ^= 0xff;
-    std::fs::write(dir.path().join("fixture.wasm"), &wasm).expect("write tampered component");
-    std::fs::copy(src.join("fixture.plugin.toml"), dir.path().join("fixture.plugin.toml")).expect("copy manifest");
-    std::fs::copy(src.join("fixture.sig"), dir.path().join("fixture.sig")).expect("copy signature");
+    let (_tmp, bundle) = copy_fixture_bundle(true);
+    let manifest_path = bundle.join("plugin.toml");
+    let mut manifest = std::fs::read(&manifest_path).expect("read manifest");
+    manifest.extend_from_slice(b"\n# tampered, but still valid TOML\n");
+    std::fs::write(&manifest_path, &manifest).expect("write tampered manifest");
 
-    let result = host.discover(dir.path(), &TrustRoots::embedded());
+    let result = host.discover_bundle(&bundle, &TrustRoots::embedded());
+    assert!(result.is_err(), "a tampered signed bundle must fail discovery closed");
+}
+
+/// Rewrites the (unsigned) fixture bundle's manifest with `capabilities`, re-serializing so the file
+/// stays valid TOML regardless of the array formatting.
+fn rewrite_fixture_capabilities(bundle: &std::path::Path, capabilities: Vec<String>) {
+    let manifest_path = bundle.join("plugin.toml");
+    let text = std::fs::read_to_string(&manifest_path).expect("read manifest");
+    let mut manifest: PluginManifest = toml::from_str(&text).expect("parse manifest");
+    manifest.capabilities = capabilities;
+    let rewritten = toml::to_string(&manifest).expect("serialize manifest");
+    std::fs::write(&manifest_path, rewritten).expect("write rewritten manifest");
+}
+
+#[test]
+fn a_manifest_under_declaring_a_capability_fails_the_cross_check() {
+    // The fixture component imports `commands`. Rewrite its (unsigned) manifest to drop `commands`
+    // from the declared set: the component now imports a capability the manifest does not declare,
+    // so the cross-check rejects it (ADR 0014 §2). Unsigned so the cross-check, not the signature,
+    // is the failing gate.
+    let host = common::host();
+    let (_tmp, bundle) = copy_fixture_bundle(false);
+    rewrite_fixture_capabilities(
+        &bundle,
+        vec![
+            "log".to_owned(),
+            "net".to_owned(),
+            "media-store".to_owned(),
+            "ai".to_owned(),
+            "present".to_owned(),
+        ],
+    );
+
+    let result = host.discover_bundle(&bundle, &TrustRoots::embedded());
     assert!(
         result.is_err(),
-        "a tampered bundle with a present signature must fail discovery"
+        "a manifest that under-declares an imported capability must fail the cross-check"
+    );
+}
+
+#[test]
+fn a_manifest_over_declaring_a_capability_is_accepted() {
+    // The manifest may declare MORE than the component imports (wit-bindgen tree-shakes unused
+    // imports, so inspected ⊆ declared). `export-sink` is not imported by the fixture; adding it to
+    // the (unsigned) manifest must still discover cleanly.
+    let host = common::host();
+    let (_tmp, bundle) = copy_fixture_bundle(false);
+    rewrite_fixture_capabilities(
+        &bundle,
+        vec![
+            "log".to_owned(),
+            "commands".to_owned(),
+            "net".to_owned(),
+            "media-store".to_owned(),
+            "ai".to_owned(),
+            "present".to_owned(),
+            "export-sink".to_owned(),
+        ],
+    );
+
+    let info = host
+        .discover_bundle(&bundle, &TrustRoots::embedded())
+        .expect("over-declaring is legitimate");
+    assert!(
+        info.capabilities.contains(&Capability::ExportSink),
+        "the declared (over-declared) capability is reported"
     );
 }

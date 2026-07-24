@@ -48,6 +48,7 @@ pub mod person_change_set;
 pub mod place;
 pub mod place_change_set;
 mod place_hierarchy;
+pub mod plugins;
 pub mod repository;
 pub mod repository_change_set;
 pub mod research_note;
@@ -193,6 +194,7 @@ pub use place::{
     tag_place, update_place_media_ref,
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
+pub use plugins::{plugin_layers, resolve_bundle, resolve_bundles};
 pub use repository::{
     NewRepository, RepositoryAddressRef, RepositorySummary, RepositoryUrlRef, add_repository_address,
     add_repository_url, attach_repository_note, create_repository, import_attach_repository_note, list_repositories,

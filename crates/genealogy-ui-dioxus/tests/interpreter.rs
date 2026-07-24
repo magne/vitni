@@ -58,7 +58,7 @@ fn software_session() -> Session {
 }
 
 fn plugin_path() -> PathBuf {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/plugins/ui-panel.wasm");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/plugins/ui-panel/plugin.wasm");
     assert!(
         path.is_file(),
         "missing plugin component {} — run `cargo xtask build-plugins` first",

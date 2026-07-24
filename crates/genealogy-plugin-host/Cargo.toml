@@ -25,6 +25,9 @@ mime_guess = { workspace = true }
 base64 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Parses the `plugin.toml` bundle manifest during discovery, and serializes a sample manifest in the
+# signing round-trip tests (ADR 0014 §2).
+toml = { workspace = true }
 # The `present` capability suspends on a boxed async `Presenter` trait (ADR 0017 §5); `async-trait`
 # makes the trait object-safe for `Box<dyn Presenter>`.
 async-trait = { workspace = true }
@@ -32,8 +35,6 @@ async-trait = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 uuid = { workspace = true }
-# Serializes a sample `PluginManifest` in the signing round-trip tests (ADR 0014 §2).
-toml = { workspace = true }
 # The net/media-store/ai capability tests drive the host fetch against a local mock HTTP server
 # (redirect chains, size caps, timeouts, content-type sniffing, the vision-api request) — ADR 0017.
 wiremock = { workspace = true }

@@ -26,9 +26,10 @@ pub fn plugins_dir() -> PathBuf {
     dir
 }
 
-/// Resolves a built plugin component path, failing with an actionable message if it is missing.
+/// Resolves a built plugin component path inside its ADR 0014 §2 bundle directory
+/// (`<plugins_dir>/<id>/plugin.wasm`), failing with an actionable message if it is missing.
 pub fn plugin_path(id: &str) -> PathBuf {
-    let path = plugins_dir().join(format!("{id}.wasm"));
+    let path = plugins_dir().join(id).join("plugin.wasm");
     assert!(
         path.is_file(),
         "missing plugin component {} — run `cargo xtask build-plugins` first",

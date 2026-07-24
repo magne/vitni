@@ -231,8 +231,7 @@ impl PluginHost {
         &self.engine
     }
 
-    /// Loads a plugin component from `path` (the spike's directory-based "embedded" layer,
-    /// ADR 0011 §6).
+    /// Loads a plugin component from `path`.
     ///
     /// # Errors
     /// Returns [`PluginError::Runtime`] if the file is missing or is not a valid component.
@@ -240,13 +239,15 @@ impl PluginHost {
         Component::from_file(&self.engine, path).map_err(|error| PluginError::Runtime(error.to_string()))
     }
 
-    /// Loads a plugin component by stable id from `plugins_dir` (the spike's directory-based loader,
-    /// ADR 0011 §6; the three-layer override is deferred to ADR 0014).
+    /// Loads the component of the plugin bundle at `bundle_dir` (its `plugin.wasm`, ADR 0014 §2). A
+    /// caller resolves `bundle_dir` through the three-layer resolver (`genealogy-app`), then loads
+    /// it here.
     ///
     /// # Errors
-    /// Returns [`PluginError::Runtime`] if the component is missing or invalid.
-    pub fn load_by_id(&self, plugins_dir: &Path, id: &str) -> Result<Component, PluginError> {
-        self.load(&plugins_dir.join(format!("{id}.wasm")))
+    /// Returns [`PluginError::Runtime`] if `bundle_dir/plugin.wasm` is missing or is not a valid
+    /// component.
+    pub fn load_bundle(&self, bundle_dir: &Path) -> Result<Component, PluginError> {
+        self.load(&bundle_dir.join("plugin.wasm"))
     }
 
     /// Builds a fresh store for one instantiation, applying the memory cap and fuel budget.
