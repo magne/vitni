@@ -17,8 +17,9 @@ use genealogy_app::{
     AppError, CitationError, CitationSummary, Confidence, DbError, DnaMatchError, DnaMatchSummary, DnaProvider,
     DnaTestError, DnaTestSummary, DnaTestType, EventError, EventSummary, EventType, FamilyError, FamilySummary,
     MatchStatus, MediaError, MediaSummary, NoteError, NoteSummary, NoteType, PersonError, PersonSummary, PlaceError,
-    PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType, Restriction, Sex, SourceError,
-    SourceSummary, SuretyLabelOverrides, TagError, TagSummary,
+    PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType, ResearchNoteError,
+    ResearchNoteSummary, Restriction, Sex, SourceError, SourceSummary, SubjectRef, SuretyLabelOverrides,
+    TagError, TagSummary,
 };
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
@@ -41,6 +42,7 @@ mod note;
 mod person;
 mod place;
 mod repository;
+mod research_note;
 mod source;
 mod tag;
 
@@ -284,6 +286,7 @@ impl Localizer {
             AppError::NoteNotFound(id) => fl!(self.loader, "err-note-not-found", id = id.clone()),
             AppError::MediaNotFound(id) => fl!(self.loader, "err-media-not-found", id = id.clone()),
             AppError::TagNotFound(id) => fl!(self.loader, "err-tag-not-found", id = id.clone()),
+            AppError::ResearchNoteNotFound(id) => fl!(self.loader, "err-research-note-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
             AppError::FamilyDomain(domain) => self.family_error(domain),
             AppError::PlaceDomain(domain) => self.place_error(domain),
@@ -296,6 +299,7 @@ impl Localizer {
             AppError::NoteDomain(domain) => self.note_error(domain),
             AppError::MediaDomain(domain) => self.media_error(domain),
             AppError::TagDomain(domain) => self.tag_error(domain),
+            AppError::ResearchNoteDomain(domain) => self.research_note_error(domain),
             AppError::Db(db) => self.db_error(db),
         }
     }

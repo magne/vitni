@@ -90,6 +90,39 @@ pub(crate) async fn find_view_by_external_id<V: DeserializeOwned>(
     Ok(Some(deserialize_view(table, &payload)?))
 }
 
+/// Loads every view in `table` whose `subjects` set names the subject serialized as
+/// `{ "<subject_kind>": <subject_value> }`, ordered by `human_id`.
+///
+/// The Postgres twin of [`crate::sqlite_query::list_views_by_subject`]: walks the `subjects` array
+/// with `json_array_elements` and reads each element's own tag key with `->>`. `subject_kind` is
+/// code-supplied (one of `Person`/`Family`/`Event`/`Place`), never user input, so it is interpolated
+/// directly like `table`.
+pub(crate) async fn list_views_by_subject<V: DeserializeOwned>(
+    pool: &Pool<Postgres>,
+    table: &str,
+    subject_kind: &str,
+    subject_value: &str,
+) -> Result<Vec<V>, DbError> {
+    let sql = format!(
+        "SELECT payload::text AS payload FROM {table} WHERE EXISTS (\
+         SELECT 1 FROM json_array_elements(payload->'state'->'subjects') AS e \
+         WHERE e->>'{subject_kind}' = $1) \
+         ORDER BY payload->'state'->>'human_id'"
+    );
+    let rows = sqlx::query(&sql)
+        .bind(subject_value)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+
+    let mut views = Vec::with_capacity(rows.len());
+    for row in rows {
+        let payload: String = row.get("payload");
+        views.push(deserialize_view(table, &payload)?);
+    }
+    Ok(views)
+}
+
 /// Loads the view in `table` whose `view_id` (the aggregate id PK) equals `view_id`, if any.
 ///
 /// Used for aggregates without a `HumanId` (the Tag definition — data-model §9), which are looked

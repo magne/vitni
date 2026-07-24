@@ -34,6 +34,7 @@ macro_rules! for_each_aggregate {
             (note, "note", genealogy_core::ids::NoteId, new_note_id, genealogy_core::note::NoteError, NoteDomain, NoteNotFound, "no note with human_id {0:?}"),
             (media, "media", genealogy_core::ids::MediaId, new_media_id, genealogy_core::media::MediaError, MediaDomain, MediaNotFound, "no media with human_id {0:?}"),
             (tag, "tag", genealogy_core::ids::TagId, new_tag_id, genealogy_core::tag::TagError, TagDomain, TagNotFound, "no tag with id {0:?}"),
+            (research_note, "research note", genealogy_core::ids::ResearchNoteId, new_research_note_id, genealogy_core::research_note::ResearchNoteError, ResearchNoteDomain, ResearchNoteNotFound, "no research note with human_id {0:?}"),
         }
     };
 }
@@ -61,6 +62,7 @@ macro_rules! for_each_human_id_aggregate {
             (repository, "Repository", "R%04d", repository_id_format),
             (note, "Note", "N%04d", note_id_format),
             (media, "Media", "O%04d", media_id_format),
+            (research_note, "`ResearchNote`", "A%04d", research_note_id_format),
         }
     };
 }

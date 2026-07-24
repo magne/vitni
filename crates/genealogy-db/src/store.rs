@@ -440,6 +440,52 @@ impl Store {
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
     }
+
+    /// Every research note whose `subjects` set names `subject` — "which arguments exist about this
+    /// Person/Family/Event/Place" (ADR 0028 §5), via the reverse-by-subject index over the
+    /// `research_note_view` projection.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_research_notes_for_subject(
+        &self,
+        subject: genealogy_core::research_note::subject::SubjectRef,
+    ) -> Result<Vec<genealogy_core::research_note::ResearchNoteView>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            let (kind, value) = subject_key_value(subject);
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.list_research_notes_for_subject(kind, &value).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.list_research_notes_for_subject(kind, &value).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = subject;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+}
+
+/// Maps a `SubjectRef` to the JSON tag key its (externally-tagged) serialization uses and the id
+/// string under it — the `(subject_kind, subject_value)` pair
+/// [`Store::list_research_notes_for_subject`]'s array-walk queries by.
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+fn subject_key_value(subject: genealogy_core::research_note::subject::SubjectRef) -> (&'static str, String) {
+    use genealogy_core::research_note::subject::SubjectRef;
+    match subject {
+        SubjectRef::Person(id) => ("Person", id.to_string()),
+        SubjectRef::Family(id) => ("Family", id.to_string()),
+        SubjectRef::Event(id) => ("Event", id.to_string()),
+        SubjectRef::Place(id) => ("Place", id.to_string()),
+    }
 }
 
 /// Generates the per-aggregate command/find/list facade methods, each delegating to the active

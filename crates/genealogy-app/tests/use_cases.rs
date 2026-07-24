@@ -64,6 +64,18 @@ fn new_person(given: &str, surname: &str) -> NewPerson {
     }
 }
 
+/// Resolves a person's `human_id` to its internal `PersonId` — the id a `SubjectRef` carries.
+async fn person_id(workspace: &Workspace, human_id: &str) -> genealogy_core::ids::PersonId {
+    workspace
+        .store()
+        .find_person(human_id)
+        .await
+        .expect("find person")
+        .expect("person projected")
+        .person_id()
+        .expect("person id set")
+}
+
 #[tokio::test]
 async fn create_auto_allocates_sequential_human_ids() {
     let (ws, _dir) = workspace().await;
@@ -2766,5 +2778,267 @@ async fn assert_participation_with_unknown_note_is_not_found() {
     assert!(
         matches!(result, Err(genealogy_app::AppError::NoteNotFound(_))),
         "an unknown note human id is rejected: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn research_note_argues_about_a_person_and_is_found_by_subject() {
+    use genealogy_app::{
+        NewResearchNote, NewResearchNoteSubject, SubjectRef, create_research_note, list_research_notes_for_subject,
+        set_research_note_body, show_research_note,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+
+    let human_id = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![NewResearchNoteSubject::Person(person.clone())],
+            title: Some("Same person as the 1865 census entry?".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create research note");
+    assert_eq!(human_id, "A0001");
+
+    set_research_note_body(
+        &ws,
+        &session,
+        &human_id,
+        "The 1865 census and the parish register agree on the birth year.".to_owned(),
+        None,
+        MutationMeta::default(),
+    )
+    .await
+    .expect("set body");
+
+    let summary = show_research_note(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(
+        summary.body.as_deref(),
+        Some("The 1865 census and the parish register agree on the birth year.")
+    );
+    assert_eq!(summary.title.as_deref(), Some("Same person as the 1865 census entry?"));
+
+    assert_eq!(summary.subjects.len(), 1, "expected exactly one subject recorded");
+    let subject = *summary.subjects.iter().next().expect("subject recorded");
+    assert!(
+        matches!(subject, SubjectRef::Person(_)),
+        "expected a Person subject, got {subject:?}"
+    );
+
+    let for_subject = list_research_notes_for_subject(&ws, subject)
+        .await
+        .expect("list for subject");
+    assert_eq!(for_subject.len(), 1);
+    assert_eq!(for_subject[0].human_id, human_id);
+}
+
+#[tokio::test]
+async fn research_note_against_an_unknown_person_is_not_found() {
+    use genealogy_app::{NewResearchNote, NewResearchNoteSubject, create_research_note};
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let result = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![NewResearchNoteSubject::Person("I9999".to_owned())],
+            title: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await;
+    assert!(
+        matches!(&result, Err(genealogy_app::AppError::PersonNotFound(id)) if id == "I9999"),
+        "an unknown subject human id is rejected: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn research_note_names_two_subjects_and_is_found_by_either() {
+    use genealogy_app::{
+        NewResearchNote, NewResearchNoteSubject, SubjectRef, create_research_note, list_research_notes_for_subject,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let ada = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person a");
+    let annabella = create_person(
+        &ws,
+        &session,
+        new_person("Annabella", "Byron"),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("person b");
+
+    let human_id = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![
+                NewResearchNoteSubject::Person(ada.clone()),
+                NewResearchNoteSubject::Person(annabella.clone()),
+            ],
+            title: Some("Shared ancestor question".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create research note");
+
+    let subject_a = SubjectRef::Person(person_id(&ws, &ada).await);
+    let subject_b = SubjectRef::Person(person_id(&ws, &annabella).await);
+
+    for subject in [subject_a, subject_b] {
+        let found = list_research_notes_for_subject(&ws, subject)
+            .await
+            .expect("list for subject");
+        assert_eq!(found.len(), 1, "expected one note for {subject:?}");
+        assert_eq!(found[0].human_id, human_id);
+    }
+}
+
+#[tokio::test]
+async fn creating_a_research_note_with_no_subjects_is_rejected() {
+    use genealogy_app::{AppError, NewResearchNote, create_research_note};
+    use genealogy_core::research_note::ResearchNoteError;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let result = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: Vec::new(),
+            title: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await;
+    assert!(
+        matches!(
+            &result,
+            Err(AppError::ResearchNoteDomain(ResearchNoteError::SubjectRequired))
+        ),
+        "an empty subject set is rejected: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn add_subject_extends_a_note_and_is_idempotent_then_last_removal_is_rejected() {
+    use genealogy_app::{
+        AppError, NewResearchNote, NewResearchNoteSubject, add_subject_to_research_note, create_research_note,
+        list_research_notes_for_subject, remove_subject_from_research_note, show_research_note,
+    };
+    use genealogy_core::research_note::ResearchNoteError;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let ada = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person a");
+    let annabella = create_person(
+        &ws,
+        &session,
+        new_person("Annabella", "Byron"),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("person b");
+
+    let human_id = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![NewResearchNoteSubject::Person(ada.clone())],
+            title: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create research note");
+
+    add_subject_to_research_note(
+        &ws,
+        &session,
+        &human_id,
+        NewResearchNoteSubject::Person(annabella.clone()),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("add subject");
+
+    let summary = show_research_note(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(summary.subjects.len(), 2, "the added subject must be recorded");
+
+    // Idempotent: re-adding the same (resolved) subject is a no-op, not an error.
+    add_subject_to_research_note(
+        &ws,
+        &session,
+        &human_id,
+        NewResearchNoteSubject::Person(annabella.clone()),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("re-adding is a no-op");
+
+    // Remove the added subject: back down to one.
+    remove_subject_from_research_note(
+        &ws,
+        &session,
+        &human_id,
+        NewResearchNoteSubject::Person(annabella.clone()),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("remove subject");
+    let summary = show_research_note(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(summary.subjects.len(), 1, "back down to the original single subject");
+
+    let subject_a = genealogy_app::SubjectRef::Person(person_id(&ws, &ada).await);
+    let found = list_research_notes_for_subject(&ws, subject_a)
+        .await
+        .expect("list for subject");
+    assert_eq!(found.len(), 1, "still found by its one remaining subject");
+
+    // Removing the last remaining subject is rejected.
+    let result = remove_subject_from_research_note(
+        &ws,
+        &session,
+        &human_id,
+        NewResearchNoteSubject::Person(ada.clone()),
+        MutationMeta::default(),
+    )
+    .await;
+    assert!(
+        matches!(
+            &result,
+            Err(AppError::ResearchNoteDomain(ResearchNoteError::SubjectRequired))
+        ),
+        "removing the last subject is rejected: {result:?}"
     );
 }

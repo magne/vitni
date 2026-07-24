@@ -466,3 +466,18 @@ impl From<SourceMediaTypeArg> for SourceMediaType {
         }
     }
 }
+
+/// Which conclusion-bearing aggregate a `--subject` `human_id` names (ADR 0028 §2). Not a mirror of
+/// a `genealogy-core` enum — `SubjectRef` bakes the kind and the id together; this is the CLI's own
+/// way to ask "which kind of id did you just give me".
+#[derive(Clone, Copy, ValueEnum)]
+pub enum SubjectKindArg {
+    /// A Person, by its `human_id`.
+    Person,
+    /// A Family, by its `human_id`.
+    Family,
+    /// An Event, by its `human_id`.
+    Event,
+    /// A Place, by its `human_id`.
+    Place,
+}

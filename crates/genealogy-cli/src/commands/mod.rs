@@ -13,5 +13,6 @@ pub mod note;
 pub mod person;
 pub mod place;
 pub mod repository;
+pub mod research_note;
 pub mod source;
 pub mod tag;

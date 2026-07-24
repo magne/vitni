@@ -812,6 +812,7 @@ mod tests {
                 repository: "R%04d".to_owned(),
                 note: "N%04d".to_owned(),
                 media: "O%04d".to_owned(),
+                research_note: "A%04d".to_owned(),
             },
             ..Default::default()
         }

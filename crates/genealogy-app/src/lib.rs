@@ -50,6 +50,7 @@ pub mod place_change_set;
 mod place_hierarchy;
 pub mod repository;
 pub mod repository_change_set;
+pub mod research_note;
 pub mod session;
 pub mod source;
 pub mod source_change_set;
@@ -143,6 +144,7 @@ pub use genealogy_core::provenance::{
     Agent, AgentKind, Confidence, EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality,
 };
 pub use genealogy_core::repository::RepositoryError;
+pub use genealogy_core::research_note::{ResearchNoteError, SubjectRef};
 pub use genealogy_core::source::SourceError;
 pub use genealogy_core::tag::TagError;
 pub use genealogy_core::text::{Attribute, ExternalId, Rect, Url};
@@ -197,6 +199,11 @@ pub use repository::{
     show_repository, tag_repository,
 };
 pub use repository_change_set::{RepositoryChangeSet, commit_repository_change_set};
+pub use research_note::{
+    NewResearchNote, NewResearchNoteSubject, ResearchNoteSummary, add_subject_to_research_note, create_research_note,
+    list_research_notes, list_research_notes_for_subject, remove_subject_from_research_note, set_research_note_body,
+    set_restrictions as set_research_note_restrictions, show_research_note, tag_research_note,
+};
 pub use session::Session;
 pub use source::{
     NewSource, SourceAttributeRef, SourceSummary, add_source_attribute, attach_source_media, attach_source_note,

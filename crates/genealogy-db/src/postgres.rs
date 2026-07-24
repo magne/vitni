@@ -23,7 +23,7 @@ use crate::store::{CommandError, DbError, map_aggregate_error};
 use crate::tables::{
     ALL_VIEW_TABLES, CITATION_VIEW_TABLE, DNA_MATCH_VIEW_TABLE, DNA_TEST_VIEW_TABLE, EVENT_VIEW_TABLE,
     FAMILY_VIEW_TABLE, MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, REPOSITORY_VIEW_TABLE,
-    SOURCE_VIEW_TABLE, TAG_VIEW_TABLE,
+    RESEARCH_NOTE_VIEW_TABLE, SOURCE_VIEW_TABLE, TAG_VIEW_TABLE,
 };
 
 /// The default pool size for a Postgres workspace connection.
@@ -192,6 +192,17 @@ impl PostgresStore {
 
     pub(crate) async fn count(&self, table: &str) -> Result<u64, DbError> {
         postgres_query::count_rows(&self.pool, table).await
+    }
+
+    /// Every research note whose `subjects` set names the subject serialized under `subject_kind`
+    /// (`Person`/`Family`/`Event`/`Place`) — the Postgres twin of
+    /// [`crate::sqlite::SqliteStore::list_research_notes_for_subject`] (ADR 0028 §5).
+    pub(crate) async fn list_research_notes_for_subject(
+        &self,
+        subject_kind: &str,
+        subject_value: &str,
+    ) -> Result<Vec<genealogy_core::research_note::ResearchNoteView>, DbError> {
+        postgres_query::list_views_by_subject(&self.pool, RESEARCH_NOTE_VIEW_TABLE, subject_kind, subject_value).await
     }
 }
 

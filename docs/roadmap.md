@@ -529,7 +529,7 @@ they are confirmed when the ADR is written.
 | [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md) — **accepted** | Geography view rendering, in-map editing, and the pluggable map provider | Phase 9 | ADR 0008, 0024 |
 | [ADR 0026](adr/0026-place-succession-and-temporal-resolution.md) — **accepted** | Place succession (merge/split) + the date-aware resolution rule | Phase 9 | ADR 0004, 0024 |
 | [ADR 0027](adr/0027-configurable-surety-scheme-labels.md) — **accepted** | Configurable surety-scheme labels (relabel the five ordinals; cardinality stays fixed) | Phase 10 | ADR 0005, 0015 |
-| [ADR 0028](adr/0028-research-note-argument-aggregate.md) — **proposed** | `ResearchNote`/`Argument` aggregate: the GEDCOM X `Document(Analysis)` proof-argument shape | Phase 10 | data-model §17 |
+| [ADR 0028](adr/0028-research-note-argument-aggregate.md) — **accepted** | `ResearchNote`/`Argument` aggregate: the GEDCOM X `Document(Analysis)` proof-argument shape, multi-subject | Phase 10 | data-model §17 |
 | [ADR 0029](adr/0029-import-merge-sync-reconciliation.md) — **proposed** | Import merge/sync: timestamp-gated reconciliation against the file's export date | Phase 10 | ADR 0013, 0018 |
 | ADR 0014 | Plugin signing, trust tiers, and distribution (and three-layer loading) | Phase 11 | ADR 0007 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
