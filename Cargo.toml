@@ -44,6 +44,11 @@ postgres-es = "0.5.0"
 # plugin host (genealogy-plugin-host; ADR 0007, 0011)
 wasmtime = "46.0.1"
 wasmtime-wasi = "46.0.1"
+# plugin bundle signing (genealogy-plugin-host, xtask; ADR 0014): ed25519 detached signatures over a
+# sha2 digest, verified against an embedded trust root. Pinned to the version already resolved
+# transitively (via the russh SSH tooling) so promoting it to a direct dependency causes no
+# `cargo update` churn and no new `cargo deny` surface.
+ed25519-dalek = "=3.0.0-pre.6"
 # assisted-import host capabilities (genealogy-plugin-host; ADR 0017): host-mediated HTTP,
 # media-library storage with SHA-256 checksums, and content-type sniffing.
 reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "gzip", "stream", "json"] }

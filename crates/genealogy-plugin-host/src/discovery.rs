@@ -31,6 +31,7 @@ use wasmtime::component::Component;
 use crate::PluginHost;
 use crate::capability::Capability;
 use crate::error::PluginError;
+use crate::trust::{self, TrustRoots, TrustTier};
 
 /// The plugin role a component implements, inferred from the entry point(s) it exports (ADR 0011
 /// §1's per-role worlds).
@@ -64,6 +65,9 @@ pub struct PluginInfo {
     pub host_api_version: String,
     /// The capabilities this component's world imports (declared, not yet granted).
     pub capabilities: Vec<Capability>,
+    /// The trust tier its A1 signature sidecars place it in (ADR 0014 §3): unsigned → `Untrusted`,
+    /// a signature verifying against a sanctioned/user-pinned key → `Sanctioned`/`UserTrusted`.
+    pub trust: TrustTier,
 }
 
 /// Maps a WIT interface import name (`genealogy:host-api/<name>@<version>`) to the [`Capability`] it
@@ -129,19 +133,57 @@ fn inspect(engine: &Engine, component: &Component) -> PluginInfo {
         role,
         host_api_version,
         capabilities,
+        // Overwritten by `discover` once the bundle sidecars have been classified; `inspect` reads
+        // only the component itself and knows nothing of the on-disk signature.
+        trust: TrustTier::Untrusted,
+    }
+}
+
+/// Reads a bundle sidecar (`<id>.plugin.toml` / `<id>.sig`), returning `None` when it is absent
+/// (an unsigned dev component) and a [`PluginError::Runtime`] on any other I/O failure.
+fn read_optional_sidecar(path: &Path) -> Result<Option<Vec<u8>>, PluginError> {
+    match std::fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(PluginError::Runtime(format!("reading {}: {error}", path.display()))),
+    }
+}
+
+/// Classifies the bundle for `id` from its A1 sidecars beside `wasm_path` (ADR 0014 §3). Both
+/// sidecars absent → `Untrusted` (unsigned, loadable); both present → verified via [`trust::classify`]
+/// (a present-but-unverifiable signature is a hard error); exactly one present → an incomplete bundle
+/// (an error).
+fn classify_bundle(dir: &Path, id: &str, wasm_path: &Path, roots: &TrustRoots) -> Result<TrustTier, PluginError> {
+    let manifest = read_optional_sidecar(&dir.join(format!("{id}.plugin.toml")))?;
+    let signature = read_optional_sidecar(&dir.join(format!("{id}.sig")))?;
+    match (manifest, signature) {
+        (None, None) => Ok(TrustTier::Untrusted),
+        (Some(manifest), Some(signature)) => {
+            let wasm = std::fs::read(wasm_path).map_err(|error| {
+                PluginError::Runtime(format!("reading plugin component {}: {error}", wasm_path.display()))
+            })?;
+            // A3: also cross-check the manifest's declared capabilities/role/host_api against the
+            // component's real imports/exports here; A2 verifies only the signature.
+            trust::classify(roots, &manifest, &wasm, Some(&signature))
+        }
+        _ => Err(PluginError::Runtime(format!(
+            "plugin {id} has an incomplete bundle: its .plugin.toml manifest and .sig signature must both be present or both absent"
+        ))),
     }
 }
 
 impl PluginHost {
     /// Scans `dir` for `.wasm` components and reads each one's genuinely declared metadata (see the
-    /// module docs for exactly what that covers). Non-`.wasm` entries are skipped. Plugins are
-    /// returned in no particular order.
+    /// module docs for exactly what that covers), then classifies each into a [`TrustTier`] by
+    /// verifying its A1 signature sidecars against `roots` (ADR 0014 §3). Non-`.wasm` entries are
+    /// skipped. Plugins are returned in no particular order.
     ///
     /// # Errors
     ///
     /// [`PluginError::Runtime`] if `dir` cannot be read, or if a `.wasm` file is not a valid
-    /// component.
-    pub fn discover(&self, dir: &Path) -> Result<Vec<PluginInfo>, PluginError> {
+    /// component; [`PluginError::Signature`] if a bundle carries a present-but-unverifiable
+    /// signature (fails closed).
+    pub fn discover(&self, dir: &Path, roots: &TrustRoots) -> Result<Vec<PluginInfo>, PluginError> {
         let entries = std::fs::read_dir(dir)
             .map_err(|error| PluginError::Runtime(format!("reading plugins directory {}: {error}", dir.display())))?;
 
@@ -158,6 +200,7 @@ impl PluginHost {
             let component = self.load(&path)?;
             let mut info = inspect(self.engine(), &component);
             id.clone_into(&mut info.id);
+            info.trust = classify_bundle(dir, id, &path, roots)?;
             found.push(info);
         }
         Ok(found)

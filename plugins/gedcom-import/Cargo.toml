@@ -11,6 +11,14 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+# ADR 0014 §2 bundle manifest: the plugin's declared role and capability requests (the interface
+# names of the WIT world it implements). `cargo xtask build-plugins` emits these into
+# `<id>.plugin.toml` beside the component and signs the manifest+component pair.
+[package.metadata.genealogy-plugin]
+role = "bulk-import"
+host_api = "0.21.0"
+capabilities = ["log", "commands", "progress", "import-source"]
+
 [dependencies]
 wit-bindgen = "0.57.1"
 genealogy-plugin-api = { path = "../plugin-api" }

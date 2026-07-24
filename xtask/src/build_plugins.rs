@@ -10,8 +10,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use genealogy_plugin_host::signing::{self, PluginManifest};
 
 use crate::util::{self, CargoManifest, I18nConfig, copy_dir, run_cargo};
+
+/// The publisher attributed to a first-party plugin whose manifest declares none.
+const DEFAULT_PUBLISHER: &str = "genealogy-project";
 
 /// The target every plugin component is built for (ADR 0007 §1).
 const PLUGIN_TARGET: &str = "wasm32-wasip2";
@@ -45,6 +49,8 @@ impl Plugin {
 struct Built {
     id: String,
     catalogues: Vec<String>,
+    manifest: PluginManifest,
+    signature_hex: String,
 }
 
 /// Runs the `build-plugins` command (see module docs).
@@ -55,11 +61,14 @@ pub fn run() -> Result<()> {
     let plugins = discover()?;
     let mut summary = Vec::new();
     for plugin in &plugins {
-        build_one(plugin, out_dir)?;
+        let wasm_dest = build_one(plugin, out_dir)?;
         let catalogues = bundle_catalogues(plugin, out_dir)?;
+        let (manifest, signature_hex) = emit_bundle(plugin, out_dir, &wasm_dest)?;
         summary.push(Built {
             id: plugin.id.clone(),
             catalogues,
+            manifest,
+            signature_hex,
         });
     }
 
@@ -71,7 +80,17 @@ pub fn run() -> Result<()> {
         } else {
             built.catalogues.join(", ")
         };
+        let manifest = &built.manifest;
         println!("  {} -> {}.wasm | i18n: {}", built.id, built.id, catalogues);
+        println!(
+            "    manifest: v{} publisher={} host-api={} role={} capabilities=[{}]",
+            manifest.version,
+            manifest.publisher,
+            manifest.host_api,
+            manifest.role,
+            manifest.capabilities.join(", ")
+        );
+        println!("    signature: {}", built.signature_hex);
     }
     println!(
         "build-plugins: {} component(s) ready in {}",
@@ -107,8 +126,9 @@ fn discover() -> Result<Vec<Plugin>> {
     Ok(plugins)
 }
 
-/// Lints (clippy, `-D warnings`), builds, and copies one plugin's artifact to `target/plugins`.
-fn build_one(plugin: &Plugin, out_dir: &Path) -> Result<()> {
+/// Lints (clippy, `-D warnings`), builds, and copies one plugin's artifact to `target/plugins`,
+/// returning the copied `<id>.wasm` path.
+fn build_one(plugin: &Plugin, out_dir: &Path) -> Result<PathBuf> {
     let manifest_path = plugin.manifest_path();
     let manifest = manifest_path.to_string_lossy();
 
@@ -139,7 +159,78 @@ fn build_one(plugin: &Plugin, out_dir: &Path) -> Result<()> {
     let dest = out_dir.join(format!("{}.wasm", plugin.id));
     fs::copy(&artifact, &dest).with_context(|| format!("copying {} to {}", artifact.display(), dest.display()))?;
     println!("build-plugins: {} -> {}", plugin.id, dest.display());
-    Ok(())
+    Ok(dest)
+}
+
+/// Emits the bundle sidecars beside `<id>.wasm` (ADR 0014 §2): the `<id>.plugin.toml` manifest and
+/// the `<id>.sig` ed25519 detached signature over the canonical digest of manifest + component. The
+/// emitted signature is verified before it is trusted, so a broken build fails loudly. Returns the
+/// manifest and the signature's hex encoding for the summary.
+fn emit_bundle(plugin: &Plugin, out_dir: &Path, wasm_dest: &Path) -> Result<(PluginManifest, String)> {
+    let manifest = plugin_manifest(plugin)?;
+    let manifest_toml =
+        toml::to_string(&manifest).with_context(|| format!("serializing manifest for {}", plugin.id))?;
+    let wasm_bytes = fs::read(wasm_dest).with_context(|| format!("reading {}", wasm_dest.display()))?;
+
+    let digest = signing::bundle_digest(manifest_toml.as_bytes(), &wasm_bytes);
+    let signing_key = signing::resolve_signing_key().context("resolving the plugin signing key")?;
+    let signature = signing::sign(&signing_key, &digest);
+    signing::verify(&signing_key.verifying_key(), &digest, &signature)
+        .with_context(|| format!("self-check: the emitted signature for {} did not verify", plugin.id))?;
+
+    let manifest_path = out_dir.join(format!("{}.plugin.toml", plugin.id));
+    let sig_path = out_dir.join(format!("{}.sig", plugin.id));
+    fs::write(&manifest_path, &manifest_toml).with_context(|| format!("writing {}", manifest_path.display()))?;
+    let signature_bytes = signing::signature_to_bytes(&signature);
+    fs::write(&sig_path, signature_bytes).with_context(|| format!("writing {}", sig_path.display()))?;
+    println!(
+        "build-plugins: {} -> {} + {}",
+        plugin.id,
+        manifest_path.display(),
+        sig_path.display()
+    );
+
+    Ok((manifest, hex_encode(&signature_bytes)))
+}
+
+/// Builds the bundle manifest (ADR 0014 §2) from the plugin's `Cargo.toml`: id from the plugin id,
+/// version from `[package] version`, and role/host-API/capabilities/publisher from the
+/// `[package.metadata.genealogy-plugin]` table.
+fn plugin_manifest(plugin: &Plugin) -> Result<PluginManifest> {
+    let metadata = plugin
+        .manifest
+        .package
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.genealogy_plugin.as_ref())
+        .with_context(|| {
+            format!(
+                "plugin {} is missing the [package.metadata.genealogy-plugin] table (ADR 0014 §2)",
+                plugin.id
+            )
+        })?;
+    Ok(PluginManifest {
+        id: plugin.id.clone(),
+        version: plugin.manifest.package.version.clone(),
+        publisher: metadata
+            .publisher
+            .clone()
+            .unwrap_or_else(|| DEFAULT_PUBLISHER.to_owned()),
+        host_api: metadata.host_api.clone(),
+        role: metadata.role.clone(),
+        capabilities: metadata.capabilities.clone(),
+    })
+}
+
+/// Lowercase hex encoding of `bytes` (for the signature line of the build summary).
+fn hex_encode(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        out.push(DIGITS[(byte >> 4) as usize] as char);
+        out.push(DIGITS[(byte & 0x0f) as usize] as char);
+    }
+    out
 }
 
 /// Copies the catalogues the plugin contributes — its own and any path dependency's — into

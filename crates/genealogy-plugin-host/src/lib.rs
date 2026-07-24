@@ -19,7 +19,9 @@ mod error;
 mod media;
 mod net;
 mod present;
+pub mod signing;
 mod state;
+mod trust;
 
 use std::path::{Path, PathBuf};
 
@@ -38,6 +40,7 @@ pub use crate::discovery::{PluginInfo, PluginRole};
 pub use crate::error::PluginError;
 pub use crate::net::{HostPattern, NetPolicy};
 pub use crate::present::{PresentError, Presenter};
+pub use crate::trust::{TrustRoots, TrustTier, classify, resolve_trust_roots};
 
 /// A progress update a bulk plugin reports as it advances (ADR 0013). `total` is absent when the
 /// plugin cannot yet know the record count (common during import).

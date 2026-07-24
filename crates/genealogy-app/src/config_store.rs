@@ -18,7 +18,8 @@ use std::path::{Path, PathBuf};
 use unic_langid::LanguageIdentifier;
 
 use crate::config::{
-    self, AiConfig, Config, IdFormats, LocaleDefaults, MapConfig, OperatorConfig, SuretyLabelOverrides, ThemeMode,
+    self, AiConfig, Config, IdFormats, LocaleDefaults, MapConfig, OperatorConfig, PluginTrustConfig,
+    SuretyLabelOverrides, ThemeMode,
 };
 use crate::error::AppError;
 use crate::workspace::{
@@ -279,6 +280,22 @@ pub trait ConfigStore {
     ///
     /// [`AppError::Config`] if the global config cannot be read or written.
     fn store_map_config(&self, map: &MapConfig) -> Result<(), AppError>;
+
+    /// Loads the `[plugin_trust]` pinned-publisher store (ADR 0014 §3). Client/presentation scope: a
+    /// per-user trust decision, machine/user-local, so it lives in the global config.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the global config cannot be read.
+    fn load_plugin_trust(&self) -> Result<PluginTrustConfig, AppError>;
+
+    /// Persists the `[plugin_trust]` pinned-publisher store into the global config (read-modify-write,
+    /// preserving the rest).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the global config cannot be read or written.
+    fn store_plugin_trust(&self, trust: &PluginTrustConfig) -> Result<(), AppError>;
 }
 
 /// The file-backed [`ConfigStore`] (ADR 0015 §2): the global config lives at `config_path`, the open
@@ -424,6 +441,14 @@ impl ConfigStore for FileConfigStore {
 
     fn store_map_config(&self, map: &MapConfig) -> Result<(), AppError> {
         config::set_map(self.config_path()?, map.clone())
+    }
+
+    fn load_plugin_trust(&self) -> Result<PluginTrustConfig, AppError> {
+        Ok(config::load(self.config_path()?)?.plugin_trust)
+    }
+
+    fn store_plugin_trust(&self, trust: &PluginTrustConfig) -> Result<(), AppError> {
+        config::set_plugin_trust(self.config_path()?, trust.clone())
     }
 }
 
@@ -605,6 +630,29 @@ mod tests {
         store.store_map_config(&map).expect("store map");
 
         assert_eq!(store.load_map_config().expect("reload"), map);
+        // The operator scope is untouched by the client-scope write.
+        assert!(store.load_operator().is_ok());
+    }
+
+    #[test]
+    fn file_store_round_trips_plugin_trust_in_the_client_scope() {
+        use crate::config::PluginTrustConfig;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = FileConfigStore::new(dir.path().join("config.toml"), None);
+        store.load_or_bootstrap_config().expect("bootstrap");
+
+        assert!(store.load_plugin_trust().expect("load empty").is_empty());
+
+        let mut publishers = std::collections::BTreeMap::new();
+        publishers.insert(
+            "acme-genealogy".to_owned(),
+            "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff".to_owned(),
+        );
+        let trust = PluginTrustConfig { publishers };
+        store.store_plugin_trust(&trust).expect("store trust");
+
+        assert_eq!(store.load_plugin_trust().expect("reload"), trust);
         // The operator scope is untouched by the client-scope write.
         assert!(store.load_operator().is_ok());
     }

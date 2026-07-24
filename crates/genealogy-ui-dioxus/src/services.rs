@@ -21,7 +21,7 @@ use genealogy_app::{
 };
 use genealogy_plugin_host::{
     Capability, Grants, HostPattern, Invocation, NetPolicy, PluginHost, PluginRole, PresentError, Presenter,
-    ProgressControl, ResourceBudget,
+    ProgressControl, ResourceBudget, TrustRoots, resolve_trust_roots,
 };
 use genealogy_ui::{
     Category, CitationChangeSetRequest, CitationEdit, DataQualityVm, DnaMatchChangeSetRequest, DnaMatchEdit,
@@ -112,6 +112,23 @@ impl Services {
     /// The chrome localizer for the open workspace, honouring the configured UI language.
     fn chrome(&self) -> Chrome {
         Chrome::for_workspace(&self.dir, self.config_ui_language().as_ref())
+    }
+
+    /// The plugin trust roots for classification (ADR 0014 §3): the embedded sanctioned key(s) plus
+    /// the user's client-scope pinned publishers, resolved from the global config. A missing config
+    /// resolves to the embedded roots alone (no pins), so discovery still classifies first-party
+    /// bundles.
+    fn trust_roots(&self) -> Result<TrustRoots, String> {
+        let chrome = self.chrome();
+        let Ok(path) = config::config_path() else {
+            return resolve_trust_roots(&[]).map_err(|error| chrome.plugin_error(&error.to_string()));
+        };
+        let trust = FileConfigStore::new(path, None)
+            .load_plugin_trust()
+            .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+        let pins =
+            genealogy_app::resolve_trust_pins(&trust).map_err(|error| chrome.plugin_error(&error.to_string()))?;
+        resolve_trust_roots(&pins).map_err(|error| chrome.plugin_error(&error.to_string()))
     }
 }
 
@@ -584,9 +601,10 @@ pub struct PluginRow {
 /// needs to run `cargo xtask build-plugins` in a dev checkout).
 pub async fn discover_plugins(services: Services) -> Result<Vec<PluginRow>, String> {
     let chrome = services.chrome();
+    let roots = services.trust_roots()?;
     let found = services
         .host
-        .discover(&services.plugins_dir)
+        .discover(&services.plugins_dir, &roots)
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     let prefs = genealogy_app::read_plugin_preferences(&services.dir);
     let mut rows: Vec<PluginRow> = found
