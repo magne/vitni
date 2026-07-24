@@ -748,6 +748,40 @@ pub fn set_plugin_trust(path: &Path, plugin_trust: PluginTrustConfig) -> Result<
     save(path, &config)
 }
 
+/// Pins `publisher`'s ed25519 public key (64 hex characters) into the client-scope `[plugin_trust]`
+/// store (ADR 0014 §3), bootstrapping the config if it does not exist yet (read-modify-write,
+/// preserving the rest). Re-pinning a publisher replaces its key.
+///
+/// # Errors
+///
+/// [`AppError::Config`] if `public_key_hex` is not exactly 64 hex characters, or the config cannot be
+/// read or written.
+pub fn add_trusted_publisher(path: &Path, publisher: &str, public_key_hex: &str) -> Result<(), AppError> {
+    let normalized = public_key_hex.trim().to_lowercase();
+    if decode_public_key_hex(&normalized).is_none() {
+        return Err(AppError::Config(format!(
+            "publisher {publisher:?} has an invalid public key (expected 64 hex characters)"
+        )));
+    }
+    let mut config = load_or_bootstrap(path)?;
+    config.plugin_trust.publishers.insert(publisher.to_owned(), normalized);
+    save(path, &config)
+}
+
+/// Removes `publisher` from the client-scope `[plugin_trust]` store (ADR 0014 §3), preserving the
+/// rest (read-modify-write).
+///
+/// # Errors
+///
+/// [`AppError::Config`] if `publisher` is not pinned, or the config cannot be read or written.
+pub fn remove_trusted_publisher(path: &Path, publisher: &str) -> Result<(), AppError> {
+    let mut config = load(path)?;
+    if config.plugin_trust.publishers.remove(publisher).is_none() {
+        return Err(AppError::Config(format!("publisher {publisher:?} is not pinned")));
+    }
+    save(path, &config)
+}
+
 /// Switches the default (last-used) workspace by name, persisting the change
 /// (read-modify-write, preserving the rest). The operator is unaffected — it is app-level, not
 /// per-workspace (ADR 0005).
@@ -771,14 +805,48 @@ pub fn set_default_workspace(path: &Path, name: &str) -> Result<(), AppError> {
 mod tests {
     use super::{
         Config, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, SuretyLabelOverride, SuretyLabelOverrides,
-        ThemeMode, load, load_or_bootstrap, save, set_default_workspace, set_operator_identity,
-        set_workspace_default_id_formats, set_workspace_default_locale, set_workspace_default_surety,
+        ThemeMode, add_trusted_publisher, load, load_or_bootstrap, remove_trusted_publisher, save,
+        set_default_workspace, set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale,
+        set_workspace_default_surety,
     };
     use genealogy_core::provenance::Confidence;
     use std::path::{Path, PathBuf};
 
     fn config_at(path: &Path) -> Config {
         load_or_bootstrap(path).expect("bootstrap")
+    }
+
+    #[test]
+    fn pin_then_unpin_a_publisher_round_trips_through_config() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        let key = "a".repeat(64);
+        add_trusted_publisher(&path, "acme", &key).expect("pin");
+        assert_eq!(
+            load(&path).expect("load").plugin_trust.publishers.get("acme"),
+            Some(&key),
+            "the pinned key persists"
+        );
+        remove_trusted_publisher(&path, "acme").expect("unpin");
+        assert!(
+            load(&path).expect("load").plugin_trust.publishers.is_empty(),
+            "unpinning drops the entry"
+        );
+    }
+
+    #[test]
+    fn pinning_rejects_a_malformed_key_and_unpinning_an_absent_publisher_errors() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        assert!(
+            add_trusted_publisher(&path, "acme", "not-hex").is_err(),
+            "a non-64-hex key is rejected"
+        );
+        config_at(&path);
+        assert!(
+            remove_trusted_publisher(&path, "ghost").is_err(),
+            "removing an unpinned publisher is an error"
+        );
     }
 
     #[test]

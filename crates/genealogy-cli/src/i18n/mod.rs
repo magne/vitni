@@ -163,6 +163,76 @@ impl Localizer {
         fl!(self.loader, "import-cancelled")
     }
 
+    /// The localized trust-tier label for a discovered plugin (ADR 0014 §3).
+    #[must_use]
+    fn plugin_trust_label(&self, trust: genealogy_plugin_host::TrustTier) -> String {
+        match trust {
+            genealogy_plugin_host::TrustTier::Sanctioned => fl!(self.loader, "plugin-trust-sanctioned"),
+            genealogy_plugin_host::TrustTier::UserTrusted => fl!(self.loader, "plugin-trust-user-trusted"),
+            genealogy_plugin_host::TrustTier::Untrusted => fl!(self.loader, "plugin-trust-untrusted"),
+        }
+    }
+
+    /// One `plugin list` row: id, trust tier, declared capabilities, and the effective grant.
+    #[must_use]
+    pub fn plugin_list_line(
+        &self,
+        id: &str,
+        trust: genealogy_plugin_host::TrustTier,
+        declared: &str,
+        granted: &str,
+    ) -> String {
+        fl!(
+            self.loader,
+            "plugin-list-line",
+            id = id,
+            trust = self.plugin_trust_label(trust),
+            declared = declared,
+            granted = granted
+        )
+    }
+
+    /// The `plugin list` empty state (no plugin bundles discovered).
+    #[must_use]
+    pub fn plugin_list_empty(&self) -> String {
+        fl!(self.loader, "plugin-list-empty")
+    }
+
+    /// `Saved grants for <id>: <capabilities>.` (an empty set denies everything declared).
+    #[must_use]
+    pub fn plugin_grants_saved(&self, id: &str, approved: &str) -> String {
+        fl!(self.loader, "plugin-grants-saved", id = id, approved = approved)
+    }
+
+    /// One `plugin trust list` row: publisher + short key fingerprint.
+    #[must_use]
+    pub fn plugin_trust_list_line(&self, publisher: &str, fingerprint: &str) -> String {
+        fl!(
+            self.loader,
+            "plugin-trust-list-line",
+            publisher = publisher,
+            fingerprint = fingerprint
+        )
+    }
+
+    /// The `plugin trust list` empty state (no publisher pinned).
+    #[must_use]
+    pub fn plugin_trust_list_empty(&self) -> String {
+        fl!(self.loader, "plugin-trust-list-empty")
+    }
+
+    /// `Pinned publisher <publisher>.`
+    #[must_use]
+    pub fn plugin_trust_pinned(&self, publisher: &str) -> String {
+        fl!(self.loader, "plugin-trust-pinned", publisher = publisher)
+    }
+
+    /// `Unpinned publisher <publisher>.`
+    #[must_use]
+    pub fn plugin_trust_unpinned(&self, publisher: &str) -> String {
+        fl!(self.loader, "plugin-trust-unpinned", publisher = publisher)
+    }
+
     /// The localized confidence label (data-model §8): a workspace's own surety-scheme override
     /// (ADR 0027) wins if one is set for this ordinal, else the Fluent-resolved default.
     #[must_use]

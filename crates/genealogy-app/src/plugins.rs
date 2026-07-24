@@ -20,6 +20,24 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+/// The trust tier a discovered plugin's signature places it in (ADR 0014 §3), as a frontend-visible
+/// DTO.
+///
+/// This crate cannot depend on `genealogy-plugin-host` (which owns the `TrustTier` the host actually
+/// computes — Wasmtime and the crypto live above this layer), so this plain mirror is what a frontend
+/// carries into a view-model. A renderer maps the host's `TrustTier` onto this when it discovers a
+/// bundle; `genealogy-ui` builds its grant view-model from this DTO, staying free of plugin-host
+/// types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PluginTrust {
+    /// Signed by an embedded sanctioned project key — every declared capability is grantable.
+    Sanctioned,
+    /// Signed by a publisher key the user pinned in their client-scope trust store.
+    UserTrusted,
+    /// Unsigned, or signed by a key the host does not trust. Loadable, but never auto-granted.
+    Untrusted,
+}
+
 /// The manifest that marks a directory as a plugin bundle (ADR 0014 §2).
 const BUNDLE_MANIFEST: &str = "plugin.toml";
 /// The component every bundle carries (ADR 0014 §2).

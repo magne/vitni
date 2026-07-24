@@ -12,6 +12,7 @@ pub mod media;
 pub mod note;
 pub mod person;
 pub mod place;
+pub mod plugin;
 pub mod repository;
 pub mod research_note;
 pub mod source;

@@ -1086,6 +1086,95 @@ impl Localizer {
         }
     }
 
+    /// The localized trust-tier label for a discovered plugin (ADR 0014 §3).
+    #[must_use]
+    pub fn plugin_trust_label(&self, trust: genealogy_app::PluginTrust) -> String {
+        match trust {
+            genealogy_app::PluginTrust::Sanctioned => fl!(self.loader, "plugin-trust-sanctioned"),
+            genealogy_app::PluginTrust::UserTrusted => fl!(self.loader, "plugin-trust-user-trusted"),
+            genealogy_app::PluginTrust::Untrusted => fl!(self.loader, "plugin-trust-untrusted"),
+        }
+    }
+
+    /// The localized display label for a capability interface name (`log`, `query`, `commands`, …),
+    /// falling back to the raw name for a capability this build does not know (ADR 0014 §5).
+    #[must_use]
+    pub fn plugin_capability_label(&self, name: &str) -> String {
+        match name {
+            "log" => fl!(self.loader, "plugin-cap-log"),
+            "query" => fl!(self.loader, "plugin-cap-query"),
+            "commands" => fl!(self.loader, "plugin-cap-commands"),
+            "progress" => fl!(self.loader, "plugin-cap-progress"),
+            "import-source" => fl!(self.loader, "plugin-cap-import-source"),
+            "export-sink" => fl!(self.loader, "plugin-cap-export-sink"),
+            "net" => fl!(self.loader, "plugin-cap-net"),
+            "media-store" => fl!(self.loader, "plugin-cap-media-store"),
+            "ai" => fl!(self.loader, "plugin-cap-ai"),
+            "present" => fl!(self.loader, "plugin-cap-present"),
+            other => other.to_owned(),
+        }
+    }
+
+    /// The "needs approval" badge shown for a plugin with no recorded grant decision (ADR 0014 §5).
+    #[must_use]
+    pub fn plugin_grant_pending(&self) -> String {
+        fl!(self.loader, "plugin-grant-pending")
+    }
+
+    /// The heading for the per-plugin capability-grant section.
+    #[must_use]
+    pub fn plugin_grants_heading(&self) -> String {
+        fl!(self.loader, "plugin-grants-heading")
+    }
+
+    /// The "Approve all declared" action label (sanctioned / user-trusted plugins).
+    #[must_use]
+    pub fn plugin_action_approve_all(&self) -> String {
+        fl!(self.loader, "plugin-action-approve-all")
+    }
+
+    /// The "Save grants" action label.
+    #[must_use]
+    pub fn plugin_action_save_grants(&self) -> String {
+        fl!(self.loader, "plugin-action-save-grants")
+    }
+
+    /// The heading for the pinned-publisher trust-store editor.
+    #[must_use]
+    pub fn plugin_trust_store_heading(&self) -> String {
+        fl!(self.loader, "plugin-trust-store-heading")
+    }
+
+    /// The trust-store empty state (no publisher pinned).
+    #[must_use]
+    pub fn plugin_trust_store_empty(&self) -> String {
+        fl!(self.loader, "plugin-trust-store-empty")
+    }
+
+    /// The publisher-identity input label in the trust-store editor.
+    #[must_use]
+    pub fn plugin_trust_publisher_label(&self) -> String {
+        fl!(self.loader, "plugin-trust-publisher-label")
+    }
+
+    /// The public-key input label in the trust-store editor.
+    #[must_use]
+    pub fn plugin_trust_key_label(&self) -> String {
+        fl!(self.loader, "plugin-trust-key-label")
+    }
+
+    /// The "Pin publisher" action label.
+    #[must_use]
+    pub fn plugin_action_pin(&self) -> String {
+        fl!(self.loader, "plugin-action-pin")
+    }
+
+    /// The accessible name for an "Unpin publisher" action, naming the publisher.
+    #[must_use]
+    pub fn plugin_action_unpin(&self, publisher: &str) -> String {
+        fl!(self.loader, "plugin-action-unpin", publisher = publisher)
+    }
+
     /// The accessible name for a field's reset-to-original control, e.g. `Reset Given name to
     /// original value` (`record-editing.html` §4).
     #[must_use]

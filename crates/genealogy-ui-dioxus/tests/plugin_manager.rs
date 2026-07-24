@@ -4,7 +4,9 @@
 //! hand-built rows — no window, no workspace, no plugin host — the same pattern as `pedigree.rs`.
 
 use dioxus::prelude::*;
+use genealogy_app::PluginTrust;
 use genealogy_plugin_host::{Capability, PluginRole};
+use genealogy_ui::Localizer;
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::plugin_table;
 use genealogy_ui_dioxus::services::PluginRow;
@@ -15,6 +17,11 @@ fn chrome(tag: &str) -> Chrome {
     Chrome::with_languages(None, &[language])
 }
 
+fn data_loc(tag: &str) -> Localizer {
+    let language = tag.parse::<LanguageIdentifier>().unwrap_or_default();
+    Localizer::with_languages(None, &[language])
+}
+
 fn rows() -> Vec<PluginRow> {
     vec![
         PluginRow {
@@ -23,6 +30,8 @@ fn rows() -> Vec<PluginRow> {
             host_api_version: "0.12.0".to_owned(),
             capabilities: vec![Capability::Log, Capability::Commands, Capability::Progress],
             enabled: true,
+            trust: PluginTrust::Sanctioned,
+            approved: None,
         },
         PluginRow {
             id: "ui-panel".to_owned(),
@@ -30,6 +39,8 @@ fn rows() -> Vec<PluginRow> {
             host_api_version: "0.12.0".to_owned(),
             capabilities: vec![Capability::Log],
             enabled: false,
+            trust: PluginTrust::Untrusted,
+            approved: None,
         },
     ]
 }
@@ -42,8 +53,9 @@ thread_local! {
 
 fn table() -> Element {
     let chrome = chrome(TABLE_LANG.with(std::cell::Cell::get));
+    let loc = data_loc(TABLE_LANG.with(std::cell::Cell::get));
     let on_toggle = Callback::new(|_: (String, bool)| {});
-    plugin_table(&chrome, &rows(), on_toggle)
+    plugin_table(&chrome, &loc, &rows(), on_toggle)
 }
 
 #[test]
@@ -106,8 +118,12 @@ fn every_row_shows_its_role_host_api_version_and_trust_tier() {
         "the host-api version caption renders:\n{html}"
     );
     assert!(
-        html.matches("unsigned").count() == 2,
-        "every plugin is shown as the honest read-only trust tier:\n{html}"
+        html.contains("Sanctioned"),
+        "a signed first-party plugin shows the Sanctioned tier:\n{html}"
+    );
+    assert!(
+        html.contains("Untrusted"),
+        "an unsigned plugin shows the Untrusted tier:\n{html}"
     );
 }
 

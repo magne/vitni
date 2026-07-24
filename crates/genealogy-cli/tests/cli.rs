@@ -509,3 +509,64 @@ fn an_unknown_workspace_name_fails() {
         .failure()
         .stderr(predicate::str::contains("nope"));
 }
+
+#[test]
+fn plugin_trust_add_list_remove_round_trips_through_config() {
+    // The client-scope pinned-publisher store (ADR 0014 §3): add, see it listed with a short
+    // fingerprint (never the raw 64-hex key), then remove it.
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let key = "a".repeat(64);
+
+    genealogy(dir.path())
+        .args(["plugin", "trust", "add", "acme", &key])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Pinned publisher acme"));
+    genealogy(dir.path())
+        .args(["plugin", "trust", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("acme").and(predicate::str::contains("aaaaaaaaaaaaaaaa")));
+    genealogy(dir.path())
+        .args(["plugin", "trust", "remove", "acme"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Unpinned publisher acme"));
+    genealogy(dir.path())
+        .args(["plugin", "trust", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No publisher is pinned"));
+}
+
+#[test]
+fn plugin_trust_add_rejects_a_malformed_key() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["plugin", "trust", "add", "acme", "not-a-key"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("acme"));
+}
+
+#[test]
+fn plugin_grant_then_revoke_round_trips_through_the_manifest() {
+    // Grant/revoke edit the workspace manifest's approved-capability set (ADR 0014 §5); no plugin
+    // discovery is needed, so this exercises the mutation path without built bundles.
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["plugin", "grant", "gedcom-import", "query", "commands"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Saved grants for gedcom-import").and(predicate::str::contains("commands")));
+    genealogy(dir.path())
+        .args(["plugin", "revoke", "gedcom-import", "commands"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("query").and(predicate::str::contains("commands").not()));
+}

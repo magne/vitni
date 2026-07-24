@@ -42,7 +42,7 @@
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
-          <td><span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span></td>
+          <td><span class="badge" style="border-color:var(--ok);color:var(--ok)" title="Signed by the embedded project key">sanctioned</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
         </tr>
         <tr>
@@ -54,7 +54,7 @@
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
-          <td><span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span></td>
+          <td><span class="badge" style="border-color:var(--ok);color:var(--ok)" title="Signed by the embedded project key">sanctioned</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
         </tr>
         <tr>
@@ -66,7 +66,7 @@
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
-          <td><span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span></td>
+          <td><span class="badge" style="border-color:var(--accent);color:var(--accent)" title="Signed by a publisher you pinned in the trust store">user-trusted</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
         </tr>
         <tr>
@@ -78,7 +78,7 @@
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
-          <td><span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span></td>
+          <td><span class="badge" style="border-color:var(--accent);color:var(--accent)" title="Signed by a publisher you pinned in the trust store">user-trusted</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
         </tr>
         <tr style="opacity:0.7">
@@ -91,11 +91,50 @@
             <span class="ev info">log</span><span class="ev info">query</span>
             <span class="chip" title="declared but not granted"><span class="dot" style="background:var(--warn)"></span>net (denied)</span>
           </td>
-          <td><span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span></td>
+          <td><span class="badge" style="border-color:var(--warn);color:var(--warn)" title="Unsigned or signed by an unknown key — never auto-granted">untrusted</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
         </tr>
       </tbody>
     </table>
+
+    <h3 style="margin-top:18px">Capability grants</h3>
+    <p class="muted" style="margin-bottom:10px">The effective grant is what a plugin <i>declared</i> intersected with what you <i>approved</i> — still deny-by-default. A sanctioned or user-trusted plugin defaults to all declared; an untrusted plugin is granted nothing until you approve each capability.</p>
+
+    <div class="card">
+      <div class="row-actions" style="justify-content:space-between">
+        <div>
+          <b>gedcom-import</b>
+          <span class="badge" style="border-color:var(--ok);color:var(--ok);margin-left:8px">sanctioned</span>
+        </div>
+        <div class="row-actions">
+          <button class="btn sm">Approve all declared</button>
+          <button class="btn sm primary">Save grants</button>
+        </div>
+      </div>
+      <div class="stack" style="margin-top:8px">
+        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">log</span><span class="grow muted">Emit diagnostic log lines to the host. No data access.</span></div>
+        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">query</span><span class="grow muted">Read projections (people, sources…) — read-only.</span></div>
+        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">commands</span><span class="grow muted">Submit commands that append events to the log.</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:8px">
+      <div class="row-actions" style="justify-content:space-between">
+        <div>
+          <b>ui-panel</b>
+          <span class="badge" style="border-color:var(--warn);color:var(--warn);margin-left:8px">untrusted</span>
+          <span class="badge" style="border-color:var(--warn);color:var(--warn);margin-left:8px">Needs approval</span>
+        </div>
+        <div class="row-actions">
+          <button class="btn sm primary">Save grants</button>
+        </div>
+      </div>
+      <div class="stack" style="margin-top:8px">
+        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="false">log</span><span class="grow muted">Emit diagnostic log lines to the host. No data access.</span></div>
+        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="false">query</span><span class="grow muted">Read projections (people, sources…) — read-only.</span></div>
+        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="false">net</span><span class="grow muted">Outbound network — denied unless you approve it.</span></div>
+      </div>
+    </div>
 
     <div class="grid-2" style="margin-top:8px">
       <div class="card">
@@ -109,14 +148,19 @@
         </div>
       </div>
       <div class="card">
-        <h3>Trust &amp; signing</h3>
-        <div class="wrap" style="margin-bottom:10px">
-          <span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span>
+        <h3>Trusted publishers</h3>
+        <p class="muted" style="margin-bottom:10px">Pin a publisher's ed25519 public key to trust their
+          signed plugins as <b>user-trusted</b> — for this machine only (ADR 0014 §3). Sanctioned
+          first-party plugins are trusted by the embedded project key and need no pin.</p>
+        <div class="stack" style="margin-bottom:10px">
+          <div class="fact-row"><span style="min-width:160px"><b>gramps.example.org</b></span><span class="grow mono muted">3aa1f2c9b0e47d58…</span><button class="btn sm ghost">Unpin</button></div>
         </div>
-        <p class="muted">Every plugin renders <b>unsigned</b> today — trust tiers and the signing /
-          verification UX (publisher identity, revocation, per-capability prompts) are <b>planned
-          (ADR 0014)</b>, not yet built. Trust is shown read-only here.</p>
-        <div class="toast" style="margin-top:4px">🔒 Sandbox active · fuel + memory limits enforced</div>
+        <div class="grid-2">
+          <label class="field">Publisher<input class="in" placeholder="publisher identity"></label>
+          <label class="field">Public key (64 hex characters)<input class="in mono" placeholder="ed25519 public key"></label>
+        </div>
+        <div class="row-actions" style="margin-top:8px"><button class="btn sm primary">Pin publisher</button></div>
+        <div class="toast" style="margin-top:8px">🔒 Sandbox active · fuel + memory limits enforced</div>
       </div>
     </div>
 
