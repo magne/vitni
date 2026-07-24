@@ -33,8 +33,50 @@ pub enum Capability {
     Present,
 }
 
+impl Capability {
+    /// The canonical short interface name (`log`, `query`, `commands`, `progress`, `import-source`,
+    /// `export-sink`, `net`, `media-store`, `ai`, `present`) — the string used in a `plugin.toml`
+    /// `capabilities` entry, in discovery, and in the persisted per-plugin approved-grant set
+    /// (ADR 0014 §5). The single source of truth for the enum→name direction.
+    #[must_use]
+    pub const fn interface_name(&self) -> &'static str {
+        match self {
+            Self::Query => "query",
+            Self::Commands => "commands",
+            Self::Log => "log",
+            Self::Progress => "progress",
+            Self::ImportSource => "import-source",
+            Self::ExportSink => "export-sink",
+            Self::Net => "net",
+            Self::MediaStore => "media-store",
+            Self::Ai => "ai",
+            Self::Present => "present",
+        }
+    }
+
+    /// The [`Capability`] a canonical short interface name denotes, or `None` for an unknown name.
+    /// The inverse of [`Self::interface_name`] and the single source of truth for the name→enum
+    /// direction (both discovery's manifest cross-check and the grant resolver share it).
+    #[must_use]
+    pub fn from_interface_name(name: &str) -> Option<Self> {
+        match name {
+            "query" => Some(Self::Query),
+            "commands" => Some(Self::Commands),
+            "log" => Some(Self::Log),
+            "progress" => Some(Self::Progress),
+            "import-source" => Some(Self::ImportSource),
+            "export-sink" => Some(Self::ExportSink),
+            "net" => Some(Self::Net),
+            "media-store" => Some(Self::MediaStore),
+            "ai" => Some(Self::Ai),
+            "present" => Some(Self::Present),
+            _ => None,
+        }
+    }
+}
+
 /// The set of capabilities granted to one plugin instance. Empty by default (deny-by-default).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Grants {
     granted: HashSet<Capability>,
 }

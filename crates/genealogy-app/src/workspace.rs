@@ -126,6 +126,13 @@ pub struct PluginPreferences {
     /// stem, e.g. `gedcom-import`).
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub disabled: BTreeSet<String>,
+    /// The operator's recorded capability-grant decisions (ADR 0014 §5), keyed by plugin id, each an
+    /// approved-capability set of [`Capability::interface_name`](genealogy_core) short names (`log`,
+    /// `commands`, …). An id **absent** from this map has **no** recorded decision — the plugin
+    /// host's grant resolver then applies the trust-tier default (trusted → grant-all; untrusted →
+    /// grant-nothing). An id present with an empty set is an explicit "approve nothing" decision.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub approved: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl PluginPreferences {
@@ -133,6 +140,14 @@ impl PluginPreferences {
     #[must_use]
     pub fn is_enabled(&self, id: &str) -> bool {
         !self.disabled.contains(id)
+    }
+
+    /// The operator's recorded approved-capability set for plugin `id`, or `None` when no decision
+    /// has been recorded (ADR 0014 §5). `None` lets the grant resolver apply the trust-tier default;
+    /// `Some(set)` (even empty) is an explicit decision the resolver intersects with the declared set.
+    #[must_use]
+    pub fn approved_grants(&self, id: &str) -> Option<&BTreeSet<String>> {
+        self.approved.get(id)
     }
 }
 
@@ -550,6 +565,21 @@ pub fn save_plugin_enabled(dir: &Path, id: &str, enabled: bool) -> Result<(), Ap
     write_manifest(dir, &manifest)
 }
 
+/// Persists the operator's approved-capability set for plugin `id` into the workspace manifest's
+/// `[plugins]` block (read-modify-write, preserving the rest, ADR 0014 §5). Records an explicit
+/// decision — `approved` (even empty) becomes the effective grant intersected with the plugin's
+/// declared capabilities; a plugin with no recorded decision falls back to its trust-tier default.
+/// No store is opened. Mirrors [`save_plugin_enabled`].
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read/written.
+pub fn save_plugin_grants(dir: &Path, id: &str, approved: &BTreeSet<String>) -> Result<(), AppError> {
+    let mut manifest = read_manifest(dir)?;
+    manifest.plugins.approved.insert(id.to_owned(), approved.clone());
+    write_manifest(dir, &manifest)
+}
+
 /// Persists the surety-label overrides into the workspace manifest's `[surety]` block
 /// (read-modify-write, preserving the rest). No store is opened. Mirrors [`save_locale_overrides`].
 ///
@@ -779,8 +809,8 @@ mod tests {
         Workspace, person_id_format_layers, push_recent, read_manifest, read_plugin_preferences,
         read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_ui_preferences,
         resolve_database_url, resolve_init_database_url, resolve_locale, resolve_surety_labels, resolve_ui_preferences,
-        save_locale_overrides, save_plugin_enabled, save_recent, save_surety_label_overrides, save_theme_mode,
-        save_window_geometry, theme_layers,
+        save_locale_overrides, save_plugin_enabled, save_plugin_grants, save_recent, save_surety_label_overrides,
+        save_theme_mode, save_window_geometry, theme_layers,
     };
     use crate::config::{
         AppDefaults, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, SuretyLabelOverride,
@@ -1498,5 +1528,85 @@ label = "Ada Lovelace"
         let dir = tempfile::tempdir().expect("tempdir");
         let prefs = read_plugin_preferences(&dir.path().join("missing"));
         assert!(prefs.is_enabled("anything"), "no manifest => every plugin enabled");
+    }
+
+    #[test]
+    fn an_old_manifest_without_the_approved_key_parses_with_no_recorded_decisions() {
+        // A manifest written before ADR 0014 §5 has a `[plugins]` block with only `disabled`; the
+        // `approved` map must serde-default so it still parses, and every id reads back as "no
+        // decision" (None), so the grant resolver applies the trust-tier default.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).expect("dir");
+        std::fs::write(
+            ws.join("workspace.toml"),
+            "database_url = \"sqlite://genealogy.sqlite3\"\n\n[plugins]\ndisabled = [\"gedcom-import\"]\n",
+        )
+        .expect("write manifest");
+
+        let prefs = read_plugin_preferences(&ws);
+        assert!(!prefs.is_enabled("gedcom-import"), "the disabled list still parses");
+        assert_eq!(
+            prefs.approved_grants("gedcom-import"),
+            None,
+            "no `approved` key => no recorded grant decision for any id"
+        );
+        assert!(prefs.approved.is_empty());
+    }
+
+    #[test]
+    fn save_plugin_grants_round_trips_and_is_independent_of_disabled() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+
+        // A prior enable/disable decision and a theme save must survive the grant write.
+        save_theme_mode(&ws, ThemeMode::Dark).expect("save theme");
+        save_plugin_enabled(&ws, "gedcom-import", false).expect("disable");
+
+        let approved: std::collections::BTreeSet<String> = ["log", "commands", "import-source"]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
+        save_plugin_grants(&ws, "gedcom-import", &approved).expect("save grants");
+
+        let prefs = read_plugin_preferences(&ws);
+        assert_eq!(
+            prefs.approved_grants("gedcom-import"),
+            Some(&approved),
+            "the approved grant set round-trips"
+        );
+        assert!(
+            !prefs.is_enabled("gedcom-import"),
+            "the earlier disable decision is preserved — `approved` and `disabled` are independent"
+        );
+        assert_eq!(
+            prefs.approved_grants("gedcom-export"),
+            None,
+            "an id with no recorded decision reads back as None"
+        );
+
+        let manifest = read_manifest(&ws).expect("manifest");
+        assert_eq!(
+            manifest.ui.theme,
+            Some(ThemeMode::Dark),
+            "the earlier theme save survives"
+        );
+    }
+
+    #[test]
+    fn an_empty_approved_set_is_an_explicit_decision_distinct_from_none() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+
+        save_plugin_grants(&ws, "untrusted-plugin", &std::collections::BTreeSet::new()).expect("save empty");
+
+        let prefs = read_plugin_preferences(&ws);
+        assert_eq!(
+            prefs.approved_grants("untrusted-plugin"),
+            Some(&std::collections::BTreeSet::new()),
+            "an explicit empty approval is Some(empty), not None"
+        );
     }
 }
