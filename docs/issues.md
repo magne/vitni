@@ -174,7 +174,7 @@ place-search picker landed later on `feat/place-map-followups`.)
 - **`map-provider` plugin world + geocoding** — the declarative provider ships and the Geography
   toolbar search is now a `RecordPicker` over existing places (search + jump); geocoding a *new*
   real-world address to a coordinate stays deferred. A WASM `map-provider` world supplying geocoding
-  + custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
+  \+ custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
   never pixels).
 
 ## Phase 10 — Research rigor & import sync
@@ -208,12 +208,50 @@ Phase 10 shipped (see Completed); these are scoped follow-ups, none blocking. Se
 
 ## Phase 11 — 1.0 hardening
 
-Roadmap-owned; see [`roadmap.md` Phase 11](roadmap.md#phase-11--10-hardening).
+Phase 11 shipped (see Completed); these are scoped follow-ups, none blocking. See
+[`roadmap.md` Phase 11](roadmap.md#phase-11--10-hardening-done).
 
-- Plugin **signing, trust tiers, capability-grant UX, and three-layer loading** (workspace > app-dir
-  > embedded) — **ADR 0014**.
-- Performance profiling.
-- Packaging and distribution.
+### Packaging & release
+
+- **Cross-platform packaging** — 1.0 is Linux-first (tarball + `.deb` + AppImage). macOS/Windows
+  bundles and **OS-level code-signing / notarization** (Gatekeeper, Authenticode) are a later cycle
+  (ADR 0014 §Out of scope).
+- **`.deb` needs `GENEALOGY_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
+  distro-installed binary needs `GENEALOGY_PLUGIN_DIR=/usr/lib/genealogy/plugins` (the AppImage sets it
+  via `AppRun`; the tarball resolves the fleet beside the binary). Teaching the embedded layer a default
+  system path so an installed `.deb` finds the fleet with no env var is the follow-up (see
+  [`release.md`](release.md)).
+- **Real release keys not yet generated** — only the deterministic **DEV** signing key exists (Sanctioned
+  in debug builds only). Before the first real release, generate the release ed25519 keypair, set the
+  private half as the `GENEALOGY_PLUGIN_SIGNING_KEY` repo secret, and embed the public half via
+  `GENEALOGY_PROJECT_PUBLIC_KEY` (ADR 0014 §6; procedure in [`release.md`](release.md)).
+- **`release.yml` unverified end-to-end** — GitHub Actions billing is currently blocked, so the release
+  workflow is zizmor / YAML / `bash -n` verified and its build/package steps reproduced locally, but has
+  never run a full tag → AppImage → GitHub Release cycle. The first real tag needs a live verification
+  when billing is active.
+
+### Plugin trust (ADR 0014 out-of-scope)
+
+- **Marketplace / registry / auto-update** — bundles are installed manually into a layer; discovery and
+  remote distribution/fetch of third-party plugins is future work.
+- **Transparency-log / online revocation** — revocation is by a binary release dropping a key from the
+  embedded trust-root set (ADR 0014 §6); no sigstore-style online revocation.
+- **Sub-capability grants** — e.g. a user-editable per-host `net` allowlist. `net`'s allowlist stays the
+  grant-site `NetPolicy` (ADR 0017); the user-editable override ADR 0017 deferred here remains a
+  follow-up, not built.
+- **Per-plugin resource-budget overrides** in config — fuel/memory limits stay host-set (ADR 0011 §4).
+- **Host-binary signing / build-provenance attestation** — signing covers plugin bundles, not the app
+  binary itself.
+
+### Profiling follow-ups (from [`research/performance-profiling.md`](research/performance-profiling.md))
+
+- **`list_*` projections lack `LIMIT`/`OFFSET`** — a full scan + JSON decode (61.7 ms at ~52.6k persons);
+  pagination is the real interactive scaling lever before 100k scale. Overlaps the existing **`ListPane`
+  DOM virtualization** / `list_view_page` backlog item above.
+- **Research-note reverse lookup is a `json_each` scan, not a materialized index** — fine now (~2 ms at
+  ~2250 notes); a materialized side-index is a follow-up only if note volume grows.
+- **Snapshotting is decided, not deferred-open** — measured and **not** warranted at target scale;
+  ADR 0004's deferral stands, no follow-up ADR (recorded here so it is not re-raised).
 
 ## Phase 12 — DNA breadth & depth
 
@@ -240,6 +278,34 @@ the file backend.
 
 ## Completed
 
+- **1.0 hardening (Phase 11).** *(Done — Gate 1 + a Gate-2 PR stack, PRs #176–#182:
+  `docs/phase-11-gate-1` → `feat/plugin-bundle-signing` → `feat/plugin-layered-loading` →
+  `feat/plugin-grants` → `feat/plugin-grant-ux` → `feat/perf-profiling` →
+  `feat/packaging-distribution`.)* Plugins were unsigned, loaded from one flat directory with all grants
+  hardcoded at the call site, the core's replay cost was unmeasured, and there was no way to ship the
+  app. Delivered in three workstreams under **ADR 0014** (the last deferred plugin-system decision).
+  **Plugin trust (ADR 0014):** a plugin is now a signed **bundle** (`plugin.toml` + `plugin.wasm` +
+  `plugin.sig`, closing the deferred ADR 0007 §8 format) — an **ed25519** detached signature over a
+  `sha2` digest of the manifest **and** the component, verified against an **embedded project trust
+  root**; three **trust tiers** (*sanctioned* project key / *user-trusted* pinned publisher key in a
+  client-scope store / *untrusted* unsigned — loadable, never auto-granted), a present-but-unverifiable
+  signature **fails closed**; **three-layer loading** (workspace > app-dir > embedded) mirroring the i18n
+  `AssetsMultiplexor`, id-keyed with a manifest↔component cross-check (inspected caps ⊆ declared,
+  tree-shake-safe); **grant = declared ∩ user-approved** persisted per plugin in the workspace manifest,
+  surfaced by a Dioxus plugin-panel (trust badge, per-capability toggles, pinned-publisher trust-store
+  editor) and a CLI `plugin list|grant|revoke|trust …` group. Signing never widens the sandbox
+  (ADR 0007 §12). **Performance profiling:** a criterion harness over a synthetic-workspace fixture
+  (built through the pure `decide` → event-store path) measures projection **rebuild** (~73–106 µs/event,
+  ~linear) and the hot query paths; **snapshotting is measured and not warranted** (rebuild is a
+  maintenance op, per-aggregate streams stay tiny — ADR 0004's deferral stands, no follow-up ADR).
+  **Packaging (Linux-first):** `cargo xtask package` assembles a signed tarball (CLI + GUI + the signed
+  fleet as the embedded layer, re-verifying every signature), cargo-deb metadata for a `.deb`, and a
+  tag-triggered zizmor-clean `release.yml` building tarball + `.deb` + AppImage with the release-signed
+  fleet and the embedded release trust root. Research:
+  [`research/plugin-signing-and-trust.md`](research/plugin-signing-and-trust.md),
+  [`research/performance-profiling.md`](research/performance-profiling.md); plan:
+  [`plans/phase-11-hardening.md`](plans/phase-11-hardening.md); release procedure:
+  [`release.md`](release.md). Scoped residuals tracked above under *Phase 11*.
 - **Research rigor & import sync (Phase 10).** *(Done — stacked branches `docs/phase-10-gate-1` →
   `feat/surety-scheme-labels` → `feat/research-note-aggregate` → `feat/import-merge-sync` →
   `feat/round-trip-gaps`.)* Gate 1 delivered three gating ADRs (0027/0028/0029) + research docs; the
