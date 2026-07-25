@@ -450,12 +450,43 @@ Research: [`surety-schemes.md`](research/surety-schemes.md),
 [`docs/plans/phase-10-research-rigor.md`](plans/phase-10-research-rigor.md). Scoped residuals tracked
 under *Phase 10* in [`docs/issues.md`](issues.md).
 
-## Phase 11 — 1.0 hardening
+## Phase 11 — 1.0 hardening ✅ done
 
-- Plugin **signing, trust tiers, capability-grant UX, and three-layer loading** (workspace > app-dir
-  > embedded), mirroring the ADR 0003/0005 override model. *(**ADR 0014**; moved here from Phase 4.)*
-- Performance profiling.
-- Packaging and distribution.
+The 1.0 hardening pass: make plugins trustworthy, prove the event-sourced core scales, and ship the
+app. Gated by **ADR 0014** (the last deferred plugin-system decision).
+
+✅ **Delivered** (Gate 1 research + ADR 0014, then a Gate-2 PR stack — `docs/phase-11-gate-1` →
+`feat/plugin-bundle-signing` → `feat/plugin-layered-loading` → `feat/plugin-grants` →
+`feat/plugin-grant-ux` → `feat/perf-profiling` → `feat/packaging-distribution`, PRs #176–#182):
+
+- **Plugin signing, trust tiers, capability-grant UX & three-layer loading (ADR 0014).** A plugin is
+  now a signed **bundle** (`plugin.toml` + `plugin.wasm` + `plugin.sig`, closing the deferred
+  ADR 0007 §8 format): an **ed25519** detached signature over a `sha2` digest of the manifest **and**
+  the component, verified against an **embedded project trust root**. Three **trust tiers** —
+  *sanctioned* (project key), *user-trusted* (a publisher key the user pins in a client-scope trust
+  store), *untrusted* (unsigned — loadable but never auto-granted); a present-but-unverifiable
+  signature **fails closed**. **Three-layer loading** (workspace > app-dir > embedded) mirrors the
+  i18n `AssetsMultiplexor`, id-keyed, higher layer wins, with a manifest↔component cross-check
+  (inspected capabilities ⊆ declared, tree-shake-safe). The **capability grant** is now
+  `declared ∩ user-approved`, persisted per plugin in the workspace manifest, surfaced by a Dioxus
+  plugin-panel (trust badge, per-capability toggles, trust-store editor) and a CLI
+  `plugin list|grant|revoke|trust …` command group. Signing never widens the sandbox (ADR 0007 §12).
+- **Performance profiling.** A criterion harness over a synthetic-workspace fixture (built through the
+  pure `decide` → event-store path) measures projection **rebuild** and the hot query paths. Rebuild
+  scales ~linearly (~73–106 µs/event; ~60–90 s extrapolated for a 100k-person workspace). **Snapshotting
+  verdict: measured, not warranted** — rebuild is a maintenance op (projections update incrementally on
+  the live path) and per-aggregate streams stay tiny, so cqrs-es snapshotting would not help; ADR 0004's
+  deferral stands, no follow-up ADR. Findings: [`research/performance-profiling.md`](research/performance-profiling.md).
+- **Packaging & distribution (Linux-first).** A `cargo xtask package` assembles a release tarball (CLI +
+  GUI binaries + the signed first-party fleet as the embedded layer, re-verifying every signature);
+  cargo-deb metadata for a `.deb`; and a tag-triggered, zizmor-clean `release.yml` that signs the fleet
+  with the release secret, embeds the release trust root, and builds tarball + `.deb` + AppImage.
+  macOS/Windows + OS-level code-signing stay out of scope. Release procedure: [`release.md`](release.md).
+
+Research: [`research/plugin-signing-and-trust.md`](research/plugin-signing-and-trust.md),
+[`research/performance-profiling.md`](research/performance-profiling.md); plan:
+[`plans/phase-11-hardening.md`](plans/phase-11-hardening.md). Scoped residuals tracked under *Phase 11*
+in [`docs/issues.md`](issues.md).
 
 ## Phase 12 — DNA breadth & depth
 
@@ -542,7 +573,7 @@ they are confirmed when the ADR is written.
 | [ADR 0027](adr/0027-configurable-surety-scheme-labels.md) — **accepted** | Configurable surety-scheme labels (relabel the five ordinals; cardinality stays fixed) | Phase 10 | ADR 0005, 0015 |
 | [ADR 0028](adr/0028-research-note-argument-aggregate.md) — **accepted** | `ResearchNote`/`Argument` aggregate: the GEDCOM X `Document(Analysis)` proof-argument shape, multi-subject | Phase 10 | data-model §17 |
 | [ADR 0029](adr/0029-import-merge-sync-reconciliation.md) — **accepted** | Import merge/sync: timestamp-gated reconciliation against the file's export date (`Person.sex` first slice; Source deferred) | Phase 10 | ADR 0013, 0018 |
-| ADR 0014 | Plugin signing, trust tiers, and distribution (and three-layer loading) | Phase 11 | ADR 0007 |
+| [ADR 0014](adr/0014-plugin-signing-trust-tiers-and-loading.md) — **accepted** | Plugin signing, trust tiers, capability-grant UX, and three-layer loading | Phase 11 | ADR 0007 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 
 Conditional — write an ADR only if/when the option is adopted (direction already fixed, so not

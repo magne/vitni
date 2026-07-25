@@ -318,8 +318,13 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 11 <small>1.0</small></div>
-    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;1.0 hardening: plugin
-      signing / trust tiers / grant UX / three-layer loading (ADR 0014) · profiling · packaging</div>
+    <div class="tl-bar done"><span class="chip done">done</span> &nbsp;1.0 hardening delivered
+      (PRs #176–#182): signed plugin bundles (ed25519 over a sha2 digest, embedded trust root) ·
+      three trust tiers (sanctioned / user-pinned / untrusted, fails closed) · three-layer loading
+      (workspace &gt; app-dir &gt; embedded, like the i18n multiplexor) · grant = declared ∩ approved
+      + plugin-panel &amp; CLI UX (ADR 0014) · criterion profiling — rebuild ~linear, snapshotting
+      measured &amp; not warranted · Linux packaging (tarball + .deb + AppImage, signed fleet) + zizmor-clean
+      release CI</div>
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 12</div>
@@ -590,7 +595,7 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Phase 10</td><td>data-model &sect;17</td></tr>
     <tr><td><b><a href="adr/0029-import-merge-sync-reconciliation.md">ADR 0029</a></b> &mdash; accepted</td><td>Import merge/sync: timestamp-gated reconciliation against the file's export date (<code>Person.sex</code> first slice; Source deferred)</td>
       <td>Phase 10</td><td>ADR 0013, 0018</td></tr>
-    <tr><td><b>ADR 0014</b></td><td>Plugin signing, trust tiers, and distribution (and three-layer loading)</td>
+    <tr><td><b><a href="adr/0014-plugin-signing-trust-tiers-and-loading.md">ADR 0014</a></b> &mdash; accepted</td><td>Plugin signing, trust tiers, capability-grant UX, and three-layer loading</td>
       <td>Phase 11</td><td>ADR 0007</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>
       <td>Phase 13</td><td>ADR 0002, 0005, 0006, 0008</td></tr>
