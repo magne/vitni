@@ -12,7 +12,7 @@ The repository has **only GitHub's default labels**, **no milestones**, and **no
 one referenced issue, #38, is closed). So the taxonomy below is greenfield — nothing has to be
 migrated or reconciled.
 
-[`issues.md`](issues.md) currently holds **92 bullets: 79 actionable and 13 that are not tasks at
+[`issues.md`](issues.md) currently holds **91 bullets: 78 actionable and 13 that are not tasks at
 all** — the latter live under *Decided — no action needed* and record deliberate choices ("by design",
 "a deliberate simplification", "permanently non-round-trippable", "recorded so it is not re-raised").
 Filing those as issues would create a tracker that can never reach zero, so the split below matters
@@ -28,9 +28,10 @@ more than the label names.
 An item graduates doc → issue when it is picked up, not when it is discovered. Keeps the tracker at
 ~20–30 live items instead of ~80 stale ones.
 
-**Keep the two linked in both directions:** the issue body opens with a link to its `issues.md`
-section, and the doc bullet gains its issue number (`— #142`). Without the back-link the doc silently
-becomes the stale copy.
+**Cross-link both ways, but authority runs one way** (§5): the issue body opens with a link to its
+`issues.md` section, and the doc bullet gains its issue number (`— #142`). The links are mutual so
+either end is discoverable from the other; the *canonical statement* stays in the doc. Without the
+back-link the doc silently becomes the stale copy.
 
 **Never let a closed issue be the only record of a decision.** If an issue closes `wontfix`, the
 reasoning goes into the doc's *Decided* section in the same change. Issue comments are not
@@ -123,7 +124,111 @@ tail, the ADR 0014 plugin-trust out-of-scope list, round-trip gaps, performance 
 upstream-blocked dependencies — carries **no milestone**. "Someday" is honestly encoded as
 `priority/low` with no milestone; an ungroomed `2.0` looks like a commitment nobody made.
 
-## 4. Triage
+## 4. Milestone contents
+
+The two pre-1.0 gates, itemized from `issues.md` as it stands. ~20 issues total — small enough to
+groom, which is the point of filing only what is being worked on.
+
+### `0.8 — UI parity` (10)
+
+| Item | Area |
+| --- | --- |
+| Bulk export is CLI-only | `frontend/gui-cli-parity` |
+| Bulk import is CLI-only, and target selection has no GUI shape | `frontend/gui-cli-parity` |
+| Projection rebuild is CLI-only | `frontend/gui-cli-parity` |
+| Postgres workspaces can only be created from the CLI | `frontend/gui-cli-parity` |
+| Research notes have no GUI at all (+ the missing mockup) | `records/notes` |
+| A child cannot be removed from a family in the GUI | `records/person-family` |
+| Place succession can be read but never written | `records/places` |
+| Tag has no restrictions path | `records/tags` |
+| Workspace-scope surety labels are read but unwritable | `records/cross-aggregate` |
+| Interactive Set/Clear region on every owner (wired on Person only) | `records/media` |
+
+The last four are *not* CLI-parity gaps — neither frontend can do them today. They belong here anyway:
+once the GUI is the reference surface, "the CLI can't either" stops being a defence.
+
+### `0.9 — UI stabilization` (10)
+
+Ordered by severity, not area.
+
+| Item | Why it gates a release |
+| --- | --- |
+| Dirty saved-record edits are not confirmed | **Silent data loss** in the primary interface — closing a tab or quitting discards an in-progress edit of a saved record with no prompt |
+| `Modal`/`SidePanel` overlay follow-ups | No focus trap: a keyboard user tabs out of the confirm dialog into the inert background. Accessibility defect on the app's only modal |
+| Two shipped map fixes have no test coverage | `type/test-gap` — both would regress undetected |
+| Manual webview pass outstanding | `manual-verify` — the interactive map canvas has never been exercised |
+| Record-picker scroll-listener cleanup | Leaks one inert JS listener per clear/re-search cycle |
+| "Jump back in" recent-list write has no close/quit hook | A keyboard quit races the debounced write |
+| `⌘S` lives outside the shortcut map | Save is neither listed by `?` nor rebindable — inconsistent with every other binding |
+| Live list updates on create | A created record does not appear until manual refresh |
+| Toast notifications | No feedback channel for completed actions |
+| Remember the open record's tab | Tab resets on every navigation |
+
+Optional twelfth: *Point tool has no confirm step in the Geography tool* — a known inconsistency with
+the Place Map editor, cheap to close alongside the map work.
+
+### Not in either milestone
+
+DNA depth, round-trip gaps, performance/scale, the ADR 0014 plugin-trust out-of-scope list, the
+plugin-UI vocabulary tail, upstream-blocked dependencies, assisted-import residuals, saved searches /
+column chooser / list virtualization, geocoding, the `place_parent` index, and the
+`geography_toolbar` argument cleanup. All `priority/low` or `priority/medium`, no milestone.
+
+**One item to close, not file:** *DNA match views in the UI* is **stale**. The screens exist
+(`screens/dna_match.rs` has Segments and Ancestors tabs with per-row edit/retract, plus
+`tests/dna_match_detail.rs`). Delete the bullet rather than filing it. The other five DNA bullets are
+accurate and about *depth*, not views — `DnaTestState` really does lack `account`/`date_tested`/
+`snp_count`, and `citations: Vec::new()` really is hardcoded in three places.
+
+## 5. Keeping the doc and the tracker in sync
+
+**Sync is one-way: doc → GitHub.** The doc is the source; an issue is a working copy of one bullet.
+Two-way sync between prose and a tracker is what produces two stale records instead of one good one.
+
+- Filing appends the number to the bullet: `— #142`. That is the whole linkage.
+- The issue body opens with a link to the bullet's **H3 anchor** (`docs/issues.md#places`), not a line
+  number — line numbers move on every edit.
+- **Discussion accretes on the issue; the canonical statement stays in the doc.** If discussion changes
+  the shape of the work, update the bullet in the same PR that acts on it. Do not maintain both.
+
+**Drift check.** A `cargo xtask issue-sync` lint fits this repo, which already gates `i18n-check`,
+`css-check`, `input-guard`, and the framework-free boundary the same way:
+
+- *Offline* (prek + CI, every commit): the doc's own invariants — every `— #N` well-formed, no
+  duplicate numbers, no reference to a number below the lowest filed issue.
+- *Online* (`--online`, weekly scheduled job with `GITHUB_TOKEN`): reconcile both directions and report
+  drift — an open issue whose bullet is gone, a bullet referencing a closed issue, an open issue with no
+  bullet at all.
+
+Weekly rather than per-PR because drift is slow and the online path needs a token and network. If even
+that is more machinery than wanted, the honest fallback is a line in the PR template — "if this closes
+a `docs/issues.md` item, remove or move the bullet" — and accepting that the doc is only as current as
+the discipline. Say which, rather than assuming the lint will get written.
+
+## 6. What happens when work completes
+
+This is the question that decides whether the doc stays reasonable, and the answer is **not** "archive
+everything". Copying every closed item into `archive/completed-work.md` just relocates the bloat: that
+file becomes the unreadable one instead. **The archive is for milestone-scale completions, not for
+items.**
+
+Three outcomes, by what the closure actually taught us:
+
+| Closure | What happens to the bullet |
+| --- | --- |
+| **Done as specified** | **Delete it.** The PR and the commit are the record. `git log -S'<bullet title>' -- docs/issues.md` recovers the full history whenever anyone asks "why was this ever a concern". No archive entry — the repo's standard is not to duplicate what git already records. |
+| **Closed with a decision** (wontfix, turned out impossible, deferred indefinitely) | **Move it to `Decided — no action needed`**, rewritten as the decision rather than the task. This is the one section that *should* grow: it is what stops the item being re-raised in a year. |
+| **A whole milestone lands** | One narrative entry in [`archive/completed-work.md`](archive/completed-work.md), matching how the phases are recorded there — what changed, which PRs, and any honest residuals. |
+
+So `issues.md` **shrinks monotonically** as work lands, except for `Decided`, which is reference
+material rather than backlog. That is the property worth protecting: the file stays reasonable because
+finished work leaves it entirely, not because it is filed somewhere else in the same repo.
+
+On the GitHub side there is nothing to manage. Closed issues drop out of the default view and stay
+searchable; a tracker of closed issues is not a maintenance burden the way a growing document is. The
+bloat risk was only ever the doc.
+
+## 7. Triage
 
 1. Issue opens → `status/needs-triage` (automated).
 2. Once per cycle, for each new issue: assign **exactly one** `area/*`, one `type/*`, one
@@ -134,7 +239,7 @@ upstream-blocked dependencies — carries **no milestone**. "Someday" is honestl
 4. **Closing** — link the PR. By-design closes go `wontfix` **and** add a *Decided* entry in
    `issues.md`.
 
-## 5. Migration mechanics
+## 8. Migration mechanics
 
 `gh issue create` per curated item. Bodies seed well from the doc: most bullets already carry the
 file/symbol pointers and a suggested implementation, so the issue is mostly copy-paste.

@@ -87,9 +87,10 @@ without test coverage, tracked below under *Geography & map*.
 ### DNA
 
 Sequencing is roadmap-owned — see [`roadmap.md` Phase 12](roadmap.md#phase-12--dna-breadth--depth).
-Pulled together so the DNA match model and its views land as one slice (data-model §17).
+Remaining work is DNA **depth**, not views: the match screens shipped (`screens/dna_match.rs` has
+Segments and Ancestors tabs with per-row edit/retract, covered by `tests/dna_match_detail.rs`), so the
+long-standing "DNA match views in the UI" item is closed.
 
-- **DNA match views** in the UI (moved from Phase 5).
 - **DnaTest fields** — `account`, `date_tested`, `snp_count` are absent from `DnaTestState`.
 - **DnaMatch depth** — no terminal-SNP, no fully-identical-regions (segment lineage only partially
   present via `ChromosomeSide` + `snps`).
