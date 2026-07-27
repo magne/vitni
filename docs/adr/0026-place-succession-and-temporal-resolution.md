@@ -90,4 +90,4 @@ projection schema (ADR 0009). It gates the full geography phase (roadmap Phase 9
 - ADR 0024 — `PlaceGeometry` (dated, accumulating) this resolution rule reads.
 - ADR 0025 — geography view + time slider that consume this rule and succession links.
 - `docs/data-model.md` §7 — Place, `PlaceName`/`PlaceRef` (dated); §9 the aggregate tax.
-- `docs/plans/places-geography-temporal.md` — the phase this ADR gates.
+- `docs/archive/plans/places-geography-temporal.md` — the phase this ADR gates.

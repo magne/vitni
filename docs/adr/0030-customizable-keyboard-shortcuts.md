@@ -10,7 +10,7 @@
 nothing else. `crates/genealogy-ui-dioxus/src/shell/keyboard.rs`'s `shell_intent()` re-implements the
 same matrix in `dioxus` `Key`/`Code`/`Modifiers` terms, hardcoded, and is what actually runs. There is
 no `Chord → ShortcutAction → behavior` lookup anywhere, so the help overlay can drift from what the
-dispatcher does, and an operator cannot change a binding — `docs/issues.md` §Ease of use has carried
+dispatcher does, and an operator cannot change a binding — `docs/issues.md` (then §Ease of use) has carried
 "customizable keyboard shortcuts" since it was first named, deferred to "the Phase 7 config split
 (ADR 0015)".
 
@@ -111,8 +111,9 @@ redesigning them for configurability is not justified by any request on file.
 
 ## Out of scope
 
-- **A VS Code-style *when* context** (named as future work in `docs/issues.md`'s "Global keys fire
-  inside text controls" completed item) — this ADR resolves the map lookup, not conditional activation
+- **A VS Code-style *when* context** (named as future work by the "Global keys fire inside text
+  controls" completed item, now in `docs/archive/completed-work.md`) — this ADR resolves the map lookup,
+  not conditional activation
   by focus/mode. A future ADR would need to define the context predicates before this is revisited.
 - **Rebinding within-screen or `g`-prefix keys** — see Decision §2.
 - **Chord sequences** beyond the existing `g`-prefix two-key case — no second sequence mechanism is
@@ -132,4 +133,5 @@ redesigning them for configurability is not justified by any request on file.
   respect; the app → ui dependency direction that keeps parsing out of `genealogy-app`.
 - ADR 0003 — the Fluent label-id convention the resolved map's descriptions continue to follow.
 - ADR 0027 — the prior "gate a config extension with an ADR" precedent this ADR follows structurally.
-- `docs/issues.md` §Ease of use / Completed — the backlog items this ADR unblocks.
+- `docs/issues.md` (then §Ease of use / Completed; now §Frontend & interaction → Keyboard & shortcuts,
+  with the delivered entries in `docs/archive/completed-work.md`) — the backlog items this ADR unblocks.

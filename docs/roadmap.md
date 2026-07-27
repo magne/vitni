@@ -367,11 +367,11 @@ provider), and **ADR 0026** (place succession & temporal resolution).
 - **The geography view** (ADR 0025): a framework-free map view-model + a MapLibre GL JS renderer in
   the webview; place markers + event-at-place pins; a **time slider**; and **in-map editing**
   (drop/move a point, draw/edit polygons) that writes the same audited `GeometryAsserted` events
-  through the existing change-set path. The **transitive place-hierarchy walk** (a `docs/issues.md`
-  item) lands here. The map **provider** is a declarative presentation-config descriptor (client
+  through the existing change-set path. The **transitive place-hierarchy walk** (a long-standing
+  backlog item) lands here. The map **provider** is a declarative presentation-config descriptor (client
   scope, Phase 7), with geocoding and a possible `map-provider` plugin over `net`.
 
-Plan: [`docs/plans/places-geography-temporal.md`](plans/places-geography-temporal.md); mockup
+Plan: [`docs/archive/plans/places-geography-temporal.md`](archive/plans/places-geography-temporal.md); mockup
 [`docs/mockups/geography.html`](mockups/geography.html).
 
 ✅ **Delivered** (stacked branches `feat/place-geometry-storage` → `feat/place-succession-temporal` →
@@ -388,7 +388,7 @@ Plan: [`docs/plans/places-geography-temporal.md`](plans/places-geography-tempora
 - **Succession & temporal resolution (ADR 0026).** A pure **effective-from** resolver (latest dated
   assertion ≤ target, else the undated/primary) selects name / enclosing parent / geometry as of a
   date — one rule shared by the generated title, the **transitive, cycle-aware, date-aware
-  place-hierarchy walk** (`genealogy-app/src/place.rs`, the old `docs/issues.md` item), and the time
+  place-hierarchy walk** (`genealogy-app/src/place.rs`, the old backlog item), and the time
   slider. `AssertSuccession`/`SuccessionAsserted { from, to, kind, date }`
   (`Merged`/`Split`/`Absorbed`/`Elevated`/`Renamed`, modelled like Person `AssociationAsserted`) records
   identity change, projected as a symmetric predecessor/successor relation with the aggregate-tax
@@ -434,7 +434,8 @@ configurable, add an explicit proof-argument aggregate, and complete import beyo
   `begin-import` verb (host-api 0.20.0), and supersedes a live single-valued assertion only when its
   `occurred_at` is at or before that date, else leaves it. First slice: `Person.sex`. Source
   reconciliation is deferred on its own prerequisite stack (resolve-or-create identity, `ABBR`
-  round-trip, the missing WIT setters, a field-level assertion read path) — tracked in `docs/issues.md`.
+  round-trip, the missing WIT setters, a field-level assertion read path) — tracked in
+  [`docs/issues.md`](issues.md) under *Import, export & plugins → Bulk import, export & sync*.
 - **Round-trip gaps (host-api 0.21.0, no gating ADR — extends ADR 0013/0018).** GEDCOM `REPO`/`SOUR.REPO`,
   `FAM`-level `SOUR`/`OBJE`/`NOTE`, `FAMS`/`FAMC` back-refs, `OBJE.CAPT`, `Address.original_text` (plus a
   blank-`CONT`-line drop fix), Gramps `<tagref>`, Source `ABBR`/`<sabbrev>`, multiple `NAME` per person
@@ -447,8 +448,9 @@ configurable, add an explicit proof-argument aggregate, and complete import beyo
 Research: [`surety-schemes.md`](research/surety-schemes.md),
 [`proof-argument-modelling.md`](research/proof-argument-modelling.md),
 [`merge-sync-conflict-resolution.md`](research/merge-sync-conflict-resolution.md); plan (archivable):
-[`docs/plans/phase-10-research-rigor.md`](plans/phase-10-research-rigor.md). Scoped residuals tracked
-under *Phase 10* in [`docs/issues.md`](issues.md).
+[`docs/archive/plans/phase-10-research-rigor.md`](archive/plans/phase-10-research-rigor.md). Scoped residuals are
+tracked by area in [`docs/issues.md`](issues.md) — chiefly under *Import, export & plugins* (bulk
+sync, round-trip gaps) and *Records & data model → Cross-aggregate* (surety-scheme cardinality).
 
 ## Phase 11 — 1.0 hardening ✅ done
 
@@ -485,8 +487,9 @@ app. Gated by **ADR 0014** (the last deferred plugin-system decision).
 
 Research: [`research/plugin-signing-and-trust.md`](research/plugin-signing-and-trust.md),
 [`research/performance-profiling.md`](research/performance-profiling.md); plan:
-[`plans/phase-11-hardening.md`](plans/phase-11-hardening.md). Scoped residuals tracked under *Phase 11*
-in [`docs/issues.md`](issues.md).
+[`archive/plans/phase-11-hardening.md`](archive/plans/phase-11-hardening.md). Scoped residuals are tracked by area in
+[`docs/issues.md`](issues.md) — under *Platform & operations* (packaging & release, performance) and
+*Import, export & plugins → Plugin trust & capabilities*.
 
 ## Phase 12 — DNA breadth & depth
 

@@ -2,7 +2,7 @@
 
 - **Status:** Draft
 - **Audience:** anyone implementing the remaining Phase 5 UI
-- **Companion:** the updated mockups ([`index.html`](index.html)) and the mockup review
+- **Companion:** the updated mockups ([`index.html`](../../mockups/index.html)) and the mockup review
   ([`review-findings.md`](review-findings.md)) are the target; [`plan.md`](plan.md) is the record of
   what Phase 5 has shipped so far and hands its unfinished items to this plan. Locked decisions,
   binding ADR constraints, the keyboard/a11y contract, and the per-PR verification gates are

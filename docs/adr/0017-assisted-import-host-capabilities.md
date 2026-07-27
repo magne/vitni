@@ -289,5 +289,5 @@ restate them.
   checksums).
 - `docs/research/digitalarkivet.md` — the API-vs-scrape findings this ADR's `net`
   and source-neutrality decisions rest on.
-- `docs/plans/assisted-import.md` — the phase plan and PR sequence.
+- `docs/archive/plans/assisted-import.md` — the phase plan and PR sequence.
 - `docs/roadmap.md` Phase 8.

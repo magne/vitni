@@ -147,7 +147,7 @@ impl PlaceView {
     }
 
     /// The **primary** enclosing-place link — the first asserted, used when no date context is
-    /// available (ADR 0026 §1; the issues.md "primary (first) `PlaceRef`" convention).
+    /// available — the "primary (first) `PlaceRef`" convention (ADR 0026 §1).
     #[must_use]
     pub fn primary_enclosed_by(&self) -> Option<&Attributed<Asserted<PlaceRef>>> {
         self.state.enclosed_by.first()

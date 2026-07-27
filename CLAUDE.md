@@ -34,6 +34,9 @@ Two docs are the source of truth; read them before changing the core or its wiri
 - **`docs/roadmap.md` (+ `roadmap.html`) — what to build next.** Risk-first de-risking
   spikes then breadth to a 1.0 vision; import/export are WASM plugins; flags the required
   follow-up ADRs. It owns phase/progress state — read it rather than tracking progress here.
+- **`docs/issues.md` — the outstanding backlog, grouped by area.** Open bugs, scoped residuals, and
+  unscheduled work; its *Decided — no action needed* section records deliberate non-tasks, so check
+  there before "fixing" something. Completed work is in `docs/archive/completed-work.md`.
 
 Binding invariants from the ADRs:
 
