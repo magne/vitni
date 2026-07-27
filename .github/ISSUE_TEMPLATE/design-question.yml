@@ -1,0 +1,76 @@
+name: Design question
+description: A decision is needed before any code can be written.
+labels: ["type/design-question", "status/needs-design", "status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For questions where the *answer* is the deliverable. If the direction is already settled and
+        only the wiring is missing, use **Feature** instead.
+
+        If the outcome should be binding, it belongs in an ADR — `docs/adr/` is immutable, so the ADR
+        is written in the same cycle as the work it gates, never retrofitted.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - records/person-family
+        - records/places
+        - records/notes
+        - records/tags
+        - records/media
+        - records/dna
+        - records/cross-aggregate
+        - frontend/shell
+        - frontend/lists
+        - frontend/keyboard
+        - frontend/pedigree
+        - frontend/geography
+        - frontend/gui-cli-parity
+        - import/bulk
+        - import/assisted
+        - import/round-trip
+        - plugins/ui-vocabulary
+        - plugins/trust
+        - platform/perf
+        - platform/packaging
+        - platform/deps
+        - docs
+        - i18n
+        - "not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+      description: State it so that a yes/no or a pick-one answer closes it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: Options considered
+      description: Each with its trade-off. A recommendation is welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: blocked
+    attributes:
+      label: What this blocks
+      description: Which backlog items cannot start until this is answered.
+
+  - type: checkboxes
+    id: adr
+    attributes:
+      label: Outcome
+      options:
+        - label: The answer should be recorded as an ADR (binding, immutable).
+        - label: >
+            The answer might be "no change" — in which case it belongs in `docs/issues.md`'s
+            **Decided — no action needed** section, not just an issue comment.

@@ -1,0 +1,10 @@
+# Blank issues stay enabled: `docs/issues.md` is the backlog of record, so an issue is often just a
+# working copy of an existing bullet and the forms would be friction rather than help.
+blank_issues_enabled: true
+contact_links:
+  - name: The backlog
+    url: https://github.com/magne/genealogy/blob/main/docs/issues.md
+    about: Outstanding work grouped by area. Check here — and its "Decided — no action needed" section — before filing.
+  - name: How this tracker works
+    url: https://github.com/magne/genealogy/blob/main/docs/issue-tracking.md
+    about: Labels, milestones, triage, and what happens to an item when the work completes.

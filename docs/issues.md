@@ -7,8 +7,10 @@ restate phases. Completed work lives in
 
 Two conventions:
 
-- The `###` area names are the organizing unit. A proposed GitHub label/milestone/triage scheme keyed
-  to them is in [`issue-tracking.md`](issue-tracking.md) (not yet applied).
+- The `###` area names are the organizing unit; each maps to one `area/*` GitHub label. A bullet being
+  worked on carries its issue number (`— #142`); the rest are unfiled by design. See
+  [`issue-tracking.md`](issue-tracking.md) for the labels, milestones, triage loop, and what happens to
+  a bullet when the work lands. `cargo xtask issue-sync` keeps the two honest.
 - [**Decided — no action needed**](#decided--no-action-needed) at the end collects deliberate
   non-tasks: things recorded so they are not re-raised or misread as unfinished. Check it before
   filing anything.
@@ -28,7 +30,7 @@ without test coverage, tracked below under *Geography & map*.
   fine — `remove_partner` is draft-local in the create form.)
   *UI:* add `FamilyEdit::RemoveChild { child }` and a `✕` on each child row of the Family screen's
   children tab, routed through the shared `retract_side_panel` / `RetractTarget` confirm in
-  `screens/shared.rs` that the other retract affordances already use.
+  `screens/shared.rs` that the other retract affordances already use. — #195
 
 ### Places
 
@@ -39,7 +41,7 @@ without test coverage, tracked below under *Geography & map*.
   *UI:* `PlaceEdit::AssertSuccession { to, kind, date }` and a "Succession" edit panel on the Place
   screen — target picked with the existing place `RecordPicker`, kind a `SelectInput`, date reusing the
   map-edit provenance date form. A `genealogy place assert-succession` subcommand is the cheaper first
-  move if the CLI should stay the reference surface.
+  move if the CLI should stay the reference surface. — #196
 - **Dated name/enclosure use-cases** — `add_place_name` / `assert_place_enclosed_by` don't accept a
   date param, so map/UI enclosure edits can't be dated (geometry edits already can); the map-edit
   provenance form doesn't yet default its date to the active time-slider year.
@@ -63,7 +65,7 @@ without test coverage, tracked below under *Geography & map*.
   "Research notes" tab on those four detail screens via `tabs.rs`'s `tab_with_add`.
   *History:* the Phase 10 plan named this screen **and** a `docs/mockups/` page as a PR2 follow-up
   "explicitly so it is not silently dropped", and listed both in its Gate-2 exit criteria. Both were
-  dropped; there is no research-note mockup either.
+  dropped; there is no research-note mockup either. — #194
 - **`remove_translation` core verb** — note-translation retract is Edit-only; there is no verb to
   remove a single translation.
 
@@ -73,13 +75,13 @@ without test coverage, tracked below under *Geography & map*.
   `TagChangeSetRequest` carries only name / priority / colour: the one aggregate of thirteen with no
   privacy control.
   *UI:* add `restrictions` to `TagChangeSetRequest` and reuse the shared restrictions field the other
-  twelve screens already render.
+  twelve screens already render. — #197
 
 ### Media
 
 - **Interactive Set/Clear region on every owner.** The interactive region viewer is wired on the
   Person screen only; the other five media owners show the read-only rich gallery. The
-  `SetMediaRegion` intent and dispatch exist for all six — extending the viewer wiring is mechanical.
+  `SetMediaRegion` intent and dispatch exist for all six — extending the viewer wiring is mechanical. — #199
 - **"Add file to media library" action.** The media-save dialog and the pure naming logic
   (`suggest_filename`/`slugify`) ship and are SSR-tested; the app-layer copy use-case that writes an
   external file into `media/<target>` and creates the Media record is deferred.
@@ -110,7 +112,7 @@ long-standing "DNA match views in the UI" item is closed.
   per-workspace override.
   *UI:* add `store_surety_label_overrides` to `ConfigStore` (delegating to the existing function) and
   give the Surety card the same two-scope control the theme / id-format cards already use via
-  `read_preference_layers` / `LayerKind`.
+  `read_preference_layers` / `LayerKind`. — #198
 - **Configurable surety-scheme *cardinality*** — ADR 0027 shipped relabeling the five fixed ordinals;
   re-scaling the scheme (GENTECH's full generality) stays deferred behind its own gating ADR, no
   consumer need demonstrated yet.
@@ -129,22 +131,22 @@ long-standing "DNA match views in the UI" item is closed.
 ### Shell, tabs & notifications
 
 - **Live list updates on create.** Creating an entity should immediately insert it into the matching
-  entity list, with no manual refresh.
+  entity list, with no manual refresh. — #207
 - **Toast notifications.** Show a toast at the bottom of the work area, auto-dismissed after a set
-  time.
+  time. — #208
 - **Remember the open record's tab.** Record-detail view should restore the last-shown tab while the
-  record stays open, and forget it once closed.
+  record stays open, and forget it once closed. — #209
 - **`Modal`/`SidePanel` overlay follow-ups** — `Modal` (`components/layout.rs`) still has no backdrop
   scrim or `onclose` prop. This was harmless while `Modal` had no callers; the close/quit confirm
   dialog (`shell/close_confirm.rs`) is now its first real caller and does **not** wire a focus trap
   (`shell/focus_trap.rs`'s `trap_tab` is not attached) or a click-away scrim — a keyboard user tabbing
   inside the dialog can reach the inert background, and there is no click-outside-to-cancel. Neither
-  overlay has slide-in motion beyond what the existing keyboard layer already provides.
+  overlay has slide-in motion beyond what the existing keyboard layer already provides. — #201
 - **Record-picker scroll-listener cleanup** — `PickerSearch::watch_scroll_close`
   (`components/record_picker.rs`) arms a `window` `scroll`/`resize` listener (via `document::eval`)
   per mount to close the floating picker on pane scroll, but never removes the JS-side listener on
   unmount, so each clear/re-search cycle leaves one inert listener behind (bounded by that, not by
-  keystrokes or scroll events). Remove it on unmount, or arm it once at a higher scope.
+  keystrokes or scroll events). Remove it on unmount, or arm it once at a higher scope. — #204
 
 ### Lists, search & scale
 
@@ -169,14 +171,14 @@ Residuals from the shortcuts work (ADR 0030); see
 - **Dirty saved-record edits are not confirmed.** `Ctrl+W`/`Ctrl+Q`'s confirm fires on `OpenTab::Draft`
   only. An in-progress edit of an *already-saved* record lives in screen-local `RecordEditState`
   (`screens/record_form.rs`) and is invisible to `NavState`, so closing/quitting discards it silently.
-  Lifting edit-dirtiness into shell state is the follow-up.
+  Lifting edit-dirtiness into shell state is the follow-up. — #200
 - **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
   its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
   so it is neither listed by the `?` overlay nor rebindable, and it does not go through
-  `NavState`/`resolved_shortcuts` at all.
+  `NavState`/`resolved_shortcuts` at all. — #206
 - **The "Jump back in" recent-list write has no close/quit hook.** `shell/window_geometry.rs` flushes
   window geometry on `WindowEvent::CloseRequested`; the recent-list persistence effect in
-  `shell/root.rs` has no equivalent, so a keyboard quit can race the debounced write.
+  `shell/root.rs` has no equivalent, so a keyboard quit can race the debounced write. — #205
 - **Chord entry is a typed canonical string, not live key capture.** `keydown` is inert under SSR and
   `cargo xtask input-guard` forbids a raw form element outside the primitives, so the Preferences
   rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.
@@ -200,7 +202,7 @@ Residuals from the shortcuts work (ADR 0030); see
   `map_shared.rs`) and the zoom-interpolated `circle-radius` + white stroke both live entirely inside
   `format!`-built JavaScript that no test inspects, and `maplibre_init_script` is private with no test
   module. Both are verified present in code; neither would fail if regressed. Either assert the
-  generated script text, or extract the paint expressions into testable Rust values.
+  generated script text, or extract the paint expressions into testable Rust values. — #202
 - **`geography_toolbar` takes 8 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
   fit state were threaded in — bundle them into a struct. Cosmetic cleanup.
 - **Point tool has no confirm step in the Geography tool.** The Place Map editor added a "Use this
@@ -220,7 +222,7 @@ Residuals from the shortcuts work (ADR 0030); see
   never pixels).
 - **Manual webview pass outstanding** — the interactive MapLibre canvas (pan/zoom, click-to-place feel,
   polygon vertex rendering, the toolbar picker) cannot be exercised by an SSR test; agents can't run
-  libwebkit2gtk.
+  libwebkit2gtk. — #203
 
 ### GUI ⇄ CLI parity
 
@@ -236,7 +238,7 @@ are filed in their own areas: research notes (*Notes & research notes*) and fami
   *UI:* a `Tool::Export` screen mirroring `Tool::Import`'s wizard shell — a plugin picker filtered to
   bundles declaring `ExportSink` (via `resolve_bundles`), a destination row defaulting to the workspace
   `exports/` directory with "Choose file…" for `ExportTarget::File`, then run + summary stages reusing
-  the `services::start_assisted_import` progress/error pattern.
+  the `services::start_assisted_import` progress/error pattern. — #190
 - **Bulk import is CLI-only, and target selection has no GUI shape at all** — the CLI's `import` is
   plugin-generic and also picks the target: `--new NAME PATH` creates + registers a fresh workspace,
   `--into NAME` imports into an existing one, prompting for confirmation when it already holds persons.
@@ -245,20 +247,20 @@ are filed in their own areas: research notes (*Notes & research notes*) and fami
   *UI:* a target stage on `Tool::Import` (or the `Tool::Export` sibling above): plugin picker
   (`ImportSource` bundles) → file picker → target radio, reusing the Preferences "Register workspace…"
   disclosure form for the new-workspace case, and `Modal` + the `list_persons` emptiness probe for the
-  non-empty confirm.
+  non-empty confirm. — #191
 - **Projection rebuild is CLI-only** — `genealogy rebuild` → `Workspace::rebuild_projections`
   (`workspace.rs:712`, an ADR 0010 maintenance op). After a `genealogy-db` schema change there is no
   in-app way to run it.
   *UI:* a "Rebuild projections" button in a new **Maintenance** card in Preferences. It is a
   workspace-functionality op, not an aggregate, so it belongs on Preferences' documented
   direct-to-app path (like the Workspaces card), not behind `Intent`. Confirm in a `Modal`, disable
-  while running, report the outcome through `NavState::notify`.
+  while running, report the outcome through `NavState::notify`. — #192
 - **Postgres workspaces can only be created from the CLI** — `genealogy init --database-url URL`
   freezes the engine into the manifest, but the Preferences "Register workspace…" form calls
   `register_workspace(&path, name, dir, None)` (`genealogy-ui-dioxus/src/services.rs:1088`), so the GUI
   always gets SQLite.
   *UI:* add an optional "Database URL" field to that existing disclosure form and thread it into the
-  `None` argument — `genealogy_app::register_workspace` already takes it.
+  `None` argument — `genealogy_app::register_workspace` already takes it. — #193
 
 ## Import, export & plugins
 
@@ -371,17 +373,17 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 - **Cross-platform packaging** — 1.0 is Linux-first (tarball + `.deb` + AppImage). macOS/Windows
   bundles and **OS-level code-signing / notarization** (Gatekeeper, Authenticode) are a later cycle
-  (ADR 0014 §Out of scope).
+  (ADR 0014 §Out of scope). — #215
 - **`.deb` needs `GENEALOGY_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
   distro-installed binary needs `GENEALOGY_PLUGIN_DIR=/usr/lib/genealogy/plugins` (the AppImage sets it
   via `AppRun`; the tarball resolves the fleet beside the binary). Teaching the embedded layer a default
   system path so an installed `.deb` finds the fleet with no env var is the follow-up (see
-  [`release.md`](release.md)).
+  [`release.md`](release.md)). — #212
 - **Real release keys not yet generated** — only the deterministic **DEV** signing key exists (Sanctioned
   in debug builds only), so `embedded_sanctioned_keys()` is `None` in a release build until one is
   configured. Before the first real release, generate the release ed25519 keypair, set the private half
   as the `GENEALOGY_PLUGIN_SIGNING_KEY` repo secret, and embed the public half via
-  `GENEALOGY_PROJECT_PUBLIC_KEY` (ADR 0014 §6; procedure in [`release.md`](release.md)).
+  `GENEALOGY_PROJECT_PUBLIC_KEY` (ADR 0014 §6; procedure in [`release.md`](release.md)). — #210
 - **The embedded plugin-dir resolver is duplicated *and* divergent** — the ADR 0014 §4 *layering* is
   shared (`genealogy_app::plugin_layers`), but each frontend still resolves the embedded layer itself
   and the two disagree on the dev fallback: `genealogy-ui-dioxus/src/app.rs:326` uses
@@ -390,15 +392,15 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   directory**. So a CLI invoked from anywhere but the repo root silently finds no embedded fleet while
   the GUI always finds it. The Phase 11 plan called for replacing this duplication; only the layering
   half landed. Fold both into one `genealogy-app` resolver — the same change that would give an
-  installed `.deb` a default system path (item above).
+  installed `.deb` a default system path (item above). — #213
 - **No `[profile.release]` section** — the Phase 11 plan's "strip/optimize release profile" was not
   done: the root `Cargo.toml` has no `[profile.release]`, so shipped binaries carry full debug symbols
   and default codegen settings. `strip = true` plus a considered `lto`/`codegen-units` is the cheapest
-  size win available before the first tag.
+  size win available before the first tag. — #214
 - **`release.yml` unverified end-to-end** — GitHub Actions billing is currently blocked, so the release
   workflow is zizmor / YAML / `bash -n` verified and its build/package steps reproduced locally, but has
   never run a full tag → AppImage → GitHub Release cycle. The first real tag needs a live verification
-  when billing is active.
+  when billing is active. — #211
 
 ### Dependencies blocked upstream
 

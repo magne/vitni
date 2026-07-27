@@ -1,0 +1,91 @@
+name: Bug
+description: Something behaves incorrectly.
+labels: ["type/bug", "status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [`docs/issues.md`](https://github.com/magne/genealogy/blob/main/docs/issues.md) first —
+        including its **Decided — no action needed** section, which records deliberate behaviour that
+        looks like a defect but isn't.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Mirrors the `###` headings of `docs/issues.md`. Triage adds the matching `area/*` label.
+      options:
+        - records/person-family
+        - records/places
+        - records/notes
+        - records/tags
+        - records/media
+        - records/dna
+        - records/cross-aggregate
+        - frontend/shell
+        - frontend/lists
+        - frontend/keyboard
+        - frontend/pedigree
+        - frontend/geography
+        - frontend/gui-cli-parity
+        - import/bulk
+        - import/assisted
+        - import/round-trip
+        - plugins/ui-vocabulary
+        - plugins/trust
+        - platform/perf
+        - platform/packaging
+        - platform/deps
+        - docs
+        - i18n
+        - "not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: The actual behaviour, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: >
+        Commands, or the click path through the GUI. A failing test is better than prose if you have one.
+      placeholder: |
+        1. `genealogy init demo /tmp/demo`
+        2. …
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: Crate and file, if known
+      description: Definition of ready asks for this; a guess is fine.
+      placeholder: crates/genealogy-ui-dioxus/src/screens/place.rs
+
+  - type: dropdown
+    id: frontend
+    attributes:
+      label: Where it shows
+      options:
+        - GUI (genealogy-ui-dioxus)
+        - CLI (genealogy)
+        - Both
+        - Neither / library only
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: webview
+    attributes:
+      label: Verification
+      options:
+        - label: >
+            This needs a manual webview pass to confirm (agents can't run libwebkit2gtk) — triage will
+            add `manual-verify`.

@@ -1,16 +1,23 @@
-# Issue tracking on GitHub (proposal)
+# Issue tracking on GitHub
 
-- **Status:** Proposed — **not applied.** No labels, milestones, or issues have been created.
+- **Status:** **Applied 2026-07-27.** 39 labels, 3 milestones, and the first 26 issues (#190–#215)
+  exist; `.github/labels.toml`, the issue-template forms, and `cargo xtask issue-sync` are in the repo.
 - **Date:** 2026-07-27
-- **Audience:** whoever decides to move the backlog onto GitHub
+- **Audience:** anyone filing, triaging, or closing an issue
 - **Companion:** [`issues.md`](issues.md) is the backlog this describes; [`roadmap.md`](roadmap.md)
   owns phase detail.
 
 ## Starting state
 
-The repository has **only GitHub's default labels**, **no milestones**, and **no open issues** (the
-one referenced issue, #38, is closed). So the taxonomy below is greenfield — nothing has to be
-migrated or reconciled.
+Before this was applied the repository had **only GitHub's default labels**, **no milestones**, and
+**no open issues** (the one referenced issue, #38, was closed) — so the taxonomy below was designed
+greenfield, with nothing to migrate or reconcile.
+
+**One caveat about the automation.** Actions billing is blocked, so every workflow run currently fails
+before starting. `.github/workflows/labels.yml` is therefore committed but **never executed** — it is
+zizmor-clean and YAML-valid, no more. Until billing clears, reconcile labels locally with
+`cargo xtask labels --apply`. This is also why the doc↔tracker drift check is an **xtask** rather than
+a scheduled workflow: it has to work without Actions.
 
 [`issues.md`](issues.md) currently holds **91 bullets: 78 actionable and 13 that are not tasks at
 all** — the latter live under *Decided — no action needed* and record deliberate choices ("by design",
@@ -39,9 +46,17 @@ discoverable six months later; the doc is.
 
 ## 2. Labels
 
-Define them in **`.github/labels.yml`** with a sync action, so the taxonomy is a version-controlled
-guardrail rather than clicks in a web UI — consistent with how this repo already treats lints, i18n
-completeness, and CSS tokens.
+Declared in **[`.github/labels.toml`](../.github/labels.toml)**, so the taxonomy is a
+version-controlled guardrail rather than clicks in a web UI — consistent with how this repo already
+treats lints, i18n completeness, and CSS tokens. TOML rather than YAML because `xtask` already has a
+`toml` dependency and no YAML one; adding a parser for a label list is not worth a new dependency.
+
+    cargo xtask labels            # show the plan (create / update / extra), change nothing
+    cargo xtask labels --apply    # create and update to match the file
+
+It **never deletes**: a label on GitHub but absent from the file is reported as `extra` and left alone,
+because deleting a label silently strips it from every issue carrying it. GitHub's defaults are
+deliberately among those extras.
 
 ### `area/*` — one per backlog H3 in `issues.md`
 
@@ -116,8 +131,8 @@ unambiguous in GitHub's milestone list.
 | Milestone | Contents |
 | --- | --- |
 | **`0.8 — UI parity`** | Every operation a user can reach from the GUI. The four *GUI ⇄ CLI parity* gaps (bulk export, bulk import + target selection, projection rebuild, Postgres workspace creation), the research-note UI **and** its missing mockup, and family child-removal. Plus the three items neither frontend can do today but the GUI must once it is the reference surface (place succession, tag restrictions, workspace-scope surety labels), and the media region viewer, which the GUI wires on Person only. |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. Highest first: **dirty saved-record edits are discarded silently** on close/quit — data loss in the primary interface. Then the `Modal` focus trap and click-away scrim (a keyboard user can tab into the inert background), the two shipped map fixes with no test coverage, the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the three *Shell, tabs & notifications* ease-of-use items (live list updates, toasts, remembered tab). |
-| **`1.0`** | Release mechanics only: generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **dirty saved-record edits are discarded silently** on close/quit — data loss in the primary interface. Then the `Modal` focus trap and click-away scrim (a keyboard user can tab into the inert background), the two shipped map fixes with no test coverage, the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the three *Shell, tabs & notifications* ease-of-use items (live list updates, toasts, remembered tab). |
+| **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
 **Do not create a fourth.** Everything else — DNA depth, the server/web work, the plugin-UI vocabulary
 tail, the ADR 0014 plugin-trust out-of-scope list, round-trip gaps, performance work, and the
@@ -133,16 +148,16 @@ groom, which is the point of filing only what is being worked on.
 
 | Item | Area |
 | --- | --- |
-| Bulk export is CLI-only | `frontend/gui-cli-parity` |
-| Bulk import is CLI-only, and target selection has no GUI shape | `frontend/gui-cli-parity` |
-| Projection rebuild is CLI-only | `frontend/gui-cli-parity` |
-| Postgres workspaces can only be created from the CLI | `frontend/gui-cli-parity` |
-| Research notes have no GUI at all (+ the missing mockup) | `records/notes` |
-| A child cannot be removed from a family in the GUI | `records/person-family` |
-| Place succession can be read but never written | `records/places` |
-| Tag has no restrictions path | `records/tags` |
-| Workspace-scope surety labels are read but unwritable | `records/cross-aggregate` |
-| Interactive Set/Clear region on every owner (wired on Person only) | `records/media` |
+| [Bulk export is CLI-only](https://github.com/magne/genealogy/issues/190) | `frontend/gui-cli-parity` |
+| [Bulk import is CLI-only, and target selection has no GUI shape](https://github.com/magne/genealogy/issues/191) | `frontend/gui-cli-parity` |
+| [Projection rebuild is CLI-only](https://github.com/magne/genealogy/issues/192) | `frontend/gui-cli-parity` |
+| [Postgres workspaces can only be created from the CLI](https://github.com/magne/genealogy/issues/193) | `frontend/gui-cli-parity` |
+| [Research notes have no GUI at all (+ the missing mockup)](https://github.com/magne/genealogy/issues/194) | `records/notes` |
+| [A child cannot be removed from a family in the GUI](https://github.com/magne/genealogy/issues/195) | `records/person-family` |
+| [Place succession can be read but never written](https://github.com/magne/genealogy/issues/196) | `records/places` |
+| [Tag has no restrictions path](https://github.com/magne/genealogy/issues/197) | `records/tags` |
+| [Workspace-scope surety labels are read but unwritable](https://github.com/magne/genealogy/issues/198) | `records/cross-aggregate` |
+| [Interactive Set/Clear region on every owner (wired on Person only)](https://github.com/magne/genealogy/issues/199) | `records/media` |
 
 Only the first six are CLI-parity gaps. **Place succession, tag restrictions, and workspace-scope
 surety labels** are reachable from *neither* frontend today; they belong here anyway, because once the
@@ -150,22 +165,25 @@ GUI is the reference surface "the CLI can't either" stops being a defence. The *
 is a third kind again — the GUI does it, but on the Person screen only, so five of six media owners
 behave differently from the first.
 
-### `0.9 — UI stabilization` (10)
+### `0.9 — UI stabilization` (10 so far)
 
-Ordered by severity, not area.
+Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
+audit could find by reading code; the rest will come from using the GUI in earnest before 1.0, and that
+is expected rather than a planning failure. Treat the count as a floor — if 0.9 is not several times
+this size by the time it closes, the GUI probably has not been exercised hard enough.
 
 | Item | Why it gates a release |
 | --- | --- |
-| Dirty saved-record edits are not confirmed | **Silent data loss** in the primary interface — closing a tab or quitting discards an in-progress edit of a saved record with no prompt |
-| `Modal`/`SidePanel` overlay follow-ups | No focus trap: a keyboard user tabs out of the confirm dialog into the inert background. Accessibility defect on the app's only modal |
-| Two shipped map fixes have no test coverage | `type/test-gap` — both would regress undetected |
-| Manual webview pass outstanding | `manual-verify` — the interactive map canvas has never been exercised |
-| Record-picker scroll-listener cleanup | Leaks one inert JS listener per clear/re-search cycle |
-| "Jump back in" recent-list write has no close/quit hook | A keyboard quit races the debounced write |
-| `⌘S` lives outside the shortcut map | Save is neither listed by `?` nor rebindable — inconsistent with every other binding |
-| Live list updates on create | A created record does not appear until manual refresh |
-| Toast notifications | No feedback channel for completed actions |
-| Remember the open record's tab | Tab resets on every navigation |
+| [Dirty saved-record edits are not confirmed](https://github.com/magne/genealogy/issues/200) | **Silent data loss** in the primary interface — closing a tab or quitting discards an in-progress edit of a saved record with no prompt |
+| [`Modal`/`SidePanel` overlay follow-ups](https://github.com/magne/genealogy/issues/201) | No focus trap: a keyboard user tabs out of the confirm dialog into the inert background. Accessibility defect on the app's only modal |
+| [Two shipped map fixes have no test coverage](https://github.com/magne/genealogy/issues/202) | `type/test-gap` — both would regress undetected |
+| [Manual webview pass outstanding](https://github.com/magne/genealogy/issues/203) | `manual-verify` — the interactive map canvas has never been exercised |
+| [Record-picker scroll-listener cleanup](https://github.com/magne/genealogy/issues/204) | Leaks one inert JS listener per clear/re-search cycle |
+| ["Jump back in" recent-list write has no close/quit hook](https://github.com/magne/genealogy/issues/205) | A keyboard quit races the debounced write |
+| [`⌘S` lives outside the shortcut map](https://github.com/magne/genealogy/issues/206) | Save is neither listed by `?` nor rebindable — inconsistent with every other binding |
+| [Live list updates on create](https://github.com/magne/genealogy/issues/207) | A created record does not appear until manual refresh |
+| [Toast notifications](https://github.com/magne/genealogy/issues/208) | No feedback channel for completed actions |
+| [Remember the open record's tab](https://github.com/magne/genealogy/issues/209) | Tab resets on every navigation |
 
 Optional twelfth: *Point tool has no confirm step in the Geography tool* — a known inconsistency with
 the Place Map editor, cheap to close alongside the map work.
@@ -194,8 +212,8 @@ Two-way sync between prose and a tracker is what produces two stale records inst
 - **Discussion accretes on the issue; the canonical statement stays in the doc.** If discussion changes
   the shape of the work, update the bullet in the same PR that acts on it. Do not maintain both.
 
-**Drift check.** A `cargo xtask issue-sync` lint fits this repo, which already gates `i18n-check`,
-`css-check`, `input-guard`, and the framework-free boundary the same way:
+**Drift check.** `cargo xtask issue-sync` — wired into `cargo xtask check`, so prek and CI cover it
+alongside `i18n-check`, `css-check`, and `input-guard`:
 
 - *Offline* (prek + CI, every commit): the doc's own invariants — every `— #N` well-formed, no
   duplicate numbers, no reference to a number below the lowest filed issue.
@@ -203,10 +221,14 @@ Two-way sync between prose and a tracker is what produces two stale records inst
   drift — an open issue whose bullet is gone, a bullet referencing a closed issue, an open issue with no
   bullet at all.
 
-Weekly rather than per-PR because drift is slow and the online path needs a token and network. If even
-that is more machinery than wanted, the honest fallback is a line in the PR template — "if this closes
-a `docs/issues.md` item, remove or move the bullet" — and accepting that the doc is only as current as
-the discipline. Say which, rather than assuming the lint will get written.
+The offline half gates every commit; the online half is run by hand (or scheduled, once billing
+allows) because it needs a token and network and drift is slow.
+
+A reference sits at the **end** of a bullet's block, after however many lines of prose — that is where
+it reads naturally, so the parser closes each block at the next bullet, heading, or blank line and
+reads the reference off the last line. Getting this wrong is not hypothetical: the first version read
+only the title line and silently found nothing, and the fix after that closed each block twice, so an
+area's *last* bullet lost its reference. Both are now regression-tested.
 
 ## 6. What happens when work completes
 

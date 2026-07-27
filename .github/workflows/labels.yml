@@ -1,0 +1,53 @@
+# Reconciles GitHub's issue labels with `.github/labels.toml` (docs/issue-tracking.md §2).
+#
+# The same `cargo xtask labels` used locally, so there is one implementation rather than a workflow
+# that reimplements the diff. Never deletes: a label present on GitHub but absent from the file is
+# reported and left alone.
+#
+# Not yet verified end-to-end — Actions billing is blocked at time of writing, so every run fails
+# before starting. Apply labels with `cargo xtask labels --apply` locally until that clears.
+name: Labels
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.toml
+      - xtask/src/labels.rs
+      - .github/workflows/labels.yml
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Write the changes (unchecked = dry run)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: labels-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: sync labels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # A push to `main` applies; a manual run applies only when asked.
+      - name: Reconcile
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLY: ${{ github.event_name == 'push' || inputs.apply }}
+        run: |
+          set -euo pipefail
+          if [ "$APPLY" = "true" ]; then
+            cargo xtask labels --apply
+          else
+            cargo xtask labels
+          fi
