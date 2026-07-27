@@ -245,6 +245,16 @@ Three outcomes, by what the closure actually taught us:
 | **Closed with a decision** (wontfix, turned out impossible, deferred indefinitely) | **Move it to `Decided — no action needed`**, rewritten as the decision rather than the task. This is the one section that *should* grow: it is what stops the item being re-raised in a year. |
 | **A whole milestone lands** | One narrative entry in [`archive/completed-work.md`](archive/completed-work.md), matching how the phases are recorded there — what changed, which PRs, and any honest residuals. |
 
+Deleting the last bullet of an area **does not delete the `###` heading**. The heading keeps a
+one-line "No open items." note instead, the way `## Bugs` already does: the area taxonomy is a map of
+the product's surfaces, not a work queue, so an empty area says "nothing open here" and is where the
+next item lands. Three concrete reasons — the `area/*` label lives in
+[`.github/labels.toml`](../.github/labels.toml) and is unaffected by the heading (and
+`cargo xtask labels` never deletes), every filed issue body deep-links the H3 anchor
+(`docs/issues.md#places`) including the closed ones, and `cargo xtask issue-sync` tracks areas per
+bullet so an area with no bullets reports no drift. Drop the heading only when the *area itself* stops
+existing, and retire its label in the same commit.
+
 So `issues.md` **shrinks monotonically** as work lands, except for `Decided`, which is reference
 material rather than backlog. That is the property worth protecting: the file stays reasonable because
 finished work leaves it entirely, not because it is filed somewhere else in the same repo.

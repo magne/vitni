@@ -11,16 +11,17 @@
 use genealogy_app::{
     Age, AgeBound, Agent, AgentId, AgentKind, AppDefaults, Attribute, Calendar, ChangeLogEntry, DateInput,
     DateModifier, DatePoint, DateQuality, EventType, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody,
-    NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewSource, OperatorConfig, ParticipantRole, PersonNameParts,
-    Provenance, Rect, Session, Workspace, WorkspaceDefaults, build_genealogical_date, change_log_for_citation,
-    change_log_for_event, change_log_for_media, change_log_for_person, change_log_for_source, create_citation,
-    create_event, create_media, create_note, create_person, create_source, create_tag, show_citation, show_event,
-    show_media, show_person, show_source,
+    MutationMeta, NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewSource, OperatorConfig, ParticipantRole,
+    PersonNameParts, Provenance, Rect, Session, Workspace, WorkspaceDefaults, add_child, build_genealogical_date,
+    change_log_for_citation, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_person,
+    change_log_for_source, create_citation, create_event, create_family, create_media, create_note, create_person,
+    create_source, create_tag, show_citation, show_event, show_family, show_media, show_person, show_source,
 };
 use genealogy_ui::{
-    CitationEdit, ConfidenceLevel, EventEdit, EvidenceKind, InformationKind, Localizer, MediaEdit, MergePersons,
-    PersonEdit, ProvenanceDraft, SourceChangeSetRequest, SourceQuality, dispatch_citation_edit, dispatch_edit,
-    dispatch_event_edit, dispatch_media_edit, dispatch_merge, dispatch_source_change_set,
+    CitationEdit, ConfidenceLevel, EventEdit, EvidenceKind, FamilyEdit, InformationKind, Localizer, MediaEdit,
+    MergePersons, PersonEdit, ProvenanceDraft, SourceChangeSetRequest, SourceQuality, dispatch_citation_edit,
+    dispatch_edit, dispatch_event_edit, dispatch_family_edit, dispatch_media_edit, dispatch_merge,
+    dispatch_source_change_set,
 };
 use uuid::Uuid;
 
@@ -362,6 +363,54 @@ async fn a_retract_carries_the_drafts_rationale() {
             .notes
             .is_empty(),
         "the retracted note is gone from the conclusion view"
+    );
+}
+
+/// A child removal ends the membership without retracting the claim that produced it: the
+/// conclusion view drops the child, the change log records a `ChildRemoved` carrying the operator's
+/// rationale, and the original `ChildAdded` assertion is left standing (never retracted) — the
+/// "record a change" half of the pair the Children tab now offers next to Retract.
+#[tokio::test]
+async fn remove_child_ends_the_membership_without_retracting_the_claim() {
+    let (ws, session, _dir) = setup().await;
+    let child = person(&ws, &session).await;
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("family");
+    add_child(&ws, &session, &family, &child, Vec::new(), MutationMeta::default())
+        .await
+        .expect("add child");
+
+    dispatch_family_edit(
+        &ws,
+        &session,
+        &FamilyEdit::RemoveChild {
+            human_id: family.clone(),
+            person_id: child.clone(),
+        },
+        &ProvenanceDraft {
+            rationale: "  the adoption was annulled  ".to_owned(),
+            ..ProvenanceDraft::default()
+        },
+    )
+    .await
+    .expect("remove child");
+
+    let log = change_log_for_family(&ws, &family).await.expect("log");
+    let entry = entry_with_rationale(&log, "the adoption was annulled");
+    assert_eq!(entry.event_type, "ChildRemoved", "the removal carries the rationale");
+    assert!(
+        !log.iter().any(|entry| entry.event_type == "AssertionRetracted"),
+        "a removal is a new claim, not a correction of the old one:\n{log:?}"
+    );
+    assert!(
+        show_family(&ws, &family)
+            .await
+            .expect("show")
+            .expect("family")
+            .children
+            .is_empty(),
+        "the removed child is gone from the conclusion view"
     );
 }
 

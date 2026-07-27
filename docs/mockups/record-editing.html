@@ -302,6 +302,11 @@
     (a new claim referencing the old one by its <span class="mono">AssertionId</span>) and
     <b>Retract</b> emits <span class="mono">AssertionRetracted</span> — the row disappears from the
     conclusion view but stays in History. Nothing is ever deleted.</p>
+  <p class="muted">A few collections carry a <b>Remove</b> verb <i>alongside</i> Retract — the
+    <a href="family.html">Family</a> Children tab is the case in point. Remove is not a correction: it
+    emits <span class="mono">ChildRemoved</span>, recording that a membership which once held has
+    ended, and the claim that added the child keeps standing. Retract says that claim was a mistake in
+    the first place. Both are logged; only the meaning differs, so the two never share a button.</p>
   <div class="specimen">
     <div class="label">Related collection — per-row editing (Edit = supersede · Retract = retract)</div>
     <table class="tbl">

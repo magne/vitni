@@ -1213,9 +1213,12 @@ impl Localizer {
 
     /// The hover tooltip for a per-row correction action, keyed by id (`retract`, `detach-citation`,
     /// `detach-media`, `detach-note`, `untag`, `edit-participation`, `remove-participant`,
-    /// `remove-child`, `remove-partner`, `unlink-event`, `unlink-repository`, `edit-geometry`) — the
-    /// mockup row-action sentences (`record-editing.html`
+    /// `remove-child`, `retract-child`, `remove-partner`, `unlink-event`, `unlink-repository`,
+    /// `edit-geometry`) — the mockup row-action sentences (`record-editing.html`
     /// §8). Falls back to the generic retract sentence.
+    ///
+    /// `remove-child` and `retract-child` are the two halves of the Children tab's pair: the first
+    /// ends a membership that once held, the second withdraws a membership claimed in error.
     #[must_use]
     pub fn action_title(&self, id: &str) -> String {
         match id {
@@ -1226,6 +1229,7 @@ impl Localizer {
             "edit-participation" => fl!(self.loader, "edit-participation-title"),
             "remove-participant" => fl!(self.loader, "remove-participant-title"),
             "remove-child" => fl!(self.loader, "remove-child-title"),
+            "retract-child" => fl!(self.loader, "retract-child-title"),
             "remove-partner" => fl!(self.loader, "remove-partner-title"),
             "cite-name" => fl!(self.loader, "cite-name-title"),
             "unlink-event" => fl!(self.loader, "unlink-event-title"),
@@ -1331,7 +1335,7 @@ impl Localizer {
     /// The title of a per-row edit/retract/detach side panel, keyed by id (`edit-name`, `edit-fact`,
     /// `edit-association`, `edit-participation`, `edit-child`, `edit-enclosing`, `edit-translation`,
     /// `edit-repository`, `edit-attribute`, `edit-haplogroup`, `edit-segment`, `edit-ancestor`, `edit-url`,
-    /// `retract`, `detach`). Falls back to the retract-panel title.
+    /// `retract`, `detach`, `remove-child`). Falls back to the retract-panel title.
     #[must_use]
     pub fn panel_title(&self, id: &str) -> String {
         match id {
@@ -1354,6 +1358,7 @@ impl Localizer {
             "cite-name" => fl!(self.loader, "panel-cite-name"),
             "cite-fact" => fl!(self.loader, "panel-cite-fact"),
             "detach" => fl!(self.loader, "detach-panel-title"),
+            "remove-child" => fl!(self.loader, "remove-child-panel-title"),
             _ => fl!(self.loader, "retract-panel-title"),
         }
     }
@@ -1363,6 +1368,13 @@ impl Localizer {
     #[must_use]
     pub fn retract_note(&self) -> String {
         fl!(self.loader, "retract-note")
+    }
+
+    /// The note shown in the Children tab's Remove-from-family panel: the membership change is
+    /// recorded in History and the claim it ends keeps standing (`family.html` Children).
+    #[must_use]
+    pub fn remove_child_note(&self) -> String {
+        fl!(self.loader, "remove-child-note")
     }
 
     /// The vital "born" affix for the detail header, e.g. `b. 1850`.
