@@ -1175,6 +1175,35 @@ impl Localizer {
         fl!(self.loader, "plugin-action-unpin", publisher = publisher)
     }
 
+    /// Localizes a rejected `[shortcuts]` override (ADR 0030 §4) — surfaced next to the offending
+    /// binding rather than silently dropped.
+    #[must_use]
+    pub fn shortcut_binding_error(&self, error: &crate::shortcuts::BindingError) -> String {
+        use crate::shortcuts::BindingError;
+        match error {
+            BindingError::UnknownAction { id } => fl!(self.loader, "shortcuts-error-unknown-action", id = id.as_str()),
+            BindingError::UnparsableChord { id, chord, .. } => {
+                fl!(
+                    self.loader,
+                    "shortcuts-error-unparsable",
+                    id = id.as_str(),
+                    chord = chord.as_str()
+                )
+            }
+            BindingError::NotRebindable { id } => {
+                fl!(self.loader, "shortcuts-error-not-rebindable", id = id.as_str())
+            }
+            BindingError::Conflict { id, chord } => {
+                fl!(
+                    self.loader,
+                    "shortcuts-error-conflict",
+                    id = id.as_str(),
+                    chord = chord.as_str()
+                )
+            }
+        }
+    }
+
     /// The accessible name for a field's reset-to-original control, e.g. `Reset Given name to
     /// original value` (`record-editing.html` §4).
     #[must_use]

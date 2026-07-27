@@ -7,6 +7,7 @@
 //! here — `onkeydown`/`set_focus` are inert under SSR. They are covered by the manual keyboard +
 //! axe-core gate in the PR verification.
 
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
@@ -20,7 +21,7 @@ use genealogy_ui_dioxus::shell::palette::CommandPalette;
 use genealogy_ui_dioxus::shell::statusbar::ShellStatusbar;
 use genealogy_ui_dioxus::shell::tabstrip::{NewRecordMenu, RecordTabstrip};
 use genealogy_ui_dioxus::shell::topbar::Topbar;
-use genealogy_ui_dioxus::shell::{ChromeCtx, Shell};
+use genealogy_ui_dioxus::shell::{ChromeCtx, Shell, ShortcutsCtx};
 use unic_langid::LanguageIdentifier;
 
 /// Opens a person record, then leaves the active destination at the given category.
@@ -78,6 +79,21 @@ fn shell_with_overlay_open() -> Element {
 /// The help overlay, forced open.
 fn help_open() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(|| nav.overlay.set(Overlay::Help));
+    rsx! {
+        HelpOverlay {}
+    }
+}
+
+/// The help overlay, forced open, with `quit` rebound to `⌘⇧Q` via a live [`ShortcutsCtx`]
+/// (ADR 0030 §1): the overlay must render the *resolved* chord, not the default `⌘Q`.
+fn help_open_with_rebound_quit() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    use_context_provider(|| {
+        let bindings = BTreeMap::from([("quit".to_owned(), "mod+shift+q".to_owned())]);
+        ShortcutsCtx(Signal::new(genealogy_app::ShortcutConfig { bindings }))
+    });
     let mut nav = use_context_provider(NavState::new);
     use_hook(|| nav.overlay.set(Overlay::Help));
     rsx! {
@@ -416,6 +432,15 @@ fn help_overlay_renders_the_shortcut_map() {
     // The "Go to" column lists bare category names paired with their `g`-prefix second key.
     assert!(html.contains(">People<"), "a g-prefix navigation row:\n{html}");
     assert!(html.contains("<kbd>g</kbd><kbd>p</kbd>"), "the g p chord:\n{html}");
+}
+
+#[test]
+fn help_overlay_reflects_a_rebound_global_chord() {
+    let html = render(help_open_with_rebound_quit);
+    assert!(
+        html.contains("<kbd>Ctrl⇧</kbd><kbd>Q</kbd>"),
+        "the rebound chord (⌘⇧Q) renders instead of the default ⌘Q:\n{html}"
+    );
 }
 
 #[test]

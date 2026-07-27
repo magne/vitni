@@ -15,8 +15,8 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use genealogy_app::{
     AiConfig, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, PluginTrust,
-    PluginTrustConfig, PreferenceLayers, ResolvedLocale, Session, SuretyLabelOverrides, TagSummary, Workspace,
-    WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers,
+    PluginTrustConfig, PreferenceLayers, ResolvedLocale, Session, ShortcutConfig, SuretyLabelOverrides, TagSummary,
+    Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers,
     read_resolved_locale, read_resolved_surety_labels, workspace_counts,
 };
 use genealogy_plugin_host::{
@@ -992,6 +992,9 @@ pub struct PreferencesData {
     pub workspaces: Vec<WorkspaceSummary>,
     /// The name of the workspace open this session — the row it matches shows the "Active" badge.
     pub open_workspace: String,
+    /// The client-scope `[shortcuts]` rebound-chord overrides (ADR 0030 §3) — global-only, no
+    /// workspace-manifest layer.
+    pub shortcuts: ShortcutConfig,
 }
 
 /// Loads the Preferences screen's data. Never opens the store (config + manifest reads only), so it
@@ -1009,6 +1012,7 @@ pub fn load_preferences(services: &Services) -> PreferencesData {
         surety,
         workspaces: list_workspaces(&services.config),
         open_workspace: services.open_workspace.clone(),
+        shortcuts: services.config.shortcuts.clone(),
     }
 }
 
@@ -1053,6 +1057,16 @@ pub fn save_surety_defaults(services: &Services, surety: SuretyLabelOverrides) -
     let path = config::config_path().map_err(|error| loc.error(&error))?;
     FileConfigStore::new(path, None)
         .store_workspace_default_surety(surety)
+        .map_err(|error| loc.error(&error))
+}
+
+/// Saves the client-scope `[shortcuts]` rebound-chord map, returning a localized error on failure
+/// (ADR 0030 §3).
+pub fn save_shortcuts(services: &Services, shortcuts: &ShortcutConfig) -> Result<(), String> {
+    let loc = services.localizer();
+    let path = config::config_path().map_err(|error| loc.error(&error))?;
+    FileConfigStore::new(path, None)
+        .store_shortcuts(shortcuts)
         .map_err(|error| loc.error(&error))
 }
 

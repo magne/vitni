@@ -454,10 +454,11 @@ impl Chrome {
         fl!(self.loader, "palette-hint-open")
     }
 
-    /// The palette footer's "⌘K from anywhere" hint.
+    /// The palette footer's "⌘K from anywhere" hint, taking the resolved command-palette chord as an
+    /// argument (ADR 0030 §4) so it never goes stale under a rebind.
     #[must_use]
-    pub fn palette_hint_anywhere(&self) -> String {
-        fl!(self.loader, "palette-hint-anywhere")
+    pub fn palette_hint_anywhere(&self, chord: &str) -> String {
+        fl!(self.loader, "palette-hint-anywhere", chord = chord)
     }
 
     /// The `⌘Z` "nothing to undo" notice (no record open / wrong screen / nothing undoable).
@@ -751,6 +752,7 @@ impl Chrome {
             "locale" => fl!(self.loader, "prefs-section-locale"),
             "formats" => fl!(self.loader, "prefs-section-formats"),
             "surety" => fl!(self.loader, "prefs-section-surety"),
+            "shortcuts" => fl!(self.loader, "prefs-section-shortcuts"),
             "defaults" => fl!(self.loader, "prefs-section-defaults"),
             _ => fl!(self.loader, "prefs-section-identity"),
         }
@@ -957,6 +959,30 @@ impl Chrome {
     #[must_use]
     pub fn prefs_surety_hint(&self) -> String {
         fl!(self.loader, "prefs-surety-hint")
+    }
+
+    /// The "Rebind global shortcuts" card title (ADR 0030).
+    #[must_use]
+    pub fn prefs_shortcuts_title(&self) -> String {
+        fl!(self.loader, "prefs-shortcuts-title")
+    }
+
+    /// The paragraph explaining only `Global` shortcuts are rebindable and the chord syntax.
+    #[must_use]
+    pub fn prefs_shortcuts_intro(&self) -> String {
+        fl!(self.loader, "prefs-shortcuts-intro")
+    }
+
+    /// The "Default: { $chord }" hint shown under an empty/unmodified shortcut field.
+    #[must_use]
+    pub fn prefs_shortcuts_default_hint(&self, chord: &str) -> String {
+        fl!(self.loader, "prefs-shortcuts-default-hint", chord = chord)
+    }
+
+    /// The lead-in for the card's general (not row-attachable) rejected-override list.
+    #[must_use]
+    pub fn prefs_shortcuts_general_errors(&self) -> String {
+        fl!(self.loader, "prefs-shortcuts-general-errors")
     }
 
     /// The "Where a setting's value comes from" card title.

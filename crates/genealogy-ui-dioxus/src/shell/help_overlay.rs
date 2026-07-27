@@ -1,16 +1,17 @@
 //! The keyboard-shortcuts help sheet (`?`).
 //!
-//! Renders the framework-neutral shortcut map (`genealogy_ui::shortcuts`) as a three-column grid
-//! (Global / Go to / Within screen). Each row pairs a localized description with its chord drawn as
-//! `kbd` glyphs (decorative — the description carries the meaning). Closes on `Esc` or a click
-//! outside; focus rests on the close control.
+//! Renders the *resolved* shortcut map (`genealogy_ui::resolved_shortcuts`, ADR 0030 §1 — so a
+//! rebound Global chord shows up here for free) as a three-column grid (Global / Go to / Within
+//! screen). Each row pairs a localized description with its chord drawn as `kbd` glyphs (decorative —
+//! the description carries the meaning). Closes on `Esc` or a click outside; focus rests on the close
+//! control.
 
 use dioxus::prelude::*;
-use genealogy_ui::{Chord, Key as ChordKey, Modifier, ShortcutGroup, navigation_shortcuts, shortcuts};
+use genealogy_ui::{Chord, Key as ChordKey, Modifier, Shortcut, ShortcutGroup, navigation_shortcuts};
 
-use crate::shell::ChromeCtx;
 use crate::shell::focus_trap::trap_tab;
 use crate::shell::nav_state::{NavState, Overlay};
+use crate::shell::{ChromeCtx, resolved_shortcuts_from_context};
 
 /// The help overlay, rendered only while [`Overlay::Help`] is open.
 #[component]
@@ -20,6 +21,7 @@ pub fn HelpOverlay() -> Element {
     if *nav.overlay.read() != Overlay::Help {
         return rsx! {};
     }
+    let resolved = resolved_shortcuts_from_context();
     rsx! {
         div { class: "overlay", onclick: move |_| nav.close_overlay(),
             div {
@@ -41,18 +43,20 @@ pub fn HelpOverlay() -> Element {
                     }
                 }
                 div { class: "h-body",
-                    HelpColumn { group: ShortcutGroup::Global }
-                    HelpColumn { group: ShortcutGroup::Navigation }
-                    HelpColumn { group: ShortcutGroup::WithinScreen }
+                    HelpColumn { group: ShortcutGroup::Global, resolved: resolved.clone() }
+                    HelpColumn { group: ShortcutGroup::Navigation, resolved: resolved.clone() }
+                    HelpColumn { group: ShortcutGroup::WithinScreen, resolved }
                 }
             }
         }
     }
 }
 
-/// One column of the help grid: a heading and its shortcut rows.
+/// One column of the help grid: a heading and its shortcut rows. `resolved` is the live resolved map
+/// (ignored by the `Navigation` group, which is not rebindable and reads
+/// [`navigation_shortcuts`] instead).
 #[component]
-fn HelpColumn(group: ShortcutGroup) -> Element {
+fn HelpColumn(group: ShortcutGroup, resolved: Vec<Shortcut>) -> Element {
     let chrome = use_context::<ChromeCtx>();
     rsx! {
         div { class: "help-col",
@@ -71,7 +75,7 @@ fn HelpColumn(group: ShortcutGroup) -> Element {
                         }
                     },
                     ShortcutGroup::Global | ShortcutGroup::WithinScreen => rsx! {
-                        for entry in shortcuts().into_iter().filter(|entry| entry.group == group) {
+                        for entry in resolved.into_iter().filter(|entry| entry.group == group) {
                             div { class: "shortcut-row",
                                 span { "{chrome.0.shortcut_label(entry.label_id)}" }
                                 span { class: "keys", aria_hidden: "true", {render_chord(entry.chord)} }
@@ -84,13 +88,19 @@ fn HelpColumn(group: ShortcutGroup) -> Element {
     }
 }
 
+/// The concatenated display string for a chord (e.g. `⌘K`), for inline hint text such as the command
+/// palette's "`⌘K` from anywhere" — contrast [`render_chord`], which draws it as separate `kbd` cells
+/// for the grid.
+#[must_use]
+pub(crate) fn chord_display(chord: Chord) -> String {
+    let mut text = modifier_glyph(chord.modifier).unwrap_or_default();
+    text.push_str(&key_glyph(chord.key));
+    text
+}
+
 /// Draws a chord as `kbd` glyphs (e.g. `⌘ K`, `⌘⇧ Z`, `↑`).
 fn render_chord(chord: Chord) -> Element {
-    let modifier = match chord.modifier {
-        Modifier::None => None,
-        Modifier::Command => Some(primary_glyph().to_owned()),
-        Modifier::CommandShift => Some(format!("{}⇧", primary_glyph())),
-    };
+    let modifier = modifier_glyph(chord.modifier);
     let key = key_glyph(chord.key);
     rsx! {
         if let Some(modifier) = modifier {
@@ -98,6 +108,25 @@ fn render_chord(chord: Chord) -> Element {
         }
         kbd { "{key}" }
     }
+}
+
+/// The modifier glyph for a chord (e.g. `⌘`, `⌘⇧`, `⌘⌥`), or `None` when no modifier is held. `Alt`
+/// composes independently of the primary modifier and Shift (ADR 0030 §5).
+fn modifier_glyph(modifier: Modifier) -> Option<String> {
+    if !modifier.command && !modifier.shift && !modifier.alt {
+        return None;
+    }
+    let mut glyph = String::new();
+    if modifier.command {
+        glyph.push_str(primary_glyph());
+    }
+    if modifier.shift {
+        glyph.push('⇧');
+    }
+    if modifier.alt {
+        glyph.push_str(if cfg!(target_os = "macos") { "⌥" } else { "Alt+" });
+    }
+    Some(glyph)
 }
 
 /// The primary modifier glyph: `⌘` on macOS, `Ctrl` elsewhere.

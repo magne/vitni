@@ -25,7 +25,7 @@ use crate::shell::statusbar::ShellStatusbar;
 use crate::shell::tabstrip::RecordTabstrip;
 use crate::shell::topbar::Topbar;
 use crate::shell::window_geometry::WindowGeometryManager;
-use crate::shell::{ChromeCtx, CountsCtx, NameCache};
+use crate::shell::{ChromeCtx, CountsCtx, NameCache, ShortcutsCtx};
 
 /// The application shell. Provides [`NavState`], installs the keyboard layer, and lays out the rail,
 /// top bar, tabstrip, work area, status bar, and overlays.
@@ -42,6 +42,12 @@ pub fn Shell() -> Element {
     });
     // The shared record-name cache backing every `RecordLink` (resolved once per data version).
     use_context_provider(|| NameCache(Signal::new(std::collections::HashMap::new())));
+    // The live client-scope shortcut overrides (ADR 0030 §3): seeded from `StartupPrefs`, held as a
+    // signal so saving the Preferences shortcuts card takes effect without a restart.
+    let shortcuts_ctx = use_context_provider(|| {
+        let prefs = try_consume_context::<StartupPrefs>().unwrap_or_default();
+        ShortcutsCtx(Signal::new(prefs.shortcuts))
+    });
     // Serve the workspace's media library to the webview at `/media/<rel>` (desktop only; a no-op
     // under SSR, which mounts no window). Registered once at shell mount.
     let media_root = match try_consume_context::<AppCtx>() {
@@ -110,7 +116,10 @@ pub fn Shell() -> Element {
             tabindex: "-1",
             inert: overlay_open.then_some("true"),
             aria_hidden: overlay_open.then_some("true"),
-            onkeydown: move |event| dispatch(&event, nav, gp, &notices),
+            onkeydown: move |event| {
+                let resolved = genealogy_ui::resolved_shortcuts(&shortcuts_ctx.0.read().bindings).0;
+                dispatch(&event, nav, gp, &notices, &resolved);
+            },
             a { class: "skip-link", href: "#main", "{chrome.0.skip_to_content()}" }
             Rail {}
             if let Some(category) = active_category {

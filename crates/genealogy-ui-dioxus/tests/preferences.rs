@@ -16,7 +16,7 @@ use genealogy_app::{
 };
 use genealogy_core::ids::AgentId;
 use genealogy_ui_dioxus::i18n::Chrome;
-use genealogy_ui_dioxus::screens::{LocaleFields, RegisterFields, SuretyFields, preferences_view};
+use genealogy_ui_dioxus::screens::{LocaleFields, RegisterFields, ShortcutFields, SuretyFields, preferences_view};
 use genealogy_ui_dioxus::services::PreferencesData;
 use unic_langid::LanguageIdentifier;
 use uuid::Uuid;
@@ -49,6 +49,7 @@ fn config_with_one_workspace() -> Config {
         ai: genealogy_app::AiConfig::default(),
         map: genealogy_app::MapConfig::default(),
         plugin_trust: genealogy_app::PluginTrustConfig::default(),
+        shortcuts: genealogy_app::ShortcutConfig::default(),
     }
 }
 
@@ -166,6 +167,7 @@ fn view_with_status_and_locale(
         layers,
         locale,
         SuretyLabelOverrides::default(),
+        genealogy_app::ShortcutConfig::default(),
         status,
         workspaces,
         open_workspace,
@@ -185,6 +187,7 @@ fn render_prefs(
     layers: PreferenceLayers,
     locale: ResolvedLocale,
     surety: SuretyLabelOverrides,
+    shortcuts: genealogy_app::ShortcutConfig,
     status: Option<String>,
     workspaces: Vec<WorkspaceSummary>,
     open_workspace: String,
@@ -197,6 +200,7 @@ fn render_prefs(
         surety,
         workspaces,
         open_workspace,
+        shortcuts,
     };
     let display = use_signal(|| data.config.operator.display.clone().unwrap_or_default());
     let email = use_signal(|| data.config.operator.email.clone().unwrap_or_default());
@@ -231,6 +235,11 @@ fn render_prefs(
         name: use_signal(String::new),
         directory: use_signal(String::new),
     };
+    let shortcut_fields = ShortcutFields {
+        bindings: use_signal(|| shortcut_bindings_seed(&data.shortcuts)),
+    };
+    let loc = genealogy_ui::Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let shortcuts_vm_value = genealogy_ui::shortcuts_vm(&data.shortcuts, &loc);
     preferences_view(
         &chrome("en"),
         &data,
@@ -240,6 +249,8 @@ fn render_prefs(
         person_id_format,
         locale_fields,
         surety_fields,
+        &shortcuts_vm_value,
+        shortcut_fields,
         status,
         |_| {},
         |_| {},
@@ -249,6 +260,18 @@ fn render_prefs(
         |_| {},
         |_| {},
     )
+}
+
+/// The chord-string field value each rebindable action seeds to (mirrors the private helper of the
+/// same shape in `preferences.rs` — duplicated here since the test harness seeds its own signals
+/// rather than going through `PreferencesScreen`).
+fn shortcut_bindings_seed(config: &genealogy_app::ShortcutConfig) -> BTreeMap<String, String> {
+    let (resolved, _errors) = genealogy_ui::resolved_shortcuts(&config.bindings);
+    resolved
+        .into_iter()
+        .filter(|entry| entry.group == genealogy_ui::ShortcutGroup::Global)
+        .map(|entry| (entry.action.config_id().to_owned(), entry.chord.to_string()))
+        .collect()
 }
 
 /// The surety-field text value for one ordinal's current override, or empty when unset (mirrors the
@@ -326,6 +349,7 @@ fn workspace_unreadable_manifest() -> Element {
         layers_falling_back_to_shared_default(),
         resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
         SuretyLabelOverrides::default(),
+        genealogy_app::ShortcutConfig::default(),
         None,
         workspaces,
         open,
@@ -343,6 +367,7 @@ fn open_differs_from_default() -> Element {
         layers_falling_back_to_shared_default(),
         resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
         SuretyLabelOverrides::default(),
+        genealogy_app::ShortcutConfig::default(),
         None,
         workspaces,
         "tree2".to_owned(),
@@ -367,6 +392,30 @@ fn one_workspace_with_surety_override() -> Element {
         layers_falling_back_to_shared_default(),
         resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
         surety,
+        genealogy_app::ShortcutConfig::default(),
+        None,
+        workspaces,
+        open,
+        false,
+    )
+}
+
+/// One workspace with `quit` rebound to `mod+j`, and a rejected override (`move-up`, not a `Global`
+/// action) that must surface as a general error rather than being dropped (ADR 0030 §4).
+fn one_workspace_with_shortcut_override_and_rejection() -> Element {
+    let config = config_with_one_workspace();
+    let workspaces = summaries(&config, Some(Engine::Sqlite));
+    let open = config.default.clone().unwrap_or_default();
+    let bindings = BTreeMap::from([
+        ("quit".to_owned(), "mod+j".to_owned()),
+        ("move-up".to_owned(), "mod+u".to_owned()),
+    ]);
+    render_prefs(
+        config,
+        layers_falling_back_to_shared_default(),
+        resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        SuretyLabelOverrides::default(),
+        genealogy_app::ShortcutConfig { bindings },
         None,
         workspaces,
         open,
@@ -384,6 +433,7 @@ fn register_form_open() -> Element {
         layers_falling_back_to_shared_default(),
         resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
         SuretyLabelOverrides::default(),
+        genealogy_app::ShortcutConfig::default(),
         None,
         workspaces,
         open,
@@ -519,6 +569,49 @@ fn surety_card_displays_a_pinned_label_override() {
     assert!(
         html.contains(r#"value="Certain""#),
         "the pinned override's label shows as the field value:\n{html}"
+    );
+}
+
+#[test]
+fn shortcuts_card_renders_one_field_per_global_action_seeded_with_the_default_chord() {
+    let html = render(one_workspace_fallback);
+    assert!(
+        html.contains(r#"name="shortcut-quit""#),
+        "the quit field renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"name="shortcut-close-tab""#),
+        "the close-tab field renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"value="mod+q""#),
+        "quit's field is seeded with its default chord:\n{html}"
+    );
+    assert!(
+        html.contains("Default: mod+q"),
+        "the default-chord hint renders under the field:\n{html}"
+    );
+    // Only the 11 Global actions get a field — a within-screen action (e.g. `move-up`) does not.
+    assert!(
+        !html.contains(r#"name="shortcut-move-up""#),
+        "a within-screen action has no shortcut field:\n{html}"
+    );
+}
+
+#[test]
+fn shortcuts_card_shows_an_accepted_override_and_a_general_error_for_a_rejected_one() {
+    let html = render(one_workspace_with_shortcut_override_and_rejection);
+    assert!(
+        html.contains(r#"name="shortcut-quit""#) && html.contains(r#"value="mod+j""#),
+        "the accepted override shows as the field value:\n{html}"
+    );
+    assert!(
+        html.contains("Some overrides could not be applied"),
+        "the rejected move-up override surfaces as a general error, not silently dropped:\n{html}"
+    );
+    assert!(
+        html.contains("move-up"),
+        "the general error names the rejected action:\n{html}"
     );
 }
 

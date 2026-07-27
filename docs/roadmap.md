@@ -574,6 +574,7 @@ they are confirmed when the ADR is written.
 | [ADR 0028](adr/0028-research-note-argument-aggregate.md) — **accepted** | `ResearchNote`/`Argument` aggregate: the GEDCOM X `Document(Analysis)` proof-argument shape, multi-subject | Phase 10 | data-model §17 |
 | [ADR 0029](adr/0029-import-merge-sync-reconciliation.md) — **accepted** | Import merge/sync: timestamp-gated reconciliation against the file's export date (`Person.sex` first slice; Source deferred) | Phase 10 | ADR 0013, 0018 |
 | [ADR 0014](adr/0014-plugin-signing-trust-tiers-and-loading.md) — **accepted** | Plugin signing, trust tiers, capability-grant UX, and three-layer loading | Phase 11 | ADR 0007 |
+| [ADR 0030](adr/0030-customizable-keyboard-shortcuts.md) — **accepted** | Customizable keyboard shortcuts: one resolved `Chord` map, Global-group-only rebinding, client-scope `[shortcuts]` config | Ease of use | ADR 0008, 0015 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 
 Conditional — write an ADR only if/when the option is adopted (direction already fixed, so not

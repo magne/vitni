@@ -1,18 +1,19 @@
 //! The central keyboard dispatcher.
 //!
-//! One `onkeydown` on the shell root interprets the framework-neutral shortcut map
-//! (`genealogy_ui::shortcuts`) into shell actions: open the palette, toggle help, navigate via the
-//! `g`-prefix, switch record tabs (`⌘1…9`), dock a record tab side-by-side (`⌘⇧1…9`), step through
-//! records (`[`/`]`), undo (`⌘Z`), and close overlays.
-//! The key→action decision is the pure [`shell_intent`] (unit-tested exhaustively); [`dispatch`] is a
-//! thin interpreter that applies the resulting [`ShellIntent`] to the shell state. The primary
-//! modifier is `⌘` on macOS and `Ctrl` elsewhere. Within-screen keys owned by a focused widget
-//! (↑/↓, Enter, ←/→, Home/End) are not handled here.
+//! One `onkeydown` on the shell root interprets the resolved shortcut map
+//! (`genealogy_ui::resolved_shortcuts`, ADR 0030) into shell actions: open the palette, toggle help,
+//! navigate via the `g`-prefix, switch record tabs (`⌘1…9`), dock a record tab side-by-side
+//! (`⌘⇧1…9`), step through records (`[`/`]`), undo (`⌘Z`), and close overlays.
+//! The key→action decision is the pure [`shell_intent`] (unit-tested exhaustively over the *default*
+//! map — the regression net a rebind must not break); [`dispatch`] is a thin interpreter that applies
+//! the resulting [`ShellIntent`] to the shell state. The primary modifier is `⌘` on macOS and `Ctrl`
+//! elsewhere. Within-screen keys owned by a focused widget (↑/↓, Enter, ←/→, Home/End) and the
+//! `g`-prefix navigation keys are not rebindable (ADR 0030 §2) and stay hardcoded here.
 
 use std::time::{Duration, Instant};
 
 use dioxus::prelude::*;
-use genealogy_ui::{Category, Destination, RecordRef};
+use genealogy_ui::{Category, Destination, RecordRef, Shortcut, ShortcutAction, ShortcutGroup};
 
 use crate::shell::nav_state::{NavState, Overlay};
 
@@ -79,55 +80,142 @@ pub fn use_keyboard_dispatch() -> Signal<GPrefix> {
 
 /// Maps one keydown to a [`ShellIntent`], if it is a shell-global chord. Pure over plain data
 /// (`dioxus` `Key`/`Modifiers`/`Code` carry no state) so the full matrix is unit-testable; `primary`
-/// is whether the platform's primary modifier is held (resolved by the caller). The `g`-prefix's
-/// *second* key is not decided here — [`dispatch`] resolves that statefully first.
+/// is whether the platform's primary modifier is held (resolved by the caller). `resolved` is the
+/// live resolved shortcut map (`genealogy_ui::resolved_shortcuts`, ADR 0030) — every `Global` action
+/// (except `Close`, whose `Esc` binding is a fixed platform convention, and the digit-range actions,
+/// matched by physical code below) is a lookup against it, so a rebind takes effect here for free.
+/// The `g`-prefix's *second* key is not decided here — [`dispatch`] resolves that statefully first.
 #[must_use]
-pub fn shell_intent(key: &Key, modifiers: Modifiers, code: Code, primary: bool) -> Option<ShellIntent> {
+pub fn shell_intent(
+    key: &Key,
+    modifiers: Modifiers,
+    code: Code,
+    primary: bool,
+    resolved: &[Shortcut],
+) -> Option<ShellIntent> {
     if *key == Key::Escape {
         return Some(ShellIntent::CloseOverlay);
     }
-    if primary {
-        return match key {
-            Key::Character(character) if character == "k" || character == "f" => Some(ShellIntent::OpenPalette),
-            Key::Character(character) if character == "n" => Some(ShellIntent::NewRecord),
-            Key::Character(character) if character == "q" => Some(ShellIntent::Quit),
-            Key::Character(character) if character == "w" => Some(ShellIntent::CloseCurrentTab),
-            Key::Character(character) if character == "z" => {
-                if modifiers.shift() {
-                    Some(ShellIntent::Redo)
-                } else {
-                    Some(ShellIntent::Undo)
-                }
-            }
-            _ => digit_1_to_9(code).map(|n| {
-                if modifiers.shift() {
-                    ShellIntent::DockRecordTab(n)
-                } else {
-                    ShellIntent::SwitchRecordTab(n)
-                }
-            }),
-        };
+    // Not rebindable (ADR 0030 §2): the `g`-prefix arm and the bracket record-step keys are bare,
+    // fixed chords, never looked up against the resolved map.
+    if !primary && let Key::Character(character) = key {
+        match character.as_str() {
+            "g" => return Some(ShellIntent::ArmGPrefix),
+            "[" => return Some(ShellIntent::StepRecord(-1)),
+            "]" => return Some(ShellIntent::StepRecord(1)),
+            _ => {}
+        }
     }
-    let Key::Character(character) = key else {
+    // `⌘1…9`/`⌘⇧1…9`: layout-independent by physical code, but the *modifier* each requires is
+    // still the resolved (rebindable) one — `Key::DigitRange` cannot be typed literally, so it is
+    // matched here rather than through the generic lookup below.
+    if let Some(digit) = digit_1_to_9(code) {
+        let held = event_modifier(modifiers, primary);
+        if Some(held) == resolved_modifier(resolved, ShortcutAction::DockRecordTab) {
+            return Some(ShellIntent::DockRecordTab(digit));
+        }
+        if Some(held) == resolved_modifier(resolved, ShortcutAction::SwitchRecordTab) {
+            return Some(ShellIntent::SwitchRecordTab(digit));
+        }
         return None;
+    }
+    let chord_key = shortcut_key(key)?;
+    let chord = genealogy_ui::Chord {
+        modifier: event_modifier(modifiers, primary),
+        key: chord_key,
     };
-    match character.as_str() {
-        "?" => Some(ShellIntent::Help),
-        "g" => Some(ShellIntent::ArmGPrefix),
-        "[" => Some(ShellIntent::StepRecord(-1)),
-        "]" => Some(ShellIntent::StepRecord(1)),
-        _ => None,
+    let action = resolved
+        .iter()
+        .find(|entry| entry.group == ShortcutGroup::Global && entry.chord == chord)?
+        .action;
+    shell_intent_for_action(action)
+}
+
+/// The [`ShellIntent`] a rebindable ([`ShortcutGroup::Global`]) action produces. `None` for an action
+/// this dispatcher does not reach through the lookup (every non-`Global` action, and `Close`/the
+/// digit-range actions, which are matched earlier) — never actually returned in practice, but the
+/// match stays total over [`ShortcutAction`] so a newly-added action cannot be forgotten silently.
+fn shell_intent_for_action(action: ShortcutAction) -> Option<ShellIntent> {
+    match action {
+        ShortcutAction::CommandPalette | ShortcutAction::Find => Some(ShellIntent::OpenPalette),
+        ShortcutAction::NewRecord => Some(ShellIntent::NewRecord),
+        ShortcutAction::Undo => Some(ShellIntent::Undo),
+        ShortcutAction::Redo => Some(ShellIntent::Redo),
+        ShortcutAction::Help => Some(ShellIntent::Help),
+        ShortcutAction::Close => Some(ShellIntent::CloseOverlay),
+        ShortcutAction::Quit => Some(ShellIntent::Quit),
+        ShortcutAction::CloseCurrentTab => Some(ShellIntent::CloseCurrentTab),
+        ShortcutAction::SwitchRecordTab
+        | ShortcutAction::DockRecordTab
+        | ShortcutAction::MoveUp
+        | ShortcutAction::MoveDown
+        | ShortcutAction::Open
+        | ShortcutAction::PrevRecord
+        | ShortcutAction::NextRecord
+        | ShortcutAction::PrevTab
+        | ShortcutAction::NextTab
+        | ShortcutAction::FirstTab
+        | ShortcutAction::LastTab
+        | ShortcutAction::AddSource
+        | ShortcutAction::Edit => None,
     }
 }
 
-/// The single keydown entry point, wired on the shell root.
-pub fn dispatch(event: &KeyboardEvent, mut nav: NavState, mut gp: Signal<GPrefix>, notices: &ShellNotices) {
+/// The modifier the resolved map requires for `action`, or `None` if `action` is absent (never
+/// happens — [`genealogy_ui::resolved_shortcuts`] always returns every action, at its default chord
+/// if no override was accepted).
+fn resolved_modifier(resolved: &[Shortcut], action: ShortcutAction) -> Option<genealogy_ui::Modifier> {
+    resolved
+        .iter()
+        .find(|entry| entry.action == action)
+        .map(|entry| entry.chord.modifier)
+}
+
+/// The event's modifier as a [`genealogy_ui::Modifier`]: `command` is the platform primary modifier
+/// (resolved by the caller), `shift`/`alt` read straight off the `dioxus` event.
+fn event_modifier(modifiers: Modifiers, primary: bool) -> genealogy_ui::Modifier {
+    genealogy_ui::Modifier {
+        command: primary,
+        shift: modifiers.shift(),
+        alt: modifiers.alt(),
+    }
+}
+
+/// Maps a `dioxus` key event to the [`genealogy_ui::Key`] a chord lookup matches against: `?` and
+/// single ASCII letters only (every `Global` action's key is one of those). `None` for anything else
+/// (arrows, Enter, digits, punctuation) — those are either matched earlier (brackets, digits) or
+/// belong to a non-rebindable within-screen/`g`-prefix chord this dispatcher does not reach here.
+fn shortcut_key(key: &Key) -> Option<genealogy_ui::Key> {
+    let Key::Character(character) = key else {
+        return None;
+    };
+    if character == "?" {
+        return Some(genealogy_ui::Key::Question);
+    }
+    let mut chars = character.chars();
+    let only = chars.next()?;
+    if chars.next().is_some() {
+        return None;
+    }
+    only.is_ascii_alphabetic()
+        .then(|| genealogy_ui::Key::Char(only.to_ascii_lowercase()))
+}
+
+/// The single keydown entry point, wired on the shell root. `resolved` is the live resolved shortcut
+/// map (ADR 0030) the caller computed from the current `[shortcuts]` overrides.
+pub fn dispatch(
+    event: &KeyboardEvent,
+    mut nav: NavState,
+    mut gp: Signal<GPrefix>,
+    notices: &ShellNotices,
+    resolved: &[Shortcut],
+) {
     let key = event.key();
     if consume_g_prefix(event, &key, &mut nav, &mut gp) {
         return;
     }
     let primary = primary_modifier(event.modifiers());
-    let Some(intent) = shell_intent(&key, event.modifiers(), event.code(), primary) else {
+    let Some(intent) = shell_intent(&key, event.modifiers(), event.code(), primary, resolved) else {
         return;
     };
     event.prevent_default();
@@ -219,17 +307,26 @@ fn digit_1_to_9(code: Code) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ShellIntent, shell_intent};
+    use std::collections::BTreeMap;
+
     use dioxus::prelude::{Code, Key, Modifiers};
+    use genealogy_ui::{ShortcutAction, resolved_shortcuts, shortcuts};
+
+    use super::{ShellIntent, shell_intent};
 
     fn character(c: &str) -> Key {
         Key::Character(c.to_owned())
     }
 
+    /// The default map (no overrides) — the regression net every existing chord must keep matching.
+    fn defaults() -> Vec<genealogy_ui::Shortcut> {
+        shortcuts()
+    }
+
     #[test]
     fn escape_closes_regardless_of_modifier() {
         assert_eq!(
-            shell_intent(&Key::Escape, Modifiers::empty(), Code::Escape, false),
+            shell_intent(&Key::Escape, Modifiers::empty(), Code::Escape, false, &defaults()),
             Some(ShellIntent::CloseOverlay)
         );
     }
@@ -237,15 +334,15 @@ mod tests {
     #[test]
     fn primary_letter_chords_map_to_their_actions() {
         assert_eq!(
-            shell_intent(&character("k"), Modifiers::empty(), Code::KeyK, true),
+            shell_intent(&character("k"), Modifiers::empty(), Code::KeyK, true, &defaults()),
             Some(ShellIntent::OpenPalette)
         );
         assert_eq!(
-            shell_intent(&character("f"), Modifiers::empty(), Code::KeyF, true),
+            shell_intent(&character("f"), Modifiers::empty(), Code::KeyF, true, &defaults()),
             Some(ShellIntent::OpenPalette)
         );
         assert_eq!(
-            shell_intent(&character("n"), Modifiers::empty(), Code::KeyN, true),
+            shell_intent(&character("n"), Modifiers::empty(), Code::KeyN, true, &defaults()),
             Some(ShellIntent::NewRecord)
         );
     }
@@ -253,11 +350,11 @@ mod tests {
     #[test]
     fn undo_and_redo_differ_by_shift() {
         assert_eq!(
-            shell_intent(&character("z"), Modifiers::empty(), Code::KeyZ, true),
+            shell_intent(&character("z"), Modifiers::empty(), Code::KeyZ, true, &defaults()),
             Some(ShellIntent::Undo)
         );
         assert_eq!(
-            shell_intent(&character("z"), Modifiers::SHIFT, Code::KeyZ, true),
+            shell_intent(&character("z"), Modifiers::SHIFT, Code::KeyZ, true, &defaults()),
             Some(ShellIntent::Redo)
         );
     }
@@ -266,7 +363,7 @@ mod tests {
     fn undo_needs_the_primary_modifier() {
         // A bare `z` is not a shell chord (it types into a field / is ignored).
         assert_eq!(
-            shell_intent(&character("z"), Modifiers::empty(), Code::KeyZ, false),
+            shell_intent(&character("z"), Modifiers::empty(), Code::KeyZ, false, &defaults()),
             None
         );
     }
@@ -274,16 +371,16 @@ mod tests {
     #[test]
     fn digits_switch_tabs_via_the_physical_code() {
         assert_eq!(
-            shell_intent(&character("1"), Modifiers::empty(), Code::Digit1, true),
+            shell_intent(&character("1"), Modifiers::empty(), Code::Digit1, true, &defaults()),
             Some(ShellIntent::SwitchRecordTab(1))
         );
         assert_eq!(
-            shell_intent(&character("9"), Modifiers::empty(), Code::Digit9, true),
+            shell_intent(&character("9"), Modifiers::empty(), Code::Digit9, true, &defaults()),
             Some(ShellIntent::SwitchRecordTab(9))
         );
         // `⌘0` is not a tab switch.
         assert_eq!(
-            shell_intent(&character("0"), Modifiers::empty(), Code::Digit0, true),
+            shell_intent(&character("0"), Modifiers::empty(), Code::Digit0, true, &defaults()),
             None
         );
     }
@@ -291,11 +388,11 @@ mod tests {
     #[test]
     fn shift_digit_docks_while_bare_digit_switches() {
         assert_eq!(
-            shell_intent(&character("3"), Modifiers::SHIFT, Code::Digit3, true),
+            shell_intent(&character("3"), Modifiers::SHIFT, Code::Digit3, true, &defaults()),
             Some(ShellIntent::DockRecordTab(3))
         );
         assert_eq!(
-            shell_intent(&character("3"), Modifiers::empty(), Code::Digit3, true),
+            shell_intent(&character("3"), Modifiers::empty(), Code::Digit3, true, &defaults()),
             Some(ShellIntent::SwitchRecordTab(3))
         );
     }
@@ -303,7 +400,7 @@ mod tests {
     #[test]
     fn shift_z_is_still_redo_not_a_dock() {
         assert_eq!(
-            shell_intent(&character("z"), Modifiers::SHIFT, Code::KeyZ, true),
+            shell_intent(&character("z"), Modifiers::SHIFT, Code::KeyZ, true, &defaults()),
             Some(ShellIntent::Redo)
         );
     }
@@ -311,20 +408,44 @@ mod tests {
     #[test]
     fn brackets_step_records_only_when_bare() {
         assert_eq!(
-            shell_intent(&character("["), Modifiers::empty(), Code::BracketLeft, false),
+            shell_intent(
+                &character("["),
+                Modifiers::empty(),
+                Code::BracketLeft,
+                false,
+                &defaults()
+            ),
             Some(ShellIntent::StepRecord(-1))
         );
         assert_eq!(
-            shell_intent(&character("]"), Modifiers::empty(), Code::BracketRight, false),
+            shell_intent(
+                &character("]"),
+                Modifiers::empty(),
+                Code::BracketRight,
+                false,
+                &defaults()
+            ),
             Some(ShellIntent::StepRecord(1))
         );
         // With the primary modifier held, `[`/`]` are not record steps.
         assert_eq!(
-            shell_intent(&character("["), Modifiers::empty(), Code::BracketLeft, true),
+            shell_intent(
+                &character("["),
+                Modifiers::empty(),
+                Code::BracketLeft,
+                true,
+                &defaults()
+            ),
             None
         );
         assert_eq!(
-            shell_intent(&character("]"), Modifiers::empty(), Code::BracketRight, true),
+            shell_intent(
+                &character("]"),
+                Modifiers::empty(),
+                Code::BracketRight,
+                true,
+                &defaults()
+            ),
             None
         );
     }
@@ -332,11 +453,11 @@ mod tests {
     #[test]
     fn bare_help_and_gprefix() {
         assert_eq!(
-            shell_intent(&character("?"), Modifiers::empty(), Code::Slash, false),
+            shell_intent(&character("?"), Modifiers::empty(), Code::Slash, false, &defaults()),
             Some(ShellIntent::Help)
         );
         assert_eq!(
-            shell_intent(&character("g"), Modifiers::empty(), Code::KeyG, false),
+            shell_intent(&character("g"), Modifiers::empty(), Code::KeyG, false, &defaults()),
             Some(ShellIntent::ArmGPrefix)
         );
     }
@@ -344,11 +465,11 @@ mod tests {
     #[test]
     fn unbound_keys_are_ignored() {
         assert_eq!(
-            shell_intent(&character("y"), Modifiers::empty(), Code::KeyY, false),
+            shell_intent(&character("y"), Modifiers::empty(), Code::KeyY, false, &defaults()),
             None
         );
         assert_eq!(
-            shell_intent(&character("y"), Modifiers::empty(), Code::KeyY, true),
+            shell_intent(&character("y"), Modifiers::empty(), Code::KeyY, true, &defaults()),
             None
         );
     }
@@ -356,11 +477,11 @@ mod tests {
     #[test]
     fn primary_q_quits_and_primary_w_closes_the_current_tab() {
         assert_eq!(
-            shell_intent(&character("q"), Modifiers::empty(), Code::KeyQ, true),
+            shell_intent(&character("q"), Modifiers::empty(), Code::KeyQ, true, &defaults()),
             Some(ShellIntent::Quit)
         );
         assert_eq!(
-            shell_intent(&character("w"), Modifiers::empty(), Code::KeyW, true),
+            shell_intent(&character("w"), Modifiers::empty(), Code::KeyW, true, &defaults()),
             Some(ShellIntent::CloseCurrentTab)
         );
     }
@@ -368,12 +489,36 @@ mod tests {
     #[test]
     fn bare_q_and_w_are_ignored_so_they_still_type_into_fields() {
         assert_eq!(
-            shell_intent(&character("q"), Modifiers::empty(), Code::KeyQ, false),
+            shell_intent(&character("q"), Modifiers::empty(), Code::KeyQ, false, &defaults()),
             None
         );
         assert_eq!(
-            shell_intent(&character("w"), Modifiers::empty(), Code::KeyW, false),
+            shell_intent(&character("w"), Modifiers::empty(), Code::KeyW, false, &defaults()),
             None
         );
+    }
+
+    #[test]
+    fn a_rebound_chord_changes_what_shell_intent_returns() {
+        // Rebind quit from `mod+q` to `mod+j`; `mod+q` must stop firing and `mod+j` must now fire.
+        let overrides = BTreeMap::from([("quit".to_owned(), "mod+j".to_owned())]);
+        let (resolved, errors) = resolved_shortcuts(&overrides);
+        assert!(errors.is_empty());
+        assert_eq!(
+            shell_intent(&character("q"), Modifiers::empty(), Code::KeyQ, true, &resolved),
+            None,
+            "the old chord no longer fires once rebound"
+        );
+        assert_eq!(
+            shell_intent(&character("j"), Modifiers::empty(), Code::KeyJ, true, &resolved),
+            Some(ShellIntent::Quit),
+            "the new chord fires the same action"
+        );
+    }
+
+    #[test]
+    fn a_rebound_action_still_appears_in_the_action_set() {
+        // Sanity: the rebind test above targets a real, currently-Global action.
+        assert!(shortcuts().iter().any(|entry| entry.action == ShortcutAction::Quit));
     }
 }

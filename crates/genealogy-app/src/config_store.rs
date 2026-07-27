@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use unic_langid::LanguageIdentifier;
 
 use crate::config::{
-    self, AiConfig, Config, IdFormats, LocaleDefaults, MapConfig, OperatorConfig, PluginTrustConfig,
+    self, AiConfig, Config, IdFormats, LocaleDefaults, MapConfig, OperatorConfig, PluginTrustConfig, ShortcutConfig,
     SuretyLabelOverrides, ThemeMode,
 };
 use crate::error::AppError;
@@ -306,6 +306,22 @@ pub trait ConfigStore {
     ///
     /// [`AppError::Config`] if the global config cannot be read or written.
     fn store_plugin_trust(&self, trust: &PluginTrustConfig) -> Result<(), AppError>;
+
+    /// Loads the `[shortcuts]` rebound-chord map (ADR 0030 §3). Client/presentation scope: a keymap
+    /// is machine/user-local, so it lives in the global config, not the workspace manifest.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the global config cannot be read.
+    fn load_shortcuts(&self) -> Result<ShortcutConfig, AppError>;
+
+    /// Persists the `[shortcuts]` rebound-chord map into the global config (read-modify-write,
+    /// preserving the rest).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the global config cannot be read or written.
+    fn store_shortcuts(&self, shortcuts: &ShortcutConfig) -> Result<(), AppError>;
 }
 
 /// The file-backed [`ConfigStore`] (ADR 0015 §2): the global config lives at `config_path`, the open
@@ -463,6 +479,14 @@ impl ConfigStore for FileConfigStore {
 
     fn store_plugin_trust(&self, trust: &PluginTrustConfig) -> Result<(), AppError> {
         config::set_plugin_trust(self.config_path()?, trust.clone())
+    }
+
+    fn load_shortcuts(&self) -> Result<ShortcutConfig, AppError> {
+        Ok(config::load(self.config_path()?)?.shortcuts)
+    }
+
+    fn store_shortcuts(&self, shortcuts: &ShortcutConfig) -> Result<(), AppError> {
+        config::set_shortcuts(self.config_path()?, shortcuts.clone())
     }
 }
 
@@ -693,6 +717,26 @@ mod tests {
     }
 
     #[test]
+    fn file_store_round_trips_shortcuts_in_the_client_scope() {
+        use crate::config::ShortcutConfig;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = FileConfigStore::new(dir.path().join("config.toml"), None);
+        store.load_or_bootstrap_config().expect("bootstrap");
+
+        assert!(store.load_shortcuts().expect("load empty").is_empty());
+
+        let mut bindings = std::collections::BTreeMap::new();
+        bindings.insert("quit".to_owned(), "mod+shift+q".to_owned());
+        let shortcuts = ShortcutConfig { bindings };
+        store.store_shortcuts(&shortcuts).expect("store shortcuts");
+
+        assert_eq!(store.load_shortcuts().expect("reload"), shortcuts);
+        // The operator scope is untouched by the client-scope write.
+        assert!(store.load_operator().is_ok());
+    }
+
+    #[test]
     fn new_layout_parses() {
         // Pins the on-disk shape the store reads: the two ADR 0005 files, retained (ADR 0015 §5).
         let dir = tempfile::tempdir().expect("tempdir");
@@ -714,6 +758,9 @@ engine = "sqlite"
 
 [workspace-defaults.id_formats]
 person = "I%04d"
+
+[shortcuts]
+quit = "mod+shift+q"
 "#,
         )
         .expect("write config");
@@ -750,5 +797,8 @@ disabled = ["gedcom-import"]
         let presentation = store.load_presentation().expect("presentation");
         assert_eq!(presentation.theme, Some(ThemeMode::Dark));
         assert_eq!(presentation.locale.ui_language, Some("no".parse().expect("langid")));
+
+        let shortcuts = store.load_shortcuts().expect("shortcuts");
+        assert_eq!(shortcuts.bindings.get("quit").map(String::as_str), Some("mod+shift+q"));
     }
 }

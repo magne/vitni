@@ -24,6 +24,16 @@
     SSR aria assertions, an axe-core pass, and contrast for both themes.
   </div>
 
+  <div class="section-note">
+    <b>Global</b> shortcuts are user-rebindable, in Preferences → Keyboard shortcuts
+    (<a href="preferences.html#shortcuts">preferences.html</a>) — a chord is typed as the canonical
+    <span class="mono">mod+shift+alt+key</span> string (e.g. <span class="mono">mod+shift+q</span>);
+    <span class="mono">mod</span> resolves to <kbd>⌘</kbd> on macOS and <kbd>Ctrl</kbd> elsewhere. The
+    <b>Go to</b>, <b>Within a screen</b>, and <b>Editing a record</b> chords below are fixed — they are
+    widget-owned (roving focus / the <kbd>g</kbd>-prefix state machine), not part of the rebindable map
+    (ADR 0030).
+  </div>
+
   <h2>Shortcuts</h2>
   <div class="grid-3">
     <div class="card">
@@ -37,6 +47,8 @@
         <div class="shortcut-row"><span>Switch record tab</span><span class="keys"><kbd>⌘</kbd><kbd>1…9</kbd></span></div>
         <div class="shortcut-row"><span>Shortcut help</span><span class="keys"><kbd>?</kbd></span></div>
         <div class="shortcut-row"><span>Close / clear</span><span class="keys"><kbd>Esc</kbd></span></div>
+        <div class="shortcut-row"><span>Quit</span><span class="keys"><kbd>⌘</kbd><kbd>Q</kbd></span></div>
+        <div class="shortcut-row"><span>Close tab</span><span class="keys"><kbd>⌘</kbd><kbd>W</kbd></span></div>
       </div>
     </div>
     <div class="card">

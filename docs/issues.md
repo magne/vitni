@@ -23,12 +23,6 @@ webview pass** (agents can't run libwebkit2gtk):
 
 ## Ease of use
 
-- **Quit / close-tab keys.** `Ctrl+Q` to quit the application; `Ctrl+W` to close the current tab
-  (entity).
-- **Customizable keyboard shortcuts** as user/client (presentation) configuration; belongs to the
-  Phase 7 config split (delivered — see Completed). Would also enable a general VS Code-style *when*
-  context, beyond the
-  structural input guard already in place (see Completed).
 - **Live list updates on create.** Creating an entity should immediately insert it into the matching
   entity list, with no manual refresh.
 - **Toast notifications.** Show a toast at the bottom of the work area, auto-dismissed after a set
@@ -92,8 +86,12 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
   unmount, so each clear/re-search cycle leaves one inert listener behind (bounded by that, not by
   keystrokes or scroll events). Remove it on unmount, or arm it once at a higher scope.
 - **`Modal`/`SidePanel` overlay follow-ups** — `Modal` (`components/layout.rs`) still has no backdrop
-  scrim or `onclose` prop (harmless today since it has no callers); and neither overlay has a
-  dedicated focus trap or slide-in motion beyond what the existing keyboard layer already provides.
+  scrim or `onclose` prop. This was harmless while `Modal` had no callers; the close/quit confirm
+  dialog (`shell/close_confirm.rs`, Ease-of-use "Quit/close-tab keys") is now its first real caller and
+  does **not** wire a focus trap (`shell/focus_trap.rs`'s `trap_tab` is not attached) or a click-away
+  scrim — a keyboard user tabbing inside the dialog can reach the inert background, and there is no
+  click-outside-to-cancel. Neither overlay has slide-in motion beyond what the existing keyboard layer
+  already provides.
 
 ### Media & assisted import (Phase 8 residuals)
 
@@ -139,6 +137,55 @@ Follow-ups left open when Phase 8 shipped (see Completed); each is scoped, none 
 Repeating groups / nested forms; `List`/detail descriptions + plugin-driven navigation; per-field
 validation vocabulary; plugin-prefilled field values; the `query` capability for `ui-panel`;
 long-running / streaming actions; multi-panel pages.
+
+### Keyboard & shortcuts
+
+Residuals from "Quit/close-tab keys & customizable keyboard shortcuts" (see Completed; ADR 0030).
+
+- **Dirty saved-record edits are not confirmed.** `Ctrl+W`/`Ctrl+Q`'s confirm fires on `OpenTab::Draft`
+  only. An in-progress edit of an *already-saved* record lives in screen-local `RecordEditState`
+  (`screens/record_form.rs`) and is invisible to `NavState`, so closing/quitting discards it silently.
+  Lifting edit-dirtiness into shell state is the follow-up.
+- **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
+  its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
+  so it is neither listed by the `?` overlay nor rebindable, and it does not go through
+  `NavState`/`resolved_shortcuts` at all.
+- **The "Jump back in" recent-list write has no close/quit hook.** `shell/window_geometry.rs` flushes
+  window geometry on `WindowEvent::CloseRequested`; the recent-list persistence effect in
+  `shell/root.rs` has no equivalent, so a keyboard quit can race the debounced write. Not fixed in this
+  pass.
+- **`Modal` overlay gaps are now user-visible** — see the updated entry under *Local import & internal
+  cleanup*: the close/quit confirm dialog is `Modal`'s first real caller, and neither a focus trap nor
+  a click-away scrim is wired.
+- **`Ctrl+W` closes the active tab even when its strip isn't shown.** The record tabstrip mounts only
+  for entity destinations (`shell/root.rs`'s `entity_category`), but `NavState::active_record` can stay
+  `Some` while the Dashboard or a tool is active. `Ctrl+W` there closes that background tab with no
+  visible strip to reflect it — a deliberate simplification, not fixed.
+- **`Ctrl+W`/`Ctrl+Q` bubble out of focused text inputs, by design.** `focus_trap.rs`'s
+  `keep_typing_local` lets every primary-modifier chord bubble to the shell except native `⌘Z`/`⌘⇧Z`
+  text undo/redo — so typing in a field and pressing `⌘W` closes the tab mid-edit, the same as `⌘K`/
+  `⌘N` already did. Intentional, recorded so it isn't later read as a regression.
+- **Within-screen and `g`-prefix keys are not rebindable** — widget-owned (roving focus / the
+  `g`-prefix state machine), fixed by design (ADR 0030 §2).
+- **No VS Code-style *when* context.** Named as future work by the "Global keys fire inside text
+  controls" Completed entry; ADR 0030 §Out of scope makes it explicit — no context predicates are
+  defined, so this stays a design question, not a missing implementation.
+- **Chord entry is a typed canonical string, not live key capture.** `keydown` is inert under SSR and
+  `cargo xtask input-guard` forbids a raw form element outside the primitives, so the Preferences
+  rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.
+- **No chord sequences beyond the existing `g`-prefix** — `resolved_shortcuts` resolves single chords
+  only.
+- **The framework-free `Key` enum (`genealogy-ui::shortcuts`) is still closed** — no function keys, so
+  `e`/`F2` (the within-screen edit chord) could not be rebound even if that group were opened up.
+- **No per-platform keymaps.** `Modifier::command` abstracts ⌘/Ctrl by design, so a binding that must
+  differ between macOS and Linux cannot be expressed.
+- **Bindings are global-only, no per-workspace override.** `[shortcuts]` lives in
+  `~/.config/genealogy/config.toml`, consistent with `[map]`/`[ai]`/`[plugin_trust]` (ADR 0030 §3) — a
+  keymap is machine/user-local, not a dataset property; named so the scope boundary is unambiguous, not
+  an oversight.
+- **No keyboard topic in the in-app Help browser.** `genealogy-ui::help.rs`'s `HelpSection::Reference`
+  is documented as "Lookup material (shortcuts, glossaries)" and `Run::Kbd` is unused — no authored doc
+  covers shortcuts; the `?` overlay is the only in-app reference today.
 
 ## Phase 9 residuals (geography & temporal model)
 
@@ -291,6 +338,26 @@ the file backend.
 
 ## Completed
 
+- **Quit/close-tab keys & customizable keyboard shortcuts.** *(Done — stacked branches
+  `feat/quit-close-tab-keys` (PR #187) → `feat/customizable-shortcuts`, gated by
+  [ADR 0030](adr/0030-customizable-keyboard-shortcuts.md).)* `Ctrl+Q`/`Ctrl+W` did not exist, and the
+  shortcut map had two independent sources of truth: `genealogy-ui`'s declarative map fed only the `?`
+  help overlay (decorative), while `genealogy-ui-dioxus`'s dispatcher re-implemented the same matrix
+  hardcoded, so the two could drift and no binding was user-changeable. **Quit/close-tab:** two new
+  `Global` actions (`⌘Q`/`⌘W`); closing a saved tab is immediate, closing a draft (or quitting with one
+  open) now arms a confirm dialog (`Modal`-based) instead of silently discarding it — the tabstrip `✕`
+  and the keyboard shortcut share one `NavState::request_close_tab` path. Quit is a desktop-only
+  `QuitManager` component mirroring `WindowGeometryManager`, so the SSR test target stays
+  `dioxus::desktop`-free. **Customizable shortcuts:** `resolved_shortcuts(overrides)` is now the single
+  map both the dispatcher and the `?` overlay read (the two-implementations problem is closed); only
+  `Global`-group actions (11 total) are rebindable — within-screen and `g`-prefix keys stay fixed;
+  `Modifier` became a 3-flag struct (`command`/`shift`/`alt`) so `Alt` composes; `Chord` gained a
+  canonical `mod+shift+alt+key` `FromStr`/`Display`; a rejected override (unknown id, unparsable
+  chord, non-`Global` action, or a conflict) is a typed error surfaced in the Preferences card, never a
+  silent drop. `[shortcuts]` lives in the global `~/.config/genealogy/config.toml`, client scope only
+  (mirrors `[ai]`/`[map]`/`[plugin_trust]`) — no workspace-manifest layer. A save takes effect live (a
+  `Signal<ShortcutConfig>` held in shell context), no restart needed. Scoped residuals tracked above
+  under *Keyboard & shortcuts*.
 - **1.0 hardening (Phase 11).** *(Done — Gate 1 + a Gate-2 PR stack, PRs #176–#182:
   `docs/phase-11-gate-1` → `feat/plugin-bundle-signing` → `feat/plugin-layered-loading` →
   `feat/plugin-grants` → `feat/plugin-grant-ux` → `feat/perf-profiling` →
@@ -438,4 +505,6 @@ the file backend.
   wired exactly once per element, and a `cargo xtask input-guard` lint (prek + CI) forbids raw form
   elements outside the primitives so it cannot regress. Field validation state moved into
   `genealogy-ui` view-models. A general VS Code-style *when* context was deliberately not built; it
-  remains future work under customizable shortcuts (Phase 7).
+  remains explicitly out of scope of customizable keyboard shortcuts
+  ([ADR 0030](adr/0030-customizable-keyboard-shortcuts.md) §Out of scope), unless a real need
+  surfaces.
