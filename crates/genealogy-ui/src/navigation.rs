@@ -1071,6 +1071,16 @@ pub enum FamilyEdit {
         /// How the child relates to that partner.
         relationship: ChildParentRelationship,
     },
+    /// End a child's membership of the family (`ChildRemoved`, cascading the child's per-partner
+    /// relationships — data-model §10). This *records a change*: the original membership claim keeps
+    /// standing in the log. Correcting a membership asserted in error is [`Self::UndoAssertion`]
+    /// instead (ADR 0004 §2).
+    RemoveChild {
+        /// The family to edit.
+        human_id: String,
+        /// The child's person `human_id`.
+        person_id: String,
+    },
     /// Link an existing event (e.g. a marriage) to the family, by `human_id`.
     LinkFamilyEvent {
         /// The family to edit.
@@ -1146,6 +1156,7 @@ impl FamilyEdit {
             | Self::AddPartner { human_id, .. }
             | Self::AddChild { human_id, .. }
             | Self::AssertChildRelationship { human_id, .. }
+            | Self::RemoveChild { human_id, .. }
             | Self::LinkFamilyEvent { human_id, .. }
             | Self::AttachMedia { human_id, .. }
             | Self::SetMediaRegion { human_id, .. }

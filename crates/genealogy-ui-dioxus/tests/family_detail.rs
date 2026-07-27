@@ -10,8 +10,8 @@ use genealogy_ui::{
     FamilyDraft, FamilyEventVm, Localizer, MediaRefVm, PartnerVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    FamilyEditForm, RecordActionLabels, RecordEditState, citations_table, family_children_table, family_events_table,
-    family_overview, id_list, record_head_actions, tags_panel,
+    ChildRemoval, FamilyEditForm, RecordActionLabels, RecordEditState, child_removal_side_panel, citations_table,
+    family_children_table, family_events_table, family_overview, id_list, record_head_actions, tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -174,14 +174,31 @@ fn family_view() -> Element {
     let editing = use_signal(|| None::<FamilyEditForm>);
     let on_remove = use_callback(|_: String| {});
     let on_retract = use_callback(|_target: (String, String, bool)| {});
+    let on_child_remove = use_callback(|_child: ChildRemoval| {});
     let on_edit_open = use_callback(|_form: FamilyEditForm| {});
     let detail = sample();
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (FamilyDraft, ProvenanceDraft)| {}))}
         {family_overview(&loc, &detail, editing, record, on_retract)}
-        {family_children_table(&loc, &detail, on_edit_open, on_retract)}
+        {family_children_table(&loc, &detail, on_edit_open, on_retract, on_child_remove)}
         {family_events_table(&loc, &detail.events, on_retract)}
         {tags_panel(&loc, &detail.tags, editing, FamilyEditForm::Tag, on_remove)}
+    }
+}
+
+/// The Children tab's removal confirm, armed for the sample child — the "record a change" panel that
+/// dispatches `FamilyEdit::RemoveChild` (as opposed to the shared Retract panel, which corrects).
+fn child_removal_panel_view() -> Element {
+    let loc = loc();
+    let armed = use_signal(|| {
+        Some(ChildRemoval {
+            human_id: "I0003".to_owned(),
+            label: "Jonathan Smith".to_owned(),
+        })
+    });
+    let reason = use_signal(String::new);
+    rsx! {
+        {child_removal_side_panel(&loc, armed, reason, use_callback(|()| {}))}
     }
 }
 
@@ -326,24 +343,57 @@ fn partner_rows_offer_remove_with_row_scoped_labels_and_no_id_leak() {
 }
 
 #[test]
-fn children_rows_offer_edit_and_remove_with_row_scoped_labels() {
+fn children_rows_offer_edit_remove_and_retract_as_distinct_verbs() {
     let html = render(family_view);
-    // Edit opens the child form pre-filled; Remove retracts the child assertion (it stays in History).
+    // Edit opens the child form pre-filled; Remove ends the membership (`ChildRemoved`); Retract
+    // withdraws the membership claim itself. All three keep the log intact — they differ in meaning.
     assert!(html.contains(">Edit<"), "the visible Edit verb:\n{html}");
     assert!(html.contains(">Remove<"), "the visible Remove verb:\n{html}");
+    assert!(html.contains(">Retract<"), "the visible Retract verb:\n{html}");
+    for needle in [
+        r#"aria-label="Edit Jonathan Smith""#,
+        r#"aria-label="Remove Jonathan Smith""#,
+        r#"aria-label="Retract Jonathan Smith""#,
+    ] {
+        assert!(
+            html.contains(needle),
+            "each child action carries a row-scoped accessible name, expected {needle:?}:\n{html}"
+        );
+    }
+    // The tooltips separate recording a change from correcting a mistake (prefix-matched, so the
+    // sentence can carry punctuation the HTML escapes).
     assert!(
-        html.contains(r#"aria-label="Edit Jonathan Smith""#),
-        "Edit carries a row-scoped accessible name:\n{html}"
+        html.contains(r#"title="Remove this child from the family"#),
+        "Remove says the membership ended:\n{html}"
     );
-    // The Remove button carries the mockup tooltip; the apostrophe-free sentence is matched as a prefix.
     assert!(
-        html.contains(r#"title="Remove this child"#),
-        "the Remove tooltip is the mockup sentence:\n{html}"
+        html.contains(r#"title="Retract this child"#),
+        "Retract says the claim was recorded in error:\n{html}"
     );
-    // The row-scoped accessible name uses the Remove verb (matching the visible label).
+}
+
+#[test]
+fn the_child_removal_panel_records_a_change_and_never_says_retract() {
+    let html = render(child_removal_panel_view);
+    assert!(
+        html.contains("Remove from family"),
+        "the panel is titled for the membership change:\n{html}"
+    );
+    assert!(
+        html.contains("Jonathan Smith"),
+        "the panel names the child being removed:\n{html}"
+    );
+    assert!(
+        html.contains("The removal is recorded in History"),
+        "the panel says the removal is logged, not destructive:\n{html}"
+    );
     assert!(
         html.contains(r#"aria-label="Remove Jonathan Smith""#),
-        "Remove carries a verb-correct row-scoped accessible name:\n{html}"
+        "the confirm carries the row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        !html.contains("Retract") && !html.contains("retract"),
+        "a removal panel never offers to retract the claim:\n{html}"
     );
 }
 

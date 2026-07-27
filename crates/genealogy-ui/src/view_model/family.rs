@@ -106,8 +106,9 @@ pub struct FamilyChildVm {
     pub confidence_label: String,
     /// How many citations back the child's membership assertion.
     pub source_count: usize,
-    /// The `AssertionId` (a UUID string) of the child's membership assertion — the Remove retract
-    /// target, cascading its relationships (ADR 0004 §2, ADR 0021). Never rendered.
+    /// The `AssertionId` (a UUID string) of the child's membership assertion — the Retract target
+    /// (the row's *correct a mistake* action), cascading its relationships (ADR 0004 §2, ADR 0021).
+    /// The row's Remove action ends the membership by `human_id` instead. Never rendered.
     pub assertion_id: String,
 }
 

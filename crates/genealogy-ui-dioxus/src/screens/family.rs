@@ -369,6 +369,8 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     let editing = use_signal(|| None::<FamilyEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
+    let mut removing_child = use_signal(|| None::<ChildRemoval>);
+    let mut removal_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
     let dismiss_label = state.data_loc().action_label("dismiss");
@@ -499,6 +501,42 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         });
     });
 
+    // A child's Remove arms the membership-change panel; confirming dispatches `RemoveChild`, which
+    // ends the membership while the claim that added the child keeps standing (data-model §10).
+    let on_child_remove = use_callback(move |child: ChildRemoval| {
+        removal_reason.set(String::new());
+        removing_child.set(Some(child));
+    });
+    let removal_services = state.services().clone();
+    let removal_human = human_id.clone();
+    let removal_saved = saved_label.clone();
+    let on_child_remove_confirm = use_callback(move |()| {
+        let Some(ChildRemoval { human_id: child, .. }) = removing_child() else {
+            return;
+        };
+        let services = removal_services.clone();
+        let human_id = removal_human.clone();
+        let saved = removal_saved.clone();
+        let prov = ProvenanceDraft {
+            rationale: removal_reason(),
+            ..ProvenanceDraft::default()
+        };
+        spawn(async move {
+            let edit = FamilyEdit::RemoveChild {
+                human_id,
+                person_id: child,
+            };
+            match save_family_edit(services, edit, prov).await {
+                Ok(_) => {
+                    removing_child.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
     let record_services = services.clone();
     let record_nav = nav;
     let current_id = human_id.clone();
@@ -526,7 +564,12 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::FamilyDetail(detail))) => detail.history.clone(),
         _ => Vec::new(),
     });
-    let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read() || retract.read().is_some());
+    let undo_busy = use_memo(move || {
+        editing.read().is_some()
+            || *record.editing.read()
+            || retract.read().is_some()
+            || removing_child.read().is_some()
+    });
     let undo_notice = chrome.kbd_nothing_to_undo();
     let undo_human = human_id.clone();
     let on_undo = use_callback(move |assertion_id: String| {
@@ -549,19 +592,23 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::FamilyDetail(detail))) => family_detail(
             &state,
             detail,
-            FamilyPane {
+            &FamilyPane {
                 active,
                 side_edit: editing,
                 record,
                 retract,
                 retract_reason,
+                removing_child,
+                removal_reason,
             },
-            FamilyCallbacks {
+            &FamilyCallbacks {
                 on_submit,
                 on_submit_batch,
                 on_record_save,
                 on_retract,
                 on_retract_confirm,
+                on_child_remove,
+                on_child_remove_confirm,
                 on_edit_open,
                 on_undo,
                 on_tag_remove,
@@ -618,6 +665,10 @@ struct FamilyPane {
     retract: Signal<Option<RetractTarget>>,
     /// The rationale typed into the open retract panel.
     retract_reason: Signal<String>,
+    /// The child being removed from the family, if the removal panel is open.
+    removing_child: Signal<Option<ChildRemoval>>,
+    /// The rationale typed into the open removal panel.
+    removal_reason: Signal<String>,
 }
 
 /// The commit callbacks a family's detail wires in: one-command collection edits, the whole-record
@@ -639,6 +690,10 @@ struct FamilyCallbacks {
     on_retract: Callback<(String, String, bool)>,
     /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
     on_retract_confirm: Callback<()>,
+    /// Opens the Remove-from-family panel for a child row.
+    on_child_remove: Callback<ChildRemoval>,
+    /// Confirms the open removal panel — dispatches `RemoveChild` with the typed rationale.
+    on_child_remove_confirm: Callback<()>,
     /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
     on_edit_open: Callback<FamilyEditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
@@ -650,8 +705,8 @@ struct FamilyCallbacks {
 fn family_detail(
     state: &AppState,
     detail: &FamilyDetail,
-    pane: FamilyPane,
-    callbacks: FamilyCallbacks,
+    pane: &FamilyPane,
+    callbacks: &FamilyCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -661,12 +716,16 @@ fn family_detail(
         record,
         retract,
         retract_reason,
-    } = pane;
+        removing_child,
+        removal_reason,
+    } = *pane;
     let on_submit = callbacks.on_submit;
     let on_submit_batch = callbacks.on_submit_batch;
     let on_record_save = callbacks.on_record_save;
     let on_retract = callbacks.on_retract;
     let on_retract_confirm = callbacks.on_retract_confirm;
+    let on_child_remove = callbacks.on_child_remove;
+    let on_child_remove_confirm = callbacks.on_child_remove_confirm;
     let on_edit_open = callbacks.on_edit_open;
     let on_undo = callbacks.on_undo;
     let on_tag_remove = callbacks.on_tag_remove;
@@ -691,10 +750,11 @@ fn family_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {family_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
+                {family_tab_content(state, detail, active_id, editing, record, FamilyTabCallbacks { on_retract, on_child_remove, on_edit_open, on_undo, on_tag_remove })}
             }
             {family_edit_panel(state, detail, editing, on_submit, on_submit_batch, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
+            {child_removal_side_panel(loc, removing_child, removal_reason, on_child_remove_confirm)}
         }
     }
 }
@@ -732,23 +792,43 @@ fn family_restriction_toggles(
     }
 }
 
-/// The content of one family detail tab, with its contextual add/edit affordances.
+/// The row callbacks a family's tabs dispatch through, grouped so the tab dispatcher stays under the
+/// argument limit.
+#[derive(Clone, Copy)]
 #[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threads the pane's signals + callbacks"
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
 )]
+struct FamilyTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Opens the Remove-from-family panel for a child row.
+    on_child_remove: Callback<ChildRemoval>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<FamilyEditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Untags a tag by id from the Tags tab.
+    on_tag_remove: Callback<String>,
+}
+
+/// The content of one family detail tab, with its contextual add/edit affordances.
 fn family_tab_content(
     state: &AppState,
     detail: &FamilyDetail,
     tab_id: &str,
     editing: Signal<Option<FamilyEditForm>>,
     record: RecordEditState<genealogy_ui::FamilyDraft>,
-    on_retract: Callback<(String, String, bool)>,
-    on_edit_open: Callback<FamilyEditForm>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<String>,
+    callbacks: FamilyTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let FamilyTabCallbacks {
+        on_retract,
+        on_child_remove,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+    } = callbacks;
     match tab_id {
         "children" => tab_with_add(
             loc,
@@ -756,7 +836,7 @@ fn family_tab_content(
             editing,
             FamilyEditForm::Child(None),
             rsx! {
-                {family_children_table(loc, detail, on_edit_open, on_retract)}
+                {family_children_table(loc, detail, on_edit_open, on_retract, on_child_remove)}
             },
         ),
         "events" => tab_with_add(
@@ -881,6 +961,112 @@ pub fn family_overview(
     }
 }
 
+/// A child whose removal from the family is armed, for [`child_removal_side_panel`]. Carries the
+/// child's `human_id` (the `RemoveChild` target) plus the display name the panel and its accessible
+/// name use. Distinct from [`RetractTarget`]: a removal ends a membership that held, so it names the
+/// child, not an assertion.
+#[derive(Clone, PartialEq, Eq)]
+pub struct ChildRemoval {
+    /// The child's person `human_id`.
+    pub human_id: String,
+    /// The child's display name, shown in the panel and its accessible name.
+    pub label: String,
+}
+
+/// The Children tab's Remove-from-family confirm: the child being removed, a rationale-only input,
+/// and a Danger confirm that dispatches [`FamilyEdit::RemoveChild`]. Deliberately *not*
+/// `retract_side_panel` — a removal records a new claim (`ChildRemoved`) rather than withdrawing the
+/// membership claim, so both the copy and the dispatched intent differ (ADR 0004 §2). A pure fn (the
+/// signals and callback are passed in), so the SSR tests render it without `AppCtx`.
+pub fn child_removal_side_panel(
+    loc: &Localizer,
+    mut removing: Signal<Option<ChildRemoval>>,
+    reason: Signal<String>,
+    on_confirm: Callback<()>,
+) -> Element {
+    let Some(ChildRemoval { label, .. }) = removing() else {
+        return rsx! {};
+    };
+    let mut reason = reason;
+    let title = loc.panel_title("remove-child");
+    rsx! {
+        SidePanel {
+            title: title.clone(),
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| removing.set(None),
+            footer: rsx! {},
+            div { class: "stack",
+                h3 { style: "font-size:var(--fs-lg);margin:0", "{title}" }
+                div { class: "muted", "{label}" }
+                div { class: "field",
+                    label { r#for: "remove-child-reason", "{loc.provenance_reason_label()}" }
+                    TextInput {
+                        id: "remove-child-reason",
+                        name: "remove-child-reason",
+                        value: "{reason}",
+                        oninput: move |event: FormEvent| reason.set(event.value()),
+                    }
+                }
+                div { class: "muted", style: "font-size:var(--fs-sm)", "{loc.remove_child_note()}" }
+                Button {
+                    label: loc.action_label("remove"),
+                    variant: ButtonVariant::Danger,
+                    aria_label: loc.action_remove_row(&label),
+                    onclick: move |_| on_confirm.call(()),
+                }
+            }
+        }
+    }
+}
+
+/// A child row's actions cell — the one collection row carrying two distinct undo verbs, so it is
+/// built here rather than through the shared `row_actions_cell`: **Edit** supersedes the per-parent
+/// relationships, **Remove** ends the membership ([`FamilyEdit::RemoveChild`], the child left this
+/// family), and **Retract** withdraws a membership asserted in error (ADR 0004 §2). No assertion id
+/// is ever rendered.
+fn child_actions_cell(
+    loc: &Localizer,
+    child: &FamilyChildVm,
+    onedit: Callback<FamilyEditForm>,
+    onretract: Callback<(String, String, bool)>,
+    onremove: Callback<ChildRemoval>,
+) -> Element {
+    let form = FamilyEditForm::Child(Some(child.clone()));
+    let removal = ChildRemoval {
+        human_id: child.human_id.clone(),
+        label: child.name.clone(),
+    };
+    let retract = (child.assertion_id.clone(), child.name.clone(), false);
+    rsx! {
+        td { class: "row-actions",
+            Button {
+                label: loc.action_label("edit"),
+                variant: ButtonVariant::Ghost,
+                small: true,
+                aria_label: loc.action_edit_row(&child.name),
+                onclick: move |_| onedit.call(form.clone()),
+            }
+            Button {
+                label: loc.action_label("remove"),
+                variant: ButtonVariant::Ghost,
+                small: true,
+                title: loc.action_title("remove-child"),
+                aria_label: loc.action_remove_row(&child.name),
+                onclick: move |_| onremove.call(removal.clone()),
+            }
+            Button {
+                label: loc.action_label("retract"),
+                variant: ButtonVariant::Ghost,
+                small: true,
+                title: loc.action_title("retract-child"),
+                aria_label: loc.action_retract_row(&child.name),
+                onclick: move |_| onretract.call(retract.clone()),
+            }
+        }
+    }
+}
+
 /// The Children tab: a row per child with a relationship column per family partner, plus surety and
 /// source columns (the per-partner relationship model — GEDCOM `_FREL`/`_MREL`).
 pub fn family_children_table(
@@ -888,6 +1074,7 @@ pub fn family_children_table(
     detail: &FamilyDetail,
     onedit: Callback<FamilyEditForm>,
     onretract: Callback<(String, String, bool)>,
+    onremove: Callback<ChildRemoval>,
 ) -> Element {
     if detail.children.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
@@ -918,13 +1105,7 @@ pub fn family_children_table(
                     }
                     td { ConfidenceBadge { level: child.confidence, label: child.confidence_label.clone() } }
                     td { {source_cue(loc, child.source_count)} }
-                    {row_actions_cell(
-                        loc,
-                        &child.name,
-                        Some((FamilyEditForm::Child(Some(child.clone())), None)), None,
-                        Some(RowRetract { assertion_id: child.assertion_id.clone(), button_label: "remove", title: "remove-child", detach: false }),
-                        Some(onedit),
-                        onretract)}
+                    {child_actions_cell(loc, child, onedit, onretract, onremove)}
                 }
             }
         }

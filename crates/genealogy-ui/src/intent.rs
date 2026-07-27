@@ -19,7 +19,7 @@ use genealogy_app::{
     import_attach_event_note, import_attach_media_note, import_attach_place_media, import_attach_place_note,
     import_attach_repository_note, import_attach_source_media, import_attach_source_note, link_family_event,
     link_place, link_source_repository, list_citations, list_event_rows, list_family_rows, list_media, list_notes,
-    list_person_rows, list_persons, list_places, list_repositories, list_sources, recent_activity,
+    list_person_rows, list_persons, list_places, list_repositories, list_sources, recent_activity, remove_child,
     set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions,
     set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page,
     set_place_restrictions, set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation,
@@ -1030,6 +1030,11 @@ pub async fn dispatch_family_edit(
         )
         .await
         .map(|()| human_id.clone()),
+        FamilyEdit::RemoveChild { human_id, person_id } => {
+            remove_child(workspace, session, human_id, person_id, prov.meta())
+                .await
+                .map(|()| human_id.clone())
+        }
         FamilyEdit::LinkFamilyEvent { human_id, event_id } => {
             link_family_event(workspace, session, human_id, event_id, prov.meta())
                 .await
@@ -1045,24 +1050,7 @@ pub async fn dispatch_family_edit(
         )
         .await
         .map(|()| human_id.clone()),
-        FamilyEdit::SetMediaRegion {
-            human_id,
-            assertion_id,
-            crop,
-            caption,
-        } => update_family_media_ref(
-            workspace,
-            session,
-            human_id,
-            assertion_id,
-            MediaRefInput {
-                crop: *crop,
-                caption: caption.clone(),
-            },
-            prov.meta(),
-        )
-        .await
-        .map(|()| human_id.clone()),
+        FamilyEdit::SetMediaRegion { .. } => family_set_region(workspace, session, edit, prov).await,
         FamilyEdit::AttachNote { human_id, note_id } => {
             attach_family_note(workspace, session, human_id, note_id, prov.meta())
                 .await
@@ -1093,6 +1081,33 @@ pub async fn dispatch_family_edit(
                 .map(|()| human_id.clone())
         }
     }
+}
+
+/// Supersedes a family media reference's crop/caption ([`FamilyEdit::SetMediaRegion`]), returning the
+/// family `human_id` to reload. Mirrors [`event_set_region`] — the whole edit comes in so the caller's
+/// match arm stays a one-line delegate; the `let else` is unreachable in practice.
+async fn family_set_region(
+    ws: &Workspace,
+    session: &Session,
+    edit: &FamilyEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let FamilyEdit::SetMediaRegion {
+        human_id,
+        assertion_id,
+        crop,
+        caption,
+    } = edit
+    else {
+        return Ok(String::new());
+    };
+    let input = MediaRefInput {
+        crop: *crop,
+        caption: caption.clone(),
+    };
+    update_family_media_ref(ws, session, human_id, assertion_id, input, prov.meta())
+        .await
+        .map(|()| human_id.clone())
 }
 
 /// Supersedes an event media reference's crop/caption ([`EventEdit::SetMediaRegion`]), returning the

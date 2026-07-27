@@ -46,8 +46,8 @@ pub use event::{
     EventEditCtx, EventEditForm, event_create_fields, event_overview, event_participants_table, event_record_fields,
 };
 pub use family::{
-    FamilyEditForm, family_children_table, family_create_fields, family_events_table, family_overview,
-    family_record_fields,
+    ChildRemoval, FamilyEditForm, child_removal_side_panel, family_children_table, family_create_fields,
+    family_events_table, family_overview, family_record_fields,
 };
 pub use geography::{
     GeographyScreen, geography_empty_state, geography_map_surface, geography_rail, geography_time_slider,

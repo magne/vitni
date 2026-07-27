@@ -24,13 +24,8 @@ without test coverage, tracked below under *Geography & map*.
 
 ### Person & Family
 
-- **A child cannot be removed from a family in the GUI** — `remove_child` has no UI caller:
-  `FamilyEdit` has `AddChild` and `AssertChildRelationship` but no removal, and `FamilyChangeSet`
-  carries no children at all, so only `genealogy family remove-child` does it. (Partner removal is
-  fine — `remove_partner` is draft-local in the create form.)
-  *UI:* add `FamilyEdit::RemoveChild { child }` and a `✕` on each child row of the Family screen's
-  children tab, routed through the shared `retract_side_panel` / `RetractTarget` confirm in
-  `screens/shared.rs` that the other retract affordances already use. — #195
+No open items. The area keeps its heading so `area/records/person-family` stays a live label and the
+issues already filed against it keep resolving their [`#person--family`](#person--family) anchor.
 
 ### Places
 
