@@ -128,6 +128,18 @@ sc-first-tab = Første fane
 sc-last-tab = Siste fane
 sc-add-source = Legg til kilde
 sc-edit = Rediger
+sc-quit = Avslutt
+sc-close-tab = Lukk fane
+
+# Bekreftelsesdialoger for lukk-fane / avslutt (⌘W, ⌘Q på en ulagret fane)
+close-tab-confirm-title = Lukk fane?
+close-tab-confirm-body = «{ $label }» er ikke lagret ennå. Hvis du lukker denne fanen, forkastes den.
+close-tab-confirm-confirm = Lukk fane
+close-tab-confirm-cancel = Avbryt
+quit-confirm-title = Avslutte?
+quit-confirm-body = En eller flere åpne faner er ikke lagret ennå. Hvis du avslutter, forkastes de.
+quit-confirm-confirm = Avslutt
+quit-confirm-cancel = Avbryt
 # Avfest-knappen i topplinjen på den festede ruten (aria-label)
 undock-label = Løsne post
 media-select-prompt = Velg et medieobjekt for å se detaljene.

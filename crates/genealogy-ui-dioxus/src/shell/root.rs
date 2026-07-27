@@ -13,11 +13,13 @@ use crate::screens::{
     PreferencesScreen, RecordDetail,
 };
 use crate::services::load_counts;
+use crate::shell::close_confirm::CloseConfirmDialog;
 use crate::shell::explorer::Explorer;
 use crate::shell::help_overlay::HelpOverlay;
 use crate::shell::keyboard::{ShellNotices, dispatch, use_keyboard_dispatch};
 use crate::shell::nav_state::{NavState, Overlay, entity_category};
 use crate::shell::palette::CommandPalette;
+use crate::shell::quit_manager::QuitManager;
 use crate::shell::rail::Rail;
 use crate::shell::statusbar::ShellStatusbar;
 use crate::shell::tabstrip::RecordTabstrip;
@@ -134,10 +136,12 @@ pub fn Shell() -> Element {
                 onaction: move |_| notice_nav.dismiss_notice(),
             }
             WindowGeometryManager {}
+            QuitManager {}
         }
         // Siblings of `.app` (not descendants) so inerting `.app` cannot inert the modal itself.
         CommandPalette {}
         HelpOverlay {}
+        CloseConfirmDialog {}
     }
 }
 

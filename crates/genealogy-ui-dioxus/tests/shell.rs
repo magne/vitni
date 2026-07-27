@@ -408,6 +408,11 @@ fn help_overlay_renders_the_shortcut_map() {
         html.contains("Command palette"),
         "a global shortcut description:\n{html}"
     );
+    assert!(html.contains("Quit"), "the quit shortcut row:\n{html}");
+    assert!(
+        html.contains("Close tab"),
+        "the close-current-tab shortcut row:\n{html}"
+    );
     // The "Go to" column lists bare category names paired with their `g`-prefix second key.
     assert!(html.contains(">People<"), "a g-prefix navigation row:\n{html}");
     assert!(html.contains("<kbd>g</kbd><kbd>p</kbd>"), "the g p chord:\n{html}");

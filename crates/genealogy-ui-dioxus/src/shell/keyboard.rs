@@ -64,6 +64,10 @@ pub enum ShellIntent {
     ArmGPrefix,
     /// Step to the previous/next record (`[` = `-1`, `]` = `+1`).
     StepRecord(i8),
+    /// Quit the application (`⌘Q`).
+    Quit,
+    /// Close the active record tab (`⌘W`).
+    CloseCurrentTab,
 }
 
 /// Installs the `g`-prefix state and returns its signal for the shell root to thread into
@@ -86,6 +90,8 @@ pub fn shell_intent(key: &Key, modifiers: Modifiers, code: Code, primary: bool) 
         return match key {
             Key::Character(character) if character == "k" || character == "f" => Some(ShellIntent::OpenPalette),
             Key::Character(character) if character == "n" => Some(ShellIntent::NewRecord),
+            Key::Character(character) if character == "q" => Some(ShellIntent::Quit),
+            Key::Character(character) if character == "w" => Some(ShellIntent::CloseCurrentTab),
             Key::Character(character) if character == "z" => {
                 if modifiers.shift() {
                     Some(ShellIntent::Redo)
@@ -142,6 +148,13 @@ pub fn dispatch(event: &KeyboardEvent, mut nav: NavState, mut gp: Signal<GPrefix
         ShellIntent::Help => nav.overlay.set(Overlay::Help),
         ShellIntent::ArmGPrefix => gp.set(GPrefix::Armed { since: Instant::now() }),
         ShellIntent::StepRecord(delta) => nav.step_record(delta),
+        ShellIntent::Quit => nav.request_quit(),
+        ShellIntent::CloseCurrentTab => {
+            let active = *nav.active_record.peek();
+            if let Some(index) = active {
+                nav.request_close_tab(index);
+            }
+        }
     }
 }
 
@@ -331,11 +344,35 @@ mod tests {
     #[test]
     fn unbound_keys_are_ignored() {
         assert_eq!(
+            shell_intent(&character("y"), Modifiers::empty(), Code::KeyY, false),
+            None
+        );
+        assert_eq!(
+            shell_intent(&character("y"), Modifiers::empty(), Code::KeyY, true),
+            None
+        );
+    }
+
+    #[test]
+    fn primary_q_quits_and_primary_w_closes_the_current_tab() {
+        assert_eq!(
+            shell_intent(&character("q"), Modifiers::empty(), Code::KeyQ, true),
+            Some(ShellIntent::Quit)
+        );
+        assert_eq!(
+            shell_intent(&character("w"), Modifiers::empty(), Code::KeyW, true),
+            Some(ShellIntent::CloseCurrentTab)
+        );
+    }
+
+    #[test]
+    fn bare_q_and_w_are_ignored_so_they_still_type_into_fields() {
+        assert_eq!(
             shell_intent(&character("q"), Modifiers::empty(), Code::KeyQ, false),
             None
         );
         assert_eq!(
-            shell_intent(&character("q"), Modifiers::empty(), Code::KeyQ, true),
+            shell_intent(&character("w"), Modifiers::empty(), Code::KeyW, false),
             None
         );
     }
