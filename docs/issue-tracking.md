@@ -12,9 +12,9 @@ The repository has **only GitHub's default labels**, **no milestones**, and **no
 one referenced issue, #38, is closed). So the taxonomy below is greenfield — nothing has to be
 migrated or reconciled.
 
-[`issues.md`](issues.md) currently holds ~95 bullets. Roughly **15 of them are not tasks at all** —
-they live under *Decided — no action needed* and record deliberate choices ("by design", "a
-deliberate simplification", "permanently non-round-trippable", "recorded so it is not re-raised").
+[`issues.md`](issues.md) currently holds **92 bullets: 79 actionable and 13 that are not tasks at
+all** — the latter live under *Decided — no action needed* and record deliberate choices ("by design",
+"a deliberate simplification", "permanently non-round-trippable", "recorded so it is not re-raised").
 Filing those as issues would create a tracker that can never reach zero, so the split below matters
 more than the label names.
 
@@ -42,7 +42,7 @@ Define them in **`.github/labels.yml`** with a sync action, so the taxonomy is a
 guardrail rather than clicks in a web UI — consistent with how this repo already treats lints, i18n
 completeness, and CSS tokens.
 
-### `area/*` — one per `issues.md` H3
+### `area/*` — one per backlog H3 in `issues.md`
 
 `records/person-family`, `records/places`, `records/notes`, `records/tags`, `records/media`,
 `records/dna`, `records/cross-aggregate`, `frontend/shell`, `frontend/lists`, `frontend/keyboard`,
@@ -52,6 +52,16 @@ completeness, and CSS tokens.
 
 The area reorganization is what makes this mapping 1:1 and mechanical — an item's label follows from
 where it already sits in the doc. Add `docs` and `i18n` as cross-cutting extras.
+
+**Two exclusions the mapping depends on.** The H3s under **`## Decided — no action needed`**
+(*Keyboard & shortcuts (ADR 0030 …)*, *Model & interchange*, *Architecture*) are **not** areas — they
+group decisions, and nothing there is ever filed. Worth stating explicitly because those headings only
+became H3s to satisfy markdownlint MD036, not because they name areas: a naive "one label per H3" sweep
+would invent `area/model-interchange` and `area/architecture` for two headings with no work behind them,
+and a second near-duplicate keyboard label. The rule is **one label per H3 under the four backlog H2s**
+(*Records & data model*, *Frontend & interaction*, *Import, export & plugins*, *Platform & operations*)
+— which is exactly the 21 above. Separately, **`## Bugs`** has no H3s by design: a bug takes its
+`area/*` from whichever area it affects, plus `type/bug`.
 
 ### `type/*` — what kind of work
 
@@ -93,13 +103,25 @@ Reuse the built-ins `bug`, `documentation`, `good first issue`, `help wanted`, `
 Milestones are **shipping vehicles, not phases.** The phases are done, and recreating them as
 milestones would re-import the framing the doc reorganization just removed.
 
+**The GUI is the main interface at 1.0.** That single constraint sets the order: parity and UI
+correctness are *pre*-1.0 gates, not a follow-up cycle. Shipping a 1.0 whose primary interface cannot
+export, cannot import a file, and silently discards an in-progress edit would be a worse outcome than
+shipping later. So the packaging work sequences **last** — it is the least valuable milestone to reach
+early, because there is no point packaging an interface that isn't finished.
+
+The workspace is at `0.1.0` with no tags yet, so the two gates are numbered to make their order
+unambiguous in GitHub's milestone list.
+
 | Milestone | Contents |
 | --- | --- |
-| **`1.0`** | The four *Packaging & release* blockers: generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path, and settle the cross-platform decision. |
-| **`1.1`** | The first post-1.0 cycle. Curated at the time — the GUI ⇄ CLI parity gaps and the research-note UI are the obvious candidates. |
+| **`0.8 — UI parity`** | Every operation a user can reach from the GUI. The four *GUI ⇄ CLI parity* gaps (bulk export, bulk import + target selection, projection rebuild, Postgres workspace creation), the research-note UI **and** its missing mockup, and family child-removal. Plus the three items neither frontend can do today but the GUI must once it is the reference surface: place succession, tag restrictions, workspace-scope surety labels. |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. Highest first: **dirty saved-record edits are discarded silently** on close/quit — data loss in the primary interface. Then the `Modal` focus trap and click-away scrim (a keyboard user can tab into the inert background), the two shipped map fixes with no test coverage, the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the three *Shell, tabs & notifications* ease-of-use items (live list updates, toasts, remembered tab). |
+| **`1.0`** | Release mechanics only: generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
-**Do not create a third.** "Someday" is honestly encoded as `priority/low` with no milestone; an
-ungroomed `2.0` milestone is worse than none, because it looks like a commitment.
+**Do not create a fourth.** Everything else — DNA depth, the server/web work, the plugin-UI vocabulary
+tail, the ADR 0014 plugin-trust out-of-scope list, round-trip gaps, performance work, and the
+upstream-blocked dependencies — carries **no milestone**. "Someday" is honestly encoded as
+`priority/low` with no milestone; an ungroomed `2.0` looks like a commitment nobody made.
 
 ## 4. Triage
 
