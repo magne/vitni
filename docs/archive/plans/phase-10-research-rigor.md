@@ -1,14 +1,15 @@
 # Plan — Phase 10: research rigor & import sync
 
-- **Status:** Gate 2 (implementation) approved and underway — PR1 (ADR 0027) done; PR2–PR4 remain
-- **Roadmap home:** [Phase 10](../roadmap.md#phase-10--research-rigor--import-sync)
-- **Gating ADRs:** [0027](../adr/0027-configurable-surety-scheme-labels.md) (surety-scheme labels),
-  [0028](../adr/0028-research-note-argument-aggregate.md) (`ResearchNote`/`Argument` aggregate),
-  [0029](../adr/0029-import-merge-sync-reconciliation.md) (import merge/sync). The fourth workstream
+- **Status:** **Implemented 2026-07-24** — Gate 2 shipped as PRs #170–#174 (all four
+  workstreams). Archived; residuals tracked by area in [`docs/issues.md`](../../issues.md).
+- **Roadmap home:** [Phase 10](../../roadmap.md#phase-10--research-rigor--import-sync)
+- **Gating ADRs:** [0027](../../adr/0027-configurable-surety-scheme-labels.md) (surety-scheme labels),
+  [0028](../../adr/0028-research-note-argument-aggregate.md) (`ResearchNote`/`Argument` aggregate),
+  [0029](../../adr/0029-import-merge-sync-reconciliation.md) (import merge/sync). The fourth workstream
   (round-trip gaps) needs **no new ADR** — see below.
-- **Research:** [`surety-schemes.md`](../research/surety-schemes.md),
-  [`proof-argument-modelling.md`](../research/proof-argument-modelling.md),
-  [`merge-sync-conflict-resolution.md`](../research/merge-sync-conflict-resolution.md)
+- **Research:** [`surety-schemes.md`](../../research/surety-schemes.md),
+  [`proof-argument-modelling.md`](../../research/proof-argument-modelling.md),
+  [`merge-sync-conflict-resolution.md`](../../research/merge-sync-conflict-resolution.md)
 
 ## Context
 

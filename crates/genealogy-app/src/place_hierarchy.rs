@@ -1,5 +1,4 @@
-//! The transitive, cycle-aware, date-aware Place hierarchy walk (`docs/issues.md` "Transitive
-//! place-hierarchy walk"; ADR 0026 §1).
+//! The transitive, cycle-aware, date-aware Place hierarchy walk (ADR 0026 §1).
 //!
 //! The enclosed-by chain used to be read one level deep, so a place's breadcrumb showed only its
 //! *direct* enclosers, never the walk up to a country. [`hierarchy_chain`] follows the primary

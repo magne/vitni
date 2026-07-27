@@ -1,47 +1,56 @@
 # Genealogy Issues
 
-A prioritized backlog: quick wins (bugs, then ease-of-use) first, then an unscheduled UI/app
-backlog, then roadmap-phase work ordered exactly as [`roadmap.md`](roadmap.md) sequences it. The
-roadmap remains the source of truth for phase detail — the phase sections below are short summaries
-that link back to it.
+Outstanding work, grouped by **area**. [`roadmap.md`](roadmap.md) owns phase detail, sequencing, and
+progress state — this file owns open bugs, scoped residuals, and unscheduled backlog, and does not
+restate phases. Completed work lives in
+[`archive/completed-work.md`](archive/completed-work.md).
+
+Two conventions:
+
+- The `###` area names are the organizing unit. A proposed GitHub label/milestone/triage scheme keyed
+  to them is in [`issue-tracking.md`](issue-tracking.md) (not yet applied).
+- [**Decided — no action needed**](#decided--no-action-needed) at the end collects deliberate
+  non-tasks: things recorded so they are not re-raised or misread as unfinished. Check it before
+  filing anything.
 
 ## Bugs
 
-Phase 9 map/geometry defects found in live GUI use — all fixed in
-`crates/genealogy-ui-dioxus/src/screens/{map_shared,place,geography}.rs` (+ the Place VM); each is
-covered by an SSR/unit test, but the interactive MapLibre canvas behavior still needs a **manual
-webview pass** (agents can't run libwebkit2gtk):
+No open defects. The five Phase 9 map/geometry bugs are fixed and archived; two of those fixes ship
+without test coverage, tracked below under *Geography & map*.
 
-- ✅ Draw-tool clicks were blocked by the pointer-capture overlay — overlay removed, crosshair moved
-  onto the map container so MapLibre receives the click.
-- ✅ Place map showed no marker — the marker push raced MapLibre's async `load`; now stashed on the
-  map element and re-applied in the `load` handler.
-- ✅ Geography selection didn't centre the map — a `use_effect` now drives `fit_bounds` on selection.
-- ✅ Marker too small / vanished when zoomed — zoom-interpolated `circle-radius` + white stroke.
-- ✅ Dropping a point didn't update the shown lat/long — the Overview coordinate now derives from the
-  resolved geometry point (`display_coordinates`), not only the scalar `CoordinatesAsserted`.
+## Records & data model
 
-## Ease of use
+### Person & Family
 
-- **Live list updates on create.** Creating an entity should immediately insert it into the matching
-  entity list, with no manual refresh.
-- **Toast notifications.** Show a toast at the bottom of the work area, auto-dismissed after a set
-  time.
-- **Remember the open record's tab.** Record-detail view should restore the last-shown tab while the
-  record stays open, and forget it once closed.
+- **A child cannot be removed from a family in the GUI** — `remove_child` has no UI caller:
+  `FamilyEdit` has `AddChild` and `AssertChildRelationship` but no removal, and `FamilyChangeSet`
+  carries no children at all, so only `genealogy family remove-child` does it. (Partner removal is
+  fine — `remove_partner` is draft-local in the create form.)
+  *UI:* add `FamilyEdit::RemoveChild { child }` and a `✕` on each child row of the Family screen's
+  children tab, routed through the shared `retract_side_panel` / `RetractTarget` confirm in
+  `screens/shared.rs` that the other retract affordances already use.
 
-## UI & app backlog (unscheduled — need a design or product call)
+### Places
 
-Not owned by any roadmap phase; grouped by area, roughly easy → hard.
+- **Place succession can be read but never written** — `assert_place_succession` (ADR 0026 §3;
+  `Merged`/`Split`/`Absorbed`/`Elevated`/`Renamed`) has no CLI subcommand and no `PlaceEdit` variant,
+  while `show_place` / `show_place_as_of` already surface `PlaceSuccessionRef`s — so the Place screen
+  can display a succession no user can create.
+  *UI:* `PlaceEdit::AssertSuccession { to, kind, date }` and a "Succession" edit panel on the Place
+  screen — target picked with the existing place `RecordPicker`, kind a `SelectInput`, date reusing the
+  map-edit provenance date form. A `genealogy place assert-succession` subcommand is the cheaper first
+  move if the CLI should stay the reference surface.
+- **Dated name/enclosure use-cases** — `add_place_name` / `assert_place_enclosed_by` don't accept a
+  date param, so map/UI enclosure edits can't be dated (geometry edits already can); the map-edit
+  provenance form doesn't yet default its date to the active time-slider year.
+- **Optional DB `place_parent` index** — a Gramps precedent for scaling the hierarchy walk; a later
+  follow-up, not needed at current volumes.
 
-### CLI-only operations (no GUI equivalent)
+### Notes & research notes
 
-Every per-aggregate verb the CLI exposes has a GUI counterpart *except* the six below (audited
-`genealogy-cli/src/{main.rs,commands/*.rs}` against `genealogy-ui/src/{navigation.rs,intent.rs}`).
-Each reuses an existing `genealogy-app` use-case — none needs a new core verb.
-
-- **Research notes have no GUI at all** — `genealogy research-note create|add-subject|remove-subject|set-body|show|list`
-  is the only way to record a proof argument (ADR 0028 shipped CLI-first). The whole app surface
+- **Research notes have no GUI at all** — the `genealogy research-note` command group
+  (`create`/`add-subject`/`remove-subject`/`set-body`/`show`/`list`) is the only way to record a proof
+  argument (ADR 0028 shipped CLI-first). The whole app surface
   already ships: `create_research_note`, `set_research_note_body`, `add_subject_to_research_note`,
   `remove_subject_from_research_note`, `show_research_note`, `list_research_notes`, plus
   `list_research_notes_for_subject` / `tag_research_note` / `set_research_note_restrictions`, which
@@ -52,6 +61,174 @@ Each reuses an existing `genealogy-app` use-case — none needs a new core verb.
   `ResearchNoteChangeSetRequest` for create. Subjects use the existing `RecordPicker`, which already
   covers Person/Family/Event/Place — exactly `SubjectRef`'s four kinds. The reverse lookup becomes a
   "Research notes" tab on those four detail screens via `tabs.rs`'s `tab_with_add`.
+  *History:* the Phase 10 plan named this screen **and** a `docs/mockups/` page as a PR2 follow-up
+  "explicitly so it is not silently dropped", and listed both in its Gate-2 exit criteria. Both were
+  dropped; there is no research-note mockup either.
+- **`remove_translation` core verb** — note-translation retract is Edit-only; there is no verb to
+  remove a single translation.
+
+### Tags
+
+- **Tag has no restrictions path** — `set_tag_restrictions` exists but no frontend calls it, and
+  `TagChangeSetRequest` carries only name / priority / colour: the one aggregate of thirteen with no
+  privacy control.
+  *UI:* add `restrictions` to `TagChangeSetRequest` and reuse the shared restrictions field the other
+  twelve screens already render.
+
+### Media
+
+- **Interactive Set/Clear region on every owner.** The interactive region viewer is wired on the
+  Person screen only; the other five media owners show the read-only rich gallery. The
+  `SetMediaRegion` intent and dispatch exist for all six — extending the viewer wiring is mechanical.
+- **"Add file to media library" action.** The media-save dialog and the pure naming logic
+  (`suggest_filename`/`slugify`) ship and are SSR-tested; the app-layer copy use-case that writes an
+  external file into `media/<target>` and creates the Media record is deferred.
+
+### DNA
+
+Sequencing is roadmap-owned — see [`roadmap.md` Phase 12](roadmap.md#phase-12--dna-breadth--depth).
+Pulled together so the DNA match model and its views land as one slice (data-model §17).
+
+- **DNA match views** in the UI (moved from Phase 5).
+- **DnaTest fields** — `account`, `date_tested`, `snp_count` are absent from `DnaTestState`.
+- **DnaMatch depth** — no terminal-SNP, no fully-identical-regions (segment lineage only partially
+  present via `ChromosomeSide` + `snps`).
+- **DNA citation collections** — both DNA aggregates hardcode `citations: Vec::new()`; provenance is
+  stubbed empty.
+- **DNA payload columns (UI)** — haplogroup lineage / terminal-SNP / per-row source (VM has 2 of 6);
+  shared-ancestor relationship-to-A/B + per-row confidence/source (2 of 5).
+- **DNA depth (research):** Y/mtDNA markers, haplogroup detail, triangulation groups.
+
+### Cross-aggregate
+
+- **Workspace-scope surety labels are read but unwritable** — `save_surety_label_overrides`
+  (`workspace.rs:589`, writes `manifest.surety`) has no caller; the ADR 0027 Preferences card writes
+  `store_workspace_default_surety`, i.e. the *global* `[workspace-defaults]` table.
+  `read_resolved_surety_labels` resolves manifest-over-global, so the per-workspace layer sits in the
+  resolution chain with no way to populate it — what shipped is the global live fallback, not a
+  per-workspace override.
+  *UI:* add `store_surety_label_overrides` to `ConfigStore` (delegating to the existing function) and
+  give the Surety card the same two-scope control the theme / id-format cards already use via
+  `read_preference_layers` / `LayerKind`.
+- **Configurable surety-scheme *cardinality*** — ADR 0027 shipped relabeling the five fixed ordinals;
+  re-scaling the scheme (GENTECH's full generality) stays deferred behind its own gating ADR, no
+  consumer need demonstrated yet.
+- **`run_checks` is dead code, and there is no CLI data-quality command** — its body is `list_persons`
+  \+ `check_persons` (`checks.rs:53-56`), and the GUI's Data Quality view calls `check_persons` directly
+  with the person list it already holds, so GUI coverage is *equivalent* — nothing is missing there.
+  Either delete the wrapper, or keep it to back a `genealogy check` subcommand so quality findings are
+  scriptable.
+- **Data-quality checks are person-only** — both `CheckKind`s are `DeathBeforeBirth` and
+  `PossibleDuplicates`. Widening checks to the other twelve aggregates is its own item.
+- **Repository media refs (U31)** — should Repository carry media refs (e.g. archive photos)? A
+  data-model question.
+
+## Frontend & interaction
+
+### Shell, tabs & notifications
+
+- **Live list updates on create.** Creating an entity should immediately insert it into the matching
+  entity list, with no manual refresh.
+- **Toast notifications.** Show a toast at the bottom of the work area, auto-dismissed after a set
+  time.
+- **Remember the open record's tab.** Record-detail view should restore the last-shown tab while the
+  record stays open, and forget it once closed.
+- **`Modal`/`SidePanel` overlay follow-ups** — `Modal` (`components/layout.rs`) still has no backdrop
+  scrim or `onclose` prop. This was harmless while `Modal` had no callers; the close/quit confirm
+  dialog (`shell/close_confirm.rs`) is now its first real caller and does **not** wire a focus trap
+  (`shell/focus_trap.rs`'s `trap_tab` is not attached) or a click-away scrim — a keyboard user tabbing
+  inside the dialog can reach the inert background, and there is no click-outside-to-cancel. Neither
+  overlay has slide-in motion beyond what the existing keyboard layer already provides.
+- **Record-picker scroll-listener cleanup** — `PickerSearch::watch_scroll_close`
+  (`components/record_picker.rs`) arms a `window` `scroll`/`resize` listener (via `document::eval`)
+  per mount to close the floating picker on pane scroll, but never removes the JS-side listener on
+  unmount, so each clear/re-search cycle leaves one inert listener behind (bounded by that, not by
+  keystrokes or scroll events). Remove it on unmount, or arm it once at a higher scope.
+
+### Lists, search & scale
+
+- **Long-list / overflow specimen (U30)** — no tab demonstrates a long-list or overflow state;
+  deferred as low-fidelity in a static mockup (the a11y real-app walkthrough covers it).
+- **`ListPane` DOM virtualization** — `master_detail.rs` mounts every row (and a `MountedEvent` per
+  row). Render only a scrolled window with a `store.count`-sized spacer and make the roving-focus
+  `nodes` bookkeeping window-aware. If server-side windowing is chosen instead, add
+  `list_view_page(table, offset, limit)` (+ a Postgres mirror) and a generated column + index on
+  `$.state.human_id` in `genealogy-db`. Overlaps the `list_*` pagination item under *Performance &
+  scale*.
+- **Saved searches** — nothing in the palette, list toolbars, or app layer; the 100k-scale research
+  workflow argues for it. Needs a design + use-case decision.
+- **Column chooser** — `list.rs` has no column state though PR3's text claims "columns". Decide
+  whether to build it or amend the PR3 description.
+
+### Keyboard & shortcuts
+
+Residuals from the shortcuts work (ADR 0030); see
+[`archive/completed-work.md`](archive/completed-work.md). Deliberate non-goals are under *Decided*.
+
+- **Dirty saved-record edits are not confirmed.** `Ctrl+W`/`Ctrl+Q`'s confirm fires on `OpenTab::Draft`
+  only. An in-progress edit of an *already-saved* record lives in screen-local `RecordEditState`
+  (`screens/record_form.rs`) and is invisible to `NavState`, so closing/quitting discards it silently.
+  Lifting edit-dirtiness into shell state is the follow-up.
+- **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
+  its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
+  so it is neither listed by the `?` overlay nor rebindable, and it does not go through
+  `NavState`/`resolved_shortcuts` at all.
+- **The "Jump back in" recent-list write has no close/quit hook.** `shell/window_geometry.rs` flushes
+  window geometry on `WindowEvent::CloseRequested`; the recent-list persistence effect in
+  `shell/root.rs` has no equivalent, so a keyboard quit can race the debounced write.
+- **Chord entry is a typed canonical string, not live key capture.** `keydown` is inert under SSR and
+  `cargo xtask input-guard` forbids a raw form element outside the primitives, so the Preferences
+  rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.
+- **No chord sequences beyond the existing `g`-prefix** — `resolved_shortcuts` resolves single chords
+  only.
+- **The framework-free `Key` enum (`genealogy-ui::shortcuts`) is still closed** — no function keys, so
+  `e`/`F2` (the within-screen edit chord) could not be rebound even if that group were opened up.
+- **No keyboard topic in the in-app Help browser.** `genealogy-ui::help.rs`'s `HelpSection::Reference`
+  is documented as "Lookup material (shortcuts, glossaries)" and `Run::Kbd` is unused — no authored doc
+  covers shortcuts; the `?` overlay is the only in-app reference today.
+
+### Pedigree & charts
+
+- **`Restriction` chart cue** on the pedigree chart.
+- **Name-autocomplete pickers** for the focus / relationship inputs, which are plain `human_id` text
+  fields today.
+
+### Geography & map
+
+- **Two shipped map fixes have no test coverage** — the marker load-race stash (`__geoPending` in
+  `map_shared.rs`) and the zoom-interpolated `circle-radius` + white stroke both live entirely inside
+  `format!`-built JavaScript that no test inspects, and `maplibre_init_script` is private with no test
+  module. Both are verified present in code; neither would fail if regressed. Either assert the
+  generated script text, or extract the paint expressions into testable Rust values.
+- **`geography_toolbar` takes 8 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
+  fit state were threaded in — bundle them into a struct. Cosmetic cleanup.
+- **Point tool has no confirm step in the Geography tool.** The Place Map editor added a "Use this
+  point" confirm; the Geography tool's Point tool still has no equivalent (commits on click), a
+  pre-existing inconsistency.
+- **In-map editing depth** — true mouse-drag reposition and mid-ring vertex insertion (today: click to
+  drop/move a point and click to add polygon vertices), pin-click selection on the canvas (today:
+  select via the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is
+  wired; polygon draws onto an existing place).
+- **Provider sub-forms** — `osm-raster` is switchable from the toolbar; `maplibre-style` / `google` are
+  declared in `[map]` config and round-trip but have no toolbar sub-form to collect a style URL /
+  API-key-env yet.
+- **`map-provider` plugin world + geocoding** — the declarative provider ships and the Geography
+  toolbar search is now a `RecordPicker` over existing places (search + jump); geocoding a *new*
+  real-world address to a coordinate stays deferred. A WASM `map-provider` world supplying geocoding
+  \+ custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
+  never pixels).
+- **Manual webview pass outstanding** — the interactive MapLibre canvas (pan/zoom, click-to-place feel,
+  polygon vertex rendering, the toolbar picker) cannot be exercised by an SSR test; agents can't run
+  libwebkit2gtk.
+
+### GUI ⇄ CLI parity
+
+Every per-aggregate verb the CLI exposes has a GUI counterpart *except* the items below (audited
+`genealogy-cli/src/{main.rs,commands/*.rs}` against `genealogy-ui/src/{navigation.rs,intent.rs}`).
+Each reuses an existing `genealogy-app` use-case — none needs a new core verb. Two more parity gaps
+are filed in their own areas: research notes (*Notes & research notes*) and family child-removal
+(*Person & Family*).
+
 - **Bulk export is CLI-only** — `genealogy export <plugin> [--output FILE]` drives
   `PluginHost::run_bulk_export`; the GUI only *names* `Capability::ExportSink` in the plugin panel and
   never calls it.
@@ -62,7 +239,8 @@ Each reuses an existing `genealogy-app` use-case — none needs a new core verb.
 - **Bulk import is CLI-only, and target selection has no GUI shape at all** — the CLI's `import` is
   plugin-generic and also picks the target: `--new NAME PATH` creates + registers a fresh workspace,
   `--into NAME` imports into an existing one, prompting for confirmation when it already holds persons.
-  (This widens the *Local import & internal cleanup* entry below, which framed the gap as GEDCOM-only.)
+  `genealogy-ui-dioxus` has no local-file import flow at all (distinct from the *assisted* import
+  wizard).
   *UI:* a target stage on `Tool::Import` (or the `Tool::Export` sibling above): plugin picker
   (`ImportSource` bundles) → file picker → target radio, reusing the Preferences "Register workspace…"
   disclosure form for the new-workspace case, and `Modal` + the `list_persons` emptiness probe for the
@@ -80,118 +258,34 @@ Each reuses an existing `genealogy-app` use-case — none needs a new core verb.
   always gets SQLite.
   *UI:* add an optional "Database URL" field to that existing disclosure form and thread it into the
   `None` argument — `genealogy_app::register_workspace` already takes it.
-- **A child cannot be removed from a family in the GUI** — `remove_child` has no UI caller: `FamilyEdit`
-  has `AddChild` and `AssertChildRelationship` but no removal, and `FamilyChangeSet` carries no children
-  at all, so only `genealogy family remove-child` does it. (Partner removal is fine — `remove_partner`
-  is draft-local in the create form.)
-  *UI:* add `FamilyEdit::RemoveChild { child }` and a `✕` on each child row of the Family screen's
-  children tab, routed through the shared `retract_side_panel` / `RetractTarget` confirm in
-  `screens/shared.rs` that the other retract affordances already use.
 
-### App use-cases no frontend reaches
+## Import, export & plugins
 
-Turned up by the same audit but a **different defect class** from the section above: these are not
-CLI-only — *neither* frontend calls them, so each is either a write-unreachable config scope or dead
-surface. The fix is a product call (wire it, or delete it).
+### Bulk import, export & sync
 
-- **Place succession can be read but never written** — `assert_place_succession` (ADR 0026 §3;
-  `Merged`/`Split`/`Absorbed`/`Elevated`/`Renamed`) has no CLI subcommand and no `PlaceEdit` variant,
-  while `show_place` / `show_place_as_of` already surface `PlaceSuccessionRef`s — so the Place screen
-  can display a succession no user can create.
-  *UI:* `PlaceEdit::AssertSuccession { to, kind, date }` and a "Succession" edit panel on the Place
-  screen — target picked with the existing place `RecordPicker`, kind a `SelectInput`, date reusing the
-  map-edit provenance date form. A `genealogy place assert-succession` subcommand is the cheaper first
-  move if the CLI should stay the reference surface.
-- **Workspace-scope surety labels are read but unwritable** — `save_surety_label_overrides`
-  (`workspace.rs:589`, writes `manifest.surety`) has no caller; the ADR 0027 Preferences card writes
-  `store_workspace_default_surety`, i.e. the *global* `[workspace-defaults]` table.
-  `read_resolved_surety_labels` resolves manifest-over-global, so the per-workspace layer sits in the
-  resolution chain with no way to populate it — what shipped is the global live fallback, not a
-  per-workspace override.
-  *UI:* add `store_surety_label_overrides` to `ConfigStore` (delegating to the existing function) and
-  give the Surety card the same two-scope control the theme / id-format cards already use via
-  `read_preference_layers` / `LayerKind`.
-- **Tag has no restrictions path** — `set_tag_restrictions` exists but no frontend calls it, and
-  `TagChangeSetRequest` carries only name / priority / colour: the one aggregate of thirteen with no
-  privacy control.
-  *UI:* add `restrictions` to `TagChangeSetRequest` and reuse the shared restrictions field the other
-  twelve screens already render.
-- **`run_checks` is dead code, and there is no CLI data-quality command** — its body is `list_persons`
-  \+ `check_persons` (`checks.rs:53-56`), and the GUI's Data Quality view calls `check_persons` directly
-  with the person list it already holds, so GUI coverage is *equivalent* — nothing is missing there.
-  Either delete the wrapper, or keep it to back a `genealogy check` subcommand so quality findings are
-  scriptable. Separately, both check kinds are person-only (`DeathBeforeBirth`, `PossibleDuplicates`);
-  widening checks to the other aggregates is its own item.
-- **External ids have no frontend entry point** — person `add_external_id` (module-level, not even
-  root-exported) and `add_family_external_id` are used only inside `import.rs` for resolve-or-create.
-  Recorded so the absence isn't later read as an oversight: external ids are importer bookkeeping, not
-  user-editable data. No action proposed.
-
-### Lists, search & scale
-
-- **Long-list / overflow specimen (U30)** — no tab demonstrates a long-list or overflow state;
-  deferred as low-fidelity in a static mockup (the a11y real-app walkthrough covers it).
-- **`ListPane` DOM virtualization** — `master_detail.rs` mounts every row (and a `MountedEvent` per
-  row). Render only a scrolled window with a `store.count`-sized spacer and make the roving-focus
-  `nodes` bookkeeping window-aware. If server-side windowing is chosen instead, add
-  `list_view_page(table, offset, limit)` (+ a Postgres mirror) and a generated column + index on
-  `$.state.human_id` in `genealogy-db`.
-- **Saved searches** — nothing in the palette, list toolbars, or app layer; the 100k-scale research
-  workflow argues for it. Needs a design + use-case decision.
-- **Column chooser** — `list.rs` has no column state though PR3's text claims "columns". Decide
-  whether to build it or amend the PR3 description.
-
-### Places
-
-- **Transitive place-hierarchy walk** — ✅ *done* (Phase 9, see Completed). The cycle-aware,
-  date-aware primary-`PlaceRef` walk landed in `genealogy-app/src/place.rs` (`hierarchy_chain` /
-  `generated_title` in `place_hierarchy.rs`), flowing through `PlaceSummary.enclosing` →
-  `PlaceDetail.hierarchy`. An optional DB `place_parent` index (Gramps precedent) remains a later scale
-  follow-up.
-
-- **Map & geometry — delivered as roadmap phases.**
-  - ✅ **Phase 6 — Place map MVP** *(done — see Completed)*: read-only single point; Leaflet +
-    OpenStreetMap, no editing, no model change. Plan
-    [`archive/plans/place-map-mvp.md`](archive/plans/place-map-mvp.md); mockup the **Map** tab of
-    [`mockups/place.html`](mockups/place.html).
-  - ✅ **Phase 9 — Places: geography & temporal model** *(done — see Completed)*: point/polygon
-    geometry, dated boundaries, place **succession** (merge/split), the date-aware resolution rule, a
-    time slider, in-map editing, and the pluggable provider. Gated by
-    [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md),
-    [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md), and
-    [ADR 0026](adr/0026-place-succession-and-temporal-resolution.md).
-
-### Pedigree
-
-- **`Restriction` chart cue** on the pedigree chart.
-- **Name-autocomplete pickers** for the focus / relationship inputs, which are plain `human_id` text
-  fields today.
-
-### Local import & internal cleanup
-
-- **GUI Import-GEDCOM command** — the CLI imports; `genealogy-ui-dioxus` has no import flow. (This is
-  local file import, distinct from the Phase 8 *assisted* import.) See *CLI-only operations* above: the
-  gap is wider than GEDCOM — `genealogy import` is plugin-generic and also owns target selection
-  (`--new` vs `--into`, plus the non-empty-workspace confirm), and bulk **export** has no GUI path at
-  all either.
+- **Gramps `<header created>` is parsed but never threaded to `begin-import`** — ADR 0029's
+  timestamp-gated reconciliation is only wired on the GEDCOM side
+  (`plugins/gedcom-import/src/lib.rs:41`). `plugins/gramps-import/src/lib.rs` goes straight from
+  `parse` to the person loop and never reads `db.header`, though `genealogy-gramps-xml/src/parse.rs:400`
+  does parse the date — so a Gramps re-import gets no timestamp gating at all. Found while verifying
+  the Phase 10 completion claim, which described both formats as wired.
+- **Source merge/sync reconciliation prerequisite** — Source resolve-or-create (`ExternalId` dedup) +
+  `set-source-title`/`set-source-abbrev` WIT verbs + a field-level `AssertionId`/`occurred_at` read
+  path. Unlike Person/Family, a standalone Source has no `ExternalId` resolve-or-create today (a second
+  import of the same file duplicates the Source aggregate), so the ADR 0029 timestamp-gated rule can't
+  target it yet. `Person.sex` reconciliation shipped without these; widening the rule to Source's
+  bibliographic fields (`title`/`author`/`pub_info`/`abbrev`) is blocked on them.
 - **Lift `prepare_import_target`** into `genealogy-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
-- **Record-picker scroll-listener cleanup** — `PickerSearch::watch_scroll_close`
-  (`components/record_picker.rs`) arms a `window` `scroll`/`resize` listener (via `document::eval`)
-  per mount to close the floating picker on pane scroll, but never removes the JS-side listener on
-  unmount, so each clear/re-search cycle leaves one inert listener behind (bounded by that, not by
-  keystrokes or scroll events). Remove it on unmount, or arm it once at a higher scope.
-- **`Modal`/`SidePanel` overlay follow-ups** — `Modal` (`components/layout.rs`) still has no backdrop
-  scrim or `onclose` prop. This was harmless while `Modal` had no callers; the close/quit confirm
-  dialog (`shell/close_confirm.rs`, Ease-of-use "Quit/close-tab keys") is now its first real caller and
-  does **not** wire a focus trap (`shell/focus_trap.rs`'s `trap_tab` is not attached) or a click-away
-  scrim — a keyboard user tabbing inside the dialog can reach the inert background, and there is no
-  click-outside-to-cancel. Neither overlay has slide-in motion beyond what the existing keyboard layer
-  already provides.
+- **No merge/conflict mockup for reconciled fields** — the Phase 10 plan required a merge/conflict view
+  in `docs/mockups/import.html` showing a reconciled field's audit trail (who/when/why, not an
+  interactive picker), and listed it in the Gate-2 exit criteria. `import.html` has no such view: the
+  ADR 0029 supersede path is invisible in the mockups, so there is no agreed design for showing a user
+  that an import overwrote one of their values.
 
-### Media & assisted import (Phase 8 residuals)
+### Assisted import
 
-Follow-ups left open when Phase 8 shipped (see Completed); each is scoped, none blocks the flow.
+Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none blocks the flow.
 
 - **Assisted session survives navigation.** The assisted-import session is screen-local — navigating
   away from the `Tool::Import` wizard cancels the run (the documented cancel-on-navigate path, ADR
@@ -208,172 +302,40 @@ Follow-ups left open when Phase 8 shipped (see Completed); each is scoped, none 
 - **`attach-citation-media` WIT verb.** The wizard's census-line crop lands on the *person's* media
   ref because there is no `attach-citation-media` command in the WIT. Citation-level attach is a
   follow-up (`genealogy-core`/`genealogy-app` already model citation `MediaRef`s).
-- **Interactive Set/Clear region on every owner.** The interactive region viewer is wired on the
-  Person screen only; the other five media owners show the read-only rich gallery. The
-  `SetMediaRegion` intent and dispatch exist for all six — extending the viewer wiring is mechanical.
-- **"Add file to media library" action.** The media-save dialog and the pure naming logic
-  (`suggest_filename`/`slugify`) ship and are SSR-tested; the app-layer copy use-case that writes an
-  external file into `media/<target>` and creates the Media record is deferred.
 - **Politeness delay for `net`.** The archive `robots.txt` requests `Crawl-delay: 5`; `net` enforces
   a timeout and size cap but no inter-request delay (the assisted flow is interactive and low-volume
   today). A politeness delay is a follow-up if usage grows.
+- **`AiProvider::Plugin` is declared but unsupported** — the variant exists in `[ai]` config and
+  round-trips, but `genealogy-plugin-host/src/ai.rs:73` returns `AiError::InvalidInput` for it, so a
+  workspace configured with `kind = "plugin"` fails only at first use. Either implement it or reject it
+  at config-load time.
 
-### Records & data-model
+### Round-trip gaps
 
-- **Repository media refs (U31)** — should Repository carry media refs (e.g. archive photos)? A
-  data-model question.
-
-### Notes
-
-- **`remove_translation` core verb** — note-translation retract is Edit-only; there is no verb to
-  remove a single translation.
-
-### Plugin-UI vocabulary tail (ADR 0022 out-of-scope)
-
-Repeating groups / nested forms; `List`/detail descriptions + plugin-driven navigation; per-field
-validation vocabulary; plugin-prefilled field values; the `query` capability for `ui-panel`;
-long-running / streaming actions; multi-panel pages.
-
-### Keyboard & shortcuts
-
-Residuals from "Quit/close-tab keys & customizable keyboard shortcuts" (see Completed; ADR 0030).
-
-- **Dirty saved-record edits are not confirmed.** `Ctrl+W`/`Ctrl+Q`'s confirm fires on `OpenTab::Draft`
-  only. An in-progress edit of an *already-saved* record lives in screen-local `RecordEditState`
-  (`screens/record_form.rs`) and is invisible to `NavState`, so closing/quitting discards it silently.
-  Lifting edit-dirtiness into shell state is the follow-up.
-- **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
-  its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
-  so it is neither listed by the `?` overlay nor rebindable, and it does not go through
-  `NavState`/`resolved_shortcuts` at all.
-- **The "Jump back in" recent-list write has no close/quit hook.** `shell/window_geometry.rs` flushes
-  window geometry on `WindowEvent::CloseRequested`; the recent-list persistence effect in
-  `shell/root.rs` has no equivalent, so a keyboard quit can race the debounced write. Not fixed in this
-  pass.
-- **`Modal` overlay gaps are now user-visible** — see the updated entry under *Local import & internal
-  cleanup*: the close/quit confirm dialog is `Modal`'s first real caller, and neither a focus trap nor
-  a click-away scrim is wired.
-- **`Ctrl+W` closes the active tab even when its strip isn't shown.** The record tabstrip mounts only
-  for entity destinations (`shell/root.rs`'s `entity_category`), but `NavState::active_record` can stay
-  `Some` while the Dashboard or a tool is active. `Ctrl+W` there closes that background tab with no
-  visible strip to reflect it — a deliberate simplification, not fixed.
-- **`Ctrl+W`/`Ctrl+Q` bubble out of focused text inputs, by design.** `focus_trap.rs`'s
-  `keep_typing_local` lets every primary-modifier chord bubble to the shell except native `⌘Z`/`⌘⇧Z`
-  text undo/redo — so typing in a field and pressing `⌘W` closes the tab mid-edit, the same as `⌘K`/
-  `⌘N` already did. Intentional, recorded so it isn't later read as a regression.
-- **Within-screen and `g`-prefix keys are not rebindable** — widget-owned (roving focus / the
-  `g`-prefix state machine), fixed by design (ADR 0030 §2).
-- **No VS Code-style *when* context.** Named as future work by the "Global keys fire inside text
-  controls" Completed entry; ADR 0030 §Out of scope makes it explicit — no context predicates are
-  defined, so this stays a design question, not a missing implementation.
-- **Chord entry is a typed canonical string, not live key capture.** `keydown` is inert under SSR and
-  `cargo xtask input-guard` forbids a raw form element outside the primitives, so the Preferences
-  rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.
-- **No chord sequences beyond the existing `g`-prefix** — `resolved_shortcuts` resolves single chords
-  only.
-- **The framework-free `Key` enum (`genealogy-ui::shortcuts`) is still closed** — no function keys, so
-  `e`/`F2` (the within-screen edit chord) could not be rebound even if that group were opened up.
-- **No per-platform keymaps.** `Modifier::command` abstracts ⌘/Ctrl by design, so a binding that must
-  differ between macOS and Linux cannot be expressed.
-- **Bindings are global-only, no per-workspace override.** `[shortcuts]` lives in
-  `~/.config/genealogy/config.toml`, consistent with `[map]`/`[ai]`/`[plugin_trust]` (ADR 0030 §3) — a
-  keymap is machine/user-local, not a dataset property; named so the scope boundary is unambiguous, not
-  an oversight.
-- **No keyboard topic in the in-app Help browser.** `genealogy-ui::help.rs`'s `HelpSection::Reference`
-  is documented as "Lookup material (shortcuts, glossaries)" and `Run::Kbd` is unused — no authored doc
-  covers shortcuts; the `?` overlay is the only in-app reference today.
-
-## Phase 9 residuals (geography & temporal model)
-
-Phase 9 shipped (see Completed); these are scoped follow-ups, none blocking. (Fit-to-bounds,
-"Open in Geography ↗", event pins on the Place map, row-level edit-vertices, and the Geography
-place-search picker landed later on `feat/place-map-followups`.)
-
-- **`geography_toolbar` takes 8 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
-  fit state were threaded in — bundle them into a struct. Cosmetic cleanup.
-- **Point tool has no confirm step in the Geography tool.** The Place Map editor added a "Use this
-  point" confirm; the Geography tool's Point tool still has no equivalent (commits on click), a
-  pre-existing inconsistency.
-- **`LineString` / `Multi*` geometry variants** — the model ships `Point`/`Polygon`; the other
-  variants are additive-later per ADR 0024 (grow the enum append-only when a concrete need appears).
-- **Explicit `[from, until)` validity intervals** — the effective-from resolution rule (ADR 0026)
-  ships; add intervals additively only if gaps/overlaps prove ambiguous in real data.
-- **Postgres spatial mirror** — `places_in_bbox` / `place_predecessors` / `place_successors` return
-  `Unsupported` on Postgres (SQLite R\*Tree only); the native geometry + GiST index is a later
-  feature-gated follow-up.
-- **Viewport-scoped loading** — `show_geography` loads every place with a resolved geometry rather than
-  calling `places_in_bbox` for the current viewport; wire the spatial query in when place counts grow
-  (needs a Postgres fallback given the row above).
-- **In-map editing depth** — true mouse-drag reposition and mid-ring vertex insertion (today: click to
-  drop/move a point and click to add polygon vertices), pin-click selection on the canvas (today:
-  select via the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is
-  wired; polygon draws onto an existing place).
-- **Provider sub-forms** — `osm-raster` is switchable from the toolbar; `maplibre-style` / `google` are
-  declared in `[map]` config and round-trip but have no toolbar sub-form to collect a style URL /
-  API-key-env yet.
-- **Dated name/enclosure use-cases** — `add_place_name` / `assert_place_enclosed_by` don't accept a
-  date param, so map/UI enclosure edits can't be dated (geometry edits already can); the map-edit
-  provenance form doesn't yet default its date to the active time-slider year.
-- **`map-provider` plugin world + geocoding** — the declarative provider ships and the Geography
-  toolbar search is now a `RecordPicker` over existing places (search + jump); geocoding a *new*
-  real-world address to a coordinate stays deferred. A WASM `map-provider` world supplying geocoding
-  \+ custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
-  never pixels).
-
-## Phase 10 — Research rigor & import sync
-
-Phase 10 shipped (see Completed); these are scoped follow-ups, none blocking. See
-[`roadmap.md` Phase 10](roadmap.md#phase-10--research-rigor--import-sync).
-
-- **Configurable surety-scheme *cardinality*** — ADR 0027 shipped relabeling the five fixed ordinals;
-  re-scaling the scheme (GENTECH's full generality) stays deferred behind its own gating ADR, no
-  consumer need demonstrated yet.
-- **Source merge/sync reconciliation prerequisite** — Source resolve-or-create (`ExternalId` dedup) +
-  `set-source-title`/`set-source-abbrev` WIT verbs + a field-level `AssertionId`/`occurred_at` read
-  path. Unlike Person/Family, a standalone Source has no `ExternalId` resolve-or-create today (a second
-  import of the same file duplicates the Source aggregate), so the ADR 0029 timestamp-gated rule can't
-  target it yet. `Person.sex` reconciliation shipped without these; widening the rule to Source's
-  bibliographic fields (`title`/`author`/`pub_info`/`abbrev`) is blocked on them.
 - **`SUBM`/other `HEAD` metadata** — deferred to its own future ADR-gated item; no core-domain concept
   (a document-level submitter/owner) exists to map it onto yet.
-- **RichText `translator`** — permanently non-round-trippable: neither GEDCOM 7 nor the Gramps DTD has
-  any tag for who translated a note's text.
 - **RichText `translations`** (text+language, distinct from `translator`) — GEDCOM 7 has a real target
   (`NOTE.TRAN`), but `genealogy-gedcom` has no structured `Note` model yet (notes are bare strings);
   blocked on that prerequisite rewrite. Gramps has no equivalent construct.
 - **`Address` on the Gramps side** — `genealogy-gramps-xml` has no `Address` concept at all, so
   `Address.original_text` (which round-trips on the GEDCOM side now) has nowhere to go there; and
   `original_text` has no Gramps DTD equivalent even once an Address type exists.
-- **Media DTO convention split** — `person-dto`/`family-dto`/`event-dto`'s `media` is `list<media-ref>`
-  (host-api 0.21.0), but `source-dto`/`citation-dto`/`place-dto` have no `media` field at all (no
-  exporter reads media off those three today); widening them is deferred until a real consumer appears
-  (YAGNI).
 
-## Phase 11 — 1.0 hardening
+### Plugin-UI vocabulary
 
-Phase 11 shipped (see Completed); these are scoped follow-ups, none blocking. See
-[`roadmap.md` Phase 11](roadmap.md#phase-11--10-hardening-done).
+ADR 0022 out-of-scope tail:
 
-### Packaging & release
+- Repeating groups / nested forms.
+- `List`/detail descriptions + plugin-driven navigation.
+- Per-field validation vocabulary.
+- Plugin-prefilled field values.
+- The `query` capability for `ui-panel`.
+- Long-running / streaming actions.
+- Multi-panel pages.
 
-- **Cross-platform packaging** — 1.0 is Linux-first (tarball + `.deb` + AppImage). macOS/Windows
-  bundles and **OS-level code-signing / notarization** (Gatekeeper, Authenticode) are a later cycle
-  (ADR 0014 §Out of scope).
-- **`.deb` needs `GENEALOGY_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
-  distro-installed binary needs `GENEALOGY_PLUGIN_DIR=/usr/lib/genealogy/plugins` (the AppImage sets it
-  via `AppRun`; the tarball resolves the fleet beside the binary). Teaching the embedded layer a default
-  system path so an installed `.deb` finds the fleet with no env var is the follow-up (see
-  [`release.md`](release.md)).
-- **Real release keys not yet generated** — only the deterministic **DEV** signing key exists (Sanctioned
-  in debug builds only). Before the first real release, generate the release ed25519 keypair, set the
-  private half as the `GENEALOGY_PLUGIN_SIGNING_KEY` repo secret, and embed the public half via
-  `GENEALOGY_PROJECT_PUBLIC_KEY` (ADR 0014 §6; procedure in [`release.md`](release.md)).
-- **`release.yml` unverified end-to-end** — GitHub Actions billing is currently blocked, so the release
-  workflow is zizmor / YAML / `bash -n` verified and its build/package steps reproduced locally, but has
-  never run a full tag → AppImage → GitHub Release cycle. The first real tag needs a live verification
-  when billing is active.
+### Plugin trust & capabilities
 
-### Plugin trust (ADR 0014 out-of-scope)
+ADR 0014 out-of-scope:
 
 - **Marketplace / registry / auto-update** — bundles are installed manually into a layer; discovery and
   remote distribution/fetch of third-party plugins is future work.
@@ -386,17 +348,58 @@ Phase 11 shipped (see Completed); these are scoped follow-ups, none blocking. Se
 - **Host-binary signing / build-provenance attestation** — signing covers plugin bundles, not the app
   binary itself.
 
-### Profiling follow-ups (from [`research/performance-profiling.md`](research/performance-profiling.md))
+## Platform & operations
+
+### Performance & scale
+
+From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 - **`list_*` projections lack `LIMIT`/`OFFSET`** — a full scan + JSON decode (61.7 ms at ~52.6k persons);
-  pagination is the real interactive scaling lever before 100k scale. Overlaps the existing **`ListPane`
-  DOM virtualization** / `list_view_page` backlog item above.
+  pagination is the real interactive scaling lever before 100k scale. Overlaps **`ListPane` DOM
+  virtualization** under *Lists, search & scale*.
 - **Research-note reverse lookup is a `json_each` scan, not a materialized index** — fine now (~2 ms at
   ~2250 notes); a materialized side-index is a follow-up only if note volume grows.
-- **Snapshotting is decided, not deferred-open** — measured and **not** warranted at target scale;
-  ADR 0004's deferral stands, no follow-up ADR (recorded here so it is not re-raised).
+- **Postgres spatial mirror** — `places_in_bbox` / `place_predecessors` / `place_successors` return
+  `Unsupported` on Postgres (SQLite R\*Tree only); the native geometry + GiST index is a later
+  feature-gated follow-up.
+- **Viewport-scoped loading** — `show_geography` loads every place with a resolved geometry rather than
+  calling `places_in_bbox` for the current viewport; wire the spatial query in when place counts grow
+  (needs a Postgres fallback given the row above).
 
-## Dependency upgrades blocked upstream
+### Packaging & release
+
+- **Cross-platform packaging** — 1.0 is Linux-first (tarball + `.deb` + AppImage). macOS/Windows
+  bundles and **OS-level code-signing / notarization** (Gatekeeper, Authenticode) are a later cycle
+  (ADR 0014 §Out of scope).
+- **`.deb` needs `GENEALOGY_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
+  distro-installed binary needs `GENEALOGY_PLUGIN_DIR=/usr/lib/genealogy/plugins` (the AppImage sets it
+  via `AppRun`; the tarball resolves the fleet beside the binary). Teaching the embedded layer a default
+  system path so an installed `.deb` finds the fleet with no env var is the follow-up (see
+  [`release.md`](release.md)).
+- **Real release keys not yet generated** — only the deterministic **DEV** signing key exists (Sanctioned
+  in debug builds only), so `embedded_sanctioned_keys()` is `None` in a release build until one is
+  configured. Before the first real release, generate the release ed25519 keypair, set the private half
+  as the `GENEALOGY_PLUGIN_SIGNING_KEY` repo secret, and embed the public half via
+  `GENEALOGY_PROJECT_PUBLIC_KEY` (ADR 0014 §6; procedure in [`release.md`](release.md)).
+- **The embedded plugin-dir resolver is duplicated *and* divergent** — the ADR 0014 §4 *layering* is
+  shared (`genealogy_app::plugin_layers`), but each frontend still resolves the embedded layer itself
+  and the two disagree on the dev fallback: `genealogy-ui-dioxus/src/app.rs:326` uses
+  `CARGO_MANIFEST_DIR/../../target/plugins` (source-tree-absolute) while
+  `genealogy-cli/src/commands/io.rs:83` uses a bare `target/plugins` **relative to the working
+  directory**. So a CLI invoked from anywhere but the repo root silently finds no embedded fleet while
+  the GUI always finds it. The Phase 11 plan called for replacing this duplication; only the layering
+  half landed. Fold both into one `genealogy-app` resolver — the same change that would give an
+  installed `.deb` a default system path (item above).
+- **No `[profile.release]` section** — the Phase 11 plan's "strip/optimize release profile" was not
+  done: the root `Cargo.toml` has no `[profile.release]`, so shipped binaries carry full debug symbols
+  and default codegen settings. `strip = true` plus a considered `lto`/`codegen-units` is the cheapest
+  size win available before the first tag.
+- **`release.yml` unverified end-to-end** — GitHub Actions billing is currently blocked, so the release
+  workflow is zizmor / YAML / `bash -n` verified and its build/package steps reproduced locally, but has
+  never run a full tag → AppImage → GitHub Release cycle. The first real tag needs a live verification
+  when billing is active.
+
+### Dependencies blocked upstream
 
 - **`sqlx` 0.9** — `sqlite-es` / `postgres-es` 0.5.0 (their latest) pin `sqlx` 0.8, so a bump splits the
   tree into two `sqlx` versions and every `Pool<Sqlite>` / `Pool<Postgres>` handed to the event stores
@@ -409,198 +412,52 @@ Phase 11 shipped (see Completed); these are scoped follow-ups, none blocking. Se
   Held at `=3.0.0-pre.6` (comment in `Cargo.toml`); re-evaluate when `testcontainers` ships a `russh` on
   stable `curve25519-dalek`.
 
-## Phase 12 — DNA breadth & depth
+## Decided — no action needed
 
-Roadmap-owned; see [`roadmap.md` Phase 12](roadmap.md#phase-12--dna-breadth--depth). Pulled together so
-the DNA match model and its views land as one slice (data-model §17). Homes the migrated DNA gaps:
+Deliberate non-tasks, recorded so they are not re-raised or read as unfinished work. Each is a
+decision, not a gap.
 
-- **DNA match views** in the UI (moved from Phase 5).
-- **DnaTest fields** — `account`, `date_tested`, `snp_count` are absent from `DnaTestState`.
-- **DnaMatch depth** — no terminal-SNP, no fully-identical-regions (segment lineage only partially
-  present via `ChromosomeSide` + `snps`).
-- **DNA citation collections** — both DNA aggregates hardcode `citations: Vec::new()`; provenance is
-  stubbed empty.
-- **DNA payload columns (UI)** — haplogroup lineage / terminal-SNP / per-row source (VM has 2 of 6);
-  shared-ancestor relationship-to-A/B + per-row confidence/source (2 of 5).
-- **DNA depth (research):** Y/mtDNA markers, haplogroup detail, triangulation groups.
+### Keyboard & shortcuts (ADR 0030 §2, §3, §Out of scope)
 
-## Phase 13 — Beyond 1.0: server + web
+- **`Ctrl+W`/`Ctrl+Q` bubble out of focused text inputs, by design.** `focus_trap.rs`'s
+  `keep_typing_local` lets every primary-modifier chord bubble to the shell except native `⌘Z`/`⌘⇧Z`
+  text undo/redo — so typing in a field and pressing `⌘W` closes the tab mid-edit, the same as `⌘K`/
+  `⌘N` already did.
+- **`Ctrl+W` closes the active tab even when its strip isn't shown.** The record tabstrip mounts only
+  for entity destinations (`shell/root.rs`'s `entity_category`), but `NavState::active_record` can stay
+  `Some` while the Dashboard or a tool is active — a deliberate simplification.
+- **Within-screen and `g`-prefix keys are not rebindable** — widget-owned (roving focus / the
+  `g`-prefix state machine), fixed by design.
+- **No per-platform keymaps.** `Modifier::command` abstracts ⌘/Ctrl by design, so a binding that must
+  differ between macOS and Linux cannot be expressed.
+- **Bindings are global-only, no per-workspace override.** `[shortcuts]` lives in
+  `~/.config/genealogy/config.toml`, consistent with `[map]`/`[ai]`/`[plugin_trust]` — a keymap is
+  machine/user-local, not a dataset property.
+- **No VS Code-style *when* context.** No context predicates are defined; a design question if a real
+  need surfaces, not a missing implementation.
 
-Roadmap-owned; see [`roadmap.md` Phase 13](roadmap.md#phase-13--beyond-10-server-backend--web-frontend).
-Backend server, web frontend, and server-connected workspaces — deliberately additive, not scheduled.
-Builds on the **Phase 7** config split: the server adds the `ConfigStore` **database** backend so the
-operator + client/presentation scopes persist per authenticated user, while the embedded build keeps
-the file backend.
+### Model & interchange
 
-## Completed
+- **`LineString` / `Multi*` geometry variants** — the model ships `Point`/`Polygon`; the other
+  variants are additive-later per ADR 0024 (grow the enum append-only when a concrete need appears).
+- **Explicit `[from, until)` validity intervals** — the effective-from resolution rule (ADR 0026)
+  ships; add intervals additively only if gaps/overlaps prove ambiguous in real data.
+- **RichText `translator`** — permanently non-round-trippable: neither GEDCOM 7 nor the Gramps DTD has
+  any tag for who translated a note's text.
+- **Media DTO convention split** — `person-dto`/`family-dto`/`event-dto`'s `media` is `list<media-ref>`
+  (host-api 0.21.0), but `source-dto`/`citation-dto`/`place-dto` have no `media` field at all (no
+  exporter reads media off those three today); widening them is deferred until a real consumer appears
+  (YAGNI).
+- **External ids have no frontend entry point** — person `add_external_id` (module-level, not even
+  root-exported) and `add_family_external_id` are used only inside `import.rs` for resolve-or-create.
+  External ids are importer bookkeeping, not user-editable data.
 
-- **Quit/close-tab keys & customizable keyboard shortcuts.** *(Done — stacked branches
-  `feat/quit-close-tab-keys` (PR #187) → `feat/customizable-shortcuts`, gated by
-  [ADR 0030](adr/0030-customizable-keyboard-shortcuts.md).)* `Ctrl+Q`/`Ctrl+W` did not exist, and the
-  shortcut map had two independent sources of truth: `genealogy-ui`'s declarative map fed only the `?`
-  help overlay (decorative), while `genealogy-ui-dioxus`'s dispatcher re-implemented the same matrix
-  hardcoded, so the two could drift and no binding was user-changeable. **Quit/close-tab:** two new
-  `Global` actions (`⌘Q`/`⌘W`); closing a saved tab is immediate, closing a draft (or quitting with one
-  open) now arms a confirm dialog (`Modal`-based) instead of silently discarding it — the tabstrip `✕`
-  and the keyboard shortcut share one `NavState::request_close_tab` path. Quit is a desktop-only
-  `QuitManager` component mirroring `WindowGeometryManager`, so the SSR test target stays
-  `dioxus::desktop`-free. **Customizable shortcuts:** `resolved_shortcuts(overrides)` is now the single
-  map both the dispatcher and the `?` overlay read (the two-implementations problem is closed); only
-  `Global`-group actions (11 total) are rebindable — within-screen and `g`-prefix keys stay fixed;
-  `Modifier` became a 3-flag struct (`command`/`shift`/`alt`) so `Alt` composes; `Chord` gained a
-  canonical `mod+shift+alt+key` `FromStr`/`Display`; a rejected override (unknown id, unparsable
-  chord, non-`Global` action, or a conflict) is a typed error surfaced in the Preferences card, never a
-  silent drop. `[shortcuts]` lives in the global `~/.config/genealogy/config.toml`, client scope only
-  (mirrors `[ai]`/`[map]`/`[plugin_trust]`) — no workspace-manifest layer. A save takes effect live (a
-  `Signal<ShortcutConfig>` held in shell context), no restart needed. Scoped residuals tracked above
-  under *Keyboard & shortcuts*.
-- **1.0 hardening (Phase 11).** *(Done — Gate 1 + a Gate-2 PR stack, PRs #176–#182:
-  `docs/phase-11-gate-1` → `feat/plugin-bundle-signing` → `feat/plugin-layered-loading` →
-  `feat/plugin-grants` → `feat/plugin-grant-ux` → `feat/perf-profiling` →
-  `feat/packaging-distribution`.)* Plugins were unsigned, loaded from one flat directory with all grants
-  hardcoded at the call site, the core's replay cost was unmeasured, and there was no way to ship the
-  app. Delivered in three workstreams under **ADR 0014** (the last deferred plugin-system decision).
-  **Plugin trust (ADR 0014):** a plugin is now a signed **bundle** (`plugin.toml` + `plugin.wasm` +
-  `plugin.sig`, closing the deferred ADR 0007 §8 format) — an **ed25519** detached signature over a
-  `sha2` digest of the manifest **and** the component, verified against an **embedded project trust
-  root**; three **trust tiers** (*sanctioned* project key / *user-trusted* pinned publisher key in a
-  client-scope store / *untrusted* unsigned — loadable, never auto-granted), a present-but-unverifiable
-  signature **fails closed**; **three-layer loading** (workspace > app-dir > embedded) mirroring the i18n
-  `AssetsMultiplexor`, id-keyed with a manifest↔component cross-check (inspected caps ⊆ declared,
-  tree-shake-safe); **grant = declared ∩ user-approved** persisted per plugin in the workspace manifest,
-  surfaced by a Dioxus plugin-panel (trust badge, per-capability toggles, pinned-publisher trust-store
-  editor) and a CLI `plugin list|grant|revoke|trust …` group. Signing never widens the sandbox
-  (ADR 0007 §12). **Performance profiling:** a criterion harness over a synthetic-workspace fixture
-  (built through the pure `decide` → event-store path) measures projection **rebuild** (~73–106 µs/event,
-  ~linear) and the hot query paths; **snapshotting is measured and not warranted** (rebuild is a
-  maintenance op, per-aggregate streams stay tiny — ADR 0004's deferral stands, no follow-up ADR).
-  **Packaging (Linux-first):** `cargo xtask package` assembles a signed tarball (CLI + GUI + the signed
-  fleet as the embedded layer, re-verifying every signature), cargo-deb metadata for a `.deb`, and a
-  tag-triggered zizmor-clean `release.yml` building tarball + `.deb` + AppImage with the release-signed
-  fleet and the embedded release trust root. Research:
-  [`research/plugin-signing-and-trust.md`](research/plugin-signing-and-trust.md),
-  [`research/performance-profiling.md`](research/performance-profiling.md); plan:
-  [`plans/phase-11-hardening.md`](plans/phase-11-hardening.md); release procedure:
-  [`release.md`](release.md). Scoped residuals tracked above under *Phase 11*.
-- **Research rigor & import sync (Phase 10).** *(Done — stacked branches `docs/phase-10-gate-1` →
-  `feat/surety-scheme-labels` → `feat/research-note-aggregate` → `feat/import-merge-sync` →
-  `feat/round-trip-gaps`.)* Gate 1 delivered three gating ADRs (0027/0028/0029) + research docs; the
-  Gate-2 PR stack then shipped one workstream per PR. **ADR 0027** — per-workspace surety-label overrides
-  relabelling the five fixed `Confidence` ordinals (presentation-only, `id_formats` precedent), with a
-  Preferences card; cardinality stays deferred. **ADR 0028** — a new 13th aggregate `ResearchNote` for
-  GEDCOM X `Document(Analysis)` proof arguments, full mutable multi-subject (`SubjectRef` over
-  Person/Family/Event/Place, `AddSubject`/`RemoveSubject`, non-empty invariant, `json_each` reverse
-  index), CLI-first, zero change to the other twelve aggregates. **ADR 0029** — timestamp-gated import
-  reconciliation reusing `AssertionSuperseded`/`occurred_at`: a `begin-import` verb threads the file's
-  `HEAD.1 DATE` / Gramps `<header created>` once per session (host-api 0.20.0) and supersedes a live
-  single-valued assertion only when it is at-or-before the file's export date; first slice `Person.sex`.
-  **Round-trip gaps** (host-api 0.21.0, no ADR): GEDCOM `REPO`/`SOUR.REPO`, `FAM`-level `SOUR`/`OBJE`/
-  `NOTE`, `FAMS`/`FAMC` back-refs, `OBJE.CAPT`, `Address.original_text` (+ a blank-`CONT` fix), Gramps
-  `<tagref>`, Source `ABBR`/`<sabbrev>`, multiple `NAME` per person (fixing a silent clobber), Gramps
-  `<region>` media-crop export, and source-repository `CALN`/`MEDI`; place `MAP`/coordinates,
-  event-level witnesses, and media `FORM`/MIME were already shipped (ADR 0024/0019, host-api 0.10.0).
-  Research under [`research/`](research/); plan
-  [`plans/phase-10-research-rigor.md`](plans/phase-10-research-rigor.md). Scoped residuals tracked above
-  under *Phase 10*.
-- **Places: geography & temporal model (Phase 9).** *(Done — stacked branches
-  `feat/place-geometry-storage` → `feat/place-succession-temporal` → `feat/geography-view`.)* Places
-  were point-only, undated, and had no map beyond the read-only Phase 6 MVP. Delivered across three
-  slices, one per gating ADR (all now **accepted**): **ADR 0024** — a typed `PlaceGeometry`
-  (`Point`/`Polygon`) over integer `Microdegrees`, asserted **dated and accumulating**
-  (`AssertGeometry`/`GeometryAsserted`), materialised as **WKB behind a SQLite R\*Tree** (`places_in_bbox`,
-  rebuildable), with **GeoJSON** interchange closing the GEDCOM `PLAC.MAP` / Gramps `<coord>` round-trip
-  (permissive GeoRust crates). **ADR 0026** — a pure **effective-from** resolver (latest dated assertion
-  ≤ target, else undated/primary) shared by the generated title, the **transitive cycle-aware
-  date-aware place-hierarchy walk** (the item above), and the time slider; plus
-  `AssertSuccession`/`SuccessionAsserted { from, to, kind, date }` (`Merged`/`Split`/`Absorbed`/
-  `Elevated`/`Renamed`) projected as a symmetric predecessor/successor relation with the aggregate-tax
-  check (a rename stays a dated `PlaceName` on the same aggregate). **ADR 0025** — a framework-free
-  `GeographyVm` and a vendored **MapLibre GL JS 5.24.0** component with a persistent `document::eval`
-  click-stream; in-map editing emits geometry through the **existing** `PlaceEdit`/`PlaceChangeSetRequest`
-  change-set path (no separate map-write); a time slider resolving as-of a year; and a declarative
-  `[map]` client/presentation-config provider descriptor. Research:
-  [`research/geography-rendering.md`](research/geography-rendering.md); plan (archivable):
-  [`plans/places-geography-temporal.md`](plans/places-geography-temporal.md); mockup
-  [`mockups/geography.html`](mockups/geography.html). Scoped residuals tracked above under *Phase 9
-  residuals*.
-- **Assisted import & external search — Digitalarkivet (Phase 8).** *(Done — branches/PRs
-  #153–#160.)* There was no way to search an online archive and turn a found record into reviewable
-  assertions. Added, under [ADR 0017](adr/0017-assisted-import-host-capabilities.md), four
-  deny-by-default host capabilities (WIT `genealogy:host-api` 0.15.0 → 0.19.0): `net` (GET-only,
-  HTTPS, allowlist re-checked per redirect hop, honest non-crawler User-Agent), `media-store`
-  (SHA-256 checksums, path-safe writes under the workspace `media/` root, path+checksum dedup), a
-  config-declared multi-provider `ai` (`command`/`vision-api`, client scope), and a suspending
-  `present` carrying a typed, versioned assisted-import payload. On top: the `assisted-import` world
-  with a `Confidence::Low` provenance template; a pure `genealogy-digitalarkivet` crate that parses
-  census/church-book pages and resolves the scan-URL chain over verbatim fixtures (HTML-first — the
-  research doc found no anonymous public API); media-crop plumbing (`MediaRef.crop`/caption through
-  app, DTO, and WIT, with the Gramps `<region>` round-trip proven on import) plus a GUI crop tool,
-  media viewer, and media-save dialog; a first-party `Tool::Import` wizard; and the
-  `digitalarkivet-import` plugin with an idempotent end-to-end import test. Per the owner's decision
-  (2026-07-19) the flow is **GUI-only** — the CLI inline-scan sketch (kitty/sixel) is dropped and
-  `present` stays frontend-neutral. Scoped residuals are tracked above under *Media & assisted
-  import* (session survives navigation, `ai` decode in confirm, IIIF scan resolution,
-  `attach-citation-media` verb, region viewer on every owner, add-to-library action, `net` politeness
-  delay) and the Gramps `<region>` export gap under Phase 10. Plan (archived):
-  [`archive/plans/assisted-import.md`](archive/plans/assisted-import.md).
-- **Configuration split & storage — three scopes + `ConfigStore` seam + env-var fix (Phase 7).**
-  *(Done — branch `feat/config-split-storage`.)* Configuration is now grouped by owner into three
-  scopes — operator, workspace-functionality, and client/presentation (ADR 0015) — behind a
-  `ConfigStore` trait with a `FileConfigStore` backend over the two existing TOML files; the database
-  backend (per authenticated user) is deferred to **Phase 13** with the server. Fixed the inverted
-  env-var precedence: a workspace's configured `ui_language` now outranks a bare `LANGUAGE`/`LANG`,
-  and `GENEALOGY_LANGUAGE` outranks both (plain env < config < `GENEALOGY_`-prefixed), via a pure
-  language resolver wired into every localizer-building site (cli / ui / dioxus). The on-disk layout
-  is unchanged (a clean break was permitted but no consumer needed one). Realized as a single typed
-  resolver for the one env key that exists; a general `GENEALOGY_*`-over-config overlay is documented
-  intent (ADR 0015). No new config fields.
-- **Place map MVP — read-only point (Phase 6).** *(Done — branch `feat/place-map-mvp`.)* A Place's
-  point coordinate was only shown as two text fields; there was no way to *see* where a place is. Added
-  a read-only **Map** tab to the Place screen that renders one marker at the existing coordinate over
-  OpenStreetMap raster tiles (Leaflet 1.9.4, vendored locally and injected into the webview `<head>` so
-  only the tiles are fetched — the app's first outbound network request), with a dashed "No coordinates
-  yet" empty state otherwise. A framework-free `MapPointVm` on `PlaceDetail`
-  (`crates/genealogy-ui/src/view_model/place.rs`), parsed from the existing `coordinates` DTO string,
-  gates the marker; the Leaflet map is initialised via `document::eval` (a no-op under SSR) with a
-  `divIcon` marker and the `© OpenStreetMap contributors` attribution rendered in the server-side DOM.
-  No `genealogy-core`, DTO, or event-log change; no ADR. New message ids are localized (`en` + `no`).
-  Editing, polygons, boundaries-over-time, event pins, a time slider, provider choice, and geocoding
-  remain **Phase 9** (the transitive place-hierarchy walk and geography items above are untouched).
-- **Tall side panel overflows the viewport.** *(Fixed — branch
-  `fix/side-panel-viewport-overflow`.)* A tall side panel (`edit-patterns.html`, b — a 6+ field or
-  nested edit) pushed its Cancel/Save foot off-screen so the form couldn't be finished. Root cause:
-  the shared `SidePanel` (`components/layout.rs`, composed by every screen's edit/attach/retract
-  panel) rendered as an in-flow flex child of the `.detail` pane, which is `overflow:hidden`; the
-  `.sidepanel` had no `position`, `max-height`, or overflow, so a panel taller than the pane was
-  clipped with no way to reach the footer. Fixed structurally in the one shared component + shared
-  CSS: `.sidepanel` is now positioned absolutely against `.detail` (`position:relative`), bounded to
-  the pane's height with the head/foot pinned (`flex:none`) and only `.sp-body` scrolling
-  (`flex:1; overflow-y:auto`), so the foot stays reachable; a click-away `.sidepanel-scrim` behind it
-  (mirroring the record-picker/menu scrim) closes the panel and lets the record show through. The
-  parallel `Modal` container got the same viewport cap (`max-height:92vh`, scrolling `.m-body`)
-  pre-emptively. Because every screen composes the one `SidePanel`, all sites are fixed at once.
-- **"Attach citation" dropdown won't close on blur.** *(Fixed — branch
-  `fix/record-picker-floating-dropdown`.)* The reason-for-change citation picker kept its drop-down
-  list of citations open after losing focus, and — a second, related bug — the list rendered in-flow,
-  pushing the fields below it down rather than floating over them. Root cause: the shared record
-  picker (`components/record_picker.rs`, composed by every entity selector — citation, source, place,
-  person, note, DNA test/match) had no `position` on `.picker-results` and closed only on pick / clear
-  / Esc. Fixed structurally, in the one shared component: the result list now floats as a
-  `position:fixed` overlay, measured from the search input's on-screen box (so it escapes the
-  `.detail` pane's `overflow:hidden` clip rather than being clipped or pushing siblings), and closes
-  on a click-away scrim, on focus leaving the control, and on the pane scrolling — in addition to
-  pick / clear / Esc. WebKitGTK's row-eat (a row click blurring the input, and closing the list,
-  before the click lands) is avoided by `prevent_default` on every row/scrim/"+ New" `onmousedown`.
-  Because every entity selector composes this one picker, all sites are fixed at once.
-- **Global keys fire inside text controls.** *(Fixed — branch `fix/global-keys-shared-input`.)*
-  Typing `g` (or any global-shortcut key) in a text field triggered the global `g`-prefix navigation.
-  Root cause: the typing guard (`keep_typing_local`, which stops plain characters from bubbling to the
-  shell's central key dispatcher) was opt-in per raw `<input>` and easy to omit — five fields had. Fixed
-  structurally: every form control now composes one guarded behavior-core primitive
-  (`components/text_input.rs` `TextInput`/`SelectInput`, `text_field.rs` `TextField`), so the guard is
-  wired exactly once per element, and a `cargo xtask input-guard` lint (prek + CI) forbids raw form
-  elements outside the primitives so it cannot regress. Field validation state moved into
-  `genealogy-ui` view-models. A general VS Code-style *when* context was deliberately not built; it
-  remains explicitly out of scope of customizable keyboard shortcuts
-  ([ADR 0030](adr/0030-customizable-keyboard-shortcuts.md) §Out of scope), unless a real need
-  surfaces.
+### Architecture
+
+- **Snapshotting is decided, not deferred-open** — measured and **not** warranted at target scale;
+  ADR 0004's deferral stands, no follow-up ADR.
+- **Server backend + web frontend** — roadmap-owned and deliberately unscheduled; see
+  [`roadmap.md` Phase 13](roadmap.md#phase-13--beyond-10-server-backend--web-frontend). Builds on the
+  config split: the server adds the `ConfigStore` **database** backend so the operator and
+  client/presentation scopes persist per authenticated user, while the embedded build keeps the file
+  backend.

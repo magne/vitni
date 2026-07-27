@@ -419,8 +419,9 @@ impl PluginTrustConfig {
     }
 }
 
-/// The `[shortcuts]` configuration section (ADR 0030 §3): a workspace's rebound keyboard shortcuts,
-/// each a `genealogy_ui::ShortcutAction::config_id` mapped to a canonical chord string. Client/
+/// The `[shortcuts]` configuration section (ADR 0030 §3): the operator's rebound keyboard shortcuts,
+/// each a `genealogy_ui::ShortcutAction::config_id` mapped to a canonical chord string. Lives in the
+/// global config only — there is no per-workspace layer. Client/
 /// presentation scope (ADR 0015 §1) — machine/user-local, not shipped with data (mirrors
 /// [`AiConfig`]/[`MapConfig`]/[`PluginTrustConfig`]).
 ///

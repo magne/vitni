@@ -77,7 +77,8 @@ resolve-or-create importer already runs at the `genealogy-app` use-case layer (d
    has no `set-source-title`/`set-source-abbrev` (title is create-only today); and no read path
    exposes a Source field's live `AssertionId` + that assertion's `occurred_at` together (`SourceView`
    discards the `AssertionId`). Reconciling Source is therefore deferred to its own prerequisite
-   follow-up (`docs/issues.md`, Phase 10) rather than built under pressure to widen coverage in this
+   follow-up (`docs/issues.md` → *Bulk import, export & sync*) rather than built under pressure to
+   widen coverage in this
    PR; `Person.sex` alone still proves the rule end-to-end. Widening to further single-valued fields
    (`Source`'s once its prerequisites land, `Citation.page`/`date`, further `Fact`s once fact-matching
    is decided) is additive, mechanical follow-up once this first field proves the rule — not blocked by
@@ -143,7 +144,7 @@ resolve-or-create importer already runs at the `genealogy-app` use-case layer (d
   `Source` (today, re-importing the same file duplicates the `Source` aggregate rather than resolving
   to it), GEDCOM `ABBR` / Gramps `<sabbrev>` round-trip (absent from both format crates), the
   `set-source-title`/`set-source-abbrev` WIT verbs (title is create-only today), and a field-level
-  `AssertionId`/`occurred_at` read path (tracked in `docs/issues.md`, Phase 10).
+  `AssertionId`/`occurred_at` read path (tracked in `docs/issues.md` → *Bulk import, export & sync*).
 - **Multi-valued field merge** (names, facts-as-a-list) — stays additive-only, unchanged by this ADR.
 - **Two-way sync** (writing local changes back out automatically) — this ADR is import-direction only;
   export is unaffected.

@@ -1,15 +1,16 @@
 # Plan — Places: geography view & temporal place model (full phase)
 
-- **Status:** Proposed
+- **Status:** **Implemented 2026-07-22** — shipped as three stacked ADR-gated slices
+  (ADR 0024/0025/0026). Archived; residuals tracked by area in [`docs/issues.md`](../../issues.md).
 - **Roadmap home:** Phase 9 (after Phase 8, the `net` capability)
-- **Mockup:** [`../mockups/geography.html`](../mockups/geography.html)
-- **Gating ADRs:** [0024](../adr/0024-place-geometry-and-spatial-storage.md) (geometry & spatial
-  storage), [0025](../adr/0025-geography-view-and-pluggable-map-provider.md) (view & provider), and a
-  new **[0026](../adr/0026-place-succession-and-temporal-resolution.md)** (place succession & temporal resolution)
+- **Mockup:** [`../mockups/geography.html`](../../mockups/geography.html)
+- **Gating ADRs:** [0024](../../adr/0024-place-geometry-and-spatial-storage.md) (geometry & spatial
+  storage), [0025](../../adr/0025-geography-view-and-pluggable-map-provider.md) (view & provider), and a
+  new **[0026](../../adr/0026-place-succession-and-temporal-resolution.md)** (place succession & temporal resolution)
 
 ## Context
 
-The [MVP](../archive/plans/place-map-mvp.md) shows a place's point on a read-only map. This phase makes places
+The [MVP](place-map-mvp.md) shows a place's point on a read-only map. This phase makes places
 **geographically and historically accurate**: they can be *areas*, their boundaries and jurisdictions
 change over time, and their very *identity* can change (municipalities merge and split). It adds the
 full geography view — editing, event pins, a time slider, and a pluggable provider with geocoding
@@ -60,7 +61,8 @@ GEDCOM `PLAC.MAP` round-trip gap).
   (`crates/genealogy-ui/src/navigation.rs`) — with operator, confidence, and reason. Nothing bypasses
   the log.
 - **Time slider** resolves names/boundaries/jurisdiction as of a year (rule from ADR 0026).
-- **Transitive hierarchy walk** (the `docs/issues.md` item) lands here or just before it: cycle-aware
+- **Transitive hierarchy walk** (the long-standing backlog item; now in
+  `docs/archive/completed-work.md`) lands here or just before it: cycle-aware
   primary-parent walk in `genealogy-app/src/place.rs`, date-aware.
 
 ### 4. Pluggable provider + geocoding (ADR 0025 + Phase 8 `net`)

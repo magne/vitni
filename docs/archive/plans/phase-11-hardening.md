@@ -1,9 +1,10 @@
 # Plan — Phase 11: 1.0 hardening
 
-- **Status:** Gate 1 complete (research + ADR 0014). Gate 2 (implementation) pending.
+- **Status:** **Implemented 2026-07-25** — Gate 2 shipped as PRs #176–#182 (all three
+  workstreams). Archived; residuals tracked by area in [`docs/issues.md`](../../issues.md).
 - **Date:** 2026-07-24
-- **Gating ADR:** [0014](../adr/0014-plugin-signing-trust-tiers-and-loading.md)
-- **Research:** [plugin-signing-and-trust.md](../research/plugin-signing-and-trust.md)
+- **Gating ADR:** [0014](../../adr/0014-plugin-signing-trust-tiers-and-loading.md)
+- **Research:** [plugin-signing-and-trust.md](../../research/plugin-signing-and-trust.md)
 
 ## Scope
 

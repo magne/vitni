@@ -116,8 +116,7 @@ pub struct PlaceSummary {
     /// The place's stable `PlaceId` (a UUID string) — the join/navigation key.
     pub id: String,
     /// The generated title (e.g. "Saint Petersburg, Russia"): the place's own resolved name
-    /// followed by each ancestor's resolved name up the transitive hierarchy walk (`docs/issues.md`;
-    /// ADR 0026 §1).
+    /// followed by each ancestor's resolved name up the transitive hierarchy walk (ADR 0026 §1).
     pub generated_title: String,
     /// The date this summary is resolved **as of** (ADR 0026 §1) — `None` for the current/primary
     /// resolution `show_place`/`list_places` use; `Some` only from `show_place_as_of`.
@@ -155,8 +154,8 @@ pub struct PlaceSummary {
     /// geometry assertions at all. The geography view's map marker (ADR 0025 §1) reads this, never
     /// [`Self::geometries`] directly.
     pub resolved_geometry: Option<PlaceGeometryRef>,
-    /// The full transitive jurisdiction chain (nearest first), joined to the place projection — the
-    /// `docs/issues.md` "Transitive place-hierarchy walk", date-aware (ADR 0026 §1).
+    /// The full transitive jurisdiction chain (nearest first), joined to the place projection —
+    /// the transitive place-hierarchy walk, date-aware (ADR 0026 §1).
     pub enclosing: Vec<PlaceEnclosingRef>,
     /// Places this place succeeded (what it came from), joined to the place projection. Populated
     /// only by `show_place`/`show_place_as_of` — empty from `list_places` (ADR 0026 §4).
