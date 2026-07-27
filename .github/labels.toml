@@ -1,0 +1,222 @@
+# Label taxonomy — the source of truth for this repository's issue labels.
+#
+# Version-controlled rather than clicked into the web UI, so the taxonomy is reviewable and cannot
+# drift silently — the same posture the repo already takes with i18n completeness, CSS tokens, and the
+# framework-free boundary. Rationale for each group: `docs/issue-tracking.md` §2.
+#
+#   cargo xtask labels            # show the plan (create / update / extra), change nothing
+#   cargo xtask labels --apply    # create and update to match this file
+#
+# Labels present on GitHub but absent here are reported as `extra` and never deleted: GitHub's
+# defaults (`bug`, `documentation`, `good first issue`, `help wanted`, `wontfix`, `dependencies`, …)
+# are deliberately reused, and Dependabot applies some of them itself.
+#
+# `area/*` mirrors the H3 headings under the four *backlog* H2s of `docs/issues.md`. The H3s under
+# `## Decided — no action needed` are deliberately absent: they group decisions, not work.
+
+# --- area/* : where the work is. Exactly one per issue. ---------------------------------------
+
+[[label]]
+name = "area/records/person-family"
+color = "1d76db"
+description = "Person and Family aggregates"
+
+[[label]]
+name = "area/records/places"
+color = "1d76db"
+description = "Place aggregate, hierarchy, succession"
+
+[[label]]
+name = "area/records/notes"
+color = "1d76db"
+description = "Note and ResearchNote aggregates"
+
+[[label]]
+name = "area/records/tags"
+color = "1d76db"
+description = "Tag aggregate"
+
+[[label]]
+name = "area/records/media"
+color = "1d76db"
+description = "Media aggregate, crops, galleries"
+
+[[label]]
+name = "area/records/dna"
+color = "1d76db"
+description = "DnaTest and DnaMatch aggregates"
+
+[[label]]
+name = "area/records/cross-aggregate"
+color = "1d76db"
+description = "Restrictions, surety, data quality, external ids"
+
+[[label]]
+name = "area/frontend/shell"
+color = "0e8a16"
+description = "Shell, tabs, overlays, notifications"
+
+[[label]]
+name = "area/frontend/lists"
+color = "0e8a16"
+description = "Lists, search, palette, scale"
+
+[[label]]
+name = "area/frontend/keyboard"
+color = "0e8a16"
+description = "Keyboard shortcuts and focus"
+
+[[label]]
+name = "area/frontend/pedigree"
+color = "0e8a16"
+description = "Pedigree and relationship charts"
+
+[[label]]
+name = "area/frontend/geography"
+color = "0e8a16"
+description = "Map rendering, geometry editing, time slider"
+
+[[label]]
+name = "area/frontend/gui-cli-parity"
+color = "0e8a16"
+description = "Operations reachable from one frontend only"
+
+[[label]]
+name = "area/import/bulk"
+color = "5319e7"
+description = "Bulk import, export, and merge/sync"
+
+[[label]]
+name = "area/import/assisted"
+color = "5319e7"
+description = "Assisted import and external archive search"
+
+[[label]]
+name = "area/import/round-trip"
+color = "5319e7"
+description = "GEDCOM and Gramps XML round-trip fidelity"
+
+[[label]]
+name = "area/plugins/ui-vocabulary"
+color = "5319e7"
+description = "Plugin-UI vocabulary (ADR 0022)"
+
+[[label]]
+name = "area/plugins/trust"
+color = "5319e7"
+description = "Plugin signing, trust tiers, capability grants"
+
+[[label]]
+name = "area/platform/perf"
+color = "b60205"
+description = "Performance, pagination, projection scale"
+
+[[label]]
+name = "area/platform/packaging"
+color = "b60205"
+description = "Packaging, release, distribution"
+
+[[label]]
+name = "area/platform/deps"
+color = "b60205"
+description = "Dependency upgrades"
+
+# Cross-cutting areas — not backlog H3s, but real homes for work.
+
+[[label]]
+name = "area/docs"
+color = "0075ca"
+description = "Documentation, ADRs, mockups"
+
+[[label]]
+name = "area/i18n"
+color = "0075ca"
+description = "Localization and Fluent catalogues"
+
+# --- type/* : what kind of work. Exactly one per issue. -------------------------------------
+
+[[label]]
+name = "type/bug"
+color = "d73a4a"
+description = "Incorrect behavior"
+
+[[label]]
+name = "type/feature"
+color = "a2eeef"
+description = "New capability"
+
+[[label]]
+name = "type/chore"
+color = "cfd3d7"
+description = "Maintenance with no behavior change"
+
+[[label]]
+name = "type/refactor"
+color = "cfd3d7"
+description = "Restructuring with no behavior change"
+
+[[label]]
+name = "type/test-gap"
+color = "fbca04"
+description = "Shipped behavior with no test covering it"
+
+[[label]]
+name = "type/design-question"
+color = "d876e3"
+description = "Needs a design or product decision before code"
+
+[[label]]
+name = "type/research"
+color = "d876e3"
+description = "Needs investigation before it can be scoped"
+
+# --- priority/* : when. Three levels; five do not survive a backlog nobody grooms weekly. ---
+
+[[label]]
+name = "priority/high"
+color = "b60205"
+description = "Next up"
+
+[[label]]
+name = "priority/medium"
+color = "fbca04"
+description = "Wanted, not urgent"
+
+[[label]]
+name = "priority/low"
+color = "c2e0c6"
+description = "Someday; carries no milestone"
+
+# --- status/* : workflow state. ---------------------------------------------------------------
+
+[[label]]
+name = "status/needs-triage"
+color = "ededed"
+description = "Not yet classified"
+
+[[label]]
+name = "status/blocked"
+color = "000000"
+description = "Blocked on something in this repo"
+
+[[label]]
+name = "status/needs-design"
+color = "d876e3"
+description = "Waiting on a design decision"
+
+# --- Three labels this repo specifically needs (docs/issue-tracking.md §2). -------------------
+
+[[label]]
+name = "needs-adr"
+color = "5319e7"
+description = "Blocked on a gating ADR that has not been written"
+
+[[label]]
+name = "blocked/upstream"
+color = "e99695"
+description = "Waiting on a third-party release, not on us"
+
+[[label]]
+name = "manual-verify"
+color = "006b75"
+description = "Needs a manual webview pass; agents cannot run libwebkit2gtk"

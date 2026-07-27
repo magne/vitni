@@ -1,0 +1,77 @@
+name: Feature
+description: A new capability, or an existing one reachable from only one frontend.
+labels: ["type/feature", "status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [`docs/issues.md`](https://github.com/magne/genealogy/blob/main/docs/issues.md) first —
+        most known gaps already have a bullet, and filing should usually *link* one rather than
+        duplicate it.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - records/person-family
+        - records/places
+        - records/notes
+        - records/tags
+        - records/media
+        - records/dna
+        - records/cross-aggregate
+        - frontend/shell
+        - frontend/lists
+        - frontend/keyboard
+        - frontend/pedigree
+        - frontend/geography
+        - frontend/gui-cli-parity
+        - import/bulk
+        - import/assisted
+        - import/round-trip
+        - plugins/ui-vocabulary
+        - plugins/trust
+        - platform/perf
+        - platform/packaging
+        - platform/deps
+        - docs
+        - i18n
+        - "not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: gap
+    attributes:
+      label: What is missing
+      description: The gap, and who hits it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: shape
+    attributes:
+      label: Suggested shape
+      description: >
+        Name the existing types, use-cases, or components to reuse. This repo strongly prefers
+        extending what exists — `genealogy-app`'s use-case surface usually already covers the domain
+        side, and the gap is only the frontend wiring.
+    validations:
+      required: true
+
+  - type: input
+    id: bullet
+    attributes:
+      label: Existing docs/issues.md bullet, if any
+      placeholder: "Records & data model → Places: \"Place succession can be read but never written\""
+
+  - type: checkboxes
+    id: gates
+    attributes:
+      label: Gates
+      options:
+        - label: >
+            This needs a gating ADR before code (the repo writes the ADR in the same cycle as the work)
+            — triage will add `needs-adr`.
+        - label: This changes the event log or an aggregate's payload, so it must be additive only.

@@ -13,6 +13,9 @@
 //!   primitives (so the typing guard is wired once; fixes "global keys fire inside text controls").
 //! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`) in one pass,
 //!   reporting all failures rather than stopping at the first.
+//! - `issue-sync` — verify the `docs/issues.md` ↔ GitHub Issues linkage: references well-formed and
+//!   unique, every backlog bullet inside an `###` area. `--online` also reconciles against `gh`.
+//! - `labels` — reconcile GitHub's issue labels with `.github/labels.toml` (`--apply` to write).
 //! - `package` — assemble a Linux release tarball (binaries + signed plugin fleet + launcher) under
 //!   `target/dist` (Phase 11 workstream C, ADR 0014 §7).
 
@@ -20,6 +23,8 @@ mod build_plugins;
 mod css_check;
 mod i18n_check;
 mod input_guard;
+mod issue_sync;
+mod labels;
 mod package;
 mod util;
 
@@ -36,6 +41,8 @@ fn main() -> Result<()> {
         Some("build-plugins") => build_plugins::run(),
         Some("css-check") => css_check::run(),
         Some("input-guard") => input_guard::run(),
+        Some("issue-sync") => issue_sync::run(),
+        Some("labels") => labels::run(),
         Some("package") => package::run(),
         Some("check") => check(),
         Some(other) => {
@@ -51,10 +58,11 @@ fn main() -> Result<()> {
 
 /// Runs every static check, reporting all failures (never stopping at the first).
 fn check() -> Result<()> {
-    let checks: [Check; 3] = [
+    let checks: [Check; 4] = [
         ("i18n-check", i18n_check::run),
         ("css-check", css_check::run),
         ("input-guard", input_guard::run),
+        ("issue-sync", issue_sync::run),
     ];
     let mut failed = Vec::new();
     for (name, run) in checks {
@@ -79,6 +87,8 @@ fn print_usage() {
     println!("  build-plugins  lint + build the WASM plugin components, collecting them in target/plugins");
     println!("  css-check      verify bundled component CSS hardcodes no colour literals");
     println!("  input-guard    verify no RSX form element is rendered outside the input primitives");
-    println!("  check          run every static check (i18n-check, css-check, input-guard)");
+    println!("  issue-sync     verify the docs/issues.md <-> GitHub Issues linkage (--online to reconcile)");
+    println!("  labels         reconcile GitHub labels with .github/labels.toml (--apply to write)");
+    println!("  check          run every static check (i18n-check, css-check, input-guard, issue-sync)");
     println!("  package        assemble a Linux release tarball (binaries + signed plugins) in target/dist");
 }
