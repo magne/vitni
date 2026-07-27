@@ -34,6 +34,99 @@ webview pass** (agents can't run libwebkit2gtk):
 
 Not owned by any roadmap phase; grouped by area, roughly easy → hard.
 
+### CLI-only operations (no GUI equivalent)
+
+Every per-aggregate verb the CLI exposes has a GUI counterpart *except* the six below (audited
+`genealogy-cli/src/{main.rs,commands/*.rs}` against `genealogy-ui/src/{navigation.rs,intent.rs}`).
+Each reuses an existing `genealogy-app` use-case — none needs a new core verb.
+
+- **Research notes have no GUI at all** — `genealogy research-note create|add-subject|remove-subject|set-body|show|list`
+  is the only way to record a proof argument (ADR 0028 shipped CLI-first). The whole app surface
+  already ships: `create_research_note`, `set_research_note_body`, `add_subject_to_research_note`,
+  `remove_subject_from_research_note`, `show_research_note`, `list_research_notes`, plus
+  `list_research_notes_for_subject` / `tag_research_note` / `set_research_note_restrictions`, which
+  have no caller anywhere yet.
+  *UI:* a 14th `Category::ResearchNotes` on a free `g`-prefix key (`a`, `b`, `g`–`k`, `o`, `q` are
+  unused — `nav_key()` at `navigation.rs:110`), following the Note screen pattern verbatim:
+  `ResearchNoteEdit { SetBody, AddSubject, RemoveSubject, Tag, SetRestrictions, UndoAssertion }` plus a
+  `ResearchNoteChangeSetRequest` for create. Subjects use the existing `RecordPicker`, which already
+  covers Person/Family/Event/Place — exactly `SubjectRef`'s four kinds. The reverse lookup becomes a
+  "Research notes" tab on those four detail screens via `tabs.rs`'s `tab_with_add`.
+- **Bulk export is CLI-only** — `genealogy export <plugin> [--output FILE]` drives
+  `PluginHost::run_bulk_export`; the GUI only *names* `Capability::ExportSink` in the plugin panel and
+  never calls it.
+  *UI:* a `Tool::Export` screen mirroring `Tool::Import`'s wizard shell — a plugin picker filtered to
+  bundles declaring `ExportSink` (via `resolve_bundles`), a destination row defaulting to the workspace
+  `exports/` directory with "Choose file…" for `ExportTarget::File`, then run + summary stages reusing
+  the `services::start_assisted_import` progress/error pattern.
+- **Bulk import is CLI-only, and target selection has no GUI shape at all** — the CLI's `import` is
+  plugin-generic and also picks the target: `--new NAME PATH` creates + registers a fresh workspace,
+  `--into NAME` imports into an existing one, prompting for confirmation when it already holds persons.
+  (This widens the *Local import & internal cleanup* entry below, which framed the gap as GEDCOM-only.)
+  *UI:* a target stage on `Tool::Import` (or the `Tool::Export` sibling above): plugin picker
+  (`ImportSource` bundles) → file picker → target radio, reusing the Preferences "Register workspace…"
+  disclosure form for the new-workspace case, and `Modal` + the `list_persons` emptiness probe for the
+  non-empty confirm.
+- **Projection rebuild is CLI-only** — `genealogy rebuild` → `Workspace::rebuild_projections`
+  (`workspace.rs:712`, an ADR 0010 maintenance op). After a `genealogy-db` schema change there is no
+  in-app way to run it.
+  *UI:* a "Rebuild projections" button in a new **Maintenance** card in Preferences. It is a
+  workspace-functionality op, not an aggregate, so it belongs on Preferences' documented
+  direct-to-app path (like the Workspaces card), not behind `Intent`. Confirm in a `Modal`, disable
+  while running, report the outcome through `NavState::notify`.
+- **Postgres workspaces can only be created from the CLI** — `genealogy init --database-url URL`
+  freezes the engine into the manifest, but the Preferences "Register workspace…" form calls
+  `register_workspace(&path, name, dir, None)` (`genealogy-ui-dioxus/src/services.rs:1088`), so the GUI
+  always gets SQLite.
+  *UI:* add an optional "Database URL" field to that existing disclosure form and thread it into the
+  `None` argument — `genealogy_app::register_workspace` already takes it.
+- **A child cannot be removed from a family in the GUI** — `remove_child` has no UI caller: `FamilyEdit`
+  has `AddChild` and `AssertChildRelationship` but no removal, and `FamilyChangeSet` carries no children
+  at all, so only `genealogy family remove-child` does it. (Partner removal is fine — `remove_partner`
+  is draft-local in the create form.)
+  *UI:* add `FamilyEdit::RemoveChild { child }` and a `✕` on each child row of the Family screen's
+  children tab, routed through the shared `retract_side_panel` / `RetractTarget` confirm in
+  `screens/shared.rs` that the other retract affordances already use.
+
+### App use-cases no frontend reaches
+
+Turned up by the same audit but a **different defect class** from the section above: these are not
+CLI-only — *neither* frontend calls them, so each is either a write-unreachable config scope or dead
+surface. The fix is a product call (wire it, or delete it).
+
+- **Place succession can be read but never written** — `assert_place_succession` (ADR 0026 §3;
+  `Merged`/`Split`/`Absorbed`/`Elevated`/`Renamed`) has no CLI subcommand and no `PlaceEdit` variant,
+  while `show_place` / `show_place_as_of` already surface `PlaceSuccessionRef`s — so the Place screen
+  can display a succession no user can create.
+  *UI:* `PlaceEdit::AssertSuccession { to, kind, date }` and a "Succession" edit panel on the Place
+  screen — target picked with the existing place `RecordPicker`, kind a `SelectInput`, date reusing the
+  map-edit provenance date form. A `genealogy place assert-succession` subcommand is the cheaper first
+  move if the CLI should stay the reference surface.
+- **Workspace-scope surety labels are read but unwritable** — `save_surety_label_overrides`
+  (`workspace.rs:589`, writes `manifest.surety`) has no caller; the ADR 0027 Preferences card writes
+  `store_workspace_default_surety`, i.e. the *global* `[workspace-defaults]` table.
+  `read_resolved_surety_labels` resolves manifest-over-global, so the per-workspace layer sits in the
+  resolution chain with no way to populate it — what shipped is the global live fallback, not a
+  per-workspace override.
+  *UI:* add `store_surety_label_overrides` to `ConfigStore` (delegating to the existing function) and
+  give the Surety card the same two-scope control the theme / id-format cards already use via
+  `read_preference_layers` / `LayerKind`.
+- **Tag has no restrictions path** — `set_tag_restrictions` exists but no frontend calls it, and
+  `TagChangeSetRequest` carries only name / priority / colour: the one aggregate of thirteen with no
+  privacy control.
+  *UI:* add `restrictions` to `TagChangeSetRequest` and reuse the shared restrictions field the other
+  twelve screens already render.
+- **`run_checks` is dead code, and there is no CLI data-quality command** — its body is `list_persons`
+  \+ `check_persons` (`checks.rs:53-56`), and the GUI's Data Quality view calls `check_persons` directly
+  with the person list it already holds, so GUI coverage is *equivalent* — nothing is missing there.
+  Either delete the wrapper, or keep it to back a `genealogy check` subcommand so quality findings are
+  scriptable. Separately, both check kinds are person-only (`DeathBeforeBirth`, `PossibleDuplicates`);
+  widening checks to the other aggregates is its own item.
+- **External ids have no frontend entry point** — person `add_external_id` (module-level, not even
+  root-exported) and `add_family_external_id` are used only inside `import.rs` for resolve-or-create.
+  Recorded so the absence isn't later read as an oversight: external ids are importer bookkeeping, not
+  user-editable data. No action proposed.
+
 ### Lists, search & scale
 
 - **Long-list / overflow specimen (U30)** — no tab demonstrates a long-list or overflow state;
@@ -77,7 +170,10 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
 ### Local import & internal cleanup
 
 - **GUI Import-GEDCOM command** — the CLI imports; `genealogy-ui-dioxus` has no import flow. (This is
-  local file import, distinct from the Phase 8 *assisted* import.)
+  local file import, distinct from the Phase 8 *assisted* import.) See *CLI-only operations* above: the
+  gap is wider than GEDCOM — `genealogy import` is plugin-generic and also owns target selection
+  (`--new` vs `--into`, plus the non-empty-workspace confirm), and bulk **export** has no GUI path at
+  all either.
 - **Lift `prepare_import_target`** into `genealogy-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
 - **Record-picker scroll-listener cleanup** — `PickerSearch::watch_scroll_close`
