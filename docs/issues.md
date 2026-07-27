@@ -253,6 +253,19 @@ Phase 11 shipped (see Completed); these are scoped follow-ups, none blocking. Se
 - **Snapshotting is decided, not deferred-open** — measured and **not** warranted at target scale;
   ADR 0004's deferral stands, no follow-up ADR (recorded here so it is not re-raised).
 
+## Dependency upgrades blocked upstream
+
+- **`sqlx` 0.9** — `sqlite-es` / `postgres-es` 0.5.0 (their latest) pin `sqlx` 0.8, so a bump splits the
+  tree into two `sqlx` versions and every `Pool<Sqlite>` / `Pool<Postgres>` handed to the event stores
+  fails to typecheck (17 mismatches). 0.9 also replaces `&str` query input with `SqlSafeStr`
+  (38 `sqlx::query(&format!(…))` call sites in `genealogy-db` need `AssertSqlSafe`). Re-evaluate when the
+  `*-es` crates release on `sqlx` 0.9.
+- **`ed25519-dalek` 3.0.0** — needs `curve25519-dalek` ^5.0.0, while `russh` (via the `testcontainers`
+  dev-dependency) needs `curve25519-dalek` =5.0.0-pre.6. Cargo resolves the conflict by downgrading to
+  `russh` 0.60.1, which does not compile against the `pkcs5` 0.8.1 that ed25519-dalek 3.0.0 pulls in.
+  Held at `=3.0.0-pre.6` (comment in `Cargo.toml`); re-evaluate when `testcontainers` ships a `russh` on
+  stable `curve25519-dalek`.
+
 ## Phase 12 — DNA breadth & depth
 
 Roadmap-owned; see [`roadmap.md` Phase 12](roadmap.md#phase-12--dna-breadth--depth). Pulled together so
