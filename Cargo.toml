@@ -30,24 +30,26 @@ repository = "https://github.com/magne/genealogy"
 [workspace.dependencies]
 # domain / shared
 cqrs-es = "0.5.0"
-async-trait = "0.1.89"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
-uuid = { version = "1.18.1", features = ["v7", "serde"] }
-thiserror = "2.0.18"
-time = { version = "0.3.44", features = ["serde", "serde-well-known", "macros"] }
+async-trait = "0.1.91"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+uuid = { version = "1.24.0", features = ["v7", "serde"] }
+thiserror = "2.0.19"
+time = { version = "0.3.54", features = ["serde", "serde-well-known", "macros"] }
 sqlx = { version = "0.8.6", features = ["sqlite", "postgres", "runtime-tokio", "json"] }
 tracing = "0.1.41"
 # event-store backends (genealogy-db, feature-gated)
 sqlite-es = "0.5.0"
 postgres-es = "0.5.0"
 # plugin host (genealogy-plugin-host; ADR 0007, 0011)
-wasmtime = "46.0.1"
-wasmtime-wasi = "46.0.1"
+wasmtime = "47.0.2"
+wasmtime-wasi = "47.0.2"
 # plugin bundle signing (genealogy-plugin-host, xtask; ADR 0014): ed25519 detached signatures over a
-# sha2 digest, verified against an embedded trust root. Pinned to the version already resolved
-# transitively (via the russh SSH tooling) so promoting it to a direct dependency causes no
-# `cargo update` churn and no new `cargo deny` surface.
+# sha2 digest, verified against an embedded trust root. Held at the pre-release: 3.0.0 requires
+# curve25519-dalek ^5.0.0, while `russh` (via the `testcontainers` dev-dependency) requires
+# curve25519-dalek =5.0.0-pre.6, and the russh version cargo falls back to does not compile against
+# the pkcs5 that ed25519-dalek 3.0.0 pulls in. Re-evaluate when testcontainers ships a russh on
+# stable curve25519-dalek.
 ed25519-dalek = "=3.0.0-pre.6"
 # assisted-import host capabilities (genealogy-plugin-host; ADR 0017): host-mediated HTTP,
 # media-library storage with SHA-256 checksums, and content-type sniffing.
@@ -55,13 +57,13 @@ reqwest = { version = "0.13.4", default-features = false, features = ["rustls", 
 sha2 = "0.11.0"
 mime_guess = "2.0.5"
 # base64-encodes the media file into the OpenAI-compatible vision request (ADR 0017 §4).
-base64 = "0.22.1"
+base64 = "0.23.0"
 wiremock = "0.6.5"
 # scoped environment-variable guard for the ai vision-api key tests (ADR 0017 §4); serializes env
 # mutation so parallel tests don't race the process environment.
 temp-env = { version = "0.3.6", features = ["async_closure"] }
 # async runtime / test support
-tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
 tempfile = "3.24.0"
 # framework-free boundary guard (genealogy-ui dev-only; ADR 0008 dependency-tree assertion)
 cargo_metadata = "0.23.1"
@@ -74,7 +76,7 @@ criterion = { version = "0.8.2", default-features = false, features = ["cargo_be
 figment = { version = "0.10.19", features = ["toml", "env"] }
 directories = "6.0.0"
 whoami = "2.1.2"
-toml = "1.1.2"
+toml = "1.1.3"
 # import/export formats (genealogy-gedcom, genealogy-gramps-xml; plugins)
 quick-xml = "0.41.0"
 # place geometry (ADR 0024): geo-types + geozero convert to GeoPackage WKB behind the genealogy-db
@@ -91,12 +93,12 @@ scraper = "0.27.0"
 url = "2.5.8"
 flate2 = { version = "1.1.5", default-features = false, features = ["rust_backend"] }
 # cli frontend
-clap = { version = "4.6.1", features = ["derive"] }
+clap = { version = "4.6.4", features = ["derive"] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-anyhow = "1.0.103"
+anyhow = "1.0.104"
 # localization (genealogy-cli; ADR 0003)
 i18n-embed = { version = "0.16.0", features = ["fluent-system", "desktop-requester", "filesystem-assets"] }
-i18n-embed-fl = "0.10.0"
+i18n-embed-fl = "0.10.1"
 rust-embed = "8.11.0"
 unic-langid = "0.9.6"
 # localized date/number formatting (genealogy-cli; ICU 2.x, compiled CLDR data — roadmap Spike A)

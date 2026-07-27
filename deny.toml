@@ -4,10 +4,6 @@
 version = 2
 # Fail on security advisories and unmaintained crates.
 ignore = [
-    # proc-macro-error2 is unmaintained (no vulnerability). It is a build-time-only
-    # transitive dependency of `i18n-embed-fl`'s `fl!()` macro (ADR 0003); there is no
-    # maintained upgrade path yet. Re-evaluate when i18n-embed-fl drops it.
-    "RUSTSEC-2026-0173",
     # Unmaintained (NOT vulnerable) transitive dependencies of the Dioxus desktop renderer
     # (`genealogy-ui-dioxus`, ADR 0008): wry/tao pull the gtk-rs GTK3 bindings, which are the
     # only GTK3 path on Linux, plus a few unmaintained macro/util crates in the GUI tree.
