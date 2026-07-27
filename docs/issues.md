@@ -23,12 +23,6 @@ webview pass** (agents can't run libwebkit2gtk):
 
 ## Ease of use
 
-- **Quit / close-tab keys.** `Ctrl+Q` to quit the application; `Ctrl+W` to close the current tab
-  (entity).
-- **Customizable keyboard shortcuts** as user/client (presentation) configuration; belongs to the
-  Phase 7 config split (delivered — see Completed). Would also enable a general VS Code-style *when*
-  context, beyond the
-  structural input guard already in place (see Completed).
 - **Live list updates on create.** Creating an entity should immediately insert it into the matching
   entity list, with no manual refresh.
 - **Toast notifications.** Show a toast at the bottom of the work area, auto-dismissed after a set
@@ -291,6 +285,30 @@ the file backend.
 
 ## Completed
 
+- **Quit/close-tab keys & customizable keyboard shortcuts.** *(Done — stacked branches
+  `feat/quit-close-tab-keys` (PR #187) → `feat/customizable-shortcuts`, gated by
+  [ADR 0030](adr/0030-customizable-keyboard-shortcuts.md).)* `Ctrl+Q`/`Ctrl+W` did not exist, and the
+  shortcut map had two independent sources of truth: `genealogy-ui`'s declarative map fed only the `?`
+  help overlay (decorative), while `genealogy-ui-dioxus`'s dispatcher re-implemented the same matrix
+  hardcoded, so the two could drift and no binding was user-changeable. **Quit/close-tab:** two new
+  `Global` actions (`⌘Q`/`⌘W`); closing a saved tab is immediate, closing a draft (or quitting with one
+  open) now arms a confirm dialog (`Modal`-based) instead of silently discarding it — the tabstrip `✕`
+  and the keyboard shortcut share one `NavState::request_close_tab` path. Quit is a desktop-only
+  `QuitManager` component mirroring `WindowGeometryManager`, so the SSR test target stays
+  `dioxus::desktop`-free. **Customizable shortcuts:** `resolved_shortcuts(overrides)` is now the single
+  map both the dispatcher and the `?` overlay read (the two-implementations problem is closed); only
+  `Global`-group actions (11 total) are rebindable — within-screen and `g`-prefix keys stay fixed;
+  `Modifier` became a 3-flag struct (`command`/`shift`/`alt`) so `Alt` composes; `Chord` gained a
+  canonical `mod+shift+alt+key` `FromStr`/`Display`; a rejected override (unknown id, unparsable
+  chord, non-`Global` action, or a conflict) is a typed error surfaced in the Preferences card, never a
+  silent drop. `[shortcuts]` lives in the global `~/.config/genealogy/config.toml`, client scope only
+  (mirrors `[ai]`/`[map]`/`[plugin_trust]`) — no workspace-manifest layer. A save takes effect live (a
+  `Signal<ShortcutConfig>` held in shell context), no restart needed. Residuals: within-screen/
+  `g`-prefix keys are not rebindable by design (ADR 0030 §2); no VS Code-style *when* context (ADR 0030
+  names it explicitly out of scope); a dirty in-progress edit of an already-saved record (screen-local
+  `RecordEditState`) is not covered by the close confirm, only draft tabs are; `⌘S` (save,
+  `screens/record_form.rs`) still lives outside the shortcut map (`docs/mockups/shortcuts.html` shows
+  it); no live key-capture widget — rebinding is a text field taking the canonical chord string.
 - **1.0 hardening (Phase 11).** *(Done — Gate 1 + a Gate-2 PR stack, PRs #176–#182:
   `docs/phase-11-gate-1` → `feat/plugin-bundle-signing` → `feat/plugin-layered-loading` →
   `feat/plugin-grants` → `feat/plugin-grant-ux` → `feat/perf-profiling` →
@@ -438,4 +456,6 @@ the file backend.
   wired exactly once per element, and a `cargo xtask input-guard` lint (prek + CI) forbids raw form
   elements outside the primitives so it cannot regress. Field validation state moved into
   `genealogy-ui` view-models. A general VS Code-style *when* context was deliberately not built; it
-  remains future work under customizable shortcuts (Phase 7).
+  remains explicitly out of scope of customizable keyboard shortcuts
+  ([ADR 0030](adr/0030-customizable-keyboard-shortcuts.md) §Out of scope), unless a real need
+  surfaces.

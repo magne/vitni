@@ -95,7 +95,7 @@ palette-cmd-find-duplicates = Find duplicates
 palette-cmd-open = Open { $target }
 palette-hint-navigate = navigate
 palette-hint-open = open
-palette-hint-anywhere = ⌘K from anywhere
+palette-hint-anywhere = { $chord } from anywhere
 
 # Keyboard notices (the shell toast bound to a shortcut outcome)
 kbd-nothing-to-undo = Nothing to undo
@@ -211,6 +211,7 @@ prefs-section-appearance = Appearance
 prefs-section-locale = Language & locale
 prefs-section-formats = Date & number
 prefs-section-surety = Surety scheme
+prefs-section-shortcuts = Keyboard shortcuts
 prefs-section-defaults = Workspace defaults
 
 prefs-identity-title = Who is making changes
@@ -256,6 +257,11 @@ prefs-surety-field-normal = Normal
 prefs-surety-field-high = High
 prefs-surety-field-very-high = Very high
 prefs-surety-hint = Blank fields keep the built-in wording. A filled-in label is shown verbatim in every locale — it is not translated, since it is your own wording.
+
+prefs-shortcuts-title = Rebind global shortcuts
+prefs-shortcuts-intro = Only global shortcuts (active anywhere) can be rebound. Within-screen keys and the g-prefix navigation keys are fixed. Type a chord as mod+shift+alt+key — mod is ⌘ on macOS, Ctrl elsewhere.
+prefs-shortcuts-default-hint = Default: { $chord }
+prefs-shortcuts-general-errors = Some overrides could not be applied:
 
 prefs-defaults-title = Where a setting's value comes from
 prefs-defaults-intro = Each setting resolves through three layers. The first layer that supplies a value wins; the rest are the fallback.

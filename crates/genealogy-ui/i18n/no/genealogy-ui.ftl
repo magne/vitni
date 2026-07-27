@@ -1079,3 +1079,9 @@ plugin-trust-publisher-label = Utgiver
 plugin-trust-key-label = Offentlig nøkkel (64 heksadesimale tegn)
 plugin-action-pin = Fest utgiver
 plugin-action-unpin = Løsne { $publisher }
+
+# Tilpassbare hurtigtaster (ADR 0030) — avviste [shortcuts]-overstyringer
+shortcuts-error-unknown-action = «{ $id }» er ikke en kjent hurtigtast.
+shortcuts-error-unparsable = «{ $chord }» for «{ $id }» kunne ikke tolkes.
+shortcuts-error-not-rebindable = «{ $id }» kan ikke tilordnes på nytt.
+shortcuts-error-conflict = «{ $chord }» for «{ $id }» er i konflikt med en annen hurtigtast.

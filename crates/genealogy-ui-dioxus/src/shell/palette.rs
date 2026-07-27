@@ -91,7 +91,12 @@ pub fn CommandPalette() -> Element {
     let title = chrome.0.palette_title();
     let hint_navigate = chrome.0.palette_hint_navigate();
     let hint_open = chrome.0.palette_hint_open();
-    let hint_anywhere = chrome.0.palette_hint_anywhere();
+    let palette_chord = crate::shell::resolved_shortcuts_from_context()
+        .into_iter()
+        .find(|entry| entry.action == genealogy_ui::ShortcutAction::CommandPalette)
+        .map(|entry| crate::shell::help_overlay::chord_display(entry.chord))
+        .unwrap_or_default();
+    let hint_anywhere = chrome.0.palette_hint_anywhere(&palette_chord);
 
     rsx! {
         div { class: "overlay", onclick: move |_| nav.close_overlay(),

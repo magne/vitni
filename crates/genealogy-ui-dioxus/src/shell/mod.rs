@@ -8,8 +8,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use dioxus::prelude::{Resource, Signal};
-use genealogy_app::WorkspaceCounts;
+use dioxus::prelude::{ReadableExt, Resource, Signal, try_consume_context};
+use genealogy_app::{ShortcutConfig, WorkspaceCounts};
 
 use crate::i18n::Chrome;
 
@@ -67,3 +67,20 @@ pub struct CachedName {
 /// fall back to their supplied label).
 #[derive(Clone, Copy)]
 pub struct NameCache(pub Signal<HashMap<(String, String), CachedName>>);
+
+/// The live client-scope `[shortcuts]` overrides (ADR 0030 §3), provided by the shell root so saving
+/// the Preferences shortcuts card takes effect immediately — the keyboard dispatcher and the `?`
+/// overlay both resolve against this signal, not a value frozen at startup.
+#[derive(Clone, Copy)]
+pub struct ShortcutsCtx(pub Signal<ShortcutConfig>);
+
+/// Reads the live [`ShortcutsCtx`] (provided by the real shell; absent in a bare SSR test of a
+/// sub-component) and resolves it against the default map (ADR 0030 §1). Absent context resolves to
+/// the unmodified default map.
+#[must_use]
+pub fn resolved_shortcuts_from_context() -> Vec<genealogy_ui::Shortcut> {
+    match try_consume_context::<ShortcutsCtx>() {
+        Some(ctx) => genealogy_ui::resolved_shortcuts(&ctx.0.read().bindings).0,
+        None => genealogy_ui::shortcuts(),
+    }
+}

@@ -73,10 +73,10 @@ pub use citation::{
 pub use citation_change_set::{CitationChangeSet, commit_citation_change_set};
 pub use config::{
     AiConfig, AiProvider, AppDefaults, Config, DateFormat, Engine, IdFormats, LocaleDefaults, MapConfig, MapProvider,
-    NumberFormat, OperatorConfig, PluginTrustConfig, SuretyLabelOverride, SuretyLabelOverrides, ThemeMode, UiDefaults,
-    WorkspaceDefaults, WorkspaceEntry, add_trusted_publisher, remove_trusted_publisher, resolve_trust_pins, set_ai,
-    set_default_workspace, set_map, set_operator_identity, set_plugin_trust, set_workspace_default_id_formats,
-    set_workspace_default_locale, set_workspace_default_surety,
+    NumberFormat, OperatorConfig, PluginTrustConfig, ShortcutConfig, SuretyLabelOverride, SuretyLabelOverrides,
+    ThemeMode, UiDefaults, WorkspaceDefaults, WorkspaceEntry, add_trusted_publisher, remove_trusted_publisher,
+    resolve_trust_pins, set_ai, set_default_workspace, set_map, set_operator_identity, set_plugin_trust, set_shortcuts,
+    set_workspace_default_id_formats, set_workspace_default_locale, set_workspace_default_surety,
 };
 pub use config_store::{
     ConfigStore, FileConfigStore, Presentation, WorkspaceFunctionality, genealogy_language_env,

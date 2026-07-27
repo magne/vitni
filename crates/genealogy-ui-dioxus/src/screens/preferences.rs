@@ -14,25 +14,28 @@
 //! operation, not part of the batched Save).
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use genealogy_app::{
-    DateFormat, Engine, IdFormats, LayerKind, LocaleDefaults, NumberFormat, ResolvedLocale, SuretyLabelOverride,
-    SuretyLabelOverrides, ThemeMode, WorkspaceSummary, requested_languages_for,
+    DateFormat, Engine, IdFormats, LayerKind, LocaleDefaults, NumberFormat, ResolvedLocale, ShortcutConfig,
+    SuretyLabelOverride, SuretyLabelOverrides, ThemeMode, WorkspaceSummary, requested_languages_for,
 };
 use genealogy_i18n::fallback_chain;
+use genealogy_ui::{ShortcutBindingVm, ShortcutGroup, ShortcutsVm, resolved_shortcuts, shortcuts, shortcuts_vm};
 use i18n_embed::DesktopLanguageRequester;
 use unic_langid::LanguageIdentifier;
 
 use super::prelude::*;
 use crate::app::{open_workspace, request_restart};
-use crate::components::{Badge, LabeledValue};
+use crate::components::{Badge, LabeledValue, TextField};
 use crate::i18n::Chrome;
 use crate::services::{
     PreferencesData, load_preferences, make_default_workspace, register_workspace, save_id_format_defaults,
-    save_locale_defaults, save_operator_identity, save_surety_defaults,
+    save_locale_defaults, save_operator_identity, save_shortcuts, save_surety_defaults,
 };
+use crate::shell::ShortcutsCtx;
 
 /// A fixed example date, rendered in each [`DateFormat`] style (matching the mockup's `12 April 1850`).
 const EXAMPLE_DATE_LONG: &str = "12 April 1850";
@@ -56,6 +59,9 @@ pub fn PreferencesScreen() -> Element {
     let mut nav = use_context::<NavState>();
     let mut data = use_signal(|| load_preferences(&services));
     let mut status = use_signal(|| None::<String>);
+    // The live client-scope shortcut overrides (ADR 0030 §3): absent under a bare SSR render of this
+    // screen (no `Shell`), present in the real app so a save takes effect without a restart.
+    let shortcuts_ctx = try_consume_context::<ShortcutsCtx>();
 
     let mut display = use_signal(|| data().config.operator.display.clone().unwrap_or_default());
     let mut email = use_signal(|| data().config.operator.email.clone().unwrap_or_default());
@@ -69,9 +75,11 @@ pub fn PreferencesScreen() -> Element {
     let mut surety_normal = use_signal(|| surety_field_from_override(data().surety.normal.as_ref()));
     let mut surety_high = use_signal(|| surety_field_from_override(data().surety.high.as_ref()));
     let mut surety_very_high = use_signal(|| surety_field_from_override(data().surety.very_high.as_ref()));
+    let mut shortcut_bindings = use_signal(|| shortcut_field_seed(&data().shortcuts));
 
     let save_services = services.clone();
     let onsave = move |_| {
+        let shortcuts_config = shortcuts_config_from_fields(&shortcut_bindings());
         let outcome = save_operator_identity(&save_services, non_empty(display()), non_empty(email()))
             .and_then(|()| {
                 let formats = IdFormats {
@@ -98,10 +106,14 @@ pub fn PreferencesScreen() -> Element {
                     very_high: surety_override_from_field(&surety_very_high()),
                 };
                 save_surety_defaults(&save_services, surety)
-            });
+            })
+            .and_then(|()| save_shortcuts(&save_services, &shortcuts_config));
         match outcome {
             Ok(()) => {
                 data.set(load_preferences(&save_services));
+                if let Some(mut ctx) = shortcuts_ctx {
+                    ctx.0.set(shortcuts_config);
+                }
                 status.set(Some(saved_label.clone()));
             }
             Err(message) => status.set(Some(message)),
@@ -166,8 +178,11 @@ pub fn PreferencesScreen() -> Element {
         surety_normal.set(surety_field_from_override(loaded.surety.normal.as_ref()));
         surety_high.set(surety_field_from_override(loaded.surety.high.as_ref()));
         surety_very_high.set(surety_field_from_override(loaded.surety.very_high.as_ref()));
+        shortcut_bindings.set(shortcut_field_seed(&loaded.shortcuts));
         status.set(None);
     };
+
+    let shortcuts_vm_value = shortcuts_vm(&data().shortcuts, state.data_loc());
 
     preferences_view(
         &chrome,
@@ -189,6 +204,10 @@ pub fn PreferencesScreen() -> Element {
             high: surety_high,
             very_high: surety_very_high,
         },
+        &shortcuts_vm_value,
+        ShortcutFields {
+            bindings: shortcut_bindings,
+        },
         status(),
         onsave,
         onreset,
@@ -198,6 +217,40 @@ pub fn PreferencesScreen() -> Element {
         onmakedefault,
         onregister,
     )
+}
+
+/// The chord-string value each rebindable ([`ShortcutGroup::Global`]) action's field seeds to: the
+/// currently-effective chord (an accepted override, else the default) — no [`genealogy_ui::Localizer`]
+/// needed, since only the *display* labels/errors are localized, not the plain chord strings.
+fn shortcut_field_seed(config: &ShortcutConfig) -> BTreeMap<String, String> {
+    let (resolved, _errors) = resolved_shortcuts(&config.bindings);
+    resolved
+        .into_iter()
+        .filter(|entry| entry.group == ShortcutGroup::Global)
+        .map(|entry| (entry.action.config_id().to_owned(), entry.chord.to_string()))
+        .collect()
+}
+
+/// The inverse of [`shortcut_field_seed`]: builds the `[shortcuts]` config to persist from the
+/// editable fields. A field left blank, or matching its action's default chord, is omitted — the
+/// action then falls back to the default, exactly like [`surety_override_from_field`]'s "blank keeps
+/// the default" convention.
+fn shortcuts_config_from_fields(bindings: &BTreeMap<String, String>) -> ShortcutConfig {
+    let mut result = BTreeMap::new();
+    for entry in shortcuts()
+        .into_iter()
+        .filter(|entry| entry.group == ShortcutGroup::Global)
+    {
+        let config_id = entry.action.config_id();
+        let Some(value) = bindings.get(config_id) else {
+            continue;
+        };
+        let trimmed = value.trim();
+        if !trimmed.is_empty() && trimmed != entry.chord.to_string() {
+            result.insert(config_id.to_owned(), trimmed.to_owned());
+        }
+    }
+    ShortcutConfig { bindings: result }
 }
 
 /// The editable Language/locale/date/number fields as raw `<select>` value tokens (`ui_language`/
@@ -234,6 +287,16 @@ pub struct SuretyFields {
     pub very_high: Signal<String>,
 }
 
+/// The editable per-action shortcut-override fields (ADR 0030 §4): current chord-string values,
+/// keyed by the action's config id (the `[shortcuts]` key). Unlike [`SuretyFields`]'s five fixed
+/// named fields, the rebindable row set is `ShortcutAction::all()`'s `Global` subset, so this holds
+/// one map rather than one signal per action.
+#[derive(Debug, Clone, Copy)]
+pub struct ShortcutFields {
+    /// The chord-string value for each rebindable action's config id.
+    pub bindings: Signal<BTreeMap<String, String>>,
+}
+
 /// The "Register workspace…" inline disclosure form's state: whether it is open, and the (trimmed
 /// on submit) name and optional directory. Grouped into one struct so [`preferences_view`]'s
 /// signature stays readable (mirrors [`LocaleFields`]).
@@ -263,6 +326,8 @@ pub fn preferences_view(
     person_id_format: Signal<String>,
     locale_fields: LocaleFields,
     surety_fields: SuretyFields,
+    shortcuts_vm: &ShortcutsVm,
+    shortcut_fields: ShortcutFields,
     status: Option<String>,
     onsave: impl FnMut(MouseEvent) + 'static,
     onreset: impl FnMut(MouseEvent) + 'static,
@@ -276,7 +341,7 @@ pub fn preferences_view(
         div { style: "display:grid;grid-template-columns:200px 1fr;height:100%;min-height:0",
             nav { class: "list", "aria-label": "{chrome.prefs_nav_label()}", style: "border-right:1px solid var(--line)",
                 div { class: "list-rows", style: "padding:var(--sp-2)",
-                    for id in ["identity", "appearance", "locale", "formats", "surety", "defaults"] {
+                    for id in ["identity", "appearance", "locale", "formats", "surety", "shortcuts", "defaults"] {
                         a { class: "nav-item", href: "#{id}", "{chrome.prefs_section_label(id)}" }
                     }
                 }
@@ -288,6 +353,7 @@ pub fn preferences_view(
                 {locale_card(chrome, &data.locale, locale_fields.ui_language, locale_fields.data_locale)}
                 {formats_card(chrome, locale_fields.date_format, locale_fields.number_format)}
                 {surety_card(chrome, surety_fields)}
+                {shortcuts_card(chrome, shortcuts_vm, shortcut_fields)}
                 {defaults_card(chrome, data, person_id_format)}
                 {workspaces_card(chrome, data, register, onopen, onmakedefault, onregister)}
                 div { class: "row-actions", style: "justify-content:flex-end;margin-top:8px",
@@ -500,6 +566,59 @@ fn surety_override_from_field(value: &str) -> Option<SuretyLabelOverride> {
         label: trimmed.to_owned(),
         description: None,
     })
+}
+
+/// The "Rebind global shortcuts" card (ADR 0030): one text field per rebindable ([`ShortcutGroup::Global`])
+/// action, taking the canonical chord string (`mod+shift+alt+key`). Any override this workspace could
+/// not apply is shown inline (per row when it names one, else in a general list) rather than dropped.
+fn shortcuts_card(chrome: &Chrome, vm: &ShortcutsVm, fields: ShortcutFields) -> Element {
+    rsx! {
+        h2 { id: "shortcuts", style: "border:0;margin:24px 0 12px", "{chrome.prefs_section_label(\"shortcuts\")}" }
+        Card { title: chrome.prefs_shortcuts_title(),
+            div { class: "muted", style: "font-size:var(--fs-sm);margin-bottom:12px", "{chrome.prefs_shortcuts_intro()}" }
+            div { class: "grid-2",
+                for row in &vm.rows {
+                    {shortcut_field_row(chrome, row, fields.bindings)}
+                }
+            }
+            if !vm.general_errors.is_empty() {
+                div { class: "field-error", style: "margin-top:8px",
+                    "{chrome.prefs_shortcuts_general_errors()}"
+                    ul {
+                        for message in &vm.general_errors {
+                            li { "{message}" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One rebindable action's chord field: labelled with its `sc-*` description, the default chord
+/// shown as the hint (or as the placeholder-style error when the override was rejected).
+fn shortcut_field_row(
+    chrome: &Chrome,
+    row: &ShortcutBindingVm,
+    mut bindings: Signal<BTreeMap<String, String>>,
+) -> Element {
+    let label = chrome.shortcut_label(row.label_id);
+    let config_id = row.config_id.clone();
+    let value = bindings.read().get(&config_id).cloned().unwrap_or_default();
+    let hint = chrome.prefs_shortcuts_default_hint(&row.default_chord);
+    rsx! {
+        TextField {
+            label,
+            name: format!("shortcut-{config_id}"),
+            value,
+            invalid: row.error.is_some(),
+            error: row.error.clone(),
+            hint,
+            oninput: move |event: FormEvent| {
+                bindings.write().insert(config_id.clone(), event.value());
+            },
+        }
+    }
 }
 
 /// The "Date & number format" card: format selects plus a live example rendered from the current

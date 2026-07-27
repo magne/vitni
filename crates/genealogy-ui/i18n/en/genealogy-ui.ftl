@@ -1079,3 +1079,9 @@ plugin-trust-publisher-label = Publisher
 plugin-trust-key-label = Public key (64 hex characters)
 plugin-action-pin = Pin publisher
 plugin-action-unpin = Unpin { $publisher }
+
+# Customizable keyboard shortcuts (ADR 0030) — rejected [shortcuts] overrides
+shortcuts-error-unknown-action = "{ $id }" is not a known shortcut.
+shortcuts-error-unparsable = "{ $chord }" for "{ $id }" could not be parsed.
+shortcuts-error-not-rebindable = "{ $id }" is not a rebindable shortcut.
+shortcuts-error-conflict = "{ $chord }" for "{ $id }" conflicts with another shortcut.

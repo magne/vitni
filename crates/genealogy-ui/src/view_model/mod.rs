@@ -51,6 +51,7 @@ mod provenance;
 mod record_draft;
 mod record_link;
 mod repository;
+mod shortcuts_vm;
 mod source;
 mod tag;
 
@@ -78,6 +79,7 @@ pub use provenance::*;
 pub use record_draft::*;
 pub use record_link::*;
 pub use repository::*;
+pub use shortcuts_vm::*;
 pub use source::*;
 pub use tag::*;
 

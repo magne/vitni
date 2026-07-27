@@ -95,7 +95,7 @@ palette-cmd-find-duplicates = Finn duplikater
 palette-cmd-open = Åpne { $target }
 palette-hint-navigate = naviger
 palette-hint-open = åpne
-palette-hint-anywhere = ⌘K fra hvor som helst
+palette-hint-anywhere = { $chord } fra hvor som helst
 
 # Keyboard notices (the shell toast bound to a shortcut outcome)
 kbd-nothing-to-undo = Ingenting å angre
@@ -210,6 +210,7 @@ prefs-section-appearance = Utseende
 prefs-section-locale = Språk og lokalitet
 prefs-section-formats = Dato og tall
 prefs-section-surety = Sikkerhetsskala
+prefs-section-shortcuts = Hurtigtaster
 prefs-section-defaults = Arbeidsområdestandarder
 
 prefs-identity-title = Hvem som gjør endringer
@@ -255,6 +256,11 @@ prefs-surety-field-normal = Normal
 prefs-surety-field-high = Høy
 prefs-surety-field-very-high = Svært høy
 prefs-surety-hint = Tomme felt beholder den innebygde ordlyden. Et utfylt felt vises ordrett i alle lokaliteter — det oversettes ikke, siden det er din egen ordlyd.
+
+prefs-shortcuts-title = Tilordne globale hurtigtaster på nytt
+prefs-shortcuts-intro = Bare globale hurtigtaster (aktive overalt) kan tilordnes på nytt. Taster innenfor et skjermbilde og g-prefiks-navigasjonstaster er faste. Skriv en tastekombinasjon som mod+shift+alt+tast — mod er ⌘ på macOS, Ctrl ellers.
+prefs-shortcuts-default-hint = Standard: { $chord }
+prefs-shortcuts-general-errors = Noen overstyringer kunne ikke brukes:
 
 prefs-defaults-title = Hvor en innstillings verdi kommer fra
 prefs-defaults-intro = Hver innstilling løses gjennom tre lag. Det første laget som gir en verdi vinner; resten er reserven.

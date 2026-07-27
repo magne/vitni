@@ -419,6 +419,32 @@ impl PluginTrustConfig {
     }
 }
 
+/// The `[shortcuts]` configuration section (ADR 0030 §3): a workspace's rebound keyboard shortcuts,
+/// each a `genealogy_ui::ShortcutAction::config_id` mapped to a canonical chord string. Client/
+/// presentation scope (ADR 0015 §1) — machine/user-local, not shipped with data (mirrors
+/// [`AiConfig`]/[`MapConfig`]/[`PluginTrustConfig`]).
+///
+/// `genealogy-app` must not depend on `genealogy-ui` (ADR 0008: app → ui is the fixed dependency
+/// direction), so bindings are stored as plain strings, untouched; all chord parsing, validation, and
+/// conflict detection lives in `genealogy_ui::resolved_shortcuts`, which the renderer calls with this
+/// map.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShortcutConfig {
+    /// The rebound chords, keyed by the action's config id (e.g. `"quit"` → `"mod+q"`), inline under
+    /// the `[shortcuts]` table (`quit = "mod+q"`) rather than a nested `[shortcuts.bindings]`.
+    #[serde(flatten)]
+    pub bindings: BTreeMap<String, String>,
+}
+
+impl ShortcutConfig {
+    /// Whether no shortcut is rebound — lets an empty `[shortcuts]` table be omitted when
+    /// serializing.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.bindings.is_empty()
+    }
+}
+
 /// Decodes a 64-hex-character ed25519 public key into its 32 raw bytes, or `None` for a bad length
 /// or a non-hex character. The plugin host turns these bytes into verifying keys (`ed25519-dalek` is
 /// its dependency, not this crate's).
@@ -515,6 +541,9 @@ pub struct Config {
     /// The pinned-publisher trust store (ADR 0014 §3); client/presentation scope, machine/user-local.
     #[serde(default, skip_serializing_if = "PluginTrustConfig::is_empty")]
     pub plugin_trust: PluginTrustConfig,
+    /// The rebound keyboard shortcuts (ADR 0030 §3); client/presentation scope, machine/user-local.
+    #[serde(default, skip_serializing_if = "ShortcutConfig::is_empty")]
+    pub shortcuts: ShortcutConfig,
 }
 
 impl Config {
@@ -643,6 +672,7 @@ pub fn load_or_bootstrap(path: &Path) -> Result<Config, AppError> {
         ai: AiConfig::default(),
         map: MapConfig::default(),
         plugin_trust: PluginTrustConfig::default(),
+        shortcuts: ShortcutConfig::default(),
     };
     save(path, &config)?;
     Ok(config)
@@ -745,6 +775,18 @@ pub fn set_map(path: &Path, map: MapConfig) -> Result<(), AppError> {
 pub fn set_plugin_trust(path: &Path, plugin_trust: PluginTrustConfig) -> Result<(), AppError> {
     let mut config = load(path)?;
     config.plugin_trust = plugin_trust;
+    save(path, &config)
+}
+
+/// Persists the `[shortcuts]` rebound-chord map into the global config (read-modify-write,
+/// preserving the rest). Client/presentation scope (ADR 0015 §1) — a keymap is machine/user-local.
+///
+/// # Errors
+///
+/// [`AppError::Config`] if the config cannot be read or written.
+pub fn set_shortcuts(path: &Path, shortcuts: ShortcutConfig) -> Result<(), AppError> {
+    let mut config = load(path)?;
+    config.shortcuts = shortcuts;
     save(path, &config)
 }
 
@@ -1172,6 +1214,22 @@ api-key-env = "EXAMPLE_API_KEY"
         assert!(config.ai.is_empty());
         let text = std::fs::read_to_string(&path).expect("read");
         assert!(!text.contains("[ai]"), "a default (empty) [ai] table is not written");
+    }
+
+    #[test]
+    fn an_empty_shortcuts_section_is_omitted_when_serializing() {
+        use super::ShortcutConfig;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        let config = config_at(&path);
+        assert!(config.shortcuts.is_empty());
+        assert_eq!(config.shortcuts, ShortcutConfig::default());
+        let text = std::fs::read_to_string(&path).expect("read");
+        assert!(
+            !text.contains("[shortcuts]"),
+            "a default (empty) [shortcuts] table is not written"
+        );
     }
 
     #[test]
