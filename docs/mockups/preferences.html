@@ -18,6 +18,7 @@
       <a class="nav-item" href="#locale"><span class="ico">🌐</span><span>Language &amp; locale</span></a>
       <a class="nav-item" href="#formats"><span class="ico">📅</span><span>Date &amp; number</span></a>
       <a class="nav-item" href="#surety"><span class="ico">🎚</span><span>Surety scheme</span></a>
+      <a class="nav-item" href="#shortcuts"><span class="ico">⌨</span><span>Keyboard shortcuts</span></a>
       <a class="nav-item" href="#defaults"><span class="ico">🗂</span><span>Workspace defaults</span></a>
       <a class="nav-item" href="#workspaces"><span class="ico">📁</span><span>Workspaces</span></a>
     </aside>
@@ -149,6 +150,40 @@
             <input class="in" placeholder="Very high" value="Certain"></div>
         </div>
         <div class="muted" style="font-size:var(--fs-sm);margin-top:8px">Blank fields keep the built-in Fluent-localized wording (“Very Low”, “Low”, …). A filled-in label is shown verbatim in every locale — it is not translated, since it is your own wording.</div>
+      </div>
+
+      <!-- Keyboard shortcuts (ADR 0030) -->
+      <h2 id="shortcuts" style="border:0;margin:24px 0 12px">Keyboard shortcuts</h2>
+      <div class="card">
+        <h3>Rebind global shortcuts</h3>
+        <div class="muted" style="font-size:var(--fs-sm);margin-bottom:12px">
+          Only <b>global</b> shortcuts (active anywhere) can be rebound. Within-screen keys and the
+          <span class="mono">g</span>-prefix navigation keys are fixed. Type a chord as
+          <span class="mono">mod+shift+alt+key</span> — <span class="mono">mod</span> is <kbd>⌘</kbd> on
+          macOS, <kbd>Ctrl</kbd> elsewhere.
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>Command palette</label>
+            <input class="in" value="mod+k">
+            <div class="field-hint">Default: mod+k</div>
+          </div>
+          <div class="field"><label>Quit</label>
+            <input class="in" value="mod+shift+q">
+            <div class="field-hint">Default: mod+q</div>
+          </div>
+          <div class="field"><label>Close tab</label>
+            <input class="in invalid" aria-invalid="true" value="mod+q">
+            <div class="field-error">"mod+q" for "close-tab" collides with another shortcut.</div>
+          </div>
+          <div class="field"><label>New (context-aware)</label>
+            <input class="in" value="mod+n">
+            <div class="field-hint">Default: mod+n</div>
+          </div>
+        </div>
+        <div class="field-error" style="margin-top:8px">
+          Some overrides could not be applied:
+          <ul><li>"move-up" is not a rebindable shortcut.</li></ul>
+        </div>
       </div>
 
       <!-- Workspace defaults -->

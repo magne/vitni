@@ -86,8 +86,12 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
   unmount, so each clear/re-search cycle leaves one inert listener behind (bounded by that, not by
   keystrokes or scroll events). Remove it on unmount, or arm it once at a higher scope.
 - **`Modal`/`SidePanel` overlay follow-ups** — `Modal` (`components/layout.rs`) still has no backdrop
-  scrim or `onclose` prop (harmless today since it has no callers); and neither overlay has a
-  dedicated focus trap or slide-in motion beyond what the existing keyboard layer already provides.
+  scrim or `onclose` prop. This was harmless while `Modal` had no callers; the close/quit confirm
+  dialog (`shell/close_confirm.rs`, Ease-of-use "Quit/close-tab keys") is now its first real caller and
+  does **not** wire a focus trap (`shell/focus_trap.rs`'s `trap_tab` is not attached) or a click-away
+  scrim — a keyboard user tabbing inside the dialog can reach the inert background, and there is no
+  click-outside-to-cancel. Neither overlay has slide-in motion beyond what the existing keyboard layer
+  already provides.
 
 ### Media & assisted import (Phase 8 residuals)
 
@@ -133,6 +137,55 @@ Follow-ups left open when Phase 8 shipped (see Completed); each is scoped, none 
 Repeating groups / nested forms; `List`/detail descriptions + plugin-driven navigation; per-field
 validation vocabulary; plugin-prefilled field values; the `query` capability for `ui-panel`;
 long-running / streaming actions; multi-panel pages.
+
+### Keyboard & shortcuts
+
+Residuals from "Quit/close-tab keys & customizable keyboard shortcuts" (see Completed; ADR 0030).
+
+- **Dirty saved-record edits are not confirmed.** `Ctrl+W`/`Ctrl+Q`'s confirm fires on `OpenTab::Draft`
+  only. An in-progress edit of an *already-saved* record lives in screen-local `RecordEditState`
+  (`screens/record_form.rs`) and is invisible to `NavState`, so closing/quitting discards it silently.
+  Lifting edit-dirtiness into shell state is the follow-up.
+- **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
+  its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
+  so it is neither listed by the `?` overlay nor rebindable, and it does not go through
+  `NavState`/`resolved_shortcuts` at all.
+- **The "Jump back in" recent-list write has no close/quit hook.** `shell/window_geometry.rs` flushes
+  window geometry on `WindowEvent::CloseRequested`; the recent-list persistence effect in
+  `shell/root.rs` has no equivalent, so a keyboard quit can race the debounced write. Not fixed in this
+  pass.
+- **`Modal` overlay gaps are now user-visible** — see the updated entry under *Local import & internal
+  cleanup*: the close/quit confirm dialog is `Modal`'s first real caller, and neither a focus trap nor
+  a click-away scrim is wired.
+- **`Ctrl+W` closes the active tab even when its strip isn't shown.** The record tabstrip mounts only
+  for entity destinations (`shell/root.rs`'s `entity_category`), but `NavState::active_record` can stay
+  `Some` while the Dashboard or a tool is active. `Ctrl+W` there closes that background tab with no
+  visible strip to reflect it — a deliberate simplification, not fixed.
+- **`Ctrl+W`/`Ctrl+Q` bubble out of focused text inputs, by design.** `focus_trap.rs`'s
+  `keep_typing_local` lets every primary-modifier chord bubble to the shell except native `⌘Z`/`⌘⇧Z`
+  text undo/redo — so typing in a field and pressing `⌘W` closes the tab mid-edit, the same as `⌘K`/
+  `⌘N` already did. Intentional, recorded so it isn't later read as a regression.
+- **Within-screen and `g`-prefix keys are not rebindable** — widget-owned (roving focus / the
+  `g`-prefix state machine), fixed by design (ADR 0030 §2).
+- **No VS Code-style *when* context.** Named as future work by the "Global keys fire inside text
+  controls" Completed entry; ADR 0030 §Out of scope makes it explicit — no context predicates are
+  defined, so this stays a design question, not a missing implementation.
+- **Chord entry is a typed canonical string, not live key capture.** `keydown` is inert under SSR and
+  `cargo xtask input-guard` forbids a raw form element outside the primitives, so the Preferences
+  rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.
+- **No chord sequences beyond the existing `g`-prefix** — `resolved_shortcuts` resolves single chords
+  only.
+- **The framework-free `Key` enum (`genealogy-ui::shortcuts`) is still closed** — no function keys, so
+  `e`/`F2` (the within-screen edit chord) could not be rebound even if that group were opened up.
+- **No per-platform keymaps.** `Modifier::command` abstracts ⌘/Ctrl by design, so a binding that must
+  differ between macOS and Linux cannot be expressed.
+- **Bindings are global-only, no per-workspace override.** `[shortcuts]` lives in
+  `~/.config/genealogy/config.toml`, consistent with `[map]`/`[ai]`/`[plugin_trust]` (ADR 0030 §3) — a
+  keymap is machine/user-local, not a dataset property; named so the scope boundary is unambiguous, not
+  an oversight.
+- **No keyboard topic in the in-app Help browser.** `genealogy-ui::help.rs`'s `HelpSection::Reference`
+  is documented as "Lookup material (shortcuts, glossaries)" and `Run::Kbd` is unused — no authored doc
+  covers shortcuts; the `?` overlay is the only in-app reference today.
 
 ## Phase 9 residuals (geography & temporal model)
 
@@ -303,12 +356,8 @@ the file backend.
   chord, non-`Global` action, or a conflict) is a typed error surfaced in the Preferences card, never a
   silent drop. `[shortcuts]` lives in the global `~/.config/genealogy/config.toml`, client scope only
   (mirrors `[ai]`/`[map]`/`[plugin_trust]`) — no workspace-manifest layer. A save takes effect live (a
-  `Signal<ShortcutConfig>` held in shell context), no restart needed. Residuals: within-screen/
-  `g`-prefix keys are not rebindable by design (ADR 0030 §2); no VS Code-style *when* context (ADR 0030
-  names it explicitly out of scope); a dirty in-progress edit of an already-saved record (screen-local
-  `RecordEditState`) is not covered by the close confirm, only draft tabs are; `⌘S` (save,
-  `screens/record_form.rs`) still lives outside the shortcut map (`docs/mockups/shortcuts.html` shows
-  it); no live key-capture widget — rebinding is a text field taking the canonical chord string.
+  `Signal<ShortcutConfig>` held in shell context), no restart needed. Scoped residuals tracked above
+  under *Keyboard & shortcuts*.
 - **1.0 hardening (Phase 11).** *(Done — Gate 1 + a Gate-2 PR stack, PRs #176–#182:
   `docs/phase-11-gate-1` → `feat/plugin-bundle-signing` → `feat/plugin-layered-loading` →
   `feat/plugin-grants` → `feat/plugin-grant-ux` → `feat/perf-profiling` →

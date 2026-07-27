@@ -38,6 +38,14 @@ framework namespace. A new renderer changes nothing in `genealogy-ui`, so that g
 - Anything the renderer consumes from the app must be re-exported from the `genealogy-app` root
   `pub use` block (the app's public surface) — and, when it flows through the presentation layer,
   surfaced by `genealogy-ui`. Add those exports before wiring the consumer.
+- **Keyboard shortcuts are a lookup against a resolved map, not a hardcoded matcher** (ADR 0030). Load
+  the client-scope `[shortcuts]` overrides (`genealogy_app::ShortcutConfig`) and call
+  `genealogy_ui::resolved_shortcuts` to get the one `Vec<Shortcut>` both the dispatcher and the `?`
+  help overlay read; translate the framework's own key event into a `genealogy_ui::Chord`
+  (`Modifier { command, shift, alt }` + `Key`) and look it up — never re-implement the chord matrix
+  per renderer (mirror `genealogy-ui-dioxus/src/shell/keyboard.rs::shell_intent`). Only
+  `ShortcutGroup::Global` actions are resolved this way; within-screen and `g`-prefix keys stay
+  hardcoded, widget-owned chords.
 
 ## 3. Implement the plugin vocabulary→widgets interpreter (ADR 0008 §5)
 
