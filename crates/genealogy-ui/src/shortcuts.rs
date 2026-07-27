@@ -122,12 +122,16 @@ pub enum ShortcutAction {
     AddSource,
     /// Edit the focused fact (`e`).
     Edit,
+    /// Quit the application (`⌘Q`).
+    Quit,
+    /// Close the active record tab (`⌘W`).
+    CloseCurrentTab,
 }
 
 impl ShortcutAction {
     /// Every action, used to assert the map is exhaustive.
     #[must_use]
-    pub const fn all() -> [Self; 20] {
+    pub const fn all() -> [Self; 22] {
         [
             Self::CommandPalette,
             Self::NewRecord,
@@ -149,6 +153,8 @@ impl ShortcutAction {
             Self::LastTab,
             Self::AddSource,
             Self::Edit,
+            Self::Quit,
+            Self::CloseCurrentTab,
         ]
     }
 }
@@ -194,8 +200,8 @@ pub fn shortcuts() -> Vec<Shortcut> {
     };
     use Modifier::{Command, CommandShift, None as NoMod};
     use ShortcutAction::{
-        AddSource, Close, CommandPalette, DockRecordTab, Edit, Find, FirstTab, Help, LastTab, MoveDown, MoveUp,
-        NewRecord, NextRecord, NextTab, Open, PrevRecord, PrevTab, Redo, SwitchRecordTab, Undo,
+        AddSource, Close, CloseCurrentTab, CommandPalette, DockRecordTab, Edit, Find, FirstTab, Help, LastTab,
+        MoveDown, MoveUp, NewRecord, NextRecord, NextTab, Open, PrevRecord, PrevTab, Quit, Redo, SwitchRecordTab, Undo,
     };
     use ShortcutGroup::{Global, WithinScreen};
     vec![
@@ -208,6 +214,8 @@ pub fn shortcuts() -> Vec<Shortcut> {
         shortcut(DockRecordTab, CommandShift, DigitRange, Global, "sc-dock-tab"),
         shortcut(Help, NoMod, Question, Global, "sc-help"),
         shortcut(Close, NoMod, Escape, Global, "sc-close"),
+        shortcut(Quit, Command, Char('q'), Global, "sc-quit"),
+        shortcut(CloseCurrentTab, Command, Char('w'), Global, "sc-close-tab"),
         shortcut(MoveUp, NoMod, ArrowUp, WithinScreen, "sc-move-up"),
         shortcut(MoveDown, NoMod, ArrowDown, WithinScreen, "sc-move-down"),
         shortcut(Open, NoMod, Enter, WithinScreen, "sc-open"),
@@ -289,8 +297,27 @@ mod tests {
             .iter()
             .filter(|entry| entry.group == ShortcutGroup::WithinScreen)
             .count();
-        assert_eq!(global, 9);
+        assert_eq!(global, 11);
         assert_eq!(within, 11);
+    }
+
+    #[test]
+    fn quit_and_close_tab_are_global_command_chords() {
+        let map = shortcuts();
+        let quit = map
+            .iter()
+            .find(|entry| entry.action == ShortcutAction::Quit)
+            .expect("quit present");
+        let close_tab = map
+            .iter()
+            .find(|entry| entry.action == ShortcutAction::CloseCurrentTab)
+            .expect("close-current-tab present");
+        assert_eq!(quit.group, ShortcutGroup::Global);
+        assert_eq!(quit.chord.modifier, Modifier::Command);
+        assert_eq!(quit.label_id, "sc-quit");
+        assert_eq!(close_tab.group, ShortcutGroup::Global);
+        assert_eq!(close_tab.chord.modifier, Modifier::Command);
+        assert_eq!(close_tab.label_id, "sc-close-tab");
     }
 
     #[test]

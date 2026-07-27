@@ -13,12 +13,14 @@ use genealogy_app::WorkspaceCounts;
 
 use crate::i18n::Chrome;
 
+pub mod close_confirm;
 pub mod explorer;
 pub mod focus_trap;
 pub mod help_overlay;
 pub mod keyboard;
 pub mod nav_state;
 pub mod palette;
+pub mod quit_manager;
 pub mod rail;
 pub mod root;
 pub mod roving;

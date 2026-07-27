@@ -32,6 +32,16 @@ pub enum Overlay {
     Help,
 }
 
+/// A close/quit operation armed behind the confirm dialog because it would discard an unsaved draft
+/// (`⌘W`/`⌘Q`, the tabstrip `✕`). `None` on [`NavState::pending_close`] means no confirm is showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CloseRequest {
+    /// Close the record tab at this 0-based index (a draft, or the confirm would not have armed).
+    Tab(usize),
+    /// Quit the application.
+    Quit,
+}
+
 /// The active colour theme, mirrored onto `[data-theme]` at the shell root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Theme {
@@ -205,6 +215,14 @@ pub struct NavState {
     /// Map tab's "Open in Geography ↗"), or `None`. Set by [`Self::open_geography_focused`];
     /// `GeographyScreen` consumes and clears it once, on mount.
     pub geography_focus: Signal<Option<(String, String)>>,
+    /// A close-tab/quit operation awaiting confirmation because it would discard an unsaved draft, or
+    /// `None` when the confirm dialog is not showing. Set by [`Self::request_close_tab`] /
+    /// [`Self::request_quit`]; resolved by [`Self::confirm_close`] / [`Self::cancel_close`].
+    pub pending_close: Signal<Option<CloseRequest>>,
+    /// A monotonically-increasing "quit the application" ticket, bumped once a quit is confirmed (or
+    /// requested with nothing unsaved). The desktop-only `QuitManager` observes it and closes the
+    /// native window; it is a no-op under SSR, which mounts no window.
+    pub quit_requested: Signal<u32>,
 }
 
 impl Default for NavState {
@@ -248,6 +266,8 @@ impl NavState {
             palette_seed: Signal::new(String::new()),
             notice: Signal::new(None),
             geography_focus: Signal::new(None),
+            pending_close: Signal::new(None),
+            quit_requested: Signal::new(0),
         }
     }
 
@@ -483,6 +503,51 @@ impl NavState {
         if docked_gone {
             self.docked_record.set(None);
         }
+    }
+
+    /// Requests closing the record tab at `index` (`⌘W`, the tabstrip `✕`): closes it immediately
+    /// unless it is an unsaved draft, in which case the confirm dialog arms instead of discarding it
+    /// silently. The single path both callers share, so a draft cannot be closed with one click.
+    pub fn request_close_tab(&mut self, index: usize) {
+        let is_draft = self.records.peek().get(index).is_some_and(OpenTab::is_draft);
+        if is_draft {
+            self.pending_close.set(Some(CloseRequest::Tab(index)));
+        } else {
+            self.close_record(index);
+        }
+    }
+
+    /// Requests quitting the application (`⌘Q`): arms the confirm dialog if any draft tab is open,
+    /// otherwise bumps [`Self::quit_requested`] immediately (nothing to lose).
+    pub fn request_quit(&mut self) {
+        let has_draft = self.records.peek().iter().any(OpenTab::is_draft);
+        if has_draft {
+            self.pending_close.set(Some(CloseRequest::Quit));
+        } else {
+            self.quit_now();
+        }
+    }
+
+    /// Applies the pending close/quit (the confirm dialog's primary action) and clears it.
+    pub fn confirm_close(&mut self) {
+        let request = *self.pending_close.peek();
+        self.pending_close.set(None);
+        match request {
+            Some(CloseRequest::Tab(index)) => self.close_record(index),
+            Some(CloseRequest::Quit) => self.quit_now(),
+            None => {}
+        }
+    }
+
+    /// Dismisses the pending close/quit without applying it (the confirm dialog's cancel action).
+    pub fn cancel_close(&mut self) {
+        self.pending_close.set(None);
+    }
+
+    /// Bumps [`Self::quit_requested`] so the desktop-only `QuitManager` closes the native window.
+    fn quit_now(&mut self) {
+        let next = self.quit_requested.peek().wrapping_add(1);
+        self.quit_requested.set(next);
     }
 
     /// The active open tab (saved record or draft), if any.

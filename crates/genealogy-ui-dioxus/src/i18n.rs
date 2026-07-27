@@ -1510,8 +1510,58 @@ impl Chrome {
             "sc-last-tab" => fl!(self.loader, "sc-last-tab"),
             "sc-add-source" => fl!(self.loader, "sc-add-source"),
             "sc-edit" => fl!(self.loader, "sc-edit"),
+            "sc-quit" => fl!(self.loader, "sc-quit"),
+            "sc-close-tab" => fl!(self.loader, "sc-close-tab"),
             other => self.rail_label(other),
         }
+    }
+
+    /// The close-current-tab confirm dialog's heading (`⌘W` on a draft tab).
+    #[must_use]
+    pub fn close_tab_confirm_title(&self) -> String {
+        fl!(self.loader, "close-tab-confirm-title")
+    }
+
+    /// The close-current-tab confirm dialog's body, naming the draft tab that would be discarded.
+    #[must_use]
+    pub fn close_tab_confirm_body(&self, label: &str) -> String {
+        fl!(self.loader, "close-tab-confirm-body", label = label)
+    }
+
+    /// The close-current-tab confirm dialog's confirm action label.
+    #[must_use]
+    pub fn close_tab_confirm_confirm(&self) -> String {
+        fl!(self.loader, "close-tab-confirm-confirm")
+    }
+
+    /// The close-current-tab confirm dialog's cancel action label.
+    #[must_use]
+    pub fn close_tab_confirm_cancel(&self) -> String {
+        fl!(self.loader, "close-tab-confirm-cancel")
+    }
+
+    /// The quit confirm dialog's heading (`⌘Q` with an unsaved draft open).
+    #[must_use]
+    pub fn quit_confirm_title(&self) -> String {
+        fl!(self.loader, "quit-confirm-title")
+    }
+
+    /// The quit confirm dialog's body.
+    #[must_use]
+    pub fn quit_confirm_body(&self) -> String {
+        fl!(self.loader, "quit-confirm-body")
+    }
+
+    /// The quit confirm dialog's confirm action label.
+    #[must_use]
+    pub fn quit_confirm_confirm(&self) -> String {
+        fl!(self.loader, "quit-confirm-confirm")
+    }
+
+    /// The quit confirm dialog's cancel action label.
+    #[must_use]
+    pub fn quit_confirm_cancel(&self) -> String {
+        fl!(self.loader, "quit-confirm-cancel")
     }
 
     /// The plugin manager's heading.

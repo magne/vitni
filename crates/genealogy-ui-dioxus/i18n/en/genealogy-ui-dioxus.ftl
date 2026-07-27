@@ -128,6 +128,18 @@ sc-first-tab = First tab
 sc-last-tab = Last tab
 sc-add-source = Add source
 sc-edit = Edit
+sc-quit = Quit
+sc-close-tab = Close tab
+
+# Close-tab / quit confirm dialogs (⌘W, ⌘Q on a draft tab)
+close-tab-confirm-title = Close tab?
+close-tab-confirm-body = "{ $label }" hasn't been saved yet. Closing this tab discards it.
+close-tab-confirm-confirm = Close tab
+close-tab-confirm-cancel = Cancel
+quit-confirm-title = Quit?
+quit-confirm-body = One or more open tabs haven't been saved yet. Quitting discards them.
+quit-confirm-confirm = Quit
+quit-confirm-cancel = Cancel
 # The docked-pane header's undock button (aria-label)
 undock-label = Undock record
 media-select-prompt = Select a media object to view its details.

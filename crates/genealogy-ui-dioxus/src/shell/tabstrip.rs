@@ -96,13 +96,13 @@ pub fn RecordTabstrip() -> Element {
                                     aria_label: "{close_label}",
                                     onclick: move |event| {
                                         event.stop_propagation();
-                                        nav.close_record(index);
+                                        nav.request_close_tab(index);
                                     },
                                     onkeydown: move |event| {
                                         if event.key() == Key::Enter || event.key() == Key::Character(" ".to_owned()) {
                                             event.prevent_default();
                                             event.stop_propagation();
-                                            nav.close_record(index);
+                                            nav.request_close_tab(index);
                                         }
                                     },
                                     "✕"
