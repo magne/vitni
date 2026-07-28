@@ -1365,6 +1365,16 @@ pub async fn register_workspace(
         .map_err(|error| loc.error(&error))
 }
 
+/// Rebuilds every projection from the event log for the open workspace, returning a localized error
+/// on failure. The Preferences Maintenance card's counterpart to the CLI's `genealogy rebuild`
+/// (`Workspace::rebuild_projections`, an ADR 0010 maintenance op) — the tool for recovering after a
+/// `genealogy-db` schema change.
+pub async fn rebuild_projections(services: Services) -> Result<(), String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    workspace.rebuild_projections().await.map_err(|error| loc.error(&error))
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;

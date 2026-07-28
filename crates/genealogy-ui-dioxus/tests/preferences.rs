@@ -16,7 +16,9 @@ use genealogy_app::{
 };
 use genealogy_core::ids::AgentId;
 use genealogy_ui_dioxus::i18n::Chrome;
-use genealogy_ui_dioxus::screens::{LocaleFields, RegisterFields, ShortcutFields, SuretyFields, preferences_view};
+use genealogy_ui_dioxus::screens::{
+    LocaleFields, MaintenanceFields, RegisterFields, ShortcutFields, SuretyFields, preferences_view,
+};
 use genealogy_ui_dioxus::services::PreferencesData;
 use unic_langid::LanguageIdentifier;
 use uuid::Uuid;
@@ -172,6 +174,8 @@ fn view_with_status_and_locale(
         workspaces,
         open_workspace,
         false,
+        false,
+        false,
     )
 }
 
@@ -192,6 +196,8 @@ fn render_prefs(
     workspaces: Vec<WorkspaceSummary>,
     open_workspace: String,
     register_open: bool,
+    maintenance_confirm_open: bool,
+    maintenance_running: bool,
 ) -> Element {
     let data = PreferencesData {
         config,
@@ -239,6 +245,10 @@ fn render_prefs(
     let shortcut_fields = ShortcutFields {
         bindings: use_signal(|| shortcut_bindings_seed(&data.shortcuts)),
     };
+    let maintenance = MaintenanceFields {
+        confirm_open: use_signal(move || maintenance_confirm_open),
+        running: use_signal(move || maintenance_running),
+    };
     let loc = genealogy_ui::Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let shortcuts_vm_value = genealogy_ui::shortcuts_vm(&data.shortcuts, &loc);
     preferences_view(
@@ -259,6 +269,8 @@ fn render_prefs(
         register,
         |_| {},
         |_| {},
+        |_| {},
+        maintenance,
         |_| {},
     )
 }
@@ -355,6 +367,8 @@ fn workspace_unreadable_manifest() -> Element {
         workspaces,
         open,
         false,
+        false,
+        false,
     )
 }
 
@@ -372,6 +386,8 @@ fn open_differs_from_default() -> Element {
         None,
         workspaces,
         "tree2".to_owned(),
+        false,
+        false,
         false,
     )
 }
@@ -398,6 +414,8 @@ fn one_workspace_with_surety_override() -> Element {
         workspaces,
         open,
         false,
+        false,
+        false,
     )
 }
 
@@ -421,6 +439,8 @@ fn one_workspace_with_shortcut_override_and_rejection() -> Element {
         workspaces,
         open,
         false,
+        false,
+        false,
     )
 }
 
@@ -439,6 +459,48 @@ fn register_form_open() -> Element {
         workspaces,
         open,
         true,
+        false,
+        false,
+    )
+}
+
+/// The Maintenance card with a rebuild in flight (button disabled, busy label).
+fn maintenance_running() -> Element {
+    let config = config_with_one_workspace();
+    let workspaces = summaries(&config, Some(Engine::Sqlite));
+    let open = config.default.clone().unwrap_or_default();
+    render_prefs(
+        config,
+        layers_falling_back_to_shared_default(),
+        resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        SuretyLabelOverrides::default(),
+        genealogy_app::ShortcutConfig::default(),
+        None,
+        workspaces,
+        open,
+        false,
+        false,
+        true,
+    )
+}
+
+/// The Maintenance card with the rebuild-confirm modal armed.
+fn maintenance_confirm_open() -> Element {
+    let config = config_with_one_workspace();
+    let workspaces = summaries(&config, Some(Engine::Sqlite));
+    let open = config.default.clone().unwrap_or_default();
+    render_prefs(
+        config,
+        layers_falling_back_to_shared_default(),
+        resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        SuretyLabelOverrides::default(),
+        genealogy_app::ShortcutConfig::default(),
+        None,
+        workspaces,
+        open,
+        false,
+        true,
+        false,
     )
 }
 
@@ -876,4 +938,46 @@ fn settings_sub_nav_lists_every_section() {
             "expected sub-nav entry {section:?}:\n{html}"
         );
     }
+}
+
+/// The Maintenance card (issue #192) renders its title, explanatory copy, and the rebuild button;
+/// in its idle state the confirm modal is absent.
+#[test]
+fn maintenance_card_renders_title_description_and_button() {
+    let html = render(one_workspace_fallback);
+    assert!(html.contains("Maintenance"), "the card title:\n{html}");
+    assert!(
+        html.contains("Rebuild projections"),
+        "the rebuild button label:\n{html}"
+    );
+    assert!(
+        !html.contains(r#"role="dialog""#),
+        "the idle render shows no confirm modal:\n{html}"
+    );
+}
+
+/// While a rebuild is running, the button is disabled and shows the busy label.
+#[test]
+fn maintenance_card_running_disables_the_button_and_shows_the_busy_label() {
+    let html = render(maintenance_running);
+    assert!(
+        html.contains("Rebuilding…"),
+        "the busy label replaces the idle label:\n{html}"
+    );
+    assert!(
+        !html.contains(">Rebuild projections<"),
+        "the idle label is not also shown:\n{html}"
+    );
+    assert!(html.contains("disabled"), "the busy button is disabled:\n{html}");
+}
+
+/// Arming the confirm signal renders the [`Modal`](genealogy_ui_dioxus::components::Modal) with its
+/// confirm/cancel actions.
+#[test]
+fn maintenance_confirm_modal_shows_confirm_and_cancel() {
+    let html = render(maintenance_confirm_open);
+    assert!(html.contains(r#"role="dialog""#), "the confirm modal renders:\n{html}");
+    assert!(html.contains("Rebuild projections?"), "the modal title:\n{html}");
+    assert!(html.contains(">Rebuild<"), "the confirm action:\n{html}");
+    assert!(html.contains(">Cancel<"), "the cancel action:\n{html}");
 }

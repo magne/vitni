@@ -258,6 +258,33 @@
         <div class="muted" style="font-size:var(--fs-sm);margin-top:6px">Workspaces are referenced by <b>name</b>; the default opens when no <span class="mono">--workspace</span> is given (ADR 0005). <b>Open</b> switches the session without changing the default; <b>Make default</b> persists without restarting.</div>
       </div>
 
+      <!-- Maintenance (#192) — no sub-nav entry, same as Workspaces above -->
+      <h2 id="maintenance" style="border:0;margin:24px 0 12px">Maintenance</h2>
+      <div class="card">
+        <h3>Maintenance</h3>
+        <div class="muted" style="font-size:var(--fs-sm);margin-bottom:12px">
+          Rebuild every projection from the event log. Projections are derived state, not the source
+          of truth, so this never loses data — use it after a <span class="mono">genealogy-db</span>
+          schema change, or if a projection looks out of sync with the log.
+        </div>
+        <div class="row-actions"><button class="btn">Rebuild projections</button></div>
+      </div>
+
+      <h3 style="margin-top:var(--sp-6)">Rebuild confirm <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, shown before a rebuild starts</span></h3>
+      <div class="overlay" style="position:relative;inset:auto;display:block;background:transparent;padding:0;margin-top:var(--sp-2)">
+        <div class="modal" style="width:min(480px,96vw)">
+          <div class="m-head">Rebuild projections?</div>
+          <div class="m-body">
+            <p>This replays the whole event log and re-derives every projection. It can take a while
+              on a large workspace, and the workspace is unavailable to other actions until it finishes.</p>
+          </div>
+          <div class="m-foot">
+            <button class="btn">Cancel</button>
+            <button class="btn primary">Rebuild</button>
+          </div>
+        </div>
+      </div>
+
       <div class="row-actions" style="justify-content:flex-end;margin-top:8px">
         <button class="btn">Reset to defaults</button>
         <button class="btn primary">Save preferences</button>

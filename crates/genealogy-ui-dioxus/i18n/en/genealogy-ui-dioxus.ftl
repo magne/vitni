@@ -296,6 +296,16 @@ prefs-register-submit = Register
 prefs-register-cancel = Cancel
 prefs-register-name-required = A workspace name is required.
 
+prefs-maintenance-title = Maintenance
+prefs-maintenance-intro = Rebuild every projection from the event log. Projections are derived state, not the source of truth, so this never loses data — use it after a genealogy-db schema change, or if a projection looks out of sync with the log.
+prefs-rebuild-projections = Rebuild projections
+prefs-rebuild-busy = Rebuilding…
+prefs-rebuild-confirm-title = Rebuild projections?
+prefs-rebuild-confirm-body = This replays the whole event log and re-derives every projection. It can take a while on a large workspace, and the workspace is unavailable to other actions until it finishes.
+prefs-rebuild-confirm-confirm = Rebuild
+prefs-rebuild-confirm-cancel = Cancel
+prefs-rebuild-success = Projections rebuilt.
+
 prefs-reset = Reset to defaults
 prefs-save = Save preferences
 prefs-saved = Preferences saved.

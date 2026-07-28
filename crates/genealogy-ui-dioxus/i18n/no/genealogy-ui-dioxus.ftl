@@ -295,6 +295,16 @@ prefs-register-submit = Registrer
 prefs-register-cancel = Avbryt
 prefs-register-name-required = Et arbeidsområdenavn er påkrevd.
 
+prefs-maintenance-title = Vedlikehold
+prefs-maintenance-intro = Bygg alle projeksjoner på nytt fra hendelsesloggen. Projeksjoner er avledet tilstand, ikke selve sannheten, så dette taper aldri data — bruk det etter en endring i genealogy-db-skjemaet, eller hvis en projeksjon ser ut til å være ute av synk med loggen.
+prefs-rebuild-projections = Bygg projeksjoner på nytt
+prefs-rebuild-busy = Bygger på nytt…
+prefs-rebuild-confirm-title = Bygg projeksjoner på nytt?
+prefs-rebuild-confirm-body = Dette spiller av hele hendelsesloggen på nytt og avleder alle projeksjoner på nytt. Det kan ta en stund på et stort arbeidsområde, og arbeidsområdet er utilgjengelig for andre handlinger til det er ferdig.
+prefs-rebuild-confirm-confirm = Bygg på nytt
+prefs-rebuild-confirm-cancel = Avbryt
+prefs-rebuild-success = Projeksjoner bygget på nytt.
+
 prefs-reset = Tilbakestill til standard
 prefs-save = Lagre innstillinger
 prefs-saved = Innstillinger lagret.

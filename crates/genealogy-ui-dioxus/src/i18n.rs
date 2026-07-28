@@ -1160,6 +1160,60 @@ impl Chrome {
         fl!(self.loader, "prefs-register-name-required")
     }
 
+    /// The "Maintenance" card title (issue #192).
+    #[must_use]
+    pub fn prefs_maintenance_title(&self) -> String {
+        fl!(self.loader, "prefs-maintenance-title")
+    }
+
+    /// The Maintenance card's explanatory copy: what a rebuild does and when it is needed.
+    #[must_use]
+    pub fn prefs_maintenance_intro(&self) -> String {
+        fl!(self.loader, "prefs-maintenance-intro")
+    }
+
+    /// The "Rebuild projections" button's idle label.
+    #[must_use]
+    pub fn prefs_rebuild_projections(&self) -> String {
+        fl!(self.loader, "prefs-rebuild-projections")
+    }
+
+    /// The button's busy label while a rebuild is running.
+    #[must_use]
+    pub fn prefs_rebuild_busy(&self) -> String {
+        fl!(self.loader, "prefs-rebuild-busy")
+    }
+
+    /// The rebuild-confirm modal's heading.
+    #[must_use]
+    pub fn prefs_rebuild_confirm_title(&self) -> String {
+        fl!(self.loader, "prefs-rebuild-confirm-title")
+    }
+
+    /// The rebuild-confirm modal's body.
+    #[must_use]
+    pub fn prefs_rebuild_confirm_body(&self) -> String {
+        fl!(self.loader, "prefs-rebuild-confirm-body")
+    }
+
+    /// The rebuild-confirm modal's confirm action.
+    #[must_use]
+    pub fn prefs_rebuild_confirm_confirm(&self) -> String {
+        fl!(self.loader, "prefs-rebuild-confirm-confirm")
+    }
+
+    /// The rebuild-confirm modal's cancel action.
+    #[must_use]
+    pub fn prefs_rebuild_confirm_cancel(&self) -> String {
+        fl!(self.loader, "prefs-rebuild-confirm-cancel")
+    }
+
+    /// The shell notice shown after a rebuild completes successfully.
+    #[must_use]
+    pub fn prefs_rebuild_success(&self) -> String {
+        fl!(self.loader, "prefs-rebuild-success")
+    }
+
     /// The "Reset to defaults" button label.
     #[must_use]
     pub fn prefs_reset(&self) -> String {

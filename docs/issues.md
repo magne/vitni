@@ -221,18 +221,10 @@ Residuals from the shortcuts work (ADR 0030); see
 
 ### GUI ⇄ CLI parity
 
-Every per-aggregate verb the CLI exposes has a GUI counterpart *except* the items below (audited
-`genealogy-cli/src/{main.rs,commands/*.rs}` against `genealogy-ui/src/{navigation.rs,intent.rs}`).
-Each reuses an existing `genealogy-app` use-case — none needs a new core verb. One more parity gap is
-filed in its own area: research notes (*Notes & research notes*).
-
-- **Projection rebuild is CLI-only** — `genealogy rebuild` → `Workspace::rebuild_projections`
-  (`workspace.rs:712`, an ADR 0010 maintenance op). After a `genealogy-db` schema change there is no
-  in-app way to run it.
-  *UI:* a "Rebuild projections" button in a new **Maintenance** card in Preferences. It is a
-  workspace-functionality op, not an aggregate, so it belongs on Preferences' documented
-  direct-to-app path (like the Workspaces card), not behind `Intent`. Confirm in a `Modal`, disable
-  while running, report the outcome through `NavState::notify`. — #192
+No open items. Every per-aggregate verb the CLI exposes has a GUI counterpart (audited
+`genealogy-cli/src/{main.rs,commands/*.rs}` against `genealogy-ui/src/{navigation.rs,intent.rs}`); each
+reuses an existing `genealogy-app` use-case rather than a new core verb. One parity gap remains, filed
+in its own area: research notes (*Notes & research notes*).
 
 ## Import, export & plugins
 
