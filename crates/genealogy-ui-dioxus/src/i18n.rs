@@ -1129,6 +1129,19 @@ impl Chrome {
         fl!(self.loader, "prefs-register-path-hint")
     }
 
+    /// The register form's optional "Database URL" field label (rendered only under the `postgres`
+    /// feature; kept un-cfg'd here so `i18n-check` never sees an unused key in a default build).
+    #[must_use]
+    pub fn prefs_register_database_url_label(&self) -> String {
+        fl!(self.loader, "prefs-register-database-url-label")
+    }
+
+    /// The register form's Database URL field hint (empty ⇒ default SQLite engine).
+    #[must_use]
+    pub fn prefs_register_database_url_hint(&self) -> String {
+        fl!(self.loader, "prefs-register-database-url-hint")
+    }
+
     /// The register form's submit button label.
     #[must_use]
     pub fn prefs_register_submit(&self) -> String {

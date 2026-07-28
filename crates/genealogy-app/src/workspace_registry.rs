@@ -47,6 +47,11 @@ pub fn list_workspaces(config: &Config) -> Vec<WorkspaceSummary> {
 /// `dir` defaults to [`default_workspace_dir`] when `None`; `database_url` overrides the engine
 /// default (frozen into the manifest at creation).
 ///
+/// If the final open fails (e.g. an unreachable Postgres server), the registration is rolled back —
+/// the config entry is removed and re-persisted, and the workspace directory is deleted, but only if
+/// this call created it — before the original error is returned. A rollback failure is logged rather
+/// than propagated, since the caller already has the real error to report.
+///
 /// # Errors
 ///
 /// [`AppError::Config`] if the name is empty/whitespace or already registered, or the config cannot
@@ -66,15 +71,35 @@ pub async fn register_workspace(
     if config.workspaces.contains_key(name) {
         return Err(AppError::Config(format!("workspace {name:?} is already registered")));
     }
+    let previous_default = config.default.clone();
     let dir = match dir {
         Some(dir) => dir.to_path_buf(),
         None => default_workspace_dir(name)?,
     };
+    let dir_preexisted = dir.exists();
     Workspace::init(&dir, &config.operator, &config.defaults, database_url)?;
     config.register_workspace(name.to_owned(), dir.clone());
     store.store_config(&config)?;
     // Open once to create the database file and record the operator in the manifest.
-    Workspace::open(&dir, &config.operator, &config.workspace_defaults).await?;
+    if let Err(error) = Workspace::open(&dir, &config.operator, &config.workspace_defaults).await {
+        config.workspaces.remove(name);
+        config.default = previous_default;
+        if let Err(rollback_error) = store.store_config(&config) {
+            tracing::warn!(
+                %rollback_error,
+                workspace = name,
+                "could not roll back the config after a failed workspace open"
+            );
+        }
+        if !dir_preexisted && let Err(remove_error) = std::fs::remove_dir_all(&dir) {
+            tracing::warn!(
+                %remove_error,
+                path = %dir.display(),
+                "could not remove the workspace directory after a failed open"
+            );
+        }
+        return Err(error);
+    }
     let engine = manifest_engine(&dir);
     Ok(WorkspaceSummary {
         name: name.to_owned(),
@@ -88,7 +113,7 @@ pub async fn register_workspace(
 mod tests {
     use super::{list_workspaces, register_workspace};
     use crate::config::{self, Engine};
-    use crate::workspace::{Workspace, engine_of_url};
+    use crate::workspace::{Workspace, engine_of_url, manifest_engine};
 
     fn config_path(dir: &tempfile::TempDir) -> std::path::PathBuf {
         dir.path().join("config.toml")
@@ -192,6 +217,85 @@ mod tests {
         assert!(result.is_err(), "duplicate name rejected");
         let after = std::fs::read_to_string(&path).expect("read config");
         assert_eq!(before, after, "disk config unchanged after a rejected duplicate");
+    }
+
+    #[tokio::test]
+    async fn register_freezes_a_postgres_url_into_the_manifest() {
+        // Mirrors `list_derives_postgres_from_the_manifest_url`: exercises `Workspace::init` — the
+        // call `register_workspace` makes before it opens the store — directly, since actually
+        // opening a postgres store needs a running server, which is out of scope for a manifest check.
+        let home = tempfile::tempdir().expect("tempdir");
+        let dir = home.path().join("pg");
+        let config = config::load_or_bootstrap(&config_path(&home)).expect("bootstrap");
+        Workspace::init(
+            &dir,
+            &config.operator,
+            &config.defaults,
+            Some("postgres://localhost/gen"),
+        )
+        .expect("init with a postgres url");
+
+        let manifest = std::fs::read_to_string(dir.join("workspace.toml")).expect("read manifest");
+        assert!(
+            manifest.contains("postgres://localhost/gen"),
+            "the manifest carries the given url:\n{manifest}"
+        );
+        assert_eq!(
+            manifest_engine(&dir),
+            Some(Engine::Postgres),
+            "postgres engine derived from the frozen url"
+        );
+    }
+
+    #[tokio::test]
+    async fn register_rejects_an_unrecognized_database_url_scheme() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let path = config_path(&home);
+        let dir = home.path().join("ws");
+        let result = register_workspace(&path, "ws", Some(&dir), Some("mysql://x")).await;
+        assert!(
+            matches!(result, Err(crate::error::AppError::Config(_))),
+            "an unrecognized scheme is a config error: {result:?}"
+        );
+        let config = config::load_or_bootstrap(&path).expect("bootstrap");
+        assert!(!config.workspaces.contains_key("ws"), "nothing was registered");
+    }
+
+    #[tokio::test]
+    async fn register_rolls_back_a_config_entry_when_open_fails() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let path = config_path(&home);
+        let dir = home.path().join("pg");
+        // Port 1 has no listener, so the connection is refused immediately — a fast, deterministic
+        // way to exercise the open-failure rollback without a running server (mirrors
+        // `workspace.rs`'s `opening_an_unreachable_postgres_workspace_surfaces_a_db_error`).
+        let result = register_workspace(&path, "pg", Some(&dir), Some("postgres://localhost:1/x")).await;
+        assert!(
+            matches!(result, Err(crate::error::AppError::Db(_))),
+            "the unreachable server surfaces as a db error: {result:?}"
+        );
+        let config = config::load_or_bootstrap(&path).expect("bootstrap");
+        assert!(
+            !config.workspaces.contains_key("pg"),
+            "the failed registration left no config entry"
+        );
+        assert!(!dir.exists(), "the directory this call created was removed");
+    }
+
+    #[tokio::test]
+    async fn register_rollback_never_deletes_a_preexisting_directory() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let path = config_path(&home);
+        let dir = home.path().join("pg");
+        std::fs::create_dir_all(&dir).expect("pre-create the directory");
+        std::fs::write(dir.join("keepsake.txt"), b"already here").expect("seed a file");
+
+        let result = register_workspace(&path, "pg", Some(&dir), Some("postgres://localhost:1/x")).await;
+        assert!(result.is_err(), "the open still fails");
+        assert!(
+            dir.join("keepsake.txt").is_file(),
+            "a pre-existing directory is left alone"
+        );
     }
 
     #[tokio::test]

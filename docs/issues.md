@@ -223,9 +223,8 @@ Residuals from the shortcuts work (ADR 0030); see
 
 Every per-aggregate verb the CLI exposes has a GUI counterpart *except* the items below (audited
 `genealogy-cli/src/{main.rs,commands/*.rs}` against `genealogy-ui/src/{navigation.rs,intent.rs}`).
-Each reuses an existing `genealogy-app` use-case — none needs a new core verb. Two more parity gaps
-are filed in their own areas: research notes (*Notes & research notes*) and family child-removal
-(*Person & Family*).
+Each reuses an existing `genealogy-app` use-case — none needs a new core verb. One more parity gap is
+filed in its own area: research notes (*Notes & research notes*).
 
 - **Bulk export is CLI-only** — `genealogy export <plugin> [--output FILE]` drives
   `PluginHost::run_bulk_export`; the GUI only *names* `Capability::ExportSink` in the plugin panel and
@@ -250,12 +249,6 @@ are filed in their own areas: research notes (*Notes & research notes*) and fami
   workspace-functionality op, not an aggregate, so it belongs on Preferences' documented
   direct-to-app path (like the Workspaces card), not behind `Intent`. Confirm in a `Modal`, disable
   while running, report the outcome through `NavState::notify`. — #192
-- **Postgres workspaces can only be created from the CLI** — `genealogy init --database-url URL`
-  freezes the engine into the manifest, but the Preferences "Register workspace…" form calls
-  `register_workspace(&path, name, dir, None)` (`genealogy-ui-dioxus/src/services.rs:1088`), so the GUI
-  always gets SQLite.
-  *UI:* add an optional "Database URL" field to that existing disclosure form and thread it into the
-  `None` argument — `genealogy_app::register_workspace` already takes it. — #193
 
 ## Import, export & plugins
 
