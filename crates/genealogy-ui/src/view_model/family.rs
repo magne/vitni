@@ -164,6 +164,9 @@ pub struct FamilyDetail {
     pub tags: Vec<TagRef>,
     /// The family's privacy restrictions, as presentation kinds.
     pub restrictions: Vec<RestrictionKind>,
+    /// The research notes arguing about this record (Research notes tab, ADR 0028 §5) — the reverse
+    /// index over the `ResearchNote` projection; filled by the dispatcher.
+    pub research_notes: Vec<RowVm>,
     /// The family's change log, newest first (History tab); filled by the dispatcher.
     pub history: Vec<HistoryEntryVm>,
 }
@@ -221,6 +224,7 @@ impl FamilyDetail {
             notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+            research_notes: Vec::new(),
             history: Vec::new(),
         }
     }
@@ -365,6 +369,7 @@ pub fn family_tabs(detail: &FamilyDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("citations", Some(detail.citations.len())),
         tab("media", Some(detail.media.len())),
         tab("notes", Some(detail.notes.len())),
+        tab("research-notes", Some(detail.research_notes.len())),
         tab("tags", Some(detail.tags.len())),
         tab("history", None),
     ]

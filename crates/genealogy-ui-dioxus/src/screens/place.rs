@@ -481,6 +481,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::DuplicateCandidates(_)
             | IntentOutcome::MergeCompare(_)
+            | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
     };
@@ -686,6 +687,13 @@ fn place_tab_content(
             },
         ),
         "tags" => tags_panel(loc, &detail.tags, editing, PlaceEditForm::Tag, on_tag_remove),
+        "research-notes" => rsx! {
+            ResearchNotesTab {
+                category: Category::Places,
+                human_id: detail.human_id.clone(),
+                rows: detail.research_notes.clone(),
+            }
+        },
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => place_overview(loc, detail, record),
     }

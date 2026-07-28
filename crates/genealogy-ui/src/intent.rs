@@ -15,22 +15,28 @@ use genealogy_app::{
     assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note, attach_family_media,
     attach_family_note, attach_person_media, attach_person_note, change_log_for_citation, change_log_for_event,
     change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person, change_log_for_place,
-    change_log_for_repository, change_log_for_source, families_for_person, import_attach_event_media,
-    import_attach_event_note, import_attach_media_note, import_attach_place_media, import_attach_place_note,
-    import_attach_repository_note, import_attach_source_media, import_attach_source_note, link_family_event,
-    link_place, link_source_repository, list_citations, list_event_rows, list_family_rows, list_media, list_notes,
-    list_person_rows, list_persons, list_places, list_repositories, list_sources, recent_activity, remove_child,
-    set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions,
-    set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page,
-    set_place_restrictions, set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation,
-    show_event, show_family, show_media, show_note, show_person, show_place, show_repository, show_source,
-    tag_citation, tag_event, tag_family, tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source,
-    undo_assertion, undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_media_assertion,
-    undo_note_assertion, undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
+    change_log_for_repository, change_log_for_research_note, change_log_for_source, families_for_person,
+    import_attach_event_media, import_attach_event_note, import_attach_media_note, import_attach_place_media,
+    import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
+    link_family_event, link_place, link_source_repository, list_citations, list_event_rows, list_family_rows,
+    list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories, list_sources,
+    recent_activity, remove_child, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
+    set_event_restrictions, set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text,
+    set_note_type, set_page, set_place_restrictions, set_repository_restrictions, set_restrictions,
+    set_source_restrictions, show_citation, show_event, show_family, show_media, show_note, show_person, show_place,
+    show_repository, show_source, tag_citation, tag_event, tag_family, tag_media, tag_note, tag_person, tag_place,
+    tag_repository, tag_source, undo_assertion, undo_citation_assertion, undo_event_assertion, undo_family_assertion,
+    undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion,
+    undo_research_note_assertion, undo_source_assertion, workspace_counts,
 };
 use genealogy_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
     commit_person_change_set, set_person_human_id,
+};
+use genealogy_app::{
+    NewResearchNote, NewResearchNoteSubject, add_subject_to_research_note, create_research_note, list_research_notes,
+    list_research_notes_about, remove_subject_from_research_note, set_research_note_body,
+    set_research_note_restrictions, show_research_note, tag_research_note,
 };
 use genealogy_app::{
     TagChangeSet, TagTarget, add_dna_match_segment, assert_dna_match_shared_ancestor, assert_dna_test_haplogroup,
@@ -70,14 +76,16 @@ use crate::navigation::{
     DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventChangeSetRequest, EventEdit,
     EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent, MediaChangeSetRequest, MediaEdit, MergePersons,
     NoteChangeSetRequest, NoteEdit, PartnerRequest, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest,
-    PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest, ResearchNoteEdit,
+    SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail,
     FamilyDetail, FamilyVm, GeographyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm,
-    PersonDetail, PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail,
-    citation_row, collapse_history, dna_match_row, dna_test_row, event_list_row, event_row, family_list_row,
-    family_row, media_row, note_row, person_list_row, place_row, repository_row, source_row, tag_row,
+    PersonDetail, PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, ResearchNoteDetail, SourceDetail,
+    TagDetail, citation_row, collapse_history, dna_match_row, dna_test_row, event_list_row, event_row, family_list_row,
+    family_row, media_row, note_row, person_list_row, place_row, repository_row, research_note_row, source_row,
+    tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -115,6 +123,8 @@ pub enum IntentOutcome {
     MediaDetail(Box<MediaDetail>),
     /// One note's detail.
     NoteDetail(Box<NoteDetail>),
+    /// One research note's detail.
+    ResearchNoteDetail(Box<ResearchNoteDetail>),
     /// One tag's detail.
     TagDetail(Box<TagDetail>),
     /// One DNA test's detail.
@@ -193,6 +203,8 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
         Intent::ShowFamily { human_id } => match show_family(workspace, human_id).await? {
             Some(summary) => {
                 let mut detail = FamilyDetail::from_summary(&summary, loc);
+                detail.research_notes =
+                    research_notes_about(workspace, loc, NewResearchNoteSubject::Family(human_id.clone())).await?;
                 let change_log = change_log_for_family(workspace, human_id).await?;
                 detail.history = collapse_history(&change_log, loc);
                 Ok(IntentOutcome::FamilyDetail(Box::new(detail)))
@@ -227,6 +239,8 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
         Intent::ShowMedia { human_id } => show_media_detail(workspace, loc, human_id).await,
         Intent::ShowNoteList => note_list(workspace, loc).await,
         Intent::ShowNote { human_id } => show_note_detail(workspace, loc, human_id).await,
+        Intent::ShowResearchNoteList => research_note_list(workspace, loc).await,
+        Intent::ShowResearchNote { human_id } => show_research_note_detail(workspace, loc, human_id).await,
         Intent::ShowTagList => tag_list(workspace, loc).await,
         Intent::ShowTag { id } => show_tag_detail(workspace, loc, id).await,
         Intent::ShowDnaTestList => dna_test_list(workspace, loc).await,
@@ -389,6 +403,9 @@ pub async fn resolve_record_name(
         Category::Notes => show_note(workspace, human_id)
             .await?
             .map(|summary| note_row(&summary, loc).title),
+        Category::ResearchNotes => show_research_note(workspace, human_id)
+            .await?
+            .map(|summary| research_note_row(&summary, loc).title),
         Category::Tags => show_tag(workspace, human_id)
             .await?
             .map(|summary| tag_row(&summary, loc).title),
@@ -540,6 +557,75 @@ async fn note_list(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutco
     Ok(IntentOutcome::List(rows))
 }
 
+/// Loads the research-note list as generic rows.
+async fn research_note_list(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
+    let summaries = list_research_notes(workspace).await?;
+    let mut rows = Vec::with_capacity(summaries.len());
+    for summary in &summaries {
+        rows.push(research_note_row(summary, loc));
+    }
+    Ok(IntentOutcome::List(rows))
+}
+
+/// Loads one research note's detail (joined summary + change log), or [`IntentOutcome::NotFound`].
+async fn show_research_note_detail(
+    workspace: &Workspace,
+    loc: &Localizer,
+    human_id: &str,
+) -> Result<IntentOutcome, AppError> {
+    match show_research_note(workspace, human_id).await? {
+        Some(summary) => {
+            let mut detail = ResearchNoteDetail::from_summary(&summary, loc);
+            let change_log = change_log_for_research_note(workspace, human_id).await?;
+            detail.history = collapse_history(&change_log, loc);
+            Ok(IntentOutcome::ResearchNoteDetail(Box::new(detail)))
+        }
+        None => Ok(IntentOutcome::NotFound {
+            human_id: human_id.to_owned(),
+        }),
+    }
+}
+
+/// Loads the research notes arguing about one record, as the reverse-lookup tab's rows (ADR 0028 §5) —
+/// the Person / Family / Event / Place detail loaders fill their `research_notes` field with this, the
+/// same way they fill `history`.
+async fn research_notes_about(
+    workspace: &Workspace,
+    loc: &Localizer,
+    subject: NewResearchNoteSubject,
+) -> Result<Vec<RowVm>, AppError> {
+    let summaries = list_research_notes_about(workspace, subject).await?;
+    let mut rows = Vec::with_capacity(summaries.len());
+    for summary in &summaries {
+        rows.push(research_note_row(summary, loc));
+    }
+    Ok(rows)
+}
+
+/// Maps a UI [`SubjectRequest`] to the app's `human_id`-keyed subject input, or [`AppError`] when the
+/// category is not one of the four conclusion-bearing aggregates a subject may name (ADR 0028 §2).
+fn subject_input(subject: &SubjectRequest) -> Result<NewResearchNoteSubject, AppError> {
+    let human_id = subject.human_id.clone();
+    match subject.category {
+        Category::People => Ok(NewResearchNoteSubject::Person(human_id)),
+        Category::Families => Ok(NewResearchNoteSubject::Family(human_id)),
+        Category::Events => Ok(NewResearchNoteSubject::Event(human_id)),
+        Category::Places => Ok(NewResearchNoteSubject::Place(human_id)),
+        Category::Dashboard
+        | Category::Sources
+        | Category::Citations
+        | Category::Repositories
+        | Category::Media
+        | Category::Notes
+        | Category::ResearchNotes
+        | Category::Tags
+        | Category::DnaTests
+        | Category::DnaMatches => Err(AppError::ResearchNoteDomain(
+            genealogy_app::ResearchNoteError::UnknownSubject,
+        )),
+    }
+}
+
 /// Loads one media object's detail (joined summary + change log), or [`IntentOutcome::NotFound`].
 async fn show_media_detail(workspace: &Workspace, loc: &Localizer, human_id: &str) -> Result<IntentOutcome, AppError> {
     match show_media(workspace, human_id).await? {
@@ -581,6 +667,8 @@ async fn show_person_detail(workspace: &Workspace, loc: &Localizer, human_id: &s
                 .iter()
                 .map(|family| FamilyVm::from_app(family, loc))
                 .collect();
+            detail.research_notes =
+                research_notes_about(workspace, loc, NewResearchNoteSubject::Person(human_id.to_owned())).await?;
             let change_log = change_log_for_person(workspace, human_id).await?;
             detail.history = collapse_history(&change_log, loc);
             Ok(IntentOutcome::Detail(Box::new(detail)))
@@ -650,6 +738,8 @@ async fn show_event_detail(workspace: &Workspace, loc: &Localizer, human_id: &st
     match show_event(workspace, human_id).await? {
         Some(summary) => {
             let mut detail = EventDetail::from_summary(&summary, loc);
+            detail.research_notes =
+                research_notes_about(workspace, loc, NewResearchNoteSubject::Event(human_id.to_owned())).await?;
             let change_log = change_log_for_event(workspace, human_id).await?;
             detail.history = collapse_history(&change_log, loc);
             Ok(IntentOutcome::EventDetail(Box::new(detail)))
@@ -665,6 +755,8 @@ async fn show_place_detail(workspace: &Workspace, loc: &Localizer, human_id: &st
     match show_place(workspace, human_id).await? {
         Some(summary) => {
             let mut detail = PlaceDetail::from_summary(&summary, loc);
+            detail.research_notes =
+                research_notes_about(workspace, loc, NewResearchNoteSubject::Place(human_id.to_owned())).await?;
             let change_log = change_log_for_place(workspace, human_id).await?;
             detail.history = collapse_history(&change_log, loc);
             Ok(IntentOutcome::PlaceDetail(Box::new(detail)))
@@ -1725,6 +1817,115 @@ pub async fn dispatch_note_edit(
                 .map(|()| human_id.clone())
         }
     }
+}
+
+/// Dispatches a [`ResearchNoteEdit`] to its `genealogy-app` command use-case, mutating the workspace.
+///
+/// The renderer reloads the affected research note ([`ResearchNoteEdit::target`]) afterwards. Mirrors
+/// [`dispatch_note_edit`]; a research note has no rename, so every arm returns the unchanged id.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
+/// database failure).
+pub async fn dispatch_research_note_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &ResearchNoteEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    match edit {
+        ResearchNoteEdit::SetBody {
+            human_id,
+            text,
+            language,
+        } => set_research_note_body(
+            workspace,
+            session,
+            human_id,
+            text.clone(),
+            language.clone(),
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
+        ResearchNoteEdit::AddSubject { human_id, subject } => {
+            add_subject_to_research_note(workspace, session, human_id, subject_input(subject)?, prov.meta())
+                .await
+                .map(|()| human_id.clone())
+        }
+        ResearchNoteEdit::RemoveSubject { human_id, subject } => {
+            remove_subject_from_research_note(workspace, session, human_id, subject_input(subject)?, prov.meta())
+                .await
+                .map(|()| human_id.clone())
+        }
+        ResearchNoteEdit::Tag {
+            human_id,
+            tag_id,
+            remove,
+        } => tag_research_note(workspace, session, human_id, tag_id, *remove, prov.meta())
+            .await
+            .map(|()| human_id.clone()),
+        ResearchNoteEdit::SetRestrictions { human_id, restrictions } => {
+            let restrictions: BTreeSet<Restriction> =
+                restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
+            set_research_note_restrictions(workspace, session, human_id, restrictions, prov.meta())
+                .await
+                .map(|()| human_id.clone())
+        }
+        ResearchNoteEdit::UndoAssertion { human_id, assertion_id } => {
+            undo_research_note_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale)
+                .await
+                .map(|()| human_id.clone())
+        }
+    }
+}
+
+/// Commits a [`ResearchNoteChangeSetRequest`] (the buffered research-note create form), returning the
+/// new note's `human_id`.
+///
+/// The aggregate has no change-set use-case: the create carries the id, subjects, and title, and a
+/// non-blank body is asserted afterwards (sequenced, non-atomic — the same shape as the media create's
+/// follow-up date assert).
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `create_research_note` (an unknown subject, an empty subject set,
+/// a taken id, a database failure) or from the follow-up body assert.
+pub async fn dispatch_research_note_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &ResearchNoteChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let mut subjects = Vec::with_capacity(request.subjects.len());
+    for subject in &request.subjects {
+        subjects.push(subject_input(subject)?);
+    }
+    let human_id = create_research_note(
+        workspace,
+        session,
+        NewResearchNote {
+            human_id: request.human_id.clone(),
+            subjects,
+            title: request.title.clone(),
+        },
+        prov.provenance(),
+        &prov.citations,
+    )
+    .await?;
+    if let Some(body) = request.body.clone() {
+        set_research_note_body(
+            workspace,
+            session,
+            &human_id,
+            body,
+            request.language.clone(),
+            prov.meta(),
+        )
+        .await?;
+    }
+    Ok(human_id)
 }
 
 /// Commits a [`TagChangeSetRequest`] (the buffered tag record) through [`commit_tag_change_set`],

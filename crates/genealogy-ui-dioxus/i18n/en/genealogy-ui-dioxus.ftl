@@ -49,6 +49,7 @@ nav-citations = Citations
 nav-repositories = Repositories
 nav-media = Media
 nav-notes = Notes
+nav-research-notes = Research notes
 nav-tags = Tags
 nav-dna-tests = DNA tests
 nav-dna-matches = DNA matches

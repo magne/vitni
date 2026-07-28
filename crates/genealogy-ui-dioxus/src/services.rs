@@ -29,8 +29,8 @@ use genealogy_ui::{
     DnaTestChangeSetRequest, DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit,
     ImportTargetChoice, Intent, IntentOutcome, Localizer, MediaChangeSetRequest, MediaEdit, MergeFailure, MergePersons,
     MergeResultVm, NoteChangeSetRequest, NoteEdit, Panel, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest,
-    PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit, RowVm, SourceChangeSetRequest, SourceEdit,
-    SubmitResult, TagChangeSetRequest, list_intent,
+    PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest,
+    ResearchNoteEdit, RowVm, SourceChangeSetRequest, SourceEdit, SubmitResult, TagChangeSetRequest, list_intent,
 };
 use i18n_embed::DesktopLanguageRequester;
 use tokio::sync::{mpsc, oneshot};
@@ -494,6 +494,36 @@ pub async fn commit_note_change_set(
         .map_err(|error| loc.error(&error))
 }
 
+/// Saves a [`ResearchNoteEdit`] through the matching `genealogy-app` command use-case, returning the
+/// research note's `human_id` (unchanged — the aggregate has no rename) or a localized error.
+pub async fn save_research_note_edit(
+    services: Services,
+    edit: ResearchNoteEdit,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_research_note_edit(&workspace, &session, &edit, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Commits the buffered research-note create form, returning the new note's `human_id`. One operator
+/// action; nothing is written until Save.
+pub async fn commit_research_note_change_set(
+    services: Services,
+    request: ResearchNoteChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_research_note_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
 /// Commits the buffered tag record (a [`TagChangeSetRequest`]) through the app's change-set, returning
 /// the tag's aggregate id (the minted one on create) or a localized error. One operator action: the
 /// name, priority, and colour commit together (or, on edit, only the changed fields).
@@ -597,7 +627,10 @@ pub async fn load_palette_rows(services: Services) -> Vec<(Category, Vec<RowVm>)
         if list_intent(category).is_none() {
             continue;
         }
-        match load_picker_rows(services.clone(), category).await {
+        // Boxed: this aggregates one dispatch future per category, and `dispatch`'s own future is large
+        // enough (one branch per intent) that inlining it here pushes the palette's resource future past
+        // the `large_futures` budget.
+        match Box::pin(load_picker_rows(services.clone(), category)).await {
             Ok(rows) if !rows.is_empty() => groups.push((category, rows)),
             Ok(_) => {}
             Err(error) => tracing::warn!(%error, ?category, "could not load palette rows for a category"),

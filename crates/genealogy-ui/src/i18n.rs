@@ -188,6 +188,8 @@ impl Localizer {
             "language" => fl!(self.loader, "tab-language"),
             "references" => fl!(self.loader, "tab-references"),
             "translations" => fl!(self.loader, "tab-translations"),
+            "subjects" => fl!(self.loader, "tab-subjects"),
+            "research-notes" => fl!(self.loader, "tab-research-notes"),
             "usage" => fl!(self.loader, "tab-usage"),
             "haplogroups" => fl!(self.loader, "tab-haplogroups"),
             "matches" => fl!(self.loader, "tab-matches"),
@@ -226,6 +228,29 @@ impl Localizer {
             UsingKind::Note => fl!(self.loader, "using-kind-note"),
             UsingKind::DnaTest => fl!(self.loader, "using-kind-dna-test"),
             UsingKind::DnaMatch => fl!(self.loader, "using-kind-dna-match"),
+        }
+    }
+
+    /// The localized aggregate label for a research note's subject (ADR 0028 §2) — the row chip on the
+    /// Subjects tab. Reuses the `using-kind-*` nouns; the categories that cannot be a subject fall back
+    /// to their stable id token, which the Subjects tab never renders.
+    #[must_use]
+    pub fn subject_kind_label(&self, category: Category) -> String {
+        match category {
+            Category::People => fl!(self.loader, "using-kind-person"),
+            Category::Families => fl!(self.loader, "using-kind-family"),
+            Category::Events => fl!(self.loader, "using-kind-event"),
+            Category::Places => fl!(self.loader, "using-kind-place"),
+            Category::Dashboard
+            | Category::Sources
+            | Category::Citations
+            | Category::Repositories
+            | Category::Media
+            | Category::Notes
+            | Category::ResearchNotes
+            | Category::Tags
+            | Category::DnaTests
+            | Category::DnaMatches => category.id().to_owned(),
         }
     }
 
@@ -303,6 +328,7 @@ impl Localizer {
             "role" => fl!(self.loader, "field-role"),
             "language" => fl!(self.loader, "field-language"),
             "content" => fl!(self.loader, "field-content"),
+            "argument" => fl!(self.loader, "field-argument"),
             "source" => fl!(self.loader, "field-source"),
             "relationship" => fl!(self.loader, "field-relationship"),
             "page" => fl!(self.loader, "field-page"),
@@ -640,6 +666,48 @@ impl Localizer {
     #[must_use]
     pub fn note_list_empty(&self) -> String {
         fl!(self.loader, "note-list-empty")
+    }
+
+    /// The `ResearchNote` list empty-state message.
+    #[must_use]
+    pub fn research_note_list_empty(&self) -> String {
+        fl!(self.loader, "research-note-list-empty")
+    }
+
+    /// The research-note list-row subtitle naming its subjects, e.g. `about I0042, P0007`.
+    #[must_use]
+    pub fn research_note_subjects(&self, subjects: &str) -> String {
+        fl!(self.loader, "research-note-subjects", subjects = subjects)
+    }
+
+    /// The `ResearchNote` Content tab's section note.
+    #[must_use]
+    pub fn research_note_content_note(&self) -> String {
+        fl!(self.loader, "research-note-content-note")
+    }
+
+    /// The `ResearchNote` Subjects tab's section note.
+    #[must_use]
+    pub fn research_note_subjects_note(&self) -> String {
+        fl!(self.loader, "research-note-subjects-note")
+    }
+
+    /// The "Research notes" reverse-lookup tab's section note (Person / Family / Event / Place).
+    #[must_use]
+    pub fn research_notes_about_note(&self) -> String {
+        fl!(self.loader, "research-notes-about-note")
+    }
+
+    /// The header title for a fresh (uncommitted) research-note draft ("New research note").
+    #[must_use]
+    pub fn research_note_new_title(&self) -> String {
+        fl!(self.loader, "research-note-new-title")
+    }
+
+    /// The validation message shown when a research-note create names no subject (ADR 0028 §2).
+    #[must_use]
+    pub fn research_note_subject_required(&self) -> String {
+        fl!(self.loader, "research-note-subject-required")
     }
 
     /// The Media Overview "Used by" / provenance section note.
@@ -1076,6 +1144,8 @@ impl Localizer {
             "detach" => fl!(self.loader, "action-detach"),
             "edit" => fl!(self.loader, "action-edit"),
             "cite" => fl!(self.loader, "action-cite"),
+            "add-subject" => fl!(self.loader, "action-add-subject"),
+            "new-research-note" => fl!(self.loader, "action-new-research-note"),
             "confirm" => fl!(self.loader, "action-confirm"),
             "reject" => fl!(self.loader, "action-reject"),
             "cancel" => fl!(self.loader, "action-cancel"),
@@ -1231,6 +1301,7 @@ impl Localizer {
             "remove-child" => fl!(self.loader, "remove-child-title"),
             "retract-child" => fl!(self.loader, "retract-child-title"),
             "remove-partner" => fl!(self.loader, "remove-partner-title"),
+            "remove-subject" => fl!(self.loader, "remove-subject-title"),
             "cite-name" => fl!(self.loader, "cite-name-title"),
             "unlink-event" => fl!(self.loader, "unlink-event-title"),
             "unlink-repository" => fl!(self.loader, "unlink-repository-title"),
@@ -1345,6 +1416,7 @@ impl Localizer {
             "edit-participation" => fl!(self.loader, "panel-edit-participation"),
             "edit-child" => fl!(self.loader, "panel-edit-child"),
             "edit-enclosing" => fl!(self.loader, "panel-edit-enclosing"),
+            "add-subject" => fl!(self.loader, "panel-add-subject"),
             "edit-translation" => fl!(self.loader, "panel-edit-translation"),
             "edit-repository" => fl!(self.loader, "panel-edit-repository"),
             "edit-attribute" => fl!(self.loader, "panel-edit-attribute"),
@@ -1635,6 +1707,9 @@ impl Localizer {
             "NoteCreated" => fl!(self.loader, "history-note-created"),
             "NoteTypeSet" => fl!(self.loader, "history-note-type-set"),
             "RichTextSet" => fl!(self.loader, "history-rich-text-set"),
+            "ResearchNoteCreated" => fl!(self.loader, "history-research-note-created"),
+            "SubjectAdded" => fl!(self.loader, "history-subject-added"),
+            "SubjectRemoved" => fl!(self.loader, "history-subject-removed"),
             "PlaceCreated" => fl!(self.loader, "history-place-created"),
             "PlaceTypeSet" => fl!(self.loader, "history-place-type-set"),
             "EnclosedByAsserted" => fl!(self.loader, "history-enclosed-by-asserted"),
@@ -2034,6 +2109,7 @@ impl Localizer {
             Category::Events => fl!(self.loader, "picker-entity-event"),
             Category::Media => fl!(self.loader, "picker-entity-media"),
             Category::Notes => fl!(self.loader, "picker-entity-note"),
+            Category::ResearchNotes => fl!(self.loader, "picker-entity-research-note"),
             Category::Repositories => fl!(self.loader, "picker-entity-repository"),
             Category::DnaTests => fl!(self.loader, "picker-entity-dna-test"),
             Category::DnaMatches => fl!(self.loader, "picker-entity-dna-match"),
@@ -2942,6 +3018,9 @@ mod tests {
         "EventTypeSet",
         "DescriptionSet",
         "PlaceLinked",
+        "ResearchNoteCreated",
+        "SubjectAdded",
+        "SubjectRemoved",
     ];
 
     fn typed_entry(event_type: &str) -> ChangeLogEntry {

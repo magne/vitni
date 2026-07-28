@@ -652,6 +652,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::DuplicateCandidates(_)
             | IntentOutcome::MergeCompare(_)
+            | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
     };
@@ -867,6 +868,13 @@ fn event_tab_content(
             },
         ),
         "tags" => tags_panel(loc, &detail.tags, editing, EventEditForm::Tag, on_tag_remove),
+        "research-notes" => rsx! {
+            ResearchNotesTab {
+                category: Category::Events,
+                human_id: detail.human_id.clone(),
+                rows: detail.research_notes.clone(),
+            }
+        },
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => event_overview(loc, detail, ctx),
     }

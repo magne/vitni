@@ -146,6 +146,7 @@ pub fn list_intent(category: Category) -> Option<Intent> {
         Category::Repositories => Some(Intent::ShowRepositoryList),
         Category::Media => Some(Intent::ShowMediaList),
         Category::Notes => Some(Intent::ShowNoteList),
+        Category::ResearchNotes => Some(Intent::ShowResearchNoteList),
         Category::DnaTests => Some(Intent::ShowDnaTestList),
         Category::DnaMatches => Some(Intent::ShowDnaMatchList),
     }

@@ -628,13 +628,13 @@ mod tests {
     #[test]
     fn navigation_shortcuts_match_keyed_categories() {
         let rows = navigation_shortcuts();
-        assert_eq!(rows.len(), 11);
+        assert_eq!(rows.len(), 12);
         for row in &rows {
             assert_eq!(Some(row.key), row.category.nav_key());
             assert_eq!(row.label_id, row.category.label_id());
         }
         let keys: BTreeSet<char> = rows.iter().map(|row| row.key).collect();
-        let expected: BTreeSet<char> = "dpfelscrmnt".chars().collect();
+        let expected: BTreeSet<char> = "dpfelscrmnat".chars().collect();
         assert_eq!(keys, expected);
         assert!(
             !rows

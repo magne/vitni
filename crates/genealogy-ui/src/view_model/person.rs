@@ -316,6 +316,9 @@ pub struct PersonDetail {
     pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
+    /// The research notes arguing about this record (Research notes tab, ADR 0028 §5) — the reverse
+    /// index over the `ResearchNote` projection; filled by the dispatcher.
+    pub research_notes: Vec<RowVm>,
     /// The person's change log, newest first (History tab); filled by the dispatcher.
     pub history: Vec<HistoryEntryVm>,
     /// A draft pre-populated from this person, for the deferred edit dialog (structured name parts,
@@ -362,6 +365,7 @@ impl PersonDetail {
             media: summary.media.iter().map(MediaRefVm::from_ref).collect(),
             notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tag_refs.clone(),
+            research_notes: Vec::new(),
             history: Vec::new(),
             edit_seed: PersonDraft::from_summary(summary),
         }
@@ -566,6 +570,7 @@ pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("citations", Some(detail.citations.len())),
         tab("media", Some(detail.media.len())),
         tab("notes", Some(detail.notes.len())),
+        tab("research-notes", Some(detail.research_notes.len())),
         tab("tags", Some(detail.tags.len())),
         tab("timeline", Some(detail.timeline.len())),
         tab("history", None),

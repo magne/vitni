@@ -1944,6 +1944,7 @@ impl Chrome {
             "nav-repositories" => fl!(self.loader, "nav-repositories"),
             "nav-media" => fl!(self.loader, "nav-media"),
             "nav-notes" => fl!(self.loader, "nav-notes"),
+            "nav-research-notes" => fl!(self.loader, "nav-research-notes"),
             "nav-tags" => fl!(self.loader, "nav-tags"),
             "nav-dna-tests" => fl!(self.loader, "nav-dna-tests"),
             "nav-dna-matches" => fl!(self.loader, "nav-dna-matches"),

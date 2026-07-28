@@ -1088,3 +1088,23 @@ shortcuts-error-unknown-action = «{ $id }» er ikke en kjent hurtigtast.
 shortcuts-error-unparsable = «{ $chord }» for «{ $id }» kunne ikke tolkes.
 shortcuts-error-not-rebindable = «{ $id }» kan ikke tilordnes på nytt.
 shortcuts-error-conflict = «{ $chord }» for «{ $id }» er i konflikt med en annen hurtigtast.
+
+# Forskningsnotater (ADR 0028) — bevisføring om de konkluderende postene
+tab-subjects = Emner
+research-note-list-empty = Ingen forskningsnotater ennå.
+research-note-new-title = Nytt forskningsnotat
+research-note-subjects = om { $subjects }
+research-note-subject-required = Et forskningsnotat må navngi minst ett emne.
+research-note-content-note = Et forskningsnotat er en skriftlig bevisføring — resonnementet som gjør bevis til en konklusjon. Det navngir postene det argumenterer om, slik at argumentet forblir knyttet til det det konkluderer om.
+research-note-subjects-note = Hva dette argumentet handler om. En enkelt analyse avgjør ofte flere konklusjoner samtidig, så et forskningsnotat navngir et sett — og må alltid navngi minst ett.
+research-notes-about-note = Bevisføring skrevet om denne posten. Et forskningsnotat er en konklusjon i prosa; dette er det omvendte registeret den hendelsesbaserte kjernen holder gratis.
+picker-entity-research-note = forskningsnotat
+history-research-note-created = Forskningsnotat opprettet
+history-subject-added = Emne lagt til
+history-subject-removed = Emne fjernet
+tab-research-notes = Forskningsnotater
+action-add-subject = + Legg til emne
+action-new-research-note = + Nytt forskningsnotat
+panel-add-subject = Legg til emne
+remove-subject-title = Slutt å navngi denne posten som et emne i argumentet — registrert i Historikk
+field-argument = Argument

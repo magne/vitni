@@ -22,6 +22,7 @@ fn count_for(counts: &WorkspaceCounts, category: Category) -> Option<u64> {
         Category::Repositories => Some(counts.repository),
         Category::Media => Some(counts.media),
         Category::Notes => Some(counts.note),
+        Category::ResearchNotes => Some(counts.research_note),
         Category::Tags => Some(counts.tag),
         Category::DnaTests => Some(counts.dna_test),
         Category::DnaMatches => Some(counts.dna_match),

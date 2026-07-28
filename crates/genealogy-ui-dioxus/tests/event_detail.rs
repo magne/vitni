@@ -152,6 +152,7 @@ fn sample() -> EventDetail {
             priority: Some(1),
         }],
         restrictions: Vec::new(),
+        research_notes: Vec::new(),
         history: Vec::new(),
     }
 }

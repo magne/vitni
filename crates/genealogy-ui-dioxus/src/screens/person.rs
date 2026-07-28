@@ -783,6 +783,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::DuplicateCandidates(_)
             | IntentOutcome::MergeCompare(_)
+            | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
     };
@@ -1030,6 +1031,13 @@ fn person_tab_content(
             },
         ),
         "tags" => tags_panel(loc, &detail.tags, editing, EditForm::Tag, on_tag_remove),
+        "research-notes" => rsx! {
+            ResearchNotesTab {
+                category: Category::People,
+                human_id: detail.human_id.clone(),
+                rows: detail.research_notes.clone(),
+            }
+        },
         "timeline" => timeline_panel(loc, &detail.timeline),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => person_overview(loc, detail, record),

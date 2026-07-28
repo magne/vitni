@@ -46,6 +46,7 @@ pub use super::record_form::{
     RecordActionLabels, RecordEditState, apply_record_edits, finish_record_save, record_edit_provenance,
     record_head_actions, record_keydown, use_record_create, use_record_edit,
 };
+pub use super::research_note::ResearchNotesTab;
 pub use super::shared::{
     JumpButton, MediaTabState, RecordLink, RegisterFields, RetractTarget, RowRetract, attach_picker_form,
     create_record_frame, id_list, media_gallery, media_tab, non_empty, optional_enum_select, picker_selection_id,

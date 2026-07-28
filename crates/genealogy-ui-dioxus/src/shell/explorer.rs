@@ -112,6 +112,7 @@ fn ExplorerList(category: Category) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::DuplicateCandidates(_)
             | IntentOutcome::MergeCompare(_)
+            | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
     }
@@ -130,6 +131,7 @@ fn list_intent(category: Category) -> Intent {
         Category::Repositories => Intent::ShowRepositoryList,
         Category::Media => Intent::ShowMediaList,
         Category::Notes => Intent::ShowNoteList,
+        Category::ResearchNotes => Intent::ShowResearchNoteList,
         Category::Tags => Intent::ShowTagList,
         Category::DnaTests => Intent::ShowDnaTestList,
         Category::DnaMatches => Intent::ShowDnaMatchList,
@@ -148,6 +150,7 @@ fn list_empty(loc: &genealogy_ui::Localizer, category: Category) -> String {
         Category::Repositories => loc.repository_list_empty(),
         Category::Media => loc.media_list_empty(),
         Category::Notes => loc.note_list_empty(),
+        Category::ResearchNotes => loc.research_note_list_empty(),
         Category::Tags => loc.tag_list_empty(),
         Category::DnaTests => loc.dna_test_list_empty(),
         Category::DnaMatches => loc.dna_match_list_empty(),
