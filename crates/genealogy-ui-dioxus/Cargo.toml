@@ -16,6 +16,10 @@ path = "src/main.rs"
 # full `--all-features` CI build enable it.
 default = []
 desktop = ["dioxus/desktop", "dep:dark-light"]
+# Shows the Preferences "Register workspace…" form's Database URL field, letting the GUI create a
+# Postgres-backed workspace like `genealogy init --database-url` already can (ADR 0002). Opt-in
+# because the default build only ever needs SQLite; off by default like `desktop`.
+postgres = ["genealogy-app/postgres"]
 
 [dependencies]
 genealogy-ui = { workspace = true }

@@ -234,6 +234,7 @@ fn render_prefs(
         open: use_signal(move || register_open),
         name: use_signal(String::new),
         directory: use_signal(String::new),
+        database_url: use_signal(String::new),
     };
     let shortcut_fields = ShortcutFields {
         bindings: use_signal(|| shortcut_bindings_seed(&data.shortcuts)),
@@ -806,6 +807,39 @@ fn the_register_form_shows_its_fields_when_open() {
     assert!(html.contains(">Register<"), "the submit button:\n{html}");
     assert!(html.contains(">Cancel<"), "the cancel button:\n{html}");
     assert!(html.contains("Optional"), "the directory hint:\n{html}");
+}
+
+/// The Database URL field is opt-in (the `postgres` feature): a default build never lets a GUI user
+/// point a new workspace at Postgres, since `genealogy-app`'s postgres backend isn't compiled in
+/// either (Cargo.toml's `postgres = ["genealogy-app/postgres"]`).
+#[cfg(not(feature = "postgres"))]
+#[test]
+fn the_register_form_hides_the_database_url_field_without_the_postgres_feature() {
+    let html = render(register_form_open);
+    assert!(
+        !html.contains("register-database-url"),
+        "the database-url field must not render in a default build:\n{html}"
+    );
+    for name in ["register-name", "register-directory"] {
+        assert!(
+            html.contains(&format!(r#"name="{name}""#)),
+            "the other fields still render:\n{html}"
+        );
+    }
+}
+
+/// With the `postgres` feature compiled in, the register form gains the Database URL field alongside
+/// the existing Name/Directory fields.
+#[cfg(feature = "postgres")]
+#[test]
+fn the_register_form_shows_the_database_url_field_with_the_postgres_feature() {
+    let html = render(register_form_open);
+    for name in ["register-name", "register-directory", "register-database-url"] {
+        assert!(
+            html.contains(&format!(r#"name="{name}""#)),
+            "expected the {name:?} field:\n{html}"
+        );
+    }
 }
 
 #[test]

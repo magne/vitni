@@ -1082,13 +1082,21 @@ pub fn make_default_workspace(services: &Services, name: &str) -> Result<(), Str
 }
 
 /// Registers a new workspace (and makes it the default), returning a localized error on failure.
-/// `dir` is the optional workspace directory; `None` uses the default data directory. Creates the
-/// directory, database, and manifest via [`genealogy_app::register_workspace`]. The caller triggers
-/// the application-state restart on success.
-pub async fn register_workspace(services: &Services, name: &str, dir: Option<PathBuf>) -> Result<(), String> {
+/// `dir` is the optional workspace directory; `None` uses the default data directory. `database_url`
+/// overrides the engine default (`None` ⇒ SQLite); the Preferences form only ever fills it in when
+/// the `postgres` feature is compiled in, but this signature stays unconditional so the plumbing
+/// needs no `cfg`. Creates the directory, database, and manifest via
+/// [`genealogy_app::register_workspace`]. The caller triggers the application-state restart on
+/// success.
+pub async fn register_workspace(
+    services: &Services,
+    name: &str,
+    dir: Option<PathBuf>,
+    database_url: Option<&str>,
+) -> Result<(), String> {
     let loc = services.localizer();
     let path = config::config_path().map_err(|error| loc.error(&error))?;
-    genealogy_app::register_workspace(&path, name, dir.as_deref(), None)
+    genealogy_app::register_workspace(&path, name, dir.as_deref(), database_url)
         .await
         .map(|_summary| ())
         .map_err(|error| loc.error(&error))

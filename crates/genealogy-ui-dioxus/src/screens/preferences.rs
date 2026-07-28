@@ -143,6 +143,7 @@ pub fn PreferencesScreen() -> Element {
         open: use_signal(|| false),
         name: use_signal(String::new),
         directory: use_signal(String::new),
+        database_url: use_signal(String::new),
     };
     let register_services = services.clone();
     let register_chrome = chrome.clone();
@@ -153,9 +154,10 @@ pub fn PreferencesScreen() -> Element {
             return;
         }
         let directory = non_empty(register.directory.peek().clone()).map(PathBuf::from);
+        let database_url = non_empty(register.database_url.peek().clone());
         let register_services = register_services.clone();
         spawn(async move {
-            match register_workspace(&register_services, &name, directory).await {
+            match register_workspace(&register_services, &name, directory, database_url.as_deref()).await {
                 Ok(()) => request_restart(),
                 Err(message) => status.set(Some(message)),
             }
@@ -308,6 +310,11 @@ pub struct RegisterFields {
     pub name: Signal<String>,
     /// The optional workspace directory (empty ⇒ the default data directory).
     pub directory: Signal<String>,
+    /// The optional Postgres connection URL (empty ⇒ the default SQLite engine). Kept on the struct
+    /// unconditionally so the submit-handler plumbing needs no `cfg`; only its field in
+    /// [`register_form`] is gated behind the `postgres` feature, since a default build never lets a
+    /// GUI user reach it (`genealogy-app`'s postgres backend isn't compiled in either).
+    pub database_url: Signal<String>,
 }
 
 /// Renders the settings sub-nav + every card. A pure function of its inputs (data, the current
@@ -926,12 +933,14 @@ fn engine_label(engine: Option<Engine>) -> &'static str {
 }
 
 /// The "+ Register workspace…" button and its inline disclosure form (Name required, Directory
-/// optional with a default-data-dir hint, Register/Cancel).
+/// optional with a default-data-dir hint, an opt-in Database URL field behind the `postgres`
+/// feature, Register/Cancel).
 fn register_form(chrome: &Chrome, register: RegisterFields, onregister: impl FnMut(MouseEvent) + 'static) -> Element {
     let RegisterFields {
         mut open,
         mut name,
         mut directory,
+        database_url,
     } = register;
     rsx! {
         div { class: "row-actions", style: "margin-top:8px",
@@ -957,6 +966,7 @@ fn register_form(chrome: &Chrome, register: RegisterFields, onregister: impl FnM
                     oninput: move |event: FormEvent| directory.set(event.value()),
                 }
                 div { class: "muted", style: "font-size:var(--fs-sm)", "{chrome.prefs_register_path_hint()}" }
+                {database_url_field(chrome, database_url)}
                 div { class: "row-actions",
                     Button {
                         label: chrome.prefs_register_submit(),
@@ -974,4 +984,28 @@ fn register_form(chrome: &Chrome, register: RegisterFields, onregister: impl FnM
             }
         }
     }
+}
+
+/// The optional "Database URL" field: freezes a Postgres connection string into the manifest at
+/// registration (mirrors `genealogy init --database-url`); empty keeps the default SQLite engine.
+/// Gated behind the `postgres` feature — off by default, so the field never appears unless the
+/// binary was built to support it.
+#[cfg(feature = "postgres")]
+fn database_url_field(chrome: &Chrome, mut database_url: Signal<String>) -> Element {
+    rsx! {
+        Input {
+            label: chrome.prefs_register_database_url_label(),
+            name: "register-database-url".to_owned(),
+            value: Some(database_url()),
+            oninput: move |event: FormEvent| database_url.set(event.value()),
+        }
+        div { class: "muted", style: "font-size:var(--fs-sm)", "{chrome.prefs_register_database_url_hint()}" }
+    }
+}
+
+/// The `postgres`-off counterpart of [`database_url_field`]: renders nothing, so [`register_form`]
+/// stays unconditional while the field itself disappears from a default build.
+#[cfg(not(feature = "postgres"))]
+fn database_url_field(_chrome: &Chrome, _database_url: Signal<String>) -> Element {
+    rsx! {}
 }
