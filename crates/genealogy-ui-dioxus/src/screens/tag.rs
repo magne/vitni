@@ -302,7 +302,8 @@ fn tag_record_fields(
 }
 
 /// The tag Overview read rows (view mode): Name · Priority · Colour as read text, matching the edit
-/// record's layout so toggling to edit moves no text (`record-editing.html` §3).
+/// record's layout so toggling to edit moves no text (`record-editing.html` §3). Restrictions render
+/// with the shared, read-only toggle set (no `ontoggle` effect — view mode has no live commands).
 fn tag_read_rows(loc: &Localizer, detail: &TagDetail) -> Element {
     let priority = detail
         .priority
@@ -320,6 +321,10 @@ fn tag_read_rows(loc: &Localizer, detail: &TagDetail) -> Element {
                         label { "{loc.field_label(\"priority\")}" }
                         div { class: "val", "{priority}" }
                     }
+                    div { class: "field",
+                        label { "{loc.field_label(\"restrictions\")}" }
+                        {restriction_set(loc, &detail.restrictions, |_| {})}
+                    }
                 }
             }
             Card { title: loc.section_label("color"),
@@ -328,6 +333,29 @@ fn tag_read_rows(loc: &Localizer, detail: &TagDetail) -> Element {
                     div { class: "val", style: "font-family:var(--font-mono)", "{color}" }
                 }
             }
+        }
+    }
+}
+
+/// Builds a [`RestrictionSet`] from a selection, localizing every choice. Shared by the read rows (a
+/// no-op `ontoggle`) and the editable Tag card (writes the toggled set back into the draft).
+fn restriction_set(
+    loc: &Localizer,
+    selected: &[RestrictionKind],
+    ontoggle: impl FnMut(RestrictionKind) + 'static,
+) -> Element {
+    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
+        .into_iter()
+        .map(|kind| RestrictionChoice {
+            kind,
+            label: loc.restriction_label(kind),
+        })
+        .collect();
+    rsx! {
+        RestrictionSet {
+            choices,
+            selected: selected.to_vec(),
+            ontoggle,
         }
     }
 }
@@ -401,6 +429,15 @@ pub fn tag_edit_tag_card(
                             },
                             "▼"
                         }
+                    }
+                }
+                div { class: "field",
+                    label { "{loc.field_label(\"restrictions\")}" }
+                    {
+                        restriction_set(loc, &current.restrictions, move |kind: RestrictionKind| {
+                            let toggled = draft.read().toggle_restriction(kind);
+                            draft.write().restrictions = toggled;
+                        })
                     }
                 }
             }

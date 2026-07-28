@@ -2043,6 +2043,8 @@ pub struct TagChangeSetRequest {
     pub priority: i32,
     /// The tag's colour (a CSS hex string).
     pub color: String,
+    /// The tag's desired privacy restrictions (GEDCOM `RESN`); empty is unrestricted.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 /// The buffered result of the deferred source create form, dispatched to

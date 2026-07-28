@@ -1949,6 +1949,11 @@ pub async fn dispatch_tag_change_set(
         Some(id) => TagTarget::Existing { id: id.clone() },
         None => TagTarget::New,
     };
+    let restrictions: BTreeSet<Restriction> = request
+        .restrictions
+        .iter()
+        .map(|&kind| Restriction::from(kind))
+        .collect();
     commit_tag_change_set(
         workspace,
         session,
@@ -1957,6 +1962,7 @@ pub async fn dispatch_tag_change_set(
             name: request.name.clone(),
             priority: request.priority,
             color: request.color.clone(),
+            restrictions,
             provenance: prov.provenance(),
             citations: prov.citations.clone(),
         },

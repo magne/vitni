@@ -48,14 +48,6 @@ issues already filed against it keep resolving their [`#person--family`](#person
 - **`remove_translation` core verb** — note-translation retract is Edit-only; there is no verb to
   remove a single translation.
 
-### Tags
-
-- **Tag has no restrictions path** — `set_tag_restrictions` exists but no frontend calls it, and
-  `TagChangeSetRequest` carries only name / priority / colour: the one aggregate of thirteen with no
-  privacy control.
-  *UI:* add `restrictions` to `TagChangeSetRequest` and reuse the shared restrictions field the other
-  twelve screens already render. — #197
-
 ### Media
 
 - **Interactive Set/Clear region on every owner.** The interactive region viewer is wired on the
@@ -205,10 +197,17 @@ Residuals from the shortcuts work (ADR 0030); see
 
 ### GUI ⇄ CLI parity
 
-No open items. Every per-aggregate verb the CLI exposes has a GUI counterpart (audited
+Every per-aggregate verb the CLI exposes has a GUI counterpart (audited
 `genealogy-cli/src/{main.rs,commands/*.rs}` against `genealogy-ui/src/{navigation.rs,intent.rs}`); each
 reuses an existing `genealogy-app` use-case rather than a new core verb. One parity gap remains, filed
-in its own area: research notes (*Notes & research notes*).
+in its own area: research notes (*Notes & research notes*). The one gap running the other way:
+
+- **Restrictions cannot be set from the CLI on any aggregate** — `restrictions_tag`
+  (`genealogy-cli/src/i18n/person.rs:35`) renders them on record output, but no command writes them:
+  no `Restriction` `ValueEnum`, no `set-restrictions` verb. The app use-cases exist per aggregate and
+  the GUI wires all thirteen, so privacy is GUI-only.
+  *Shape:* one shared `ValueEnum` plus a `set-restrictions` subcommand per aggregate over the existing
+  use-cases and `restriction_label`. Not a pre-1.0 gate — the milestone rule is GUI reachability. — #225
 
 ## Import, export & plugins
 
