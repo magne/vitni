@@ -337,7 +337,7 @@ impl Tool {
         match self {
             Self::Pedigree => "🌳",
             Self::Merge => "⇄",
-            Self::Import => "🌐",
+            Self::Import => "📥",
             Self::Export => "📤",
             Self::Geography => "🗺",
             Self::Plugins => "🧩",
