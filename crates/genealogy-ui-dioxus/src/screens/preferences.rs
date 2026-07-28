@@ -29,11 +29,11 @@ use unic_langid::LanguageIdentifier;
 
 use super::prelude::*;
 use crate::app::{open_workspace, request_restart};
-use crate::components::{Badge, LabeledValue, TextField};
+use crate::components::{Badge, LabeledValue, Modal, TextField};
 use crate::i18n::Chrome;
 use crate::services::{
-    PreferencesData, load_preferences, make_default_workspace, register_workspace, save_id_format_defaults,
-    save_locale_defaults, save_operator_identity, save_shortcuts, save_surety_defaults,
+    PreferencesData, load_preferences, make_default_workspace, rebuild_projections, register_workspace,
+    save_id_format_defaults, save_locale_defaults, save_operator_identity, save_shortcuts, save_surety_defaults,
 };
 use crate::shell::ShortcutsCtx;
 
@@ -164,6 +164,32 @@ pub fn PreferencesScreen() -> Element {
         });
     };
 
+    // The Maintenance card's rebuild: confirm, then run against the open workspace off the render.
+    // Unlike the batched Save, this acts immediately (mirrors the Workspaces card's actions) — a
+    // rebuild is not a preference to accumulate and commit later.
+    let maintenance = MaintenanceFields {
+        confirm_open: use_signal(|| false),
+        running: use_signal(|| false),
+    };
+    let mut maintenance_confirm_open = maintenance.confirm_open;
+    let mut maintenance_running = maintenance.running;
+    let rebuild_services = services.clone();
+    let rebuild_chrome = chrome.clone();
+    let onrebuild = move |_: MouseEvent| {
+        maintenance_confirm_open.set(false);
+        maintenance_running.set(true);
+        let services = rebuild_services.clone();
+        let chrome = rebuild_chrome.clone();
+        spawn(async move {
+            let outcome = rebuild_projections(services).await;
+            maintenance_running.set(false);
+            match outcome {
+                Ok(()) => nav.notify(chrome.prefs_rebuild_success()),
+                Err(message) => nav.notify(message),
+            }
+        });
+    };
+
     // Discards unsaved edits by re-seeding the fields from the last-loaded (on-disk) data, without
     // writing anything — the counterpart to `onsave`.
     let onreset = move |_| {
@@ -218,6 +244,8 @@ pub fn PreferencesScreen() -> Element {
         onopen,
         onmakedefault,
         onregister,
+        maintenance,
+        onrebuild,
     )
 }
 
@@ -299,6 +327,18 @@ pub struct ShortcutFields {
     pub bindings: Signal<BTreeMap<String, String>>,
 }
 
+/// The Maintenance card's state (issue #192): whether the rebuild-confirm [`Modal`] is open, and
+/// whether a rebuild is currently running (disables the button and swaps in the busy label). Unlike
+/// [`RegisterFields`], this card is Preferences-only, so it lives here rather than in
+/// `screens/shared.rs`.
+#[derive(Debug, Clone, Copy)]
+pub struct MaintenanceFields {
+    /// Whether the rebuild-confirm modal is open.
+    pub confirm_open: Signal<bool>,
+    /// Whether a rebuild is currently running.
+    pub running: Signal<bool>,
+}
+
 /// Renders the settings sub-nav + every card. A pure function of its inputs (data, the current
 /// theme mode, the editable-field signals, and plain callbacks) so the SSR test can exercise it with
 /// hand-built fixtures — no `AppCtx`/plugin host required (mirrors `dashboard_view`).
@@ -325,6 +365,8 @@ pub fn preferences_view(
     onopen: impl FnMut(String) + 'static,
     onmakedefault: impl FnMut(String) + 'static,
     onregister: impl FnMut(MouseEvent) + 'static,
+    maintenance: MaintenanceFields,
+    onrebuild: impl FnMut(MouseEvent) + 'static,
 ) -> Element {
     rsx! {
         div { style: "display:grid;grid-template-columns:200px 1fr;height:100%;min-height:0",
@@ -345,6 +387,7 @@ pub fn preferences_view(
                 {shortcuts_card(chrome, shortcuts_vm, shortcut_fields)}
                 {defaults_card(chrome, data, person_id_format)}
                 {workspaces_card(chrome, data, register, onopen, onmakedefault, onregister)}
+                {maintenance_card(chrome, maintenance, onrebuild)}
                 div { class: "row-actions", style: "justify-content:flex-end;margin-top:8px",
                     Button { label: chrome.prefs_reset(), variant: ButtonVariant::Default, onclick: onreset }
                     Button { label: chrome.prefs_save(), variant: ButtonVariant::Primary, onclick: onsave }
@@ -946,6 +989,55 @@ fn register_form(chrome: &Chrome, register: RegisterFields, onregister: impl FnM
                     }
                 }
             }
+        }
+    }
+}
+
+/// The "Maintenance" card (issue #192): the CLI's `genealogy rebuild` GUI counterpart
+/// (`Workspace::rebuild_projections`, an ADR 0010 maintenance op). A workspace-functionality op, not
+/// an aggregate, so — like the Workspaces card above — it talks straight to `genealogy-app` and acts
+/// immediately rather than joining the batched Save; it likewise has no sub-nav entry of its own.
+/// The button is confirmed in a [`Modal`] and disables (showing the busy label) while the rebuild runs.
+fn maintenance_card(
+    chrome: &Chrome,
+    maintenance: MaintenanceFields,
+    onrebuild: impl FnMut(MouseEvent) + 'static,
+) -> Element {
+    let mut confirm_open = maintenance.confirm_open;
+    let running = maintenance.running;
+    let button_label = if running() {
+        chrome.prefs_rebuild_busy()
+    } else {
+        chrome.prefs_rebuild_projections()
+    };
+    rsx! {
+        Card { title: chrome.prefs_maintenance_title(),
+            div { class: "muted", style: "font-size:var(--fs-sm);margin-bottom:12px", "{chrome.prefs_maintenance_intro()}" }
+            div { class: "row-actions",
+                Button {
+                    label: button_label,
+                    disabled: running(),
+                    onclick: move |_| confirm_open.set(true),
+                }
+            }
+        }
+        Modal {
+            title: chrome.prefs_rebuild_confirm_title(),
+            open: confirm_open(),
+            footer: rsx! {
+                Button {
+                    label: chrome.prefs_rebuild_confirm_cancel(),
+                    variant: ButtonVariant::Ghost,
+                    onclick: move |_| confirm_open.set(false),
+                }
+                Button {
+                    label: chrome.prefs_rebuild_confirm_confirm(),
+                    variant: ButtonVariant::Primary,
+                    disabled: running(),
+                    onclick: onrebuild,
+                }
+            },
+            p { "{chrome.prefs_rebuild_confirm_body()}" }
         }
     }
 }
