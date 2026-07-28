@@ -1,7 +1,7 @@
 //! `ResearchNote` use-cases (ADR 0028): create, set body, tag, restrict, show, and list — including
 //! the reverse-by-subject query ("which arguments exist about this Person/Family/Event/Place").
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::enums::Restriction;
 use genealogy_core::ids::{AssertionId, HumanId, ResearchNoteId, TagId};
@@ -20,6 +20,60 @@ use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
+/// One of a research note's subjects, resolved for display and navigation (ADR 0028 §2).
+///
+/// The projection stores a subject as an aggregate id ([`SubjectRef`]), which a frontend cannot link
+/// by; this pairs it with the record's own user-facing id and names the aggregate by its stored
+/// `Aggregate::TYPE` string, so a frontend maps it onto its own category vocabulary without a second
+/// enum to keep in step.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResearchNoteSubjectRef {
+    /// The subject's stored aggregate-type string: `person`, `family`, `event`, or `place`.
+    pub kind: String,
+    /// The subject's user-facing id (e.g. `I0042`) — the id a frontend links by. Empty only if the
+    /// projection holds a subject whose record has no `human_id` yet.
+    pub human_id: String,
+    /// The subject's aggregate id (a UUID string) — the stable join key.
+    pub id: String,
+}
+
+/// The four subject kinds, as the `Aggregate::TYPE` strings the store keys on.
+const SUBJECT_KINDS: [&str; 4] = ["person", "family", "event", "place"];
+
+/// Per-kind aggregate-id → `human_id` maps, loaded once per query so every subject of every returned
+/// research note resolves without a lookup per subject.
+type SubjectIndex = HashMap<&'static str, HashMap<String, String>>;
+
+/// Loads the [`SubjectIndex`] for the four conclusion-bearing aggregates.
+async fn subject_index(store: &Store) -> Result<SubjectIndex, AppError> {
+    let mut index = SubjectIndex::new();
+    for kind in SUBJECT_KINDS {
+        let pairs = store.human_id_index(kind).await?;
+        index.insert(kind, pairs.into_iter().collect());
+    }
+    Ok(index)
+}
+
+/// Resolves one stored [`SubjectRef`] against `index` into the display/navigation DTO.
+fn resolve_subject_ref(subject: SubjectRef, index: &SubjectIndex) -> ResearchNoteSubjectRef {
+    let (kind, id) = match subject {
+        SubjectRef::Person(id) => ("person", id.to_string()),
+        SubjectRef::Family(id) => ("family", id.to_string()),
+        SubjectRef::Event(id) => ("event", id.to_string()),
+        SubjectRef::Place(id) => ("place", id.to_string()),
+    };
+    let human_id = index
+        .get(kind)
+        .and_then(|by_id| by_id.get(&id))
+        .cloned()
+        .unwrap_or_default();
+    ResearchNoteSubjectRef {
+        kind: kind.to_owned(),
+        human_id,
+        id,
+    }
+}
+
 /// A frontend-neutral summary of a research note (the DTO the CLI renders), carrying its stable id,
 /// its subjects, and the joined tags.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,6 +86,9 @@ pub struct ResearchNoteSummary {
     /// so the frontend resolves each subject's own human-readable id and localizes the kind
     /// (ADR 0003).
     pub subjects: BTreeSet<SubjectRef>,
+    /// The same subjects, each resolved to its own `human_id` and aggregate-kind string — what a
+    /// frontend renders and links by (the raw [`Self::subjects`] carries only internal ids).
+    pub subject_refs: Vec<ResearchNoteSubjectRef>,
     /// The optional short title.
     pub title: Option<String>,
     /// The written argument text, if set.
@@ -348,7 +405,8 @@ pub async fn show_research_note(
         return Ok(None);
     };
     let tags = tag_refs(workspace.store()).await?;
-    Ok(Some(summarize(&view, &tags)))
+    let subjects = subject_index(workspace.store()).await?;
+    Ok(Some(summarize(&view, &tags, &subjects)))
 }
 
 /// Lists every research note's summary, ordered by `human_id`.
@@ -359,7 +417,8 @@ pub async fn show_research_note(
 pub async fn list_research_notes(workspace: &Workspace) -> Result<Vec<ResearchNoteSummary>, AppError> {
     let views = workspace.store().list_research_notes().await?;
     let tags = tag_refs(workspace.store()).await?;
-    Ok(views.iter().map(|view| summarize(view, &tags)).collect())
+    let subjects = subject_index(workspace.store()).await?;
+    Ok(views.iter().map(|view| summarize(view, &tags, &subjects)).collect())
 }
 
 /// Lists every research note arguing about `subject` — "which arguments exist about this
@@ -375,7 +434,23 @@ pub async fn list_research_notes_for_subject(
 ) -> Result<Vec<ResearchNoteSummary>, AppError> {
     let views = workspace.store().list_research_notes_for_subject(subject).await?;
     let tags = tag_refs(workspace.store()).await?;
-    Ok(views.iter().map(|view| summarize(view, &tags)).collect())
+    let subjects = subject_index(workspace.store()).await?;
+    Ok(views.iter().map(|view| summarize(view, &tags, &subjects)).collect())
+}
+
+/// Lists every research note arguing about the record `subject` names by its `human_id` — the
+/// reverse-lookup tab on the four conclusion-bearing detail screens. Resolves the `human_id` to its
+/// aggregate id and then queries [`list_research_notes_for_subject`].
+///
+/// # Errors
+///
+/// A `*NotFound` error if `subject`'s `human_id` is unknown, or a store/read-model error.
+pub async fn list_research_notes_about(
+    workspace: &Workspace,
+    subject: NewResearchNoteSubject,
+) -> Result<Vec<ResearchNoteSummary>, AppError> {
+    let subject = resolve_subject(workspace.store(), subject).await?;
+    list_research_notes_for_subject(workspace, subject).await
 }
 
 /// Executes one command through the store, stamping it with `provenance` and `citations`
@@ -449,12 +524,18 @@ async fn resolve_research_note_id(store: &Store, human_id: &str) -> Result<Resea
     )
 }
 
-/// Renders a [`ResearchNoteView`] into the frontend DTO, joining its tags via `tags`.
-fn summarize(view: &ResearchNoteView, tags: &std::collections::HashMap<TagId, TagRef>) -> ResearchNoteSummary {
+/// Renders a [`ResearchNoteView`] into the frontend DTO, joining its tags via `tags` and resolving
+/// each subject's own `human_id` via `subjects`.
+fn summarize(view: &ResearchNoteView, tags: &HashMap<TagId, TagRef>, subjects: &SubjectIndex) -> ResearchNoteSummary {
     let body = view.body();
     ResearchNoteSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         id: view.research_note_id().map(|id| id.to_string()).unwrap_or_default(),
+        subject_refs: view
+            .subjects()
+            .iter()
+            .map(|&subject| resolve_subject_ref(subject, subjects))
+            .collect(),
         subjects: view.subjects().clone(),
         title: view.title().map(str::to_owned),
         body: body.map(|b| b.text.clone()),

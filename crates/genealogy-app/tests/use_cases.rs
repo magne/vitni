@@ -2842,6 +2842,130 @@ async fn research_note_argues_about_a_person_and_is_found_by_subject() {
 }
 
 #[tokio::test]
+async fn research_note_subjects_resolve_to_the_ids_a_frontend_links_by() {
+    use genealogy_app::{
+        NewPlace, NewResearchNote, NewResearchNoteSubject, PlaceType, create_place, create_research_note,
+        list_research_notes, show_research_note,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let place = create_place(
+        &ws,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::City,
+            name: Some("London".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("place");
+
+    let human_id = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![
+                NewResearchNoteSubject::Person(person.clone()),
+                NewResearchNoteSubject::Place(place.clone()),
+            ],
+            title: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create research note");
+
+    let summary = show_research_note(&ws, &human_id).await.expect("show").expect("found");
+    let mut resolved: Vec<(String, String)> = summary
+        .subject_refs
+        .iter()
+        .map(|subject| (subject.kind.clone(), subject.human_id.clone()))
+        .collect();
+    resolved.sort();
+    assert_eq!(
+        resolved,
+        vec![
+            ("person".to_owned(), person.clone()),
+            ("place".to_owned(), place.clone()),
+        ],
+        "each subject carries its own aggregate kind and human id"
+    );
+    assert!(
+        summary.subject_refs.iter().all(|subject| !subject.id.is_empty()),
+        "the aggregate id stays available as the join key"
+    );
+
+    let listed = list_research_notes(&ws).await.expect("list");
+    assert_eq!(
+        listed[0].subject_refs.len(),
+        2,
+        "the list query resolves subjects too, not only show"
+    );
+}
+
+#[tokio::test]
+async fn research_notes_about_a_record_are_found_by_its_human_id() {
+    use genealogy_app::{
+        AppError, NewResearchNote, NewResearchNoteSubject, create_research_note, list_research_notes_about,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let ada = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let babbage = create_person(
+        &ws,
+        &session,
+        new_person("Charles", "Babbage"),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("person");
+
+    let human_id = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![NewResearchNoteSubject::Person(ada.clone())],
+            title: Some("Same person as the 1865 census entry?".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create research note");
+
+    let about_ada = list_research_notes_about(&ws, NewResearchNoteSubject::Person(ada.clone()))
+        .await
+        .expect("about ada");
+    assert_eq!(about_ada.len(), 1);
+    assert_eq!(about_ada[0].human_id, human_id);
+
+    let about_babbage = list_research_notes_about(&ws, NewResearchNoteSubject::Person(babbage))
+        .await
+        .expect("about babbage");
+    assert!(about_babbage.is_empty(), "a record with no arguments about it is empty");
+
+    let unknown = list_research_notes_about(&ws, NewResearchNoteSubject::Person("I9999".to_owned())).await;
+    let Err(AppError::PersonNotFound(missing)) = unknown else {
+        panic!("an unknown subject id is an error, not an empty list: {unknown:?}");
+    };
+    assert_eq!(missing, "I9999");
+}
+
+#[tokio::test]
 async fn research_note_against_an_unknown_person_is_not_found() {
     use genealogy_app::{NewResearchNote, NewResearchNoteSubject, create_research_note};
 

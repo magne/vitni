@@ -22,8 +22,8 @@ use crate::navigation::{
     DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef,
     EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, MediaChangeSetRequest,
     MediaEdit, NoteChangeSetRequest, NoteEdit, PartnerRequest, PersonChangeSetRequest, PlaceChangeSetRequest,
-    PlaceEdit, RecordRef, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit,
-    TagChangeSetRequest,
+    PlaceEdit, RecordRef, RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest, ResearchNoteEdit,
+    SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest,
 };
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 
@@ -53,6 +53,7 @@ mod provenance;
 mod record_draft;
 mod record_link;
 mod repository;
+mod research_note;
 mod shortcuts_vm;
 mod source;
 mod tag;
@@ -83,6 +84,7 @@ pub use provenance::*;
 pub use record_draft::*;
 pub use record_link::*;
 pub use repository::*;
+pub use research_note::*;
 pub use shortcuts_vm::*;
 pub use source::*;
 pub use tag::*;

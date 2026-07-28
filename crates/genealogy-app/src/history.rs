@@ -32,6 +32,8 @@ use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use genealogy_core::provenance::{AgentKind, Confidence, EventContext, EvidenceAnalysis, Timestamp};
 use genealogy_core::repository::RepositoryView;
 use genealogy_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
+use genealogy_core::research_note::ResearchNoteView;
+use genealogy_core::research_note::command::{ResearchNoteCommand, ResearchNoteCommandEnvelope};
 use genealogy_core::source::SourceView;
 use genealogy_core::source::command::{SourceCommand, SourceCommandEnvelope};
 use genealogy_db::{DbError, Store, StoredEvent};
@@ -129,6 +131,8 @@ pub struct WorkspaceCounts {
     pub media: u64,
     /// Notes.
     pub note: u64,
+    /// Research notes (proof arguments — ADR 0028).
+    pub research_note: u64,
     /// Tags.
     pub tag: u64,
     /// DNA tests.
@@ -137,8 +141,8 @@ pub struct WorkspaceCounts {
     pub dna_match: u64,
 }
 
-/// The 12 aggregate kinds, as the `Aggregate::TYPE` strings the store keys on.
-const AGGREGATE_KINDS: [&str; 12] = [
+/// The 13 aggregate kinds, as the `Aggregate::TYPE` strings the store keys on.
+const AGGREGATE_KINDS: [&str; 13] = [
     "person",
     "family",
     "event",
@@ -148,6 +152,7 @@ const AGGREGATE_KINDS: [&str; 12] = [
     "repository",
     "media",
     "note",
+    "research_note",
     "tag",
     "dna_test",
     "dna_match",
@@ -732,6 +737,66 @@ pub async fn undo_note_assertion(
         .map_err(map_command_error)
 }
 
+/// Reads a research note's change log (the History tab), newest first. Mirrors
+/// [`change_log_for_person`].
+///
+/// # Errors
+///
+/// [`AppError::ResearchNoteNotFound`] if no such research note exists, or [`AppError`] on a
+/// store/parse failure.
+pub async fn change_log_for_research_note(
+    workspace: &Workspace,
+    human_id: &str,
+) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
+    let research_note_id = resolve_research_note_id(store, human_id).await?;
+    let events = store
+        .read_aggregate_events("research_note", &research_note_id.to_string())
+        .await?;
+
+    let retracted = retracted_targets(&events)?;
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        let assertion_id = header.assertion_id.to_string();
+        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
+        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
+/// Undoes a research-note assertion by retracting it (non-destructive — the log is append-only).
+///
+/// # Errors
+///
+/// [`AppError::ResearchNoteNotFound`] if the research note is unknown, [`AppError::Db`] if
+/// `assertion_id` is not a UUID, or the domain rejection if the core refuses the retraction.
+pub async fn undo_research_note_assertion(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+    rationale: Option<String>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let research_note_id = resolve_research_note_id(store, human_id).await?;
+    let target = AssertionId::from_uuid(
+        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
+    );
+    let envelope = ResearchNoteCommandEnvelope {
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
+        command: ResearchNoteCommand::RetractAssertion {
+            research_note_id,
+            target,
+        },
+    };
+    store
+        .execute_research_note(&research_note_id.to_string(), envelope)
+        .await
+        .map_err(map_command_error)
+}
+
 /// Reads a DNA test's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
 ///
 /// # Errors
@@ -883,6 +948,7 @@ pub async fn workspace_counts(workspace: &Workspace) -> Result<WorkspaceCounts, 
             "repository" => counts.repository = count,
             "media" => counts.media = count,
             "note" => counts.note = count,
+            "research_note" => counts.research_note = count,
             "tag" => counts.tag = count,
             "dna_test" => counts.dna_test = count,
             "dna_match" => counts.dna_match = count,
@@ -1108,6 +1174,19 @@ async fn resolve_note_id(store: &Store, human_id: &str) -> Result<genealogy_core
     })
 }
 
+/// Resolves a `human_id` to its aggregate
+/// [`ResearchNoteId`](genealogy_core::ids::ResearchNoteId).
+async fn resolve_research_note_id(
+    store: &Store,
+    human_id: &str,
+) -> Result<genealogy_core::ids::ResearchNoteId, AppError> {
+    crate::use_case::resolve_id(
+        store.find_research_note(human_id).await?,
+        ResearchNoteView::research_note_id,
+        || AppError::ResearchNoteNotFound(human_id.to_owned()),
+    )
+}
+
 /// Resolves a `human_id` to its aggregate [`DnaTestId`](genealogy_core::ids::DnaTestId).
 async fn resolve_dna_test_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::DnaTestId, AppError> {
     crate::use_case::resolve_id(store.find_dna_test(human_id).await?, DnaTestView::dna_test_id, || {
@@ -1129,8 +1208,12 @@ mod tests {
     use super::{
         ActivityDetail, OperatorKind, change_log_for_person, recent_activity, undo_assertion, workspace_counts,
     };
+    use super::{change_log_for_research_note, undo_research_note_assertion};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
     use crate::person::{NewFact, NewPerson, assert_fact, assert_sex, create_person, set_restrictions, show_person};
+    use crate::research_note::{
+        NewResearchNote, NewResearchNoteSubject, create_research_note, set_research_note_body, show_research_note,
+    };
     use crate::session::Session;
     use crate::use_case::{MutationMeta, Provenance};
     use crate::workspace::Workspace;
@@ -1407,5 +1490,94 @@ mod tests {
         assert_eq!(counts.person, 1);
         assert_eq!(counts.family, 0);
         assert_eq!(counts.event, 0);
+    }
+
+    /// Creates a person and a research note arguing about them, returning the note's `human_id`.
+    async fn research_note_about_a_person(workspace: &Workspace, session: &Session) -> String {
+        let person = create_bare(workspace, session).await;
+        create_research_note(
+            workspace,
+            session,
+            NewResearchNote {
+                human_id: None,
+                subjects: vec![NewResearchNoteSubject::Person(person)],
+                title: Some("Immigration year unresolved".to_owned()),
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("create research note")
+    }
+
+    #[tokio::test]
+    async fn research_note_change_log_is_newest_first_and_marks_undoable_entries() {
+        let (workspace, session, _dir) = setup().await;
+        let human_id = research_note_about_a_person(&workspace, &session).await;
+        set_research_note_body(
+            &workspace,
+            &session,
+            &human_id,
+            "Passenger lists not yet checked.".to_owned(),
+            Some("en".to_owned()),
+            MutationMeta::default(),
+        )
+        .await
+        .expect("body");
+
+        let log = change_log_for_research_note(&workspace, &human_id).await.expect("log");
+        assert_eq!(log.len(), 2);
+        assert_eq!(log[0].event_type, "RichTextSet");
+        assert_eq!(log[0].aggregate_kind, "research_note");
+        assert!(log[0].can_undo, "the body assertion is undoable");
+        assert_eq!(log[1].event_type, "ResearchNoteCreated");
+        assert!(!log[1].can_undo, "the creation is not undoable");
+    }
+
+    #[tokio::test]
+    async fn undoing_a_research_note_assertion_appends_a_retraction() {
+        let (workspace, session, _dir) = setup().await;
+        let human_id = research_note_about_a_person(&workspace, &session).await;
+        set_research_note_body(
+            &workspace,
+            &session,
+            &human_id,
+            "Passenger lists not yet checked.".to_owned(),
+            Some("en".to_owned()),
+            MutationMeta::default(),
+        )
+        .await
+        .expect("body");
+        let log = change_log_for_research_note(&workspace, &human_id).await.expect("log");
+        let target = log[0].assertion_id.clone();
+
+        undo_research_note_assertion(&workspace, &session, &human_id, &target, None)
+            .await
+            .expect("undo");
+
+        let log = change_log_for_research_note(&workspace, &human_id).await.expect("log");
+        assert_eq!(log[0].event_type, "AssertionRetracted");
+        assert_eq!(
+            log[1].event_type, "RichTextSet",
+            "the retracted assertion stays in the log"
+        );
+        assert!(!log[1].can_undo, "a retracted assertion is no longer undoable");
+        assert!(
+            show_research_note(&workspace, &human_id)
+                .await
+                .expect("show")
+                .is_some_and(|note| note.body.is_none()),
+            "the retraction removed the body from the projection"
+        );
+    }
+
+    #[tokio::test]
+    async fn workspace_counts_include_research_notes() {
+        let (workspace, session, _dir) = setup().await;
+        let _ = research_note_about_a_person(&workspace, &session).await;
+
+        let counts = workspace_counts(&workspace).await.expect("counts");
+        assert_eq!(counts.research_note, 1);
+        assert_eq!(counts.note, 0, "a research note is not an ordinary note");
     }
 }

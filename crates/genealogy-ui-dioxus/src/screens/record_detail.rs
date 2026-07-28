@@ -21,6 +21,7 @@ use super::note::{NoteCreateRecord, NoteDetailPane};
 use super::person::{PersonCreateRecord, PersonDetailPane};
 use super::place::{PlaceCreateRecord, PlaceDetailPane};
 use super::repository::{RepositoryCreateRecord, RepositoryDetailPane};
+use super::research_note::{ResearchNoteCreateRecord, ResearchNoteDetailPane};
 use super::source::{SourceCreateRecord, SourceDetailPane};
 use super::tag::{TagCreateRecord, TagDetailPane};
 
@@ -56,6 +57,7 @@ fn draft_pane(category: Category) -> Element {
                     Category::Repositories => rsx! { RepositoryCreateRecord { key: "{key}" } },
                     Category::Media => rsx! { MediaCreateRecord { key: "{key}" } },
                     Category::Notes => rsx! { NoteCreateRecord { key: "{key}" } },
+                    Category::ResearchNotes => rsx! { ResearchNoteCreateRecord { key: "{key}" } },
                     Category::Tags => rsx! { TagCreateRecord { key: "{key}" } },
                     Category::DnaTests => rsx! { DnaTestCreateRecord { key: "{key}" } },
                     Category::DnaMatches => rsx! { DnaMatchCreateRecord { key: "{key}" } },
@@ -114,6 +116,7 @@ fn detail_pane(category: Category, human_id: String) -> Element {
                     Category::Repositories => rsx! { RepositoryDetailPane { key: "{human_id}", human_id } },
                     Category::Media => rsx! { MediaDetailPane { key: "{human_id}", human_id } },
                     Category::Notes => rsx! { NoteDetailPane { key: "{human_id}", human_id } },
+                    Category::ResearchNotes => rsx! { ResearchNoteDetailPane { key: "{human_id}", human_id } },
                     Category::Tags => rsx! { TagDetailPane { key: "{human_id}", id: human_id } },
                     Category::DnaTests => rsx! { DnaTestDetailPane { key: "{human_id}", human_id } },
                     Category::DnaMatches => rsx! { DnaMatchDetailPane { key: "{human_id}", human_id } },

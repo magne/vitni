@@ -49,6 +49,7 @@ nav-citations = Sitater
 nav-repositories = Arkiv
 nav-media = Medier
 nav-notes = Notater
+nav-research-notes = Forskningsnotater
 nav-tags = Merker
 nav-dna-tests = DNA-tester
 nav-dna-matches = DNA-treff

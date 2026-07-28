@@ -52,6 +52,8 @@ pub enum Category {
     Media,
     /// Notes.
     Notes,
+    /// Research notes — written proof arguments about the conclusion-bearing aggregates (ADR 0028).
+    ResearchNotes,
     /// Tags.
     Tags,
     /// DNA tests (aggregate; reachable by click, no `g`-key).
@@ -63,7 +65,7 @@ pub enum Category {
 impl Category {
     /// Every category in rail display order.
     #[must_use]
-    pub const fn all() -> [Self; 13] {
+    pub const fn all() -> [Self; 14] {
         [
             Self::Dashboard,
             Self::People,
@@ -75,6 +77,7 @@ impl Category {
             Self::Repositories,
             Self::Media,
             Self::Notes,
+            Self::ResearchNotes,
             Self::Tags,
             Self::DnaTests,
             Self::DnaMatches,
@@ -95,6 +98,7 @@ impl Category {
             Self::Repositories => "repositories",
             Self::Media => "media",
             Self::Notes => "notes",
+            Self::ResearchNotes => "research-notes",
             Self::Tags => "tags",
             Self::DnaTests => "dna-tests",
             Self::DnaMatches => "dna-matches",
@@ -117,6 +121,7 @@ impl Category {
             Self::Repositories => Some('r'),
             Self::Media => Some('m'),
             Self::Notes => Some('n'),
+            Self::ResearchNotes => Some('a'),
             Self::Tags => Some('t'),
             Self::DnaTests | Self::DnaMatches => None,
         }
@@ -131,7 +136,7 @@ impl Category {
     /// The aggregate categories a new record can be created for (all except the workspace
     /// Dashboard), in rail order.
     #[must_use]
-    pub const fn creatable() -> [Self; 12] {
+    pub const fn creatable() -> [Self; 13] {
         [
             Self::People,
             Self::Families,
@@ -142,6 +147,7 @@ impl Category {
             Self::Repositories,
             Self::Media,
             Self::Notes,
+            Self::ResearchNotes,
             Self::Tags,
             Self::DnaTests,
             Self::DnaMatches,
@@ -162,6 +168,7 @@ impl Category {
             Self::Repositories => "🏛",
             Self::Media => "🖼",
             Self::Notes => "🗒",
+            Self::ResearchNotes => "🧾",
             Self::Tags => "🏷",
             Self::DnaTests => "🧬",
             Self::DnaMatches => "🔗",
@@ -182,6 +189,7 @@ impl Category {
             Self::Repositories => "nav-repositories",
             Self::Media => "nav-media",
             Self::Notes => "nav-notes",
+            Self::ResearchNotes => "nav-research-notes",
             Self::Tags => "nav-tags",
             Self::DnaTests => "nav-dna-tests",
             Self::DnaMatches => "nav-dna-matches",
@@ -204,6 +212,7 @@ impl Category {
             Self::Repositories => Some("repository"),
             Self::Media => Some("media"),
             Self::Notes => Some("note"),
+            Self::ResearchNotes => Some("research_note"),
             Self::Tags => Some("tag"),
             Self::DnaTests => Some("dna_test"),
             Self::DnaMatches => Some("dna_match"),
@@ -224,6 +233,7 @@ impl Category {
             "repository" => Some(Self::Repositories),
             "media" => Some(Self::Media),
             "note" => Some(Self::Notes),
+            "research_note" => Some(Self::ResearchNotes),
             "tag" => Some(Self::Tags),
             "dna_test" => Some(Self::DnaTests),
             "dna_match" => Some(Self::DnaMatches),
@@ -540,6 +550,11 @@ pub enum Screen {
         /// The note's user-facing id (e.g. `N0001`).
         human_id: String,
     },
+    /// One research note's detail view.
+    ResearchNoteDetail {
+        /// The research note's user-facing id (e.g. `A0001`).
+        human_id: String,
+    },
     /// One tag's detail view.
     TagDetail {
         /// The tag's stable id (a UUID string; tags have no `human_id`).
@@ -638,6 +653,13 @@ pub enum Intent {
     /// Load one note's detail.
     ShowNote {
         /// The note's user-facing id (e.g. `N0001`).
+        human_id: String,
+    },
+    /// Load the research-note list.
+    ShowResearchNoteList,
+    /// Load one research note's detail.
+    ShowResearchNote {
+        /// The research note's user-facing id (e.g. `A0001`).
         human_id: String,
     },
     /// Load the tag list.
@@ -1903,6 +1925,107 @@ impl NoteEdit {
     }
 }
 
+/// Which conclusion-bearing aggregate a research note's subject names, by that record's `human_id`
+/// (ADR 0028 §2). The `category` is one of [`Category::People`] / [`Category::Families`] /
+/// [`Category::Events`] / [`Category::Places`] — the four kinds `SubjectRef` allows; any other is
+/// rejected by [`dispatch_research_note_edit`](crate::intent::dispatch_research_note_edit).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubjectRequest {
+    /// Which aggregate the subject belongs to.
+    pub category: Category,
+    /// The subject record's user-facing id (e.g. `I0042`).
+    pub human_id: String,
+}
+
+/// A request to mutate a research note, dispatched to a `genealogy-app` command use-case via
+/// [`dispatch_research_note_edit`](crate::intent::dispatch_research_note_edit). Mirrors [`NoteEdit`]
+/// for the `ResearchNote` slice (ADR 0028).
+///
+/// A research note has no rename and no title-set verb: its `human_id` and title are fixed at create
+/// time, so — unlike every other aggregate's `*Edit` — there is no `SetHumanId` variant here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResearchNoteEdit {
+    /// Set (or change) the written argument and its BCP-47 language (`None`/blank clears the language).
+    SetBody {
+        /// The research note to edit.
+        human_id: String,
+        /// The argument text (Markdown).
+        text: String,
+        /// The argument's BCP-47 language; `None` clears it.
+        language: Option<String>,
+    },
+    /// Name one more subject this argument is about (idempotent — ADR 0028 §2).
+    AddSubject {
+        /// The research note to edit.
+        human_id: String,
+        /// The subject to add.
+        subject: SubjectRequest,
+    },
+    /// Stop naming a subject. Rejected by the core when it is the note's last one (ADR 0028 §2).
+    RemoveSubject {
+        /// The research note to edit.
+        human_id: String,
+        /// The subject to remove.
+        subject: SubjectRequest,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag picked by name; never shown.
+    Tag {
+        /// The research note to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
+    /// Set the research note's privacy restrictions (an empty set clears them).
+    SetRestrictions {
+        /// The research note to edit.
+        human_id: String,
+        /// The restrictions to set.
+        restrictions: Vec<RestrictionKind>,
+    },
+    /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
+    UndoAssertion {
+        /// The research note whose change log holds the assertion.
+        human_id: String,
+        /// The assertion to retract (its `AssertionId`, a UUID string).
+        assertion_id: String,
+    },
+}
+
+impl ResearchNoteEdit {
+    /// The `human_id` of the research note this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::SetBody { human_id, .. }
+            | Self::AddSubject { human_id, .. }
+            | Self::RemoveSubject { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => human_id,
+        }
+    }
+}
+
+/// The buffered result of the deferred research-note create form, dispatched to
+/// [`create_research_note`](genealogy_app::create_research_note) (plus a follow-up body assert) via
+/// [`dispatch_research_note_change_set`](crate::intent::dispatch_research_note_change_set) on Save.
+/// Create-only; nothing is persisted until Save.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ResearchNoteChangeSetRequest {
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
+    /// The entities this argument is about — must be non-empty (ADR 0028 §2).
+    pub subjects: Vec<SubjectRequest>,
+    /// The short title (blank ⇒ `None`).
+    pub title: Option<String>,
+    /// The written argument (blank ⇒ `None`, and no body is asserted).
+    pub body: Option<String>,
+    /// The argument's BCP-47 language (blank ⇒ `None`).
+    pub language: Option<String>,
+}
+
 /// The buffered result of the directly-editable tag record (create + edit, one mechanism), dispatched
 /// to [`commit_tag_change_set`](genealogy_app::commit_tag_change_set) via
 /// [`dispatch_tag_change_set`](crate::intent::dispatch_tag_change_set) when the operator presses Save.
@@ -2350,21 +2473,21 @@ mod tests {
     }
 
     #[test]
-    fn category_all_has_thirteen_unique_ids() {
+    fn category_all_has_fourteen_unique_ids() {
         let ids: BTreeSet<&str> = Category::all().iter().map(|category| category.id()).collect();
-        assert_eq!(Category::all().len(), 13);
-        assert_eq!(ids.len(), 13);
+        assert_eq!(Category::all().len(), 14);
+        assert_eq!(ids.len(), 14);
     }
 
     #[test]
-    fn eleven_categories_have_unique_nav_keys() {
+    fn twelve_categories_have_unique_nav_keys() {
         let keys: Vec<char> = Category::all()
             .iter()
             .filter_map(|category| category.nav_key())
             .collect();
         let unique: BTreeSet<char> = keys.iter().copied().collect();
-        assert_eq!(keys.len(), 11);
-        assert_eq!(unique.len(), 11);
+        assert_eq!(keys.len(), 12);
+        assert_eq!(unique.len(), 12);
     }
 
     #[test]
@@ -2373,7 +2496,7 @@ mod tests {
             .iter()
             .filter_map(|category| category.nav_key())
             .collect();
-        let expected: BTreeSet<char> = "dpfelscrmnt".chars().collect();
+        let expected: BTreeSet<char> = "dpfelscrmnat".chars().collect();
         assert_eq!(keys, expected);
     }
 
@@ -2381,6 +2504,43 @@ mod tests {
     fn dna_categories_have_no_nav_key() {
         assert_eq!(Category::DnaTests.nav_key(), None);
         assert_eq!(Category::DnaMatches.nav_key(), None);
+    }
+
+    #[test]
+    fn research_notes_sits_between_notes_and_tags_with_its_own_glyph_and_key() {
+        let order: Vec<Category> = Category::all().to_vec();
+        let notes = order
+            .iter()
+            .position(|category| *category == Category::Notes)
+            .expect("Notes is in the rail");
+        let research = order
+            .iter()
+            .position(|category| *category == Category::ResearchNotes)
+            .expect("ResearchNotes is in the rail");
+        let tags = order
+            .iter()
+            .position(|category| *category == Category::Tags)
+            .expect("Tags is in the rail");
+        assert_eq!(research, notes + 1, "research notes follow notes");
+        assert_eq!(tags, research + 1, "tags follow research notes");
+        assert_eq!(Category::ResearchNotes.nav_key(), Some('a'));
+        assert_eq!(Category::from_nav_key('a'), Some(Category::ResearchNotes));
+        assert_ne!(
+            Category::ResearchNotes.icon(),
+            Category::Notes.icon(),
+            "the two note categories must be distinguishable in the rail"
+        );
+    }
+
+    #[test]
+    fn research_notes_round_trips_through_its_aggregate_kind() {
+        assert_eq!(Category::ResearchNotes.aggregate_kind(), Some("research_note"));
+        assert_eq!(
+            Category::from_aggregate_kind("research_note"),
+            Some(Category::ResearchNotes)
+        );
+        assert_eq!(Category::ResearchNotes.id(), "research-notes");
+        assert_eq!(Category::ResearchNotes.label_id(), "nav-research-notes");
     }
 
     #[test]
@@ -2393,7 +2553,7 @@ mod tests {
     #[test]
     fn creatable_excludes_dashboard() {
         let creatable = Category::creatable();
-        assert_eq!(creatable.len(), 12);
+        assert_eq!(creatable.len(), 13);
         assert!(!creatable.contains(&Category::Dashboard));
     }
 

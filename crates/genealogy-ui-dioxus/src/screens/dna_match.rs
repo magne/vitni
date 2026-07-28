@@ -507,6 +507,7 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
             | IntentOutcome::MergeCompare(_)
             | IntentOutcome::Geography(_)
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::DataQuality(_),
         )) => rsx! {},
     };

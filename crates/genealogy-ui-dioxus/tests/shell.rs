@@ -548,10 +548,10 @@ fn new_record_menu_lists_every_creatable_category() {
     assert!(html.contains(r#"role="menu""#), "menu role:\n{html}");
     assert_eq!(
         html.matches(r#"role="menuitem""#).count(),
-        12,
+        13,
         "one menuitem per creatable category:\n{html}"
     );
-    for label in ["People", "Families", "DNA tests", "DNA matches"] {
+    for label in ["People", "Families", "Research notes", "DNA tests", "DNA matches"] {
         assert!(
             html.contains(&format!(">{label}<")),
             "expected category label {label:?}:\n{html}"

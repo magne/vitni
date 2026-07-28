@@ -29,6 +29,7 @@ mod prelude;
 mod record_detail;
 mod record_form;
 mod repository;
+mod research_note;
 mod shared;
 mod source;
 mod tabs;
@@ -89,6 +90,10 @@ pub use record_form::{
 };
 pub use repository::{
     RepositoryEditForm, repository_overview, repository_record_fields, repository_sources_table, repository_urls_table,
+};
+pub use research_note::{
+    ResearchNoteCreateRecord, ResearchNoteEditForm, ResearchNotesTab, research_note_content_tab,
+    research_note_draft_subjects, research_note_record_fields, research_note_subjects_table, research_notes_table,
 };
 pub use shared::{
     MediaTabState, RegisterFields, RetractTarget, RowRetract, attach_picker_form, citation_table, create_record_frame,

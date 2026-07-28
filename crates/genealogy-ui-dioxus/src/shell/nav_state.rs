@@ -215,6 +215,11 @@ pub struct NavState {
     /// Map tab's "Open in Geography ↗"), or `None`. Set by [`Self::open_geography_focused`];
     /// `GeographyScreen` consumes and clears it once, on mount.
     pub geography_focus: Signal<Option<(String, String)>>,
+    /// The `(category, human_id)` a fresh research-note draft should be pre-seeded with as its subject
+    /// (the "Research notes" reverse tab's Add on a Person / Family / Event / Place), or `None`. Set by
+    /// [`Self::open_research_note_about`]; `ResearchNoteCreateRecord` consumes and clears it once, on
+    /// mount — the same one-shot handoff as [`Self::geography_focus`].
+    pub research_note_subject: Signal<Option<(Category, String)>>,
     /// A close-tab/quit operation awaiting confirmation because it would discard an unsaved draft, or
     /// `None` when the confirm dialog is not showing. Set by [`Self::request_close_tab`] /
     /// [`Self::request_quit`]; resolved by [`Self::confirm_close`] / [`Self::cancel_close`].
@@ -266,6 +271,7 @@ impl NavState {
             palette_seed: Signal::new(String::new()),
             notice: Signal::new(None),
             geography_focus: Signal::new(None),
+            research_note_subject: Signal::new(None),
             pending_close: Signal::new(None),
             quit_requested: Signal::new(0),
         }
@@ -344,6 +350,14 @@ impl NavState {
         self.records.write().push(OpenTab::Draft(category));
         let last = self.records.read().len().saturating_sub(1);
         self.active_record.set(Some(last));
+    }
+
+    /// Opens a research-note create draft pre-seeded with `(category, human_id)` as its subject — the
+    /// Add on a record's "Research notes" tab. Reveals the `ResearchNotes` category so the draft's tab is
+    /// visible next to its list, exactly as the rail's own New does.
+    pub fn open_research_note_about(&mut self, category: Category, human_id: String) {
+        self.research_note_subject.set(Some((category, human_id)));
+        self.request_new_for(Category::ResearchNotes);
     }
 
     /// Commits a draft in place: replaces the open draft tab for `record.category` with the saved

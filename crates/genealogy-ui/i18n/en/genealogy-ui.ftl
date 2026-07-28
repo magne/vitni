@@ -1088,3 +1088,23 @@ shortcuts-error-unknown-action = "{ $id }" is not a known shortcut.
 shortcuts-error-unparsable = "{ $chord }" for "{ $id }" could not be parsed.
 shortcuts-error-not-rebindable = "{ $id }" is not a rebindable shortcut.
 shortcuts-error-conflict = "{ $chord }" for "{ $id }" conflicts with another shortcut.
+
+# Research notes (ADR 0028) — proof arguments about the conclusion-bearing records
+tab-subjects = Subjects
+research-note-list-empty = No research notes yet.
+research-note-new-title = New research note
+research-note-subjects = about { $subjects }
+research-note-subject-required = A research note must name at least one subject.
+research-note-content-note = A research note is a written proof argument — the reasoning that turns evidence into a conclusion. It names the records it argues about, so the argument stays attached to what it concludes.
+research-note-subjects-note = What this argument is about. A single analysis often resolves several conclusions at once, so a research note names a set — and must always name at least one.
+research-notes-about-note = Proof arguments written about this record. A research note is a conclusion in prose; this is the reverse index the event-sourced core keeps for free.
+picker-entity-research-note = research note
+history-research-note-created = Research note created
+history-subject-added = Subject added
+history-subject-removed = Subject removed
+tab-research-notes = Research notes
+action-add-subject = + Add subject
+action-new-research-note = + New research note
+panel-add-subject = Add subject
+remove-subject-title = Stop naming this record as a subject of the argument — recorded in History
+field-argument = Argument

@@ -43,8 +43,9 @@ pub use intent::{
     dispatch_edit, dispatch_event_change_set, dispatch_event_edit, dispatch_family_change_set, dispatch_family_edit,
     dispatch_media_change_set, dispatch_media_edit, dispatch_merge, dispatch_note_change_set, dispatch_note_edit,
     dispatch_person_change_set, dispatch_place_change_set, dispatch_place_edit, dispatch_repository_change_set,
-    dispatch_repository_edit, dispatch_source_change_set, dispatch_source_edit, dispatch_tag_change_set, pin_publisher,
-    resolve_record_name, unpin_publisher,
+    dispatch_repository_edit, dispatch_research_note_change_set, dispatch_research_note_edit,
+    dispatch_source_change_set, dispatch_source_edit, dispatch_tag_change_set, pin_publisher, resolve_record_name,
+    unpin_publisher,
 };
 pub use list::{ListQuery, RowSort, RowVm, step_row, visible_rows};
 pub use navigation::{
@@ -53,8 +54,8 @@ pub use navigation::{
     DraftSourceRef, EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent,
     MediaChangeSetRequest, MediaEdit, MergePersons, NavHistory, NavLocation, NoteChangeSetRequest, NoteEdit,
     PartnerRequest, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, RecordRef,
-    RepositoryChangeSetRequest, RepositoryEdit, Screen, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest, Tool,
-    tab_label,
+    RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest, ResearchNoteEdit, Screen,
+    SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest, Tool, tab_label,
 };
 pub use palette::{
     PALETTE_GROUP_MAX, PaletteAction, PaletteCommand, PaletteCommandVm, PaletteEntry, PaletteGroup, PaletteGroupKind,
@@ -86,15 +87,16 @@ pub use view_model::{
     PedigreeSlotVm, PedigreeVm, PersonDetail, PersonDraft, PinnedPublisherVm, PlaceDetail, PlaceDraft, PlaceGeometryVm,
     PlaceHierarchyVm, PlaceLinkVm, PlaceMarkerVm, PlaceNameVm, PlaceSuccessionVm, PluginGrantVm, ProvenanceDraft,
     RecordDraft, RecordLink, RelationshipVm, RepositoryDetail, RepositoryDraft, RepositoryLinkVm, RepositoryUrlVm,
-    SharedAncestorVm, ShortcutBindingVm, ShortcutsVm, SourceAttributeVm, SourceCitationVm, SourceDetail, SourceDraft,
-    SourceHeldVm, SourceReliabilityVm, TIME_SLIDER_RANGE, TagDetail, TagDraft, TagUsageGroupVm, TimelineKind,
-    TimelineRowVm, TranslationVm, TrustStoreVm, UsingRecordVm, citation_row, citation_tabs, clamp_slider_year,
-    collapse_history, display_coordinates, dna_match_row, dna_match_tabs, dna_test_row, dna_test_tabs, event_list_row,
-    event_row, event_tabs, evidence_axes, family_list_row, family_row, family_tabs, first_undoable, format_date_point,
-    media_row, media_tabs, note_row, note_tabs, parse_date_point, person_list_row, person_row, person_tabs,
-    place_map_display_shape, place_row, place_tabs, plugin_grant_vm, rect_css, rect_from_drag, repository_row,
-    repository_tabs, resolve_geometry_as_of, shortcuts_vm, slugify, source_row, source_tabs, suggest_filename, tag_row,
-    tag_tabs, trust_store_vm,
+    ResearchNoteDetail, ResearchNoteDraft, SharedAncestorVm, ShortcutBindingVm, ShortcutsVm, SourceAttributeVm,
+    SourceCitationVm, SourceDetail, SourceDraft, SourceHeldVm, SourceReliabilityVm, SubjectVm, TIME_SLIDER_RANGE,
+    TagDetail, TagDraft, TagUsageGroupVm, TimelineKind, TimelineRowVm, TranslationVm, TrustStoreVm, UsingRecordVm,
+    citation_row, citation_tabs, clamp_slider_year, collapse_history, display_coordinates, dna_match_row,
+    dna_match_tabs, dna_test_row, dna_test_tabs, event_list_row, event_row, event_tabs, evidence_axes, family_list_row,
+    family_row, family_tabs, first_undoable, format_date_point, media_row, media_tabs, note_row, note_tabs,
+    parse_date_point, person_list_row, person_row, person_tabs, place_map_display_shape, place_row, place_tabs,
+    plugin_grant_vm, rect_css, rect_from_drag, repository_row, repository_tabs, research_note_row, research_note_tabs,
+    resolve_geometry_as_of, shortcuts_vm, slugify, source_row, source_tabs, suggest_filename, tag_row, tag_tabs,
+    trust_store_vm,
 };
 pub use vocabulary::{
     Action, Field, Form, Panel, SelectOption, SubmitResult, Table, VocabularyError, parse, parse_submit_result,

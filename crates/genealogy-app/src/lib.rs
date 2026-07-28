@@ -155,10 +155,11 @@ pub use geography::{EventPin, GeographySummary, PlaceMarker, show_geography, yea
 pub use history::{
     ActivityDetail, ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_dna_match,
     change_log_for_dna_test, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
-    change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, change_log_for_tag,
-    recent_activity, undo_assertion, undo_citation_assertion, undo_dna_match_assertion, undo_dna_test_assertion,
-    undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion, undo_place_assertion,
-    undo_repository_assertion, undo_source_assertion, workspace_counts,
+    change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_research_note,
+    change_log_for_source, change_log_for_tag, recent_activity, undo_assertion, undo_citation_assertion,
+    undo_dna_match_assertion, undo_dna_test_assertion, undo_event_assertion, undo_family_assertion,
+    undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion,
+    undo_research_note_assertion, undo_source_assertion, workspace_counts,
 };
 pub use import::{import_add_child, import_add_partner, import_assert_sex, import_family, import_person};
 pub use media::{
@@ -203,9 +204,10 @@ pub use repository::{
 };
 pub use repository_change_set::{RepositoryChangeSet, commit_repository_change_set};
 pub use research_note::{
-    NewResearchNote, NewResearchNoteSubject, ResearchNoteSummary, add_subject_to_research_note, create_research_note,
-    list_research_notes, list_research_notes_for_subject, remove_subject_from_research_note, set_research_note_body,
-    set_restrictions as set_research_note_restrictions, show_research_note, tag_research_note,
+    NewResearchNote, NewResearchNoteSubject, ResearchNoteSubjectRef, ResearchNoteSummary, add_subject_to_research_note,
+    create_research_note, list_research_notes, list_research_notes_about, list_research_notes_for_subject,
+    remove_subject_from_research_note, set_research_note_body, set_restrictions as set_research_note_restrictions,
+    show_research_note, tag_research_note,
 };
 pub use session::Session;
 pub use source::{

@@ -86,6 +86,7 @@ fn matches_dashboard(category: Category) -> bool {
         | Category::Repositories
         | Category::Media
         | Category::Notes
+        | Category::ResearchNotes
         | Category::Tags
         | Category::DnaTests
         | Category::DnaMatches => false,
