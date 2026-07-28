@@ -27,6 +27,7 @@ use crate::navigation::{
 };
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 
+mod bulk_import;
 mod citation;
 mod common;
 mod crop;
@@ -56,6 +57,7 @@ mod shortcuts_vm;
 mod source;
 mod tag;
 
+pub use bulk_import::*;
 pub use citation::*;
 pub use common::*;
 pub use crop::*;

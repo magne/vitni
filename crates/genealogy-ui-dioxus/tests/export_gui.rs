@@ -10,8 +10,8 @@ use genealogy_ui::ExportProgress;
 use genealogy_ui_dioxus::components::SelectChoice;
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
-    DestinationStage, ExportDestinationLabels, ExportNoticeTone, ExportRunningLabels, ExportSummaryLabels,
-    ExportSummaryStage, NoticeStage, RunningStage,
+    DestinationStage, ExportDestinationLabels, ExportRunningLabels, ExportSummaryLabels, ExportSummaryStage,
+    NoticeStage, RunningStage, WizardNoticeTone,
 };
 
 fn render(view: fn() -> Element) -> String {
@@ -213,7 +213,7 @@ fn summary_stage_shows_the_count_and_the_destination() {
 fn failure_view() -> Element {
     rsx! {
         NoticeStage {
-            tone: ExportNoticeTone::Failure,
+            tone: WizardNoticeTone::Failure,
             heading: "Export failed".to_owned(),
             message: "plugin trapped: out of fuel".to_owned(),
             restart_label: "Export again".to_owned(),
@@ -225,7 +225,7 @@ fn failure_view() -> Element {
 fn cancelled_view() -> Element {
     rsx! {
         NoticeStage {
-            tone: ExportNoticeTone::Cancelled,
+            tone: WizardNoticeTone::Cancelled,
             heading: "Export cancelled".to_owned(),
             message: "The export stopped before it finished.".to_owned(),
             restart_label: "Export again".to_owned(),

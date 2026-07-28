@@ -54,7 +54,7 @@ nav-dna-tests = DNA-tester
 nav-dna-matches = DNA-treff
 nav-pedigree = Anetavle
 nav-merge = Sammenlign / slå sammen
-nav-import = Assistert import
+nav-import = Importer
 nav-export = Eksport
 nav-geography = Geografi
 nav-plugins = Tillegg
@@ -430,3 +430,49 @@ export-error-heading = Eksporten mislyktes
 export-failed-unknown = Eksporten avsluttet uten å rapportere et resultat.
 export-cancelled-heading = Eksporten ble avbrutt
 export-cancelled-message = Eksporten stoppet før den var ferdig; en delvis skrevet fil kan ligge igjen.
+
+# Import-verktøyets modusvelger (sak #191): filimport i bulk mot den assisterte nettveiviseren over.
+import-tool-heading = Importer
+import-mode-label = Hvordan vil du importere?
+import-mode-bulk = Filimport i bulk
+import-mode-assisted = Assistert nettimport
+
+# Masseimport-veiviseren (sak #191): GUI-motstykket til `genealogy import`.
+bulk-import-heading = Masseimport
+bulk-import-stage-source = Kilde
+bulk-import-stage-running = Kjører
+bulk-import-stage-summary = Oppsummering
+bulk-import-source-heading = Velg hva som skal leses, og hvor det skal importeres
+bulk-import-plugin-label = Importformat
+bulk-import-no-plugins = Ingen tillegg for masseimport er installert. Kjør `cargo xtask build-plugins`.
+bulk-import-source-label = Kildefil
+bulk-import-source-placeholder = Sti til filen som skal importeres
+bulk-import-source-preview = Leser fra
+bulk-import-source-directory-hint = Den stien er en mappe — velg en fil å importere.
+bulk-import-target-label = Importer til
+bulk-import-target-existing = Et eksisterende arbeidsområde
+bulk-import-target-new = Et nytt arbeidsområde
+bulk-import-target-workspace-label = Arbeidsområde
+bulk-import-run = Importer
+bulk-import-running-heading = Importerer…
+bulk-import-progress-starting = Starter…
+bulk-import-progress-count = { $processed } av { $total }
+bulk-import-progress-processed = { $processed } importert
+bulk-import-cancel = Avbryt
+bulk-import-summary-heading = Import fullført
+bulk-import-summary-records = { $count } oppføringer importert
+bulk-import-summary-source = Importert fra
+bulk-import-another = Importer en til
+bulk-import-error-heading = Importen mislyktes
+bulk-import-failed-unknown = Importen avsluttet uten å rapportere et resultat.
+bulk-import-cancelled-heading = Importen ble avbrutt
+bulk-import-cancelled-message = Importen stoppet før den var ferdig.
+bulk-import-confirm-title = Importere til { $workspace }?
+bulk-import-confirm-body = { $workspace } har allerede { $count ->
+    [one] 1 person
+   *[other] { $count } personer
+} registrert. Import kan legge til duplikater.
+bulk-import-confirm-cancel = Avbryt
+bulk-import-confirm-run = Importer likevel
+bulk-import-target-name-required = Skriv inn et navn for det nye arbeidsområdet.
+bulk-import-target-name-taken = Et arbeidsområde med det navnet er allerede registrert.
