@@ -91,9 +91,10 @@ pub enum PaletteAction {
 }
 
 /// The default command list, in palette display order: a Create for every creatable category, then
-/// Find-duplicates, the tool screens (Pedigree/Import/Plugins/Preferences), and Help. The renderer
-/// resolves each command's label. Merge is reached through [`PaletteCommand::FindDuplicates`], so it
-/// is not an [`PaletteCommand::OpenTool`]. Import is the assisted-import wizard (ADR 0017).
+/// Find-duplicates, the tool screens (Pedigree/Import/Export/Plugins/Preferences), and Help. The
+/// renderer resolves each command's label. Merge is reached through
+/// [`PaletteCommand::FindDuplicates`], so it is not an [`PaletteCommand::OpenTool`]. Import is the
+/// assisted-import wizard (ADR 0017); Export is the bulk-export wizard (ADR 0013).
 #[must_use]
 pub fn palette_commands() -> Vec<PaletteCommand> {
     let mut commands = Vec::new();
@@ -103,6 +104,7 @@ pub fn palette_commands() -> Vec<PaletteCommand> {
     commands.push(PaletteCommand::FindDuplicates);
     commands.push(PaletteCommand::OpenTool(Tool::Pedigree));
     commands.push(PaletteCommand::OpenTool(Tool::Import));
+    commands.push(PaletteCommand::OpenTool(Tool::Export));
     commands.push(PaletteCommand::OpenTool(Tool::Plugins));
     commands.push(PaletteCommand::OpenTool(Tool::Preferences));
     commands.push(PaletteCommand::OpenHelp);
@@ -371,6 +373,7 @@ mod tests {
             );
         }
         assert!(commands.contains(&PaletteCommand::FindDuplicates));
+        assert!(commands.contains(&PaletteCommand::OpenTool(Tool::Export)));
         assert!(commands.contains(&PaletteCommand::OpenTool(Tool::Preferences)));
         assert!(commands.contains(&PaletteCommand::OpenHelp));
         assert!(

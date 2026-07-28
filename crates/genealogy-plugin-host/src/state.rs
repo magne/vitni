@@ -1965,6 +1965,15 @@ impl export_sink::Host for HostState {
         let path = target
             .resolve(&suggested_name)
             .map_err(types::CapabilityError::Backend)?;
+        // The host owns the path (the plugin only proposes a leaf name), so creating the directory it
+        // asked for is part of honouring the target — `<workspace>/exports`, the CLI's and the GUI
+        // wizard's default, does not exist until the first export.
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| types::CapabilityError::Backend(format!("creating {}: {error}", parent.display())))?;
+        }
         let file = File::create(&path)
             .map_err(|error| types::CapabilityError::Backend(format!("creating {}: {error}", path.display())))?;
         self.sink = Some(file);

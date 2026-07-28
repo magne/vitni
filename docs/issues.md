@@ -226,19 +226,12 @@ Every per-aggregate verb the CLI exposes has a GUI counterpart *except* the item
 Each reuses an existing `genealogy-app` use-case — none needs a new core verb. One more parity gap is
 filed in its own area: research notes (*Notes & research notes*).
 
-- **Bulk export is CLI-only** — `genealogy export <plugin> [--output FILE]` drives
-  `PluginHost::run_bulk_export`; the GUI only *names* `Capability::ExportSink` in the plugin panel and
-  never calls it.
-  *UI:* a `Tool::Export` screen mirroring `Tool::Import`'s wizard shell — a plugin picker filtered to
-  bundles declaring `ExportSink` (via `resolve_bundles`), a destination row defaulting to the workspace
-  `exports/` directory with "Choose file…" for `ExportTarget::File`, then run + summary stages reusing
-  the `services::start_assisted_import` progress/error pattern. — #190
 - **Bulk import is CLI-only, and target selection has no GUI shape at all** — the CLI's `import` is
   plugin-generic and also picks the target: `--new NAME PATH` creates + registers a fresh workspace,
   `--into NAME` imports into an existing one, prompting for confirmation when it already holds persons.
   `genealogy-ui-dioxus` has no local-file import flow at all (distinct from the *assisted* import
   wizard).
-  *UI:* a target stage on `Tool::Import` (or the `Tool::Export` sibling above): plugin picker
+  *UI:* a target stage on `Tool::Import`, shaped like the shipped `Tool::Export` wizard: plugin picker
   (`ImportSource` bundles) → file picker → target radio, reusing the Preferences "Register workspace…"
   disclosure form for the new-workspace case, and `Modal` + the `list_persons` emptiness probe for the
   non-empty confirm. — #191

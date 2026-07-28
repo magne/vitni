@@ -1293,3 +1293,75 @@ async fn import_stops_when_progress_reports_cancel() {
         "only the records imported before cancellation are persisted"
     );
 }
+
+/// The GUI's default destination is a directory (`<workspace>/exports`), not a pinned file: the host
+/// resolves the leaf from the plugin's suggested name, and the document must land there and re-import
+/// unchanged. Every other export test pins an `ExportTarget::File`, so this is the only cover for the
+/// directory path.
+#[tokio::test]
+async fn export_to_a_directory_lands_under_the_plugins_suggested_name() {
+    let host = common::host();
+    let importer = common::component("gedcom-import");
+    let exporter = common::component("gedcom-export");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    let original = snapshot(&workspace).await;
+
+    // The wizard hands the host a directory that does not exist yet, exactly as `<workspace>/exports`
+    // does on a fresh workspace.
+    let out_dir = io_dir.path().join("exports");
+    let (log, record) = progress_collector();
+    let (count, workspace) = host
+        .run_bulk_export(
+            &exporter,
+            invocation(workspace, export_grants()),
+            ExportTarget::Directory(out_dir.clone()),
+            record,
+        )
+        .await
+        .expect("export to a directory");
+    drop(workspace);
+    assert_eq!(count, 4, "3 individuals + 1 family exported");
+    assert!(
+        !log.lock().expect("progress lock").is_empty(),
+        "a directory export reports progress like a file export"
+    );
+
+    // The plugin's suggested name decides the leaf; nothing else is written into the directory.
+    let written: Vec<PathBuf> = std::fs::read_dir(&out_dir)
+        .expect("the host created the export directory")
+        .map(|entry| entry.expect("dir entry").path())
+        .collect();
+    assert_eq!(written, vec![out_dir.join("export.ged")], "one file, plugin-named");
+
+    // The document itself is a real export: it re-imports to the same structure.
+    let (root2, _dir2) = init_workspace();
+    let workspace2 = open_workspace(&root2).await;
+    let (recount, workspace2) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace2, import_grants()),
+            out_dir.join("export.ged"),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("re-import");
+    assert_eq!(recount, 4);
+    assert_eq!(
+        snapshot(&workspace2).await,
+        original,
+        "a directory export round-trips like a file export"
+    );
+}

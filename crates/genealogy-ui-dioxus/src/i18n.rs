@@ -1496,6 +1496,151 @@ impl Chrome {
         }
     }
 
+    /// The bulk-export wizard heading.
+    #[must_use]
+    pub fn export_heading(&self) -> String {
+        fl!(self.loader, "export-heading")
+    }
+
+    /// The three wizard stage names, in order (Destination, Running, Summary).
+    #[must_use]
+    pub fn export_stages(&self) -> [String; 3] {
+        [
+            fl!(self.loader, "export-stage-destination"),
+            fl!(self.loader, "export-stage-running"),
+            fl!(self.loader, "export-stage-summary"),
+        ]
+    }
+
+    /// The Destination-stage heading.
+    #[must_use]
+    pub fn export_destination_heading(&self) -> String {
+        fl!(self.loader, "export-destination-heading")
+    }
+
+    /// The Destination-stage plugin-selector label.
+    #[must_use]
+    pub fn export_plugin_label(&self) -> String {
+        fl!(self.loader, "export-plugin-label")
+    }
+
+    /// The "no bulk-export plugins installed" message.
+    #[must_use]
+    pub fn export_no_plugins(&self) -> String {
+        fl!(self.loader, "export-no-plugins")
+    }
+
+    /// The destination field label.
+    #[must_use]
+    pub fn export_destination_label(&self) -> String {
+        fl!(self.loader, "export-destination-label")
+    }
+
+    /// The destination field placeholder.
+    #[must_use]
+    pub fn export_destination_placeholder(&self) -> String {
+        fl!(self.loader, "export-destination-placeholder")
+    }
+
+    /// The live destination-preview label.
+    #[must_use]
+    pub fn export_destination_preview(&self) -> String {
+        fl!(self.loader, "export-destination-preview")
+    }
+
+    /// The hint shown beside a directory destination (the plugin names the file).
+    #[must_use]
+    pub fn export_destination_dir_hint(&self) -> String {
+        fl!(self.loader, "export-destination-dir-hint")
+    }
+
+    /// The Export action label.
+    #[must_use]
+    pub fn export_run(&self) -> String {
+        fl!(self.loader, "export-run")
+    }
+
+    /// The Running-stage heading.
+    #[must_use]
+    pub fn export_running_heading(&self) -> String {
+        fl!(self.loader, "export-running-heading")
+    }
+
+    /// The step name shown before the plugin reports its first step.
+    #[must_use]
+    pub fn export_progress_starting(&self) -> String {
+        fl!(self.loader, "export-progress-starting")
+    }
+
+    /// The progress count: "{processed} of {total}", or just the processed count while the plugin
+    /// does not yet know the total.
+    #[must_use]
+    pub fn export_progress_count(&self, processed: u32, total: Option<u32>) -> String {
+        match total {
+            Some(total) => fl!(
+                self.loader,
+                "export-progress-count",
+                processed = processed,
+                total = total
+            ),
+            None => fl!(self.loader, "export-progress-processed", processed = processed),
+        }
+    }
+
+    /// The Cancel action label.
+    #[must_use]
+    pub fn export_cancel(&self) -> String {
+        fl!(self.loader, "export-cancel")
+    }
+
+    /// The Summary-stage heading.
+    #[must_use]
+    pub fn export_summary_heading(&self) -> String {
+        fl!(self.loader, "export-summary-heading")
+    }
+
+    /// The "{n} records written" summary count.
+    #[must_use]
+    pub fn export_summary_records(&self, count: u32) -> String {
+        fl!(self.loader, "export-summary-records", count = count)
+    }
+
+    /// The summary's destination-row label.
+    #[must_use]
+    pub fn export_summary_destination(&self) -> String {
+        fl!(self.loader, "export-summary-destination")
+    }
+
+    /// The "Export again" action label.
+    #[must_use]
+    pub fn export_another(&self) -> String {
+        fl!(self.loader, "export-another")
+    }
+
+    /// The failed-export heading.
+    #[must_use]
+    pub fn export_error_heading(&self) -> String {
+        fl!(self.loader, "export-error-heading")
+    }
+
+    /// The message shown when the run ends without an outcome (its channel was dropped).
+    #[must_use]
+    pub fn export_failed_unknown(&self) -> String {
+        fl!(self.loader, "export-failed-unknown")
+    }
+
+    /// The cancelled-export heading.
+    #[must_use]
+    pub fn export_cancelled_heading(&self) -> String {
+        fl!(self.loader, "export-cancelled-heading")
+    }
+
+    /// The cancelled-export explanation.
+    #[must_use]
+    pub fn export_cancelled_message(&self) -> String {
+        fl!(self.loader, "export-cancelled-message")
+    }
+
     /// Resolves a rail/navigation label id (`nav-*`) to its display text; unknown ids render as-is.
     #[must_use]
     pub fn rail_label(&self, id: &str) -> String {
@@ -1516,6 +1661,7 @@ impl Chrome {
             "nav-pedigree" => fl!(self.loader, "nav-pedigree"),
             "nav-merge" => fl!(self.loader, "nav-merge"),
             "nav-import" => fl!(self.loader, "nav-import"),
+            "nav-export" => fl!(self.loader, "nav-export"),
             "nav-geography" => fl!(self.loader, "nav-geography"),
             "nav-plugins" => fl!(self.loader, "nav-plugins"),
             "nav-preferences" => fl!(self.loader, "nav-preferences"),
