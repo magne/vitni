@@ -1108,3 +1108,4 @@ action-new-research-note = + New research note
 panel-add-subject = Add subject
 remove-subject-title = Stop naming this record as a subject of the argument — recorded in History
 field-argument = Argument
+field-restrictions = Restrictions

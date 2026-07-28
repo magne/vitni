@@ -1108,3 +1108,4 @@ action-new-research-note = + Nytt forskningsnotat
 panel-add-subject = Legg til emne
 remove-subject-title = Slutt å navngi denne posten som et emne i argumentet — registrert i Historikk
 field-argument = Argument
+field-restrictions = Restriksjoner

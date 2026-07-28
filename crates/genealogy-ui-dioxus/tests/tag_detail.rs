@@ -4,7 +4,7 @@
 
 use dioxus::prelude::*;
 use genealogy_app::{TagRef, UsingKind};
-use genealogy_ui::{Localizer, TagDetail, TagDraft, TagUsageGroupVm, UsingRecordVm};
+use genealogy_ui::{Localizer, RestrictionKind, TagDetail, TagDraft, TagUsageGroupVm, UsingRecordVm};
 use genealogy_ui_dioxus::components::TabItem;
 use genealogy_ui_dioxus::master_detail::DetailContainer;
 use genealogy_ui_dioxus::screens::{
@@ -65,6 +65,7 @@ fn sample() -> TagDetail {
                 }],
             },
         ],
+        restrictions: Vec::new(),
         history: Vec::new(),
     }
 }
@@ -139,11 +140,37 @@ fn overview_view_mode() -> Element {
     }
 }
 
+fn overview_view_mode_with_restrictions() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let mut detail = sample();
+    detail.restrictions = vec![RestrictionKind::Confidential];
+    let edit = use_record_edit::<TagDraft>(&TagDraft::from_detail(&detail));
+    let name_touched = use_signal(|| false);
+    let picker_open = use_signal(|| false);
+    rsx! {
+        {tag_overview(&loc, &detail, edit, name_touched, picker_open)}
+    }
+}
+
 fn overview_edit_mode() -> Element {
     // Edit mode swaps in the editable record cards (what `TagRecordEditor` renders behind the
     // `editing` signal); rendered directly here so the SSR test needs no `AppCtx`.
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let committed = TagDraft::from_detail(&sample());
+    let draft = use_signal(|| committed.clone());
+    let name_touched = use_signal(|| false);
+    let picker_open = use_signal(|| false);
+    rsx! {
+        {tag_edit_tag_card(&loc, draft, &committed, name_touched, false)}
+        {tag_edit_colour_card(&loc, draft, &committed, picker_open)}
+    }
+}
+
+fn overview_edit_mode_with_restrictions() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let mut seed = sample();
+    seed.restrictions = vec![RestrictionKind::Locked];
+    let committed = TagDraft::from_detail(&seed);
     let draft = use_signal(|| committed.clone());
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
@@ -273,5 +300,44 @@ fn an_applied_tag_chip_shows_name_and_colour_not_the_uuid() {
     assert!(
         !html.contains("0190-secret-tag-id"),
         "an applied-tag chip must never render the tag's UUID:\n{html}"
+    );
+}
+
+#[test]
+fn view_mode_shows_the_tags_current_restrictions() {
+    let html = render(overview_view_mode_with_restrictions);
+    assert!(
+        html.contains(r#"data-kind="confidential""#),
+        "the restriction toggle set is rendered:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-pressed="true""#),
+        "the confidential restriction shows pressed:\n{html}"
+    );
+}
+
+#[test]
+fn view_mode_with_no_restrictions_shows_the_toggle_set_unpressed() {
+    let html = render(overview_view_mode);
+    assert!(
+        html.contains(r#"data-kind="confidential""#),
+        "the restriction toggle set is rendered even when nothing is set:\n{html}"
+    );
+    assert!(
+        !html.contains(r#"aria-pressed="true""#),
+        "nothing is pressed when the tag carries no restriction:\n{html}"
+    );
+}
+
+#[test]
+fn edit_mode_restriction_toggles_are_seeded_from_the_draft() {
+    let html = render(overview_edit_mode_with_restrictions);
+    assert!(
+        html.contains(r#"data-kind="locked""#),
+        "the restriction toggle set is rendered in edit mode:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-pressed="true""#),
+        "the locked restriction shows pressed:\n{html}"
     );
 }

@@ -378,6 +378,7 @@ impl Localizer {
             "priority" => fl!(self.loader, "field-priority"),
             "color" => fl!(self.loader, "field-color"),
             "swatch" => fl!(self.loader, "field-swatch"),
+            "restrictions" => fl!(self.loader, "field-restrictions"),
             _ => self.field_label_dna(id),
         }
     }

@@ -674,6 +674,7 @@ fn a_valid_tag_draft_builds_a_trimmed_request() {
     assert_eq!(request.name, "Needs sources");
     assert_eq!(request.priority, 3);
     assert_eq!(request.color, "#e0884a");
+    assert!(request.restrictions.is_empty(), "a fresh draft carries no restrictions");
 }
 
 fn tag_detail_sample() -> TagDetail {
@@ -685,6 +686,7 @@ fn tag_detail_sample() -> TagDetail {
         priority: Some(2),
         total: 3,
         usage: Vec::new(),
+        restrictions: Vec::new(),
         history: Vec::new(),
     }
 }

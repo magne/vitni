@@ -1,5 +1,6 @@
 use super::{
-    DetailTab, HistoryEntryVm, Localizer, RecordDraft, RowVm, TagChangeSetRequest, UsingRecordVm, using_record_vm,
+    DetailTab, HistoryEntryVm, Localizer, RecordDraft, RestrictionKind, RowVm, TagChangeSetRequest, UsingRecordVm,
+    using_record_vm,
 };
 
 /// One object-type group on the Tag Usage tab: the localized kind, the count, and a few examples.
@@ -31,6 +32,8 @@ pub struct TagDetail {
     pub total: usize,
     /// The records carrying this tag, grouped by object type (the Usage tab).
     pub usage: Vec<TagUsageGroupVm>,
+    /// The tag's privacy restrictions, as presentation kinds.
+    pub restrictions: Vec<RestrictionKind>,
     /// The tag's change log, newest first (History tab); filled by the dispatcher.
     pub history: Vec<HistoryEntryVm>,
 }
@@ -57,6 +60,7 @@ impl TagDetail {
             priority: summary.priority,
             total,
             usage,
+            restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             history: Vec::new(),
         }
     }
@@ -86,6 +90,8 @@ pub struct TagDraft {
     pub priority: String,
     /// The tag's colour, a CSS hex string (required, non-empty).
     pub color: String,
+    /// The tag's desired privacy restrictions (GEDCOM `RESN`); empty is unrestricted.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl TagDraft {
@@ -97,6 +103,7 @@ impl TagDraft {
             name: String::new(),
             priority: DEFAULT_TAG_PRIORITY.to_string(),
             color: DEFAULT_TAG_COLOR.to_owned(),
+            restrictions: Vec::new(),
         }
     }
 
@@ -111,7 +118,25 @@ impl TagDraft {
                 .priority
                 .map_or_else(|| DEFAULT_TAG_PRIORITY.to_string(), |p| p.to_string()),
             color: detail.color.clone().unwrap_or_else(|| DEFAULT_TAG_COLOR.to_owned()),
+            restrictions: detail.restrictions.clone(),
         }
+    }
+
+    /// This draft's restrictions with `kind` toggled on/off, kept in [`RestrictionKind::all`]'s
+    /// canonical order regardless of toggle order — so an unchanged set compares equal (`PartialEq`)
+    /// no matter which restriction was toggled last, keeping the Save-dirty and diff checks accurate.
+    #[must_use]
+    pub fn toggle_restriction(&self, kind: RestrictionKind) -> Vec<RestrictionKind> {
+        let mut next = self.restrictions.clone();
+        if let Some(position) = next.iter().position(|&existing| existing == kind) {
+            next.remove(position);
+        } else {
+            next.push(kind);
+        }
+        RestrictionKind::all()
+            .into_iter()
+            .filter(|k| next.contains(k))
+            .collect()
     }
 
     /// The priority parsed from the spinner text, or `None` when empty / non-numeric (invalid).
@@ -158,6 +183,7 @@ impl TagDraft {
             name: self.name.trim().to_owned(),
             priority,
             color: self.color.trim().to_owned(),
+            restrictions: self.restrictions.clone(),
         })
     }
 }
@@ -211,4 +237,65 @@ pub fn tag_tabs(detail: &TagDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("usage", Some(detail.total)),
         tab("history", None),
     ]
+}
+
+#[cfg(test)]
+mod tag_draft_tests {
+    use super::TagDraft;
+    use crate::presentation::RestrictionKind;
+
+    fn seed() -> TagDraft {
+        TagDraft {
+            existing_id: Some("9f3a8c12-4e7b-7a05-9f1e-2c9d8b7a6453".to_owned()),
+            name: "Direct ancestor".to_owned(),
+            priority: "1".to_owned(),
+            color: "#e5534b".to_owned(),
+            restrictions: vec![RestrictionKind::Confidential],
+        }
+    }
+
+    #[test]
+    fn to_request_carries_restrictions() {
+        let draft = TagDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..seed()
+        };
+        let request = draft.to_request().expect("valid draft");
+        assert_eq!(
+            request.restrictions,
+            vec![RestrictionKind::Confidential, RestrictionKind::Privacy]
+        );
+    }
+
+    #[test]
+    fn a_fresh_create_draft_has_no_restrictions() {
+        assert!(TagDraft::new().restrictions.is_empty());
+    }
+
+    #[test]
+    fn toggle_restriction_adds_in_canonical_order_regardless_of_click_order() {
+        let draft = TagDraft {
+            restrictions: Vec::new(),
+            ..seed()
+        };
+        // Toggle Privacy first, then Confidential; canonical order (Confidential before Privacy)
+        // should still win, not click order.
+        let after_privacy = draft.toggle_restriction(RestrictionKind::Privacy);
+        let draft = TagDraft {
+            restrictions: after_privacy,
+            ..draft
+        };
+        let after_confidential = draft.toggle_restriction(RestrictionKind::Confidential);
+        assert_eq!(
+            after_confidential,
+            vec![RestrictionKind::Confidential, RestrictionKind::Privacy]
+        );
+    }
+
+    #[test]
+    fn toggle_restriction_removes_an_already_selected_kind() {
+        let draft = seed();
+        let toggled = draft.toggle_restriction(RestrictionKind::Confidential);
+        assert!(toggled.is_empty());
+    }
 }
