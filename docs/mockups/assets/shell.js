@@ -26,6 +26,7 @@
       { id: "repositories", icon: "🏛", label: "Repositories", href: "repository.html", count: "37", key: "r" },
       { id: "media", icon: "🖼", label: "Media", href: "media.html", count: "896", key: "m" },
       { id: "notes", icon: "🗒", label: "Notes", href: "note.html", count: "1,150", key: "n" },
+      { id: "research-notes", icon: "🧾", label: "Research notes", href: "research-note.html", count: "46", key: "a" },
       { id: "tags", icon: "🏷", label: "Tags", href: "tag.html", count: "24", key: "t" },
       { id: "dna-tests", icon: "🧬", label: "DNA tests", href: "dna-test.html", count: "12" },
       { id: "dna-matches", icon: "🔗", label: "DNA matches", href: "dna-match.html", count: "318" }
@@ -65,6 +66,7 @@
       ["Repositories", "g r"],
       ["Media", "g m"],
       ["Notes", "g n"],
+      ["Research notes", "g a"],
       ["Tags", "g t"]
     ]},
     { group: "Within a screen", items: [

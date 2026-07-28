@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Research note — mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: research-notes list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter research notes…">
+        <button class="btn sm primary" title="New research note">+ New</button>
+      </div>
+      <div class="list-rows">
+        <div class="row sel">
+          <div class="avatar">🧾</div>
+          <div class="row-main">
+            <div class="row-title">Same person as the 1865 census entry?</div>
+            <div class="row-sub">about I0042, P0007 · en</div>
+          </div>
+          <div class="row-id">A0001</div>
+        </div>
+        <div class="row">
+          <div class="avatar">🧾</div>
+          <div class="row-main">
+            <div class="row-title">Which Marriage is the 1876 one?</div>
+            <div class="row-sub">about E0007 · en</div>
+          </div>
+          <div class="row-id">A0002</div>
+        </div>
+        <div class="row">
+          <div class="avatar">🧾</div>
+          <div class="row-main">
+            <div class="row-title">Two Nordland farms, one name</div>
+            <div class="row-sub">about P0007, P0031 · nb-NO</div>
+          </div>
+          <div class="row-id">A0003</div>
+        </div>
+        <div class="row">
+          <div class="avatar">🧾</div>
+          <div class="row-main">
+            <div class="row-title muted">A0004</div>
+            <div class="row-sub muted">about F0012</div>
+          </div>
+          <div class="row-id">A0004</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: research note -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg">🧾</div>
+        <div>
+          <h1 class="detail-title">Same person as the 1865 census entry?</h1>
+          <div class="detail-sub">Research note · argues about 2 records · en</div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge" title="Aggregate id: 0192-4c8e-7a05-9f1e-2c9d8b7a6453 (internal)">A0001</span>
+            <span class="resn-set" role="group" aria-label="Privacy restrictions">
+              <span class="resn" data-kind="confidential" role="button" tabindex="0" aria-pressed="false">Confidential</span>
+              <span class="resn" data-kind="locked" role="button" tabindex="0" aria-pressed="false">Locked</span>
+              <span class="resn" data-kind="privacy" role="button" tabindex="0" aria-pressed="false">Privacy</span>
+            </span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm">⋯</button>
+          <button class="btn sm primary">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="content">Content</div>
+        <div class="tab" data-tab="subjects">Subjects<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- CONTENT -->
+        <div class="tab-pane active" data-pane="content">
+          <div class="section-note">
+            A research note is a written <b>proof argument</b> — the reasoning that turns evidence into a
+            conclusion. It names the records it argues about, so the argument stays attached to what it
+            concludes, and the audit trail keeps who wrote it and why.
+          </div>
+          <div class="card">
+            <h3>Argument · en</h3>
+            <h2 style="font-size:var(--fs-lg);margin-bottom:8px">Same person as the 1865 census entry?</h2>
+            <p>The 1865 census entry for <i>Nordland</i> and the parish register both give a birth year of
+              1850 for a John Smith, carpenter. The question is whether they are one person.</p>
+            <p>Points in favour:</p>
+            <ul>
+              <li>Both name the same occupation and the same farm.</li>
+              <li>The register's baptism sponsor appears as a neighbour in the census household.</li>
+            </ul>
+            <p>Against: the census spells the surname <i>Smyth</i>, and no probate links the two.</p>
+            <blockquote style="border-left:3px solid var(--line-2);margin:8px 0;padding-left:12px" class="muted">Conclusion: same person, <b>Normal</b> confidence. Cited from the <a href="citation.html">parish register</a>; a probate record would raise it.</blockquote>
+          </div>
+
+          <!-- Edit-mode specimen -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft (<a href="record-editing.html">record editing</a>). The <b>id</b> and <b>title</b> are read-only on a saved note: the aggregate has no rename and no title-set verb, so only the argument and its language are editable.</div>
+          <div class="card" style="margin-top:4px">
+            <div class="fact-row" style="margin-bottom:12px">
+              <h3 style="text-transform:none;letter-spacing:0;margin:0">Same person as the 1865 census entry?</h3>
+              <span class="badge">A0001</span>
+              <span class="spacer"></span>
+              <button class="btn sm">Cancel</button>
+              <button class="btn sm primary">Save</button>
+            </div>
+            <div class="stack">
+              <div class="fact-row">
+                <span class="field-label" style="width:90px;margin:0">Language</span>
+                <input class="in" style="width:90px" value="en" aria-label="BCP-47 language tag">
+              </div>
+              <div class="field" style="margin-bottom:0">
+                <label>Argument <span class="faint">(Markdown)</span></label>
+                <textarea class="in" rows="4">The 1865 census entry for *Nordland* and the parish register both give a birth year of 1850 for a John Smith, carpenter.
+
+Against: the census spells the surname *Smyth*.</textarea>
+              </div>
+            </div>
+            <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+              <div class="field" style="margin-bottom:0">
+                <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+                <input class="in" placeholder="Why this change is being made…">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBJECTS (what the argument is about) -->
+        <div class="tab-pane" data-pane="subjects">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add subject</button></div>
+          <div class="section-note">What this argument is about. A single analysis often resolves several
+            conclusions at once, so a research note names a <b>set</b> — and must always name at least one.
+            Only the four conclusion-bearing records qualify: Person, Family, Event, Place.</div>
+          <table class="tbl">
+            <caption class="sr-only">Records this argument is about</caption>
+            <thead><tr><th>Object</th><th>Type</th><th>ID</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody>
+              <tr>
+                <td><a href="person.html">John Smith</a></td>
+                <td><span class="chip">Person</span></td>
+                <td class="muted mono">I0042</td>
+                <td class="row-actions"><button class="btn sm ghost" aria-label="Remove I0042" title="Stop naming this record as a subject of the argument — recorded in History">Remove</button></td>
+              </tr>
+              <tr>
+                <td><a href="place.html">Nordland</a></td>
+                <td><span class="chip">Place</span></td>
+                <td class="muted mono">P0007</td>
+                <td class="row-actions"><button class="btn sm ghost" aria-label="Remove P0007" title="Stop naming this record as a subject of the argument — recorded in History">Remove</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="section-note">Removing the <b>last</b> subject is refused by the core — an argument with
+            nothing to argue about is not a research note.</div>
+        </div>
+
+        <!-- TAGS -->
+        <div class="tab-pane" data-pane="tags">
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#e0884a"></span>Needs sources <button class="btn sm ghost" aria-label="Remove tag Needs sources" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-07-02 09:14</div>
+              <div class="tl-what">Subject added: <b>Nordland (P0007)</b></div>
+              <div class="tl-who">magne</div>
+              <div class="tl-why">"The farm identity is part of the same question"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-28 17:40</div>
+              <div class="tl-what">Text set</div>
+              <div class="tl-who">magne</div>
+              <div class="tl-why">"Wrote up the against-case"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-28 16:02</div>
+              <div class="tl-what">Research note created</div>
+              <div class="tl-who">magne</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <!-- CREATE FORM specimen -->
+  <div class="specimen" style="margin-top:24px">
+    <div class="muted" style="font-size:var(--fs-xs);margin-bottom:4px">Create specimen — a throwaway draft
+      (<a href="record-editing.html">record editing</a> §6). Unlike every other create form, Save stays
+      disabled until the draft names at least one subject; the id and title are editable here and only
+      here.</div>
+    <div class="card">
+      <div class="fact-row" style="margin-bottom:12px">
+        <h3 style="text-transform:none;letter-spacing:0;margin:0">New research note</h3>
+        <span class="badge">draft · not saved</span>
+        <span class="spacer"></span>
+        <button class="btn sm">Cancel</button>
+        <button class="btn sm primary" disabled>Save</button>
+      </div>
+      <div class="stack">
+        <div class="field">
+          <label>ID</label>
+          <input class="in mono" placeholder="A0005">
+          <div class="field-hint">Leave empty to generate an id from the workspace format</div>
+        </div>
+        <div class="field">
+          <label>Title</label>
+          <input class="in" placeholder="What question does this argument settle?">
+        </div>
+        <div class="field">
+          <label>Argument <span class="faint">(Markdown)</span></label>
+          <textarea class="in" rows="3" placeholder="The reasoning that turns the evidence into a conclusion…"></textarea>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Language</label>
+          <input class="in" style="width:90px" placeholder="en">
+        </div>
+      </div>
+      <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+        <h3>Subjects</h3>
+        <div class="section-note">A research note must name at least one subject.</div>
+        <div class="fact-row">
+          <span class="field-label" style="width:90px;margin:0">Type</span>
+          <select class="in" style="width:auto"><option selected>Person</option><option>Family</option><option>Event</option><option>Place</option></select>
+          <input class="filter" style="flex:1" placeholder="Find person…">
+          <button class="btn sm">+ Add subject</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "research-notes",
+  crumb: ["Research notes", "Same person as the 1865 census entry?"],
+  record: "John Smith (1850–1920)",
+  tabstrip: [{ label: "Research note A0001", active: true }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

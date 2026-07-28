@@ -45,22 +45,6 @@ issues already filed against it keep resolving their [`#person--family`](#person
 
 ### Notes & research notes
 
-- **Research notes have no GUI at all** — the `genealogy research-note` command group
-  (`create`/`add-subject`/`remove-subject`/`set-body`/`show`/`list`) is the only way to record a proof
-  argument (ADR 0028 shipped CLI-first). The whole app surface
-  already ships: `create_research_note`, `set_research_note_body`, `add_subject_to_research_note`,
-  `remove_subject_from_research_note`, `show_research_note`, `list_research_notes`, plus
-  `list_research_notes_for_subject` / `tag_research_note` / `set_research_note_restrictions`, which
-  have no caller anywhere yet.
-  *UI:* a 14th `Category::ResearchNotes` on a free `g`-prefix key (`a`, `b`, `g`–`k`, `o`, `q` are
-  unused — `nav_key()` at `navigation.rs:110`), following the Note screen pattern verbatim:
-  `ResearchNoteEdit { SetBody, AddSubject, RemoveSubject, Tag, SetRestrictions, UndoAssertion }` plus a
-  `ResearchNoteChangeSetRequest` for create. Subjects use the existing `RecordPicker`, which already
-  covers Person/Family/Event/Place — exactly `SubjectRef`'s four kinds. The reverse lookup becomes a
-  "Research notes" tab on those four detail screens via `tabs.rs`'s `tab_with_add`.
-  *History:* the Phase 10 plan named this screen **and** a `docs/mockups/` page as a PR2 follow-up
-  "explicitly so it is not silently dropped", and listed both in its Gate-2 exit criteria. Both were
-  dropped; there is no research-note mockup either. — #194
 - **`remove_translation` core verb** — note-translation retract is Edit-only; there is no verb to
   remove a single translation.
 
