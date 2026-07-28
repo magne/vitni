@@ -1054,3 +1054,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 .wiz-step.done .num { background: var(--ok); color: var(--accent-ink); border-color: var(--ok); }
 .confirm-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
 @media (max-width: 900px) { .confirm-split { grid-template-columns: 1fr; } }
+
+/* ---- Bulk-export wizard (ADR 0013; export.html) ---- */
+.export-preview { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-3); }
+.export-progress {
+  height: 8px; margin-top: var(--sp-3); overflow: hidden;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-pill);
+}
+.export-progress-fill { height: 100%; background: var(--accent); transition: width 120ms linear; }
+/* No known total yet: the bar is full but faded, so it reads as "running", not "done". */
+.export-progress.indeterminate .export-progress-fill { opacity: 0.4; }

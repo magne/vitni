@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bulk export — mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div style="padding:var(--sp-6);overflow:auto;height:100%">
+
+    <h1 style="border:0;margin:0 0 4px;font-size:21px">Bulk export</h1>
+    <div class="section-note">
+      <b>Write the whole workspace out through an export plugin.</b> The wizard is a first-party
+      <span class="mono">Tool::Export</span> screen (ADR 0013) — the GUI counterpart of
+      <span class="mono">genealogy export &lt;plugin&gt; [--output FILE]</span>. There is no native file
+      dialog: you type a destination and see the resolved path live. An empty field or a bare directory
+      is an <span class="mono">ExportTarget::Directory</span> and the plugin names the file; a path with
+      a file name is an <span class="mono">ExportTarget::File</span> and pins it. The run streams real
+      progress and can be cancelled — cancellation is cooperative, so it takes effect at the plugin's
+      next progress report.
+    </div>
+
+    <!-- Step indicator -->
+    <div class="wiz-steps" role="list" aria-label="Export stages">
+      <span class="wiz-step done" role="listitem"><span class="num">✓</span> Destination</span>
+      <span class="wiz-step active" role="listitem" aria-current="step"><span class="num">2</span> Running</span>
+      <span class="wiz-step" role="listitem"><span class="num">3</span> Summary</span>
+    </div>
+
+    <!-- ===================== STAGE 1 — DESTINATION ===================== -->
+    <div class="card">
+      <h3>Stage 1 · Destination</h3>
+      <div class="grid-2" style="align-items:end">
+        <div class="field" style="margin:0">
+          <label for="ex-plugin">Export format</label>
+          <select class="in" id="ex-plugin" aria-label="Bulk-export plugin">
+            <option selected>gedcom-export</option>
+            <option>gramps-export</option>
+          </select>
+          <div class="field-hint">Discovered from the installed plugins whose role is
+            <span class="mono">bulk-export</span> and that the operator has enabled — nothing is hardcoded.</div>
+        </div>
+        <div class="field" style="margin:0">
+          <label for="ex-dest">Destination</label>
+          <input class="in mono" id="ex-dest" placeholder="Leave empty to write into the workspace exports folder">
+        </div>
+      </div>
+      <div class="export-preview">
+        <span class="field-label">Writes to</span>
+        <div class="picker-value">
+          <span class="mono grow" style="word-break:break-all">/home/ola/genealogy/slekt/exports</span>
+          <span class="muted">under the plugin's file name</span>
+        </div>
+      </div>
+      <div class="muted" style="font-size:var(--fs-xs);margin-top:6px">
+        A relative path resolves against the workspace's <span class="mono">exports/</span> folder;
+        <span class="mono">..</span> is honoured. The host creates the directory and reduces the plugin's
+        suggested name to its base name, so no plugin can steer the write out of it.
+      </div>
+      <div style="margin-top:var(--sp-3)">
+        <button class="btn primary">Export</button>
+      </div>
+    </div>
+
+    <!-- Specimen: the same field with a file name typed, so the plugin has no say over the leaf. -->
+    <div class="card">
+      <h3>Stage 1 · Destination <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, a pinned file name</span></h3>
+      <div class="field" style="margin:0">
+        <label for="ex-dest-file">Destination</label>
+        <input class="in mono" id="ex-dest-file" value="2026/slekt-full.ged">
+      </div>
+      <div class="export-preview">
+        <span class="field-label">Writes to</span>
+        <div class="picker-value">
+          <span class="mono grow" style="word-break:break-all">/home/ola/genealogy/slekt/exports/2026/slekt-full.ged</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== STAGE 2 — RUNNING ===================== -->
+    <div class="card">
+      <h3>Stage 2 · Running</h3>
+      <div class="wrap" style="align-items:baseline">
+        <span class="grow">families</span>
+        <span class="muted mono">1 284 of 3 902</span>
+      </div>
+      <div class="export-progress" role="progressbar" aria-label="Exporting"
+           aria-valuemin="0" aria-valuenow="1284" aria-valuemax="3902">
+        <div class="export-progress-fill" style="width:32.9%"></div>
+      </div>
+      <div class="muted" style="font-size:var(--fs-xs);margin-top:6px">
+        The step name (<span class="mono">persons</span>, <span class="mono">families</span>, …) is the
+        plugin's own vocabulary, shown verbatim; only the counts are decorated.
+      </div>
+      <div style="margin-top:var(--sp-3)">
+        <button class="btn ghost">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Specimen: the plugin has not counted the records yet, so the bar is indeterminate. -->
+    <div class="card">
+      <h3>Stage 2 · Running <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, no total known yet</span></h3>
+      <div class="wrap" style="align-items:baseline">
+        <span class="grow">Starting…</span>
+        <span class="muted mono">0 written</span>
+      </div>
+      <div class="export-progress indeterminate" role="progressbar" aria-label="Exporting"
+           aria-valuemin="0" aria-valuenow="0">
+        <div class="export-progress-fill" style="width:100%"></div>
+      </div>
+    </div>
+
+    <!-- ===================== STAGE 3 — SUMMARY ===================== -->
+    <div class="card">
+      <h3>Stage 3 · Summary</h3>
+      <div class="wrap" style="gap:var(--sp-4)">
+        <span class="badge">3 902 records written</span>
+      </div>
+      <div class="export-preview" style="margin-top:var(--sp-3)">
+        <span class="field-label">Written to</span>
+        <div class="picker-value">
+          <span class="mono grow" style="word-break:break-all">/home/ola/genealogy/slekt/exports</span>
+        </div>
+      </div>
+      <div class="muted" style="font-size:var(--fs-xs);margin-top:6px">
+        With a directory target the host resolves the leaf from the plugin's suggested name, so the
+        summary names the directory — the same thing the CLI prints.
+      </div>
+      <div style="margin-top:var(--sp-3)">
+        <button class="btn primary">Export again</button>
+      </div>
+    </div>
+
+    <!-- ===================== STAGE 3b — FAILED ===================== -->
+    <div class="card">
+      <h3>Stage 3 · Failed <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen</span></h3>
+      <p class="empty" role="alert">plugin error: guest exhausted its fuel budget</p>
+      <div style="margin-top:var(--sp-3)">
+        <button class="btn primary">Export again</button>
+      </div>
+    </div>
+
+    <!-- ===================== STAGE 3c — CANCELLED ===================== -->
+    <div class="card">
+      <h3>Stage 3 · Cancelled <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen</span></h3>
+      <p class="empty" role="status">The export stopped before it finished; a partly written file may be left behind.</p>
+      <div class="muted" style="font-size:var(--fs-xs);margin-top:6px">
+        A cancellation is a <span class="mono">status</span>, not an <span class="mono">alert</span>: the
+        operator asked for it, so it must not interrupt assistive tech the way a failure does. The run's
+        trailing progress reports and its eventual failure cannot overwrite this stage.
+      </div>
+      <div style="margin-top:var(--sp-3)">
+        <button class="btn primary">Export again</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "export",
+  crumb: ["Bulk export", "gedcom-export"]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

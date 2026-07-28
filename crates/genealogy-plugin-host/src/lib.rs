@@ -808,3 +808,59 @@ fn map_trap(error: &wasmtime::Error) -> PluginError {
     }
     PluginError::Runtime(error.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+
+    use super::ExportTarget;
+
+    /// A `File` target pins the path: the plugin's suggested name has no say.
+    #[test]
+    fn a_file_target_ignores_the_suggested_name() {
+        let target = ExportTarget::File(PathBuf::from("/ws/out/pinned.ged"));
+        assert_eq!(target.resolve("export.ged"), Ok(PathBuf::from("/ws/out/pinned.ged")));
+    }
+
+    /// A `Directory` target takes the plugin's suggested name as the leaf.
+    #[test]
+    fn a_directory_target_uses_the_suggested_name() {
+        let target = ExportTarget::Directory(PathBuf::from("/ws/exports"));
+        assert_eq!(
+            target.resolve("export.ged"),
+            Ok(PathBuf::from("/ws/exports/export.ged"))
+        );
+    }
+
+    /// A suggested name is reduced to its base name, so no plugin can steer the write out of the
+    /// directory the host chose — whether by climbing out of it or by naming an absolute path.
+    #[test]
+    fn a_directory_target_cannot_be_escaped_by_the_suggested_name() {
+        let target = ExportTarget::Directory(PathBuf::from("/ws/exports"));
+        for suggested in ["../evil.ged", "../../../evil.ged", "/etc/evil.ged", "sub/dir/evil.ged"] {
+            let resolved = target.resolve(suggested).expect("a base name remains");
+            assert_eq!(
+                resolved,
+                PathBuf::from("/ws/exports/evil.ged"),
+                "escaping name {suggested:?} must collapse to its base name"
+            );
+            assert!(
+                resolved.starts_with(Path::new("/ws/exports")),
+                "the write must stay inside the target directory: {resolved:?}"
+            );
+        }
+    }
+
+    /// A suggested name with no base name at all (`..`, a bare separator, empty) is refused outright
+    /// — there is nothing safe to write to.
+    #[test]
+    fn a_directory_target_refuses_a_suggested_name_without_a_base_name() {
+        let target = ExportTarget::Directory(PathBuf::from("/ws/exports"));
+        for suggested in ["..", "/", "", "."] {
+            assert!(
+                target.resolve(suggested).is_err(),
+                "suggested name {suggested:?} names no file"
+            );
+        }
+    }
+}

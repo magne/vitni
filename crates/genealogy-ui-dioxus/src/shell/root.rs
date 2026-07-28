@@ -9,8 +9,8 @@ use crate::app::{AppCtx, StartupPrefs};
 use crate::components::Toast;
 use crate::master_detail::MasterDetail;
 use crate::screens::{
-    DashboardScreen, GeographyScreen, HelpScreen, ImportScreen, MergeScreen, PedigreeScreen, PluginPanelScreen,
-    PreferencesScreen, RecordDetail,
+    DashboardScreen, ExportScreen, GeographyScreen, HelpScreen, ImportScreen, MergeScreen, PedigreeScreen,
+    PluginPanelScreen, PreferencesScreen, RecordDetail,
 };
 use crate::services::load_counts;
 use crate::shell::close_confirm::CloseConfirmDialog;
@@ -166,6 +166,7 @@ fn Workarea() -> Element {
         Destination::Tool(Tool::Pedigree) => rsx! { PedigreeScreen {} },
         Destination::Tool(Tool::Merge) => rsx! { MergeScreen {} },
         Destination::Tool(Tool::Import) => rsx! { ImportScreen {} },
+        Destination::Tool(Tool::Export) => rsx! { ExportScreen {} },
         Destination::Tool(Tool::Geography) => rsx! { GeographyScreen {} },
         Destination::Tool(Tool::Plugins) => rsx! { PluginPanelScreen {} },
         Destination::Tool(Tool::Preferences) => rsx! { PreferencesScreen {} },

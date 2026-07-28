@@ -10,6 +10,7 @@ mod dashboard;
 mod dna_match;
 mod dna_test;
 mod event;
+mod export;
 mod family;
 mod geography;
 mod help;
@@ -44,6 +45,10 @@ pub use dna_test::{
 };
 pub use event::{
     EventEditCtx, EventEditForm, event_create_fields, event_overview, event_participants_table, event_record_fields,
+};
+pub use export::{
+    DestinationStage, ExportDestinationLabels, ExportNoticeTone, ExportRunningLabels, ExportScreen,
+    ExportSummaryLabels, ExportSummaryStage, ExportWizardLabels, NoticeStage, RunningStage,
 };
 pub use family::{
     ChildRemoval, FamilyEditForm, child_removal_side_panel, family_children_table, family_create_fields,

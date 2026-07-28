@@ -277,6 +277,8 @@ pub enum Tool {
     Merge,
     /// Assisted online import wizard (ADR 0017): fetch, review, and import records one at a time.
     Import,
+    /// Bulk export wizard (ADR 0013): run an export plugin over the whole workspace to a file.
+    Export,
     /// The full geography view: place/event markers, in-map editing, and the time slider (ADR 0025).
     Geography,
     /// Plugin manager / plugin form host (ADR 0012).
@@ -288,11 +290,12 @@ pub enum Tool {
 impl Tool {
     /// Every tool in rail display order.
     #[must_use]
-    pub const fn all() -> [Self; 6] {
+    pub const fn all() -> [Self; 7] {
         [
             Self::Pedigree,
             Self::Merge,
             Self::Import,
+            Self::Export,
             Self::Geography,
             Self::Plugins,
             Self::Preferences,
@@ -306,6 +309,7 @@ impl Tool {
             Self::Pedigree => "pedigree",
             Self::Merge => "merge",
             Self::Import => "import",
+            Self::Export => "export",
             Self::Geography => "geography",
             Self::Plugins => "plugins",
             Self::Preferences => "preferences",
@@ -319,6 +323,7 @@ impl Tool {
             "pedigree" => Some(Self::Pedigree),
             "merge" => Some(Self::Merge),
             "import" => Some(Self::Import),
+            "export" => Some(Self::Export),
             "geography" => Some(Self::Geography),
             "plugins" => Some(Self::Plugins),
             "preferences" => Some(Self::Preferences),
@@ -333,6 +338,7 @@ impl Tool {
             Self::Pedigree => "🌳",
             Self::Merge => "⇄",
             Self::Import => "🌐",
+            Self::Export => "📤",
             Self::Geography => "🗺",
             Self::Plugins => "🧩",
             Self::Preferences => "⚙",
@@ -346,6 +352,7 @@ impl Tool {
             Self::Pedigree => "nav-pedigree",
             Self::Merge => "nav-merge",
             Self::Import => "nav-import",
+            Self::Export => "nav-export",
             Self::Geography => "nav-geography",
             Self::Plugins => "nav-plugins",
             Self::Preferences => "nav-preferences",
@@ -2377,10 +2384,10 @@ mod tests {
     }
 
     #[test]
-    fn tool_all_has_six_unique_ids() {
+    fn tool_all_has_seven_unique_ids() {
         let ids: BTreeSet<&str> = Tool::all().iter().map(|tool| tool.id()).collect();
-        assert_eq!(Tool::all().len(), 6);
-        assert_eq!(ids.len(), 6);
+        assert_eq!(Tool::all().len(), 7);
+        assert_eq!(ids.len(), 7);
     }
 
     #[test]

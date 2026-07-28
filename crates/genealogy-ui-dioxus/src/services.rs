@@ -10,7 +10,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use genealogy_app::{
@@ -20,8 +21,8 @@ use genealogy_app::{
     read_resolved_locale, read_resolved_surety_labels, workspace_counts,
 };
 use genealogy_plugin_host::{
-    Capability, Grants, HostPattern, Invocation, NetPolicy, PluginHost, PluginRole, PresentError, Presenter,
-    ProgressControl, ResourceBudget, TrustRoots, TrustTier, resolve_trust_roots,
+    Capability, ExportTarget, Grants, HostPattern, Invocation, NetPolicy, PluginHost, PluginRole, PresentError,
+    Presenter, ProgressControl, ProgressUpdate, ResourceBudget, TrustRoots, TrustTier, resolve_trust_roots,
 };
 use genealogy_ui::{
     Category, CitationChangeSetRequest, CitationEdit, DataQualityVm, DnaMatchChangeSetRequest, DnaMatchEdit,
@@ -975,6 +976,120 @@ fn ai_config(services: &Services) -> AiConfig {
     }
 }
 
+/// How many progress reports the export channel buffers. The guest reports far faster than the UI
+/// repaints, and a full buffer simply drops the update (the next one supersedes it anyway), so this
+/// only has to be deep enough that a repaint-sized burst is not lost.
+const EXPORT_PROGRESS_BUFFER: usize = 16;
+
+/// The handle the export wizard consumes to follow a bulk-export run: the stream of progress reports,
+/// the cancel flag it sets to stop the run, and the eventual outcome.
+///
+/// Cancelling is cooperative: the flag is read by the progress sink, so the run stops at the guest's
+/// next progress report and then fails out through `outcome`.
+pub struct BulkExportHandle {
+    /// Each progress report the plugin makes, in order. Dropping the receiver does not stop the run.
+    pub progress: mpsc::Receiver<ProgressUpdate>,
+    /// Set to `true` to cancel: the next progress report answers [`ProgressControl::Cancel`].
+    pub cancel: Arc<AtomicBool>,
+    /// Resolves with the records written and the destination the run wrote to, or a localized error.
+    pub outcome: oneshot::Receiver<Result<(u32, PathBuf), String>>,
+}
+
+/// Starts a bulk export of the open workspace with `plugin_id` into `target` (ADR 0013), returning the
+/// [`BulkExportHandle`] the wizard follows plus the session future the caller spawns.
+///
+/// As with [`start_assisted_import`], the future is deliberately **not** `Send` ([`Services`] holds
+/// `Rc`s) and is spawned on the renderer's local executor. The host's progress sink, by contrast,
+/// *must* be `Send + 'static`, so it captures only the channel and the cancel flag — never
+/// [`Services`]. The invocation runs under a Software operator with a deny-all network policy, as the
+/// CLI's `genealogy export` does.
+pub fn start_bulk_export(
+    services: Services,
+    plugin_id: String,
+    target: ExportTarget,
+) -> (BulkExportHandle, impl Future<Output = ()>) {
+    let (progress_tx, progress_rx) = mpsc::channel::<ProgressUpdate>(EXPORT_PROGRESS_BUFFER);
+    let (outcome_tx, outcome_rx) = oneshot::channel();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let sink = export_progress_sink(progress_tx, Arc::clone(&cancel));
+    let future = async move {
+        let outcome = run_export_session(services, plugin_id, target, sink).await;
+        // A dropped receiver just means the wizard closed first; nothing else needs the outcome.
+        drop(outcome_tx.send(outcome));
+    };
+    (
+        BulkExportHandle {
+            progress: progress_rx,
+            cancel,
+            outcome: outcome_rx,
+        },
+        future,
+    )
+}
+
+/// The host progress sink for a bulk export: forwards each report to the wizard and answers with the
+/// cancel flag's current value.
+///
+/// The forward is a non-blocking `try_send` — the host calls this from the guest's progress hook, so
+/// it must never block, and a full or closed channel is not a reason to stop the export (the wizard
+/// may simply have closed its progress view). Only the flag cancels.
+fn export_progress_sink(
+    updates: mpsc::Sender<ProgressUpdate>,
+    cancel: Arc<AtomicBool>,
+) -> impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static {
+    move |update| {
+        if cancel.load(Ordering::Relaxed) {
+            return ProgressControl::Cancel;
+        }
+        drop(updates.try_send(update));
+        ProgressControl::Proceed
+    }
+}
+
+/// Runs the bulk-export invocation to completion, returning the records written and the destination
+/// or a localized error. Mirrors the CLI's `genealogy export` (ADR 0013): resolve the bundle, take the
+/// operator's effective grant, open a fresh workspace, and run the plugin under a Software session.
+///
+/// The destination reported back is the target's own path: with an [`ExportTarget::Directory`] the
+/// plugin's suggested file name decides the leaf, which the host resolves and does not report, so the
+/// directory is the most the wizard can name — the same thing the CLI prints.
+async fn run_export_session(
+    services: Services,
+    plugin_id: String,
+    target: ExportTarget,
+    progress: impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
+) -> Result<(u32, PathBuf), String> {
+    let chrome = services.chrome();
+    let loc = services.localizer();
+    let destination = match &target {
+        ExportTarget::File(path) | ExportTarget::Directory(path) => path.clone(),
+    };
+    let bundle = services
+        .plugin_bundle(&plugin_id)
+        .ok_or_else(|| chrome.plugin_error(&format!("no plugin bundle found for {plugin_id:?}")))?;
+    let grants = services.effective_grants(&bundle)?;
+    let component = services
+        .host
+        .load_bundle(&bundle)
+        .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let invocation = Invocation {
+        session: Session::software(plugin_id, env!("CARGO_PKG_VERSION")),
+        net_policy: NetPolicy::deny_all(),
+        workspace,
+        grants,
+        budget: ResourceBudget::default(),
+        ai_config: AiConfig::default(),
+        provenance_confidence: None,
+    };
+    let (records, _workspace) = services
+        .host
+        .run_bulk_export(&component, invocation, target, progress)
+        .await
+        .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    Ok((records, destination))
+}
+
 /// Everything the Preferences screen (PR 20) needs to render: the global config (operator identity,
 /// the workspace registry + default), the open workspace's override-chain layers (theme, Person id
 /// format), and the resolved language/locale/date/number preferences.
@@ -1104,10 +1219,80 @@ pub async fn register_workspace(
 
 #[cfg(test)]
 mod tests {
-    use genealogy_plugin_host::{PresentError, Presenter};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use genealogy_plugin_host::{PresentError, Presenter, ProgressControl, ProgressUpdate};
     use tokio::sync::mpsc;
 
-    use super::{ChannelPresenter, PresentRequest};
+    use super::{ChannelPresenter, PresentRequest, export_progress_sink};
+
+    fn update(step: &str, processed: u32) -> ProgressUpdate {
+        ProgressUpdate {
+            step: step.to_owned(),
+            processed,
+            total: Some(120),
+        }
+    }
+
+    /// The export progress sink forwards every report to the wizard and lets the run proceed.
+    #[tokio::test]
+    async fn export_progress_reports_reach_the_wizard() {
+        let (updates, mut reports) = mpsc::channel::<ProgressUpdate>(4);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut sink = export_progress_sink(updates, cancel);
+
+        assert_eq!(sink(update("persons", 40)), ProgressControl::Proceed);
+        assert_eq!(sink(update("families", 90)), ProgressControl::Proceed);
+
+        let first = reports.recv().await.expect("the first report arrives");
+        assert_eq!(
+            (first.step.as_str(), first.processed, first.total),
+            ("persons", 40, Some(120))
+        );
+        let second = reports.recv().await.expect("the second report arrives");
+        assert_eq!(second.step, "families");
+    }
+
+    /// Raising the cancel flag is the whole cancel mechanism: the next report answers `Cancel`.
+    #[tokio::test]
+    async fn a_raised_cancel_flag_stops_the_run() {
+        let (updates, mut reports) = mpsc::channel::<ProgressUpdate>(4);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut sink = export_progress_sink(updates, Arc::clone(&cancel));
+
+        assert_eq!(sink(update("persons", 10)), ProgressControl::Proceed);
+        cancel.store(true, Ordering::Relaxed);
+        assert_eq!(sink(update("persons", 20)), ProgressControl::Cancel);
+
+        // The cancelled report is not forwarded — only the one before it.
+        assert_eq!(reports.recv().await.map(|report| report.processed), Some(10));
+        assert!(reports.try_recv().is_err(), "the cancelled report is not forwarded");
+    }
+
+    /// A wizard that stopped listening (its receiver dropped) does not abort the export — only the
+    /// cancel flag does. The report is dropped and the run proceeds.
+    #[tokio::test]
+    async fn a_dropped_progress_receiver_does_not_stop_the_run() {
+        let (updates, reports) = mpsc::channel::<ProgressUpdate>(4);
+        drop(reports);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut sink = export_progress_sink(updates, cancel);
+
+        assert_eq!(sink(update("persons", 40)), ProgressControl::Proceed);
+    }
+
+    /// A full buffer is likewise not a reason to stop: the guest reports faster than the UI repaints,
+    /// and the next report supersedes the dropped one.
+    #[tokio::test]
+    async fn a_full_progress_buffer_does_not_stop_the_run() {
+        let (updates, _reports) = mpsc::channel::<ProgressUpdate>(1);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut sink = export_progress_sink(updates, cancel);
+
+        assert_eq!(sink(update("persons", 1)), ProgressControl::Proceed);
+        assert_eq!(sink(update("persons", 2)), ProgressControl::Proceed);
+    }
 
     /// The channel-backed presenter forwards a payload and returns the wizard's answer — the
     /// round-trip the wizard drives, exercised without a webview.

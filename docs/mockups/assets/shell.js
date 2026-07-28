@@ -33,6 +33,7 @@
     tools: [
       { id: "pedigree", icon: "🌳", label: "Pedigree", href: "pedigree.html" },
       { id: "import", icon: "🌐", label: "Assisted import", href: "import.html" },
+      { id: "export", icon: "📤", label: "Export", href: "export.html" },
       { id: "merge", icon: "⇄", label: "Compare / merge", href: "merge.html" },
       { id: "strengths", icon: "★", label: "Why this app", href: "strengths.html" },
       { id: "shortcuts", icon: "⌨", label: "Shortcuts", href: "shortcuts.html" },
