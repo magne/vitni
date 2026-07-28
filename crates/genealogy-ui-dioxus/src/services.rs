@@ -26,10 +26,10 @@ use genealogy_plugin_host::{
 };
 use genealogy_ui::{
     Category, CitationChangeSetRequest, CitationEdit, DataQualityVm, DnaMatchChangeSetRequest, DnaMatchEdit,
-    DnaTestChangeSetRequest, DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Intent,
-    IntentOutcome, Localizer, MediaChangeSetRequest, MediaEdit, MergeFailure, MergePersons, MergeResultVm,
-    NoteChangeSetRequest, NoteEdit, Panel, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit,
-    ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit, RowVm, SourceChangeSetRequest, SourceEdit,
+    DnaTestChangeSetRequest, DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit,
+    ImportTargetChoice, Intent, IntentOutcome, Localizer, MediaChangeSetRequest, MediaEdit, MergeFailure, MergePersons,
+    MergeResultVm, NoteChangeSetRequest, NoteEdit, Panel, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest,
+    PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit, RowVm, SourceChangeSetRequest, SourceEdit,
     SubmitResult, TagChangeSetRequest, list_intent,
 };
 use i18n_embed::DesktopLanguageRequester;
@@ -976,10 +976,10 @@ fn ai_config(services: &Services) -> AiConfig {
     }
 }
 
-/// How many progress reports the export channel buffers. The guest reports far faster than the UI
-/// repaints, and a full buffer simply drops the update (the next one supersedes it anyway), so this
-/// only has to be deep enough that a repaint-sized burst is not lost.
-const EXPORT_PROGRESS_BUFFER: usize = 16;
+/// How many progress reports a bulk-export or bulk-import channel buffers. The guest reports far
+/// faster than the UI repaints, and a full buffer simply drops the update (the next one supersedes it
+/// anyway), so this only has to be deep enough that a repaint-sized burst is not lost.
+const BULK_PROGRESS_BUFFER: usize = 16;
 
 /// The handle the export wizard consumes to follow a bulk-export run: the stream of progress reports,
 /// the cancel flag it sets to stop the run, and the eventual outcome.
@@ -1008,10 +1008,10 @@ pub fn start_bulk_export(
     plugin_id: String,
     target: ExportTarget,
 ) -> (BulkExportHandle, impl Future<Output = ()>) {
-    let (progress_tx, progress_rx) = mpsc::channel::<ProgressUpdate>(EXPORT_PROGRESS_BUFFER);
+    let (progress_tx, progress_rx) = mpsc::channel::<ProgressUpdate>(BULK_PROGRESS_BUFFER);
     let (outcome_tx, outcome_rx) = oneshot::channel();
     let cancel = Arc::new(AtomicBool::new(false));
-    let sink = export_progress_sink(progress_tx, Arc::clone(&cancel));
+    let sink = bulk_progress_sink(progress_tx, Arc::clone(&cancel));
     let future = async move {
         let outcome = run_export_session(services, plugin_id, target, sink).await;
         // A dropped receiver just means the wizard closed first; nothing else needs the outcome.
@@ -1027,13 +1027,13 @@ pub fn start_bulk_export(
     )
 }
 
-/// The host progress sink for a bulk export: forwards each report to the wizard and answers with the
-/// cancel flag's current value.
+/// The host progress sink shared by the bulk-export and bulk-import wizards: forwards each report to
+/// the wizard and answers with the cancel flag's current value.
 ///
 /// The forward is a non-blocking `try_send` — the host calls this from the guest's progress hook, so
-/// it must never block, and a full or closed channel is not a reason to stop the export (the wizard
-/// may simply have closed its progress view). Only the flag cancels.
-fn export_progress_sink(
+/// it must never block, and a full or closed channel is not a reason to stop the run (the wizard may
+/// simply have closed its progress view). Only the flag cancels.
+fn bulk_progress_sink(
     updates: mpsc::Sender<ProgressUpdate>,
     cancel: Arc<AtomicBool>,
 ) -> impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static {
@@ -1088,6 +1088,154 @@ async fn run_export_session(
         .await
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     Ok((records, destination))
+}
+
+/// The handle the bulk-import wizard consumes to follow a bulk-import run: the stream of progress
+/// reports, the cancel flag it sets to stop the run, and the eventual outcome. Mirrors
+/// [`BulkExportHandle`], minus the destination round-trip an import does not need — the source is
+/// exactly what the operator typed, so the caller already has it.
+///
+/// Cancelling is cooperative: the flag is read by the progress sink, so the run stops at the guest's
+/// next progress report and then fails out through `outcome`.
+pub struct BulkImportHandle {
+    /// Each progress report the plugin makes, in order. Dropping the receiver does not stop the run.
+    pub progress: mpsc::Receiver<ProgressUpdate>,
+    /// Set to `true` to cancel: the next progress report answers [`ProgressControl::Cancel`].
+    pub cancel: Arc<AtomicBool>,
+    /// Resolves with the number of records imported, or a localized error.
+    pub outcome: oneshot::Receiver<Result<u32, String>>,
+}
+
+/// Starts a bulk import of `source` with `plugin_id` into `target` (issue #191), returning the
+/// [`BulkImportHandle`] the wizard follows plus the session future the caller spawns.
+///
+/// As with [`start_bulk_export`], the future is deliberately **not** `Send` ([`Services`] holds `Rc`s)
+/// and is spawned on the renderer's local executor. The host's progress sink, by contrast, *must* be
+/// `Send + 'static`, so it captures only the channel and the cancel flag — never [`Services`]. The
+/// invocation runs under a Software operator with a deny-all network policy, as the CLI's `genealogy
+/// import` does.
+pub fn start_bulk_import(
+    services: Services,
+    plugin_id: String,
+    source: PathBuf,
+    target: ImportTargetChoice,
+) -> (BulkImportHandle, impl Future<Output = ()>) {
+    let (progress_tx, progress_rx) = mpsc::channel::<ProgressUpdate>(BULK_PROGRESS_BUFFER);
+    let (outcome_tx, outcome_rx) = oneshot::channel();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let sink = bulk_progress_sink(progress_tx, Arc::clone(&cancel));
+    let future = async move {
+        let outcome = run_bulk_import_session(services, plugin_id, source, target, sink).await;
+        // A dropped receiver just means the wizard closed first; nothing else needs the outcome.
+        drop(outcome_tx.send(outcome));
+    };
+    (
+        BulkImportHandle {
+            progress: progress_rx,
+            cancel,
+            outcome: outcome_rx,
+        },
+        future,
+    )
+}
+
+/// Opens a registered workspace by name, which may not be the one currently open — mirroring the
+/// CLI's `--into NAME` resolution (`main.rs:396-401`). Shared by the bulk-import run itself and its
+/// non-empty-workspace probe ([`count_workspace_persons`]).
+async fn open_workspace_by_name(services: &Services, name: &str) -> Result<Workspace, String> {
+    let loc = services.localizer();
+    let dir = services
+        .config
+        .resolve_workspace(Some(name))
+        .map_err(|error| loc.error(&error))?;
+    Workspace::open(&dir, &services.config.operator, &services.config.workspace_defaults)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Counts the persons already in a registered workspace, opening it fresh by name. The bulk-import
+/// target stage runs this before an import into an *existing* workspace and confirms in a `Modal` when
+/// it is non-empty — the GUI shape of the CLI's own confirm (`main.rs:350-359`). A freshly registered
+/// (`ImportTargetChoice::New`) workspace is always empty, so it is never probed.
+///
+/// # Errors
+/// A localized error if the workspace cannot be resolved or opened, or its persons cannot be listed.
+pub async fn count_workspace_persons(services: &Services, workspace: &str) -> Result<usize, String> {
+    let loc = services.localizer();
+    let opened = open_workspace_by_name(services, workspace).await?;
+    let persons = genealogy_app::list_persons(&opened)
+        .await
+        .map_err(|error| loc.error(&error))?;
+    Ok(persons.len())
+}
+
+/// Opens the bulk import's target workspace: an already-registered one by name, or a freshly
+/// registered one. Registering calls `genealogy_app::register_workspace` directly (not this module's
+/// `register_workspace` wrapper) so the new workspace's path — needed to open it — is not thrown away;
+/// there is no separate confirm step for a `New` target, since a fresh workspace is always empty
+/// (mirrors the CLI's `--new NAME PATH`, `main.rs:371-393`).
+async fn open_import_target(services: &Services, target: &ImportTargetChoice) -> Result<Workspace, String> {
+    let loc = services.localizer();
+    match target {
+        ImportTargetChoice::Existing { workspace } => open_workspace_by_name(services, workspace).await,
+        ImportTargetChoice::New {
+            name,
+            directory,
+            database_url,
+        } => {
+            let config_path = config::config_path().map_err(|error| loc.error(&error))?;
+            let summary =
+                genealogy_app::register_workspace(&config_path, name, directory.as_deref(), database_url.as_deref())
+                    .await
+                    .map_err(|error| loc.error(&error))?;
+            Workspace::open(
+                &summary.path,
+                &services.config.operator,
+                &services.config.workspace_defaults,
+            )
+            .await
+            .map_err(|error| loc.error(&error))
+        }
+    }
+}
+
+/// Runs the bulk-import invocation to completion, returning the number of records imported or a
+/// localized error. Mirrors the CLI's `genealogy import` (ADR 0013): resolve the bundle (from the
+/// currently open workspace's plugin layers, same as the bulk-export and assisted-import wizards),
+/// take the operator's effective grant, open the *target* workspace (which may differ from the one
+/// currently open), and run the plugin under a Software session.
+async fn run_bulk_import_session(
+    services: Services,
+    plugin_id: String,
+    source: PathBuf,
+    target: ImportTargetChoice,
+    progress: impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
+) -> Result<u32, String> {
+    let chrome = services.chrome();
+    let bundle = services
+        .plugin_bundle(&plugin_id)
+        .ok_or_else(|| chrome.plugin_error(&format!("no plugin bundle found for {plugin_id:?}")))?;
+    let grants = services.effective_grants(&bundle)?;
+    let component = services
+        .host
+        .load_bundle(&bundle)
+        .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    let workspace = open_import_target(&services, &target).await?;
+    let invocation = Invocation {
+        session: Session::software(plugin_id, env!("CARGO_PKG_VERSION")),
+        net_policy: NetPolicy::deny_all(),
+        workspace,
+        grants,
+        budget: ResourceBudget::default(),
+        ai_config: AiConfig::default(),
+        provenance_confidence: None,
+    };
+    let (records, _workspace) = services
+        .host
+        .run_bulk_import(&component, invocation, source, progress)
+        .await
+        .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    Ok(records)
 }
 
 /// Everything the Preferences screen (PR 20) needs to render: the global config (operator identity,
@@ -1225,7 +1373,7 @@ mod tests {
     use genealogy_plugin_host::{PresentError, Presenter, ProgressControl, ProgressUpdate};
     use tokio::sync::mpsc;
 
-    use super::{ChannelPresenter, PresentRequest, export_progress_sink};
+    use super::{ChannelPresenter, PresentRequest, bulk_progress_sink};
 
     fn update(step: &str, processed: u32) -> ProgressUpdate {
         ProgressUpdate {
@@ -1240,7 +1388,7 @@ mod tests {
     async fn export_progress_reports_reach_the_wizard() {
         let (updates, mut reports) = mpsc::channel::<ProgressUpdate>(4);
         let cancel = Arc::new(AtomicBool::new(false));
-        let mut sink = export_progress_sink(updates, cancel);
+        let mut sink = bulk_progress_sink(updates, cancel);
 
         assert_eq!(sink(update("persons", 40)), ProgressControl::Proceed);
         assert_eq!(sink(update("families", 90)), ProgressControl::Proceed);
@@ -1259,7 +1407,7 @@ mod tests {
     async fn a_raised_cancel_flag_stops_the_run() {
         let (updates, mut reports) = mpsc::channel::<ProgressUpdate>(4);
         let cancel = Arc::new(AtomicBool::new(false));
-        let mut sink = export_progress_sink(updates, Arc::clone(&cancel));
+        let mut sink = bulk_progress_sink(updates, Arc::clone(&cancel));
 
         assert_eq!(sink(update("persons", 10)), ProgressControl::Proceed);
         cancel.store(true, Ordering::Relaxed);
@@ -1277,7 +1425,7 @@ mod tests {
         let (updates, reports) = mpsc::channel::<ProgressUpdate>(4);
         drop(reports);
         let cancel = Arc::new(AtomicBool::new(false));
-        let mut sink = export_progress_sink(updates, cancel);
+        let mut sink = bulk_progress_sink(updates, cancel);
 
         assert_eq!(sink(update("persons", 40)), ProgressControl::Proceed);
     }
@@ -1288,7 +1436,7 @@ mod tests {
     async fn a_full_progress_buffer_does_not_stop_the_run() {
         let (updates, _reports) = mpsc::channel::<ProgressUpdate>(1);
         let cancel = Arc::new(AtomicBool::new(false));
-        let mut sink = export_progress_sink(updates, cancel);
+        let mut sink = bulk_progress_sink(updates, cancel);
 
         assert_eq!(sink(update("persons", 1)), ProgressControl::Proceed);
         assert_eq!(sink(update("persons", 2)), ProgressControl::Proceed);

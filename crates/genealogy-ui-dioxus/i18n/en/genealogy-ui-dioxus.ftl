@@ -431,3 +431,49 @@ export-error-heading = Export failed
 export-failed-unknown = The export ended without reporting a result.
 export-cancelled-heading = Export cancelled
 export-cancelled-message = The export stopped before it finished; a partly written file may be left behind.
+
+# `Tool::Import`'s mode chooser (issue #191): Bulk file import vs the assisted online wizard above.
+import-tool-heading = Import
+import-mode-label = How do you want to import?
+import-mode-bulk = Bulk file import
+import-mode-assisted = Assisted online import
+
+# Bulk-import wizard (issue #191): the GUI counterpart of `genealogy import`.
+bulk-import-heading = Bulk import
+bulk-import-stage-source = Source
+bulk-import-stage-running = Running
+bulk-import-stage-summary = Summary
+bulk-import-source-heading = Choose what to read, and where to import it
+bulk-import-plugin-label = Import format
+bulk-import-no-plugins = No bulk-import plugins are installed. Run `cargo xtask build-plugins`.
+bulk-import-source-label = Source file
+bulk-import-source-placeholder = Path to the file to import
+bulk-import-source-preview = Reads from
+bulk-import-source-directory-hint = That path names a directory — pick a file to import.
+bulk-import-target-label = Import into
+bulk-import-target-existing = An existing workspace
+bulk-import-target-new = A new workspace
+bulk-import-target-workspace-label = Workspace
+bulk-import-run = Import
+bulk-import-running-heading = Importing…
+bulk-import-progress-starting = Starting…
+bulk-import-progress-count = { $processed } of { $total }
+bulk-import-progress-processed = { $processed } imported
+bulk-import-cancel = Cancel
+bulk-import-summary-heading = Import complete
+bulk-import-summary-records = { $count } records imported
+bulk-import-summary-source = Imported from
+bulk-import-another = Import another
+bulk-import-error-heading = Import failed
+bulk-import-failed-unknown = The import ended without reporting a result.
+bulk-import-cancelled-heading = Import cancelled
+bulk-import-cancelled-message = The import stopped before it finished.
+bulk-import-confirm-title = Import into { $workspace }?
+bulk-import-confirm-body = { $workspace } already has { $count ->
+    [one] 1 person
+   *[other] { $count } persons
+} recorded. Importing may add duplicates.
+bulk-import-confirm-cancel = Cancel
+bulk-import-confirm-run = Import anyway
+bulk-import-target-name-required = Enter a name for the new workspace.
+bulk-import-target-name-taken = A workspace with that name is already registered.

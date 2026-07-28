@@ -66,6 +66,28 @@ pass** (agents can't run libwebkit2gtk):
 
 ## Completed features & phases
 
+- **Bulk import in the GUI.** *(Done — `feat/gui-bulk-import`, closes #191.)* `genealogy-ui-dioxus` had
+  no local-file import flow — only the assisted online wizard — and the CLI's own target selection
+  (`--new NAME PATH` / `--into NAME`, prompting when an existing target already holds persons) had no
+  GUI shape. `Tool::Import` gained a front mode choice (`ImportModeSwitch`, `screens/import.rs`): **Bulk
+  file import** (the new default) or **Assisted online import** (the untouched ADR 0017 flow). Bulk
+  import is its own state machine (`BulkImportSession`/`BulkImportStage`, mirroring the shipped export
+  wizard's `ExportSession` exactly, including the terminal-stage guard) with a Source → Running →
+  Summary wizard (`screens/bulk_import.rs`): a `bulk-import`-role plugin picker, a source-file field
+  parsed lexically by `ImportSourcePath` (a file-only counterpart of `ExportDestination`), and a target
+  radio — an existing workspace, or a new one through the workspace-registration fields lifted out of
+  Preferences into a shared `register_fields_form` (`screens/shared.rs`; `RegisterFields` and
+  `database_url_field` moved with it, one `prefs-register-*` key set for both call sites). Importing
+  into an *existing* non-empty workspace is confirmed first in a `Modal`, naming the workspace and its
+  `list_persons` count (`services::count_workspace_persons`) — there is no `--yes` equivalent, the modal
+  is the confirmation; a freshly registered workspace is always empty and never prompts. `services.rs`
+  gained `start_bulk_import`/`BulkImportHandle` mirroring `start_bulk_export`; the progress sink and its
+  buffer constant were renamed (`bulk_progress_sink`/`BULK_PROGRESS_BUFFER`) to reflect being shared by
+  both bulk wizards rather than duplicated. The shared `NoticeStage`/`WizardNoticeTone` (renamed from
+  `ExportNoticeTone`) covers the failure/cancelled terminal stages for both wizards, and the `.export-*`
+  CSS classes were renamed to the neutral `.path-preview`/`.run-progress*` now that two wizards use
+  them. A success into the workspace already open this session triggers `request_restart()` so its
+  projections are not shown stale.
 - **Quit/close-tab keys & customizable keyboard shortcuts.** *(Done — stacked branches
   `feat/quit-close-tab-keys` (PR #187) → `feat/customizable-shortcuts`, gated by
   [ADR 0030](../adr/0030-customizable-keyboard-shortcuts.md).)* `Ctrl+Q`/`Ctrl+W` did not exist, and the

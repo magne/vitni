@@ -88,7 +88,7 @@ pub struct ExportSummaryLabels {
 /// how assistive tech announces them: a failure interrupts, a cancellation the operator just asked
 /// for does not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExportNoticeTone {
+pub enum WizardNoticeTone {
     /// The run failed.
     Failure,
     /// The operator cancelled the run.
@@ -126,7 +126,7 @@ pub fn ExportScreen() -> Element {
         },
         ExportStage::Error(message) => rsx! {
             NoticeStage {
-                tone: ExportNoticeTone::Failure,
+                tone: WizardNoticeTone::Failure,
                 heading: chrome.export_error_heading(),
                 message,
                 restart_label: chrome.export_another(),
@@ -135,7 +135,7 @@ pub fn ExportScreen() -> Element {
         },
         ExportStage::Cancelled => rsx! {
             NoticeStage {
-                tone: ExportNoticeTone::Cancelled,
+                tone: WizardNoticeTone::Cancelled,
                 heading: chrome.export_cancelled_heading(),
                 message: chrome.export_cancelled_message(),
                 restart_label: chrome.export_another(),
@@ -267,7 +267,7 @@ pub fn DestinationStage(
                     }
                 }
             }
-            div { class: "export-preview",
+            div { class: "path-preview",
                 span { class: "field-label", "{labels.preview}" }
                 div { class: "picker-value",
                     span { class: "mono grow", style: "word-break:break-all", "{destination.path().display()}" }
@@ -308,14 +308,14 @@ pub fn RunningStage(labels: ExportRunningLabels, progress: ExportProgress, oncan
                 span { class: "muted mono", "{labels.count}" }
             }
             div {
-                class: if percent.is_some() { "export-progress" } else { "export-progress indeterminate" },
+                class: if percent.is_some() { "run-progress" } else { "run-progress indeterminate" },
                 role: "progressbar",
                 aria_label: labels.heading.clone(),
                 aria_valuemin: "0",
                 aria_valuenow: "{progress.processed}",
                 aria_valuemax: progress.total.map(|total| total.to_string()),
                 div {
-                    class: "export-progress-fill",
+                    class: "run-progress-fill",
                     style: match percent {
                         Some(percent) => format!("width:{percent:.1}%"),
                         None => "width:100%".to_owned(),
@@ -343,7 +343,7 @@ pub fn ExportSummaryStage(labels: ExportSummaryLabels, destination: String, onre
             div { class: "wrap", style: "gap:var(--sp-4)",
                 span { class: "badge", "{labels.records}" }
             }
-            div { class: "export-preview", style: "margin-top:var(--sp-3)",
+            div { class: "path-preview", style: "margin-top:var(--sp-3)",
                 span { class: "field-label", "{labels.destination}" }
                 div { class: "picker-value",
                     span { class: "mono grow", style: "word-break:break-all", "{destination}" }
@@ -363,15 +363,15 @@ pub fn ExportSummaryStage(labels: ExportSummaryLabels, destination: String, onre
 /// The failure / cancellation off-ramp: the message and a way back to the Destination stage.
 #[component]
 pub fn NoticeStage(
-    tone: ExportNoticeTone,
+    tone: WizardNoticeTone,
     heading: String,
     message: String,
     restart_label: String,
     onrestart: EventHandler<()>,
 ) -> Element {
     let role = match tone {
-        ExportNoticeTone::Failure => "alert",
-        ExportNoticeTone::Cancelled => "status",
+        WizardNoticeTone::Failure => "alert",
+        WizardNoticeTone::Cancelled => "status",
     };
     rsx! {
         Card {

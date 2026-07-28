@@ -6,8 +6,82 @@ use genealogy_ui::{
 
 use super::prelude::*;
 use crate::components::{MediaViewer, MediaViewerLabels, PickerOptions, ProvenanceAxis, ProvenanceBlock};
+use crate::i18n::Chrome;
 use crate::services::{Services, resolve_record_name};
 use crate::shell::{CachedName, NameCache, NameState};
+
+/// The workspace-registration field set's state: whether the (Preferences-only) disclosure is open,
+/// and the (trimmed on submit) name and optional directory/database URL. Grouped into one struct so
+/// [`super::preferences::preferences_view`]'s signature stays readable (mirrors `LocaleFields`).
+/// Shared by the Preferences "Register workspace…" card and the bulk-import wizard's new-workspace
+/// target (issue #191) — one form, one `prefs-register-*` key set.
+#[derive(Debug, Clone, Copy)]
+pub struct RegisterFields {
+    /// Whether the Preferences disclosure form is open. Unused by the bulk-import wizard, which shows
+    /// the fields unconditionally once its own target radio picks "new workspace".
+    pub open: Signal<bool>,
+    /// The workspace name (required; trimmed on submit).
+    pub name: Signal<String>,
+    /// The optional workspace directory (empty ⇒ the default data directory).
+    pub directory: Signal<String>,
+    /// The optional Postgres connection URL (empty ⇒ the default SQLite engine). Kept on the struct
+    /// unconditionally so the submit-handler plumbing needs no `cfg`; only its field in
+    /// [`register_fields_form`] is gated behind the `postgres` feature, since a default build never
+    /// lets a GUI user reach it (`genealogy-app`'s postgres backend isn't compiled in either).
+    pub database_url: Signal<String>,
+}
+
+/// The reusable workspace-registration field set: Name, Directory (with a default-data-dir hint), and
+/// an opt-in Database URL behind the `postgres` feature. No submit action of its own — the caller
+/// (Preferences' disclosure, or the bulk-import wizard's Run button) supplies that.
+pub fn register_fields_form(chrome: &Chrome, register: RegisterFields) -> Element {
+    let RegisterFields {
+        mut name,
+        mut directory,
+        database_url,
+        ..
+    } = register;
+    rsx! {
+        Input {
+            label: chrome.prefs_register_name_label(),
+            name: "register-name".to_owned(),
+            value: Some(name()),
+            oninput: move |event: FormEvent| name.set(event.value()),
+        }
+        Input {
+            label: chrome.prefs_register_path_label(),
+            name: "register-directory".to_owned(),
+            value: Some(directory()),
+            oninput: move |event: FormEvent| directory.set(event.value()),
+        }
+        div { class: "muted", style: "font-size:var(--fs-sm)", "{chrome.prefs_register_path_hint()}" }
+        {database_url_field(chrome, database_url)}
+    }
+}
+
+/// The optional "Database URL" field: freezes a Postgres connection string into the manifest at
+/// registration (mirrors `genealogy init --database-url`); empty keeps the default SQLite engine.
+/// Gated behind the `postgres` feature — off by default, so the field never appears unless the
+/// binary was built to support it.
+#[cfg(feature = "postgres")]
+fn database_url_field(chrome: &Chrome, mut database_url: Signal<String>) -> Element {
+    rsx! {
+        Input {
+            label: chrome.prefs_register_database_url_label(),
+            name: "register-database-url".to_owned(),
+            value: Some(database_url()),
+            oninput: move |event: FormEvent| database_url.set(event.value()),
+        }
+        div { class: "muted", style: "font-size:var(--fs-sm)", "{chrome.prefs_register_database_url_hint()}" }
+    }
+}
+
+/// The `postgres`-off counterpart of [`database_url_field`]: renders nothing, so [`register_fields_form`]
+/// stays unconditional while the field itself disappears from a default build.
+#[cfg(not(feature = "postgres"))]
+fn database_url_field(_chrome: &Chrome, _database_url: Signal<String>) -> Element {
+    rsx! {}
+}
 
 /// Wires the `[`/`]` prev/next-record navigation into a master-detail screen: observes
 /// [`NavState::pending_step`] and, when the keyboard dispatcher arms a step, opens the neighbouring

@@ -1,12 +1,14 @@
-//! The assisted-import wizard (`Tool::Import`, ADR 0017 §5; `import.html`): a first-party Tool screen
-//! that drives one long `run-assisted` plugin invocation and renders the typed `present` payloads it
-//! sends (parsed by [`genealogy_ui::ImportSession`], **not** the ADR 0022 UI vocabulary).
+//! `Tool::Import` (`import.html`): [`ImportModeSwitch`] picks between two independent wizards —
+//! **Bulk file import** (issue #191, the default; body in `screens/bulk_import.rs`) and the
+//! **Assisted online import** wizard this file otherwise implements (ADR 0017 §5), which drives one
+//! long `run-assisted` plugin invocation and renders the typed `present` payloads it sends (parsed by
+//! [`genealogy_ui::ImportSession`], **not** the ADR 0022 UI vocabulary).
 //!
-//! Stages: Source (pick an installed assisted-import plugin, enter a URL, fetch) → Records (a picker
-//! table) → Confirm (a split view: the scan with the PR6 crop tool on the left, the editable
-//! transcribed fields + a provenance preview on the right) → Save scan (the PR6 media-save dialog,
-//! once per source page) → Summary. The plugin drives which stage shows; the wizard answers each
-//! payload over the presenter channel.
+//! The assisted wizard's stages: Source (pick an installed assisted-import plugin, enter a URL,
+//! fetch) → Records (a picker table) → Confirm (a split view: the scan with the PR6 crop tool on the
+//! left, the editable transcribed fields + a provenance preview on the right) → Save scan (the PR6
+//! media-save dialog, once per source page) → Summary. The plugin drives which stage shows; the
+//! wizard answers each payload over the presenter channel.
 //!
 //! Each stage is a pure component over already-localized label structs and the parsed payload; it
 //! emits the user's answer as an [`ImportResponse`] through `onrespond`, so it renders in isolation
@@ -28,6 +30,7 @@ use genealogy_ui::{
 use serde_json::json;
 use tokio::sync::oneshot;
 
+use super::bulk_import::BulkImportBody;
 use super::prelude::*;
 use crate::components::{MediaSaveDialog, MediaSaveLabels, MediaViewer, MediaViewerLabels};
 use crate::i18n::Chrome;
@@ -117,14 +120,69 @@ pub struct SummaryLabels {
     pub another: String,
 }
 
-/// The assisted-import wizard screen: owns the session and the presenter channel, and composes the
-/// per-stage components (translating each `onrespond` into a channel reply and a status update).
+/// `Tool::Import`'s front mode choice (issue #191): a local-file bulk import, or the assisted online
+/// wizard below. Held as a plain radio-choice id string (not an enum) so [`ImportModeSwitch`] renders
+/// in isolation, matching every other stage component's already-localized-label convention.
+const IMPORT_MODE_BULK: &str = "bulk";
+
+/// The mode-switch labels, resolved once from the chrome catalogue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportModeLabels {
+    /// The radio group's accessible name.
+    pub group_label: String,
+    /// The "Bulk file import" choice label.
+    pub bulk: String,
+    /// The "Assisted online import" choice label.
+    pub assisted: String,
+}
+
+/// The mode chooser shown above both wizards: bulk file import (the default) versus the assisted
+/// online wizard.
+#[component]
+pub fn ImportModeSwitch(labels: ImportModeLabels, mode: Signal<String>) -> Element {
+    let choices = vec![
+        RadioChoice {
+            id: IMPORT_MODE_BULK.to_owned(),
+            label: labels.bulk.clone(),
+        },
+        RadioChoice {
+            id: "assisted".to_owned(),
+            label: labels.assisted.clone(),
+        },
+    ];
+    let mut mode = mode;
+    rsx! {
+        Card {
+            RadioGroup {
+                group_label: labels.group_label.clone(),
+                choices,
+                selected: mode(),
+                onselect: move |id: String| mode.set(id),
+            }
+        }
+    }
+}
+
+/// The `Tool::Import` screen: the mode chooser plus, depending on the pick, either the bulk-import
+/// wizard body ([`BulkImportBody`], the default) or the assisted-import wizard below — owning the
+/// latter's session and presenter channel, and composing its per-stage components (translating each
+/// `onrespond` into a channel reply and a status update).
 #[component]
 pub fn ImportScreen() -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let chrome = use_context::<ChromeCtx>().0;
+    let mode = use_signal(|| IMPORT_MODE_BULK.to_owned());
+    if mode() == IMPORT_MODE_BULK {
+        return rsx! {
+            div { style: "display:flex;flex-direction:column;gap:var(--sp-4);padding:var(--sp-4)",
+                h1 { style: "border:0;margin:0;font-size:21px", "{chrome.import_tool_heading()}" }
+                ImportModeSwitch { labels: import_mode_labels(&chrome), mode }
+                BulkImportBody {}
+            }
+        };
+    }
     let session = use_signal(ImportSession::new);
     let responder = use_signal(|| None::<oneshot::Sender<String>>);
     let running = use_signal(|| false);
@@ -212,10 +270,21 @@ pub fn ImportScreen() -> Element {
 
     rsx! {
         div { style: "display:flex;flex-direction:column;gap:var(--sp-4);padding:var(--sp-4)",
-            h1 { style: "border:0;margin:0;font-size:21px", "{chrome.import_heading()}" }
+            h1 { style: "border:0;margin:0;font-size:21px", "{chrome.import_tool_heading()}" }
+            ImportModeSwitch { labels: import_mode_labels(&chrome), mode }
+            h2 { style: "border:0;margin:0;font-size:16px", "{chrome.import_heading()}" }
             {step_indicator(&wizard_labels(&chrome), session().stage())}
             {body}
         }
+    }
+}
+
+/// The mode-switch labels from the chrome catalogue.
+fn import_mode_labels(chrome: &Chrome) -> ImportModeLabels {
+    ImportModeLabels {
+        group_label: chrome.import_mode_label(),
+        bulk: chrome.import_mode_bulk(),
+        assisted: chrome.import_mode_assisted(),
     }
 }
 

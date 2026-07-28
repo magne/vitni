@@ -5,6 +5,7 @@
 //! shell-level [`Explorer`](crate::shell::explorer::Explorer), and the tabstrip/dock/keyboard come
 //! from the shell. The plugin panel renders a plugin-supplied form through the vocabulary interpreter.
 
+mod bulk_import;
 mod citation;
 mod dashboard;
 mod dna_match;
@@ -33,6 +34,10 @@ mod source;
 mod tabs;
 mod tag;
 
+pub use bulk_import::{
+    BulkConfirmLabels, BulkImportBody, BulkImportWizardLabels, BulkRunningLabels, BulkRunningStage, BulkSourceLabels,
+    BulkSourceStage, BulkSummaryLabels, BulkSummaryStage,
+};
 pub use citation::{CitationEditForm, citation_attributes_table, citation_create_fields, citation_overview};
 pub use dashboard::{DashboardScreen, dashboard_view};
 pub use dna_match::{
@@ -47,8 +52,8 @@ pub use event::{
     EventEditCtx, EventEditForm, event_create_fields, event_overview, event_participants_table, event_record_fields,
 };
 pub use export::{
-    DestinationStage, ExportDestinationLabels, ExportNoticeTone, ExportRunningLabels, ExportScreen,
-    ExportSummaryLabels, ExportSummaryStage, ExportWizardLabels, NoticeStage, RunningStage,
+    DestinationStage, ExportDestinationLabels, ExportRunningLabels, ExportScreen, ExportSummaryLabels,
+    ExportSummaryStage, ExportWizardLabels, NoticeStage, RunningStage, WizardNoticeTone,
 };
 pub use family::{
     ChildRemoval, FamilyEditForm, child_removal_side_panel, family_children_table, family_create_fields,
@@ -59,8 +64,8 @@ pub use geography::{
 };
 pub use help::{HelpScreen, render_doc};
 pub use import::{
-    ConfirmChrome, ConfirmStage, ImportRowStatus, ImportScreen, RecordsLabels, RecordsStage, SaveStage, SourceLabels,
-    SourceStage, SummaryLabels, SummaryStage, WizardLabels,
+    ConfirmChrome, ConfirmStage, ImportModeLabels, ImportModeSwitch, ImportRowStatus, ImportScreen, RecordsLabels,
+    RecordsStage, SaveStage, SourceLabels, SourceStage, SummaryLabels, SummaryStage, WizardLabels,
 };
 pub use map_shared::DrawTool;
 pub use media::{MediaEditForm, media_attributes_table, media_overview, media_record_fields};
@@ -76,9 +81,7 @@ pub use place::{
     place_record_fields, place_succession_card,
 };
 pub use plugin_panel::{PluginPanelScreen, plugin_table, submit_outcome_view};
-pub use preferences::{
-    LocaleFields, PreferencesScreen, RegisterFields, ShortcutFields, SuretyFields, preferences_view,
-};
+pub use preferences::{LocaleFields, PreferencesScreen, ShortcutFields, SuretyFields, preferences_view};
 pub use record_detail::{DockedRecordDetail, RecordDetail};
 pub use record_form::{
     RecordActionLabels, RecordEditState, apply_record_edits, finish_record_save, record_edit_provenance,
@@ -88,10 +91,11 @@ pub use repository::{
     RepositoryEditForm, repository_overview, repository_record_fields, repository_sources_table, repository_urls_table,
 };
 pub use shared::{
-    MediaTabState, RetractTarget, RowRetract, attach_picker_form, citation_table, create_record_frame,
+    MediaTabState, RegisterFields, RetractTarget, RowRetract, attach_picker_form, citation_table, create_record_frame,
     create_record_header, id_list, media_gallery, media_tab, media_viewer_labels, non_empty, picker_selection_id,
-    provenance_block, provenance_block_dna, provenance_claim_row, provenance_cue, retract_panel, retract_side_panel,
-    row_actions_cell, source_cue, source_media_type_choices, tag_chips, use_existing_picker, use_record_step,
+    provenance_block, provenance_block_dna, provenance_claim_row, provenance_cue, register_fields_form, retract_panel,
+    retract_side_panel, row_actions_cell, source_cue, source_media_type_choices, tag_chips, use_existing_picker,
+    use_record_step,
 };
 pub use source::{
     SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_record_fields,

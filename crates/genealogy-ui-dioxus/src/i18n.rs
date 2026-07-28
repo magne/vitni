@@ -1641,6 +1641,241 @@ impl Chrome {
         fl!(self.loader, "export-cancelled-message")
     }
 
+    /// `Tool::Import`'s page-level heading, shared by both its Bulk and Assisted modes.
+    #[must_use]
+    pub fn import_tool_heading(&self) -> String {
+        fl!(self.loader, "import-tool-heading")
+    }
+
+    /// The import-mode radio group's accessible name.
+    #[must_use]
+    pub fn import_mode_label(&self) -> String {
+        fl!(self.loader, "import-mode-label")
+    }
+
+    /// The "Bulk file import" mode choice label.
+    #[must_use]
+    pub fn import_mode_bulk(&self) -> String {
+        fl!(self.loader, "import-mode-bulk")
+    }
+
+    /// The "Assisted online import" mode choice label.
+    #[must_use]
+    pub fn import_mode_assisted(&self) -> String {
+        fl!(self.loader, "import-mode-assisted")
+    }
+
+    /// The bulk-import wizard heading.
+    #[must_use]
+    pub fn bulk_import_heading(&self) -> String {
+        fl!(self.loader, "bulk-import-heading")
+    }
+
+    /// The three wizard stage names, in order (Source, Running, Summary).
+    #[must_use]
+    pub fn bulk_import_stages(&self) -> [String; 3] {
+        [
+            fl!(self.loader, "bulk-import-stage-source"),
+            fl!(self.loader, "bulk-import-stage-running"),
+            fl!(self.loader, "bulk-import-stage-summary"),
+        ]
+    }
+
+    /// The Source-stage heading.
+    #[must_use]
+    pub fn bulk_import_source_heading(&self) -> String {
+        fl!(self.loader, "bulk-import-source-heading")
+    }
+
+    /// The Source-stage plugin-selector label.
+    #[must_use]
+    pub fn bulk_import_plugin_label(&self) -> String {
+        fl!(self.loader, "bulk-import-plugin-label")
+    }
+
+    /// The "no bulk-import plugins installed" message.
+    #[must_use]
+    pub fn bulk_import_no_plugins(&self) -> String {
+        fl!(self.loader, "bulk-import-no-plugins")
+    }
+
+    /// The source-file field label.
+    #[must_use]
+    pub fn bulk_import_source_label(&self) -> String {
+        fl!(self.loader, "bulk-import-source-label")
+    }
+
+    /// The source-file field placeholder.
+    #[must_use]
+    pub fn bulk_import_source_placeholder(&self) -> String {
+        fl!(self.loader, "bulk-import-source-placeholder")
+    }
+
+    /// The live source-path-preview label.
+    #[must_use]
+    pub fn bulk_import_source_preview(&self) -> String {
+        fl!(self.loader, "bulk-import-source-preview")
+    }
+
+    /// The hint shown when the typed source path names a directory rather than a file.
+    #[must_use]
+    pub fn bulk_import_source_directory_hint(&self) -> String {
+        fl!(self.loader, "bulk-import-source-directory-hint")
+    }
+
+    /// The target radio group's accessible name.
+    #[must_use]
+    pub fn bulk_import_target_label(&self) -> String {
+        fl!(self.loader, "bulk-import-target-label")
+    }
+
+    /// The "Import into an existing workspace" target choice label.
+    #[must_use]
+    pub fn bulk_import_target_existing(&self) -> String {
+        fl!(self.loader, "bulk-import-target-existing")
+    }
+
+    /// The "Create a new workspace" target choice label.
+    #[must_use]
+    pub fn bulk_import_target_new(&self) -> String {
+        fl!(self.loader, "bulk-import-target-new")
+    }
+
+    /// The existing-workspace selector's label.
+    #[must_use]
+    pub fn bulk_import_target_workspace_label(&self) -> String {
+        fl!(self.loader, "bulk-import-target-workspace-label")
+    }
+
+    /// The Run action label.
+    #[must_use]
+    pub fn bulk_import_run(&self) -> String {
+        fl!(self.loader, "bulk-import-run")
+    }
+
+    /// The Running-stage heading.
+    #[must_use]
+    pub fn bulk_import_running_heading(&self) -> String {
+        fl!(self.loader, "bulk-import-running-heading")
+    }
+
+    /// The step name shown before the plugin reports its first step.
+    #[must_use]
+    pub fn bulk_import_progress_starting(&self) -> String {
+        fl!(self.loader, "bulk-import-progress-starting")
+    }
+
+    /// The progress count: "{processed} of {total}", or just the processed count while the plugin
+    /// does not yet know the total.
+    #[must_use]
+    pub fn bulk_import_progress_count(&self, processed: u32, total: Option<u32>) -> String {
+        match total {
+            Some(total) => fl!(
+                self.loader,
+                "bulk-import-progress-count",
+                processed = processed,
+                total = total
+            ),
+            None => fl!(self.loader, "bulk-import-progress-processed", processed = processed),
+        }
+    }
+
+    /// The Cancel action label.
+    #[must_use]
+    pub fn bulk_import_cancel(&self) -> String {
+        fl!(self.loader, "bulk-import-cancel")
+    }
+
+    /// The Summary-stage heading.
+    #[must_use]
+    pub fn bulk_import_summary_heading(&self) -> String {
+        fl!(self.loader, "bulk-import-summary-heading")
+    }
+
+    /// The "{n} records imported" summary count.
+    #[must_use]
+    pub fn bulk_import_summary_records(&self, count: u32) -> String {
+        fl!(self.loader, "bulk-import-summary-records", count = count)
+    }
+
+    /// The summary's source-row label.
+    #[must_use]
+    pub fn bulk_import_summary_source(&self) -> String {
+        fl!(self.loader, "bulk-import-summary-source")
+    }
+
+    /// The "Import another" action label.
+    #[must_use]
+    pub fn bulk_import_another(&self) -> String {
+        fl!(self.loader, "bulk-import-another")
+    }
+
+    /// The failed-import heading.
+    #[must_use]
+    pub fn bulk_import_error_heading(&self) -> String {
+        fl!(self.loader, "bulk-import-error-heading")
+    }
+
+    /// The message shown when the run ends without an outcome (its channel was dropped).
+    #[must_use]
+    pub fn bulk_import_failed_unknown(&self) -> String {
+        fl!(self.loader, "bulk-import-failed-unknown")
+    }
+
+    /// The cancelled-import heading.
+    #[must_use]
+    pub fn bulk_import_cancelled_heading(&self) -> String {
+        fl!(self.loader, "bulk-import-cancelled-heading")
+    }
+
+    /// The cancelled-import explanation.
+    #[must_use]
+    pub fn bulk_import_cancelled_message(&self) -> String {
+        fl!(self.loader, "bulk-import-cancelled-message")
+    }
+
+    /// The non-empty-target confirm dialog's heading, naming the target workspace.
+    #[must_use]
+    pub fn bulk_import_confirm_title(&self, workspace: &str) -> String {
+        fl!(self.loader, "bulk-import-confirm-title", workspace = workspace)
+    }
+
+    /// The non-empty-target confirm dialog's body, naming the target workspace and its person count.
+    #[must_use]
+    pub fn bulk_import_confirm_body(&self, workspace: &str, count: usize) -> String {
+        let count = u32::try_from(count).unwrap_or(u32::MAX);
+        fl!(
+            self.loader,
+            "bulk-import-confirm-body",
+            workspace = workspace,
+            count = count
+        )
+    }
+
+    /// The confirm dialog's Cancel action label.
+    #[must_use]
+    pub fn bulk_import_confirm_cancel(&self) -> String {
+        fl!(self.loader, "bulk-import-confirm-cancel")
+    }
+
+    /// The confirm dialog's "Import anyway" action label.
+    #[must_use]
+    pub fn bulk_import_confirm_run(&self) -> String {
+        fl!(self.loader, "bulk-import-confirm-run")
+    }
+
+    /// The validation message for a blank existing-workspace selection or new-workspace name.
+    #[must_use]
+    pub fn bulk_import_target_name_required(&self) -> String {
+        fl!(self.loader, "bulk-import-target-name-required")
+    }
+
+    /// The validation message for a new-workspace name that already names a registered workspace.
+    #[must_use]
+    pub fn bulk_import_target_name_taken(&self) -> String {
+        fl!(self.loader, "bulk-import-target-name-taken")
+    }
+
     /// Resolves a rail/navigation label id (`nav-*`) to its display text; unknown ids render as-is.
     #[must_use]
     pub fn rail_label(&self, id: &str) -> String {
