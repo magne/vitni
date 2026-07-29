@@ -130,7 +130,7 @@ unambiguous in GitHub's milestone list.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.8 — UI parity`** | Every operation a user can reach from the GUI. The four *GUI ⇄ CLI parity* gaps (bulk export, bulk import + target selection, projection rebuild, Postgres workspace creation), the research-note UI **and** its missing mockup, and family child-removal. Plus the three items neither frontend can do today but the GUI must once it is the reference surface (place succession, tag restrictions, workspace-scope surety labels), and the media region viewer, which the GUI wires on Person only. |
+| **`0.8 — UI parity`** *(shipped)* | Every operation a user can reach from the GUI. The four *GUI ⇄ CLI parity* gaps (bulk export, bulk import + target selection, projection rebuild, Postgres workspace creation), the research-note UI **and** its missing mockup, and family child-removal. Plus the three items neither frontend can do today but the GUI must once it is the reference surface (place succession, tag restrictions, workspace-scope surety labels), and the media region viewer, which the GUI wires on Person only. |
 | **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **dirty saved-record edits are discarded silently** on close/quit — data loss in the primary interface. Then the `Modal` focus trap and click-away scrim (a keyboard user can tab into the inert background), the two shipped map fixes with no test coverage, the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the three *Shell, tabs & notifications* ease-of-use items (live list updates, toasts, remembered tab). |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
@@ -144,7 +144,10 @@ upstream-blocked dependencies — carries **no milestone**. "Someday" is honestl
 The two pre-1.0 gates, itemized from `issues.md` as it stands. ~20 issues total — small enough to
 groom, which is the point of filing only what is being worked on.
 
-### `0.8 — UI parity` (10)
+### `0.8 — UI parity` (10) — shipped
+
+All ten closed; the milestone is closed on GitHub. The work itself is itemized in
+[`archive/completed-work.md`](archive/completed-work.md).
 
 | Item | Area |
 | --- | --- |
