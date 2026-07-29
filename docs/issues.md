@@ -42,9 +42,6 @@ issues already filed against it keep resolving their [`#person--family`](#person
 
 ### Media
 
-- **Interactive Set/Clear region on every owner.** The interactive region viewer is wired on the
-  Person screen only; the other five media owners show the read-only rich gallery. The
-  `SetMediaRegion` intent and dispatch exist for all six — extending the viewer wiring is mechanical. — #199
 - **"Add file to media library" action.** The media-save dialog and the pure naming logic
   (`suggest_filename`/`slugify`) ship and are SSR-tested; the app-layer copy use-case that writes an
   external file into `media/<target>` and creates the Media record is deferred.

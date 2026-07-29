@@ -91,6 +91,17 @@ pass** (agents can't run libwebkit2gtk):
   `LayerKind`s, since the resolver works per ordinal) drives one override-chain row per level, badged
   `wins` where this workspace pinned the ordinal itself. No CLI verb — config parity for the CLI stays
   tracked as #225.
+- **Interactive Set/Clear region on every media owner.** *(Done — `feat/media-region-all-owners`,
+  closes #199.)* The interactive crop viewer (click a gallery card → Set/Clear region → supersede the
+  crop, ADR 0017 §GUI) was wired on the Person screen only; the other five owners (Family, Event,
+  Place, Source, Citation) showed the read-only gallery, even though `SetMediaRegion` intent + dispatch
+  already existed for all six. Wired the shared `media_tab`/`MediaTabState` helper (`screens/shared.rs`)
+  on the remaining five screens' Media tab — each dispatches its own `{Family,Event,Place,Source,
+  Citation}Edit::SetMediaRegion`, mirroring the Person wiring exactly. Added an SSR test per screen
+  (`tests/{family,event,citation,place,source}_detail.rs`) asserting the gallery card opens the viewer,
+  plus a dispatch-layer test per aggregate in `genealogy-ui/tests/dispatch_provenance.rs` proving the
+  region supersede reaches the change log. Updated all six owner mockups to show the click-to-open
+  affordance (Family's stays a deliberate empty-state specimen; its note now says so).
 
 ## Completed features & phases
 
