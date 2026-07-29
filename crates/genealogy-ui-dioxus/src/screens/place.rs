@@ -439,6 +439,29 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
     });
     use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
 
+    // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
+    let media_viewing = use_signal(|| None::<MediaRefVm>);
+    let on_view = use_callback(move |item: MediaRefVm| media_viewing.clone().set(Some(item)));
+    let region_human = human_id.clone();
+    let on_region = use_callback(
+        move |(assertion_id, crop, caption): (String, Option<Rect>, Option<String>)| {
+            on_submit.call((
+                PlaceEdit::SetMediaRegion {
+                    human_id: region_human.clone(),
+                    assertion_id,
+                    crop,
+                    caption,
+                },
+                ProvenanceDraft::default(),
+            ));
+        },
+    );
+    let media_state = MediaTabState {
+        viewing: media_viewing,
+        on_view,
+        on_region,
+    };
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -455,7 +478,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
                 retract,
                 retract_reason,
             },
-            PlaceCallbacks {
+            &PlaceCallbacks {
                 on_submit,
                 on_record_save,
                 on_retract,
@@ -464,6 +487,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
                 on_undo,
                 on_tag_remove,
                 on_map_saved,
+                media_state,
             },
             &human_id,
         ),
@@ -521,10 +545,6 @@ struct PlacePane {
 /// The commit callbacks a place's detail wires in: one-command collection edits, the whole-record
 /// save (the scalar edit via `edits_against`), and the per-row correction (edit-open + retract-confirm).
 #[derive(Clone, Copy)]
-#[expect(
-    clippy::struct_field_names,
-    reason = "event-handler fields conventionally share the on_ prefix"
-)]
 struct PlaceCallbacks {
     /// Commits one [`PlaceEdit`] command (a collection row).
     on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
@@ -543,6 +563,8 @@ struct PlaceCallbacks {
     /// Reloads the detail + surfaces the saved toast once the Map tab's own `GeometrySaveForm` has
     /// dispatched its `AssertGeometry` (Phase 9).
     on_map_saved: Callback<()>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
 }
 
 /// Renders a loaded place's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -551,7 +573,7 @@ fn place_detail(
     state: &AppState,
     detail: &PlaceDetail,
     pane: PlacePane,
-    callbacks: PlaceCallbacks,
+    callbacks: &PlaceCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -569,6 +591,7 @@ fn place_detail(
     let on_undo = callbacks.on_undo;
     let on_tag_remove = callbacks.on_tag_remove;
     let on_map_saved = callbacks.on_map_saved;
+    let media_state = callbacks.media_state;
     let tabs = place_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -589,7 +612,7 @@ fn place_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {place_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, on_map_saved)}
+            {place_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, on_map_saved, media_state)}
         }
         {place_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -645,6 +668,7 @@ fn place_tab_content(
     on_undo: Callback<String>,
     on_tag_remove: Callback<String>,
     on_map_saved: Callback<()>,
+    media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
@@ -679,7 +703,7 @@ fn place_tab_content(
             editing,
             PlaceEditForm::Media,
             rsx! {
-                {media_gallery(loc, &detail.media, Some(on_retract), None)}
+                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
         "notes" => tab_with_add(

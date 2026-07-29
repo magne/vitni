@@ -3,7 +3,7 @@
 //! the names table, the hierarchy table, and the tags panel.
 
 use dioxus::prelude::*;
-use genealogy_app::{PlaceType, TagRef};
+use genealogy_app::{PlaceType, Rect, TagRef};
 use genealogy_ui::{
     AttachedRefVm, Category, CitationRefVm, ConfidenceLevel, DateDraft, EvidenceAxis, EvidenceAxisVm, Localizer,
     MapPointVm, MarkerShapeVm, MediaRefVm, PickerSelection, PickerState, PlaceDetail, PlaceDraft, PlaceGeometryVm,
@@ -11,9 +11,9 @@ use genealogy_ui::{
 };
 use genealogy_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use genealogy_ui_dioxus::screens::{
-    PlaceEditForm, RecordActionLabels, RecordEditState, SuccessionFormState, citations_table, id_list, media_gallery,
-    place_hierarchy_table, place_names_table, place_overview, place_succession_card, place_succession_form_fields,
-    record_head_actions, tags_panel,
+    MediaTabState, PlaceEditForm, RecordActionLabels, RecordEditState, SuccessionFormState, citations_table, id_list,
+    media_gallery, media_tab, place_hierarchy_table, place_names_table, place_overview, place_succession_card,
+    place_succession_form_fields, record_head_actions, tags_panel,
 };
 
 /// A representative place detail: a city with High-confidence coordinates, two names (one sourced,
@@ -541,4 +541,36 @@ fn the_succession_panel_renders_its_kind_pickers_and_date() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+}
+
+/// The Place Media tab (issue #199): the gallery card opens the shared crop viewer, mirroring the
+/// Person screen's `media_tab` wiring (`place.rs`'s "media" tab arm).
+fn place_media_tab_view() -> Element {
+    let loc = loc();
+    let on_retract = use_callback(|_target: (String, String, bool)| {});
+    let detail = sample();
+    let viewing = use_signal(|| detail.media.first().cloned());
+    let on_view = use_callback(|_item: MediaRefVm| {});
+    let on_region = use_callback(|_region: (String, Option<Rect>, Option<String>)| {});
+    let media_state = MediaTabState {
+        viewing,
+        on_view,
+        on_region,
+    };
+    rsx! {
+        {media_tab(&loc, &detail.media, Some(on_retract), media_state)}
+    }
+}
+
+#[test]
+fn media_tab_opens_the_crop_viewer_on_a_card_click() {
+    let html = render(place_media_tab_view);
+    assert!(
+        html.contains("media-open"),
+        "the gallery card opens the crop viewer (ADR 0017 §GUI):\n{html}"
+    );
+    assert!(
+        html.contains("Set region") && html.contains("Clear region"),
+        "the crop viewer overlay renders with its Set/Clear region actions:\n{html}"
+    );
 }
