@@ -583,6 +583,29 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     });
     use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
 
+    // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
+    let media_viewing = use_signal(|| None::<MediaRefVm>);
+    let on_view = use_callback(move |item: MediaRefVm| media_viewing.clone().set(Some(item)));
+    let region_human = human_id.clone();
+    let on_region = use_callback(
+        move |(assertion_id, crop, caption): (String, Option<Rect>, Option<String>)| {
+            on_submit.call((
+                FamilyEdit::SetMediaRegion {
+                    human_id: region_human.clone(),
+                    assertion_id,
+                    crop,
+                    caption,
+                },
+                ProvenanceDraft::default(),
+            ));
+        },
+    );
+    let media_state = MediaTabState {
+        viewing: media_viewing,
+        on_view,
+        on_region,
+    };
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -612,6 +635,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
                 on_edit_open,
                 on_undo,
                 on_tag_remove,
+                media_state,
             },
             &human_id,
         ),
@@ -675,10 +699,6 @@ struct FamilyPane {
 /// The commit callbacks a family's detail wires in: one-command collection edits, the whole-record
 /// save (the id edit via `edits_against`), and the per-row correction (edit-open + retract-confirm).
 #[derive(Clone, Copy)]
-#[expect(
-    clippy::struct_field_names,
-    reason = "event-handler fields conventionally share the on_ prefix"
-)]
 struct FamilyCallbacks {
     /// Commits one [`FamilyEdit`] command (a collection row).
     on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
@@ -701,6 +721,8 @@ struct FamilyCallbacks {
     on_undo: Callback<String>,
     /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
     on_tag_remove: Callback<String>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
 }
 
 fn family_detail(
@@ -730,6 +752,7 @@ fn family_detail(
     let on_edit_open = callbacks.on_edit_open;
     let on_undo = callbacks.on_undo;
     let on_tag_remove = callbacks.on_tag_remove;
+    let media_state = callbacks.media_state;
     let tabs = family_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -751,7 +774,7 @@ fn family_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {family_tab_content(state, detail, active_id, editing, record, FamilyTabCallbacks { on_retract, on_child_remove, on_edit_open, on_undo, on_tag_remove })}
+                {family_tab_content(state, detail, active_id, editing, record, FamilyTabCallbacks { on_retract, on_child_remove, on_edit_open, on_undo, on_tag_remove, media_state })}
             }
             {family_edit_panel(state, detail, editing, on_submit, on_submit_batch, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -796,10 +819,6 @@ fn family_restriction_toggles(
 /// The row callbacks a family's tabs dispatch through, grouped so the tab dispatcher stays under the
 /// argument limit.
 #[derive(Clone, Copy)]
-#[expect(
-    clippy::struct_field_names,
-    reason = "event-handler fields conventionally share the on_ prefix"
-)]
 struct FamilyTabCallbacks {
     /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
     on_retract: Callback<(String, String, bool)>,
@@ -811,6 +830,8 @@ struct FamilyTabCallbacks {
     on_undo: Callback<String>,
     /// Untags a tag by id from the Tags tab.
     on_tag_remove: Callback<String>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
 }
 
 /// The content of one family detail tab, with its contextual add/edit affordances.
@@ -829,6 +850,7 @@ fn family_tab_content(
         on_edit_open,
         on_undo,
         on_tag_remove,
+        media_state,
     } = callbacks;
     match tab_id {
         "children" => tab_with_add(
@@ -864,7 +886,7 @@ fn family_tab_content(
             editing,
             FamilyEditForm::Media,
             rsx! {
-                {media_gallery(loc, &detail.media, Some(on_retract), None)}
+                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
         "notes" => tab_with_add(

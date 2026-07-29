@@ -4,14 +4,15 @@
 //! (name/colour, never id).
 
 use dioxus::prelude::*;
-use genealogy_app::{ChildParentRelationship, TagRef};
+use genealogy_app::{ChildParentRelationship, Rect, TagRef};
 use genealogy_ui::{
     ChildRelationshipVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyChildVm, FamilyDetail,
     FamilyDraft, FamilyEventVm, Localizer, MediaRefVm, PartnerVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    ChildRemoval, FamilyEditForm, RecordActionLabels, RecordEditState, child_removal_side_panel, citations_table,
-    family_children_table, family_events_table, family_overview, id_list, record_head_actions, tags_panel,
+    ChildRemoval, FamilyEditForm, MediaTabState, RecordActionLabels, RecordEditState, child_removal_side_panel,
+    citations_table, family_children_table, family_events_table, family_overview, id_list, media_tab,
+    record_head_actions, tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -445,4 +446,36 @@ fn per_row_correction_never_renders_an_assertion_or_tag_id() {
             "an aggregate/assertion id leaked into the HTML: {secret}\n{html}"
         );
     }
+}
+
+/// The Family Media tab (issue #199): the gallery card opens the shared crop viewer, mirroring the
+/// Person screen's `media_tab` wiring (`family.rs`'s "media" tab arm).
+fn family_media_tab_view() -> Element {
+    let loc = loc();
+    let on_retract = use_callback(|_target: (String, String, bool)| {});
+    let detail = sample();
+    let viewing = use_signal(|| detail.media.first().cloned());
+    let on_view = use_callback(|_item: MediaRefVm| {});
+    let on_region = use_callback(|_region: (String, Option<Rect>, Option<String>)| {});
+    let media_state = MediaTabState {
+        viewing,
+        on_view,
+        on_region,
+    };
+    rsx! {
+        {media_tab(&loc, &detail.media, Some(on_retract), media_state)}
+    }
+}
+
+#[test]
+fn media_tab_opens_the_crop_viewer_on_a_card_click() {
+    let html = render(family_media_tab_view);
+    assert!(
+        html.contains("media-open"),
+        "the gallery card opens the crop viewer (ADR 0017 §GUI):\n{html}"
+    );
+    assert!(
+        html.contains("Set region") && html.contains("Clear region"),
+        "the crop viewer overlay renders with its Set/Clear region actions:\n{html}"
+    );
 }
