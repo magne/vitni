@@ -167,6 +167,15 @@ pub trait ConfigStore {
     /// [`AppError::Config`] if the config cannot be read or written.
     fn store_workspace_default_surety(&self, surety: SuretyLabelOverrides) -> Result<(), AppError>;
 
+    /// Persists the per-workspace surety-scheme label overrides into the manifest's `[surety]` block
+    /// (ADR 0027) — the scope that wins over [`Self::store_workspace_default_surety`]'s live fallback.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if no workspace directory is set, or [`AppError::Workspace`] if the
+    /// manifest cannot be read/written.
+    fn store_surety_label_overrides(&self, surety: SuretyLabelOverrides) -> Result<(), AppError>;
+
     /// Switches the default (last-used) workspace by name.
     ///
     /// # Errors
@@ -395,6 +404,10 @@ impl ConfigStore for FileConfigStore {
         config::set_workspace_default_surety(self.config_path()?, surety)
     }
 
+    fn store_surety_label_overrides(&self, surety: SuretyLabelOverrides) -> Result<(), AppError> {
+        workspace::save_surety_label_overrides(self.workspace_dir()?, surety)
+    }
+
     fn store_default_workspace(&self, name: &str) -> Result<(), AppError> {
         config::set_default_workspace(self.config_path()?, name)
     }
@@ -597,6 +610,57 @@ mod tests {
         assert_eq!(prefs.approved_grants("gedcom-import"), Some(&approved));
         // The functionality scope's other state (operators) is untouched.
         assert!(store.load_workspace_functionality().is_ok());
+    }
+
+    #[test]
+    fn file_store_round_trips_surety_label_overrides_in_the_workspace_scope() {
+        use crate::config::{SuretyLabelOverride, SuretyLabelOverrides, WorkspaceDefaults};
+        use crate::workspace::read_resolved_surety_labels;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(4), &AppDefaults::default(), None).expect("init");
+        let store = FileConfigStore::for_workspace(ws.clone());
+        store.store_theme(ThemeMode::Dark).expect("theme");
+
+        let surety = SuretyLabelOverrides {
+            very_high: Some(SuretyLabelOverride {
+                label: "Certain".to_owned(),
+                description: None,
+            }),
+            ..Default::default()
+        };
+        store
+            .store_surety_label_overrides(surety.clone())
+            .expect("store surety");
+
+        let resolved = read_resolved_surety_labels(&ws, &WorkspaceDefaults::default());
+        assert_eq!(resolved, surety, "the manifest override resolves back out");
+        // The rest of the manifest survives the read-modify-write.
+        let functionality = store.load_workspace_functionality().expect("functionality");
+        assert_eq!(functionality.database_url, "sqlite://genealogy.sqlite3");
+        assert!(functionality.operators.contains_key(&Uuid::from_u128(4).to_string()));
+        assert_eq!(
+            store.load_presentation().expect("presentation").theme,
+            Some(ThemeMode::Dark),
+            "the earlier theme write survives"
+        );
+    }
+
+    #[test]
+    fn storing_surety_label_overrides_without_a_workspace_dir_is_a_config_error() {
+        use crate::config::SuretyLabelOverrides;
+        use crate::error::AppError;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = FileConfigStore::new(dir.path().join("config.toml"), None);
+        let error = store
+            .store_surety_label_overrides(SuretyLabelOverrides::default())
+            .expect_err("no workspace directory is set");
+        assert!(
+            matches!(error, AppError::Config(_)),
+            "a missing workspace directory is a config error, got {error:?}"
+        );
     }
 
     #[test]

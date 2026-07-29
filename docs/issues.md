@@ -67,15 +67,6 @@ long-standing "DNA match views in the UI" item is closed.
 
 ### Cross-aggregate
 
-- **Workspace-scope surety labels are read but unwritable** — `save_surety_label_overrides`
-  (`workspace.rs:589`, writes `manifest.surety`) has no caller; the ADR 0027 Preferences card writes
-  `store_workspace_default_surety`, i.e. the *global* `[workspace-defaults]` table.
-  `read_resolved_surety_labels` resolves manifest-over-global, so the per-workspace layer sits in the
-  resolution chain with no way to populate it — what shipped is the global live fallback, not a
-  per-workspace override.
-  *UI:* add `store_surety_label_overrides` to `ConfigStore` (delegating to the existing function) and
-  give the Surety card the same two-scope control the theme / id-format cards already use via
-  `read_preference_layers` / `LayerKind`. — #198
 - **Configurable surety-scheme *cardinality*** — ADR 0027 shipped relabeling the five fixed ordinals;
   re-scaling the scheme (GENTECH's full generality) stays deferred behind its own gating ADR, no
   consumer need demonstrated yet.

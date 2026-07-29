@@ -16,8 +16,8 @@ use unic_langid::LanguageIdentifier;
 
 use crate::aggregates::for_each_human_id_aggregate;
 use crate::config::{
-    AppDefaults, DateFormat, Engine, IdFormats, NumberFormat, OperatorConfig, SuretyLabelOverrides, ThemeMode,
-    WorkspaceDefaults,
+    AppDefaults, DateFormat, Engine, IdFormats, NumberFormat, OperatorConfig, SuretyLabelOverride,
+    SuretyLabelOverrides, ThemeMode, WorkspaceDefaults,
 };
 use crate::error::AppError;
 
@@ -374,14 +374,60 @@ pub fn person_id_format_layers(overrides: &IdFormatOverrides, defaults: &Workspa
     }
 }
 
+/// Which layer supplied each of the five surety-scheme ordinals' resolved label (ADR 0027).
+///
+/// Unlike [`ThemeLayers`] and [`IdFormatLayers`] — one setting, one winner — [`resolve_surety_labels`]
+/// resolves **per ordinal**, so a single winner would be a lie: a workspace can pin `very_high` while
+/// `low` still comes from the shared default and `normal` from neither. [`LayerKind::Embedded`] here
+/// means no layer pinned that ordinal, leaving the frontend's own Fluent-resolved wording in charge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SuretyLayers {
+    /// Which layer supplied the `VeryLow` label.
+    pub very_low: LayerKind,
+    /// Which layer supplied the `Low` label.
+    pub low: LayerKind,
+    /// Which layer supplied the `Normal` label.
+    pub normal: LayerKind,
+    /// Which layer supplied the `High` label.
+    pub high: LayerKind,
+    /// Which layer supplied the `VeryHigh` label.
+    pub very_high: LayerKind,
+}
+
+/// Builds the per-ordinal surety override-chain DTO for the Preferences "Surety scheme" card.
+#[must_use]
+pub fn surety_layers(overrides: &SuretyLabelOverrides, defaults: &WorkspaceDefaults) -> SuretyLayers {
+    SuretyLayers {
+        very_low: surety_layer(overrides.very_low.as_ref(), defaults.surety.very_low.as_ref()),
+        low: surety_layer(overrides.low.as_ref(), defaults.surety.low.as_ref()),
+        normal: surety_layer(overrides.normal.as_ref(), defaults.surety.normal.as_ref()),
+        high: surety_layer(overrides.high.as_ref(), defaults.surety.high.as_ref()),
+        very_high: surety_layer(overrides.very_high.as_ref(), defaults.surety.very_high.as_ref()),
+    }
+}
+
+/// The winning layer for one ordinal: the workspace manifest, else the live shared default, else the
+/// embedded baseline (no override anywhere).
+fn surety_layer(workspace: Option<&SuretyLabelOverride>, shared: Option<&SuretyLabelOverride>) -> LayerKind {
+    if workspace.is_some() {
+        LayerKind::Workspace
+    } else if shared.is_some() {
+        LayerKind::SharedDefault
+    } else {
+        LayerKind::Embedded
+    }
+}
+
 /// The override-chain DTOs backing the mockup's "Workspace defaults" card, for the two worked
-/// examples it shows (theme, the Person id format).
+/// examples it shows (theme, the Person id format), plus the Surety card's per-ordinal chain.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreferenceLayers {
     /// The theme override chain.
     pub theme: ThemeLayers,
     /// The Person `HumanId` format override chain.
     pub person_id_format: IdFormatLayers,
+    /// The per-ordinal surety-label override chain (ADR 0027).
+    pub surety: SuretyLayers,
 }
 
 /// Reads a workspace's override-chain DTOs without opening the store.
@@ -396,10 +442,15 @@ pub fn read_preference_layers(dir: &Path, defaults: &WorkspaceDefaults) -> Prefe
         .as_ref()
         .map(|manifest| manifest.ui.clone())
         .unwrap_or_default();
+    let surety = manifest
+        .as_ref()
+        .map(|manifest| manifest.surety.clone())
+        .unwrap_or_default();
     let id_formats = manifest.map(|manifest| manifest.id_formats).unwrap_or_default();
     PreferenceLayers {
         theme: theme_layers(&ui, defaults),
         person_id_format: person_id_format_layers(&id_formats, defaults),
+        surety: surety_layers(&surety, defaults),
     }
 }
 
@@ -524,6 +575,18 @@ fn resolve_surety_labels(overrides: &SuretyLabelOverrides, defaults: &WorkspaceD
 pub fn read_resolved_surety_labels(dir: &Path, defaults: &WorkspaceDefaults) -> SuretyLabelOverrides {
     let overrides = read_manifest(dir).map(|manifest| manifest.surety).unwrap_or_default();
     resolve_surety_labels(&overrides, defaults)
+}
+
+/// Reads a workspace manifest's **own** `[surety]` label overrides — unresolved, so an absent
+/// ordinal stays `None` rather than falling back to the shared default (ADR 0027). This is the layer
+/// the Preferences card edits when it writes to the workspace scope; use
+/// [`read_resolved_surety_labels`] for the effective labels to *render* with.
+///
+/// Infallible by design, matching [`read_plugin_preferences`]: a missing directory or manifest, or
+/// any parse error, yields "no override".
+#[must_use]
+pub fn read_surety_label_overrides(dir: &Path) -> SuretyLabelOverrides {
+    read_manifest(dir).map(|manifest| manifest.surety).unwrap_or_default()
 }
 
 /// Reads a workspace's plugin enable/disable overrides without opening the store.
@@ -810,7 +873,7 @@ mod tests {
         read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_ui_preferences,
         resolve_database_url, resolve_init_database_url, resolve_locale, resolve_surety_labels, resolve_ui_preferences,
         save_locale_overrides, save_plugin_enabled, save_plugin_grants, save_recent, save_surety_label_overrides,
-        save_theme_mode, save_window_geometry, theme_layers,
+        save_theme_mode, save_window_geometry, surety_layers, theme_layers,
     };
     use crate::config::{
         AppDefaults, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, SuretyLabelOverride,
@@ -1386,6 +1449,72 @@ label = "Ada Lovelace"
             Some("Doubtful".to_owned()),
             "no manifest => the global default"
         );
+    }
+
+    #[test]
+    fn surety_layers_reports_the_winning_layer_per_ordinal() {
+        let defaults = defaults_with_surety(SuretyLabelOverrides {
+            low: Some(SuretyLabelOverride {
+                label: "Doubtful".to_owned(),
+                description: None,
+            }),
+            ..Default::default()
+        });
+        let overrides = SuretyLabelOverrides {
+            very_low: Some(SuretyLabelOverride {
+                label: "Hearsay".to_owned(),
+                description: None,
+            }),
+            ..Default::default()
+        };
+        let layers = surety_layers(&overrides, &defaults);
+        assert_eq!(
+            layers.very_low,
+            LayerKind::Workspace,
+            "the manifest pinned this ordinal"
+        );
+        assert_eq!(
+            layers.low,
+            LayerKind::SharedDefault,
+            "only the shared default pinned this ordinal"
+        );
+        assert_eq!(
+            layers.normal,
+            LayerKind::Embedded,
+            "no layer pinned this ordinal, so the frontend's own baseline wording wins"
+        );
+        assert_eq!(layers.high, LayerKind::Embedded);
+        assert_eq!(layers.very_high, LayerKind::Embedded);
+    }
+
+    #[test]
+    fn read_preference_layers_surfaces_the_surety_layers() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+        save_surety_label_overrides(
+            &ws,
+            SuretyLabelOverrides {
+                very_high: Some(SuretyLabelOverride {
+                    label: "Certain".to_owned(),
+                    description: None,
+                }),
+                ..Default::default()
+            },
+        )
+        .expect("save surety");
+
+        let defaults = defaults_with_surety(SuretyLabelOverrides {
+            normal: Some(SuretyLabelOverride {
+                label: "Balanced".to_owned(),
+                description: None,
+            }),
+            ..Default::default()
+        });
+        let layers = read_preference_layers(&ws, &defaults);
+        assert_eq!(layers.surety.very_high, LayerKind::Workspace);
+        assert_eq!(layers.surety.normal, LayerKind::SharedDefault);
+        assert_eq!(layers.surety.very_low, LayerKind::Embedded);
     }
 
     #[test]

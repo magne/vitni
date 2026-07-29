@@ -78,6 +78,19 @@ pass** (agents can't run libwebkit2gtk):
   `genealogy place assert-succession <HUMAN_ID> --to <ID>… [--from <ID>…] --kind <KIND> [--year/--month/--day]`
   over a `SuccessionKindArg` `ValueEnum` mirror, promoting `gregorian_date` to the app's public surface.
   Editing an existing succession row is still out of scope — Retract stays the only row action.
+- **Workspace-scope surety labels are writable.** *(Done — `fix/workspace-surety-write`, closes #198.)*
+  `save_surety_label_overrides` (writes the manifest's `[surety]` block) had no caller: the ADR 0027
+  Surety card only ever wrote the global `[workspace-defaults.surety]` table, so the per-workspace layer
+  sat in `read_resolved_surety_labels`' manifest-over-global chain with no way to populate it. The card
+  now carries a **scope selector** (*This workspace* / *Shared default*) governing where a Save goes —
+  workspace → the new `ConfigStore::store_surety_label_overrides`, shared → the existing
+  `store_workspace_default_surety` — routed by the pure `surety_save(scope, values)` helper. Switching
+  scope re-seeds the five fields from that scope's *own* stored labels (`PreferencesData.surety_workspace`
+  or `config.workspace_defaults.surety`), never the resolved blend, so the fields always show what a Save
+  writes; blank still means "no override at this scope". Below the fields, `surety_layers` (five
+  `LayerKind`s, since the resolver works per ordinal) drives one override-chain row per level, badged
+  `wins` where this workspace pinned the ordinal itself. No CLI verb — config parity for the CLI stays
+  tracked as #225.
 
 ## Completed features & phases
 

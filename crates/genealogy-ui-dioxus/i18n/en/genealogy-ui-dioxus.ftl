@@ -253,12 +253,16 @@ prefs-formats-note = Genealogical date qualifiers (abt, bef, est, ranges) are fo
 
 prefs-surety-title = Confidence-level wording
 prefs-surety-intro = Relabel the five surety levels asserted on every claim with your own wording. The five levels themselves are fixed (ADR 0027) — this changes only the words shown, never how a claim's evidence is stored or how many levels there are.
+prefs-surety-scope-label = Save these labels to
+prefs-surety-scope-workspace = This workspace
+prefs-surety-scope-shared = Shared default (every workspace without its own)
 prefs-surety-field-very-low = Very low
 prefs-surety-field-low = Low
 prefs-surety-field-normal = Normal
 prefs-surety-field-high = High
 prefs-surety-field-very-high = Very high
-prefs-surety-hint = Blank fields keep the built-in wording. A filled-in label is shown verbatim in every locale — it is not translated, since it is your own wording.
+prefs-surety-hint = Blank fields keep the built-in wording. A filled-in label is shown verbatim in every locale — it is not translated, since it is your own wording. Switching scope shows that scope's own labels.
+prefs-surety-layers-label = Where each level's wording comes from
 
 prefs-shortcuts-title = Rebind global shortcuts
 prefs-shortcuts-intro = Only global shortcuts (active anywhere) can be rebound. Within-screen keys and the g-prefix navigation keys are fixed. Type a chord as mod+shift+alt+key — mod is ⌘ on macOS, Ctrl elsewhere.

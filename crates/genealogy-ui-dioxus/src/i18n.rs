@@ -941,6 +941,30 @@ impl Chrome {
         fl!(self.loader, "prefs-surety-intro")
     }
 
+    /// The label of the selector choosing which scope the five surety labels are saved to.
+    #[must_use]
+    pub fn prefs_surety_scope_label(&self) -> String {
+        fl!(self.loader, "prefs-surety-scope-label")
+    }
+
+    /// The "This workspace" scope choice (the manifest's own `[surety]` block).
+    #[must_use]
+    pub fn prefs_surety_scope_workspace(&self) -> String {
+        fl!(self.loader, "prefs-surety-scope-workspace")
+    }
+
+    /// The "Shared default" scope choice (the app-level `[workspace-defaults.surety]` fallback).
+    #[must_use]
+    pub fn prefs_surety_scope_shared(&self) -> String {
+        fl!(self.loader, "prefs-surety-scope-shared")
+    }
+
+    /// The caption above the per-ordinal override-chain rows.
+    #[must_use]
+    pub fn prefs_surety_layers_label(&self) -> String {
+        fl!(self.loader, "prefs-surety-layers-label")
+    }
+
     /// The field label (and empty-field placeholder) for one fixed `Confidence` ordinal
     /// (`very-low`/`low`/`normal`/`high`/`very-high`); an unknown ordinal falls back to `normal`'s
     /// label.
