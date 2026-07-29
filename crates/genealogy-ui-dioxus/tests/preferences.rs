@@ -213,12 +213,10 @@ fn render_prefs(
     maintenance_confirm_open: bool,
     maintenance_running: bool,
 ) -> Element {
-    let surety = resolved_surety(&surety_workspace, &config.workspace_defaults.surety);
     let data = PreferencesData {
         config,
         layers,
         locale,
-        surety,
         surety_workspace,
         workspaces,
         open_workspace,
@@ -310,18 +308,6 @@ fn shortcut_bindings_seed(config: &genealogy_app::ShortcutConfig) -> BTreeMap<St
 /// private helper in `preferences.rs`).
 fn surety_field_text(override_: Option<&SuretyLabelOverride>) -> String {
     override_.map(|o| o.label.clone()).unwrap_or_default()
-}
-
-/// The resolved surety labels the app would compute for these two scopes: the workspace's own
-/// override wins per ordinal, else the shared default (mirrors `genealogy_app`'s own resolver).
-fn resolved_surety(workspace: &SuretyLabelOverrides, shared: &SuretyLabelOverrides) -> SuretyLabelOverrides {
-    SuretyLabelOverrides {
-        very_low: workspace.very_low.clone().or_else(|| shared.very_low.clone()),
-        low: workspace.low.clone().or_else(|| shared.low.clone()),
-        normal: workspace.normal.clone().or_else(|| shared.normal.clone()),
-        high: workspace.high.clone().or_else(|| shared.high.clone()),
-        very_high: workspace.very_high.clone().or_else(|| shared.very_high.clone()),
-    }
 }
 
 /// A surety label override with no description (the only shape the Preferences form writes).

@@ -1282,9 +1282,6 @@ pub struct PreferencesData {
     pub layers: PreferenceLayers,
     /// The resolved language/locale/date/number preferences for the open workspace.
     pub locale: ResolvedLocale,
-    /// The resolved surety-scheme label overrides for the open workspace (ADR 0027) — the manifest
-    /// over the shared default, per ordinal.
-    pub surety: SuretyLabelOverrides,
     /// The workspace manifest's **own** `[surety]` overrides, unresolved: what the Surety card edits
     /// and writes back in the workspace scope. The shared scope's own values are
     /// `config.workspace_defaults.surety`.
@@ -1305,12 +1302,10 @@ pub struct PreferencesData {
 pub fn load_preferences(services: &Services) -> PreferencesData {
     let layers = read_preference_layers(&services.dir, &services.config.workspace_defaults);
     let locale = read_resolved_locale(&services.dir, &services.config.workspace_defaults);
-    let surety = read_resolved_surety_labels(&services.dir, &services.config.workspace_defaults);
     PreferencesData {
         config: services.config.clone(),
         layers,
         locale,
-        surety,
         surety_workspace: read_surety_label_overrides(&services.dir),
         workspaces: list_workspaces(&services.config),
         open_workspace: services.open_workspace.clone(),
