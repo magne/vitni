@@ -203,7 +203,7 @@ Residuals from the shortcuts work (ADR 0030); see
   `PlaceMarker` label from `place.names.first()` (`genealogy-app/src/geography.rs`) while the geometry on
   that same marker *is* date-resolved, so at slider year 1875 the pin reads "Oslo" while
   `generated_title` beside it correctly reads "Kristiania" — the map contradicts the record. Use the
-  as-of-resolved name. Found by code reading in [`research/gis-norway.md`](research/gis-norway.md).
+  as-of-resolved name; `PlaceView::name_as_of` already exists. — #232
 - **`geography_toolbar` takes 8 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
   fit state were threaded in — bundle them into a struct. Cosmetic cleanup.
 - **Point tool has no confirm step in the Geography tool.** The Place Map editor added a "Use this
@@ -358,7 +358,7 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   on that backend: the GUI place screen and `genealogy place show` alike. Not a spatial problem and needs
   no PostGIS — the succession index is a plain relational join that was only ever wired into the SQLite
   path. Tolerating `Unsupported` as an empty list is the one-line stopgap; mirroring
-  `place_succession_index` for `Pool<Postgres>` is the fix.
+  `place_succession_index` for `Pool<Postgres>` is the fix. — #231
 - **Postgres spatial mirror** — `places_in_bbox` returns `Unsupported` on Postgres (SQLite R\*Tree only);
   the native geometry + GiST index is a later feature-gated follow-up. It would also back the
   `places_containing` query under *Places*, and once containment exists on both engines the two must
@@ -368,7 +368,7 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   take the max, and every `human_id` lookup is a second full scan, so a bulk import is O(n²) twice over
   before any domain work happens. A generated column plus index turns both into probes. Overlaps
   **`ListPane` DOM virtualization** under *Lists, search & scale*, which names the same change as one of
-  its options; this is the standalone version, wanted independently of virtualization.
+  its options; this is the standalone version, wanted independently of virtualization. — #233
 - **Viewport-scoped loading** — `show_geography` loads every place with a resolved geometry rather than
   calling `places_in_bbox` for the current viewport; wire the spatial query in when place counts grow
   (needs a Postgres fallback given the row above).

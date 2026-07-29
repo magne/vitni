@@ -170,9 +170,9 @@ this size by the time it closes, the GUI probably has not been exercised hard en
 | [Live list updates on create](https://github.com/magne/genealogy/issues/207) | A created record does not appear until manual refresh |
 | [Toast notifications](https://github.com/magne/genealogy/issues/208) | No feedback channel for completed actions |
 | [Remember the open record's tab](https://github.com/magne/genealogy/issues/209) | Tab resets on every navigation |
-| Postgres place-detail reads fail outright | Every `show_place` / `genealogy place show` errors on a Postgres workspace — the place screen is unusable on that backend, GUI and CLI alike |
-| Geography markers label with the first-asserted name | The pin reads "Oslo" at slider year 1875 while the generated title correctly reads "Kristiania" — the map contradicts the record beside it |
-| Index `$.state.human_id` | `next_human_id` and `find_place` each full-scan the projection; the index is the prerequisite for any bulk place import not being O(n²) |
+| [Postgres place-detail reads fail outright](https://github.com/magne/genealogy/issues/231) | Every `show_place` / `genealogy place show` errors on a Postgres workspace — the place screen is unusable on that backend, GUI and CLI alike |
+| [Map markers label with the first-asserted name](https://github.com/magne/genealogy/issues/232) | The pin reads "Oslo" at slider year 1875 while the generated title correctly reads "Kristiania" — the map contradicts the record beside it |
+| [Index `$.state.human_id`](https://github.com/magne/genealogy/issues/233) | `next_human_id` and `find_place` each full-scan the projection; the index is the prerequisite for any bulk place import not being O(n²) |
 
 The last three came out of [`research/gis-norway.md`](research/gis-norway.md); the first two are
 pre-existing defects unrelated to that work, found while reading the code. The index is the weakest fit
