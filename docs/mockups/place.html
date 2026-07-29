@@ -403,13 +403,19 @@
           </table>
 
           <!-- Succession: typed, dated links to OTHER place aggregates (identity change), ADR 0026.
-               Distinct from a rename (a dated Name on this same aggregate). -->
+               Distinct from a rename (a dated Name on this same aggregate).
+               "+ Add succession" opens the side panel and shows whether or not the place already took
+               part in one — an empty card is exactly where an operator needs it. The panel's fields:
+                 · Kind of change   — merged / split / absorbed / elevated / renamed
+                 · Resulting place  — a place picker, repeatable (many for a split)
+                 · Also ceased      — a place picker, repeatable; only a merge's many side needs it.
+                                      THIS place is the anchor and is always one of the ceasing places,
+                                      so it is never picked here.
+                 · Date             — the structured effective date; blank leaves it undated
+                 · provenance block + Save. Save stays inert until a resulting place is picked. -->
           <div class="card" style="margin-top:16px">
-            <div class="fact-row" style="margin-bottom:8px">
-              <h3 style="margin:0">Succession <span class="badge">ADR 0026</span></h3>
-              <span class="spacer"></span>
-              <button class="btn sm primary" title="Assert a merge / split / absorb link">+ Add succession</button>
-            </div>
+            <h3>Succession <span class="badge">ADR 0026</span></h3>
+            <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary" title="Assert a merge / split / absorb link to other places">+ Add succession</button></div>
             <div class="faint" style="font-size:var(--fs-xs);margin-bottom:6px">Identity changes — a merge or split reaches <i>different</i> place records, navigable both ways.</div>
             <div class="stack">
               <div class="fact-row"><span class="chip">absorbed</span><span class="grow"><a href="place.html">New Amsterdam</a> → <b>New York</b></span><span class="muted">1664</span><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></div>

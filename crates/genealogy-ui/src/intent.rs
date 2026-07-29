@@ -49,15 +49,15 @@ use genealogy_app::{ancestors, check_persons, descendants, find_duplicate_candid
 
 use genealogy_app::{
     CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MapProvider, MediaChangeSet, NewPlaceEntry,
-    NoteChangeSet, PartnerInput, PlaceChangeSet, PlaceRefInput, RepositoryChangeSet, SourceChangeSet,
-    assert_event_date_value, assert_media_date_value, assert_place_coordinates, assert_place_geometry,
-    build_genealogical_date, commit_citation_change_set, commit_dna_test_change_set, commit_event_change_set,
-    commit_family_change_set, commit_media_change_set, commit_note_change_set, commit_place_change_set,
-    commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build, set_dna_test_kit_id,
-    set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type, set_media_checksum,
-    set_media_file_path, set_media_mime, set_media_web_path, set_place_code, set_place_type, set_repository_name,
-    set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info, set_title, show_geography,
-    year_only_date,
+    NoteChangeSet, PartnerInput, PlaceChangeSet, PlaceRefInput, PlaceSuccessionInput, RepositoryChangeSet,
+    SourceChangeSet, assert_event_date_value, assert_media_date_value, assert_place_coordinates, assert_place_geometry,
+    assert_place_succession, build_genealogical_date, commit_citation_change_set, commit_dna_test_change_set,
+    commit_event_change_set, commit_family_change_set, commit_media_change_set, commit_note_change_set,
+    commit_place_change_set, commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build,
+    set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type,
+    set_media_checksum, set_media_file_path, set_media_mime, set_media_web_path, set_place_code, set_place_type,
+    set_repository_name, set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
+    show_geography, year_only_date,
 };
 use genealogy_app::{NewDnaMatch, observe_dna_match};
 use genealogy_app::{
@@ -1387,6 +1387,7 @@ pub async fn dispatch_place_edit(
                 .await
                 .map(|()| human_id.clone())
         }
+        PlaceEdit::AssertSuccession { .. } => place_assert_succession(workspace, session, edit, prov).await,
         PlaceEdit::AttachCitation { human_id, citation_id } => {
             add_place_citation(workspace, session, human_id, citation_id, prov.meta())
                 .await
@@ -1438,6 +1439,47 @@ pub async fn dispatch_place_edit(
                 .map(|()| human_id.clone())
         }
     }
+}
+
+/// Asserts a place succession ([`PlaceEdit::AssertSuccession`]), returning the anchor place's
+/// `human_id` to reload. Takes the whole edit so the caller's match arm stays a one-line delegate (the
+/// field-by-field destructure lives here); the `let else` is unreachable in practice.
+///
+/// The anchor **leads** the ceasing set: `assert_place_succession` rejects a `from` list that omits
+/// `human_id` (`SuccessionAnchorMismatch`), so a caller never has to repeat it in `from_extra`.
+async fn place_assert_succession(
+    ws: &Workspace,
+    session: &Session,
+    edit: &PlaceEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let PlaceEdit::AssertSuccession {
+        human_id,
+        from_extra,
+        to,
+        kind,
+        date,
+    } = edit
+    else {
+        return Ok(edit.target().to_owned());
+    };
+    let mut from_human_ids = Vec::with_capacity(from_extra.len() + 1);
+    from_human_ids.push(human_id.clone());
+    from_human_ids.extend(from_extra.iter().cloned());
+    assert_place_succession(
+        ws,
+        session,
+        human_id,
+        PlaceSuccessionInput {
+            from_human_ids,
+            to_human_ids: to.clone(),
+            kind: *kind,
+            date: date.clone().map(build_genealogical_date),
+        },
+        prov.meta(),
+    )
+    .await
+    .map(|()| human_id.clone())
 }
 
 /// Supersedes a source media reference's crop/caption ([`SourceEdit::SetMediaRegion`]), returning the

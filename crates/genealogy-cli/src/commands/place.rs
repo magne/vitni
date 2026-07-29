@@ -2,15 +2,16 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, MediaRefInput, MutationMeta, NewPlace, Provenance, Session, Workspace, add_place_citation,
-    add_place_name, assert_place_coordinates, assert_place_enclosed_by, attach_place_media, attach_place_note,
-    create_place, list_places, set_place_code, set_place_type, show_place, tag_place,
+    AppError, DateParts, MediaRefInput, MutationMeta, NewPlace, PlaceSuccessionInput, Provenance, Session, Workspace,
+    add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by, assert_place_succession,
+    attach_place_media, attach_place_note, create_place, gregorian_date, list_places, set_place_code, set_place_type,
+    show_place, tag_place,
 };
 use genealogy_core::geo::{GeoCoordinates, Microdegrees};
 use genealogy_core::ids::{MediaId, NoteId};
 use uuid::Uuid;
 
-use crate::args::PlaceTypeArg;
+use crate::args::{PlaceTypeArg, SuccessionKindArg};
 use crate::i18n::Localizer;
 
 /// Place subcommands.
@@ -50,6 +51,34 @@ pub enum PlaceCmd {
         /// The enclosing place's human id.
         #[arg(long, value_name = "HUMAN_ID")]
         enclosing: String,
+    },
+    /// Assert an identity-changing succession this place took part in (ADR 0026 §3).
+    ///
+    /// The positional `HUMAN_ID` is the **anchor**: the place the assertion is recorded against, and
+    /// always one of the places that ceased — it is added to the ceasing set automatically, so
+    /// `--from` names only the *other* ceasing places (the many side of a merge). Repeat `--to` for a
+    /// split's several resulting places.
+    AssertSuccession {
+        /// The anchor place's human id (e.g. `P0001`) — one of the places that ceased.
+        human_id: String,
+        /// A resulting place's human id; repeat for a split's several results.
+        #[arg(long = "to", value_name = "HUMAN_ID", required = true)]
+        to: Vec<String>,
+        /// Another place that ceased alongside the anchor; repeat for a merge's several places.
+        #[arg(long = "from", value_name = "HUMAN_ID")]
+        from: Vec<String>,
+        /// The kind of identity change.
+        #[arg(long, value_enum)]
+        kind: SuccessionKindArg,
+        /// The year the succession took effect (negative for BCE); omit to leave it undated.
+        #[arg(long)]
+        year: Option<i32>,
+        /// The month, 1–12 (requires `--year`).
+        #[arg(long, requires = "year")]
+        month: Option<u8>,
+        /// The day, 1–31 (requires `--year`).
+        #[arg(long, requires = "year")]
+        day: Option<u8>,
     },
     /// Assert a place's geographic coordinates (decimal degrees).
     SetCoordinates {
@@ -161,6 +190,20 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        PlaceCmd::AssertSuccession {
+            human_id,
+            to,
+            from,
+            kind,
+            year,
+            month,
+            day,
+        } => {
+            let succession = succession_input(&human_id, to, from, kind, year, month, day);
+            assert_place_succession(workspace, session, &human_id, succession, meta).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
         PlaceCmd::SetCoordinates { human_id, lat, long } => {
             let coordinates = GeoCoordinates {
                 latitude: lat,
@@ -207,6 +250,28 @@ pub async fn run(
         }
         PlaceCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         PlaceCmd::List => list(workspace, localizer).await,
+    }
+}
+
+/// Builds the succession intent from the parsed args, prepending the anchor to the ceasing places —
+/// `assert_place_succession` rejects a `from` set that omits it (`SuccessionAnchorMismatch`).
+fn succession_input(
+    human_id: &str,
+    to: Vec<String>,
+    from: Vec<String>,
+    kind: SuccessionKindArg,
+    year: Option<i32>,
+    month: Option<u8>,
+    day: Option<u8>,
+) -> PlaceSuccessionInput {
+    let mut from_human_ids = Vec::with_capacity(from.len() + 1);
+    from_human_ids.push(human_id.to_owned());
+    from_human_ids.extend(from);
+    PlaceSuccessionInput {
+        from_human_ids,
+        to_human_ids: to,
+        kind: kind.into(),
+        date: year.map(|year| gregorian_date(DateParts { year, month, day })),
     }
 }
 

@@ -29,14 +29,6 @@ issues already filed against it keep resolving their [`#person--family`](#person
 
 ### Places
 
-- **Place succession can be read but never written** — `assert_place_succession` (ADR 0026 §3;
-  `Merged`/`Split`/`Absorbed`/`Elevated`/`Renamed`) has no CLI subcommand and no `PlaceEdit` variant,
-  while `show_place` / `show_place_as_of` already surface `PlaceSuccessionRef`s — so the Place screen
-  can display a succession no user can create.
-  *UI:* `PlaceEdit::AssertSuccession { to, kind, date }` and a "Succession" edit panel on the Place
-  screen — target picked with the existing place `RecordPicker`, kind a `SelectInput`, date reusing the
-  map-edit provenance date form. A `genealogy place assert-succession` subcommand is the cheaper first
-  move if the CLI should stay the reference surface. — #196
 - **Dated name/enclosure use-cases** — `add_place_name` / `assert_place_enclosed_by` don't accept a
   date param, so map/UI enclosure edits can't be dated (geometry edits already can); the map-edit
   provenance form doesn't yet default its date to the active time-slider year.

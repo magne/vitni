@@ -63,6 +63,21 @@ pass** (agents can't run libwebkit2gtk):
   [ADR 0024](../adr/0024-place-geometry-and-spatial-storage.md),
   [ADR 0025](../adr/0025-geography-view-and-pluggable-map-provider.md), and
   [ADR 0026](../adr/0026-place-succession-and-temporal-resolution.md).
+- **Place succession write path.** *(Done — `feat/place-succession-write`, closes #196.)*
+  `assert_place_succession` (ADR 0026 §3) was reachable from neither frontend, so the Place screen could
+  display a succession no user could create. Both frontends now write one:
+  `PlaceEdit::AssertSuccession { human_id, from_extra, to, kind, date }` (`genealogy-ui`) dispatches to
+  the use-case with the **anchor prepended** to the ceasing set — `human_id` is always one of the places
+  that ceased, so `from_extra` names only the *other* ones (a merge's many side) and the app never sees
+  the `SuccessionAnchorMismatch` it rejects on. In the GUI the Hierarchy tab's Succession card carries an
+  "Add succession" action in **both** its populated and empty states, opening a side panel
+  (`PlaceEditForm::Succession`) with a kind select over all five `SuccessionKind` variants, two
+  repeatable place pickers (resulting / also-ceased, each excluding this place and the already-picked
+  ids) accumulating deletable chips, a structured effective date, and the provenance block; Save is
+  inert until a resulting place is picked. The CLI gained
+  `genealogy place assert-succession <HUMAN_ID> --to <ID>… [--from <ID>…] --kind <KIND> [--year/--month/--day]`
+  over a `SuccessionKindArg` `ValueEnum` mirror, promoting `gregorian_date` to the app's public surface.
+  Editing an existing succession row is still out of scope — Retract stays the only row action.
 
 ## Completed features & phases
 

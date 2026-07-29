@@ -582,6 +582,42 @@ impl Localizer {
         fl!(self.loader, "place-succession-note")
     }
 
+    /// The Succession card's add action, which opens the succession panel (ADR 0026 §3).
+    #[must_use]
+    pub fn place_succession_add(&self) -> String {
+        fl!(self.loader, "place-succession-add")
+    }
+
+    /// The add action's hover tooltip, naming what the panel asserts.
+    #[must_use]
+    pub fn place_succession_add_title(&self) -> String {
+        fl!(self.loader, "place-succession-add-title")
+    }
+
+    /// The Succession panel's kind-select label.
+    #[must_use]
+    pub fn place_succession_kind_field(&self) -> String {
+        fl!(self.loader, "place-succession-kind-field")
+    }
+
+    /// The Succession panel's resulting-place picker label (many for a split).
+    #[must_use]
+    pub fn place_succession_to_field(&self) -> String {
+        fl!(self.loader, "place-succession-to-field")
+    }
+
+    /// The Succession panel's other-ceasing-place picker label (the many side of a merge).
+    #[must_use]
+    pub fn place_succession_from_field(&self) -> String {
+        fl!(self.loader, "place-succession-from-field")
+    }
+
+    /// The "add the picked place" action next to each of the panel's repeatable pickers.
+    #[must_use]
+    pub fn place_succession_add_picked(&self) -> String {
+        fl!(self.loader, "place-succession-add-picked")
+    }
+
     /// The Place Map tab's draw/edit-scope section note (Phase 9 map editor, ADR 0024/0025): drawing
     /// a point or a boundary emits the same audited assertion a typed field edit would.
     #[must_use]
