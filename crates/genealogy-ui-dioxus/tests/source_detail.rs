@@ -5,15 +5,16 @@
 //! that a tag shows its name/colour but never its id.
 
 use dioxus::prelude::*;
-use genealogy_app::{CitingKind, SourceMediaType, TagRef};
+use genealogy_app::{CitingKind, Rect, SourceMediaType, TagRef};
 use genealogy_ui::{
     AttachedRefVm, CitationRefVm, CitingRecordVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MediaRefVm,
     RepositoryLinkVm, SourceAttributeVm, SourceCitationVm, SourceDetail, SourceReliabilityVm,
 };
 use genealogy_ui::{ProvenanceDraft, SourceDraft};
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, SourceEditForm, id_list, media_gallery, record_head_actions,
-    source_attributes_table, source_citations_table, source_overview, source_repositories_table, tags_panel,
+    MediaTabState, RecordActionLabels, RecordEditState, SourceEditForm, id_list, media_gallery, media_tab,
+    record_head_actions, source_attributes_table, source_citations_table, source_overview, source_repositories_table,
+    tags_panel,
 };
 
 /// A representative source detail: an 1850 census with a Normal typical surety, one repository link
@@ -356,4 +357,36 @@ fn no_assertion_id_is_ever_rendered() {
             "assertion/tag id {assertion_id:?} must never be rendered:\n{html}"
         );
     }
+}
+
+/// The Source Media tab (issue #199): the gallery card opens the shared crop viewer, mirroring the
+/// Person screen's `media_tab` wiring (`source.rs`'s "media" tab arm).
+fn source_media_tab_view() -> Element {
+    let loc = loc();
+    let on_retract = use_callback(|_target: (String, String, bool)| {});
+    let detail = sample();
+    let viewing = use_signal(|| detail.media.first().cloned());
+    let on_view = use_callback(|_item: MediaRefVm| {});
+    let on_region = use_callback(|_region: (String, Option<Rect>, Option<String>)| {});
+    let media_state = MediaTabState {
+        viewing,
+        on_view,
+        on_region,
+    };
+    rsx! {
+        {media_tab(&loc, &detail.media, Some(on_retract), media_state)}
+    }
+}
+
+#[test]
+fn media_tab_opens_the_crop_viewer_on_a_card_click() {
+    let html = render(source_media_tab_view);
+    assert!(
+        html.contains("media-open"),
+        "the gallery card opens the crop viewer (ADR 0017 §GUI):\n{html}"
+    );
+    assert!(
+        html.contains("Set region") && html.contains("Clear region"),
+        "the crop viewer overlay renders with its Set/Clear region actions:\n{html}"
+    );
 }

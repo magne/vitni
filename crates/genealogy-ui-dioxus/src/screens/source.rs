@@ -292,6 +292,29 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
     });
     use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
 
+    // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
+    let media_viewing = use_signal(|| None::<MediaRefVm>);
+    let on_view = use_callback(move |item: MediaRefVm| media_viewing.clone().set(Some(item)));
+    let region_human = human_id.clone();
+    let on_region = use_callback(
+        move |(assertion_id, crop, caption): (String, Option<Rect>, Option<String>)| {
+            on_submit.call((
+                SourceEdit::SetMediaRegion {
+                    human_id: region_human.clone(),
+                    assertion_id,
+                    crop,
+                    caption,
+                },
+                ProvenanceDraft::default(),
+            ));
+        },
+    );
+    let media_state = MediaTabState {
+        viewing: media_viewing,
+        on_view,
+        on_region,
+    };
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -308,7 +331,7 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
                 retract,
                 retract_reason,
             },
-            SourceCallbacks {
+            &SourceCallbacks {
                 on_submit,
                 on_record_save,
                 on_retract,
@@ -316,6 +339,7 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
                 on_edit_open,
                 on_undo,
                 on_tag_remove,
+                media_state,
             },
             &human_id,
         ),
@@ -373,10 +397,6 @@ struct SourcePane {
 /// The commit callbacks a source's detail wires in: one-command collection edits, the whole-record
 /// save (the scalar edit via `edits_against`), and the per-row correction (edit-open + retract-confirm).
 #[derive(Clone, Copy)]
-#[expect(
-    clippy::struct_field_names,
-    reason = "event-handler fields conventionally share the on_ prefix"
-)]
 struct SourceCallbacks {
     /// Commits one [`SourceEdit`] command (a collection row).
     on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
@@ -392,6 +412,8 @@ struct SourceCallbacks {
     on_undo: Callback<String>,
     /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
     on_tag_remove: Callback<String>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
 }
 
 /// Renders a loaded source's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -400,7 +422,7 @@ fn source_detail(
     state: &AppState,
     detail: &SourceDetail,
     pane: SourcePane,
-    callbacks: SourceCallbacks,
+    callbacks: &SourceCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -417,6 +439,7 @@ fn source_detail(
     let on_edit_open = callbacks.on_edit_open;
     let on_undo = callbacks.on_undo;
     let on_tag_remove = callbacks.on_tag_remove;
+    let media_state = callbacks.media_state;
     let tabs = source_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -437,7 +460,7 @@ fn source_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {source_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
+            {source_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
         }
         {source_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -492,6 +515,7 @@ fn source_tab_content(
     on_edit_open: Callback<SourceEditForm>,
     on_undo: Callback<String>,
     on_tag_remove: Callback<String>,
+    media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
@@ -523,7 +547,7 @@ fn source_tab_content(
             editing,
             SourceEditForm::Media,
             rsx! {
-                {media_gallery(loc, &detail.media, Some(on_retract), None)}
+                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
         "notes" => tab_with_add(

@@ -49,9 +49,9 @@ pub use super::record_form::{
 pub use super::research_note::ResearchNotesTab;
 pub use super::shared::{
     JumpButton, MediaTabState, RecordLink, RegisterFields, RetractTarget, RowRetract, attach_picker_form,
-    create_record_frame, id_list, media_gallery, media_tab, non_empty, optional_enum_select, picker_selection_id,
-    provenance_block, provenance_block_dna, provenance_cue, record_enum_select, register_fields_form,
-    retract_side_panel, row_actions_cell, source_cue, source_media_type_choices, use_existing_picker, use_record_undo,
+    create_record_frame, id_list, media_tab, non_empty, optional_enum_select, picker_selection_id, provenance_block,
+    provenance_block_dna, provenance_cue, record_enum_select, register_fields_form, retract_side_panel,
+    row_actions_cell, source_cue, source_media_type_choices, use_existing_picker, use_record_undo,
 };
 pub use super::tabs::{
     AddressForm, ParticipationForm, ParticipationSeed, address_cards, citations_table, history_panel, tab_with_add,

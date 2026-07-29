@@ -6,7 +6,7 @@ use dioxus::prelude::*;
 use genealogy_app::Address;
 use genealogy_app::{
     Age, Attribute, Calendar, DateInput, DateModifier, DatePoint, DateQuality, EventType, GenealogicalDate,
-    GenealogicalDateBody, NewParticipation, ParticipantRole, TagRef, build_genealogical_date,
+    GenealogicalDateBody, NewParticipation, ParticipantRole, Rect, TagRef, build_genealogical_date,
 };
 use genealogy_ui::{
     AddressVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventDetail, EventDraft, EvidenceAxis, EvidenceAxisVm,
@@ -30,8 +30,8 @@ fn sample_date() -> GenealogicalDate {
 }
 use genealogy_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use genealogy_ui_dioxus::screens::{
-    EventEditCtx, EventEditForm, ParticipationSeed, RecordActionLabels, RecordEditState, address_cards,
-    citations_table, event_overview, event_participants_table, id_list, media_gallery, participation_form,
+    EventEditCtx, EventEditForm, MediaTabState, ParticipationSeed, RecordActionLabels, RecordEditState, address_cards,
+    citations_table, event_overview, event_participants_table, id_list, media_gallery, media_tab, participation_form,
     record_head_actions, tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
@@ -548,5 +548,37 @@ fn the_participation_form_prefills_age_and_attributes_when_editing() {
     assert!(
         html.contains(r#"value="42""#),
         "the seeded age pre-fills the years input:\n{html}"
+    );
+}
+
+/// The Event Media tab (issue #199): the gallery card opens the shared crop viewer, mirroring the
+/// Person screen's `media_tab` wiring (`event.rs`'s "media" tab arm).
+fn event_media_tab_view() -> Element {
+    let loc = loc();
+    let on_retract = use_callback(|_target: (String, String, bool)| {});
+    let detail = sample();
+    let viewing = use_signal(|| detail.media.first().cloned());
+    let on_view = use_callback(|_item: MediaRefVm| {});
+    let on_region = use_callback(|_region: (String, Option<Rect>, Option<String>)| {});
+    let media_state = MediaTabState {
+        viewing,
+        on_view,
+        on_region,
+    };
+    rsx! {
+        {media_tab(&loc, &detail.media, Some(on_retract), media_state)}
+    }
+}
+
+#[test]
+fn media_tab_opens_the_crop_viewer_on_a_card_click() {
+    let html = render(event_media_tab_view);
+    assert!(
+        html.contains("media-open"),
+        "the gallery card opens the crop viewer (ADR 0017 §GUI):\n{html}"
+    );
+    assert!(
+        html.contains("Set region") && html.contains("Clear region"),
+        "the crop viewer overlay renders with its Set/Clear region actions:\n{html}"
     );
 }
