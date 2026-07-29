@@ -1,6 +1,8 @@
 use genealogy_app::{PlaceGeometry, PlaceType};
 // The place row view-models the prelude doesn't re-export; they seed the per-row Name / enclosing edits.
-use genealogy_ui::{MarkerShapeVm, PlaceGeometryVm, PlaceHierarchyVm, PlaceNameVm, place_map_display_shape};
+use genealogy_ui::{
+    DateDraft, MarkerShapeVm, PickerState, PlaceGeometryVm, PlaceHierarchyVm, PlaceNameVm, place_map_display_shape,
+};
 
 use super::geography::geography_time_slider;
 use super::map_shared::{
@@ -261,6 +263,9 @@ pub enum PlaceEditForm {
     /// Assert an enclosing place — `None` adds a new link, `Some(row)` edits (supersedes) an existing
     /// one (the enclosing place is fixed; the correction updates its provenance).
     Enclosing(Option<PlaceHierarchyVm>),
+    /// Assert an identity-changing succession (ADR 0026 §3). Add-only: an existing row's sole action
+    /// stays Retract, so there is no seeded edit variant.
+    Succession,
     /// Attach a citation by `human_id`.
     Citation,
     /// Attach a media object by `human_id`.
@@ -657,7 +662,7 @@ fn place_tab_content(
                 Button { label: loc.action_label("add-enclosing"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Enclosing(None))) }
             }
             {place_hierarchy_table(loc, detail, on_edit_open, on_retract)}
-            {place_succession_card(loc, detail, on_retract)}
+            {place_succession_card(loc, detail, on_edit_open, on_retract)}
         },
         "citations" => tab_with_add(
             loc,
@@ -1136,22 +1141,32 @@ pub fn place_hierarchy_table(
 pub fn place_succession_card(
     loc: &Localizer,
     detail: &PlaceDetail,
+    onedit: Callback<PlaceEditForm>,
     on_retract: Callback<(String, String, bool)>,
 ) -> Element {
-    if detail.predecessors.is_empty() && detail.successors.is_empty() {
-        return rsx! {
-            Card { title: loc.place_succession_title(), EmptyState { message: loc.tab_empty() } }
-        };
-    }
+    let empty = detail.predecessors.is_empty() && detail.successors.is_empty();
     rsx! {
         Card { title: loc.place_succession_title(),
-            div { class: "faint", style: "font-size:var(--fs-xs);margin-bottom:6px", "{loc.place_succession_note()}" }
-            div { class: "stack",
-                for rel in detail.predecessors.iter() {
-                    {succession_row(loc, &detail.title, rel, true, on_retract)}
+            div { class: "tab-actions",
+                Button {
+                    label: loc.place_succession_add(),
+                    variant: ButtonVariant::Primary,
+                    small: true,
+                    title: loc.place_succession_add_title(),
+                    onclick: move |_| onedit.call(PlaceEditForm::Succession),
                 }
-                for rel in detail.successors.iter() {
-                    {succession_row(loc, &detail.title, rel, false, on_retract)}
+            }
+            div { class: "faint", style: "font-size:var(--fs-xs);margin-bottom:6px", "{loc.place_succession_note()}" }
+            if empty {
+                EmptyState { message: loc.tab_empty() }
+            } else {
+                div { class: "stack",
+                    for rel in detail.predecessors.iter() {
+                        {succession_row(loc, &detail.title, rel, true, on_retract)}
+                    }
+                    for rel in detail.successors.iter() {
+                        {succession_row(loc, &detail.title, rel, false, on_retract)}
+                    }
                 }
             }
         }
@@ -1217,6 +1232,7 @@ fn place_edit_panel(
         PlaceEditForm::Name(Some(_)) => loc.panel_title("edit-name"),
         PlaceEditForm::Enclosing(None) => loc.action_label("add-enclosing"),
         PlaceEditForm::Enclosing(Some(_)) => loc.panel_title("edit-enclosing"),
+        PlaceEditForm::Succession => loc.place_succession_add(),
         PlaceEditForm::Citation => loc.action_label("attach-citation"),
         PlaceEditForm::Media => loc.action_label("attach-media"),
         PlaceEditForm::Note => loc.action_label("attach-note"),
@@ -1233,6 +1249,7 @@ fn place_edit_panel(
             {match form {
                 PlaceEditForm::Name(seed) => rsx! { PlaceNameForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Enclosing(seed) => rsx! { PlaceEnclosingForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+                PlaceEditForm::Succession => rsx! { PlaceSuccessionForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Citation => rsx! { PlaceLinkForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Media => rsx! { PlaceLinkForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Note => rsx! { PlaceLinkForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
@@ -1343,6 +1360,197 @@ fn PlaceEnclosingForm(
     } else {
         attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
     }
+}
+
+/// The Succession panel's live state: the picked kind (an index into [`genealogy_ui::SUCCESSION_KINDS`]),
+/// the two accumulating place lists, and the effective-date draft. Bundled so the field-rendering fn
+/// stays within the argument budget; every field is a `Signal`, so the struct is `Copy` too.
+#[derive(Clone, Copy)]
+pub struct SuccessionFormState {
+    /// The picked kind's index into [`genealogy_ui::SUCCESSION_KINDS`].
+    pub kind: Signal<usize>,
+    /// The resulting place(s) picked so far — the app's `to` endpoints (many for a split).
+    pub to: Signal<Vec<PickerSelection>>,
+    /// The *other* ceasing place(s) picked so far — a merge's many side; the anchor is implicit.
+    pub from: Signal<Vec<PickerSelection>>,
+    /// When the succession took effect; a blank draft leaves it undated.
+    pub date: Signal<DateDraft>,
+}
+
+/// The Succession panel's field set (`place.html`'s Succession card): the kind select, the repeatable
+/// resulting-place picker, the repeatable also-ceased picker (a merge's many side), and the
+/// effective-date cluster. A pure fn (the pickers + signals passed in) so the SSR tests render it
+/// without `AppCtx`.
+pub fn place_succession_form_fields(
+    loc: &Localizer,
+    to_picker: &RecordPicker,
+    from_picker: &RecordPicker,
+    state: SuccessionFormState,
+) -> Element {
+    let mut kind = state.kind;
+    let mut date = state.date;
+    let options: Vec<SelectChoice> = genealogy_ui::SUCCESSION_KINDS
+        .iter()
+        .enumerate()
+        .map(|(index, succession_kind)| SelectChoice {
+            value: index.to_string(),
+            label: loc.succession_kind_label(*succession_kind),
+        })
+        .collect();
+    rsx! {
+        Select {
+            label: loc.place_succession_kind_field(),
+            name: "succession-kind".to_owned(),
+            value: Some(kind().to_string()),
+            options,
+            onchange: move |event: FormEvent| {
+                if let Ok(index) = event.value().parse::<usize>() {
+                    kind.set(index);
+                }
+            },
+        }
+        {succession_place_field(loc, to_picker, state.to)}
+        {succession_place_field(loc, from_picker, state.from)}
+        {date_draft_field(
+            loc,
+            "succession-date",
+            true,
+            date(),
+            DateDraft::default(),
+            Callback::new(move |value: DateDraft| date.set(value)),
+            Callback::new(move |()| date.set(DateDraft::default())),
+        )}
+    }
+}
+
+/// One repeatable place field of the Succession panel: an existing-place picker, an "add the picked
+/// place" control that moves the pick into `picked` and clears the picker, and the accumulated picks
+/// as deletable chips. Local to this screen — the succession panel is its only caller.
+fn succession_place_field(loc: &Localizer, picker: &RecordPicker, mut picked: Signal<Vec<PickerSelection>>) -> Element {
+    let mut picker_state = picker.state;
+    let nothing_picked = picker.state.read().selection.is_none();
+    let dismiss = loc.action_label("dismiss");
+    rsx! {
+        {record_picker(loc, picker)}
+        div { class: "tab-actions",
+            Button {
+                label: loc.place_succession_add_picked(),
+                variant: ButtonVariant::Default,
+                small: true,
+                disabled: nothing_picked,
+                onclick: move |_| {
+                    let Some(selection) = picker_state.read().selection.clone() else {
+                        return;
+                    };
+                    picked.write().push(selection);
+                    picker_state.set(PickerState::default());
+                },
+            }
+        }
+        if !picked.read().is_empty() {
+            div { class: "wrap", style: "margin-bottom:8px",
+                for (index , selection) in picked.read().iter().enumerate() {
+                    Chip {
+                        key: "{selection.human_id}",
+                        label: selection.title.clone(),
+                        id_label: selection.human_id.clone(),
+                        delete_label: dismiss.clone(),
+                        ondelete: move |()| {
+                            picked.write().remove(index);
+                        },
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The place succession form → [`PlaceEdit::AssertSuccession`] (ADR 0026 §3). Add-only: an existing
+/// succession row's sole action is Retract, so there is no seeded edit mode.
+///
+/// `human_id` is the **anchor** — the place the assertion is recorded against, and always one of the
+/// ceasing places; the dispatcher prepends it to the app's `from` list, so the "Also ceased" picker
+/// names only the *other* places that ceased. Save is a no-op until at least one resulting place is
+/// picked (the app rejects an empty endpoint list).
+#[component]
+fn PlaceSuccessionForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let form = SuccessionFormState {
+        kind: use_signal(|| 0_usize),
+        to: use_signal(Vec::<PickerSelection>::new),
+        from: use_signal(Vec::<PickerSelection>::new),
+        date: use_signal(DateDraft::default),
+    };
+    // Neither picker may offer this place or an already-picked one: a succession's endpoints are
+    // distinct places, and the anchor rides in `human_id`.
+    let mut taken: Vec<String> = vec![human_id.clone()];
+    taken.extend(form.to.read().iter().map(|pick| pick.human_id.clone()));
+    taken.extend(form.from.read().iter().map(|pick| pick.human_id.clone()));
+    let to_picker = use_existing_picker(
+        services.clone(),
+        Category::Places,
+        loc.place_succession_to_field(),
+        "succession-to".to_owned(),
+        loc.picker_entity(Category::Places),
+        taken.clone(),
+    );
+    let from_picker = use_existing_picker(
+        services,
+        Category::Places,
+        loc.place_succession_from_field(),
+        "succession-from".to_owned(),
+        loc.picker_entity(Category::Places),
+        taken,
+    );
+    let prov = use_signal(ProvenanceDraft::default);
+    let onsave = use_callback(move |()| {
+        let edit = succession_edit(
+            &human_id,
+            form.kind.peek().to_owned(),
+            &form.to.read(),
+            &form.from.read(),
+            &form.date.read(),
+        );
+        let Some(edit) = edit else {
+            return;
+        };
+        onsubmit.call((edit, prov()));
+    });
+    rsx! {
+        {place_succession_form_fields(loc, &to_picker, &from_picker, form)}
+        {provenance_block(loc, prov)}
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            onclick: move |_| onsave.call(()),
+        }
+    }
+}
+
+/// The edit the Succession panel's Save dispatches, or `None` when the form is not assertable yet — no
+/// resulting place, an unknown kind index, or an unparseable date (the app would reject each). Pure, so
+/// the guard is unit-tested without a render scope.
+fn succession_edit(
+    human_id: &str,
+    kind_index: usize,
+    to: &[PickerSelection],
+    from: &[PickerSelection],
+    date: &DateDraft,
+) -> Option<PlaceEdit> {
+    if to.is_empty() {
+        return None;
+    }
+    Some(PlaceEdit::AssertSuccession {
+        human_id: human_id.to_owned(),
+        from_extra: from.iter().map(|pick| pick.human_id.clone()).collect(),
+        to: to.iter().map(|pick| pick.human_id.clone()).collect(),
+        kind: *genealogy_ui::SUCCESSION_KINDS.get(kind_index)?,
+        date: date.to_input().ok()?,
+    })
 }
 
 /// A place collection link form over an existing-only picker (an attached citation/media/note) → the
@@ -1463,6 +1671,84 @@ fn place_type_choices() -> [PlaceType; 9] {
         PlaceType::Farm,
         PlaceType::Building,
     ]
+}
+
+#[cfg(test)]
+mod succession_form_tests {
+    use genealogy_app::SuccessionKind;
+    use genealogy_ui::{DateDraft, DateModifierKind, PickerSelection, PlaceEdit};
+
+    use super::succession_edit;
+
+    fn pick(human_id: &str) -> PickerSelection {
+        PickerSelection {
+            human_id: human_id.to_owned(),
+            title: format!("{human_id} place"),
+        }
+    }
+
+    #[test]
+    fn a_merge_puts_the_other_ceasing_places_in_from_extra_and_leaves_the_anchor_implicit() {
+        let edit =
+            succession_edit("P0001", 0, &[pick("P0003")], &[pick("P0002")], &DateDraft::default()).expect("assertable");
+        assert_eq!(
+            edit,
+            PlaceEdit::AssertSuccession {
+                human_id: "P0001".to_owned(),
+                from_extra: vec!["P0002".to_owned()],
+                to: vec!["P0003".to_owned()],
+                kind: SuccessionKind::Merged,
+                date: None,
+            },
+            "the anchor is never repeated in `from_extra`; the dispatcher prepends it"
+        );
+    }
+
+    #[test]
+    fn a_split_preserves_the_picked_order_of_the_resulting_places() {
+        let edit = succession_edit("P0001", 1, &[pick("P0002"), pick("P0003")], &[], &DateDraft::default())
+            .expect("assertable");
+        let PlaceEdit::AssertSuccession { to, kind, .. } = edit else {
+            panic!("expected an AssertSuccession");
+        };
+        assert_eq!(to, vec!["P0002".to_owned(), "P0003".to_owned()]);
+        assert_eq!(kind, SuccessionKind::Split);
+    }
+
+    #[test]
+    fn no_resulting_place_is_not_assertable() {
+        assert_eq!(
+            succession_edit("P0001", 0, &[], &[pick("P0002")], &DateDraft::default()),
+            None,
+            "the app rejects an empty endpoint list, so Save stays a no-op"
+        );
+    }
+
+    #[test]
+    fn a_dated_succession_carries_its_parsed_date() {
+        let date = DateDraft {
+            start: "1948".to_owned(),
+            ..DateDraft::default()
+        };
+        let edit = succession_edit("P0001", 0, &[pick("P0003")], &[], &date).expect("assertable");
+        let PlaceEdit::AssertSuccession { date, .. } = edit else {
+            panic!("expected an AssertSuccession");
+        };
+        assert!(date.is_some(), "a typed year reaches the edit");
+    }
+
+    #[test]
+    fn an_unparseable_date_is_not_assertable() {
+        let date = DateDraft {
+            kind: DateModifierKind::TextOnly,
+            ..DateDraft::default()
+        };
+        assert_eq!(
+            succession_edit("P0001", 0, &[pick("P0003")], &[], &date),
+            None,
+            "a text-only date with no text would be rejected downstream"
+        );
+    }
 }
 
 #[cfg(test)]

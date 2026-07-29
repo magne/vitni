@@ -930,7 +930,11 @@ async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<CitationId
 
 /// Builds an exact Gregorian [`GenealogicalDate`] from `parts`, computing the integer sort key the
 /// model stores (data-model §7.1). Month/day default to 0 in the key when unknown.
-pub(crate) fn gregorian_date(parts: DateParts) -> GenealogicalDate {
+///
+/// The frontend-facing shortcut for a plain `--year/--month/--day` date: use it where a full
+/// [`DateInput`] (calendar, quality, modifier, verbatim phrase) would be over-specified.
+#[must_use]
+pub fn gregorian_date(parts: DateParts) -> GenealogicalDate {
     let point = DatePoint {
         year: Some(parts.year),
         month: parts.month,

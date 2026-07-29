@@ -7,7 +7,7 @@ use clap::ValueEnum;
 use genealogy_app::{
     ChildParentRelationship, ChromosomeSide, Confidence, DnaGenomeBuild, DnaProvider, DnaTestType, EventType,
     EvidenceKind, InformationKind, NoteType, ParticipantRole, PlaceType, RepositoryType, SourceMediaType,
-    SourceQuality,
+    SourceQuality, SuccessionKind,
 };
 use genealogy_core::enums::EvidenceLevel;
 
@@ -295,6 +295,34 @@ impl From<PlaceTypeArg> for PlaceType {
             PlaceTypeArg::Village => Self::Village,
             PlaceTypeArg::Farm => Self::Farm,
             PlaceTypeArg::Building => Self::Building,
+        }
+    }
+}
+
+/// CLI mirror of [`SuccessionKind`] — how a place's identity changed (ADR 0026 §2–§3). A closed
+/// domain set, so this mirror is exhaustive and carries no `Custom` escape.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum SuccessionKindArg {
+    /// Two or more places merged into one (many→one).
+    Merged,
+    /// One place split into two or more (one→many).
+    Split,
+    /// One place was absorbed into another, which continues under its own identity.
+    Absorbed,
+    /// One place was elevated to a new administrative level, becoming a new identity.
+    Elevated,
+    /// One place's identity was replaced by a new one (not a same-place rename).
+    Renamed,
+}
+
+impl From<SuccessionKindArg> for SuccessionKind {
+    fn from(value: SuccessionKindArg) -> Self {
+        match value {
+            SuccessionKindArg::Merged => Self::Merged,
+            SuccessionKindArg::Split => Self::Split,
+            SuccessionKindArg::Absorbed => Self::Absorbed,
+            SuccessionKindArg::Elevated => Self::Elevated,
+            SuccessionKindArg::Renamed => Self::Renamed,
         }
     }
 }

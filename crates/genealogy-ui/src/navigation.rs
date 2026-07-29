@@ -16,7 +16,7 @@ use genealogy_app::{
     Address, Age, AssociationRole, Attribute, Centimorgans, ChildParentRelationship, DateInput, DnaGenomeBuild,
     DnaProvider, DnaSegment, DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType,
     ParticipantRole, PercentShared, PersonNameParts, PlaceGeometry, PlaceType, Rect, RepositoryType, Sex,
-    SourceMediaType, Url,
+    SourceMediaType, SuccessionKind, Url,
 };
 use serde::{Deserialize, Serialize};
 
@@ -1407,6 +1407,27 @@ pub enum PlaceEdit {
         /// The enclosing place's `human_id`.
         enclosing_id: String,
     },
+    /// Assert an identity-changing succession this place took part in (ADR 0026 §3): a merge, split,
+    /// absorption, elevation, or identity rename reaching **other** place aggregates.
+    ///
+    /// The **anchor rule**: `human_id` is the place the assertion is recorded against, and it is
+    /// always one of the places that *ceased*. `from_extra` names the other ceasing places — empty for
+    /// `Split`/`Absorbed`/`Elevated`/`Renamed`, non-empty only for a `Merged` many→one; `to` names the
+    /// places that resulted (many for a `Split`). The dispatcher prepends the anchor to the app's
+    /// `from` list, because `assert_place_succession` rejects a `from` set that omits it
+    /// (`SuccessionAnchorMismatch`).
+    AssertSuccession {
+        /// The place to edit — the anchor, and always one of the ceasing places.
+        human_id: String,
+        /// The `human_id`s of the *other* places that ceased; empty unless this is a `Merged` many→one.
+        from_extra: Vec<String>,
+        /// The `human_id`s of the places that resulted; many for a `Split`.
+        to: Vec<String>,
+        /// The kind of identity change.
+        kind: SuccessionKind,
+        /// When the succession took effect, if known.
+        date: Option<DateInput>,
+    },
     /// Attach an existing citation (by `human_id`).
     AttachCitation {
         /// The place to edit.
@@ -1477,6 +1498,7 @@ impl PlaceEdit {
             | Self::SetCode { human_id, .. }
             | Self::AddName { human_id, .. }
             | Self::AddEnclosing { human_id, .. }
+            | Self::AssertSuccession { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }
             | Self::SetMediaRegion { human_id, .. }
@@ -2458,7 +2480,9 @@ impl DnaMatchEdit {
 mod tests {
     use std::collections::BTreeSet;
 
-    use super::{Category, Destination, NavHistory, NavLocation, Tool, tab_label};
+    use genealogy_app::SuccessionKind;
+
+    use super::{Category, Destination, NavHistory, NavLocation, PlaceEdit, Tool, tab_label};
 
     fn location(category: Category) -> NavLocation {
         NavLocation {
@@ -2667,5 +2691,19 @@ mod tests {
         assert_eq!(tab_label(None, "I0001"), "I0001");
         assert_eq!(tab_label(Some(""), "I0001"), "I0001");
         assert_eq!(tab_label(Some("   "), "I0001"), "I0001");
+    }
+
+    /// A succession names three sets of places; the edit targets (and reloads) the **anchor** — the
+    /// place the assertion is recorded against — never one of the other endpoints.
+    #[test]
+    fn an_assert_succession_edit_targets_the_anchor_place() {
+        let edit = PlaceEdit::AssertSuccession {
+            human_id: "P0001".to_owned(),
+            from_extra: vec!["P0002".to_owned()],
+            to: vec!["P0003".to_owned()],
+            kind: SuccessionKind::Merged,
+            date: None,
+        };
+        assert_eq!(edit.target(), "P0001");
     }
 }

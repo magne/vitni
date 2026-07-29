@@ -5,13 +5,15 @@
 use dioxus::prelude::*;
 use genealogy_app::{PlaceType, TagRef};
 use genealogy_ui::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MapPointVm, MarkerShapeVm,
-    MediaRefVm, PlaceDetail, PlaceDraft, PlaceGeometryVm, PlaceHierarchyVm, PlaceNameVm, PlaceSuccessionVm,
-    ProvenanceDraft,
+    AttachedRefVm, Category, CitationRefVm, ConfidenceLevel, DateDraft, EvidenceAxis, EvidenceAxisVm, Localizer,
+    MapPointVm, MarkerShapeVm, MediaRefVm, PickerSelection, PickerState, PlaceDetail, PlaceDraft, PlaceGeometryVm,
+    PlaceHierarchyVm, PlaceNameVm, PlaceSuccessionVm, ProvenanceDraft,
 };
+use genealogy_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use genealogy_ui_dioxus::screens::{
-    PlaceEditForm, RecordActionLabels, RecordEditState, citations_table, id_list, media_gallery, place_hierarchy_table,
-    place_names_table, place_overview, place_succession_card, record_head_actions, tags_panel,
+    PlaceEditForm, RecordActionLabels, RecordEditState, SuccessionFormState, citations_table, id_list, media_gallery,
+    place_hierarchy_table, place_names_table, place_overview, place_succession_card, place_succession_form_fields,
+    record_head_actions, tags_panel,
 };
 
 /// A representative place detail: a city with High-confidence coordinates, two names (one sourced,
@@ -216,7 +218,7 @@ fn place_view() -> Element {
         {place_overview(&loc, &detail, record)}
         {place_names_table(&loc, &detail, onedit, onretract)}
         {place_hierarchy_table(&loc, &detail, onedit, onretract)}
-        {place_succession_card(&loc, &detail, onretract)}
+        {place_succession_card(&loc, &detail, onedit, onretract)}
         {citations_table::<PlaceEditForm>(&loc, &detail.citations, false, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
         {id_list(&loc, &detail.notes, Some(onretract))}
@@ -450,9 +452,10 @@ fn no_succession() -> PlaceDetail {
 
 fn no_succession_view() -> Element {
     let loc = loc();
+    let onedit = use_callback(|_: PlaceEditForm| {});
     let onretract = use_callback(|_: (String, String, bool)| {});
     let detail = no_succession();
-    place_succession_card(&loc, &detail, onretract)
+    place_succession_card(&loc, &detail, onedit, onretract)
 }
 
 #[test]
@@ -463,4 +466,79 @@ fn no_predecessors_or_successors_renders_the_empty_state() {
         !html.contains("New Amsterdam"),
         "no predecessor row is rendered:\n{html}"
     );
+}
+
+/// The write path's entry point (#196): the Succession card carries "+ Add succession" whether or not
+/// the place already took part in one — the empty state is exactly where an operator needs it.
+#[test]
+fn the_succession_card_offers_the_add_action_when_populated() {
+    let html = render(place_view);
+    assert!(
+        html.contains("Add succession"),
+        "the populated card offers the add action:\n{html}"
+    );
+}
+
+#[test]
+fn the_succession_card_offers_the_add_action_in_the_empty_state() {
+    let html = render(no_succession_view);
+    assert!(
+        html.contains("Add succession"),
+        "the empty state offers the add action too:\n{html}"
+    );
+}
+
+fn succession_picker(loc: &Localizer, name: &str) -> RecordPicker {
+    RecordPicker {
+        config: PickerConfig {
+            label: name.to_owned(),
+            name: name.to_owned(),
+            entity_label: loc.picker_entity(Category::Places),
+            allow_new: false,
+        },
+        state: use_signal(PickerState::default),
+        options: PickerOptions::Ready(Vec::new()),
+        exclude: Vec::new(),
+        callbacks: PickerCallbacks {
+            onpick: use_callback(|_: PickerSelection| {}),
+            onclear: use_callback(|()| {}),
+            onnew: use_callback(|_: String| {}),
+        },
+    }
+}
+
+fn succession_form_view() -> Element {
+    let loc = loc();
+    let to = succession_picker(&loc, "succession-to");
+    let from = succession_picker(&loc, "succession-from");
+    let state = SuccessionFormState {
+        kind: use_signal(|| 0_usize),
+        to: use_signal(Vec::<PickerSelection>::new),
+        from: use_signal(Vec::<PickerSelection>::new),
+        date: use_signal(DateDraft::default),
+    };
+    place_succession_form_fields(&loc, &to, &from, state)
+}
+
+/// The Succession panel's field set (`place.html`): the kind select, both repeatable place pickers, and
+/// the effective-date cluster.
+#[test]
+fn the_succession_panel_renders_its_kind_pickers_and_date() {
+    let html = render(succession_form_view);
+    for needle in [
+        r#"id="succession-kind""#,
+        r#"for="succession-to""#,
+        r#"for="succession-from""#,
+        r#"for="succession-date""#,
+        // The kind select offers every domain variant, so a merge and a split are both reachable.
+        "merged",
+        "split",
+        "absorbed",
+        "elevated",
+        "renamed",
+        // Both repeatable pickers carry their own "add the picked place" control.
+        "Add picked place",
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
 }

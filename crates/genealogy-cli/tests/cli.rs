@@ -455,6 +455,95 @@ fn place_aggregate_ids_are_independent_of_persons() {
         .stdout(predicate::str::contains("Created P0001"));
 }
 
+/// The succession write path (#196, ADR 0026 §3): a many→one merge names the survivor with `--to` and
+/// the other ceasing places with `--from`; the positional `HUMAN_ID` is the anchor and is added to the
+/// ceasing set by the command, so the operator never has to repeat it.
+#[test]
+fn place_assert_succession_merges_two_municipalities_into_one() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    for name in ["Aker", "Kristiania", "Oslo"] {
+        genealogy(dir.path())
+            .args(["place", "create", "--type", "municipality", "--name", name])
+            .assert()
+            .success();
+    }
+
+    genealogy(dir.path())
+        .args([
+            "place",
+            "assert-succession",
+            "P0001",
+            "--to",
+            "P0003",
+            "--from",
+            "P0002",
+            "--kind",
+            "merged",
+            "--year",
+            "1948",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Updated P0001"));
+}
+
+/// A split names many resulting places through a repeated `--to`, and needs no `--from` at all.
+#[test]
+fn place_assert_succession_splits_one_county_into_two() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    for name in ["Old County", "North County", "South County"] {
+        genealogy(dir.path())
+            .args(["place", "create", "--type", "county", "--name", name])
+            .assert()
+            .success();
+    }
+
+    genealogy(dir.path())
+        .args([
+            "place",
+            "assert-succession",
+            "P0001",
+            "--to",
+            "P0002",
+            "--to",
+            "P0003",
+            "--kind",
+            "split",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Updated P0001"));
+}
+
+#[test]
+fn place_assert_succession_to_an_unknown_place_fails() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["place", "create", "--type", "parish", "--name", "Vågå"])
+        .assert()
+        .success();
+
+    genealogy(dir.path())
+        .args([
+            "place",
+            "assert-succession",
+            "P0001",
+            "--to",
+            "P9999",
+            "--kind",
+            "renamed",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("P9999"));
+}
+
 #[test]
 fn show_of_an_unknown_person_fails() {
     let dir = TempDir::new().unwrap();

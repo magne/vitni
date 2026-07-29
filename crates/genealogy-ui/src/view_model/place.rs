@@ -4,6 +4,17 @@ use super::{
     event_pin_vm, marker_shape, non_blank, year_of,
 };
 
+/// The succession kinds the Succession panel's Kind select offers, in display order — the closed
+/// domain set (ADR 0026 §2–§3), so a new variant is a compile error here rather than a silently
+/// unpickable kind. Labels come from [`Localizer::succession_kind_label`].
+pub const SUCCESSION_KINDS: [genealogy_app::SuccessionKind; 5] = [
+    genealogy_app::SuccessionKind::Merged,
+    genealogy_app::SuccessionKind::Split,
+    genealogy_app::SuccessionKind::Absorbed,
+    genealogy_app::SuccessionKind::Elevated,
+    genealogy_app::SuccessionKind::Renamed,
+];
+
 /// One asserted place name (Names tab): text, language, date, surety, and source count.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaceNameVm {
@@ -841,6 +852,19 @@ mod place_succession_tests {
             ..rel(SuccessionKind::Absorbed)
         };
         assert_eq!(succession_vm(&unnamed, &loc()).name, "P0021");
+    }
+
+    #[test]
+    fn the_offered_succession_kinds_cover_every_variant_with_a_distinct_label() {
+        let labels: Vec<String> = super::SUCCESSION_KINDS
+            .iter()
+            .map(|&kind| loc().succession_kind_label(kind))
+            .collect();
+        assert_eq!(labels.len(), 5, "the kind select offers all five variants: {labels:?}");
+        let mut unique = labels.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(unique.len(), labels.len(), "no kind is offered twice: {labels:?}");
     }
 }
 
