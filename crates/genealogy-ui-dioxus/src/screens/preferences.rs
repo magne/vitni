@@ -34,6 +34,7 @@ use crate::i18n::Chrome;
 use crate::services::{
     PreferencesData, load_preferences, make_default_workspace, rebuild_projections, register_workspace,
     save_id_format_defaults, save_locale_defaults, save_operator_identity, save_shortcuts, save_surety_defaults,
+    save_surety_workspace_overrides,
 };
 use crate::shell::ShortcutsCtx;
 
@@ -70,11 +71,16 @@ pub fn PreferencesScreen() -> Element {
     let mut data_locale = use_signal(|| optional_tag(data().locale.data_locale.as_ref()));
     let mut date_format = use_signal(|| date_format_value(data().locale.date_format).to_owned());
     let mut number_format = use_signal(|| number_format_value(data().locale.number_format).to_owned());
-    let mut surety_very_low = use_signal(|| surety_field_from_override(data().surety.very_low.as_ref()));
-    let mut surety_low = use_signal(|| surety_field_from_override(data().surety.low.as_ref()));
-    let mut surety_normal = use_signal(|| surety_field_from_override(data().surety.normal.as_ref()));
-    let mut surety_high = use_signal(|| surety_field_from_override(data().surety.high.as_ref()));
-    let mut surety_very_high = use_signal(|| surety_field_from_override(data().surety.very_high.as_ref()));
+    // The Surety card edits one scope at a time, seeded from that scope's *own* stored labels (not
+    // the resolved blend), so the fields always show what a Save would write (ADR 0027).
+    let surety_fields = SuretyFields {
+        scope: use_signal(|| SuretyScope::Workspace),
+        very_low: use_signal(|| surety_field_from_override(data().surety_workspace.very_low.as_ref())),
+        low: use_signal(|| surety_field_from_override(data().surety_workspace.low.as_ref())),
+        normal: use_signal(|| surety_field_from_override(data().surety_workspace.normal.as_ref())),
+        high: use_signal(|| surety_field_from_override(data().surety_workspace.high.as_ref())),
+        very_high: use_signal(|| surety_field_from_override(data().surety_workspace.very_high.as_ref())),
+    };
     let mut shortcut_bindings = use_signal(|| shortcut_field_seed(&data().shortcuts));
 
     let save_services = services.clone();
@@ -97,16 +103,12 @@ pub fn PreferencesScreen() -> Element {
                 };
                 save_locale_defaults(&save_services, locale)
             })
-            .and_then(|()| {
-                let surety = SuretyLabelOverrides {
-                    very_low: surety_override_from_field(&surety_very_low()),
-                    low: surety_override_from_field(&surety_low()),
-                    normal: surety_override_from_field(&surety_normal()),
-                    high: surety_override_from_field(&surety_high()),
-                    very_high: surety_override_from_field(&surety_very_high()),
-                };
-                save_surety_defaults(&save_services, surety)
-            })
+            .and_then(
+                |()| match surety_save(*surety_fields.scope.peek(), &surety_fields.values()) {
+                    SuretySave::Workspace(surety) => save_surety_workspace_overrides(&save_services, surety),
+                    SuretySave::Shared(surety) => save_surety_defaults(&save_services, surety),
+                },
+            )
             .and_then(|()| save_shortcuts(&save_services, &shortcuts_config));
         match outcome {
             Ok(()) => {
@@ -201,11 +203,8 @@ pub fn PreferencesScreen() -> Element {
         data_locale.set(optional_tag(loaded.locale.data_locale.as_ref()));
         date_format.set(date_format_value(loaded.locale.date_format).to_owned());
         number_format.set(number_format_value(loaded.locale.number_format).to_owned());
-        surety_very_low.set(surety_field_from_override(loaded.surety.very_low.as_ref()));
-        surety_low.set(surety_field_from_override(loaded.surety.low.as_ref()));
-        surety_normal.set(surety_field_from_override(loaded.surety.normal.as_ref()));
-        surety_high.set(surety_field_from_override(loaded.surety.high.as_ref()));
-        surety_very_high.set(surety_field_from_override(loaded.surety.very_high.as_ref()));
+        let scope = *surety_fields.scope.peek();
+        surety_fields.seed_from(surety_scope_values(&loaded, scope));
         shortcut_bindings.set(shortcut_field_seed(&loaded.shortcuts));
         status.set(None);
     };
@@ -225,13 +224,7 @@ pub fn PreferencesScreen() -> Element {
             date_format,
             number_format,
         },
-        SuretyFields {
-            very_low: surety_very_low,
-            low: surety_low,
-            normal: surety_normal,
-            high: surety_high,
-            very_high: surety_very_high,
-        },
+        surety_fields,
         &shortcuts_vm_value,
         ShortcutFields {
             bindings: shortcut_bindings,
@@ -300,11 +293,43 @@ pub struct LocaleFields {
     pub number_format: Signal<String>,
 }
 
-/// The editable surety-scheme label fields (ADR 0027), one per fixed `Confidence` ordinal. Each is
-/// the raw text field value: empty means "no override" (the Fluent-resolved default wins). Grouped
-/// into one struct so [`preferences_view`]'s signature stays readable (mirrors [`LocaleFields`]).
+/// Which scope the Surety card writes its five labels to (ADR 0027): the open workspace's own
+/// manifest `[surety]` block, or the shared app-level `[workspace-defaults.surety]` table every
+/// workspace without its own override falls back to, live.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SuretyScope {
+    /// The open workspace's manifest — wins over the shared default, per ordinal.
+    Workspace,
+    /// The shared app-level live fallback.
+    Shared,
+}
+
+/// The stable `<select>` value token for a [`SuretyScope`].
+fn surety_scope_id(scope: SuretyScope) -> &'static str {
+    match scope {
+        SuretyScope::Workspace => "workspace",
+        SuretyScope::Shared => "shared",
+    }
+}
+
+/// The inverse of [`surety_scope_id`]: an unrecognized token (impossible — the `<select>` emits only
+/// the two above) falls back to the narrower [`SuretyScope::Workspace`] rather than panicking, so a
+/// stray value can never widen a save to the shared scope.
+fn surety_scope_from_id(id: &str) -> SuretyScope {
+    match id {
+        "shared" => SuretyScope::Shared,
+        _ => SuretyScope::Workspace,
+    }
+}
+
+/// The editable surety-scheme label fields (ADR 0027), one per fixed `Confidence` ordinal, plus the
+/// scope they are saved to. Each label is the raw text field value: empty means "no override at this
+/// scope". Grouped into one struct so [`preferences_view`]'s signature stays readable (mirrors
+/// [`LocaleFields`]).
 #[derive(Debug, Clone, Copy)]
 pub struct SuretyFields {
+    /// Which scope a Save writes the five labels to.
+    pub scope: Signal<SuretyScope>,
     /// The `Confidence::VeryLow` label override field.
     pub very_low: Signal<String>,
     /// The `Confidence::Low` label override field.
@@ -315,6 +340,85 @@ pub struct SuretyFields {
     pub high: Signal<String>,
     /// The `Confidence::VeryHigh` label override field.
     pub very_high: Signal<String>,
+}
+
+impl SuretyFields {
+    /// Re-seeds the five label fields from one scope's own stored overrides — blank wherever that
+    /// scope pins nothing, so the fields always show exactly what a Save would write.
+    pub fn seed_from(mut self, stored: &SuretyLabelOverrides) {
+        self.very_low.set(surety_field_from_override(stored.very_low.as_ref()));
+        self.low.set(surety_field_from_override(stored.low.as_ref()));
+        self.normal.set(surety_field_from_override(stored.normal.as_ref()));
+        self.high.set(surety_field_from_override(stored.high.as_ref()));
+        self.very_high
+            .set(surety_field_from_override(stored.very_high.as_ref()));
+    }
+
+    /// Snapshots the five label fields' current text out of their signals, so [`surety_save`] can
+    /// route them as a plain value.
+    #[must_use]
+    pub fn values(&self) -> SuretyFieldValues {
+        SuretyFieldValues {
+            very_low: self.very_low.peek().clone(),
+            low: self.low.peek().clone(),
+            normal: self.normal.peek().clone(),
+            high: self.high.peek().clone(),
+            very_high: self.very_high.peek().clone(),
+        }
+    }
+}
+
+/// A snapshot of the Surety card's five label fields, free of signals.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SuretyFieldValues {
+    /// The `Confidence::VeryLow` field's text.
+    pub very_low: String,
+    /// The `Confidence::Low` field's text.
+    pub low: String,
+    /// The `Confidence::Normal` field's text.
+    pub normal: String,
+    /// The `Confidence::High` field's text.
+    pub high: String,
+    /// The `Confidence::VeryHigh` field's text.
+    pub very_high: String,
+}
+
+/// Where a Save sends the Surety card's edits, carrying the overrides to write there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SuretySave {
+    /// Into the open workspace's manifest `[surety]` block.
+    Workspace(SuretyLabelOverrides),
+    /// Into the shared app-level `[workspace-defaults.surety]` table.
+    Shared(SuretyLabelOverrides),
+}
+
+/// Routes a snapshot of the card's scope and five fields to the store that scope names (ADR 0027).
+///
+/// Pure — no signals, no I/O — so both destinations and the blank-field convention are unit-tested
+/// without a Dioxus runtime; the caller performs the write the returned variant names.
+#[must_use]
+pub fn surety_save(scope: SuretyScope, values: &SuretyFieldValues) -> SuretySave {
+    let overrides = SuretyLabelOverrides {
+        very_low: surety_override_from_field(&values.very_low),
+        low: surety_override_from_field(&values.low),
+        normal: surety_override_from_field(&values.normal),
+        high: surety_override_from_field(&values.high),
+        very_high: surety_override_from_field(&values.very_high),
+    };
+    match scope {
+        SuretyScope::Workspace => SuretySave::Workspace(overrides),
+        SuretyScope::Shared => SuretySave::Shared(overrides),
+    }
+}
+
+/// The labels `scope` has stored of its own — the manifest's `[surety]` block or the shared
+/// `[workspace-defaults.surety]` table, never the resolved blend of the two.
+#[must_use]
+pub fn surety_scope_values(data: &PreferencesData, scope: SuretyScope) -> &SuretyLabelOverrides {
+    match scope {
+        SuretyScope::Workspace => &data.surety_workspace,
+        SuretyScope::Shared => &data.config.workspace_defaults.surety,
+    }
 }
 
 /// The editable per-action shortcut-override fields (ADR 0030 §4): current chord-string values,
@@ -383,7 +487,7 @@ pub fn preferences_view(
                 {appearance_card(chrome, theme_mode, onthemechange)}
                 {locale_card(chrome, &data.locale, locale_fields.ui_language, locale_fields.data_locale)}
                 {formats_card(chrome, locale_fields.date_format, locale_fields.number_format)}
-                {surety_card(chrome, surety_fields)}
+                {surety_card(chrome, data, surety_fields)}
                 {shortcuts_card(chrome, shortcuts_vm, shortcut_fields)}
                 {defaults_card(chrome, data, person_id_format)}
                 {workspaces_card(chrome, data, register, onopen, onmakedefault, onregister)}
@@ -777,15 +881,46 @@ fn number_example(format: NumberFormat) -> &'static str {
     }
 }
 
-/// The "Surety scheme" card (ADR 0027): one text field per fixed `Confidence` ordinal. An empty
-/// field keeps the Fluent-resolved default wording; a filled-in field is shown verbatim (not
-/// translated) in every locale, since it is the workspace's own chosen word.
-fn surety_card(chrome: &Chrome, surety_fields: SuretyFields) -> Element {
+/// The "Surety scheme" card (ADR 0027): a scope selector plus one text field per fixed `Confidence`
+/// ordinal, and the per-ordinal override chain below. An empty field means "no override at the
+/// selected scope"; a filled-in field is shown verbatim (not translated) in every locale, since it
+/// is the workspace's own chosen word. Switching scope re-seeds the fields from that scope's own
+/// stored labels, so what is on screen is always what a Save writes.
+fn surety_card(chrome: &Chrome, data: &PreferencesData, surety_fields: SuretyFields) -> Element {
+    let scope = *surety_fields.scope.read();
+    let workspace_values = data.surety_workspace.clone();
+    let shared_values = data.config.workspace_defaults.surety.clone();
+    let layers = data.layers.surety;
+    let mut fields = surety_fields;
     rsx! {
         h2 { id: "surety", style: "border:0;margin:24px 0 12px", "{chrome.prefs_section_label(\"surety\")}" }
         Card { title: chrome.prefs_surety_title(),
             div { class: "muted", style: "font-size:var(--fs-sm);margin-bottom:12px", "{chrome.prefs_surety_intro()}" }
-            div { class: "grid-2",
+            Select {
+                label: chrome.prefs_surety_scope_label(),
+                name: "surety-scope".to_owned(),
+                value: Some(surety_scope_id(scope).to_owned()),
+                options: vec![
+                    SelectChoice {
+                        value: surety_scope_id(SuretyScope::Workspace).to_owned(),
+                        label: chrome.prefs_surety_scope_workspace(),
+                    },
+                    SelectChoice {
+                        value: surety_scope_id(SuretyScope::Shared).to_owned(),
+                        label: chrome.prefs_surety_scope_shared(),
+                    },
+                ],
+                onchange: move |event: FormEvent| {
+                    let scope = surety_scope_from_id(&event.value());
+                    fields.scope.set(scope);
+                    fields
+                        .seed_from(match scope {
+                            SuretyScope::Workspace => &workspace_values,
+                            SuretyScope::Shared => &shared_values,
+                        });
+                },
+            }
+            div { class: "grid-2", style: "margin-top:8px",
                 {surety_field(chrome, "very-low", surety_fields.very_low)}
                 {surety_field(chrome, "low", surety_fields.low)}
                 {surety_field(chrome, "normal", surety_fields.normal)}
@@ -793,7 +928,36 @@ fn surety_card(chrome: &Chrome, surety_fields: SuretyFields) -> Element {
                 {surety_field(chrome, "very-high", surety_fields.very_high)}
             }
             div { class: "muted", style: "font-size:var(--fs-sm);margin-top:8px", "{chrome.prefs_surety_hint()}" }
+            div { class: "field-label", style: "margin:12px 0 6px", "{chrome.prefs_surety_layers_label()}" }
+            div { class: "stack",
+                {surety_layer_row(chrome, "very-low", layers.very_low)}
+                {surety_layer_row(chrome, "low", layers.low)}
+                {surety_layer_row(chrome, "normal", layers.normal)}
+                {surety_layer_row(chrome, "high", layers.high)}
+                {surety_layer_row(chrome, "very-high", layers.very_high)}
+            }
         }
+    }
+}
+
+/// One ordinal's override-chain row: the layer that supplied its effective wording, badged `wins`
+/// when this workspace pinned the ordinal itself and `fallback` when the wording comes from a layer
+/// below it (the shared default, or the built-in baseline when nothing is pinned anywhere).
+fn surety_layer_row(chrome: &Chrome, ordinal: &str, layer: LayerKind) -> Element {
+    let label = format!(
+        "{} — {}",
+        chrome.prefs_surety_field_label(ordinal),
+        surety_layer_label(chrome, layer)
+    );
+    layer_row(chrome, &label, layer == LayerKind::Workspace)
+}
+
+/// The row label naming one surety ordinal's winning layer, with the file it is stored in.
+fn surety_layer_label(chrome: &Chrome, layer: LayerKind) -> String {
+    match layer {
+        LayerKind::Workspace => chrome.prefs_layer_workspace("workspace.toml"),
+        LayerKind::SharedDefault => chrome.prefs_layer_shared("~/.config/genealogy/config.toml"),
+        LayerKind::Embedded => chrome.prefs_layer_embedded(),
     }
 }
 
@@ -1039,5 +1203,70 @@ fn maintenance_card(
             },
             p { "{chrome.prefs_rebuild_confirm_body()}" }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SuretyFieldValues, SuretySave, SuretyScope, surety_save, surety_scope_from_id, surety_scope_id};
+    use genealogy_app::SuretyLabelOverrides;
+
+    fn one_label(text: &str) -> SuretyFieldValues {
+        SuretyFieldValues {
+            very_high: text.to_owned(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn the_workspace_scope_routes_a_save_to_the_manifest() {
+        let save = surety_save(SuretyScope::Workspace, &one_label("Certain"));
+        let SuretySave::Workspace(overrides) = save else {
+            panic!("the workspace scope must write the manifest, got {save:?}");
+        };
+        assert_eq!(
+            overrides.very_high.map(|o| o.label),
+            Some("Certain".to_owned()),
+            "the filled-in field becomes that ordinal's override"
+        );
+    }
+
+    #[test]
+    fn the_shared_scope_routes_a_save_to_the_app_level_defaults() {
+        let save = surety_save(SuretyScope::Shared, &one_label("Certain"));
+        let SuretySave::Shared(overrides) = save else {
+            panic!("the shared scope must write the app-level defaults, got {save:?}");
+        };
+        assert_eq!(overrides.very_high.map(|o| o.label), Some("Certain".to_owned()));
+    }
+
+    #[test]
+    fn blank_and_whitespace_only_fields_are_no_override_at_either_scope() {
+        let values = SuretyFieldValues {
+            normal: "   ".to_owned(),
+            ..Default::default()
+        };
+        for scope in [SuretyScope::Workspace, SuretyScope::Shared] {
+            let overrides = match surety_save(scope, &values) {
+                SuretySave::Workspace(overrides) | SuretySave::Shared(overrides) => overrides,
+            };
+            assert_eq!(
+                overrides,
+                SuretyLabelOverrides::default(),
+                "blank fields clear every ordinal's override at {scope:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn scope_tokens_round_trip_and_an_unknown_token_stays_at_the_workspace_scope() {
+        for scope in [SuretyScope::Workspace, SuretyScope::Shared] {
+            assert_eq!(surety_scope_from_id(surety_scope_id(scope)), scope);
+        }
+        assert_eq!(
+            surety_scope_from_id("nonsense"),
+            SuretyScope::Workspace,
+            "an unrecognized token must never widen a save to the shared scope"
+        );
     }
 }

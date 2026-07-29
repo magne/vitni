@@ -18,7 +18,7 @@ use genealogy_app::{
     AiConfig, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, PluginTrust,
     PluginTrustConfig, PreferenceLayers, ResolvedLocale, Session, ShortcutConfig, SuretyLabelOverrides, TagSummary,
     Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers,
-    read_resolved_locale, read_resolved_surety_labels, workspace_counts,
+    read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides, workspace_counts,
 };
 use genealogy_plugin_host::{
     Capability, ExportTarget, Grants, HostPattern, Invocation, NetPolicy, PluginHost, PluginRole, PresentError,
@@ -1282,8 +1282,13 @@ pub struct PreferencesData {
     pub layers: PreferenceLayers,
     /// The resolved language/locale/date/number preferences for the open workspace.
     pub locale: ResolvedLocale,
-    /// The resolved surety-scheme label overrides for the open workspace (ADR 0027).
+    /// The resolved surety-scheme label overrides for the open workspace (ADR 0027) — the manifest
+    /// over the shared default, per ordinal.
     pub surety: SuretyLabelOverrides,
+    /// The workspace manifest's **own** `[surety]` overrides, unresolved: what the Surety card edits
+    /// and writes back in the workspace scope. The shared scope's own values are
+    /// `config.workspace_defaults.surety`.
+    pub surety_workspace: SuretyLabelOverrides,
     /// The registered workspaces (name order, default + engine flagged) for the "Workspaces" card.
     pub workspaces: Vec<WorkspaceSummary>,
     /// The name of the workspace open this session — the row it matches shows the "Active" badge.
@@ -1306,6 +1311,7 @@ pub fn load_preferences(services: &Services) -> PreferencesData {
         layers,
         locale,
         surety,
+        surety_workspace: read_surety_label_overrides(&services.dir),
         workspaces: list_workspaces(&services.config),
         open_workspace: services.open_workspace.clone(),
         shortcuts: services.config.shortcuts.clone(),
@@ -1353,6 +1359,16 @@ pub fn save_surety_defaults(services: &Services, surety: SuretyLabelOverrides) -
     let path = config::config_path().map_err(|error| loc.error(&error))?;
     FileConfigStore::new(path, None)
         .store_workspace_default_surety(surety)
+        .map_err(|error| loc.error(&error))
+}
+
+/// Saves the open workspace's own surety-scheme label overrides into its manifest `[surety]` block,
+/// returning a localized error on failure (ADR 0027). The per-workspace counterpart to
+/// [`save_surety_defaults`]: this scope wins over that live fallback, per ordinal.
+pub fn save_surety_workspace_overrides(services: &Services, surety: SuretyLabelOverrides) -> Result<(), String> {
+    let loc = services.localizer();
+    FileConfigStore::for_workspace(services.dir.clone())
+        .store_surety_label_overrides(surety)
         .map_err(|error| loc.error(&error))
 }
 

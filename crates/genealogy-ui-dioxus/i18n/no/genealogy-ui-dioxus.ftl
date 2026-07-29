@@ -252,12 +252,16 @@ prefs-formats-note = Slektsforskningsdatoer (ca., før, anslått, intervaller) f
 
 prefs-surety-title = Ordlyd for sikkerhetsnivåer
 prefs-surety-intro = Gi de fem sikkerhetsnivåene som brukes på hver påstand din egen ordlyd. Selve de fem nivåene er faste (ADR 0027) — dette endrer bare ordene som vises, aldri hvordan en påstands bevis lagres eller hvor mange nivåer det finnes.
+prefs-surety-scope-label = Lagre denne ordlyden i
+prefs-surety-scope-workspace = Dette arbeidsområdet
+prefs-surety-scope-shared = Delt standard (alle arbeidsområder uten egen)
 prefs-surety-field-very-low = Svært lav
 prefs-surety-field-low = Lav
 prefs-surety-field-normal = Normal
 prefs-surety-field-high = Høy
 prefs-surety-field-very-high = Svært høy
-prefs-surety-hint = Tomme felt beholder den innebygde ordlyden. Et utfylt felt vises ordrett i alle lokaliteter — det oversettes ikke, siden det er din egen ordlyd.
+prefs-surety-hint = Tomme felt beholder den innebygde ordlyden. Et utfylt felt vises ordrett i alle lokaliteter — det oversettes ikke, siden det er din egen ordlyd. Å bytte omfang viser ordlyden som er lagret der.
+prefs-surety-layers-label = Hvor ordlyden for hvert nivå kommer fra
 
 prefs-shortcuts-title = Tilordne globale hurtigtaster på nytt
 prefs-shortcuts-intro = Bare globale hurtigtaster (aktive overalt) kan tilordnes på nytt. Taster innenfor et skjermbilde og g-prefiks-navigasjonstaster er faste. Skriv en tastekombinasjon som mod+shift+alt+tast — mod er ⌘ på macOS, Ctrl ellers.

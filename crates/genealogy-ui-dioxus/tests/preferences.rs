@@ -12,12 +12,13 @@ use std::collections::BTreeMap;
 use dioxus::prelude::*;
 use genealogy_app::{
     Config, DateFormat, Engine, IdFormatLayers, LayerKind, NumberFormat, OperatorConfig, PreferenceLayers,
-    ResolvedLocale, SuretyLabelOverrides, ThemeLayers, ThemeMode, WorkspaceDefaults, WorkspaceEntry, WorkspaceSummary,
+    ResolvedLocale, SuretyLabelOverride, SuretyLabelOverrides, SuretyLayers, ThemeLayers, ThemeMode, WorkspaceDefaults,
+    WorkspaceEntry, WorkspaceSummary,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
-    LocaleFields, MaintenanceFields, RegisterFields, ShortcutFields, SuretyFields, preferences_view,
+    LocaleFields, MaintenanceFields, RegisterFields, ShortcutFields, SuretyFields, SuretyScope, preferences_view,
 };
 use genealogy_ui_dioxus::services::PreferencesData;
 use unic_langid::LanguageIdentifier;
@@ -82,6 +83,18 @@ fn layers_with_pinned_theme_and_id_format() -> PreferenceLayers {
             embedded: "I%04d".to_owned(),
             winner: LayerKind::Workspace,
         },
+        surety: surety_layers_all(LayerKind::Embedded),
+    }
+}
+
+/// Surety layers with the same winning layer on all five ordinals.
+fn surety_layers_all(layer: LayerKind) -> SuretyLayers {
+    SuretyLayers {
+        very_low: layer,
+        low: layer,
+        normal: layer,
+        high: layer,
+        very_high: layer,
     }
 }
 
@@ -101,6 +114,7 @@ fn layers_falling_back_to_shared_default() -> PreferenceLayers {
             embedded: "I%04d".to_owned(),
             winner: LayerKind::SharedDefault,
         },
+        surety: surety_layers_all(LayerKind::Embedded),
     }
 }
 
@@ -190,7 +204,7 @@ fn render_prefs(
     config: Config,
     layers: PreferenceLayers,
     locale: ResolvedLocale,
-    surety: SuretyLabelOverrides,
+    surety_workspace: SuretyLabelOverrides,
     shortcuts: genealogy_app::ShortcutConfig,
     status: Option<String>,
     workspaces: Vec<WorkspaceSummary>,
@@ -199,11 +213,13 @@ fn render_prefs(
     maintenance_confirm_open: bool,
     maintenance_running: bool,
 ) -> Element {
+    let surety = resolved_surety(&surety_workspace, &config.workspace_defaults.surety);
     let data = PreferencesData {
         config,
         layers,
         locale,
         surety,
+        surety_workspace,
         workspaces,
         open_workspace,
         shortcuts,
@@ -229,12 +245,15 @@ fn render_prefs(
         date_format: use_signal(|| date_format_value(data.locale.date_format).to_owned()),
         number_format: use_signal(|| number_format_value(data.locale.number_format).to_owned()),
     };
+    // The card edits one scope's *own* stored values, not the resolved ones — the workspace scope
+    // (the default) seeds from the manifest's `[surety]` block, exactly as `PreferencesScreen` does.
     let surety_fields = SuretyFields {
-        very_low: use_signal(|| surety_field_text(data.surety.very_low.as_ref())),
-        low: use_signal(|| surety_field_text(data.surety.low.as_ref())),
-        normal: use_signal(|| surety_field_text(data.surety.normal.as_ref())),
-        high: use_signal(|| surety_field_text(data.surety.high.as_ref())),
-        very_high: use_signal(|| surety_field_text(data.surety.very_high.as_ref())),
+        scope: use_signal(|| SuretyScope::Workspace),
+        very_low: use_signal(|| surety_field_text(data.surety_workspace.very_low.as_ref())),
+        low: use_signal(|| surety_field_text(data.surety_workspace.low.as_ref())),
+        normal: use_signal(|| surety_field_text(data.surety_workspace.normal.as_ref())),
+        high: use_signal(|| surety_field_text(data.surety_workspace.high.as_ref())),
+        very_high: use_signal(|| surety_field_text(data.surety_workspace.very_high.as_ref())),
     };
     let register = RegisterFields {
         open: use_signal(move || register_open),
@@ -289,8 +308,54 @@ fn shortcut_bindings_seed(config: &genealogy_app::ShortcutConfig) -> BTreeMap<St
 
 /// The surety-field text value for one ordinal's current override, or empty when unset (mirrors the
 /// private helper in `preferences.rs`).
-fn surety_field_text(override_: Option<&genealogy_app::SuretyLabelOverride>) -> String {
+fn surety_field_text(override_: Option<&SuretyLabelOverride>) -> String {
     override_.map(|o| o.label.clone()).unwrap_or_default()
+}
+
+/// The resolved surety labels the app would compute for these two scopes: the workspace's own
+/// override wins per ordinal, else the shared default (mirrors `genealogy_app`'s own resolver).
+fn resolved_surety(workspace: &SuretyLabelOverrides, shared: &SuretyLabelOverrides) -> SuretyLabelOverrides {
+    SuretyLabelOverrides {
+        very_low: workspace.very_low.clone().or_else(|| shared.very_low.clone()),
+        low: workspace.low.clone().or_else(|| shared.low.clone()),
+        normal: workspace.normal.clone().or_else(|| shared.normal.clone()),
+        high: workspace.high.clone().or_else(|| shared.high.clone()),
+        very_high: workspace.very_high.clone().or_else(|| shared.very_high.clone()),
+    }
+}
+
+/// A surety label override with no description (the only shape the Preferences form writes).
+fn label(text: &str) -> SuretyLabelOverride {
+    SuretyLabelOverride {
+        label: text.to_owned(),
+        description: None,
+    }
+}
+
+/// One rendered section of the screen: the slice of `html` from the heading anchored at `start_id`
+/// up to `end_id` (to the end when `end_id` is empty or absent).
+fn section<'html>(html: &'html str, start_id: &str, end_id: &str) -> &'html str {
+    let start = html.find(start_id).unwrap_or_default();
+    let end = html[start..]
+        .find(end_id)
+        .filter(|_| !end_id.is_empty())
+        .map_or(html.len(), |offset| start + offset);
+    &html[start..end]
+}
+
+/// The rendered Surety card: the slice between its own heading and the next section's.
+fn surety_section(html: &str) -> &str {
+    section(html, r#"id="surety""#, r#"id="shortcuts""#)
+}
+
+/// The one per-ordinal layer row in the Surety card whose label carries `ordinal`'s wording. The
+/// leading split piece is the card's field grid (which names every ordinal), so it is skipped.
+fn surety_layer_row<'html>(html: &'html str, ordinal: &str) -> &'html str {
+    surety_section(html)
+        .split(r#"class="fact-row card""#)
+        .skip(1)
+        .find(|row| row.contains(ordinal))
+        .unwrap_or_default()
 }
 
 /// The `<select>` value token for a [`DateFormat`] variant (mirrors the private helper in
@@ -392,23 +457,50 @@ fn open_differs_from_default() -> Element {
     )
 }
 
-/// One workspace with a pinned surety-scheme label override on the `very-high` ordinal.
+/// One workspace whose manifest pins the `very-high` ordinal — the workspace scope wins there.
 fn one_workspace_with_surety_override() -> Element {
     let config = config_with_one_workspace();
     let workspaces = summaries(&config, Some(Engine::Sqlite));
     let open = config.default.clone().unwrap_or_default();
     let surety = SuretyLabelOverrides {
-        very_high: Some(genealogy_app::SuretyLabelOverride {
-            label: "Certain".to_owned(),
-            description: None,
-        }),
+        very_high: Some(label("Certain")),
         ..Default::default()
     };
+    let mut layers = layers_falling_back_to_shared_default();
+    layers.surety.very_high = LayerKind::Workspace;
     render_prefs(
         config,
-        layers_falling_back_to_shared_default(),
+        layers,
         resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
         surety,
+        genealogy_app::ShortcutConfig::default(),
+        None,
+        workspaces,
+        open,
+        false,
+        false,
+        false,
+    )
+}
+
+/// One workspace with no manifest override, but a `low` label pinned in the shared
+/// `[workspace-defaults.surety]` table — the workspace scope's own field stays blank while the
+/// shared layer supplies the effective wording.
+fn one_workspace_with_shared_default_surety_only() -> Element {
+    let mut config = config_with_one_workspace();
+    config.workspace_defaults.surety = SuretyLabelOverrides {
+        low: Some(label("Doubtful")),
+        ..Default::default()
+    };
+    let workspaces = summaries(&config, Some(Engine::Sqlite));
+    let open = config.default.clone().unwrap_or_default();
+    let mut layers = layers_falling_back_to_shared_default();
+    layers.surety.low = LayerKind::SharedDefault;
+    render_prefs(
+        config,
+        layers,
+        resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        SuretyLabelOverrides::default(),
         genealogy_app::ShortcutConfig::default(),
         None,
         workspaces,
@@ -627,11 +719,48 @@ fn surety_card_renders_every_ordinal_field_blank_by_default() {
 }
 
 #[test]
-fn surety_card_displays_a_pinned_label_override() {
+fn surety_card_renders_the_scope_selector_defaulting_to_this_workspace() {
+    let html = render(one_workspace_fallback);
+    let section = surety_section(&html);
+    for needle in [
+        r#"name="surety-scope""#,
+        "Save these labels to",
+        "This workspace",
+        "Shared default",
+    ] {
+        assert!(section.contains(needle), "expected {needle:?} in:\n{section}");
+    }
+    assert!(
+        section.contains(r#"<option value="workspace" selected=true>"#),
+        "the workspace scope is the default selection:\n{section}"
+    );
+}
+
+#[test]
+fn surety_card_displays_a_pinned_label_override_in_the_workspace_scope() {
     let html = render(one_workspace_with_surety_override);
     assert!(
         html.contains(r#"value="Certain""#),
-        "the pinned override's label shows as the field value:\n{html}"
+        "the manifest's own override seeds the field the workspace scope will write back:\n{html}"
+    );
+    let row = surety_layer_row(&html, "Very high");
+    assert!(
+        row.contains(">wins<") && row.contains("Workspace"),
+        "the pinned ordinal's layer row names the workspace layer as the winner:\n{row}"
+    );
+}
+
+#[test]
+fn surety_card_shows_a_shared_default_only_ordinal_as_a_fallback_layer() {
+    let html = render(one_workspace_with_shared_default_surety_only);
+    assert!(
+        !html.contains(r#"value="Doubtful""#),
+        "the workspace scope's own field stays blank — the label is pinned in the shared scope:\n{html}"
+    );
+    let row = surety_layer_row(&html, "Low");
+    assert!(
+        row.contains(">fallback<") && row.contains("Shared app"),
+        "the shared-default-only ordinal's layer row is a fallback naming the shared app layer:\n{row}"
     );
 }
 
@@ -724,11 +853,13 @@ fn defaults_card_marks_the_workspace_layer_as_the_winner_when_pinned() {
         html.contains("Where a setting&#39;s value comes from"), // dioxus_ssr HTML-escapes `'`
         "the card title:\n{html}"
     );
-    assert!(html.contains(">wins<"), "the winning layer's badge:\n{html}");
+    // Scoped to the card: the Surety card above renders per-ordinal layer rows of its own.
+    let defaults = section(&html, r#"id="defaults""#, "");
+    assert!(defaults.contains(">wins<"), "the winning layer's badge:\n{defaults}");
     assert_eq!(
-        html.matches(">fallback<").count(),
+        defaults.matches(">fallback<").count(),
         2,
-        "the two non-winning layers:\n{html}"
+        "the two non-winning layers:\n{defaults}"
     );
     assert!(
         html.contains("workspace.toml"),

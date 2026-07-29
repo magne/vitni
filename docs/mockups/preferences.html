@@ -137,7 +137,14 @@
           wording. The <b>five levels themselves are fixed</b> (ADR 0027) — this changes only the
           words shown, never how a claim's evidence is stored or how many levels there are.
         </div>
-        <div class="grid-2">
+        <div class="field">
+          <label for="surety-scope">Save these labels to</label>
+          <select class="in" id="surety-scope" name="surety-scope">
+            <option value="workspace" selected>This workspace</option>
+            <option value="shared">Shared default (every workspace without its own)</option>
+          </select>
+        </div>
+        <div class="grid-2" style="margin-top:8px">
           <div class="field"><label><span class="conf" data-level="very-low"><span class="dot"></span></span> Very low</label>
             <input class="in" placeholder="Very low" value="Hearsay"></div>
           <div class="field"><label><span class="conf" data-level="low"><span class="dot"></span></span> Low</label>
@@ -149,7 +156,15 @@
           <div class="field"><label><span class="conf" data-level="very-high"><span class="dot"></span></span> Very high</label>
             <input class="in" placeholder="Very high" value="Certain"></div>
         </div>
-        <div class="muted" style="font-size:var(--fs-sm);margin-top:8px">Blank fields keep the built-in Fluent-localized wording (“Very Low”, “Low”, …). A filled-in label is shown verbatim in every locale — it is not translated, since it is your own wording.</div>
+        <div class="muted" style="font-size:var(--fs-sm);margin-top:8px">Blank fields keep the built-in Fluent-localized wording (“Very Low”, “Low”, …). A filled-in label is shown verbatim in every locale — it is not translated, since it is your own wording. Switching scope shows that scope's own labels.</div>
+        <div class="field-label" style="margin:12px 0 6px">Where each level's wording comes from</div>
+        <div class="stack">
+          <div class="fact-row card" style="margin:0"><span class="badge">wins</span><span class="grow">Very low — Workspace — workspace.toml</span></div>
+          <div class="fact-row card" style="margin:0"><span class="badge">fallback</span><span class="grow">Low — Shared app — ~/.config/genealogy/config.toml</span></div>
+          <div class="fact-row card" style="margin:0"><span class="badge">fallback</span><span class="grow">Normal — Embedded — built-in baseline</span></div>
+          <div class="fact-row card" style="margin:0"><span class="badge">fallback</span><span class="grow">High — Embedded — built-in baseline</span></div>
+          <div class="fact-row card" style="margin:0"><span class="badge">wins</span><span class="grow">Very high — Workspace — workspace.toml</span></div>
+        </div>
       </div>
 
       <!-- Keyboard shortcuts (ADR 0030) -->

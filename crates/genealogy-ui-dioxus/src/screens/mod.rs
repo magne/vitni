@@ -83,7 +83,8 @@ pub use place::{
 };
 pub use plugin_panel::{PluginPanelScreen, plugin_table, submit_outcome_view};
 pub use preferences::{
-    LocaleFields, MaintenanceFields, PreferencesScreen, ShortcutFields, SuretyFields, preferences_view,
+    LocaleFields, MaintenanceFields, PreferencesScreen, ShortcutFields, SuretyFieldValues, SuretyFields, SuretySave,
+    SuretyScope, preferences_view, surety_save, surety_scope_values,
 };
 pub use record_detail::{DockedRecordDetail, RecordDetail};
 pub use record_form::{
