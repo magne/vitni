@@ -11,17 +11,18 @@
 use genealogy_app::{
     Age, AgeBound, Agent, AgentId, AgentKind, AppDefaults, Attribute, Calendar, ChangeLogEntry, DateInput,
     DateModifier, DatePoint, DateQuality, EventType, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody,
-    MutationMeta, NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewSource, OperatorConfig, ParticipantRole,
-    PersonNameParts, Provenance, Rect, Session, Workspace, WorkspaceDefaults, add_child, build_genealogical_date,
-    change_log_for_citation, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_person,
-    change_log_for_source, create_citation, create_event, create_family, create_media, create_note, create_person,
-    create_source, create_tag, show_citation, show_event, show_family, show_media, show_person, show_source,
+    MutationMeta, NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewPlace, NewSource, OperatorConfig,
+    ParticipantRole, PersonNameParts, PlaceType, Provenance, Rect, Session, Workspace, WorkspaceDefaults, add_child,
+    build_genealogical_date, change_log_for_citation, change_log_for_event, change_log_for_family,
+    change_log_for_media, change_log_for_person, change_log_for_place, change_log_for_source, create_citation,
+    create_event, create_family, create_media, create_note, create_person, create_place, create_source, create_tag,
+    show_citation, show_event, show_family, show_media, show_person, show_place, show_source,
 };
 use genealogy_ui::{
     CitationEdit, ConfidenceLevel, EventEdit, EvidenceKind, FamilyEdit, InformationKind, Localizer, MediaEdit,
-    MergePersons, PersonEdit, ProvenanceDraft, SourceChangeSetRequest, SourceQuality, dispatch_citation_edit,
-    dispatch_edit, dispatch_event_edit, dispatch_family_edit, dispatch_media_edit, dispatch_merge,
-    dispatch_source_change_set,
+    MergePersons, PersonEdit, PlaceEdit, ProvenanceDraft, SourceChangeSetRequest, SourceEdit, SourceQuality,
+    dispatch_citation_edit, dispatch_edit, dispatch_event_edit, dispatch_family_edit, dispatch_media_edit,
+    dispatch_merge, dispatch_place_edit, dispatch_source_change_set, dispatch_source_edit,
 };
 use uuid::Uuid;
 
@@ -919,6 +920,407 @@ async fn set_media_region_supersedes_the_person_media_crop() {
     assert_ne!(row.assertion_id, attach, "the surviving row has a new assertion id");
 
     let log = change_log_for_person(&ws, &subject).await.expect("log");
+    assert!(
+        log.iter().any(|entry| entry.event_type == "AssertionSuperseded"),
+        "the region change is recorded as a supersession"
+    );
+}
+
+/// The media viewer's Set region action dispatches `FamilyEdit::SetMediaRegion` (issue #199), which
+/// supersedes the attach assertion with the new crop + caption while the audit trail keeps both.
+#[tokio::test]
+async fn set_media_region_supersedes_the_family_media_crop() {
+    let (ws, session, _dir) = setup().await;
+    let subject = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("family");
+    let media = create_media(
+        &ws,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: Some("photos/wedding.jpg".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("media");
+    dispatch_family_edit(
+        &ws,
+        &session,
+        &FamilyEdit::AttachMedia {
+            human_id: subject.clone(),
+            media_id: media.clone(),
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("attach media");
+
+    let attach = show_family(&ws, &subject)
+        .await
+        .expect("show")
+        .expect("family")
+        .media
+        .first()
+        .expect("one media ref")
+        .assertion_id
+        .clone();
+
+    let crop = Rect {
+        left: 12,
+        top: 22,
+        width: 32,
+        height: 42,
+    };
+    dispatch_family_edit(
+        &ws,
+        &session,
+        &FamilyEdit::SetMediaRegion {
+            human_id: subject.clone(),
+            assertion_id: attach.clone(),
+            crop: Some(crop),
+            caption: Some("couple".to_owned()),
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("set region");
+
+    let after = show_family(&ws, &subject).await.expect("show").expect("family");
+    let row = after.media.first().expect("one media ref");
+    assert_eq!(row.crop, Some(crop), "the superseding ref carries the new crop");
+    assert_eq!(row.caption.as_deref(), Some("couple"));
+    assert_ne!(row.assertion_id, attach, "the surviving row has a new assertion id");
+
+    let log = change_log_for_family(&ws, &subject).await.expect("log");
+    assert!(
+        log.iter().any(|entry| entry.event_type == "AssertionSuperseded"),
+        "the region change is recorded as a supersession"
+    );
+}
+
+/// The media viewer's Set region action dispatches `EventEdit::SetMediaRegion` (issue #199), which
+/// supersedes the attach assertion with the new crop + caption while the audit trail keeps both.
+#[tokio::test]
+async fn set_media_region_supersedes_the_event_media_crop() {
+    let (ws, session, _dir) = setup().await;
+    let subject = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Birth,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event");
+    let media = create_media(
+        &ws,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: Some("photos/birth-record.jpg".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("media");
+    dispatch_event_edit(
+        &ws,
+        &session,
+        &EventEdit::AttachMedia {
+            human_id: subject.clone(),
+            media_id: media.clone(),
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("attach media");
+
+    let attach = show_event(&ws, &subject)
+        .await
+        .expect("show")
+        .expect("event")
+        .media
+        .first()
+        .expect("one media ref")
+        .assertion_id
+        .clone();
+
+    let crop = Rect {
+        left: 8,
+        top: 9,
+        width: 18,
+        height: 28,
+    };
+    dispatch_event_edit(
+        &ws,
+        &session,
+        &EventEdit::SetMediaRegion {
+            human_id: subject.clone(),
+            assertion_id: attach.clone(),
+            crop: Some(crop),
+            caption: Some("entry".to_owned()),
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("set region");
+
+    let after = show_event(&ws, &subject).await.expect("show").expect("event");
+    let row = after.media.first().expect("one media ref");
+    assert_eq!(row.crop, Some(crop), "the superseding ref carries the new crop");
+    assert_eq!(row.caption.as_deref(), Some("entry"));
+    assert_ne!(row.assertion_id, attach, "the surviving row has a new assertion id");
+
+    let log = change_log_for_event(&ws, &subject).await.expect("log");
+    assert!(
+        log.iter().any(|entry| entry.event_type == "AssertionSuperseded"),
+        "the region change is recorded as a supersession"
+    );
+}
+
+/// The media viewer's Set region action dispatches `CitationEdit::SetMediaRegion` (issue #199), which
+/// supersedes the attach assertion with the new crop + caption while the audit trail keeps both.
+#[tokio::test]
+async fn set_media_region_supersedes_the_citation_media_crop() {
+    let (ws, session, _dir) = setup().await;
+    let subject = citation(&ws, &session).await;
+    let media = create_media(
+        &ws,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: Some("scans/register-page.jpg".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("media");
+    dispatch_citation_edit(
+        &ws,
+        &session,
+        &CitationEdit::AttachMedia {
+            human_id: subject.clone(),
+            media_id: media.clone(),
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("attach media");
+
+    let attach = show_citation(&ws, &subject)
+        .await
+        .expect("show")
+        .expect("citation")
+        .media
+        .first()
+        .expect("one media ref")
+        .assertion_id
+        .clone();
+
+    let crop = Rect {
+        left: 15,
+        top: 25,
+        width: 35,
+        height: 45,
+    };
+    dispatch_citation_edit(
+        &ws,
+        &session,
+        &CitationEdit::SetMediaRegion {
+            human_id: subject.clone(),
+            assertion_id: attach.clone(),
+            crop: Some(crop),
+            caption: Some("entry line".to_owned()),
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("set region");
+
+    let after = show_citation(&ws, &subject).await.expect("show").expect("citation");
+    let row = after.media.first().expect("one media ref");
+    assert_eq!(row.crop, Some(crop), "the superseding ref carries the new crop");
+    assert_eq!(row.caption.as_deref(), Some("entry line"));
+    assert_ne!(row.assertion_id, attach, "the surviving row has a new assertion id");
+
+    let log = change_log_for_citation(&ws, &subject).await.expect("log");
+    assert!(
+        log.iter().any(|entry| entry.event_type == "AssertionSuperseded"),
+        "the region change is recorded as a supersession"
+    );
+}
+
+/// The media viewer's Set region action dispatches `PlaceEdit::SetMediaRegion` (issue #199), which
+/// supersedes the attach assertion with the new crop + caption while the audit trail keeps both.
+#[tokio::test]
+async fn set_media_region_supersedes_the_place_media_crop() {
+    let (ws, session, _dir) = setup().await;
+    let subject = create_place(
+        &ws,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::City,
+            name: Some("Trondheim".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("place");
+    let media = create_media(
+        &ws,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: Some("photos/town-square.jpg".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("media");
+    dispatch_place_edit(
+        &ws,
+        &session,
+        &PlaceEdit::AttachMedia {
+            human_id: subject.clone(),
+            media_id: media.clone(),
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("attach media");
+
+    let attach = show_place(&ws, &subject)
+        .await
+        .expect("show")
+        .expect("place")
+        .media
+        .first()
+        .expect("one media ref")
+        .assertion_id
+        .clone();
+
+    let crop = Rect {
+        left: 6,
+        top: 7,
+        width: 16,
+        height: 26,
+    };
+    dispatch_place_edit(
+        &ws,
+        &session,
+        &PlaceEdit::SetMediaRegion {
+            human_id: subject.clone(),
+            assertion_id: attach.clone(),
+            crop: Some(crop),
+            caption: Some("square".to_owned()),
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("set region");
+
+    let after = show_place(&ws, &subject).await.expect("show").expect("place");
+    let row = after.media.first().expect("one media ref");
+    assert_eq!(row.crop, Some(crop), "the superseding ref carries the new crop");
+    assert_eq!(row.caption.as_deref(), Some("square"));
+    assert_ne!(row.assertion_id, attach, "the surviving row has a new assertion id");
+
+    let log = change_log_for_place(&ws, &subject).await.expect("log");
+    assert!(
+        log.iter().any(|entry| entry.event_type == "AssertionSuperseded"),
+        "the region change is recorded as a supersession"
+    );
+}
+
+/// The media viewer's Set region action dispatches `SourceEdit::SetMediaRegion` (issue #199), which
+/// supersedes the attach assertion with the new crop + caption while the audit trail keeps both.
+#[tokio::test]
+async fn set_media_region_supersedes_the_source_media_crop() {
+    let (ws, session, _dir) = setup().await;
+    let subject = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("source");
+    let media = create_media(
+        &ws,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: Some("scans/register-cover.jpg".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("media");
+    dispatch_source_edit(
+        &ws,
+        &session,
+        &SourceEdit::AttachMedia {
+            human_id: subject.clone(),
+            media_id: media.clone(),
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("attach media");
+
+    let attach = show_source(&ws, &subject)
+        .await
+        .expect("show")
+        .expect("source")
+        .media
+        .first()
+        .expect("one media ref")
+        .assertion_id
+        .clone();
+
+    let crop = Rect {
+        left: 3,
+        top: 4,
+        width: 14,
+        height: 24,
+    };
+    dispatch_source_edit(
+        &ws,
+        &session,
+        &SourceEdit::SetMediaRegion {
+            human_id: subject.clone(),
+            assertion_id: attach.clone(),
+            crop: Some(crop),
+            caption: Some("cover".to_owned()),
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("set region");
+
+    let after = show_source(&ws, &subject).await.expect("show").expect("source");
+    let row = after.media.first().expect("one media ref");
+    assert_eq!(row.crop, Some(crop), "the superseding ref carries the new crop");
+    assert_eq!(row.caption.as_deref(), Some("cover"));
+    assert_ne!(row.assertion_id, attach, "the surviving row has a new assertion id");
+
+    let log = change_log_for_source(&ws, &subject).await.expect("log");
     assert!(
         log.iter().any(|entry| entry.event_type == "AssertionSuperseded"),
         "the region change is recorded as a supersession"
