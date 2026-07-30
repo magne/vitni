@@ -10,7 +10,7 @@
 use std::future::Future;
 
 use dioxus::prelude::*;
-use genealogy_ui::{Category, Localizer, ProvenanceDraft, RecordDraft};
+use genealogy_ui::{Category, Localizer, ProvenanceDraft, RecordDraft, RecordRef};
 
 use crate::components::{Button, ButtonVariant};
 use crate::screens::provenance_block;
@@ -179,6 +179,51 @@ fn use_edit_write_through<D: RecordDraft>(key: EditKey, state: RecordEditState<D
     });
 }
 
+/// Runs this pane's own Save when the shell asks for it — the close/quit confirm's **Save** /
+/// **Save all** (issue #240). `category` + `human_id` name the editor (`None` for a category's create
+/// draft), `save` is the screen's existing save closure, exactly as its Save button calls it.
+///
+/// The shell cannot save generically: save is per-screen and differently shaped per aggregate, so
+/// `NavState::save_then_close` / `save_all_then_quit` arm the request, activate the record's tab so
+/// this pane is mounted, and this effect runs the screen's own commit. The outcome flows back through
+/// [`finish_record_save`] / [`finish_draft_commit`], which is what lets the run continue to the next
+/// record and finally close the tab or quit.
+///
+/// Fires **once per armed request** (the `ran` latch, peeked so writing it cannot re-trigger the
+/// effect). A record queued for saving whose draft turns out not to be savable is reported as a
+/// failure rather than left hanging — the run stops and every tab stays open.
+pub fn use_save_on_request<D: RecordDraft>(
+    category: Category,
+    human_id: Option<&str>,
+    state: RecordEditState<D>,
+    save: Callback<()>,
+) {
+    let mut nav = use_context::<NavState>();
+    let key = match human_id {
+        Some(human_id) => EditKey::saved(category, human_id),
+        None => EditKey::draft(category),
+    };
+    let mut ran = use_signal(|| false);
+    use_effect(move || {
+        let armed = nav.save_request.read().as_ref().map(|request| request.key.clone());
+        if armed.as_ref() != Some(&key) {
+            if *ran.peek() {
+                ran.set(false);
+            }
+            return;
+        }
+        if *ran.peek() {
+            return;
+        }
+        ran.set(true);
+        if state.can_save() {
+            save.call(());
+        } else {
+            nav.note_save_finished(key.category, key.human_id.as_deref(), false);
+        }
+    });
+}
+
 /// The already-localized Edit / Save / Cancel labels the header actions need.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordActionLabels {
@@ -316,6 +361,11 @@ pub fn record_keydown<D: RecordDraft>(
 /// Finishes a whole-record save: on success marks the workspace changed and either re-keys the open
 /// tab to the record's new `human_id` (a rename remounts the detail pane by the new id) or bumps
 /// `reload` to refetch; either way shows the saved toast. On failure shows the error toast.
+///
+/// Reports the outcome to the shell last ([`NavState::note_save_finished`]), so a save the close/quit
+/// confirm asked for resolves only once this pane has finished writing its own signals — the tab may
+/// close on the way out. A save the user started themselves reports too; the shell ignores it unless
+/// a run is waiting on that record.
 pub fn finish_record_save(
     effective: Result<String, String>,
     category: Category,
@@ -331,10 +381,45 @@ pub fn finish_record_save(
             if effective == current {
                 reload += 1;
             } else {
-                nav.rename_record(category, current, effective);
+                nav.rename_record(category, current, effective.clone());
             }
             toast.set(Some(saved.to_owned()));
+            nav.note_save_finished(category, Some(&effective), true);
         }
-        Err(message) => toast.set(Some(message)),
+        Err(message) => {
+            toast.set(Some(message));
+            nav.note_save_finished(category, Some(current), false);
+        }
+    }
+}
+
+/// Finishes a create form's commit: on success the draft tab becomes the stored record in place
+/// ([`NavState::commit_draft`]), labelled `label` — or the record's own id when that is empty or absent;
+/// on failure the error is shown as a shell notice and the draft is left as it was.
+///
+/// Every `*CreateRecord` screen ends its save here, so the close/quit confirm's Save can drive a create
+/// draft through the same path a saved record takes ([`use_save_on_request`]).
+pub fn finish_draft_commit(
+    committed: Result<String, String>,
+    category: Category,
+    label: Option<String>,
+    mut nav: NavState,
+) {
+    match committed {
+        Ok(human_id) => {
+            let label = label
+                .filter(|label| !label.is_empty())
+                .unwrap_or_else(|| human_id.clone());
+            nav.commit_draft(RecordRef {
+                category,
+                human_id,
+                label,
+            });
+            nav.note_save_finished(category, None, true);
+        }
+        Err(message) => {
+            nav.notify(message);
+            nav.note_save_finished(category, None, false);
+        }
     }
 }

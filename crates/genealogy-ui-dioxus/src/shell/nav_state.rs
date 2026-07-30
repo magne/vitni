@@ -48,6 +48,21 @@ pub enum CloseRequest {
     Quit,
 }
 
+/// The record whose save the shell has asked for, so a close/quit can keep the work instead of
+/// discarding it (the confirm's **Save** / **Save all**).
+///
+/// The shell cannot save generically — save is per-screen and differently shaped per aggregate — so it
+/// arms the request and the record's own screen runs its existing save closure
+/// (`use_save_on_request`), reporting back through [`NavState::note_save_finished`]. The target tab is
+/// activated first, because only the active tab's pane is mounted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SaveRequest {
+    /// The editor being saved right now.
+    pub key: EditKey,
+    /// What to do once every record in the run has saved.
+    pub then: CloseRequest,
+}
+
 /// The active colour theme, mirrored onto `[data-theme]` at the shell root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Theme {
@@ -316,6 +331,13 @@ pub struct NavState {
     /// read it through [`Self::tab_has_unsaved`], so an edit can never be discarded silently. Keyed like
     /// [`Self::docked_record`] so it survives tab reorders and closes.
     pub edit_drafts: Signal<BTreeMap<EditKey, StashedEdit>>,
+    /// The record whose save is running right now (the confirm's Save / Save all), or `None` when no
+    /// save run is in flight. The record's own screen observes it, saves, and reports back through
+    /// [`Self::note_save_finished`] — see [`SaveRequest`].
+    pub save_request: Signal<Option<SaveRequest>>,
+    /// The records still to save in the current run, in strip order: Save all walks them one at a time,
+    /// arming [`Self::save_request`] for each in turn, because only the active tab's pane is mounted.
+    pub save_queue: Signal<Vec<EditKey>>,
     /// A monotonically-increasing "quit the application" ticket, bumped once a quit is confirmed (or
     /// requested with nothing unsaved). The desktop-only `QuitManager` observes it and closes the
     /// native window; it is a no-op under SSR, which mounts no window.
@@ -366,6 +388,8 @@ impl NavState {
             research_note_subject: Signal::new(None),
             pending_close: Signal::new(None),
             edit_drafts: Signal::new(BTreeMap::new()),
+            save_request: Signal::new(None),
+            save_queue: Signal::new(Vec::new()),
             quit_requested: Signal::new(0),
         }
     }
@@ -699,7 +723,157 @@ impl NavState {
         }
     }
 
-    /// Applies the pending close/quit (the confirm dialog's primary action) and clears it.
+    /// Whether the confirm can offer **Save** for the open tab at `index`: an in-progress edit is
+    /// parked for it and that edit is valid ([`StashedEdit::valid`]). A draft tab with nothing typed
+    /// has no parked buffer, so there is nothing to save — the confirm says so rather than showing a
+    /// dead button.
+    #[must_use]
+    pub fn tab_is_savable(&self, index: usize) -> bool {
+        let Some(tab) = self.records.read().get(index).cloned() else {
+            return false;
+        };
+        self.edit_drafts
+            .read()
+            .get(&tab.edit_key())
+            .is_some_and(|edit| edit.valid)
+    }
+
+    /// Saves the open tab at `index` and then closes it (the close confirm's **Save**): activates the
+    /// tab so its pane is mounted, arms the save, and dismisses the confirm. Nothing closes until the
+    /// record's screen reports the save finished ([`Self::note_save_finished`]).
+    pub fn save_then_close(&mut self, index: usize) {
+        let Some(tab) = self.records.peek().get(index).cloned() else {
+            return;
+        };
+        self.pending_close.set(None);
+        self.save_queue.set(Vec::new());
+        self.begin_save(tab.edit_key(), CloseRequest::Tab(index));
+    }
+
+    /// Saves every open tab holding unsaved work, in strip order, and then quits (the quit confirm's
+    /// **Save all**): queues them all and arms the first. Quits straight away when nothing is dirty
+    /// after all.
+    pub fn save_all_then_quit(&mut self) {
+        let tabs = self.records.peek().clone();
+        let mut queue = Vec::new();
+        for (index, tab) in tabs.iter().enumerate() {
+            if self.tab_has_unsaved(index) {
+                queue.push(tab.edit_key());
+            }
+        }
+        self.pending_close.set(None);
+        if queue.is_empty() {
+            self.quit_now();
+            return;
+        }
+        let first = queue.remove(0);
+        self.save_queue.set(queue);
+        self.begin_save(first, CloseRequest::Quit);
+    }
+
+    /// Reports the outcome of the save the shell asked for: `(category, human_id)` names the editor
+    /// that saved (`human_id` is `None` for a category's create draft), `ok` whether it succeeded. A
+    /// no-op unless it names the armed request, so a Save the user clicked themselves never resolves a
+    /// run.
+    ///
+    /// On success the record's parked edit is dropped and the next queued record is armed; once the
+    /// queue empties the close/quit the run was for is applied. On failure the whole run is abandoned
+    /// with every tab left open — the screen has already reported the error.
+    pub fn note_save_finished(&mut self, category: Category, human_id: Option<&str>, ok: bool) {
+        let Some(request) = self.save_request.peek().clone() else {
+            return;
+        };
+        let reported = match human_id {
+            Some(human_id) => EditKey::saved(category, human_id),
+            None => EditKey::draft(category),
+        };
+        if request.key != reported {
+            return;
+        }
+        if !ok {
+            self.abandon_save_run();
+            return;
+        }
+        self.drop_edit(&request.key);
+        self.advance_save_run(&request);
+    }
+
+    /// Arms `key`'s save for the run ending in `then`, activating its tab first: only the active tab's
+    /// pane is mounted, and the pane is what knows how to save.
+    fn begin_save(&mut self, key: EditKey, then: CloseRequest) {
+        self.reveal_editor(&key);
+        self.save_request.set(Some(SaveRequest { key, then }));
+    }
+
+    /// Brings `key`'s tab forward so its pane mounts: reveals the editor when the work area is showing
+    /// something else entirely (a tool, the Dashboard, Help — none of which mount a record pane), then
+    /// activates the tab.
+    fn reveal_editor(&mut self, key: &EditKey) {
+        if entity_category(*self.active.peek()).is_none() {
+            self.go_to(Destination::Category(key.category));
+        }
+        let index = self.records.peek().iter().position(|tab| tab.edit_key() == *key);
+        if let Some(index) = index {
+            self.activate_record(index);
+        }
+    }
+
+    /// Arms the next queued record, or — with the queue drained — applies the close/quit the run was
+    /// for. `saved` is the request that just finished.
+    fn advance_save_run(&mut self, saved: &SaveRequest) {
+        let next = if self.save_queue.peek().is_empty() {
+            None
+        } else {
+            Some(self.save_queue.write().remove(0))
+        };
+        if let Some(next) = next {
+            self.begin_save(next, saved.then);
+            return;
+        }
+        self.save_request.set(None);
+        match saved.then {
+            CloseRequest::Tab(index) => {
+                if let Some(index) = self.save_close_index(index, &saved.key) {
+                    self.close_record(index);
+                }
+            }
+            CloseRequest::Quit => self.quit_now(),
+        }
+    }
+
+    /// Abandons the run in flight, leaving every tab open and every remaining edit parked.
+    fn abandon_save_run(&mut self) {
+        self.save_request.set(None);
+        self.save_queue.set(Vec::new());
+    }
+
+    /// The strip index a finished [`CloseRequest::Tab`] should close: the armed `index` when it still
+    /// names the editor that saved, otherwise wherever that editor sits now (the strip may have moved
+    /// under the save). `None` when the tab has since been closed, so there is nothing left to close.
+    ///
+    /// A committed create draft is the one case where no tab carries `key` any more: [`Self::commit_draft`]
+    /// swapped the stored record into the draft's slot and made it active, so the active tab is the tab
+    /// that was saved.
+    fn save_close_index(&self, index: usize, key: &EditKey) -> Option<usize> {
+        let records = self.records.peek();
+        if records.get(index).is_some_and(|tab| tab.edit_key() == *key) {
+            return Some(index);
+        }
+        if let Some(found) = records.iter().position(|tab| tab.edit_key() == *key) {
+            return Some(found);
+        }
+        if key.human_id.is_some() {
+            return None;
+        }
+        let active = (*self.active_record.peek())?;
+        let committed = records
+            .get(active)
+            .is_some_and(|tab| !tab.is_draft() && tab.category() == key.category);
+        committed.then_some(active)
+    }
+
+    /// Applies the pending close/quit, discarding the unsaved work (the confirm dialog's Discard) and
+    /// clears it.
     pub fn confirm_close(&mut self) {
         let request = *self.pending_close.peek();
         self.pending_close.set(None);
@@ -710,9 +884,11 @@ impl NavState {
         }
     }
 
-    /// Dismisses the pending close/quit without applying it (the confirm dialog's cancel action).
+    /// Dismisses the pending close/quit without applying it (the confirm dialog's cancel action),
+    /// abandoning any save run it armed.
     pub fn cancel_close(&mut self) {
         self.pending_close.set(None);
+        self.abandon_save_run();
     }
 
     /// Bumps [`Self::quit_requested`] so the desktop-only `QuitManager` closes the native window.
@@ -865,6 +1041,7 @@ impl NavState {
             docked_id.clone_from(&new_human_id);
         }
         self.rekey_stashed_edit(category, old_human_id, &new_human_id);
+        self.rekey_save_run(category, old_human_id, &new_human_id);
         let mut records = self.records.write();
         let Some(OpenTab::Saved(record)) = records
             .iter_mut()
@@ -886,6 +1063,27 @@ impl NavState {
         let mut edits = self.edit_drafts.write();
         if let Some(edit) = edits.remove(&old) {
             edits.insert(EditKey::saved(category, new_human_id), edit);
+        }
+    }
+
+    /// Moves an armed/queued save from `old_human_id` to `new_human_id` (a rename), so a save that
+    /// renamed its own record still reports back under a key the run recognises — otherwise the run
+    /// would hang with the tab never closing. A no-op when no run names the old id.
+    fn rekey_save_run(&mut self, category: Category, old_human_id: &str, new_human_id: &str) {
+        let old = EditKey::saved(category, old_human_id);
+        let new = EditKey::saved(category, new_human_id);
+        if self
+            .save_request
+            .peek()
+            .as_ref()
+            .is_some_and(|request| request.key == old)
+            && let Some(request) = self.save_request.write().as_mut()
+        {
+            request.key = new.clone();
+        }
+        let queued = self.save_queue.peek().iter().position(|key| *key == old);
+        if let Some(index) = queued {
+            self.save_queue.write()[index] = new;
         }
     }
 
