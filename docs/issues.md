@@ -164,12 +164,6 @@ long-standing "DNA match views in the UI" item is closed.
 Residuals from the shortcuts work (ADR 0030); see
 [`archive/completed-work.md`](archive/completed-work.md). Deliberate non-goals are under *Decided*.
 
-- **An unsaved edit is lost when its tab stops being active.** Only the active tab's pane is mounted
-  (`screens/record_detail.rs`'s `detail_pane`, keyed on `human_id`), so activating another tab or
-  opening another record unmounts the editor and drops its screen-local draft — and `use_record_edit`'s
-  `use_drop` clears the record's `NavState::dirty_edits` mark on the way out, so the loss is silent
-  again: no tab marker, no close/quit confirm. Two records cannot be mid-edit at once. Park the draft
-  in shell state, keyed per record, and hydrate the pane from it on mount. — #239
 - **The close/quit confirm cannot save.** It offers Discard or Cancel only, so the only way to keep an
   in-progress edit is to cancel, find the record, save, and close again. It should offer Save (and
   Save all, listing the records, for `⌘Q` with several dirty). Save is per-screen and differently
