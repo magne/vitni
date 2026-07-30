@@ -5,6 +5,8 @@
 //! components. The active [`Destination`] is the framework-neutral navigation key from
 //! `genealogy-ui` (ADR 0008); the renderer merely interprets it.
 
+use std::collections::BTreeSet;
+
 use dioxus::prelude::*;
 use genealogy_app::{RecentItem, ThemeMode, push_recent};
 use genealogy_ui::{Category, Destination, NavHistory, NavLocation, RecordRef, Tool};
@@ -32,11 +34,13 @@ pub enum Overlay {
     Help,
 }
 
-/// A close/quit operation armed behind the confirm dialog because it would discard an unsaved draft
-/// (`⌘W`/`⌘Q`, the tabstrip `✕`). `None` on [`NavState::pending_close`] means no confirm is showing.
+/// A close/quit operation armed behind the confirm dialog because it would discard unsaved work —
+/// an unsaved draft, or an in-progress edit of a saved record ([`NavState::dirty_edits`]) — via
+/// `⌘W`/`⌘Q` or the tabstrip `✕`. `None` on [`NavState::pending_close`] means no confirm is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloseRequest {
-    /// Close the record tab at this 0-based index (a draft, or the confirm would not have armed).
+    /// Close the record tab at this 0-based index (it holds unsaved work, or the confirm would not
+    /// have armed).
     Tab(usize),
     /// Quit the application.
     Quit,
@@ -220,10 +224,16 @@ pub struct NavState {
     /// [`Self::open_research_note_about`]; `ResearchNoteCreateRecord` consumes and clears it once, on
     /// mount — the same one-shot handoff as [`Self::geography_focus`].
     pub research_note_subject: Signal<Option<(Category, String)>>,
-    /// A close-tab/quit operation awaiting confirmation because it would discard an unsaved draft, or
+    /// A close-tab/quit operation awaiting confirmation because it would discard unsaved work, or
     /// `None` when the confirm dialog is not showing. Set by [`Self::request_close_tab`] /
     /// [`Self::request_quit`]; resolved by [`Self::confirm_close`] / [`Self::cancel_close`].
     pub pending_close: Signal<Option<CloseRequest>>,
+    /// The `(category, human_id)` keys of *saved* records whose open editor holds an in-progress edit
+    /// that is not yet stored. Screen-local edit state is invisible to the shell, so
+    /// `use_record_edit` publishes it here ([`Self::set_edit_dirty`]) and the close/quit confirm reads
+    /// it ([`Self::tab_has_unsaved`]) — otherwise `⌘W`/`⌘Q` would discard the edit silently.
+    /// Keyed like [`Self::docked_record`] so it survives tab reorders and closes.
+    pub dirty_edits: Signal<BTreeSet<(Category, String)>>,
     /// A monotonically-increasing "quit the application" ticket, bumped once a quit is confirmed (or
     /// requested with nothing unsaved). The desktop-only `QuitManager` observes it and closes the
     /// native window; it is a no-op under SSR, which mounts no window.
@@ -273,6 +283,7 @@ impl NavState {
             geography_focus: Signal::new(None),
             research_note_subject: Signal::new(None),
             pending_close: Signal::new(None),
+            dirty_edits: Signal::new(BTreeSet::new()),
             quit_requested: Signal::new(0),
         }
     }
@@ -491,12 +502,17 @@ impl NavState {
     }
 
     /// Closes the open record tab at `index`, falling back to a neighbouring tab and clearing the
-    /// active record when none remain. Does not change the rail's [`Self::active`] destination.
+    /// active record when none remain. Does not change the rail's [`Self::active`] destination. Any
+    /// unsaved-edit mark for the closed record is dropped with it — the edit is gone (the caller
+    /// confirmed that via [`Self::request_close_tab`]), so leaving the key would block later closes.
     pub fn close_record(&mut self, index: usize) {
         if index >= self.records.read().len() {
             return;
         }
-        self.records.write().remove(index);
+        let closed = self.records.write().remove(index);
+        if let OpenTab::Saved(record) = closed {
+            self.dirty_edits.write().remove(&(record.category, record.human_id));
+        }
         let remaining = self.records.read().len();
         if remaining == 0 {
             self.active_record.set(None);
@@ -519,23 +535,64 @@ impl NavState {
         }
     }
 
+    /// Records whether the *saved* record keyed by `(category, human_id)` has an in-progress edit
+    /// that is not yet stored — published by `use_record_edit` so `⌘W`/`⌘Q` can see screen-local edit
+    /// state. Writes only on an actual change, so a re-render that reports the same dirtiness does not
+    /// churn the tabstrip and the confirm dialog.
+    pub fn set_edit_dirty(&mut self, category: Category, human_id: &str, dirty: bool) {
+        let key = (category, human_id.to_owned());
+        if self.dirty_edits.peek().contains(&key) == dirty {
+            return;
+        }
+        if dirty {
+            self.dirty_edits.write().insert(key);
+        } else {
+            self.dirty_edits.write().remove(&key);
+        }
+    }
+
+    /// Drops the unsaved-edit mark for `(category, human_id)` — the record was saved, closed, or its
+    /// editor unmounted, so no stale key is left behind to block a later close.
+    pub fn clear_edit_dirty(&mut self, category: Category, human_id: &str) {
+        self.set_edit_dirty(category, human_id, false);
+    }
+
+    /// Whether the open tab at `index` holds work that closing it would discard: an unsaved draft, or
+    /// a saved record with an in-progress edit ([`Self::dirty_edits`]).
+    ///
+    /// Reads reactively so the tabstrip's unsaved marker re-renders as edits come and go; the
+    /// `⌘W`/`⌘Q` callers below run from event handlers, outside any reactive scope, so the
+    /// subscription is inert for them.
+    #[must_use]
+    pub fn tab_has_unsaved(&self, index: usize) -> bool {
+        let Some(tab) = self.records.read().get(index).cloned() else {
+            return false;
+        };
+        match tab {
+            OpenTab::Draft(_) => true,
+            OpenTab::Saved(record) => self.dirty_edits.read().contains(&(record.category, record.human_id)),
+        }
+    }
+
     /// Requests closing the record tab at `index` (`⌘W`, the tabstrip `✕`): closes it immediately
-    /// unless it is an unsaved draft, in which case the confirm dialog arms instead of discarding it
-    /// silently. The single path both callers share, so a draft cannot be closed with one click.
+    /// unless it holds unsaved work ([`Self::tab_has_unsaved`]), in which case the confirm dialog arms
+    /// instead of discarding it silently. The single path both callers share, so unsaved work cannot
+    /// be lost with one click.
     pub fn request_close_tab(&mut self, index: usize) {
-        let is_draft = self.records.peek().get(index).is_some_and(OpenTab::is_draft);
-        if is_draft {
+        if self.tab_has_unsaved(index) {
             self.pending_close.set(Some(CloseRequest::Tab(index)));
         } else {
             self.close_record(index);
         }
     }
 
-    /// Requests quitting the application (`⌘Q`): arms the confirm dialog if any draft tab is open,
-    /// otherwise bumps [`Self::quit_requested`] immediately (nothing to lose).
+    /// Requests quitting the application (`⌘Q`): arms the confirm dialog if any open tab holds unsaved
+    /// work ([`Self::tab_has_unsaved`] — a draft or an in-progress edit), otherwise bumps
+    /// [`Self::quit_requested`] immediately (nothing to lose).
     pub fn request_quit(&mut self) {
-        let has_draft = self.records.peek().iter().any(OpenTab::is_draft);
-        if has_draft {
+        let open = self.records.peek().len();
+        let unsaved = (0..open).any(|index| self.tab_has_unsaved(index));
+        if unsaved {
             self.pending_close.set(Some(CloseRequest::Quit));
         } else {
             self.quit_now();
@@ -707,6 +764,7 @@ impl NavState {
         {
             docked_id.clone_from(&new_human_id);
         }
+        self.rekey_dirty_edit(category, old_human_id, &new_human_id);
         let mut records = self.records.write();
         let Some(OpenTab::Saved(record)) = records
             .iter_mut()
@@ -715,6 +773,17 @@ impl NavState {
             return;
         };
         record.human_id = new_human_id;
+    }
+
+    /// Moves an unsaved-edit mark from `old_human_id` to `new_human_id` (a rename), so the confirm
+    /// still fires for a record that changed id mid-edit. A no-op when the record is not marked.
+    fn rekey_dirty_edit(&mut self, category: Category, old_human_id: &str, new_human_id: &str) {
+        if !self.dirty_edits.peek().contains(&(category, old_human_id.to_owned())) {
+            return;
+        }
+        let mut dirty = self.dirty_edits.write();
+        dirty.remove(&(category, old_human_id.to_owned()));
+        dirty.insert((category, new_human_id.to_owned()));
     }
 
     /// Moves the navigation history one step back and applies the resulting location, if any (`⌘←`

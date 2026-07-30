@@ -346,6 +346,13 @@ impl Chrome {
         fl!(self.loader, "draft-tab-label", entity = entity)
     }
 
+    /// The accessible name of a record tab that holds unsaved work — the tab label plus an "unsaved
+    /// changes" suffix, so the dot marker's meaning is announced rather than conveyed by colour alone.
+    #[must_use]
+    pub fn tab_unsaved_named(&self, name: &str) -> String {
+        fl!(self.loader, "tab-unsaved-named", name = name)
+    }
+
     /// The accessible name for the tabstrip's back-navigation control.
     #[must_use]
     pub fn tab_back(&self) -> String {
@@ -2027,6 +2034,13 @@ impl Chrome {
         fl!(self.loader, "close-tab-confirm-body", label = label)
     }
 
+    /// The close-current-tab confirm dialog's body for an *already-saved* record with an in-progress
+    /// edit: the record survives, only the unsaved changes are discarded.
+    #[must_use]
+    pub fn close_tab_confirm_body_edits(&self, label: &str) -> String {
+        fl!(self.loader, "close-tab-confirm-body-edits", label = label)
+    }
+
     /// The close-current-tab confirm dialog's confirm action label.
     #[must_use]
     pub fn close_tab_confirm_confirm(&self) -> String {
@@ -2045,10 +2059,17 @@ impl Chrome {
         fl!(self.loader, "quit-confirm-title")
     }
 
-    /// The quit confirm dialog's body.
+    /// The quit confirm dialog's body when an unsaved draft is open.
     #[must_use]
     pub fn quit_confirm_body(&self) -> String {
         fl!(self.loader, "quit-confirm-body")
+    }
+
+    /// The quit confirm dialog's body when the unsaved work is an in-progress edit of stored records
+    /// rather than a draft — the records survive, only the changes are lost.
+    #[must_use]
+    pub fn quit_confirm_body_edits(&self) -> String {
+        fl!(self.loader, "quit-confirm-body-edits")
     }
 
     /// The quit confirm dialog's confirm action label.
