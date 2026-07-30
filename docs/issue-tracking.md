@@ -139,7 +139,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **dirty saved-record edits are discarded silently** on close/quit — data loss in the primary interface. Then the `Modal` focus trap and click-away scrim (a keyboard user can tab into the inert background), the two shipped map fixes with no test coverage, the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the three *Shell, tabs & notifications* ease-of-use items (live list updates, toasts, remembered tab). Then the three items the Norwegian-geography research surfaced: **Postgres place-detail reads fail outright** (the most severe — `show_place` and `genealogy place show` return an error on every place, on that backend), the geography markers labelled with the first-asserted name rather than the resolved one, and the `$.state.human_id` index that turns two full projection scans into probes. |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **unsaved record edits are discarded silently** — the close/quit confirm landed (#200), but leaving the record's tab still drops the edit and its marker, and the confirm itself cannot save. Data loss in the primary interface. Then the `Modal` focus trap and click-away scrim (a keyboard user can tab into the inert background), the two shipped map fixes with no test coverage, the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the three *Shell, tabs & notifications* ease-of-use items (live list updates, toasts, remembered tab). Then the three items the Norwegian-geography research surfaced: **Postgres place-detail reads fail outright** (the most severe — `show_place` and `genealogy place show` return an error on every place, on that backend), the geography markers labelled with the first-asserted name rather than the resolved one, and the `$.state.human_id` index that turns two full projection scans into probes. |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
@@ -155,7 +155,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (13 so far)
+### `0.9 — UI stabilization` (14 so far)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
 audit could find by reading code; the rest will come from using the GUI in earnest before 1.0, and that
@@ -164,7 +164,8 @@ this size by the time it closes, the GUI probably has not been exercised hard en
 
 | Item | Why it gates a release |
 | --- | --- |
-| [Dirty saved-record edits are not confirmed](https://github.com/magne/genealogy/issues/200) | **Silent data loss** in the primary interface — closing a tab or quitting discards an in-progress edit of a saved record with no prompt |
+| [Unsaved edits are lost when their tab stops being active](https://github.com/magne/genealogy/issues/239) | **Silent data loss** in the primary interface — only the active tab's pane is mounted, so switching tabs or opening another record drops the in-progress edit *and* its unsaved marker. Two records cannot be mid-edit at once |
+| [Close/quit confirm cannot save](https://github.com/magne/genealogy/issues/240) | The `⌘W`/`⌘Q` confirm offers Discard or Cancel only — keeping the edit means cancelling, finding the record, saving, and closing again |
 | [`Modal`/`SidePanel` overlay follow-ups](https://github.com/magne/genealogy/issues/201) | No focus trap: a keyboard user tabs out of the confirm dialog into the inert background. Accessibility defect on the app's only modal |
 | [Two shipped map fixes have no test coverage](https://github.com/magne/genealogy/issues/202) | `type/test-gap` — both would regress undetected |
 | [Manual webview pass outstanding](https://github.com/magne/genealogy/issues/203) | `manual-verify` — the interactive map canvas has never been exercised |
