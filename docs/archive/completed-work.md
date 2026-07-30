@@ -31,8 +31,6 @@ inaccuracies were found; the two that describe real gaps became outstanding item
 
 ## Bugs (fixed)
 
-### Phase 9 map & geometry
-
 Phase 9 map/geometry defects found in live GUI use — all fixed in
 `crates/genealogy-ui-dioxus/src/screens/{map_shared,place,geography}.rs` (+ the Place VM). Bugs 1, 3
 and 5 carry SSR/unit tests; bugs 2 and 4 are verified present in code but **untested** (see the
@@ -48,23 +46,6 @@ pass** (agents can't run libwebkit2gtk):
   *(No test coverage.)*
 - ✅ Dropping a point didn't update the shown lat/long — the Overview coordinate now derives from the
   resolved geometry point (`display_coordinates`), not only the scalar `CoordinatesAsserted`.
-
-### Shell, tabs & keyboard
-
-- ✅ **Dirty saved-record edits were discarded without confirmation** (`0.9 — UI stabilization`,
-  [#200](https://github.com/magne/genealogy/issues/200), PR
-  [#238](https://github.com/magne/genealogy/pull/238)) — silent data loss in the primary interface.
-  `Ctrl+W`/`Ctrl+Q`'s confirm fired on `OpenTab::Draft` only, so an in-progress edit of an
-  *already-saved* record — which lives in screen-local `RecordEditState` and was therefore invisible
-  to `NavState` — was thrown away with no prompt. Fixed by lifting edit-dirtiness into shell state:
-  `NavState::dirty_edits` holds the `(Category, human_id)` keys of saved records whose editor is
-  dirty, published by `use_record_edit` and read by `request_close_tab` / `request_quit` through
-  `tab_has_unsaved`. `close_record` drops the closed record's key and `rename_record` re-keys it.
-  The confirm body now distinguishes an unsaved draft ("hasn't been saved yet") from an edited stored
-  record ("has unsaved changes"), and the tabstrip marks any tab holding unsaved work with an
-  `unsaved` class, a `●` glyph, and an "unsaved changes" accessible name (WCAG 1.4.1 — colour is not
-  the only signal). Covered by 11 SSR probes in `tests/close_confirm.rs` and `tests/draft_tabs.rs`;
-  the behaviour is specified in `docs/mockups/record-editing.html` §5a.
 
 ## Places (delivered)
 
