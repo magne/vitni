@@ -9,9 +9,10 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 use genealogy_ui::{Category, ProvenanceDraft, RecordRef, TagDraft};
 use genealogy_ui_dioxus::i18n::Chrome;
+use genealogy_ui_dioxus::screens::{use_record_edit, use_save_on_request};
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::close_confirm::CloseConfirmDialog;
-use genealogy_ui_dioxus::shell::nav_state::{EditKey, NavState, StashedEdit};
+use genealogy_ui_dioxus::shell::nav_state::{CloseRequest, EditKey, NavState, SaveRequest, StashedEdit};
 use unic_langid::LanguageIdentifier;
 
 /// A chrome localizer for a single explicit language (deterministic for tests).
@@ -32,15 +33,31 @@ fn record(human_id: &str, label: &str) -> RecordRef {
 /// mid-edit detail pane does. The draft type is immaterial to the confirm flow, so every probe here
 /// parks a [`TagDraft`]; what matters is that the key is present.
 fn mark_dirty(nav: &mut NavState, category: Category, human_id: &str) {
-    let seed = TagDraft::new();
+    nav.stash_edit(
+        EditKey::saved(category, human_id),
+        StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
+    );
+}
+
+/// Parks an in-progress edit that is dirty but **invalid** (a tag with its name cleared): Save is not
+/// on offer for it, so the confirm must say so rather than showing a dead button.
+fn mark_dirty_invalid(nav: &mut NavState, category: Category, human_id: &str) {
     let draft = TagDraft {
-        name: "edited".to_owned(),
+        priority: "7".to_owned(),
         ..TagDraft::new()
     };
     nav.stash_edit(
         EditKey::saved(category, human_id),
-        StashedEdit::new(draft, seed, ProvenanceDraft::default()),
+        StashedEdit::new(draft, TagDraft::new(), ProvenanceDraft::default()),
     );
+}
+
+/// A dirty, valid draft — the buffer a mid-edit pane holds.
+fn edited() -> TagDraft {
+    TagDraft {
+        name: "edited".to_owned(),
+        ..TagDraft::new()
+    }
 }
 
 /// Renders a probe component to an HTML string.
@@ -50,8 +67,27 @@ fn render(app: fn() -> Element) -> String {
     dioxus_ssr::render(&vdom)
 }
 
-/// The marker block: open-tab count, whether the confirm is armed, the quit ticket value, and the
-/// keys currently holding a parked in-progress edit (`category/human_id`).
+/// Renders a probe and settles it, so `use_effect` bodies (and the cascade they dirty) run — what the
+/// pane probes need, since [`use_save_on_request`] fires from an effect. Mirrors `edit_stash.rs`.
+fn render_settled(app: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(app);
+    vdom.rebuild_in_place();
+    for _ in 0..8 {
+        vdom.render_immediate(&mut dioxus::core::NoOpMutations);
+    }
+    dioxus_ssr::render(&vdom)
+}
+
+/// One editor key rendered as `category/human_id`, a create draft (which has no id) as `category/*`.
+fn key_id(key: &EditKey) -> String {
+    let id = key.human_id.clone().unwrap_or_else(|| "*".to_owned());
+    format!("{}/{id}", key.category.id())
+}
+
+/// The marker block: open-tab count, whether the confirm is armed, the quit ticket value, the keys
+/// currently holding a parked in-progress edit (`category/human_id`), and the save run — the editor
+/// whose save is armed right now, the queue waiting behind it, and which tab is active (a run
+/// activates each record in turn so its pane is mounted to save it).
 fn probe(nav: &NavState) -> Element {
     let tabs = nav.records.read().len();
     let pending = if nav.pending_close.read().is_some() {
@@ -60,22 +96,35 @@ fn probe(nav: &NavState) -> Element {
         "NONE"
     };
     let quit = *nav.quit_requested.read();
-    let dirty = nav
-        .edit_drafts
+    let dirty = nav.edit_drafts.read().keys().map(key_id).collect::<Vec<_>>().join(",");
+    let saving = nav
+        .save_request
         .read()
-        .keys()
-        .map(|key| {
-            let id = key.human_id.clone().unwrap_or_else(|| "*".to_owned());
-            format!("{}/{id}", key.category.id())
-        })
-        .collect::<Vec<_>>()
-        .join(",");
+        .as_ref()
+        .map_or_else(|| "NONE".to_owned(), |request| key_id(&request.key));
+    let queue = nav.save_queue.read().iter().map(key_id).collect::<Vec<_>>().join(",");
+    let active = nav
+        .active_record
+        .read()
+        .map_or_else(|| "-".to_owned(), |index| index.to_string());
     rsx! {
         div { "TABS:{tabs}" }
         div { "PENDING:{pending}" }
         div { "QUIT:{quit}" }
         div { "DIRTY:[{dirty}]" }
+        div { "SAVING:{saving}" }
+        div { "QUEUE:[{queue}]" }
+        div { "ACTIVE:{active}" }
     }
+}
+
+/// Reports the armed save as finished, `ok` or not, the way the record's own screen does once its
+/// commit returns. A no-op when no save is armed.
+fn finish_armed(nav: &mut NavState, ok: bool) {
+    let Some(key) = nav.save_request.peek().as_ref().map(|request| request.key.clone()) else {
+        return;
+    };
+    nav.note_save_finished(key.category, key.human_id.as_deref(), ok);
 }
 
 fn close_saved_tab_is_immediate() -> Element {
@@ -382,6 +431,295 @@ fn clearing_the_dirty_mark_restores_the_immediate_close() {
     assert!(html.contains("PENDING:NONE"), "no confirm for clean state:\n{html}");
 }
 
+// ---- Save from the confirm (issue #240) ----------------------------------------------------------
+
+fn save_then_close_arms_the_run() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        mark_dirty(&mut nav, Category::People, "I0002");
+        nav.activate_record(0);
+        nav.request_close_tab(1);
+        nav.save_then_close(1);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn saving_from_the_confirm_arms_the_record_and_leaves_its_tab_open() {
+    let html = render(save_then_close_arms_the_run);
+    assert!(
+        html.contains("SAVING:people/I0002"),
+        "the record's save is armed:\n{html}"
+    );
+    assert!(html.contains("QUEUE:[]"), "one tab is the whole run:\n{html}");
+    assert!(
+        html.contains("ACTIVE:1"),
+        "the tab is activated so its pane mounts and can save:\n{html}"
+    );
+    assert!(html.contains("PENDING:NONE"), "the confirm is dismissed:\n{html}");
+    assert!(
+        html.contains("TABS:2"),
+        "nothing closes until the save reports back:\n{html}"
+    );
+    assert!(
+        html.contains("DIRTY:[people/I0002]"),
+        "the edit stays parked until it is saved:\n{html}"
+    );
+}
+
+fn finished_save_applies_the_pending_tab_close() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        nav.request_close_tab(0);
+        nav.save_then_close(0);
+        finish_armed(&mut nav, true);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_finished_save_closes_the_tab_the_confirm_was_holding() {
+    let html = render(finished_save_applies_the_pending_tab_close);
+    assert!(html.contains("TABS:0"), "the saved tab closes:\n{html}");
+    assert!(html.contains("DIRTY:[]"), "and its edit is spent, not parked:\n{html}");
+    assert!(html.contains("SAVING:NONE"), "the run is over:\n{html}");
+    assert!(html.contains("QUIT:0"), "closing a tab is not a quit:\n{html}");
+}
+
+fn finished_save_of_a_quit_run_quits() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        nav.request_quit();
+        nav.save_all_then_quit();
+        finish_armed(&mut nav, true);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn the_last_finished_save_of_a_quit_run_fires_the_quit() {
+    let html = render(finished_save_of_a_quit_run_quits);
+    assert!(
+        html.contains("QUIT:1"),
+        "the quit fires once the work is saved:\n{html}"
+    );
+    assert!(html.contains("TABS:1"), "a quit closes no tabs itself:\n{html}");
+    assert!(html.contains("SAVING:NONE"), "the run is over:\n{html}");
+}
+
+fn failed_save_aborts_the_run() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty(&mut nav, Category::People, "I0002");
+        nav.request_quit();
+        nav.save_all_then_quit();
+        finish_armed(&mut nav, false);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_failed_save_aborts_the_run_and_leaves_every_tab_open() {
+    // The screen has already toasted the error; the shell's job is to stop, not to quit over it.
+    let html = render(failed_save_aborts_the_run);
+    assert!(html.contains("TABS:2"), "nothing closed:\n{html}");
+    assert!(html.contains("QUIT:0"), "and nothing quit:\n{html}");
+    assert!(
+        html.contains("DIRTY:[people/I0001,people/I0002]"),
+        "both parked edits are intact:\n{html}"
+    );
+    assert!(html.contains("SAVING:NONE"), "the armed save is cleared:\n{html}");
+    assert!(html.contains("QUEUE:[]"), "and so is the rest of the queue:\n{html}");
+}
+
+fn save_all_walks_the_dirty_records() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let mut trace = use_signal(String::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        nav.open_record(record("I0003", "Cy"));
+        mark_dirty(&mut nav, Category::People, "I0003");
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty(&mut nav, Category::People, "I0002");
+        nav.request_quit();
+        nav.save_all_then_quit();
+        let mut steps = Vec::new();
+        for _ in 0..3 {
+            let armed = nav
+                .save_request
+                .peek()
+                .as_ref()
+                .map_or_else(|| "NONE".to_owned(), |request| key_id(&request.key));
+            let active = nav
+                .active_record
+                .peek()
+                .map_or_else(|| "-".to_owned(), |index| index.to_string());
+            steps.push(format!("{armed}@{active};"));
+            finish_armed(&mut nav, true);
+        }
+        trace.set(steps.concat());
+    });
+    rsx! {
+        div { "TRACE:{trace}" }
+        {probe(&nav)}
+    }
+}
+
+#[test]
+fn save_all_walks_every_dirty_record_in_strip_order_and_quits_last() {
+    let html = render(save_all_walks_the_dirty_records);
+    assert!(
+        html.contains("TRACE:people/I0001@0;people/I0002@1;people/I0003@2;"),
+        "one record is armed at a time, in strip order, each activated first:\n{html}"
+    );
+    assert!(html.contains("QUIT:1"), "the quit waits for the last save:\n{html}");
+    assert!(html.contains("DIRTY:[]"), "every edit was saved:\n{html}");
+    assert!(html.contains("QUEUE:[]"), "the queue is drained:\n{html}");
+}
+
+fn cancel_clears_an_armed_save_run() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty(&mut nav, Category::People, "I0002");
+        nav.request_quit();
+        nav.save_all_then_quit();
+        nav.cancel_close();
+    });
+    probe(&nav)
+}
+
+#[test]
+fn cancelling_clears_the_armed_save_and_its_queue() {
+    let html = render(cancel_clears_an_armed_save_run);
+    assert!(html.contains("SAVING:NONE"), "no save stays armed:\n{html}");
+    assert!(html.contains("QUEUE:[]"), "and nothing is left queued:\n{html}");
+    assert!(html.contains("TABS:2"), "both tabs stay open:\n{html}");
+}
+
+fn save_then_close_a_create_draft() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.stash_edit(
+            EditKey::draft(Category::People),
+            StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
+        );
+        nav.request_close_tab(0);
+        nav.save_then_close(0);
+    });
+    rsx! {
+        div { "ARMED:{key_id_of_armed(&nav)}" }
+        {probe(&nav)}
+    }
+}
+
+/// The armed editor's key, or `NONE` — read outside [`probe`] so a test can assert on it alone.
+fn key_id_of_armed(nav: &NavState) -> String {
+    nav.save_request
+        .read()
+        .as_ref()
+        .map_or_else(|| "NONE".to_owned(), |request| key_id(&request.key))
+}
+
+#[test]
+fn a_create_draft_is_queued_under_its_category_with_no_id() {
+    let html = render(save_then_close_a_create_draft);
+    assert!(
+        html.contains("ARMED:people/*"),
+        "a create draft is armed by category alone:\n{html}"
+    );
+    assert!(html.contains("TABS:1"), "the draft tab is still open:\n{html}");
+}
+
+fn create_draft_saved_then_closed() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.stash_edit(
+            EditKey::draft(Category::People),
+            StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
+        );
+        nav.request_close_tab(0);
+        nav.save_then_close(0);
+        // What the create screen does on a successful commit: the draft becomes a stored record in the
+        // same slot, and the save reports back under the draft's key.
+        nav.commit_draft(record("I0001", "Ada"));
+        nav.note_save_finished(Category::People, None, true);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_saved_create_draft_closes_the_tab_the_confirm_was_holding() {
+    // `commit_draft` swaps the stored record into the draft's slot, so the close has to follow the tab
+    // rather than trust the index it armed with.
+    let html = render(create_draft_saved_then_closed);
+    assert!(html.contains("TABS:0"), "the committed record's tab closes:\n{html}");
+    assert!(html.contains("DIRTY:[]"), "the create buffer is spent:\n{html}");
+    assert!(html.contains("SAVING:NONE"), "the run is over:\n{html}");
+}
+
+fn renamed_record_finishes_its_save() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        nav.request_close_tab(0);
+        nav.save_then_close(0);
+        // A whole-record save that changed the human id re-keys the tab; the screen reports back under
+        // the id the record now has.
+        nav.rename_record(Category::People, "I0001", "I0099".to_owned());
+        nav.note_save_finished(Category::People, Some("I0099"), true);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_save_that_renames_the_record_still_finishes_its_run() {
+    let html = render(renamed_record_finishes_its_save);
+    assert!(html.contains("TABS:0"), "the renamed record's tab closes:\n{html}");
+    assert!(html.contains("SAVING:NONE"), "the run does not hang:\n{html}");
+}
+
+fn savable_flags_for_valid_and_invalid_edits() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        nav.open_create(Category::Tags);
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty_invalid(&mut nav, Category::People, "I0002");
+    });
+    let valid = nav.tab_is_savable(0);
+    let invalid = nav.tab_is_savable(1);
+    let untouched_draft = nav.tab_is_savable(2);
+    rsx! {
+        div { "SAVABLE:{valid}/{invalid}/{untouched_draft}" }
+    }
+}
+
+#[test]
+fn only_a_parked_valid_edit_is_savable_from_the_confirm() {
+    let html = render(savable_flags_for_valid_and_invalid_edits);
+    assert!(
+        html.contains("SAVABLE:true/false/false"),
+        "an invalid edit and a draft tab with nothing typed offer no Save:\n{html}"
+    );
+}
+
 /// The confirm dialog, forced open for a pending draft-tab close.
 fn dialog_open_for_draft() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
@@ -482,6 +820,245 @@ fn quit_dialog_body_describes_unsaved_edits_when_no_draft_is_open() {
     assert!(
         !html.contains("haven't been saved yet"),
         "the draft-only quit copy would be untrue here:\n{html}"
+    );
+}
+
+/// The close-tab confirm over a saved record whose parked edit is valid — Save is on offer.
+fn dialog_with_savable_edit() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        nav.request_close_tab(0);
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_close_tab_dialog_offers_save_discard_and_cancel() {
+    let html = render(dialog_with_savable_edit);
+    assert!(
+        html.contains("Save"),
+        "Save keeps the work rather than losing it:\n{html}"
+    );
+    assert!(
+        html.contains("Discard changes"),
+        "Discard names what it throws away:\n{html}"
+    );
+    assert!(html.contains("Cancel"), "Cancel backs out:\n{html}");
+    assert!(
+        !html.contains("disabled"),
+        "a valid edit's Save is live, not dead:\n{html}"
+    );
+}
+
+/// The close-tab confirm over a saved record whose parked edit is invalid — Save cannot run.
+fn dialog_with_invalid_edit() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty_invalid(&mut nav, Category::People, "I0001");
+        nav.request_close_tab(0);
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn an_invalid_edit_disables_save_and_says_why() {
+    let html = render(dialog_with_invalid_edit);
+    assert!(
+        html.contains("disabled"),
+        "Save is disabled, not silently dead:\n{html}"
+    );
+    assert!(
+        // The apostrophe in "can't" renders HTML-escaped, so the assertion stops short of it.
+        html.contains("is missing required fields"),
+        "the body gives the reason:\n{html}"
+    );
+    assert!(
+        html.contains("Discard changes"),
+        "discarding is still available:\n{html}"
+    );
+}
+
+/// The close-tab confirm over a draft tab with nothing typed into it — there is no buffer to save.
+fn dialog_for_untouched_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.request_close_tab(0);
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn a_draft_with_nothing_typed_has_nothing_to_save() {
+    let html = render(dialog_for_untouched_draft);
+    assert!(html.contains("disabled"), "Save is disabled:\n{html}");
+    assert!(
+        html.contains("nothing to save"),
+        "the body says why rather than leaving a dead button:\n{html}"
+    );
+    assert!(html.contains("Discard draft"), "a draft is discarded whole:\n{html}");
+}
+
+/// The quit confirm with three dirty records open: two stored, one draft.
+fn quit_dialog_over_three_dirty_records() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        nav.open_record(record("I0003", "Cy"));
+        nav.open_create(Category::Tags);
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty(&mut nav, Category::People, "I0003");
+        nav.stash_edit(
+            EditKey::draft(Category::Tags),
+            StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
+        );
+        nav.request_quit();
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_quit_dialog_lists_every_record_with_unsaved_work() {
+    let html = render(quit_dialog_over_three_dirty_records);
+    assert!(html.contains("Ada"), "the first dirty record is named:\n{html}");
+    assert!(html.contains("Cy"), "and so is the third:\n{html}");
+    assert!(
+        html.contains("New Tags"),
+        "the draft is named as the tabstrip names it:\n{html}"
+    );
+    assert!(
+        !html.contains("Bob"),
+        "the clean record is not at stake, so it is not listed:\n{html}"
+    );
+    assert!(html.contains("Save all"), "Save all keeps every one of them:\n{html}");
+    assert!(
+        html.contains("Discard all"),
+        "Discard all is the losing option:\n{html}"
+    );
+    assert!(html.contains("Cancel"), "Cancel backs out:\n{html}");
+}
+
+/// The quit confirm where one of the dirty records cannot be saved.
+fn quit_dialog_with_one_invalid_record() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty_invalid(&mut nav, Category::People, "I0002");
+        nav.request_quit();
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn one_unsavable_record_disables_save_all_and_names_it() {
+    let html = render(quit_dialog_with_one_invalid_record);
+    assert!(html.contains("disabled"), "Save all cannot run:\n{html}");
+    assert!(
+        html.contains("&#34;Bob&#34; is missing required fields"),
+        "the body names the record standing in the way:\n{html}"
+    );
+}
+
+/// A stand-in for an aggregate's detail pane: the shared edit buffer plus the save-on-request wiring,
+/// counting how often the screen's own save closure is called.
+#[component]
+fn SavePane(human_id: String) -> Element {
+    let state = use_record_edit::<TagDraft>(Category::Tags, &human_id, &TagDraft::new());
+    let mut saves = use_signal(|| 0_u32);
+    let on_save = use_callback(move |()| saves += 1);
+    use_save_on_request(Category::Tags, Some(&human_id), state, on_save);
+    rsx! {
+        div { "SAVES:{saves}" }
+    }
+}
+
+fn pane_saves_on_an_armed_request() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(RecordRef {
+            category: Category::Tags,
+            human_id: "T0001".to_owned(),
+            label: "Ada".to_owned(),
+        });
+        nav.stash_edit(
+            EditKey::saved(Category::Tags, "T0001"),
+            StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
+        );
+        nav.request_close_tab(0);
+        nav.save_then_close(0);
+    });
+    rsx! {
+        SavePane { human_id: "T0001" }
+    }
+}
+
+#[test]
+fn an_armed_save_runs_the_records_own_save_closure_exactly_once() {
+    // The pane is where the save lives, so the shell arming a request has to reach it — once, however
+    // many render passes the effect cascade takes.
+    let html = render_settled(pane_saves_on_an_armed_request);
+    assert!(
+        html.contains("SAVES:1"),
+        "the armed request runs the pane's save exactly once:\n{html}"
+    );
+}
+
+fn pane_ignores_another_records_save() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(RecordRef {
+            category: Category::Tags,
+            human_id: "T0001".to_owned(),
+            label: "Ada".to_owned(),
+        });
+        nav.stash_edit(
+            EditKey::saved(Category::Tags, "T0001"),
+            StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
+        );
+        nav.stash_edit(
+            EditKey::saved(Category::Tags, "T0002"),
+            StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
+        );
+        nav.request_close_tab(0);
+        nav.save_then_close(0);
+        // Re-arm for a record this pane is not showing.
+        nav.save_request.set(Some(SaveRequest {
+            key: EditKey::saved(Category::Tags, "T0002"),
+            then: CloseRequest::Quit,
+        }));
+    });
+    rsx! {
+        SavePane { human_id: "T0001" }
+    }
+}
+
+#[test]
+fn a_pane_only_saves_when_the_request_names_its_own_record() {
+    let html = render_settled(pane_ignores_another_records_save);
+    assert!(
+        html.contains("SAVES:0"),
+        "another record's save request is not this pane's to run:\n{html}"
     );
 }
 
