@@ -155,7 +155,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (12 so far)
+### `0.9 — UI stabilization` (13 so far)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
 audit could find by reading code; the rest will come from using the GUI in earnest before 1.0, and that
@@ -167,6 +167,7 @@ this size by the time it closes, the GUI probably has not been exercised hard en
 | [`Modal`/`SidePanel` overlay follow-ups](https://github.com/magne/genealogy/issues/201) | No focus trap: a keyboard user tabs out of the confirm dialog into the inert background. Accessibility defect on the app's only modal |
 | [Two shipped map fixes have no test coverage](https://github.com/magne/genealogy/issues/202) | `type/test-gap` — both would regress undetected |
 | [Manual webview pass outstanding](https://github.com/magne/genealogy/issues/203) | `manual-verify` — the interactive map canvas has never been exercised |
+| [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify` — the close/quit confirm, the per-record edit stash, and Save / Save all shipped SSR-only: live layout and timing unexercised |
 | [Record-picker scroll-listener cleanup](https://github.com/magne/genealogy/issues/204) | Leaks one inert JS listener per clear/re-search cycle |
 | ["Jump back in" recent-list write has no close/quit hook](https://github.com/magne/genealogy/issues/205) | A keyboard quit races the debounced write |
 | [`⌘S` lives outside the shortcut map](https://github.com/magne/genealogy/issues/206) | Save is neither listed by `?` nor rebindable — inconsistent with every other binding |
