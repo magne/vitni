@@ -209,6 +209,28 @@
       <div class="fact-row"><span class="badge">Save</span><span class="grow">Clears the marker and the confirm: the draft matches what is stored again, so the tab closes with no prompt. So does <b>Cancel</b> on the record itself (§5), which reverts the draft.</span></div>
     </div>
   </div>
+  <p class="muted">An in-progress edit is <b>parked per record</b> rather than held by the open editor.
+    Only the active tab's pane is mounted, so switching tabs or opening another record would otherwise
+    discard the draft: instead the buffer — the draft, the committed values it is diffed against, and the
+    provenance filled in so far (§5b) — is kept in shell state and handed back when the record comes
+    forward again, still in edit mode. <b>Several records can be mid-edit at once</b>, and every one of
+    their tabs carries the <b>●</b> marker, not just the active one.</p>
+  <div class="specimen">
+    <div class="label">Tab marker — two records mid-edit at the same time</div>
+    <div class="tabstrip" role="tablist" aria-label="Open records">
+      <div class="tabs-scroll">
+        <div class="rtab active unsaved" role="tab" tabindex="0" aria-selected="true" aria-label="John Smith — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>John Smith</span><span class="close" role="button" tabindex="0" aria-label="Close John Smith">✕</span></div>
+        <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="Mary Doe — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>Mary Doe</span><span class="close" role="button" tabindex="0" aria-label="Close Mary Doe">✕</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="stack">
+      <div class="fact-row"><span class="badge">keyed</span><span class="grow">Per editor: a stored record by its id, a create form (§6) by its category — so a half-filled create form survives a tab switch just as an edit does.</span></div>
+      <div class="fact-row"><span class="badge">restored</span><span class="grow">Returning to the tab shows the edit exactly as it was left. The record's stored values are not re-read over the top of it.</span></div>
+      <div class="fact-row"><span class="badge">dropped</span><span class="grow">The parked edit goes the moment it stops being pending — <b>Save</b>, <b>Cancel</b> (§5), or closing the tab through the confirm above. A record whose draft matches what is stored is never marked.</span></div>
+    </div>
+  </div>
 
   <!-- 5b · Provenance on Save -->
   <h2>5b · Provenance on Save — who · when · why</h2>

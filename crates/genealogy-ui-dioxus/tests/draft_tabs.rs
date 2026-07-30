@@ -10,10 +10,10 @@
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use genealogy_ui::{Category, Destination, RecordRef, Tool};
+use genealogy_ui::{Category, Destination, ProvenanceDraft, RecordRef, TagDraft, Tool};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::shell::ChromeCtx;
-use genealogy_ui_dioxus::shell::nav_state::{NavState, OpenTab};
+use genealogy_ui_dioxus::shell::nav_state::{EditKey, NavState, OpenTab, StashedEdit};
 use genealogy_ui_dioxus::shell::tabstrip::RecordTabstrip;
 use unic_langid::LanguageIdentifier;
 
@@ -29,6 +29,19 @@ fn record(category: Category, human_id: &str, label: &str) -> RecordRef {
         human_id: human_id.to_owned(),
         label: label.to_owned(),
     }
+}
+
+/// Parks an in-progress edit of the saved record `(category, human_id)` in the shell, the way a
+/// mid-edit detail pane does — what the tabstrip's unsaved marker reads.
+fn mark_dirty(nav: &mut NavState, category: Category, human_id: &str) {
+    let draft = TagDraft {
+        name: "edited".to_owned(),
+        ..TagDraft::new()
+    };
+    nav.stash_edit(
+        EditKey::saved(category, human_id),
+        StashedEdit::new(draft, TagDraft::new(), ProvenanceDraft::default()),
+    );
 }
 
 fn render(app: fn() -> Element) -> String {
@@ -178,7 +191,7 @@ fn tabstrip_with_one_dirty_record() -> Element {
     use_hook(move || {
         nav.open_record(record(Category::People, "I0001", "Ada"));
         nav.open_record(record(Category::People, "I0002", "Bob"));
-        nav.set_edit_dirty(Category::People, "I0001", true);
+        mark_dirty(&mut nav, Category::People, "I0001");
     });
     rsx! {
         RecordTabstrip {}
@@ -210,6 +223,41 @@ fn a_dirty_saved_tab_carries_the_unsaved_class_and_glyph() {
     assert!(
         html.contains(r#"class="rtab active""#),
         "the clean active tab keeps its plain class:\n{html}"
+    );
+}
+
+/// The tabstrip with both open records holding an unsaved edit (issue #239: the edits are parked per
+/// record in the shell, so both are visible at once even though only one pane is mounted).
+fn tabstrip_with_two_dirty_records() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record(Category::People, "I0001", "Ada"));
+        nav.open_record(record(Category::People, "I0002", "Bob"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty(&mut nav, Category::People, "I0002");
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn every_tab_holding_an_unsaved_edit_carries_the_marker_not_just_the_active_one() {
+    let html = render(tabstrip_with_two_dirty_records);
+    assert_eq!(
+        html.matches("unsaved-dot").count(),
+        2,
+        "both dirty tabs show the glyph:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="rtab unsaved""#) && html.contains(r#"class="rtab active unsaved""#),
+        "the inactive and the active dirty tab are both marked:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Ada — unsaved changes""#)
+            && html.contains(r#"aria-label="Bob — unsaved changes""#),
+        "each dirty tab's accessible name says so:\n{html}"
     );
 }
 

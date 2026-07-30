@@ -12,7 +12,7 @@ pub fn MediaCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::MediaDraft>();
+    let record = use_record_create::<genealogy_ui::MediaDraft>(Category::Media);
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::MediaDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let label = request

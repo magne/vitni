@@ -13,7 +13,7 @@ pub fn PersonCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<PersonDraft>();
+    let record = use_record_create::<PersonDraft>(Category::People);
     let mut draft = record.draft;
     let selected_tags = use_signal(Vec::<String>::new);
     let save_services = services.clone();

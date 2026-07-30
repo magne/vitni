@@ -15,7 +15,7 @@ use genealogy_ui::{Category, Localizer, ProvenanceDraft, RecordDraft};
 use crate::components::{Button, ButtonVariant};
 use crate::screens::provenance_block;
 use crate::services::Services;
-use crate::shell::nav_state::NavState;
+use crate::shell::nav_state::{EditKey, NavState, StashedEdit};
 
 /// The buffered edit state of one record: whether it is being edited, the committed `seed`, the live
 /// `draft`, and the provenance collected once per save (`record-editing.html` §5b).
@@ -68,22 +68,23 @@ impl<D: RecordDraft> RecordEditState<D> {
 /// Reseeds the draft when the committed record changes underneath (e.g. after a save reload) — but
 /// only while not editing, so a live edit is never clobbered (the tag editor's precedent).
 ///
-/// Also **publishes dirtiness to the shell** ([`NavState::set_edit_dirty`]): the edit buffer is
-/// screen-local, so without this `⌘W`/`⌘Q` cannot see an in-progress edit and would discard it
-/// silently. Reading `is_dirty()` inside the effect subscribes it to `draft` and `seed`, so a save
-/// reseed and Cancel clear the mark on their own; unmounting the screen clears it too, leaving no
-/// stale key behind.
+/// The buffer's **storage is the shell**, not this screen ([`NavState::edit_drafts`]): the detail panes
+/// are keyed per record, so activating another tab unmounts this one, and a pane-local buffer would go
+/// with it (issue #239). The buffer is therefore hydrated from the shell on mount
+/// ([`use_stashed_edit`]) and written through on every change ([`use_edit_write_through`]), which also
+/// makes the shell's dirty set — the tabstrip marker, `⌘W`/`⌘Q` — exact for every open tab at once.
+///
+/// A restored buffer comes up in edit mode, which is also what keeps the reseed below from clobbering
+/// it when the record's detail finishes loading underneath.
 pub fn use_record_edit<D: RecordDraft>(category: Category, human_id: &str, seed: &D) -> RecordEditState<D> {
-    let editing = use_signal(|| false);
-    let mut seed_sig = use_signal({
-        let seed = seed.clone();
-        move || seed
-    });
-    let mut draft = use_signal({
-        let seed = seed.clone();
-        move || seed
-    });
-    let prov = use_signal(ProvenanceDraft::default);
+    // The detail panes are keyed on `human_id` (`screens/record_detail.rs`), so a different record
+    // remounts this hook rather than re-running it with a new id — the key captured here stays right.
+    let key = EditKey::saved(category, human_id);
+    // A stored record is read-first, so a buffer with nothing parked for it starts in view mode (§1).
+    let state = use_stashed_edit(&key, false, seed);
+    let mut seed_sig = state.seed;
+    let mut draft = state.draft;
+    let editing = state.editing;
     let seed = seed.clone();
     use_effect(use_reactive!(|seed| {
         if !editing() {
@@ -91,31 +92,91 @@ pub fn use_record_edit<D: RecordDraft>(category: Category, human_id: &str, seed:
             draft.set(seed);
         }
     }));
-    let state = RecordEditState {
-        editing,
-        seed: seed_sig,
-        draft,
-        prov,
-    };
-    let mut nav = use_context::<NavState>();
-    // The detail panes are keyed on `human_id` (`screens/record_detail.rs`), so a different record
-    // remounts this hook rather than re-running it with a new id — the key captured here stays right.
-    let published = human_id.to_owned();
-    use_effect(move || nav.set_edit_dirty(category, &published, state.is_dirty()));
-    let dropped = human_id.to_owned();
-    use_drop(move || nav.clear_edit_dirty(category, &dropped));
+    use_edit_write_through(key, state);
     state
 }
 
-/// The edit state for a create pane: an empty draft, in edit mode from the start (`record-editing.html`
-/// §6). Never reseeds — a create draft is thrown away on Cancel.
-pub fn use_record_create<D: RecordDraft>() -> RecordEditState<D> {
+/// The edit state for a create pane: the category's create draft as parked in the shell if one is in
+/// progress, otherwise an empty draft — in edit mode from the start either way
+/// (`record-editing.html` §6). Never reseeds; the draft is discarded on Cancel
+/// ([`NavState::cancel_draft`]) and spent by Save ([`NavState::commit_draft`]), both of which drop the
+/// parked entry.
+#[must_use]
+pub fn use_record_create<D: RecordDraft>(category: Category) -> RecordEditState<D> {
+    let key = EditKey::draft(category);
+    // A create form has nothing to read, so a fresh buffer starts in edit mode.
+    let state = use_stashed_edit(&key, true, &D::default());
+    use_edit_write_through(key, state);
+    state
+}
+
+/// The contents a record's edit buffer comes up with on mount (see [`use_stashed_edit`]).
+#[derive(Clone)]
+struct EditSeed<D> {
+    /// Whether the buffer starts in edit mode.
+    editing: bool,
+    /// The committed values the draft is diffed against.
+    seed: D,
+    /// The live draft.
+    draft: D,
+    /// The provenance collected for the pending save.
+    prov: ProvenanceDraft,
+}
+
+/// Builds a record's edit buffer on mount: the edit parked in the shell for `key`, if there is one (its
+/// pane was unmounted mid-edit), otherwise a fresh buffer over `seed` in `editing_when_fresh` mode. A
+/// *restored* buffer always starts in edit mode — it holds changes the user has not saved.
+///
+/// The lookup runs in a hook, not an effect, so the *first* render already shows the restored draft
+/// rather than flashing the committed record.
+fn use_stashed_edit<D: RecordDraft>(key: &EditKey, editing_when_fresh: bool, seed: &D) -> RecordEditState<D> {
+    let nav = use_context::<NavState>();
+    let key = key.clone();
+    let fresh = seed.clone();
+    let initial = use_hook(move || match nav.stashed_edit::<D>(&key) {
+        Some((draft, seed, prov)) => EditSeed {
+            editing: true,
+            seed,
+            draft,
+            prov,
+        },
+        None => EditSeed {
+            editing: editing_when_fresh,
+            seed: fresh.clone(),
+            draft: fresh,
+            prov: ProvenanceDraft::default(),
+        },
+    });
+    let EditSeed {
+        editing,
+        seed,
+        draft,
+        prov,
+    } = initial;
     RecordEditState {
-        editing: use_signal(|| true),
-        seed: use_signal(D::default),
-        draft: use_signal(D::default),
-        prov: use_signal(ProvenanceDraft::default),
+        editing: use_signal(move || editing),
+        seed: use_signal(move || seed),
+        draft: use_signal(move || draft),
+        prov: use_signal(move || prov),
     }
+}
+
+/// Writes the edit buffer through to the shell under `key`, so leaving the tab parks the edit instead of
+/// discarding it. While the draft is dirty its contents are kept parked; the moment it is clean again —
+/// Cancel restoring the seed, or a save reseeding it — the entry is dropped. Save and Cancel therefore
+/// need no wiring of their own, and the parked keyset stays an exact dirty set.
+fn use_edit_write_through<D: RecordDraft>(key: EditKey, state: RecordEditState<D>) {
+    let mut nav = use_context::<NavState>();
+    use_effect(move || {
+        if !state.is_dirty() {
+            nav.drop_edit(&key);
+            return;
+        }
+        let draft = state.draft.read().clone();
+        let seed = state.seed.read().clone();
+        let prov = state.prov.read().clone();
+        nav.stash_edit(key.clone(), StashedEdit::new(draft, seed, prov));
+    });
 }
 
 /// The already-localized Edit / Save / Cancel labels the header actions need.

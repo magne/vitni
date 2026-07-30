@@ -20,7 +20,7 @@ pub fn NoteCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::NoteDraft>();
+    let record = use_record_create::<genealogy_ui::NoteDraft>(Category::Notes);
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::NoteDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let label = request.text.clone().unwrap_or_default();

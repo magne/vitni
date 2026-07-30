@@ -30,8 +30,8 @@ use crate::presentation::{ConfidenceLevel, RestrictionKind};
 /// [`Self::nav_key`]); the two DNA aggregates appear in the rail but have no nav key yet (the
 /// shortcut spec leaves them off the `g`-map).
 ///
-/// `Ord` is the declared (rail) order, so a `(Category, String)` key sorts into a stable,
-/// user-meaningful sequence in the ordered collections that hold one (`NavState::dirty_edits`).
+/// `Ord` is the declared (rail) order, so a key built from a category sorts into a stable,
+/// user-meaningful sequence in the ordered collections that hold one (`NavState::edit_drafts`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Category {
