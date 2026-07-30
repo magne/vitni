@@ -164,6 +164,12 @@ long-standing "DNA match views in the UI" item is closed.
 Residuals from the shortcuts work (ADR 0030); see
 [`archive/completed-work.md`](archive/completed-work.md). Deliberate non-goals are under *Decided*.
 
+- **The unsaved-work confirm has never run in a real webview.** #238, #239, and #240 shipped the
+  close/quit confirm, the per-record edit stash, and Save / Save all entirely under SSR: the markup is
+  asserted, the live rendering and timing are not. Needs a human pass on the three-button footer's
+  layout at dialog width, the quit dialog's `ul.stack` list under WebKitGTK, the disabled Save's
+  appearance (`.btn.primary[disabled]`), whether a freshly activated pane mounts fast enough that Save
+  looks instant, and that a `⌘Q` Save-all run reaches `QuitManager` after the last save. — #244
 - **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
   its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
   so it is neither listed by the `?` overlay nor rebindable, and it does not go through
