@@ -31,16 +31,18 @@ pub fn PlaceCreateRecord() -> Element {
         let label = request.name.clone().unwrap_or_default();
         let services = services.clone();
         spawn(async move {
-            match commit_place_change_set(services, request, prov).await {
-                Ok(id) => nav.commit_draft(RecordRef {
-                    category: Category::Places,
-                    human_id: id.clone(),
-                    label: if label.is_empty() { id } else { label },
-                }),
-                Err(message) => nav.notify(message),
-            }
+            let committed = commit_place_change_set(services, request, prov).await;
+            finish_draft_commit(committed, Category::Places, Some(label), nav);
         });
     });
+    // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
+    // create form can keep the draft instead of losing it.
+    let save_now = use_callback(move |()| {
+        if record.can_save() {
+            on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+        }
+    });
+    use_save_on_request(Category::Places, None, record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
         Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Places) }
@@ -49,11 +51,7 @@ pub fn PlaceCreateRecord() -> Element {
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
-            onclick: move |_| {
-                if record.can_save() {
-                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
-                }
-            },
+            onclick: move |_| save_now.call(()),
         }
     };
     create_record_frame(
@@ -438,6 +436,15 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
         ));
     });
     use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
+
+    // The close/quit confirm's Save hands the record back to this pane (issue #240): it runs the same
+    // whole-record commit the header's Save does, so ⌘W/⌘Q can keep the edit instead of discarding it.
+    let save_now = use_callback(move |()| {
+        if record.can_save() {
+            on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
+        }
+    });
+    use_save_on_request(Category::Places, Some(&human_id), record, save_now);
 
     // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
     let media_viewing = use_signal(|| None::<MediaRefVm>);
