@@ -216,6 +216,11 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 /* The docked tab: an inset accent underline (not colour alone — the docked pane header repeats
    the record label, so the state is conveyed redundantly, WCAG 1.4.1). */
 .rtab.docked { box-shadow: inset 0 -2px 0 var(--accent); }
+/* A tab holding unsaved work (an unsaved draft, or a saved record mid-edit). The dot glyph carries
+   the state and the tab's aria-label spells it out, so the tint is reinforcement rather than the
+   signal itself (WCAG 1.4.1). */
+.rtab.unsaved { color: var(--ink-2); }
+.rtab .unsaved-dot { color: var(--warn); font-size: var(--fs-xs); line-height: 1; }
 
 /* ---- New-record menu (the tabstrip "+") ---- */
 .menu-anchor { position: relative; display: inline-flex; }

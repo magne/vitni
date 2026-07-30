@@ -97,11 +97,11 @@
 
   function applyTheme(t) {
     document.documentElement.setAttribute("data-theme", t);
-    try { localStorage.setItem("phase5-theme", t); } catch (e) {}
+    try { localStorage.setItem("genealogy-mockup-theme", t); } catch (e) {}
   }
   function initTheme() {
     var t = null;
-    try { t = localStorage.getItem("phase5-theme"); } catch (e) {}
+    try { t = localStorage.getItem("genealogy-mockup-theme"); } catch (e) {}
     if (!t) {
       t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
     }
@@ -189,9 +189,14 @@
     // pushing the window wider; the new-record button stays outside it, always visible.
     var scroll = el("div", "tabs-scroll");
     tabs.forEach(function (t) {
-      var rt = el("div", "rtab" + (t.active ? " active" : ""));
+      // `unsaved: true` marks a tab holding work that closing would discard — an unsaved draft, or a
+      // saved record with an in-progress edit. The dot glyph and the aria-label carry the state; the
+      // tint is only reinforcement (WCAG 1.4.1).
+      var rt = el("div", "rtab" + (t.active ? " active" : "") + (t.unsaved ? " unsaved" : ""));
       attr(rt, { role: "tab", tabindex: t.active ? "0" : "-1", "aria-selected": t.active ? "true" : "false" });
-      rt.innerHTML = "<span>" + t.label + "</span>";
+      if (t.unsaved) attr(rt, { "aria-label": t.label + " — unsaved changes" });
+      rt.innerHTML =
+        (t.unsaved ? '<span class="unsaved-dot" aria-hidden="true">●</span>' : "") + "<span>" + t.label + "</span>";
       var close = el("span", "close", "✕");
       attr(close, { role: "button", tabindex: "0", "aria-label": "Close " + t.label });
       function closeTab(ev) {
