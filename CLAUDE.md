@@ -148,6 +148,10 @@ subcommand-bearing verb per aggregate, generated from `for_each_cli_command!` in
   `genealogy-cli.ftl` is **generated** by `build.rs` from tracked per-module fragments and is
   gitignored — edit a fragment, never the concatenated file. `genealogy-core` emits no
   user-facing strings: typed errors only, English `tracing` for developers.
+- **Every UI change updates `docs/mockups/` in the same change.** The mockups are the design source
+  of truth and must describe *shipped* behaviour, never follow-up work — so a shipped change that the
+  mockups still contradict is an incomplete change. `docs/mockups/assets/components.css` is the
+  superset: the app sheet must not introduce a rule the mockups lack.
 - **Presentation vs data localization are distinct.** ADR 0003 is the *UI chrome*. The *data*
   language metadata (`LanguageTag`, `RichText.language`, `PlaceName`,
   `PersonName.transliterations`, data-model §14) describes what language a *record* is in. They

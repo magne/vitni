@@ -73,6 +73,31 @@
       </div>
     </div>
 
+    <!-- Record tabs: the strip's per-tab states, including the unsaved marker -->
+    <h2 style="border:0;margin:var(--sp-6) 0 12px;font-size:21px">Record tabs</h2>
+    <p class="muted">The strip shows only on entity categories, beside the Explorer — the Dashboard is
+      full-width and has none. A tab is a record you have open; drag one onto the detail pane (or press
+      <kbd>⌘⇧</kbd><kbd>1…9</kbd>) to dock it side-by-side.</p>
+    <div class="specimen">
+      <div class="label">Tabstrip — clean, unsaved, docked</div>
+      <div class="tabstrip" role="tablist" aria-label="Open records">
+        <div class="tabs-scroll">
+          <div class="rtab active" role="tab" tabindex="0" aria-selected="true"><span>John Smith</span><span class="close" role="button" tabindex="0" aria-label="Close John Smith">✕</span></div>
+          <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="Mary Doe — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>Mary Doe</span><span class="close" role="button" tabindex="0" aria-label="Close Mary Doe">✕</span></div>
+          <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="New person — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>New person</span><span class="close" role="button" tabindex="0" aria-label="Close New person">✕</span></div>
+          <div class="rtab docked" role="tab" tabindex="-1" aria-selected="false"><span>Trinity Church</span><span class="close" role="button" tabindex="0" aria-label="Close Trinity Church">✕</span></div>
+        </div>
+        <div class="rtab add" role="button" tabindex="0" aria-label="Open another record">+</div>
+      </div>
+      <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">The <b>●</b> marker means
+        the tab holds <b>unsaved work</b> — either an <b>unsaved draft</b> (nothing stored yet, as with
+        “New person”) or <b>unsaved edits</b> to an already-saved record (“Mary Doe”). Both make
+        <kbd>⌘</kbd><kbd>W</kbd> and <kbd>⌘</kbd><kbd>Q</kbd> ask before discarding — see
+        <a href="record-editing.html">Record editing</a>. The marker is a glyph plus an “unsaved
+        changes” accessible name, not colour alone (WCAG 1.4.1); the docked tab's accent underline is
+        the same convention.</div>
+    </div>
+
   </div>
 </div>
 

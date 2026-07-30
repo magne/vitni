@@ -3,20 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Phase 5 — UI mockups</title>
+  <title>UI mockups — design index</title>
   <link rel="stylesheet" href="assets/tokens.css">
   <link rel="stylesheet" href="assets/components.css">
 </head>
 <body>
 <main class="doc">
   <div class="inline" style="float:right">
-    <button class="btn sm" onclick="(function(){var h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');try{localStorage.setItem('phase5-theme',h.getAttribute('data-theme'));}catch(e){}})()">◐ Toggle theme</button>
+    <button class="btn sm" onclick="(function(){var h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');try{localStorage.setItem('genealogy-mockup-theme',h.getAttribute('data-theme'));}catch(e){}})()">◐ Toggle theme</button>
   </div>
-  <h1>Phase 5 — UI breadth mockups</h1>
+  <h1>UI mockups — the design index</h1>
   <p class="lede">A design system and a screen inventory for the genealogy desktop app. Open any
-    screen below; toggle light/dark from the top-right or from a screen's top bar. These are static
-    HTML prototypes — the build plan that turns them into Dioxus screens is
-    <a href="../archive/phase5/plan.md">plan.md</a>.</p>
+    screen below; toggle light/dark from the top-right or from a screen's top bar. These static HTML
+    prototypes are the <b>design source of truth</b> and describe <b>shipped</b> behaviour: every UI
+    change updates them in the same commit, so a page here never documents planned work. Screens
+    tagged with a future phase (see <a href="../roadmap.md">roadmap.md</a>) are the exception and say
+    so. The Phase 5 build plan that first turned these into Dioxus screens is archived at
+    <a href="../archive/phase5/plan.md">archive/phase5/plan.md</a>.</p>
 
   <div class="section-note">
     <b>Design intent.</b> Entity-category rail + master-detail (not Gramps's mixed category buttons);
@@ -56,21 +59,17 @@
   <div class="gallery">
     <a class="card" href="pedigree.html"><div class="g-title">🌳 Pedigree / tree</div><div class="g-desc">Ancestor chart with the focus person; view switcher.</div></a>
     <a class="card" href="merge.html"><div class="g-title">⇄ Compare / merge</div><div class="g-desc">Duplicate detection + non-destructive, reversible merge.</div></a>
-    <a class="card" href="import.html"><div class="g-title">📥 Import</div><div class="g-desc">A mode switch picks Bulk file import (a plugin + file + target workspace, mirroring <span class="mono">genealogy import</span>, issue #191) or Assisted online import — Digitalarkivet: fetch a record, review the scan + interpreted fields, import as low-confidence claims. (Phase 8)</div></a>
+    <a class="card" href="import.html"><div class="g-title">📥 Import</div><div class="g-desc">A mode switch picks Bulk file import (a plugin + file + target workspace, mirroring <span class="mono">genealogy import</span>, issue #191) or Assisted online import — Digitalarkivet: fetch a record, review the scan + interpreted fields, import as low-confidence claims.</div></a>
     <a class="card" href="export.html"><div class="g-title">📤 Bulk export</div><div class="g-desc">Pick an export plugin and a destination, watch live progress, cancel mid-run. The GUI counterpart of <span class="mono">genealogy export</span>.</div></a>
-    <a class="card" href="geography.html"><div class="g-title">🗺 Geography</div><div class="g-desc">Point/polygon/multi-polygon geometry, time slider, in-map editing, pluggable provider, succession links. The Place mockup's own <b>Map</b> tab (see <span class="mono">place.html</span>) edits one place the same way. (Phase 9)</div></a>
+    <a class="card" href="geography.html"><div class="g-title">🗺 Geography</div><div class="g-desc">Point/polygon/multi-polygon geometry, time slider, in-map editing, pluggable provider, succession links. The Place mockup's own <b>Map</b> tab (see <span class="mono">place.html</span>) edits one place the same way.</div></a>
     <a class="card" href="search-palette.html"><div class="g-title">🔍 Search &amp; ⌘K palette</div><div class="g-desc">Global search and the command palette.</div></a>
     <a class="card" href="preferences.html"><div class="g-title">⚙ Preferences</div><div class="g-desc">Operator, theme, language/locale defaults, date format, override layers.</div></a>
     <a class="card" href="plugin-manager.html"><div class="g-title">🧩 Plugin manager</div><div class="g-desc">Sandboxed plugins, capabilities, enable/disable.</div></a>
   </div>
 
-  <h2>Build plan</h2>
-  <p class="muted">The PR-sized breakdown that implements these screens over
-    <span class="mono">genealogy-ui</span> + <span class="mono">genealogy-ui-dioxus</span> lives in
-    <a href="../archive/phase5/plan.md">plan.md</a>.</p>
 </main>
 <script>
-(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('phase5-theme')||'dark');}catch(e){}})();
+(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('genealogy-mockup-theme')||'dark');}catch(e){}})();
 </script>
 </body>
 </html>
