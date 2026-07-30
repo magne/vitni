@@ -139,16 +139,24 @@ sc-close-tab = Lukk fane
 # Bekreftelsesdialoger for lukk-fane / avslutt (⌘W, ⌘Q over ulagret arbeid). Hver har to
 # brødtekster: `-body` for et ulagret utkast (ingenting er lagret ennå) og `-body-edits` for en
 # påbegynt endring av en post som allerede er lagret — «er ikke lagret ennå» ville vært usant der.
+# Begge dialogene tilbyr tre valg: behold arbeidet (lagre), mist det (forkast) eller gå tilbake.
 close-tab-confirm-title = Lukk fane?
 close-tab-confirm-body = «{ $label }» er ikke lagret ennå. Hvis du lukker denne fanen, forkastes den.
 close-tab-confirm-body-edits = «{ $label }» har ulagrede endringer. Hvis du lukker denne fanen, forkastes de.
-close-tab-confirm-confirm = Lukk fane
+close-tab-confirm-save = Lagre
+close-tab-confirm-discard = Forkast endringer
+close-tab-confirm-discard-draft = Forkast utkast
 close-tab-confirm-cancel = Avbryt
 quit-confirm-title = Avslutte?
 quit-confirm-body = En eller flere åpne faner er ikke lagret ennå. Hvis du avslutter, forkastes de.
 quit-confirm-body-edits = En eller flere åpne poster har ulagrede endringer. Hvis du avslutter, forkastes de.
-quit-confirm-confirm = Avslutt
+quit-confirm-list-intro = Poster med ulagret arbeid:
+quit-confirm-save-all = Lagre alle
+quit-confirm-discard-all = Forkast alle
 quit-confirm-cancel = Avbryt
+# Hvorfor lagring ikke er tilgjengelig — vises i brødteksten istedenfor en død knapp.
+close-confirm-cannot-save = «{ $label }» mangler påkrevde felter og kan ikke lagres ennå.
+close-confirm-nothing-to-save = Ingenting er fylt ut for «{ $label }» ennå, så det er ingenting å lagre.
 # Avfest-knappen i topplinjen på den festede ruten (aria-label)
 undock-label = Løsne post
 media-select-prompt = Velg et medieobjekt for å se detaljene.
