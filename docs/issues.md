@@ -419,6 +419,21 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   Held at `=3.0.0-pre.6` (comment in `Cargo.toml`); re-evaluate when `testcontainers` ships a `russh` on
   stable `curve25519-dalek`.
 
+### Docs & repo tooling
+
+The `area/docs` label already existed with no `###` home; this is it.
+
+- **`issue-sync` rejects the bug bullets that `issue-tracking.md` says are correct.** `offline_problems`
+  in `xtask/src/issue_sync.rs` fails any bullet whose section has no `###` area — "is directly under
+  `## X` with no `###` area, so it has no area/\* label to inherit" — but
+  [`issue-tracking.md`](issue-tracking.md) §2 states "**`## Bugs`** has no H3s by design: a bug takes its
+  `area/*` from whichever area it affects, plus `type/bug`". So the documented shape for an open bug is
+  one the tool refuses. Latent today only because `## Bugs` currently holds prose, not bullets: the two
+  open defects were deliberately routed under their area H3s to avoid it. Whichever way it is resolved —
+  exempt `## Bugs` in the parser, or drop the by-design claim from the doc and require bugs to live under
+  an area H3 — the two must agree, because `cargo xtask check` is a prek hook and a docs-only commit gets
+  no CI (`paths-ignore` covers `docs/**`), so this is the only gate that would catch it. — #235
+
 ## Decided — no action needed
 
 Deliberate non-tasks, recorded so they are not re-raised or read as unfinished work. Each is a

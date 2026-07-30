@@ -112,6 +112,10 @@ nobody grooms weekly.
   how an unverified claim slipped through once already — the `## Bugs` section asserted test coverage
   for five fixes when two had none.
 
+`docs` now has an H3 home of its own — *Docs & repo tooling* under *Platform & operations* — because
+`issue-sync` requires every bullet to sit under some `###` area to inherit a label from. `i18n` remains
+purely cross-cutting.
+
 Reuse the built-ins `bug`, `documentation`, `good first issue`, `help wanted`, `wontfix`,
 `dependencies` (Dependabot already applies the last one).
 
