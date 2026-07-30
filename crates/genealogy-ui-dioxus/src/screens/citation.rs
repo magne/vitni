@@ -15,7 +15,7 @@ pub fn CitationCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::CitationDraft>();
+    let record = use_record_create::<genealogy_ui::CitationDraft>(Category::Citations);
     let mut draft = record.draft;
     // The find-or-create source picker: options load once; pick/clear/"+ New" drive the draft's link.
     let source_state = use_signal(genealogy_ui::PickerState::default);

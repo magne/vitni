@@ -15,7 +15,7 @@ pub fn RepositoryCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::RepositoryDraft>();
+    let record = use_record_create::<genealogy_ui::RepositoryDraft>(Category::Repositories);
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::RepositoryDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let label = request.name.clone().unwrap_or_default();

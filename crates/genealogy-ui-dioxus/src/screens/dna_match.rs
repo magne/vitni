@@ -24,7 +24,7 @@ pub fn DnaMatchCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::DnaMatchDraft>();
+    let record = use_record_create::<genealogy_ui::DnaMatchDraft>(Category::DnaMatches);
     let mut draft = record.draft;
     // The two existing-test pickers: options load once; each excludes the other's pick so a match is
     // never asserted between a test and itself. Pick/clear drive the draft's (required) test ids.

@@ -14,7 +14,7 @@ pub fn DnaTestCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::DnaTestDraft>();
+    let record = use_record_create::<genealogy_ui::DnaTestDraft>(Category::DnaTests);
     let mut draft = record.draft;
     // The existing-person picker: options load once; pick/clear drive the draft's (required) person id.
     let person_state = use_signal(genealogy_ui::PickerState::default);

@@ -15,7 +15,7 @@ pub fn SourceCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::SourceDraft>();
+    let record = use_record_create::<genealogy_ui::SourceDraft>(Category::Sources);
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::SourceDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let label = request.title.clone().unwrap_or_default();

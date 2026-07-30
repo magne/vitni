@@ -28,7 +28,7 @@ pub fn FamilyCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::FamilyDraft>();
+    let record = use_record_create::<genealogy_ui::FamilyDraft>(Category::Families);
     let mut draft = record.draft;
     // The People picker adds one partner at a time: a pick appends an existing-partner chip and resets
     // the search; "+ New person" opens the pending new-partner draft card. Options load once per form.

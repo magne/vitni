@@ -1,18 +1,17 @@
 //! SSR-probe assertions for the close-tab/quit confirm flow on [`NavState`] (PR1 §1.4): closing a
 //! *clean* saved tab is immediate; closing one that holds unsaved work — a draft, or a saved record
-//! with an in-progress edit ([`NavState::dirty_edits`], issue #200) — arms the confirm dialog instead
-//! of discarding it silently. Like `dock.rs`, each probe drives `NavState` in `use_hook` and renders a
+//! with an in-progress edit parked in [`NavState::edit_drafts`] (issue #200) — arms the confirm dialog
+//! instead of discarding it silently. Like `dock.rs`, each probe drives `NavState` in `use_hook` and renders a
 //! small marker the test inspects.
 
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use genealogy_ui::Category;
-use genealogy_ui::RecordRef;
+use genealogy_ui::{Category, ProvenanceDraft, RecordRef, TagDraft};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::close_confirm::CloseConfirmDialog;
-use genealogy_ui_dioxus::shell::nav_state::NavState;
+use genealogy_ui_dioxus::shell::nav_state::{EditKey, NavState, StashedEdit};
 use unic_langid::LanguageIdentifier;
 
 /// A chrome localizer for a single explicit language (deterministic for tests).
@@ -29,6 +28,21 @@ fn record(human_id: &str, label: &str) -> RecordRef {
     }
 }
 
+/// Parks an in-progress edit of the saved record `(category, human_id)` in the shell, the way a
+/// mid-edit detail pane does. The draft type is immaterial to the confirm flow, so every probe here
+/// parks a [`TagDraft`]; what matters is that the key is present.
+fn mark_dirty(nav: &mut NavState, category: Category, human_id: &str) {
+    let seed = TagDraft::new();
+    let draft = TagDraft {
+        name: "edited".to_owned(),
+        ..TagDraft::new()
+    };
+    nav.stash_edit(
+        EditKey::saved(category, human_id),
+        StashedEdit::new(draft, seed, ProvenanceDraft::default()),
+    );
+}
+
 /// Renders a probe component to an HTML string.
 fn render(app: fn() -> Element) -> String {
     let mut vdom = VirtualDom::new(app);
@@ -37,7 +51,7 @@ fn render(app: fn() -> Element) -> String {
 }
 
 /// The marker block: open-tab count, whether the confirm is armed, the quit ticket value, and the
-/// `(category, human_id)` keys currently marked as holding an unsaved edit.
+/// keys currently holding a parked in-progress edit (`category/human_id`).
 fn probe(nav: &NavState) -> Element {
     let tabs = nav.records.read().len();
     let pending = if nav.pending_close.read().is_some() {
@@ -47,10 +61,13 @@ fn probe(nav: &NavState) -> Element {
     };
     let quit = *nav.quit_requested.read();
     let dirty = nav
-        .dirty_edits
+        .edit_drafts
         .read()
-        .iter()
-        .map(|(category, human_id)| format!("{}/{human_id}", category.id()))
+        .keys()
+        .map(|key| {
+            let id = key.human_id.clone().unwrap_or_else(|| "*".to_owned());
+            format!("{}/{id}", key.category.id())
+        })
         .collect::<Vec<_>>()
         .join(",");
     rsx! {
@@ -192,7 +209,7 @@ fn close_dirty_saved_tab_arms_confirm() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
-        nav.set_edit_dirty(Category::People, "I0001", true);
+        mark_dirty(&mut nav, Category::People, "I0001");
         nav.request_close_tab(0);
     });
     probe(&nav)
@@ -215,7 +232,7 @@ fn quit_with_dirty_saved_tab_arms_confirm() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
-        nav.set_edit_dirty(Category::People, "I0001", true);
+        mark_dirty(&mut nav, Category::People, "I0001");
         nav.request_quit();
     });
     probe(&nav)
@@ -235,7 +252,7 @@ fn cancel_keeps_the_dirty_saved_tab() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
-        nav.set_edit_dirty(Category::People, "I0001", true);
+        mark_dirty(&mut nav, Category::People, "I0001");
         nav.request_close_tab(0);
         nav.cancel_close();
     });
@@ -257,7 +274,7 @@ fn confirm_closes_the_dirty_saved_tab() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
-        nav.set_edit_dirty(Category::People, "I0001", true);
+        mark_dirty(&mut nav, Category::People, "I0001");
         nav.request_close_tab(0);
         nav.confirm_close();
     });
@@ -279,7 +296,7 @@ fn close_clean_saved_tab_beside_a_dirty_one() -> Element {
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
         nav.open_record(record("I0002", "Bob"));
-        nav.set_edit_dirty(Category::People, "I0002", true);
+        mark_dirty(&mut nav, Category::People, "I0002");
         nav.request_close_tab(0);
     });
     probe(&nav)
@@ -304,7 +321,7 @@ fn quit_with_one_dirty_of_two_tabs() -> Element {
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
         nav.open_record(record("I0002", "Bob"));
-        nav.set_edit_dirty(Category::People, "I0002", true);
+        mark_dirty(&mut nav, Category::People, "I0002");
         nav.request_quit();
     });
     probe(&nav)
@@ -324,7 +341,7 @@ fn rename_rekeys_the_dirty_record() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
-        nav.set_edit_dirty(Category::People, "I0001", true);
+        mark_dirty(&mut nav, Category::People, "I0001");
         nav.rename_record(Category::People, "I0001", "I0099".to_owned());
         nav.request_close_tab(0);
     });
@@ -345,12 +362,12 @@ fn renaming_a_dirty_record_follows_it_to_the_new_id() {
     assert!(html.contains("TABS:1"), "nothing closed:\n{html}");
 }
 
-fn clear_edit_dirty_makes_the_tab_closable() -> Element {
+fn dropping_the_parked_edit_makes_the_tab_closable() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
-        nav.set_edit_dirty(Category::People, "I0001", true);
-        nav.clear_edit_dirty(Category::People, "I0001");
+        mark_dirty(&mut nav, Category::People, "I0001");
+        nav.drop_edit(&EditKey::saved(Category::People, "I0001"));
         nav.request_close_tab(0);
     });
     probe(&nav)
@@ -358,9 +375,9 @@ fn clear_edit_dirty_makes_the_tab_closable() -> Element {
 
 #[test]
 fn clearing_the_dirty_mark_restores_the_immediate_close() {
-    // A save reseeds the draft and Cancel restores it; either way `use_record_edit` republishes a
-    // clean state, and the tab must go back to closing with no prompt.
-    let html = render(clear_edit_dirty_makes_the_tab_closable);
+    // A save reseeds the draft and Cancel restores it; either way `use_record_edit`'s write-through
+    // drops the parked edit, and the tab must go back to closing with no prompt.
+    let html = render(dropping_the_parked_edit_makes_the_tab_closable);
     assert!(html.contains("TABS:0"), "a clean record closes immediately:\n{html}");
     assert!(html.contains("PENDING:NONE"), "no confirm for clean state:\n{html}");
 }
@@ -411,7 +428,7 @@ fn dialog_open_for_dirty_saved_record() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
-        nav.set_edit_dirty(Category::People, "I0001", true);
+        mark_dirty(&mut nav, Category::People, "I0001");
         nav.request_close_tab(0);
     });
     rsx! {
@@ -446,7 +463,7 @@ fn dialog_open_for_quit_with_dirty_edit() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
-        nav.set_edit_dirty(Category::People, "I0001", true);
+        mark_dirty(&mut nav, Category::People, "I0001");
         nav.request_quit();
     });
     rsx! {

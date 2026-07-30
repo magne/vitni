@@ -30,7 +30,7 @@ pub fn ResearchNoteCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::ResearchNoteDraft>();
+    let record = use_record_create::<genealogy_ui::ResearchNoteDraft>(Category::ResearchNotes);
 
     let mut seeded = record.draft;
     let mut subject_seed = nav.research_note_subject;

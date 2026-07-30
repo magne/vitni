@@ -5,11 +5,13 @@
 //! components. The active [`Destination`] is the framework-neutral navigation key from
 //! `genealogy-ui` (ADR 0008); the renderer merely interprets it.
 
-use std::collections::BTreeSet;
+use std::any::Any;
+use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use dioxus::prelude::*;
 use genealogy_app::{RecentItem, ThemeMode, push_recent};
-use genealogy_ui::{Category, Destination, NavHistory, NavLocation, RecordRef, Tool};
+use genealogy_ui::{Category, Destination, NavHistory, NavLocation, ProvenanceDraft, RecordDraft, RecordRef, Tool};
 
 /// The entity category a destination shows a list + editor for, or `None` when the destination is a
 /// full-width screen with no Explorer/editor (a tool, the workspace Dashboard, or Help). This is the
@@ -35,8 +37,8 @@ pub enum Overlay {
 }
 
 /// A close/quit operation armed behind the confirm dialog because it would discard unsaved work —
-/// an unsaved draft, or an in-progress edit of a saved record ([`NavState::dirty_edits`]) — via
-/// `⌘W`/`⌘Q` or the tabstrip `✕`. `None` on [`NavState::pending_close`] means no confirm is showing.
+/// an unsaved draft, or an in-progress edit parked in [`NavState::edit_drafts`] — via `⌘W`/`⌘Q` or the
+/// tabstrip `✕`. `None` on [`NavState::pending_close`] means no confirm is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloseRequest {
     /// Close the record tab at this 0-based index (it holds unsaved work, or the confirm would not
@@ -165,6 +167,83 @@ impl OpenTab {
     fn is_saved_key(&self, category: Category, human_id: &str) -> bool {
         self.category() == category && self.human_id() == Some(human_id)
     }
+
+    /// The key under which this tab's editor parks its in-progress edit ([`NavState::edit_drafts`]).
+    #[must_use]
+    pub fn edit_key(&self) -> EditKey {
+        match self {
+            Self::Saved(record) => EditKey::saved(record.category, &record.human_id),
+            Self::Draft(category) => EditKey::draft(*category),
+        }
+    }
+}
+
+/// Which editor a [`StashedEdit`] belongs to: a saved record (`human_id` is `Some`) or a category's
+/// create draft (`human_id` is `None` — at most one draft per category is open, see
+/// [`NavState::open_create`]).
+///
+/// `Ord` follows `Category`'s declared rail order, then the id, so the map iterates in a stable,
+/// user-meaningful sequence.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EditKey {
+    /// The aggregate category the editor belongs to.
+    pub category: Category,
+    /// The saved record's stable id, or `None` for the category's create draft.
+    pub human_id: Option<String>,
+}
+
+impl EditKey {
+    /// The key of the saved record `(category, human_id)`.
+    #[must_use]
+    pub fn saved(category: Category, human_id: &str) -> Self {
+        Self {
+            category,
+            human_id: Some(human_id.to_owned()),
+        }
+    }
+
+    /// The key of `category`'s create draft.
+    #[must_use]
+    pub fn draft(category: Category) -> Self {
+        Self {
+            category,
+            human_id: None,
+        }
+    }
+}
+
+/// One record's in-progress edit, parked in the shell so it survives its pane unmounting.
+///
+/// Only the active tab's pane is mounted (`screens/record_detail.rs` keys the detail pane on the
+/// record's id), so the edit buffer cannot live in the pane: activating another tab would drop it.
+/// `draft` and `seed` are the pane's typed `D: RecordDraft` erased to [`Any`], because one map holds
+/// every aggregate's draft type; recover them with [`NavState::stashed_edit`].
+#[derive(Clone)]
+pub struct StashedEdit {
+    /// The live draft the form binds to (the typed `D`).
+    pub draft: Rc<dyn Any>,
+    /// The committed values `draft` is diffed against for dirtiness (the same `D`).
+    pub seed: Rc<dyn Any>,
+    /// The provenance (why / citations / evidence / confidence) collected for the pending save.
+    pub prov: ProvenanceDraft,
+    /// `RecordDraft::is_valid` for `draft`, recorded on the way in so the Save gate can be read
+    /// without knowing the draft's type.
+    pub valid: bool,
+}
+
+impl StashedEdit {
+    /// Parks `draft` — diffed against `seed`, with the `prov` collected so far — recording the draft's
+    /// own validity.
+    #[must_use]
+    pub fn new<D: RecordDraft>(draft: D, seed: D, prov: ProvenanceDraft) -> Self {
+        let valid = draft.is_valid();
+        Self {
+            draft: Rc::new(draft),
+            seed: Rc::new(seed),
+            prov,
+            valid,
+        }
+    }
 }
 
 /// Shell-wide navigation/UI state, provided as context so every shell region shares one source of
@@ -228,12 +307,15 @@ pub struct NavState {
     /// `None` when the confirm dialog is not showing. Set by [`Self::request_close_tab`] /
     /// [`Self::request_quit`]; resolved by [`Self::confirm_close`] / [`Self::cancel_close`].
     pub pending_close: Signal<Option<CloseRequest>>,
-    /// The `(category, human_id)` keys of *saved* records whose open editor holds an in-progress edit
-    /// that is not yet stored. Screen-local edit state is invisible to the shell, so
-    /// `use_record_edit` publishes it here ([`Self::set_edit_dirty`]) and the close/quit confirm reads
-    /// it ([`Self::tab_has_unsaved`]) — otherwise `⌘W`/`⌘Q` would discard the edit silently.
-    /// Keyed like [`Self::docked_record`] so it survives tab reorders and closes.
-    pub dirty_edits: Signal<BTreeSet<(Category, String)>>,
+    /// The in-progress edits parked per editor — the shell's edit-buffer store. Only the active tab's
+    /// pane is mounted, so the buffer cannot live in the pane: `use_record_edit` hydrates from here on
+    /// mount ([`Self::stashed_edit`]) and writes through on every change ([`Self::stash_edit`]), which
+    /// is what lets several records be mid-edit at once.
+    ///
+    /// The **keyset is the dirty set**: the tabstrip's unsaved marker and the close/quit confirm both
+    /// read it through [`Self::tab_has_unsaved`], so an edit can never be discarded silently. Keyed like
+    /// [`Self::docked_record`] so it survives tab reorders and closes.
+    pub edit_drafts: Signal<BTreeMap<EditKey, StashedEdit>>,
     /// A monotonically-increasing "quit the application" ticket, bumped once a quit is confirmed (or
     /// requested with nothing unsaved). The desktop-only `QuitManager` observes it and closes the
     /// native window; it is a no-op under SSR, which mounts no window.
@@ -283,7 +365,7 @@ impl NavState {
             geography_focus: Signal::new(None),
             research_note_subject: Signal::new(None),
             pending_close: Signal::new(None),
-            dirty_edits: Signal::new(BTreeSet::new()),
+            edit_drafts: Signal::new(BTreeMap::new()),
             quit_requested: Signal::new(0),
         }
     }
@@ -375,7 +457,11 @@ impl NavState {
     /// `record`, keeping its position in the strip and making it active, and records it in the "Jump
     /// back in" list. Falls back to opening `record` as a fresh tab if no draft is open (e.g. the
     /// draft was closed mid-commit).
+    ///
+    /// The create buffer parked for the category is dropped: it has just been stored, so leaving it
+    /// would mark the new record's tab unsaved and refill its form on the next mount.
     pub fn commit_draft(&mut self, record: RecordRef) {
+        self.drop_edit(&EditKey::draft(record.category));
         if let Some(kind) = record.category.aggregate_kind() {
             push_recent(
                 &mut self.recent.write(),
@@ -401,7 +487,8 @@ impl NavState {
         self.history.write().push(location);
     }
 
-    /// Cancels the open draft tab for `category`, closing it (Cancel on a create form).
+    /// Cancels the open draft tab for `category`, closing it (Cancel on a create form) — which drops
+    /// the create buffer parked for it ([`Self::close_record`]).
     pub fn cancel_draft(&mut self, category: Category) {
         let draft = self
             .records
@@ -503,16 +590,14 @@ impl NavState {
 
     /// Closes the open record tab at `index`, falling back to a neighbouring tab and clearing the
     /// active record when none remain. Does not change the rail's [`Self::active`] destination. Any
-    /// unsaved-edit mark for the closed record is dropped with it — the edit is gone (the caller
-    /// confirmed that via [`Self::request_close_tab`]), so leaving the key would block later closes.
+    /// edit parked for the closed tab is dropped with it — the edit is gone (the caller confirmed that
+    /// via [`Self::request_close_tab`]), so leaving the entry would block later closes.
     pub fn close_record(&mut self, index: usize) {
         if index >= self.records.read().len() {
             return;
         }
         let closed = self.records.write().remove(index);
-        if let OpenTab::Saved(record) = closed {
-            self.dirty_edits.write().remove(&(record.category, record.human_id));
-        }
+        self.drop_edit(&closed.edit_key());
         let remaining = self.records.read().len();
         if remaining == 0 {
             self.active_record.set(None);
@@ -535,34 +620,49 @@ impl NavState {
         }
     }
 
-    /// Records whether the *saved* record keyed by `(category, human_id)` has an in-progress edit
-    /// that is not yet stored — published by `use_record_edit` so `⌘W`/`⌘Q` can see screen-local edit
-    /// state. Writes only on an actual change, so a re-render that reports the same dirtiness does not
-    /// churn the tabstrip and the confirm dialog.
-    pub fn set_edit_dirty(&mut self, category: Category, human_id: &str, dirty: bool) {
-        let key = (category, human_id.to_owned());
-        if self.dirty_edits.peek().contains(&key) == dirty {
+    /// Parks `edit` under `key`, replacing whatever was there — `use_record_edit` writes the buffer
+    /// through on every change, so the entry always holds the editor's current draft.
+    pub fn stash_edit(&mut self, key: EditKey, edit: StashedEdit) {
+        self.edit_drafts.write().insert(key, edit);
+    }
+
+    /// The edit parked under `key` as `(draft, seed, prov)`, for a pane hydrating its buffer on mount.
+    ///
+    /// `None` when nothing is parked there, and also when the entry holds a draft type other than `D`:
+    /// the store is heterogeneous over every aggregate's draft, so a mismatch is possible and resolves
+    /// to "no parked edit" rather than a panic in a mount-time hook.
+    #[must_use]
+    pub fn stashed_edit<D: RecordDraft>(&self, key: &EditKey) -> Option<(D, D, ProvenanceDraft)> {
+        let edits = self.edit_drafts.peek();
+        let edit = edits.get(key)?;
+        let draft = edit.draft.downcast_ref::<D>()?;
+        let seed = edit.seed.downcast_ref::<D>()?;
+        Some((draft.clone(), seed.clone(), edit.prov.clone()))
+    }
+
+    /// Drops the edit parked under `key` — it was saved, cancelled, or its record closed, so no stale
+    /// entry is left to mark the tab unsaved or block a later close. Writes only when there is
+    /// something to drop, so the clean re-runs of the write-through effect do not churn the tabstrip.
+    pub fn drop_edit(&mut self, key: &EditKey) {
+        if !self.edit_drafts.peek().contains_key(key) {
             return;
         }
-        if dirty {
-            self.dirty_edits.write().insert(key);
-        } else {
-            self.dirty_edits.write().remove(&key);
-        }
+        self.edit_drafts.write().remove(key);
     }
 
-    /// Drops the unsaved-edit mark for `(category, human_id)` — the record was saved, closed, or its
-    /// editor unmounted, so no stale key is left behind to block a later close.
-    pub fn clear_edit_dirty(&mut self, category: Category, human_id: &str) {
-        self.set_edit_dirty(category, human_id, false);
-    }
-
-    /// Whether the open tab at `index` holds work that closing it would discard: an unsaved draft, or
-    /// a saved record with an in-progress edit ([`Self::dirty_edits`]).
+    /// Whether an in-progress edit is parked under `key`.
     ///
     /// Reads reactively so the tabstrip's unsaved marker re-renders as edits come and go; the
     /// `⌘W`/`⌘Q` callers below run from event handlers, outside any reactive scope, so the
     /// subscription is inert for them.
+    #[must_use]
+    pub fn has_unsaved(&self, key: &EditKey) -> bool {
+        self.edit_drafts.read().contains_key(key)
+    }
+
+    /// Whether the open tab at `index` holds work that closing it would discard: an unsaved draft, or
+    /// a saved record with an in-progress edit parked in [`Self::edit_drafts`]. A draft tab always
+    /// counts — nothing about it is stored yet, whether or not anything has been typed.
     #[must_use]
     pub fn tab_has_unsaved(&self, index: usize) -> bool {
         let Some(tab) = self.records.read().get(index).cloned() else {
@@ -570,7 +670,7 @@ impl NavState {
         };
         match tab {
             OpenTab::Draft(_) => true,
-            OpenTab::Saved(record) => self.dirty_edits.read().contains(&(record.category, record.human_id)),
+            OpenTab::Saved(_) => self.has_unsaved(&tab.edit_key()),
         }
     }
 
@@ -764,7 +864,7 @@ impl NavState {
         {
             docked_id.clone_from(&new_human_id);
         }
-        self.rekey_dirty_edit(category, old_human_id, &new_human_id);
+        self.rekey_stashed_edit(category, old_human_id, &new_human_id);
         let mut records = self.records.write();
         let Some(OpenTab::Saved(record)) = records
             .iter_mut()
@@ -775,15 +875,18 @@ impl NavState {
         record.human_id = new_human_id;
     }
 
-    /// Moves an unsaved-edit mark from `old_human_id` to `new_human_id` (a rename), so the confirm
-    /// still fires for a record that changed id mid-edit. A no-op when the record is not marked.
-    fn rekey_dirty_edit(&mut self, category: Category, old_human_id: &str, new_human_id: &str) {
-        if !self.dirty_edits.peek().contains(&(category, old_human_id.to_owned())) {
+    /// Moves a parked edit from `old_human_id` to `new_human_id` (a rename), so it stays attached to the
+    /// record — and the confirm still fires — for a record that changed id mid-edit. A no-op when
+    /// nothing is parked for the old id.
+    fn rekey_stashed_edit(&mut self, category: Category, old_human_id: &str, new_human_id: &str) {
+        let old = EditKey::saved(category, old_human_id);
+        if !self.edit_drafts.peek().contains_key(&old) {
             return;
         }
-        let mut dirty = self.dirty_edits.write();
-        dirty.remove(&(category, old_human_id.to_owned()));
-        dirty.insert((category, new_human_id.to_owned()));
+        let mut edits = self.edit_drafts.write();
+        if let Some(edit) = edits.remove(&old) {
+            edits.insert(EditKey::saved(category, new_human_id), edit);
+        }
     }
 
     /// Moves the navigation history one step back and applies the resulting location, if any (`⌘←`

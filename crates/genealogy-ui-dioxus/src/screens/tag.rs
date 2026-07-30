@@ -17,7 +17,7 @@ pub fn TagCreateRecord() -> Element {
     let draft_badge = loc.record_draft_badge();
     let save_label = loc.action_label("save");
     let cancel_label = loc.action_label("cancel");
-    let edit = use_record_create::<TagDraft>();
+    let edit = use_record_create::<TagDraft>(Category::Tags);
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
     let on_save = use_callback(move |(draft, prov): (TagDraft, ProvenanceDraft)| {

@@ -22,7 +22,7 @@ pub fn PlaceCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::PlaceDraft>();
+    let record = use_record_create::<genealogy_ui::PlaceDraft>(Category::Places);
     let mut draft = record.draft;
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::PlaceDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {

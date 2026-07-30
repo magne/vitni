@@ -16,7 +16,7 @@ pub fn EventCreateRecord() -> Element {
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::EventDraft>();
+    let record = use_record_create::<genealogy_ui::EventDraft>(Category::Events);
     let mut draft = record.draft;
     // The find-or-create place picker: options load once; pick/clear/"+ New" drive the draft's link.
     let place_state = use_signal(genealogy_ui::PickerState::default);
