@@ -353,7 +353,7 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
         }
         _ => genealogy_ui::ResearchNoteDraft::new(),
     };
-    let record = use_record_edit::<genealogy_ui::ResearchNoteDraft>(&seed);
+    let record = use_record_edit::<genealogy_ui::ResearchNoteDraft>(Category::ResearchNotes, &human_id, &seed);
 
     let label_human_id = human_id.clone();
     use_effect(move || {

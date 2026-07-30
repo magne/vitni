@@ -336,7 +336,7 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
         }
         _ => genealogy_ui::DnaMatchDraft::new(),
     };
-    let record = use_record_edit::<genealogy_ui::DnaMatchDraft>(&seed);
+    let record = use_record_edit::<genealogy_ui::DnaMatchDraft>(Category::DnaMatches, &human_id, &seed);
 
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the match's
     // title (`tab_label` falls back to `human_id` when the title is blank).

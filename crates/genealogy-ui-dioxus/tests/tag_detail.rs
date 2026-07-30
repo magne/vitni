@@ -4,7 +4,7 @@
 
 use dioxus::prelude::*;
 use genealogy_app::{TagRef, UsingKind};
-use genealogy_ui::{Localizer, RestrictionKind, TagDetail, TagDraft, TagUsageGroupVm, UsingRecordVm};
+use genealogy_ui::{Category, Localizer, RestrictionKind, TagDetail, TagDraft, TagUsageGroupVm, UsingRecordVm};
 use genealogy_ui_dioxus::components::TabItem;
 use genealogy_ui_dioxus::master_detail::DetailContainer;
 use genealogy_ui_dioxus::screens::{
@@ -92,7 +92,8 @@ fn header_view() -> Element {
 /// edit mode). Renders `record_head_actions` over a view-mode edit state.
 fn head_actions_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let edit = use_record_edit::<TagDraft>(&TagDraft::from_detail(&sample()));
+    use_context_provider(NavState::new);
+    let edit = use_record_edit::<TagDraft>(Category::Tags, "T0001", &TagDraft::from_detail(&sample()));
     let labels = RecordActionLabels::resolve(&loc);
     let on_save = use_callback(|_: (TagDraft, genealogy_ui::ProvenanceDraft)| {});
     rsx! {
@@ -132,7 +133,8 @@ fn render(view: fn() -> Element) -> String {
 fn overview_view_mode() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let detail = sample();
-    let edit = use_record_edit::<TagDraft>(&TagDraft::from_detail(&detail));
+    use_context_provider(NavState::new);
+    let edit = use_record_edit::<TagDraft>(Category::Tags, "T0001", &TagDraft::from_detail(&detail));
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
     rsx! {
@@ -144,7 +146,8 @@ fn overview_view_mode_with_restrictions() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let mut detail = sample();
     detail.restrictions = vec![RestrictionKind::Confidential];
-    let edit = use_record_edit::<TagDraft>(&TagDraft::from_detail(&detail));
+    use_context_provider(NavState::new);
+    let edit = use_record_edit::<TagDraft>(Category::Tags, "T0001", &TagDraft::from_detail(&detail));
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
     rsx! {

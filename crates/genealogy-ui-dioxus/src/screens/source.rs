@@ -167,7 +167,7 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::SourceDetail(detail))) => genealogy_ui::SourceDraft::from_detail(detail),
         _ => genealogy_ui::SourceDraft::new(),
     };
-    let record = use_record_edit::<genealogy_ui::SourceDraft>(&seed);
+    let record = use_record_edit::<genealogy_ui::SourceDraft>(Category::Sources, &human_id, &seed);
 
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the source's
     // title (`tab_label` falls back to `human_id` when the title is blank).

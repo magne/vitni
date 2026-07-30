@@ -194,7 +194,7 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
         }
         _ => genealogy_ui::RepositoryDraft::new(),
     };
-    let record = use_record_edit::<genealogy_ui::RepositoryDraft>(&seed);
+    let record = use_record_edit::<genealogy_ui::RepositoryDraft>(Category::Repositories, &human_id, &seed);
 
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the
     // repository's name (`tab_label` falls back to `human_id` when the name is blank).

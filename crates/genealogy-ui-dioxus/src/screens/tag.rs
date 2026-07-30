@@ -100,7 +100,7 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::TagDetail(detail))) => TagDraft::from_detail(detail),
         _ => TagDraft::new(),
     };
-    let edit = use_record_edit::<TagDraft>(&seed);
+    let edit = use_record_edit::<TagDraft>(Category::Tags, &id, &seed);
 
     // Once the detail loads, upgrade the tab label from the tag id placeholder to its name
     // (`tab_label` falls back to the id when the name is blank).

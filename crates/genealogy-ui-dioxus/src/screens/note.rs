@@ -206,7 +206,7 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::NoteDetail(detail))) => genealogy_ui::NoteDraft::from_detail(detail),
         _ => genealogy_ui::NoteDraft::new(),
     };
-    let record = use_record_edit::<genealogy_ui::NoteDraft>(&seed);
+    let record = use_record_edit::<genealogy_ui::NoteDraft>(Category::Notes, &human_id, &seed);
 
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the note's
     // title (`tab_label` falls back to `human_id` when the title is blank).

@@ -594,7 +594,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::Detail(detail))) => detail.edit_seed.clone(),
         _ => PersonDraft::new(),
     };
-    let record = use_record_edit::<PersonDraft>(&seed);
+    let record = use_record_edit::<PersonDraft>(Category::People, &human_id, &seed);
 
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the person's
     // name (`tab_label` falls back to `human_id` when the name is blank).

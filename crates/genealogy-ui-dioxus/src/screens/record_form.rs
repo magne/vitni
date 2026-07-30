@@ -64,10 +64,16 @@ impl<D: RecordDraft> RecordEditState<D> {
     }
 }
 
-/// The edit state for an existing record, seeded from its current values. Reseeds the draft when the
-/// committed record changes underneath (e.g. after a save reload) — but only while not editing, so a
-/// live edit is never clobbered (the tag editor's precedent).
-pub fn use_record_edit<D: RecordDraft>(seed: &D) -> RecordEditState<D> {
+/// The edit state for an existing record `(category, human_id)`, seeded from its current values.
+/// Reseeds the draft when the committed record changes underneath (e.g. after a save reload) — but
+/// only while not editing, so a live edit is never clobbered (the tag editor's precedent).
+///
+/// Also **publishes dirtiness to the shell** ([`NavState::set_edit_dirty`]): the edit buffer is
+/// screen-local, so without this `⌘W`/`⌘Q` cannot see an in-progress edit and would discard it
+/// silently. Reading `is_dirty()` inside the effect subscribes it to `draft` and `seed`, so a save
+/// reseed and Cancel clear the mark on their own; unmounting the screen clears it too, leaving no
+/// stale key behind.
+pub fn use_record_edit<D: RecordDraft>(category: Category, human_id: &str, seed: &D) -> RecordEditState<D> {
     let editing = use_signal(|| false);
     let mut seed_sig = use_signal({
         let seed = seed.clone();
@@ -85,12 +91,20 @@ pub fn use_record_edit<D: RecordDraft>(seed: &D) -> RecordEditState<D> {
             draft.set(seed);
         }
     }));
-    RecordEditState {
+    let state = RecordEditState {
         editing,
         seed: seed_sig,
         draft,
         prov,
-    }
+    };
+    let mut nav = use_context::<NavState>();
+    // The detail panes are keyed on `human_id` (`screens/record_detail.rs`), so a different record
+    // remounts this hook rather than re-running it with a new id — the key captured here stays right.
+    let published = human_id.to_owned();
+    use_effect(move || nav.set_edit_dirty(category, &published, state.is_dirty()));
+    let dropped = human_id.to_owned();
+    use_drop(move || nav.clear_edit_dirty(category, &dropped));
+    state
 }
 
 /// The edit state for a create pane: an empty draft, in edit mode from the start (`record-editing.html`
