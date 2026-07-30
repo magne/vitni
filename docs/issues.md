@@ -17,8 +17,10 @@ Two conventions:
 
 ## Bugs
 
-No open defects. The five Phase 9 map/geometry bugs are fixed and archived; two of those fixes ship
-without test coverage, tracked below under *Geography & map*.
+Two open defects, both found by code reading rather than use, and both tracked under the area they
+affect: *Postgres place-detail reads fail outright* under *Performance & scale*, and *map markers label
+with the first-asserted name* under *Geography & map*. The five Phase 9 map/geometry bugs are fixed and
+archived; two of those fixes ship without test coverage, also tracked under *Geography & map*.
 
 ## Records & data model
 
@@ -29,9 +31,52 @@ issues already filed against it keep resolving their [`#person--family`](#person
 
 ### Places
 
+Most of the model items below come from [`research/gis-norway.md`](research/gis-norway.md), which
+assessed the aggregate against Norwegian administrative history; it holds the per-question reasoning,
+the additivity check against ADR 0004 §4, and the data behind each claim. All of them are additive —
+none needs an event rewrite — and the first three are gated by an unwritten **ADR 0031**.
+
 - **Dated name/enclosure use-cases** — `add_place_name` / `assert_place_enclosed_by` don't accept a
   date param, so map/UI enclosure edits can't be dated (geometry edits already can); the map-edit
-  provenance form doesn't yet default its date to the active time-slider year.
+  provenance form doesn't yet default its date to the active time-slider year. This is also what makes
+  a dated hierarchy unwritable from the app layer at all: a county transfer or a 19th-century parish
+  boundary can only be expressed today by building a raw `PlaceCommand` and calling
+  `Store::execute_place`, which is what `crates/genealogy-app/tests/place_temporal.rs` does and
+  documents as a gap.
+- **`MultiPolygon` geometry variant** — `PlaceGeometry` is `Point`/`Polygon`, so a place whose area is
+  topologically disconnected cannot be expressed: 280 of 357 Norwegian municipalities have coastline and
+  Kvitsøy alone is 167 islands. Asserting several same-dated `Polygon`s does not substitute —
+  `geometry_as_of` returns exactly one while `geo_index` indexes every part, so the rendered boundary and
+  the bbox query disagree. Reopened from *Decided* on the trigger ADR 0024 named for itself.
+- **Parallel hierarchies need a relation on `PlaceRef`** — a farm sits in a *kommune* **and** a *sokn*
+  **and** a *prestegjeld*, and these do not nest. `PlaceRef` has no relation kind, so every parent lands
+  in one undiscriminated `Vec`, `enclosed_by_as_of` returns whichever import order put first, and
+  `hierarchy_chain`/`generated_title` can emit a factually mixed chain. `PlaceSummary` has no field for
+  the live enclosure set either, so a second parent is invisible to the frontend and its `AssertionId`
+  never reaches the UI to be retracted.
+- **Geometry accuracy and role** — `PlaceGeometryAssertion` carries only `{geometry, date}`, so nothing
+  distinguishes a surveyed boundary from a reconstructed one, nor "this place **is** a point" from "this
+  is the only locator we have for an area". Two same-dated geometries at different generalization levels
+  are also indistinguishable, and `geometry_as_of` then picks by assertion order. `Confidence` is the
+  wrong carrier — it is a surety scheme whose ordinals ADR 0027 §3 makes relabelable per workspace, so
+  metres would inherit a user-chosen label.
+- **Ecclesiastical `PlaceType` variants** — `Diocese`/`Deanery`/`District` are missing, which is the
+  whole hierarchy above the parish and the one Norwegian genealogical sources are organised by.
+  `Custom(String)` is not a substitute: `genealogy-ui/src/i18n.rs` renders it verbatim, so a raw
+  Norwegian string reaches every list, breadcrumb, picker and map label, against data-model §14.
+- **Dissolved places resolve forever** — each dated assertion is read as effective-*from* with no way to
+  say "ceased", so a municipality dissolved in 1964 still resolves a name, a parent and a geometry as of
+  today, and `show_geography` plots it overlapping its own successors. `SuccessionAsserted` does not fix
+  it: nothing in the resolution path reads successions. A read-side `existed_as_of` derived from the
+  succession payload closes it with no event change; only cessation with *no* successor needs an
+  additive `AssertDissolution`, since `decide` rejects an empty `to`.
+- **Dated, accumulating `code`** — `code` is single-valued and last-writer-wins, so a place's identifier
+  history is lost: Bærum carried 0219, then 3024, then 3201 with no boundary change. Making it dated and
+  accumulating like `PlaceName` is a projection reshape, free per ADR 0010.
+- **`places_containing(point, as_of)`** — there is no containment query at all; `places_in_bbox` answers
+  only bounding-box overlap. This is what "which parish held this farm in 1865" needs. Containment must
+  surface as *evidence* for an `AssertEnclosedBy` — rationale, dataset citation, low confidence — never
+  as a projection-time inference, or geometry silently overrides the recorded legal fact.
 - **Optional DB `place_parent` index** — a Gramps precedent for scaling the hierarchy walk; a later
   follow-up, not needed at current volumes.
 
@@ -154,6 +199,11 @@ Residuals from the shortcuts work (ADR 0030); see
   `format!`-built JavaScript that no test inspects, and `maplibre_init_script` is private with no test
   module. Both are verified present in code; neither would fail if regressed. Either assert the
   generated script text, or extract the paint expressions into testable Rust values. — #202
+- **Map markers label with the first-asserted name, not the resolved one.** `show_geography` builds each
+  `PlaceMarker` label from `place.names.first()` (`genealogy-app/src/geography.rs`) while the geometry on
+  that same marker *is* date-resolved, so at slider year 1875 the pin reads "Oslo" while
+  `generated_title` beside it correctly reads "Kristiania" — the map contradicts the record. Use the
+  as-of-resolved name; `PlaceView::name_as_of` already exists. — #232
 - **`geography_toolbar` takes 8 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
   fit state were threaded in — bundle them into a struct. Cosmetic cleanup.
 - **Point tool has no confirm step in the Geography tool.** The Place Map editor added a "Use this
@@ -205,6 +255,19 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   import of the same file duplicates the Source aggregate), so the ADR 0029 timestamp-gated rule can't
   target it yet. `Person.sex` reconciliation shipped without these; widening the rule to Source's
   bibliographic fields (`title`/`author`/`pub_info`/`abbrev`) is blocked on them.
+- **Place merge/sync reconciliation prerequisite** — the same three gaps ADR 0029 §4 recorded for Source,
+  and Place has them identically: no `ExternalId` resolve-or-create (Place is absent from
+  `for_each_db_external_id_aggregate!`, and `import.rs` has no place path, so a second import duplicates
+  every place), no WIT verbs for most Place fields, and no read path exposing a field's live
+  `AssertionId` **together with** that assertion's `occurred_at` — without which the timestamp gate
+  cannot be evaluated at all. Place's dated multi-valued fields do have the natural match key `Fact`
+  lacks: the effective-from `date`. See [`research/gis-norway.md`](research/gis-norway.md).
+- **Retraction resurrection blocks recurring imports** — ADR 0029 compares the incoming value against the
+  *live* assertion, and a retracted assertion is not live. So a value a researcher retracted as wrong is
+  re-asserted by the next import run, and every run after it, attributed to `AgentKind::Software` so it
+  reads as routine in the history. This destroys editorial judgement rather than merely duplicating data,
+  and must be resolved before any import is made recurring. Needs a tombstone rule over retracted
+  assertions keyed by originating authority.
 - **Lift `prepare_import_target`** into `genealogy-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
 - **No merge/conflict mockup for reconciled fields** — the Phase 10 plan required a merge/conflict view
@@ -289,9 +352,23 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   virtualization** under *Lists, search & scale*.
 - **Research-note reverse lookup is a `json_each` scan, not a materialized index** — fine now (~2 ms at
   ~2250 notes); a materialized side-index is a follow-up only if note volume grows.
-- **Postgres spatial mirror** — `places_in_bbox` / `place_predecessors` / `place_successors` return
-  `Unsupported` on Postgres (SQLite R\*Tree only); the native geometry + GiST index is a later
-  feature-gated follow-up.
+- **Postgres place-detail reads fail outright.** `show_place_resolved` — the shared body of both
+  `show_place` and `show_place_as_of` — calls `place_predecessors`/`place_successors` with `?`
+  propagation, and both return `DbError::Unsupported` on Postgres, so **every** place-detail read errors
+  on that backend: the GUI place screen and `genealogy place show` alike. Not a spatial problem and needs
+  no PostGIS — the succession index is a plain relational join that was only ever wired into the SQLite
+  path. Tolerating `Unsupported` as an empty list is the one-line stopgap; mirroring
+  `place_succession_index` for `Pool<Postgres>` is the fix. — #231
+- **Postgres spatial mirror** — `places_in_bbox` returns `Unsupported` on Postgres (SQLite R\*Tree only);
+  the native geometry + GiST index is a later feature-gated follow-up. It would also back the
+  `places_containing` query under *Places*, and once containment exists on both engines the two must
+  agree at boundary-touching points and shared edges — so a shared conformance corpus, not two
+  independently plausible implementations, or parish membership would change with the database engine.
+- **Index `$.state.human_id`** — `next_human_id` reads and JSON-extracts every row of a `*_view` table to
+  take the max, and every `human_id` lookup is a second full scan, so a bulk import is O(n²) twice over
+  before any domain work happens. A generated column plus index turns both into probes. Overlaps
+  **`ListPane` DOM virtualization** under *Lists, search & scale*, which names the same change as one of
+  its options; this is the standalone version, wanted independently of virtualization. — #233
 - **Viewport-scoped loading** — `show_geography` loads every place with a resolved geometry rather than
   calling `places_in_bbox` for the current viewport; wire the spatial query in when place counts grow
   (needs a Postgres fallback given the row above).
@@ -368,10 +445,15 @@ decision, not a gap.
 
 ### Model & interchange
 
-- **`LineString` / `Multi*` geometry variants** — the model ships `Point`/`Polygon`; the other
-  variants are additive-later per ADR 0024 (grow the enum append-only when a concrete need appears).
+- **`LineString` geometry variant** — the model ships `Point`/`Polygon`; `LineString` is additive-later
+  per ADR 0024 (grow the enum append-only when a concrete need appears), and nothing wants it yet.
+  **`Multi*` is no longer deferred** — the concrete need ADR 0024 named for itself arrived, so it is an
+  open item under *Places*.
 - **Explicit `[from, until)` validity intervals** — the effective-from resolution rule (ADR 0026)
-  ships; add intervals additively only if gaps/overlaps prove ambiguous in real data.
+  ships; add intervals additively only if gaps/overlaps prove ambiguous in real data. Still closed after
+  the Norwegian-geography review, which found the gap intervals would address (a dissolved place
+  resolving forever) but concluded they are the wrong-sized fix: only a place's *lifetime* needs an end,
+  not every assertion, so the open *Places* item is a read-side `existed_as_of` instead.
 - **RichText `translator`** — permanently non-round-trippable: neither GEDCOM 7 nor the Gramps DTD has
   any tag for who translated a note's text.
 - **Media DTO convention split** — `person-dto`/`family-dto`/`event-dto`'s `media` is `list<media-ref>`
@@ -385,7 +467,11 @@ decision, not a gap.
 ### Architecture
 
 - **Snapshotting is decided, not deferred-open** — measured and **not** warranted at target scale;
-  ADR 0004's deferral stands, no follow-up ADR.
+  ADR 0004's deferral stands, no follow-up ADR. The measurement was taken on small payloads, so it holds
+  for boundary geometry imported at N500-equivalent generalization or coarser (the level
+  [`research/gis-norway.md`](research/gis-norway.md) recommends); only importing finer geometry, which
+  that research argues against on other grounds, would put megabyte events in the log and require
+  re-measuring.
 - **Server backend + web frontend** — roadmap-owned and deliberately unscheduled; see
   [`roadmap.md` Phase 13](roadmap.md#phase-13--beyond-10-server-backend--web-frontend). Builds on the
   config split: the server adds the `ConfigStore` **database** backend so the operator and

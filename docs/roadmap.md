@@ -408,6 +408,19 @@ Plan: [`docs/archive/plans/places-geography-temporal.md`](archive/plans/places-g
   `add_place_name`/`assert_place_enclosed_by` use-cases, and the `map-provider` plugin world +
   geocoding (ADR 0025 §4).
 
+  **Residual closure, scoped 2026-07-29** by [`docs/research/gis-norway.md`](research/gis-norway.md),
+  which tested this phase's model against Norwegian administrative history (counties and municipalities
+  back to 1838, plus the ecclesiastical hierarchy) and found real importable data reaching 1838. Three of
+  the residuals above are promoted from optional to required by that target and are gated by **ADR 0031**:
+  the `Multi*` geometry variant (280 of 357 Norwegian municipalities have coastline, so single-ring
+  polygons cannot express them), the dated `add_place_name`/`assert_place_enclosed_by` use-cases, and the
+  Postgres mirror — whose succession half turns out to be a functional break of `show_place` rather than a
+  performance follow-up. The research also surfaced model gaps this phase did not anticipate: parallel
+  civil/ecclesiastical/judicial hierarchies that do not nest, positional accuracy as a concept distinct
+  from `Confidence`, and cessation. All are additive; the itemization lives in
+  [`issues.md`](issues.md#places). The import itself is deliberately unmilestoned — see
+  [`issue-tracking.md`](issue-tracking.md) §4.
+
 ## Phase 10 — Research rigor & import sync ✅ done
 
 The evidence/conclusion model's research-quality layer (all data-model §17): make the surety scheme
@@ -578,6 +591,7 @@ they are confirmed when the ADR is written.
 | [ADR 0029](adr/0029-import-merge-sync-reconciliation.md) — **accepted** | Import merge/sync: timestamp-gated reconciliation against the file's export date (`Person.sex` first slice; Source deferred) | Phase 10 | ADR 0013, 0018 |
 | [ADR 0014](adr/0014-plugin-signing-trust-tiers-and-loading.md) — **accepted** | Plugin signing, trust tiers, capability-grant UX, and three-layer loading | Phase 11 | ADR 0007 |
 | [ADR 0030](adr/0030-customizable-keyboard-shortcuts.md) — **accepted** | Customizable keyboard shortcuts: one resolved `Chord` map, Global-group-only rebinding, client-scope `[shortcuts]` config | Ease of use | ADR 0008, 0015 |
+| ADR 0031 | Place model for real-world administrative geography: reopen the `Multi*` geometry variant, add a civil/ecclesiastical/judicial `relation` to `PlaceRef`, and carry positional accuracy separately from `Confidence` | Phase 9 residual closure | ADR 0024, 0026, 0027 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 
 Conditional — write an ADR only if/when the option is adopted (direction already fixed, so not

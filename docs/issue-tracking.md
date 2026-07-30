@@ -1,7 +1,8 @@
 # Issue tracking on GitHub
 
-- **Status:** **Applied 2026-07-27.** 39 labels, 3 milestones, and the first 26 issues (#190–#215)
-  exist; `.github/labels.toml`, the issue-template forms, and `cargo xtask issue-sync` are in the repo.
+- **Status:** **Applied 2026-07-27.** 39 labels and the issue-template forms exist, alongside
+  `.github/labels.toml` and `cargo xtask issue-sync`. `0.8 — UI parity` shipped and is closed; the two
+  remaining gates are `0.9` and `1.0`.
 - **Date:** 2026-07-27
 - **Audience:** anyone filing, triaging, or closing an issue
 - **Companion:** [`issues.md`](issues.md) is the backlog this describes; [`roadmap.md`](roadmap.md)
@@ -128,47 +129,29 @@ early, because there is no point packaging an interface that isn't finished.
 The workspace is at `0.1.0` with no tags yet, so the two gates are numbered to make their order
 unambiguous in GitHub's milestone list.
 
+`0.8 — UI parity` shipped and is closed on GitHub; its narrative lives in
+[`archive/completed-work.md`](archive/completed-work.md). A closed gate is dropped from this table
+rather than kept as history — the archive is the record.
+
 | Milestone | Contents |
 | --- | --- |
-| **`0.8 — UI parity`** *(shipped)* | Every operation a user can reach from the GUI. The four *GUI ⇄ CLI parity* gaps (bulk export, bulk import + target selection, projection rebuild, Postgres workspace creation), the research-note UI **and** its missing mockup, and family child-removal. Plus the three items neither frontend can do today but the GUI must once it is the reference surface (place succession, tag restrictions, workspace-scope surety labels), and the media region viewer, which the GUI wires on Person only. |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **dirty saved-record edits are discarded silently** on close/quit — data loss in the primary interface. Then the `Modal` focus trap and click-away scrim (a keyboard user can tab into the inert background), the two shipped map fixes with no test coverage, the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the three *Shell, tabs & notifications* ease-of-use items (live list updates, toasts, remembered tab). |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **dirty saved-record edits are discarded silently** on close/quit — data loss in the primary interface. Then the `Modal` focus trap and click-away scrim (a keyboard user can tab into the inert background), the two shipped map fixes with no test coverage, the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the three *Shell, tabs & notifications* ease-of-use items (live list updates, toasts, remembered tab). Then the three items the Norwegian-geography research surfaced: **Postgres place-detail reads fail outright** (the most severe — `show_place` and `genealogy place show` return an error on every place, on that backend), the geography markers labelled with the first-asserted name rather than the resolved one, and the `$.state.human_id` index that turns two full projection scans into probes. |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
-**Do not create a fourth.** Everything else — DNA depth, the server/web work, the plugin-UI vocabulary
-tail, the ADR 0014 plugin-trust out-of-scope list, round-trip gaps, performance work, and the
-upstream-blocked dependencies — carries **no milestone**. "Someday" is honestly encoded as
-`priority/low` with no milestone; an ungroomed `2.0` looks like a commitment nobody made.
+**A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
+server/web work, the plugin-UI vocabulary tail, the ADR 0014 plugin-trust out-of-scope list, round-trip
+gaps, performance work, the Norwegian-geography import, and the upstream-blocked dependencies — carries
+**no milestone**. "Someday" is honestly encoded as `priority/low` with no milestone; an ungroomed `2.0`
+looks like a commitment nobody made. This is deliberately a principle rather than a count: a count has
+to be re-argued every time a gate ships, and the thing worth guarding is the commitment, not the
+arithmetic.
 
 ## 4. Milestone contents
 
-The two pre-1.0 gates, itemized from `issues.md` as it stands. ~20 issues total — small enough to
-groom, which is the point of filing only what is being worked on.
+The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
+point of filing only what is being worked on.
 
-### `0.8 — UI parity` (10) — shipped
-
-All ten closed; the milestone is closed on GitHub. The work itself is itemized in
-[`archive/completed-work.md`](archive/completed-work.md).
-
-| Item | Area |
-| --- | --- |
-| [Bulk export is CLI-only](https://github.com/magne/genealogy/issues/190) | `frontend/gui-cli-parity` |
-| [Bulk import is CLI-only, and target selection has no GUI shape](https://github.com/magne/genealogy/issues/191) | `frontend/gui-cli-parity` |
-| [Projection rebuild is CLI-only](https://github.com/magne/genealogy/issues/192) | `frontend/gui-cli-parity` |
-| [Postgres workspaces can only be created from the CLI](https://github.com/magne/genealogy/issues/193) | `frontend/gui-cli-parity` |
-| [Research notes have no GUI at all (+ the missing mockup)](https://github.com/magne/genealogy/issues/194) | `records/notes` |
-| [A child cannot be removed from a family in the GUI](https://github.com/magne/genealogy/issues/195) | `records/person-family` |
-| [Place succession can be read but never written](https://github.com/magne/genealogy/issues/196) | `records/places` |
-| [Tag has no restrictions path](https://github.com/magne/genealogy/issues/197) | `records/tags` |
-| [Workspace-scope surety labels are read but unwritable](https://github.com/magne/genealogy/issues/198) | `records/cross-aggregate` |
-| [Interactive Set/Clear region on every owner (wired on Person only)](https://github.com/magne/genealogy/issues/199) | `records/media` |
-
-Only the first six are CLI-parity gaps. **Place succession, tag restrictions, and workspace-scope
-surety labels** are reachable from *neither* frontend today; they belong here anyway, because once the
-GUI is the reference surface "the CLI can't either" stops being a defence. The **media region viewer**
-is a third kind again — the GUI does it, but on the Person screen only, so five of six media owners
-behave differently from the first.
-
-### `0.9 — UI stabilization` (10 so far)
+### `0.9 — UI stabilization` (13 so far)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
 audit could find by reading code; the rest will come from using the GUI in earnest before 1.0, and that
@@ -187,8 +170,16 @@ this size by the time it closes, the GUI probably has not been exercised hard en
 | [Live list updates on create](https://github.com/magne/genealogy/issues/207) | A created record does not appear until manual refresh |
 | [Toast notifications](https://github.com/magne/genealogy/issues/208) | No feedback channel for completed actions |
 | [Remember the open record's tab](https://github.com/magne/genealogy/issues/209) | Tab resets on every navigation |
+| [Postgres place-detail reads fail outright](https://github.com/magne/genealogy/issues/231) | Every `show_place` / `genealogy place show` errors on a Postgres workspace — the place screen is unusable on that backend, GUI and CLI alike |
+| [Map markers label with the first-asserted name](https://github.com/magne/genealogy/issues/232) | The pin reads "Oslo" at slider year 1875 while the generated title correctly reads "Kristiania" — the map contradicts the record beside it |
+| [Index `$.state.human_id`](https://github.com/magne/genealogy/issues/233) | `next_human_id` and `find_place` each full-scan the projection; the index is the prerequisite for any bulk place import not being O(n²) |
 
-Optional twelfth: *Point tool has no confirm step in the Geography tool* — a known inconsistency with
+The last three came out of [`research/gis-norway.md`](research/gis-norway.md); the first two are
+pre-existing defects unrelated to that work, found while reading the code. The index is the weakest fit
+of the three — an enabler rather than a defect — and is here because it is cheap and unblocks the
+geography work that follows.
+
+Optional fifteenth: *Point tool has no confirm step in the Geography tool* — a known inconsistency with
 the Place Map editor, cheap to close alongside the map work.
 
 ### Not in either milestone
@@ -197,6 +188,11 @@ DNA depth, round-trip gaps, performance/scale, the ADR 0014 plugin-trust out-of-
 plugin-UI vocabulary tail, upstream-blocked dependencies, assisted-import residuals, saved searches /
 column chooser / list virtualization, geocoding, the `place_parent` index, and the
 `geography_toolbar` argument cleanup. All `priority/low` or `priority/medium`, no milestone.
+
+The **Norwegian-geography import** belongs here too, and deliberately so. Its model changes are gated by
+an unwritten ADR 0031 and it is scoped in `roadmap.md` as closing Phase 9's declared residuals, not as a
+shipping gate — putting a feature body with an unaccepted gating ADR ahead of UI correctness would
+invert the ordering rule in §3. Only its three by-products above are milestoned.
 
 **One item to close, not file:** *DNA match views in the UI* is **stale**. The screens exist
 (`screens/dna_match.rs` has Segments and Ancestors tabs with per-row edit/retract, plus
