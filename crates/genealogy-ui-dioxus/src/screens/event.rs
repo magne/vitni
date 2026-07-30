@@ -408,7 +408,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::EventDetail(detail))) => genealogy_ui::EventDraft::from_detail(detail),
         _ => genealogy_ui::EventDraft::new(),
     };
-    let record = use_record_edit::<genealogy_ui::EventDraft>(&seed);
+    let record = use_record_edit::<genealogy_ui::EventDraft>(Category::Events, &human_id, &seed);
 
     // The existing-place picker: its options load once, and pick/clear/reset drive the draft's place
     // link (inline place creation is create-only, so this picker never offers "+ New").

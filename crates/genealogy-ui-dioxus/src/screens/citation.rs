@@ -463,7 +463,7 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
         }
         _ => genealogy_ui::CitationDraft::new(),
     };
-    let record = use_record_edit::<genealogy_ui::CitationDraft>(&seed);
+    let record = use_record_edit::<genealogy_ui::CitationDraft>(Category::Citations, &human_id, &seed);
 
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the cited
     // source (`tab_label` falls back to `human_id` when unsourced, mirroring the detail-head title).

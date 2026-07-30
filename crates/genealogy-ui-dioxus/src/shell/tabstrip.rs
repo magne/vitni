@@ -6,6 +6,10 @@
 //! list is simply empty) so back/forward stay reachable. Each tab is an HTML5 drag source: dragging
 //! it onto the detail pane docks the record side-by-side (`.master-detail.split-2`); `⌘⇧1…9` is the
 //! keyboard equivalent. The tab currently docked carries the `docked` class.
+//!
+//! A tab holding unsaved work — a draft, or a saved record mid-edit
+//! ([`NavState::tab_has_unsaved`]) — carries the `unsaved` class, a dot glyph, and an "unsaved
+//! changes" accessible name, so `⌘W`'s confirm is never a surprise.
 
 use dioxus::prelude::*;
 use genealogy_ui::Category;
@@ -57,6 +61,7 @@ pub fn RecordTabstrip() -> Element {
                                     *docked_category == category && *docked_id == record.human_id
                                 })
                         });
+                        let is_unsaved = nav.tab_has_unsaved(index);
                         let mut class = String::from("rtab");
                         if is_active {
                             class.push_str(" active");
@@ -67,16 +72,27 @@ pub fn RecordTabstrip() -> Element {
                         if is_draft {
                             class.push_str(" draft");
                         }
+                        if is_unsaved {
+                            class.push_str(" unsaved");
+                        }
                         let label = match tab.as_saved() {
                             Some(record) => record.label.clone(),
                             None => chrome.0.draft_tab_label(&chrome.0.rail_label(category.label_id())),
                         };
                         let human_id = tab.human_id().map(str::to_owned);
                         let close_label = chrome.0.close_tab_named(&label);
+                        // Only an unsaved tab overrides its accessible name; a clean tab is named by
+                        // its own text content, which reads better than any generated string.
+                        let unsaved_name = if is_unsaved {
+                            Some(chrome.0.tab_unsaved_named(&label))
+                        } else {
+                            None
+                        };
                         rsx! {
                             button {
                                 class,
                                 role: "tab",
+                                aria_label: unsaved_name,
                                 // Only saved tabs are drag sources; a draft has no record to dock.
                                 draggable: if human_id.is_some() { "true" } else { "false" },
                                 tabindex: if is_active { "0" } else { "-1" },
@@ -88,6 +104,9 @@ pub fn RecordTabstrip() -> Element {
                                     }
                                 },
                                 ondragend: move |_| nav.end_tab_drag(),
+                                if is_unsaved {
+                                    span { class: "unsaved-dot", aria_hidden: "true", "●" }
+                                }
                                 "{label}"
                                 span {
                                     class: "close",

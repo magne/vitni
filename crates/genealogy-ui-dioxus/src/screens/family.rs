@@ -390,7 +390,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::FamilyDetail(detail))) => genealogy_ui::FamilyDraft::from_detail(detail),
         _ => genealogy_ui::FamilyDraft::new(),
     };
-    let record = use_record_edit::<genealogy_ui::FamilyDraft>(&seed);
+    let record = use_record_edit::<genealogy_ui::FamilyDraft>(Category::Families, &human_id, &seed);
 
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the family's
     // title (`tab_label` falls back to `human_id` when the title is blank).

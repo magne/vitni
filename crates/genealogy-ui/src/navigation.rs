@@ -29,7 +29,10 @@ use crate::presentation::{ConfidenceLevel, RestrictionKind};
 /// Order is the rail's display order. Eleven categories carry a `g`-prefix navigation key (see
 /// [`Self::nav_key`]); the two DNA aggregates appear in the rail but have no nav key yet (the
 /// shortcut spec leaves them off the `g`-map).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Ord` is the declared (rail) order, so a `(Category, String)` key sorts into a stable,
+/// user-meaningful sequence in the ordered collections that hold one (`NavState::dirty_edits`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Category {
     /// Workspace overview.

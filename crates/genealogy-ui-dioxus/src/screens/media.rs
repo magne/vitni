@@ -205,7 +205,7 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::MediaDetail(detail))) => genealogy_ui::MediaDraft::from_detail(detail),
         _ => genealogy_ui::MediaDraft::new(),
     };
-    let record = use_record_edit::<genealogy_ui::MediaDraft>(&seed);
+    let record = use_record_edit::<genealogy_ui::MediaDraft>(Category::Media, &human_id, &seed);
 
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the media
     // object's title (`tab_label` falls back to `human_id` when the title is blank).

@@ -164,10 +164,6 @@ long-standing "DNA match views in the UI" item is closed.
 Residuals from the shortcuts work (ADR 0030); see
 [`archive/completed-work.md`](archive/completed-work.md). Deliberate non-goals are under *Decided*.
 
-- **Dirty saved-record edits are not confirmed.** `Ctrl+W`/`Ctrl+Q`'s confirm fires on `OpenTab::Draft`
-  only. An in-progress edit of an *already-saved* record lives in screen-local `RecordEditState`
-  (`screens/record_form.rs`) and is invisible to `NavState`, so closing/quitting discards it silently.
-  Lifting edit-dirtiness into shell state is the follow-up. — #200
 - **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
   its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
   so it is neither listed by the `?` overlay nor rebindable, and it does not go through

@@ -311,7 +311,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::PlaceDetail(detail))) => genealogy_ui::PlaceDraft::from_detail(detail),
         _ => genealogy_ui::PlaceDraft::new(),
     };
-    let record = use_record_edit::<genealogy_ui::PlaceDraft>(&seed);
+    let record = use_record_edit::<genealogy_ui::PlaceDraft>(Category::Places, &human_id, &seed);
 
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the place's
     // title (`tab_label` falls back to `human_id` when the title is blank).

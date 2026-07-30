@@ -101,7 +101,8 @@ fn explorer_wraps_the_list_in_a_single_grid_cell() {
 }
 
 /// The record tabstrip after opening a person draft: the draft tab is active, carries the `draft`
-/// class, shows the localized "New <entity>" label, and is not a drag source.
+/// class (plus `unsaved`, since a draft is unsaved by definition), shows the localized "New <entity>"
+/// label, and is not a drag source.
 fn tabstrip_with_draft() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
@@ -115,8 +116,8 @@ fn tabstrip_with_draft() -> Element {
 fn a_draft_tab_renders_its_own_chrome() {
     let html = render(tabstrip_with_draft);
     assert!(
-        html.contains(r#"class="rtab active draft""#),
-        "the draft tab is active and marked as a draft:\n{html}"
+        html.contains(r#"class="rtab active draft unsaved""#),
+        "the draft tab is active, marked as a draft, and flagged unsaved:\n{html}"
     );
     assert!(
         html.contains("New People"),

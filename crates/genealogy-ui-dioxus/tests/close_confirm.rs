@@ -1,7 +1,8 @@
 //! SSR-probe assertions for the close-tab/quit confirm flow on [`NavState`] (PR1 §1.4): closing a
-//! saved tab is immediate; closing a draft (or quitting with one open) arms the confirm dialog
-//! instead of discarding it silently. Like `dock.rs`, each probe drives `NavState` in `use_hook` and
-//! renders a small marker the test inspects.
+//! *clean* saved tab is immediate; closing one that holds unsaved work — a draft, or a saved record
+//! with an in-progress edit ([`NavState::dirty_edits`], issue #200) — arms the confirm dialog instead
+//! of discarding it silently. Like `dock.rs`, each probe drives `NavState` in `use_hook` and renders a
+//! small marker the test inspects.
 
 use std::rc::Rc;
 
@@ -35,7 +36,8 @@ fn render(app: fn() -> Element) -> String {
     dioxus_ssr::render(&vdom)
 }
 
-/// The marker block: open-tab count, whether the confirm is armed, and the quit ticket value.
+/// The marker block: open-tab count, whether the confirm is armed, the quit ticket value, and the
+/// `(category, human_id)` keys currently marked as holding an unsaved edit.
 fn probe(nav: &NavState) -> Element {
     let tabs = nav.records.read().len();
     let pending = if nav.pending_close.read().is_some() {
@@ -44,10 +46,18 @@ fn probe(nav: &NavState) -> Element {
         "NONE"
     };
     let quit = *nav.quit_requested.read();
+    let dirty = nav
+        .dirty_edits
+        .read()
+        .iter()
+        .map(|(category, human_id)| format!("{}/{human_id}", category.id()))
+        .collect::<Vec<_>>()
+        .join(",");
     rsx! {
         div { "TABS:{tabs}" }
         div { "PENDING:{pending}" }
         div { "QUIT:{quit}" }
+        div { "DIRTY:[{dirty}]" }
     }
 }
 
@@ -178,6 +188,183 @@ fn confirming_a_pending_quit_fires_it() {
     );
 }
 
+fn close_dirty_saved_tab_arms_confirm() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.set_edit_dirty(Category::People, "I0001", true);
+        nav.request_close_tab(0);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn closing_a_dirty_saved_tab_arms_the_confirm_instead_of_discarding_the_edit() {
+    let html = render(close_dirty_saved_tab_arms_confirm);
+    assert!(
+        html.contains("TABS:1"),
+        "the record with an unsaved edit stays open until confirmed:\n{html}"
+    );
+    assert!(
+        html.contains("PENDING:SOME"),
+        "an in-progress edit of a saved record arms the confirm:\n{html}"
+    );
+}
+
+fn quit_with_dirty_saved_tab_arms_confirm() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.set_edit_dirty(Category::People, "I0001", true);
+        nav.request_quit();
+    });
+    probe(&nav)
+}
+
+#[test]
+fn quitting_with_a_dirty_saved_record_arms_the_confirm() {
+    let html = render(quit_with_dirty_saved_tab_arms_confirm);
+    assert!(
+        html.contains("QUIT:0"),
+        "quit does not fire while a saved record has an unsaved edit:\n{html}"
+    );
+    assert!(html.contains("PENDING:SOME"), "the confirm dialog is armed:\n{html}");
+}
+
+fn cancel_keeps_the_dirty_saved_tab() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.set_edit_dirty(Category::People, "I0001", true);
+        nav.request_close_tab(0);
+        nav.cancel_close();
+    });
+    probe(&nav)
+}
+
+#[test]
+fn cancelling_keeps_the_dirty_tab_open_and_still_dirty() {
+    let html = render(cancel_keeps_the_dirty_saved_tab);
+    assert!(html.contains("TABS:1"), "cancelling keeps the tab open:\n{html}");
+    assert!(html.contains("PENDING:NONE"), "the confirm clears:\n{html}");
+    assert!(
+        html.contains("DIRTY:[people/I0001]"),
+        "the edit is still pending, so the next ⌘W confirms again:\n{html}"
+    );
+}
+
+fn confirm_closes_the_dirty_saved_tab() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.set_edit_dirty(Category::People, "I0001", true);
+        nav.request_close_tab(0);
+        nav.confirm_close();
+    });
+    probe(&nav)
+}
+
+#[test]
+fn confirming_closes_the_dirty_tab_and_drops_its_dirty_key() {
+    let html = render(confirm_closes_the_dirty_saved_tab);
+    assert!(html.contains("TABS:0"), "confirming discards the edit:\n{html}");
+    assert!(
+        html.contains("DIRTY:[]"),
+        "the closed record leaves no stale dirty key behind:\n{html}"
+    );
+}
+
+fn close_clean_saved_tab_beside_a_dirty_one() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        nav.set_edit_dirty(Category::People, "I0002", true);
+        nav.request_close_tab(0);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_clean_tab_closes_immediately_even_while_a_sibling_is_dirty() {
+    let html = render(close_clean_saved_tab_beside_a_dirty_one);
+    assert!(html.contains("TABS:1"), "the clean tab closes at once:\n{html}");
+    assert!(
+        html.contains("PENDING:NONE"),
+        "dirtiness is per record, not shell-wide:\n{html}"
+    );
+    assert!(
+        html.contains("DIRTY:[people/I0002]"),
+        "closing a neighbour leaves the dirty record's key intact:\n{html}"
+    );
+}
+
+fn quit_with_one_dirty_of_two_tabs() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        nav.set_edit_dirty(Category::People, "I0002", true);
+        nav.request_quit();
+    });
+    probe(&nav)
+}
+
+#[test]
+fn quit_confirms_when_any_open_tab_is_dirty() {
+    let html = render(quit_with_one_dirty_of_two_tabs);
+    assert!(html.contains("QUIT:0"), "quit waits on the confirm:\n{html}");
+    assert!(
+        html.contains("PENDING:SOME"),
+        "one dirty tab among many still arms the confirm:\n{html}"
+    );
+}
+
+fn rename_rekeys_the_dirty_record() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.set_edit_dirty(Category::People, "I0001", true);
+        nav.rename_record(Category::People, "I0001", "I0099".to_owned());
+        nav.request_close_tab(0);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn renaming_a_dirty_record_follows_it_to_the_new_id() {
+    let html = render(rename_rekeys_the_dirty_record);
+    assert!(
+        html.contains("DIRTY:[people/I0099]"),
+        "the dirty key follows the record to its new id:\n{html}"
+    );
+    assert!(
+        html.contains("PENDING:SOME"),
+        "the confirm still fires under the new id:\n{html}"
+    );
+    assert!(html.contains("TABS:1"), "nothing closed:\n{html}");
+}
+
+fn clear_edit_dirty_makes_the_tab_closable() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.set_edit_dirty(Category::People, "I0001", true);
+        nav.clear_edit_dirty(Category::People, "I0001");
+        nav.request_close_tab(0);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn clearing_the_dirty_mark_restores_the_immediate_close() {
+    // A save reseeds the draft and Cancel restores it; either way `use_record_edit` republishes a
+    // clean state, and the tab must go back to closing with no prompt.
+    let html = render(clear_edit_dirty_makes_the_tab_closable);
+    assert!(html.contains("TABS:0"), "a clean record closes immediately:\n{html}");
+    assert!(html.contains("PENDING:NONE"), "no confirm for clean state:\n{html}");
+}
+
 /// The confirm dialog, forced open for a pending draft-tab close.
 fn dialog_open_for_draft() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
@@ -216,6 +403,69 @@ fn dialog_open_for_quit() -> Element {
 fn dialog_renders_the_quit_confirm() {
     let html = render(dialog_open_for_quit);
     assert!(html.contains("Quit?"), "quit confirm title:\n{html}");
+}
+
+/// The confirm dialog, forced open for a pending close of a saved record with an unsaved edit.
+fn dialog_open_for_dirty_saved_record() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.set_edit_dirty(Category::People, "I0001", true);
+        nav.request_close_tab(0);
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn dialog_body_describes_unsaved_edits_not_a_draft() {
+    let html = render(dialog_open_for_dirty_saved_record);
+    assert!(
+        html.contains("Ada"),
+        "the body names the record, not the entity type:\n{html}"
+    );
+    assert!(
+        html.contains("unsaved changes"),
+        "the body says the edits are unsaved, not that the record is:\n{html}"
+    );
+    assert!(
+        !html.contains("hasn't been saved yet"),
+        "the draft-only copy would be untrue for a stored record:\n{html}"
+    );
+    assert!(
+        !html.contains("New People"),
+        "a saved record is never labelled as a new draft:\n{html}"
+    );
+}
+
+/// The confirm dialog, forced open for a quit whose only unsaved work is an edit of a saved record.
+fn dialog_open_for_quit_with_dirty_edit() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.set_edit_dirty(Category::People, "I0001", true);
+        nav.request_quit();
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn quit_dialog_body_describes_unsaved_edits_when_no_draft_is_open() {
+    let html = render(dialog_open_for_quit_with_dirty_edit);
+    assert!(html.contains("Quit?"), "quit confirm title:\n{html}");
+    assert!(
+        html.contains("unsaved changes"),
+        "quitting over an edited record says the changes are unsaved:\n{html}"
+    );
+    assert!(
+        !html.contains("haven't been saved yet"),
+        "the draft-only quit copy would be untrue here:\n{html}"
+    );
 }
 
 /// The confirm dialog with nothing pending.

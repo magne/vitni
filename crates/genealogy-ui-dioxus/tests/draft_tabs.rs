@@ -1,14 +1,27 @@
-//! SSR-probe assertions for the draft-tab creation lifecycle and record reveal on [`NavState`]
-//! (create = a draft tab).
+//! SSR-probe assertions for the draft-tab creation lifecycle, record reveal, and the tabstrip's
+//! unsaved marker on [`NavState`] (create = a draft tab).
 //!
 //! Like `dock.rs`, each probe provides a `NavState`, drives its methods in `use_hook`, and renders a
 //! marker block the test inspects: `TABS:` is the open-tab count, `ACTIVE:` the active index (or
 //! `NONE`), `KIND:` the active tab's kind (`DRAFT`/`SAVED`/`NONE`), `REF:` the active *saved* record
-//! label (or `NONE`, so a draft reads `NONE`), and `DEST:` the active destination id.
+//! label (or `NONE`, so a draft reads `NONE`), and `DEST:` the active destination id. The marker
+//! probes render the real [`RecordTabstrip`], so they need a `ChromeCtx` too.
+
+use std::rc::Rc;
 
 use dioxus::prelude::*;
 use genealogy_ui::{Category, Destination, RecordRef, Tool};
+use genealogy_ui_dioxus::i18n::Chrome;
+use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::nav_state::{NavState, OpenTab};
+use genealogy_ui_dioxus::shell::tabstrip::RecordTabstrip;
+use unic_langid::LanguageIdentifier;
+
+/// A chrome localizer for a single explicit language (deterministic for tests).
+fn chrome(tag: &str) -> Rc<Chrome> {
+    let language = tag.parse::<LanguageIdentifier>().unwrap_or_default();
+    Rc::new(Chrome::with_languages(None, &[language]))
+}
 
 fn record(category: Category, human_id: &str, label: &str) -> RecordRef {
     RecordRef {
@@ -156,6 +169,68 @@ fn reveal_from_a_tool_reveals_the_record_category() {
         "revealing from a tool switches to the category:\n{html}"
     );
     assert!(html.contains("REF:Ada"), "the record opens:\n{html}");
+}
+
+/// The tabstrip with Ada holding an unsaved edit and Bob clean.
+fn tabstrip_with_one_dirty_record() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record(Category::People, "I0001", "Ada"));
+        nav.open_record(record(Category::People, "I0002", "Bob"));
+        nav.set_edit_dirty(Category::People, "I0001", true);
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn a_dirty_saved_tab_carries_the_unsaved_class_and_glyph() {
+    // The whole point of the marker: an unsaved edit is visible without opening the tab. Colour alone
+    // would fail WCAG 1.4.1, so the glyph and the accessible name carry it too.
+    let html = render(tabstrip_with_one_dirty_record);
+    assert!(
+        html.contains(r#"class="rtab unsaved""#),
+        "the dirty (inactive) tab is marked unsaved:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="unsaved-dot" aria-hidden="true""#),
+        "the marker renders a glyph, not colour alone:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Ada — unsaved changes""#),
+        "the dirty tab's accessible name says so:\n{html}"
+    );
+    assert_eq!(
+        html.matches("unsaved-dot").count(),
+        1,
+        "only the dirty tab gets a marker — Bob is clean:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="rtab active""#),
+        "the clean active tab keeps its plain class:\n{html}"
+    );
+}
+
+/// The tabstrip with a single draft tab open (nothing saved yet).
+fn tabstrip_with_draft_only() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || nav.open_create(Category::People));
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn a_draft_tab_carries_the_unsaved_marker_too() {
+    let html = render(tabstrip_with_draft_only);
+    assert!(
+        html.contains(r#"class="rtab active draft unsaved""#),
+        "a draft is unsaved by definition and gets the same marker:\n{html}"
+    );
+    assert!(html.contains("unsaved-dot"), "the draft tab shows the glyph:\n{html}");
 }
 
 #[test]

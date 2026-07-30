@@ -364,7 +364,7 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
         }
         _ => genealogy_ui::DnaTestDraft::new(),
     };
-    let record = use_record_edit::<genealogy_ui::DnaTestDraft>(&seed);
+    let record = use_record_edit::<genealogy_ui::DnaTestDraft>(Category::DnaTests, &human_id, &seed);
 
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the test's
     // title (`tab_label` falls back to `human_id` when the title is blank).

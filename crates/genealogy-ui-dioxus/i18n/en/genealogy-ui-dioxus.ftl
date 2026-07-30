@@ -79,6 +79,9 @@ new-tab-label = Create a new record
 draft-tab-label = New { $entity }
 close-tab-label = Close record
 close-tab-named = Close { $name }
+# A record tab holding unsaved work carries a dot glyph; this is its accessible name, so the state
+# reaches a screen reader rather than living in the marker's colour alone (WCAG 1.4.1).
+tab-unsaved-named = { $name } — unsaved changes
 table-actions = Actions
 tab-back = Back
 tab-forward = Forward
@@ -133,13 +136,17 @@ sc-edit = Edit
 sc-quit = Quit
 sc-close-tab = Close tab
 
-# Close-tab / quit confirm dialogs (⌘W, ⌘Q on a draft tab)
+# Close-tab / quit confirm dialogs (⌘W, ⌘Q over unsaved work). Each has two bodies: the `-body` one
+# for an unsaved draft (nothing stored yet) and the `-body-edits` one for an in-progress edit of an
+# already-stored record — saying "hasn't been saved yet" about a stored record would be untrue.
 close-tab-confirm-title = Close tab?
 close-tab-confirm-body = "{ $label }" hasn't been saved yet. Closing this tab discards it.
+close-tab-confirm-body-edits = "{ $label }" has unsaved changes. Closing this tab discards them.
 close-tab-confirm-confirm = Close tab
 close-tab-confirm-cancel = Cancel
 quit-confirm-title = Quit?
 quit-confirm-body = One or more open tabs haven't been saved yet. Quitting discards them.
+quit-confirm-body-edits = One or more open records have unsaved changes. Quitting discards them.
 quit-confirm-confirm = Quit
 quit-confirm-cancel = Cancel
 # The docked-pane header's undock button (aria-label)

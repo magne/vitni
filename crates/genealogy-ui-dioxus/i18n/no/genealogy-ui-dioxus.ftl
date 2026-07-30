@@ -79,6 +79,9 @@ new-tab-label = Opprett en ny post
 draft-tab-label = Ny { $entity }
 close-tab-label = Lukk post
 close-tab-named = Lukk { $name }
+# En postfane med ulagret arbeid får en prikk-glyf; dette er dens tilgjengelige navn, slik at
+# tilstanden også nås av en skjermleser og ikke bare ligger i markørens farge (WCAG 1.4.1).
+tab-unsaved-named = { $name } – ulagrede endringer
 table-actions = Handlinger
 tab-back = Tilbake
 tab-forward = Fremover
@@ -133,13 +136,17 @@ sc-edit = Rediger
 sc-quit = Avslutt
 sc-close-tab = Lukk fane
 
-# Bekreftelsesdialoger for lukk-fane / avslutt (⌘W, ⌘Q på en ulagret fane)
+# Bekreftelsesdialoger for lukk-fane / avslutt (⌘W, ⌘Q over ulagret arbeid). Hver har to
+# brødtekster: `-body` for et ulagret utkast (ingenting er lagret ennå) og `-body-edits` for en
+# påbegynt endring av en post som allerede er lagret — «er ikke lagret ennå» ville vært usant der.
 close-tab-confirm-title = Lukk fane?
 close-tab-confirm-body = «{ $label }» er ikke lagret ennå. Hvis du lukker denne fanen, forkastes den.
+close-tab-confirm-body-edits = «{ $label }» har ulagrede endringer. Hvis du lukker denne fanen, forkastes de.
 close-tab-confirm-confirm = Lukk fane
 close-tab-confirm-cancel = Avbryt
 quit-confirm-title = Avslutte?
 quit-confirm-body = En eller flere åpne faner er ikke lagret ennå. Hvis du avslutter, forkastes de.
+quit-confirm-body-edits = En eller flere åpne poster har ulagrede endringer. Hvis du avslutter, forkastes de.
 quit-confirm-confirm = Avslutt
 quit-confirm-cancel = Avbryt
 # Avfest-knappen i topplinjen på den festede ruten (aria-label)
