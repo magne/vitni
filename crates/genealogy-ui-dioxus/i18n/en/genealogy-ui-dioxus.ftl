@@ -139,16 +139,24 @@ sc-close-tab = Close tab
 # Close-tab / quit confirm dialogs (⌘W, ⌘Q over unsaved work). Each has two bodies: the `-body` one
 # for an unsaved draft (nothing stored yet) and the `-body-edits` one for an in-progress edit of an
 # already-stored record — saying "hasn't been saved yet" about a stored record would be untrue.
+# Both dialogs offer three actions: keep the work (save), lose it (discard), or back out (cancel).
 close-tab-confirm-title = Close tab?
 close-tab-confirm-body = "{ $label }" hasn't been saved yet. Closing this tab discards it.
 close-tab-confirm-body-edits = "{ $label }" has unsaved changes. Closing this tab discards them.
-close-tab-confirm-confirm = Close tab
+close-tab-confirm-save = Save
+close-tab-confirm-discard = Discard changes
+close-tab-confirm-discard-draft = Discard draft
 close-tab-confirm-cancel = Cancel
 quit-confirm-title = Quit?
 quit-confirm-body = One or more open tabs haven't been saved yet. Quitting discards them.
 quit-confirm-body-edits = One or more open records have unsaved changes. Quitting discards them.
-quit-confirm-confirm = Quit
+quit-confirm-list-intro = Records with unsaved work:
+quit-confirm-save-all = Save all
+quit-confirm-discard-all = Discard all
 quit-confirm-cancel = Cancel
+# Why the save action is unavailable — shown in the body instead of leaving a dead button.
+close-confirm-cannot-save = "{ $label }" is missing required fields, so it can't be saved yet.
+close-confirm-nothing-to-save = Nothing has been filled in for "{ $label }" yet, so there is nothing to save.
 # The docked-pane header's undock button (aria-label)
 undock-label = Undock record
 media-select-prompt = Select a media object to view its details.

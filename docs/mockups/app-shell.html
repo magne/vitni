@@ -100,6 +100,42 @@
         docked tab's accent underline is the same convention.</div>
     </div>
 
+    <!-- Quitting with unsaved work: one dialog over the whole set -->
+    <h2 style="border:0;margin:var(--sp-6) 0 12px;font-size:21px">Quitting with unsaved work</h2>
+    <p class="muted"><kbd>⌘</kbd><kbd>Q</kbd> with anything unsaved raises one dialog for the whole set:
+      it <b>lists every record at stake</b> by its tab name — a draft as “New &lt;entity&gt;”, a stored
+      record by its own label — so the choice is made over the actual list, not over “one or more”.
+      <b>Save all</b> walks them in strip order, activating each and running that record's own Save, and
+      quits once the last one lands; <b>Discard all</b> quits and loses the work; <b>Cancel</b> backs out
+      with every tab and every edit intact. Per-tab closing is
+      <a href="record-editing.html">Record editing</a> §5a.</p>
+    <div class="specimen grid-2">
+      <div class="card" style="margin-bottom:0">
+        <h3>Quit? — three records mid-edit</h3>
+        <p class="muted" style="margin-top:var(--sp-2)">One or more open tabs haven't been saved yet.
+          Quitting discards them.</p>
+        <p class="muted" style="margin-top:var(--sp-2)">Records with unsaved work:</p>
+        <ul class="stack" style="margin:0"><li>John Smith</li><li>Mary Doe</li><li>New person</li></ul>
+        <div class="inline" style="justify-content:flex-end"><button class="btn sm ghost">Cancel</button><button class="btn sm">Discard all</button><button class="btn sm primary">Save all</button></div>
+      </div>
+      <div class="card" style="margin-bottom:0">
+        <h3>Quit? — one record blocks Save all</h3>
+        <p class="muted" style="margin-top:var(--sp-2)">One or more open records have unsaved changes.
+          Quitting discards them.</p>
+        <p class="muted" style="margin-top:var(--sp-2)">Records with unsaved work:</p>
+        <ul class="stack" style="margin:0"><li>John Smith</li><li>Mary Doe</li></ul>
+        <p class="muted" style="margin-top:var(--sp-2)">“Mary Doe” is missing required fields, so it
+          can't be saved yet.</p>
+        <div class="inline" style="justify-content:flex-end"><button class="btn sm ghost">Cancel</button><button class="btn sm">Discard all</button><button class="btn sm primary" disabled>Save all</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="stack">
+        <div class="fact-row"><span class="badge">order</span><span class="grow">One record saves at a time: only the active tab's editor is mounted, so the run activates each in turn. A record whose save fails stops the run — the remaining tabs keep their edits and the app does not quit.</span></div>
+        <div class="fact-row"><span class="badge">blocked</span><span class="grow">If any listed record cannot be saved, <b>Save all</b> is disabled and the body names the first one standing in the way. Discard all and Cancel stay available.</span></div>
+      </div>
+    </div>
+
   </div>
 </div>
 

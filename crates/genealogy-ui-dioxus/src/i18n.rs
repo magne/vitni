@@ -2041,16 +2041,44 @@ impl Chrome {
         fl!(self.loader, "close-tab-confirm-body-edits", label = label)
     }
 
-    /// The close-current-tab confirm dialog's confirm action label.
+    /// The close-current-tab confirm dialog's save action label — keep the work and close the tab.
     #[must_use]
-    pub fn close_tab_confirm_confirm(&self) -> String {
-        fl!(self.loader, "close-tab-confirm-confirm")
+    pub fn close_tab_confirm_save(&self) -> String {
+        fl!(self.loader, "close-tab-confirm-save")
+    }
+
+    /// The close-current-tab confirm dialog's discard action label for an *already-saved* record: only
+    /// the in-progress changes are thrown away.
+    #[must_use]
+    pub fn close_tab_confirm_discard(&self) -> String {
+        fl!(self.loader, "close-tab-confirm-discard")
+    }
+
+    /// The close-current-tab confirm dialog's discard action label for a draft tab: nothing is stored,
+    /// so the whole record goes.
+    #[must_use]
+    pub fn close_tab_confirm_discard_draft(&self) -> String {
+        fl!(self.loader, "close-tab-confirm-discard-draft")
     }
 
     /// The close-current-tab confirm dialog's cancel action label.
     #[must_use]
     pub fn close_tab_confirm_cancel(&self) -> String {
         fl!(self.loader, "close-tab-confirm-cancel")
+    }
+
+    /// Why the confirm's save action is unavailable: the record named by `label` is missing something it
+    /// needs, so it cannot be saved yet.
+    #[must_use]
+    pub fn close_confirm_cannot_save(&self, label: &str) -> String {
+        fl!(self.loader, "close-confirm-cannot-save", label = label)
+    }
+
+    /// Why the confirm's save action is unavailable for a draft nothing has been typed into: the record
+    /// named by `label` has no work to keep.
+    #[must_use]
+    pub fn close_confirm_nothing_to_save(&self, label: &str) -> String {
+        fl!(self.loader, "close-confirm-nothing-to-save", label = label)
     }
 
     /// The quit confirm dialog's heading (`⌘Q` with an unsaved draft open).
@@ -2072,10 +2100,22 @@ impl Chrome {
         fl!(self.loader, "quit-confirm-body-edits")
     }
 
-    /// The quit confirm dialog's confirm action label.
+    /// The lead-in above the quit confirm's list of the records holding unsaved work.
     #[must_use]
-    pub fn quit_confirm_confirm(&self) -> String {
-        fl!(self.loader, "quit-confirm-confirm")
+    pub fn quit_confirm_list_intro(&self) -> String {
+        fl!(self.loader, "quit-confirm-list-intro")
+    }
+
+    /// The quit confirm dialog's save-all action label — save every listed record, then quit.
+    #[must_use]
+    pub fn quit_confirm_save_all(&self) -> String {
+        fl!(self.loader, "quit-confirm-save-all")
+    }
+
+    /// The quit confirm dialog's discard-all action label — quit and lose every listed record's work.
+    #[must_use]
+    pub fn quit_confirm_discard_all(&self) -> String {
+        fl!(self.loader, "quit-confirm-discard-all")
     }
 
     /// The quit confirm dialog's cancel action label.

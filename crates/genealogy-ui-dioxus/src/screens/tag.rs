@@ -27,16 +27,18 @@ pub fn TagCreateRecord() -> Element {
         let services = services.clone();
         let name = request.name.clone();
         spawn(async move {
-            match commit_tag_change_set(services, request, prov).await {
-                Ok(id) => nav.commit_draft(RecordRef {
-                    category: Category::Tags,
-                    human_id: id.clone(),
-                    label: if name.is_empty() { id } else { name },
-                }),
-                Err(message) => nav.notify(message),
-            }
+            let committed = commit_tag_change_set(services, request, prov).await;
+            finish_draft_commit(committed, Category::Tags, Some(name), nav);
         });
     });
+    // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
+    // create form can keep the draft instead of losing it.
+    let save_now = use_callback(move |()| {
+        if edit.can_save() {
+            on_save.call((edit.draft.read().clone(), edit.prov.read().clone()));
+        }
+    });
+    use_save_on_request(Category::Tags, None, edit, save_now);
     let can_save = edit.can_save();
     let actions = rsx! {
         Button {
@@ -50,11 +52,7 @@ pub fn TagCreateRecord() -> Element {
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
-            onclick: move |_| {
-                if edit.can_save() {
-                    on_save.call((edit.draft.read().clone(), edit.prov.read().clone()));
-                }
-            },
+            onclick: move |_| save_now.call(()),
         }
     };
     create_record_frame(
@@ -143,6 +141,15 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
     let undo_notice = chrome.kbd_nothing_to_undo();
     let on_undo = use_callback(|_assertion_id: String| {});
     use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
+
+    // The close/quit confirm's Save hands the record back to this pane (issue #240): it runs the same
+    // whole-record commit the header's Save does, so ⌘W/⌘Q can keep the edit instead of discarding it.
+    let save_now = use_callback(move |()| {
+        if edit.can_save() {
+            on_save.call((edit.draft.read().clone(), edit.prov.read().clone()));
+        }
+    });
+    use_save_on_request(Category::Tags, Some(&id), edit, save_now);
 
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },

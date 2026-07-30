@@ -188,27 +188,38 @@
   <p class="muted">The confirm names what is at stake, and the wording differs by case — a draft is
     <i>not saved yet</i>, a stored record <i>has unsaved changes</i>. Saying the second is unsaved would
     be untrue: the record exists, only the edits are at risk.</p>
+  <p class="muted">Three actions, so keeping the work is one click rather than a detour: <b>Save</b>
+    (primary) commits the record and then closes the tab, <b>Discard</b> closes it and loses the work,
+    <b>Cancel</b> backs out. The shell cannot save on its own — save is per-screen and shaped per
+    aggregate — so Save activates the record's tab and runs <i>that screen's</i> Save, the same commit the
+    header button fires.</p>
   <div class="specimen grid-2">
     <div class="card" style="margin-bottom:0">
       <h3>Close tab? — stored record, unsaved edits</h3>
       <p class="muted" style="margin-top:var(--sp-2)">“John Smith” has unsaved changes. Closing this tab
         discards them.</p>
-      <div class="inline" style="justify-content:flex-end"><button class="btn sm ghost">Cancel</button><button class="btn sm primary">Close tab</button></div>
+      <div class="inline" style="justify-content:flex-end"><button class="btn sm ghost">Cancel</button><button class="btn sm">Discard changes</button><button class="btn sm primary">Save</button></div>
     </div>
     <div class="card" style="margin-bottom:0">
-      <h3>Quit? — stored record, unsaved edits</h3>
-      <p class="muted" style="margin-top:var(--sp-2)">One or more open records have unsaved changes.
-        Quitting discards them.</p>
-      <div class="inline" style="justify-content:flex-end"><button class="btn sm ghost">Cancel</button><button class="btn sm primary">Quit</button></div>
+      <h3>Close tab? — Save unavailable</h3>
+      <p class="muted" style="margin-top:var(--sp-2)">“John Smith” has unsaved changes. Closing this tab
+        discards them.</p>
+      <p class="muted" style="margin-top:var(--sp-2)">“John Smith” is missing required fields, so it
+        can't be saved yet.</p>
+      <div class="inline" style="justify-content:flex-end"><button class="btn sm ghost">Cancel</button><button class="btn sm">Discard changes</button><button class="btn sm primary" disabled>Save</button></div>
     </div>
   </div>
   <div class="card">
     <div class="stack">
-      <div class="fact-row"><span class="badge">draft</span><span class="grow">Nothing is stored: “New person” <b>hasn't been saved yet. Closing this tab discards it.</b> Quit reads “One or more open tabs haven't been saved yet.”</span></div>
+      <div class="fact-row"><span class="badge">draft</span><span class="grow">Nothing is stored: “New person” <b>hasn't been saved yet. Closing this tab discards it.</b> The discard action reads <b>Discard draft</b> — the whole record goes, not just an edit. Quit reads “One or more open tabs haven't been saved yet.”</span></div>
       <div class="fact-row"><span class="badge">Cancel</span><span class="grow">Leaves the tab open with the edit intact — the next <kbd>⌘</kbd><kbd>W</kbd> asks again.</span></div>
-      <div class="fact-row"><span class="badge">Save</span><span class="grow">Clears the marker and the confirm: the draft matches what is stored again, so the tab closes with no prompt. So does <b>Cancel</b> on the record itself (§5), which reverts the draft.</span></div>
+      <div class="fact-row"><span class="badge">Save</span><span class="grow">Commits the record, then closes the tab. Saving from the record itself clears the marker and the confirm the same way: the draft matches what is stored again, so the tab closes with no prompt. So does <b>Cancel</b> on the record (§5), which reverts the draft.</span></div>
+      <div class="fact-row"><span class="badge">disabled</span><span class="grow">Save is offered only for work that can be saved. A draft missing a required field, or a create form nothing has been typed into (“Nothing has been filled in for “New person” yet, so there is nothing to save.”), gets a <b>disabled</b> Save and the reason in the body — never a button that silently does nothing.</span></div>
+      <div class="fact-row"><span class="badge">failed</span><span class="grow">A save that fails leaves every tab open with its edit parked and the screen's own error toast showing. Nothing closes and nothing quits on a failure.</span></div>
     </div>
   </div>
+  <p class="muted">Quitting with several records mid-edit is one dialog over the whole set — see
+    <a href="app-shell.html">App shell</a>.</p>
   <p class="muted">An in-progress edit is <b>parked per record</b> rather than held by the open editor.
     Only the active tab's pane is mounted, so switching tabs or opening another record would otherwise
     discard the draft: instead the buffer — the draft, the committed values it is diffed against, and the
@@ -395,7 +406,7 @@
       <tr><td><kbd>Enter</kbd></td><td>Edit: commit the current field to the draft.</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Cancel the current field edit; if no field is actively editing, cancel the record.</td></tr>
       <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd><kbd>S</kbd></td><td>Save the record if it is dirty and valid.</td></tr>
-      <tr><td><kbd>⌘</kbd><kbd>W</kbd> / <kbd>⌘</kbd><kbd>Q</kbd></td><td>Close the tab / quit — but with unsaved work open (a draft <i>or</i> an edit of a stored record) a confirm asks first (§5a).</td></tr>
+      <tr><td><kbd>⌘</kbd><kbd>W</kbd> / <kbd>⌘</kbd><kbd>Q</kbd></td><td>Close the tab / quit — but with unsaved work open (a draft <i>or</i> an edit of a stored record) a confirm asks first, offering Save / Discard / Cancel (§5a).</td></tr>
     </tbody>
   </table>
   <div class="card" style="margin-top:var(--sp-4)">

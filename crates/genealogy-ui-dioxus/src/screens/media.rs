@@ -22,16 +22,18 @@ pub fn MediaCreateRecord() -> Element {
             .unwrap_or_default();
         let services = services.clone();
         spawn(async move {
-            match commit_media_change_set(services, request, prov).await {
-                Ok(id) => nav.commit_draft(RecordRef {
-                    category: Category::Media,
-                    human_id: id.clone(),
-                    label: if label.is_empty() { id } else { label },
-                }),
-                Err(message) => nav.notify(message),
-            }
+            let committed = commit_media_change_set(services, request, prov).await;
+            finish_draft_commit(committed, Category::Media, Some(label), nav);
         });
     });
+    // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
+    // create form can keep the draft instead of losing it.
+    let save_now = use_callback(move |()| {
+        if record.can_save() {
+            on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+        }
+    });
+    use_save_on_request(Category::Media, None, record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
         Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Media) }
@@ -40,11 +42,7 @@ pub fn MediaCreateRecord() -> Element {
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
-            onclick: move |_| {
-                if record.can_save() {
-                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
-                }
-            },
+            onclick: move |_| save_now.call(()),
         }
     };
     create_record_frame(
@@ -321,6 +319,15 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
         ));
     });
     use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
+
+    // The close/quit confirm's Save hands the record back to this pane (issue #240): it runs the same
+    // whole-record commit the header's Save does, so ⌘W/⌘Q can keep the edit instead of discarding it.
+    let save_now = use_callback(move |()| {
+        if record.can_save() {
+            on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
+        }
+    });
+    use_save_on_request(Category::Media, Some(&human_id), record, save_now);
 
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
