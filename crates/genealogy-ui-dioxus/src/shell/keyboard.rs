@@ -121,8 +121,15 @@ pub fn shell_intent(
         return None;
     }
     let chord_key = shortcut_key(key)?;
+    let mut modifier = event_modifier(modifiers, primary);
+    if chord_key == genealogy_ui::Key::Question {
+        // `?` is typed with Shift on every common layout (US `shift+/`, Norwegian `shift++`), so the
+        // event always reports it. Shift here is how the character was *produced*, not a modifier of
+        // it — keeping it would mean the `?` help chord (declared with no modifiers) never matches.
+        modifier.shift = false;
+    }
     let chord = genealogy_ui::Chord {
-        modifier: event_modifier(modifiers, primary),
+        modifier,
         key: chord_key,
     };
     let action = resolved
@@ -460,6 +467,17 @@ mod tests {
         assert_eq!(
             shell_intent(&character("g"), Modifiers::empty(), Code::KeyG, false, &defaults()),
             Some(ShellIntent::ArmGPrefix)
+        );
+    }
+
+    /// The test above presses `?` with no modifiers, which no keyboard can actually produce: `?` is
+    /// `shift+/` on US layouts and `shift++` on Norwegian ones, so a real event always reports Shift.
+    /// Matching that against the no-modifier help chord is what makes the overlay reachable at all.
+    #[test]
+    fn help_matches_with_the_shift_that_types_the_question_mark() {
+        assert_eq!(
+            shell_intent(&character("?"), Modifiers::SHIFT, Code::Slash, false, &defaults()),
+            Some(ShellIntent::Help)
         );
     }
 

@@ -411,7 +411,7 @@ fn confirm_modal(
             title: labels.title,
             open: true,
             close_label: labels.dismiss,
-            onclose: move |_| pending.set(None),
+            onclose: move |()| pending.set(None),
             footer: rsx! {
                 Button {
                     label: labels.cancel,

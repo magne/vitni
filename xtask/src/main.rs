@@ -18,9 +18,13 @@
 //! - `labels` — reconcile GitHub's issue labels with `.github/labels.toml` (`--apply` to write).
 //! - `package` — assemble a Linux release tarball (binaries + signed plugin fleet + launcher) under
 //!   `target/dist` (Phase 11 workstream C, ADR 0014 §7).
+//! - `gui-pass` — run the real GUI on a headless Xvfb display, drive it with `xdotool`, and assert
+//!   over screenshots of what SSR cannot reach (the `MapLibre` canvas, the overlay layer). Scenarios
+//!   are TOML files under `crates/genealogy-ui-dioxus/tests/gui-pass/`, so adding one needs no rebuild.
 
 mod build_plugins;
 mod css_check;
+mod gui_pass;
 mod i18n_check;
 mod input_guard;
 mod issue_sync;
@@ -44,6 +48,7 @@ fn main() -> Result<()> {
         Some("issue-sync") => issue_sync::run(),
         Some("labels") => labels::run(),
         Some("package") => package::run(),
+        Some("gui-pass") => gui_pass::run(&env::args().skip(2).collect::<Vec<String>>()),
         Some("check") => check(),
         Some(other) => {
             print_usage();
@@ -91,4 +96,12 @@ fn print_usage() {
     println!("  labels         reconcile GitHub labels with .github/labels.toml (--apply to write)");
     println!("  check          run every static check (i18n-check, css-check, input-guard, issue-sync)");
     println!("  package        assemble a Linux release tarball (binaries + signed plugins) in target/dist");
+    println!("  gui-pass       run GUI scenarios on a headless Xvfb display, asserting over screenshots");
+    println!("                 [SCENARIO...]  a name or path under crates/genealogy-ui-dioxus/tests/gui-pass");
+    println!("                                (default: every scenario there)");
+    println!("                 [--reset]      wipe the fixture workspace, isolated home and old shots");
+    println!("                 [--keep]       leave Xvfb + the GUI up (attach with x11vnc -display :99)");
+    println!("                 [--display :N] drive a different display (default :99)");
+    println!("                 [--real-config] use your own config/workspaces instead of the fixture");
+    println!("                 [--workspace NAME] open that workspace (implies --real-config)");
 }

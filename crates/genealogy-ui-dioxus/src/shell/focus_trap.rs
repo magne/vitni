@@ -15,18 +15,31 @@
 //! dialog contains. [`DialogFocus`] moves focus into the dialog when it opens and restores the control
 //! that had it once the dialog closes (`docs/mockups/shortcuts.html`).
 //!
-//! `Esc` is not handled here — it bubbles to the shell's central keyboard dispatcher, which dismisses
-//! the topmost layer.
+//! `Esc` is handled by [`dismiss_on_escape`], attached to each overlay's own root. It cannot be left
+//! to the shell's central keyboard dispatcher: that listener sits on `.app`, and every overlay is
+//! rendered as a *sibling* of `.app` (so inerting `.app` cannot inert the overlay), which means a
+//! keydown inside an overlay never reaches it.
 
 use dioxus::prelude::*;
 
 /// Swallows `Tab`/`Shift+Tab` so focus stays within a single-focusable overlay.
 ///
-/// Attach to the overlay's dialog root `onkeydown`. Other keys (including `Esc`) are left to bubble
-/// to the shell dispatcher.
+/// Attach to the overlay's dialog root `onkeydown`. Other keys are left to bubble — `Esc` to the
+/// overlay root's own [`dismiss_on_escape`].
 pub fn trap_tab(event: &KeyboardEvent) {
     if event.key() == Key::Tab {
         event.prevent_default();
+    }
+}
+
+/// Runs `dismiss` when the key is `Esc`, so an overlay closes on it.
+///
+/// Attach to the overlay's **outermost** root (`div.overlay`), not the dialog: the shell's dispatcher
+/// listens on `.app`, and overlays render as siblings of `.app`, so nothing else sees this keydown.
+pub fn dismiss_on_escape(event: &KeyboardEvent, dismiss: impl FnOnce()) {
+    if event.key() == Key::Escape {
+        event.prevent_default();
+        dismiss();
     }
 }
 

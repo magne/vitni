@@ -79,7 +79,7 @@ pub fn MediaSaveDialog(
             title: labels.title.clone(),
             open,
             close_label: labels.dismiss.clone(),
-            onclose: move |_| oncancel.call(()),
+            onclose: move |()| oncancel.call(()),
             footer: rsx! {
                 if let (Some(label), Some(onback)) = (back_label.clone(), onback) {
                     Button {

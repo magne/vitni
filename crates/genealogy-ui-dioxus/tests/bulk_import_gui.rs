@@ -370,7 +370,7 @@ fn confirm_modal_view() -> Element {
             title: chrome.bulk_import_confirm_title("family"),
             open: true,
             close_label: chrome.dismiss(),
-            onclose: |_| {},
+            onclose: |()| {},
             footer: rsx! {
                 Button { label: chrome.bulk_import_confirm_cancel(), variant: ButtonVariant::Ghost, onclick: |_| {} }
                 Button { label: chrome.bulk_import_confirm_run(), variant: ButtonVariant::Primary, onclick: |_| {} }

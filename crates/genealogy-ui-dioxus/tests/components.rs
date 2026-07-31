@@ -106,7 +106,7 @@ fn gallery() -> Element {
             title: "Delete tag?".to_owned(),
             open: true,
             close_label: "Dismiss".to_owned(),
-            onclose: move |_| {},
+            onclose: move |()| {},
             footer: rsx! { Button { label: "Delete".to_owned(), variant: ButtonVariant::Danger, onclick: move |_| {} } },
             div { "This removes the tag." }
         }
@@ -183,7 +183,7 @@ fn controlled_overlays_hide_when_closed() {
                 title: "Hidden".to_owned(),
                 open: false,
                 close_label: "Dismiss".to_owned(),
-                onclose: move |_| {},
+                onclose: move |()| {},
                 footer: rsx! {},
                 div { "body" }
             }

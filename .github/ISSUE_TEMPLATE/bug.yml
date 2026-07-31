@@ -87,5 +87,5 @@ body:
       label: Verification
       options:
         - label: >
-            This needs a manual webview pass to confirm (agents can't run libwebkit2gtk) — triage will
-            add `manual-verify`.
+            Confirming this needs a human at the running GUI — the behaviour is interaction, motion or
+            timing, not something a screenshot settles. Triage will add `manual-verify`.

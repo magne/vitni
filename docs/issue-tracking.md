@@ -107,10 +107,19 @@ nobody grooms weekly.
 - **`blocked/upstream`** — for `sqlx` 0.9 and `ed25519-dalek` 3.0.0. Both are waiting on third-party
   releases. Distinguishing them from ordinary `blocked` stops recurring re-investigation of a
   conclusion already reached and written down.
-- **`manual-verify`** — this repo has a workflow state agents cannot discharge: "needs a manual
-  webview pass (agents can't run libwebkit2gtk)". Making it a label matters because this is exactly
-  how an unverified claim slipped through once already — the `## Bugs` section asserted test coverage
-  for five fixes when two had none.
+- **`manual-verify`** — this repo has a workflow state SSR tests cannot discharge: behaviour that only
+  exists in a running webview (`document::eval`, CSS, the MapLibre canvas). Making it a label matters
+  because this is exactly how an unverified claim slipped through once already — the `## Bugs` section
+  asserted test coverage for five fixes when two had none.
+
+  **Most of it is automatable, so scope the label to what actually needs a human.** `cargo xtask
+  gui-pass` (see [`CLAUDE.md`](../CLAUDE.md#testing-the-gui)) runs the real GUI on an Xvfb display,
+  drives it with `xdotool`, and asserts over screenshots — pan, zoom, click-to-place, overlay dismissal
+  and static appearance are all reachable there, and the scenarios are TOML files, not Rust. What is
+  left for a human is **feel**: pan/zoom smoothness, click latency, whether a save looks instant,
+  slide-in motion. Software GL is not a GPU and a still image has no frame rate. The harness needs a
+  graphical-capable machine, so it does not run in CI today. `manual-verify` means *that* residual, not
+  "agents can't run the webview" — the reason this label used to give.
 
 `docs` now has an H3 home of its own — *Docs & repo tooling* under *Platform & operations* — because
 `issue-sync` requires every bullet to sit under some `###` area to inherit a label from. `i18n` remains
@@ -165,8 +174,8 @@ this size by the time it closes, the GUI probably has not been exercised hard en
 | Item | Why it gates a release |
 | --- | --- |
 | [`SidePanel` has no focus trap or focus restore](https://github.com/magne/genealogy/issues/247) | Accessibility defect on the app's primary edit surface — 15 call sites, one per aggregate: focus never enters the panel, `Tab` walks out into the non-inert background, and closing does not restore focus |
-| [Manual webview pass outstanding](https://github.com/magne/genealogy/issues/203) | `manual-verify` — the interactive map canvas has never been exercised |
-| [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify` — the close/quit confirm, the per-record edit stash, and Save / Save all shipped SSR-only: live layout and timing unexercised |
+| [Manual webview pass outstanding](https://github.com/magne/genealogy/issues/203) | `manual-verify` — nobody has panned, zoomed or drawn on the live map canvas; only its rendering has been looked at |
+| [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify` — the close/quit confirm, the per-record edit stash, and Save / Save all shipped SSR-only: live timing unexercised |
 | [Record-picker scroll-listener cleanup](https://github.com/magne/genealogy/issues/204) | Leaks one inert JS listener per clear/re-search cycle |
 | ["Jump back in" recent-list write has no close/quit hook](https://github.com/magne/genealogy/issues/205) | A keyboard quit races the debounced write |
 | [`⌘S` lives outside the shortcut map](https://github.com/magne/genealogy/issues/206) | Save is neither listed by `?` nor rebindable — inconsistent with every other binding |

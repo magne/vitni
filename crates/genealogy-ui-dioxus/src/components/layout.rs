@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 
 use crate::components::button::IconButton;
-use crate::shell::focus_trap::{DialogFocus, FocusGuard, focus_guard};
+use crate::shell::focus_trap::{DialogFocus, FocusGuard, dismiss_on_escape, focus_guard};
 
 /// A titled content container.
 #[component]
@@ -95,8 +95,8 @@ pub fn Modal(
     open: bool,
     /// The accessible name for the click-away scrim (already localized).
     close_label: String,
-    /// Fired when the scrim is clicked.
-    onclose: EventHandler<MouseEvent>,
+    /// Fired when the dialog is dismissed without deciding — the scrim is clicked, or `Esc` is pressed.
+    onclose: EventHandler<()>,
     /// The dialog body.
     children: Element,
     /// The footer (e.g. confirm/cancel buttons).
@@ -106,13 +106,15 @@ pub fn Modal(
         return rsx! {};
     }
     rsx! {
-        div { class: "overlay",
+        div {
+            class: "overlay",
+            onkeydown: move |event: KeyboardEvent| dismiss_on_escape(&event, || onclose.call(())),
             button {
                 class: "modal-scrim",
                 r#type: "button",
                 aria_label: "{close_label}",
                 onmousedown: move |event: MouseEvent| event.prevent_default(),
-                onclick: move |event| onclose.call(event),
+                onclick: move |_| onclose.call(()),
             }
             div {
                 class: "modal",

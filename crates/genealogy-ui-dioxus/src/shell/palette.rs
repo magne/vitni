@@ -17,7 +17,7 @@ use crate::app::AppCtx;
 use crate::components::TextInput;
 use crate::services::load_palette_rows;
 use crate::shell::ChromeCtx;
-use crate::shell::focus_trap::trap_tab;
+use crate::shell::focus_trap::{dismiss_on_escape, trap_tab};
 use crate::shell::nav_state::{NavState, Overlay};
 
 /// One rendered palette option: its flat index (for `aria-activedescendant`), decorative icon,
@@ -99,7 +99,10 @@ pub fn CommandPalette() -> Element {
     let hint_anywhere = chrome.0.palette_hint_anywhere(&palette_chord);
 
     rsx! {
-        div { class: "overlay", onclick: move |_| nav.close_overlay(),
+        div {
+            class: "overlay",
+            onclick: move |_| nav.close_overlay(),
+            onkeydown: move |event: KeyboardEvent| dismiss_on_escape(&event, || nav.dismiss_topmost()),
             div {
                 class: "palette",
                 role: "dialog",

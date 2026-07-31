@@ -1,0 +1,78 @@
+# The interactive MapLibre canvas (#203) — the one thing SSR cannot reach at all: it renders no
+# canvas, fetches no tiles, and has no pointer. Coordinates are window pixels at 1800x1200, read off
+# the shots this scenario writes; re-read them if the rail or toolbar layout changes.
+description = "The map canvas renders tiles and responds to pan, zoom and the point tool (#203)"
+
+[[step]]
+do = "shot"
+name = "dashboard"
+
+[[step]]
+do = "click"
+at = [85, 881]
+label = "rail: Geography"
+
+[[step]]
+do = "shot"
+name = "map"
+
+[[step]]
+do = "drag"
+from = [1100, 600]
+by = [-300, -120]
+label = "map: drag to pan"
+
+[[step]]
+do = "shot"
+name = "panned"
+
+[[step]]
+do = "wheel"
+at = [1070, 686]
+clicks = 2
+label = "map: wheel zoom in"
+
+[[step]]
+do = "shot"
+name = "zoomed"
+
+[[step]]
+do = "click"
+at = [1404, 110]
+label = "toolbar: Drop / move a point"
+
+[[step]]
+do = "shot"
+name = "point-tool-armed"
+
+[[step]]
+do = "click"
+at = [900, 500]
+label = "map: drop a point"
+
+[[step]]
+do = "shot"
+name = "point-dropped"
+
+[[assert]]
+kind = "differ"
+shots = ["dashboard", "map"]
+because = "clicking Geography must open the map tool"
+
+[[assert]]
+kind = "differ"
+shots = ["map", "panned"]
+because = "a drag on the canvas must pan the map"
+
+[[assert]]
+kind = "differ"
+shots = ["panned", "zoomed"]
+because = "the wheel must zoom the map"
+
+[[assert]]
+kind = "differ"
+shots = ["point-tool-armed", "point-dropped"]
+because = "clicking with the point tool armed must place a coordinate"
+# A dropped point repaints one small marker plus the coordinate readout, so the whole-frame RMSE stays
+# well under the default same-screen tolerance.
+tolerance = 0.001

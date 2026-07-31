@@ -35,7 +35,8 @@ Phase 9 map/geometry defects found in live GUI use — all fixed in
 `crates/genealogy-ui-dioxus/src/screens/{map_shared,place,geography}.rs` (+ the Place VM). Bugs 1, 3
 and 5 carry SSR/unit tests; bugs 2 and 4 are verified present in code but **untested** (see the
 verification note above). The interactive MapLibre canvas behavior still needs a **manual webview
-pass** (agents can't run libwebkit2gtk):
+pass** — SSR cannot reach it, and neither can an agent screenshot, which shows rendering but not
+pan/zoom feel or click latency:
 
 - ✅ Draw-tool clicks were blocked by the pointer-capture overlay — overlay removed, crosshair moved
   onto the map container so MapLibre receives the click.
