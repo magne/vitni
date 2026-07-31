@@ -854,7 +854,7 @@ fn dna_test_edit_panel(
             title,
             open: true,
             close_label: loc.action_label("cancel"),
-            onclose: move |_| editing.set(None),
+            onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
                 DnaTestEditForm::Haplogroup(seed) => rsx! { DnaTestHaplogroupForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },

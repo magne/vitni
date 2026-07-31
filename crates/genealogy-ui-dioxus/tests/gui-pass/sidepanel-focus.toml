@@ -1,0 +1,116 @@
+# `SidePanel`'s focus trap (#247) — every assertion here is invisible to SSR, which renders the guards
+# as markup but moves no focus: before the trap landed, focus never entered the panel, `Tab` walked
+# straight out into the pane behind it, and `Esc` did nothing at all.
+#
+# The panel under test is the smallest one in the app — `retract_side_panel` on the Place Names tab,
+# whose controls are exactly ✕ → the reason input → the Danger confirm. That count is what makes the
+# cycle assertion sharp: three `Tab`s from any control must come back to it.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "A side panel takes focus, cycles Tab within itself, and restores focus on Esc (#247)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "click"
+at = [723, 248]
+label = "detail tab: Names"
+
+[[step]]
+do = "shot"
+name = "before-open"
+
+[[step]]
+do = "click"
+at = [1594, 441]
+label = "name row: Retract"
+
+[[step]]
+do = "shot"
+name = "panel-open"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "panel: Tab onto the reason input"
+
+[[step]]
+do = "shot"
+name = "focus-first"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "panel: Tab onto the confirm"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "panel: Tab onto the trailing guard, which wraps to ✕"
+
+[[step]]
+do = "shot"
+name = "focus-close"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "panel: Tab back onto the reason input"
+
+[[step]]
+do = "shot"
+name = "focus-cycled"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "panel: Esc"
+
+[[step]]
+do = "shot"
+name = "after-esc"
+
+[[step]]
+do = "key"
+chord = "Return"
+label = "reopen with the restored focus"
+
+[[step]]
+do = "shot"
+name = "reopened"
+
+[[assert]]
+kind = "differ"
+shots = ["before-open", "panel-open"]
+because = "the Retract row action must open the side panel"
+
+[[assert]]
+kind = "match"
+shots = ["focus-first", "focus-cycled"]
+# Byte-identical when it works: three tab stops, so the fourth Tab lands back on the reason input.
+tolerance = 0.001
+because = "Tab must cycle within the panel — without the guards focus walks out into the pane behind it"
+
+[[assert]]
+kind = "differ"
+shots = ["panel-open", "after-esc"]
+because = "Esc must dismiss the side panel"
+
+[[assert]]
+kind = "match"
+shots = ["focus-close", "reopened"]
+# The load-bearing focus-restore assertion: `Return` only reopens this panel if closing it put focus
+# back on the Retract button that opened it. A whole-frame comparison cannot say *where* a focus ring
+# is, so it asks the app to prove where focus went instead. The reference is `focus-close` rather than
+# `panel-open` because both frames were reached from the keyboard, so both show the ring on the panel's
+# ✕ — `panel-open` was reached by mouse, and WebKit shows no `:focus-visible` ring for that.
+tolerance = 0.002
+because = "closing the panel must restore focus to the control that opened it"

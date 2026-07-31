@@ -1,6 +1,6 @@
 //! SSR assertions for the shared `SidePanel`/`Modal` overlay containers (viewport-overflow fix):
-//! both render a click-away scrim alongside their head/body/foot regions, the modal brackets its
-//! content with the focus-trap guards, and both render nothing while closed. The viewport-bounded
+//! both render a click-away scrim alongside their head/body/foot regions, both bracket their content
+//! with the focus-trap guards, and both render nothing while closed. The viewport-bounded
 //! scroll (absolute positioning against `.detail`/`.overlay`, `.sp-body`/`.m-body` scrolling, the
 //! pinned head/foot), the slide-in motion, and the focus movement the guards drive are CSS/webview
 //! behaviour and not SSR-observable — verified by running the app, same constraint as the floating
@@ -16,7 +16,7 @@ fn render(view: fn() -> Element) -> String {
 }
 
 fn open_side_panel_view() -> Element {
-    let onclose = use_callback(|_: MouseEvent| {});
+    let onclose = use_callback(|(): ()| {});
     rsx! {
         SidePanel {
             title: "Edit name".to_owned(),
@@ -30,7 +30,7 @@ fn open_side_panel_view() -> Element {
 }
 
 fn closed_side_panel_view() -> Element {
-    let onclose = use_callback(|_: MouseEvent| {});
+    let onclose = use_callback(|(): ()| {});
     rsx! {
         SidePanel {
             title: "Edit name".to_owned(),
@@ -99,6 +99,28 @@ fn an_open_side_panel_renders_a_click_away_scrim() {
     assert!(html.contains("sp-head"), "the panel head renders:\n{html}");
     assert!(html.contains("sp-body"), "the panel body renders:\n{html}");
     assert!(html.contains("sp-foot"), "the panel footer renders:\n{html}");
+}
+
+#[test]
+fn an_open_side_panel_brackets_its_content_with_focus_guards() {
+    let html = render(open_side_panel_view);
+    assert!(
+        html.contains(r#"data-focus-trap="true""#),
+        "the panel root is the trap the guards wrap focus inside:\n{html}"
+    );
+    let guards = html.matches("data-focus-guard").count();
+    assert_eq!(guards, 2, "one guard before the content and one after:\n{html}");
+    let leading = html.find("focus-guard").unwrap_or_default();
+    let head = html.find("sp-head").unwrap_or_default();
+    let trailing = html.rfind("focus-guard").unwrap_or_default();
+    let foot = html.find("sp-foot").unwrap_or_default();
+    assert!(leading < head, "the leading guard precedes the head:\n{html}");
+    assert!(foot < trailing, "the trailing guard follows the footer:\n{html}");
+    let scrim = html.find("sidepanel-scrim").unwrap_or_default();
+    assert!(
+        scrim < leading,
+        "the scrim stays outside the trap, so tabbing cannot land on it:\n{html}"
+    );
 }
 
 #[test]

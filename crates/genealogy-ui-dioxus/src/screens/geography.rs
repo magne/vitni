@@ -456,8 +456,8 @@ fn geo_edit_panel(
         SidePanel {
             title,
             open: true,
-            close_label: chrome.rail_label("nav-preferences"),
-            onclose: move |_| panel.set(GeoPanel::None),
+            close_label: chrome.close(),
+            onclose: move |()| panel.set(GeoPanel::None),
             footer: rsx! {},
             {match current {
                 GeoPanel::CreateHere { point } => rsx! {

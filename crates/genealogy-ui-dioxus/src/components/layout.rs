@@ -42,8 +42,13 @@ pub fn EmptyState(
 }
 
 /// A slide-in editor panel. Controlled: renders nothing unless `open`; closing is forwarded via
-/// `onclose`. The dynamic focus trap lands with the keyboard layer (PR2); the dialog semantics are
-/// here.
+/// `onclose` — the ✕, a click on the scrim, and `Esc` all take that one path. Focus is trapped inside
+/// the panel and restored to the control that opened it on close, the same cycling trap [`Modal`] uses
+/// ([`crate::shell::focus_trap`]).
+///
+/// Unlike an overlay, a panel renders *inside* `.app`, so the shell cannot inert the background around
+/// it (inerting `.app` would inert the panel too). The trap closes the keyboard path and the scrim the
+/// pointer one; the background staying reachable to assistive tech is tracked in `docs/issues.md`.
 #[component]
 pub fn SidePanel(
     /// The already-localized panel title.
@@ -52,8 +57,8 @@ pub fn SidePanel(
     open: bool,
     /// The accessible name for the close control (already localized).
     close_label: String,
-    /// Fired when the close control is activated.
-    onclose: EventHandler<MouseEvent>,
+    /// Fired when the panel is closed — the ✕, the scrim, or `Esc`.
+    onclose: EventHandler<()>,
     /// The panel body.
     children: Element,
     /// The footer (e.g. action buttons).
@@ -68,16 +73,26 @@ pub fn SidePanel(
             r#type: "button",
             aria_label: "{close_label}",
             onmousedown: move |event: MouseEvent| event.prevent_default(),
-            onclick: move |event| onclose.call(event),
+            onclick: move |_| onclose.call(()),
         }
-        div { class: "sidepanel", role: "dialog", aria_modal: "true", aria_label: "{title}",
+        div {
+            class: "sidepanel",
+            role: "dialog",
+            aria_modal: "true",
+            aria_label: "{title}",
+            tabindex: "-1",
+            "data-focus-trap": "true",
+            onkeydown: move |event: KeyboardEvent| dismiss_on_escape(&event, || onclose.call(())),
+            {focus_guard(FocusGuard::Leading)}
             div { class: "sp-head",
                 h3 { "{title}" }
                 span { class: "spacer" }
-                IconButton { icon: "✕".to_owned(), label: close_label.clone(), onclick: move |event| onclose.call(event) }
+                IconButton { icon: "✕".to_owned(), label: close_label.clone(), onclick: move |_: MouseEvent| onclose.call(()) }
             }
             div { class: "sp-body stack", {children} }
             div { class: "sp-foot", {footer} }
+            {focus_guard(FocusGuard::Trailing)}
+            DialogFocus {}
         }
     }
 }

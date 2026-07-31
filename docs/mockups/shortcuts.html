@@ -98,11 +98,12 @@
       stop, then arrows move inside.</li>
     <li><b>Focus is always visible</b> — a strong <span class="mono">:focus-visible</span> ring on every
       interactive element; never removed without replacement.</li>
-    <li><b>Overlays trap focus.</b> A modal brackets its content with a pair of offscreen guards, so
-      <kbd>Tab</kbd>/<kbd>⇧Tab</kbd> cycle between its own controls and never reach the shell behind it;
-      focus moves in when it opens and back to the control that opened it when it closes. The palette
-      and this help overlay hold focus on their single control. <kbd>Esc</kbd> closes — and over a
-      pending close it is the confirm's <b>Cancel</b>, so nothing is discarded.</li>
+    <li><b>Dialogs trap focus.</b> A modal and a record side panel each bracket their content with a
+      pair of offscreen guards, so <kbd>Tab</kbd>/<kbd>⇧Tab</kbd> cycle between their own controls and
+      never reach the shell behind them; focus moves in when the dialog opens and back to the control
+      that opened it when it closes. The palette and this help overlay hold focus on their single
+      control. <kbd>Esc</kbd> closes — and over a pending close it is the confirm's <b>Cancel</b>, so
+      nothing is discarded.</li>
     <li><b>Skip link</b> ("Skip to content") is the first tab stop, jumping past the rail to
       <span class="mono">&lt;main&gt;</span>.</li>
     <li><b>Reading order matches visual order</b>; 200% zoom / reflow supported.</li>
@@ -118,7 +119,8 @@
       <tr><td>Record tab strip</td><td><span class="mono">tablist</span> / <span class="mono">tab</span></td><td><span class="mono">aria-selected</span>; ⌘1…9</td></tr>
       <tr><td>Pedigree</td><td><span class="mono">tree</span> / <span class="mono">treeitem</span></td><td>arrows to walk; Enter to recenter</td></tr>
       <tr><td>Modal</td><td><span class="mono">dialog</span> <span class="mono">aria-modal</span></td><td>focus trap + restore; Esc; click-away scrim</td></tr>
-      <tr><td>Side panel / palette</td><td><span class="mono">dialog</span> <span class="mono">aria-modal</span></td><td>Esc; click-away scrim (palette: single tab stop)</td></tr>
+      <tr><td>Side panel</td><td><span class="mono">dialog</span> <span class="mono">aria-modal</span></td><td>focus trap + restore; Esc; click-away scrim</td></tr>
+      <tr><td>Palette / help overlay</td><td><span class="mono">dialog</span> <span class="mono">aria-modal</span></td><td>single tab stop; Esc; click-away scrim</td></tr>
       <tr><td>Record edit mode / unsaved work <span class="muted">(a draft <i>or</i> an edit of a stored record)</span></td><td>labelled fields; <span class="mono">group</span></td><td><span class="mono">aria-invalid</span> per field; modified announced; polite live region on Save; Reset has an accessible name; the record's tab is named “&lt;record&gt; — unsaved changes” beside its <b>●</b> marker, and ⌘W/⌘Q confirm before discarding, offering Save as the primary action</td></tr>
       <tr><td>Search</td><td><span class="mono">search</span> landmark</td><td>labelled input; ⌘K focuses</td></tr>
       <tr><td>Status bar</td><td><span class="mono">contentinfo</span></td><td>active record announced</td></tr>
