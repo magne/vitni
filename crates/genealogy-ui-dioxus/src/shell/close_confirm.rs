@@ -79,7 +79,7 @@ pub fn CloseConfirmDialog() -> Element {
             title: copy.title,
             open: true,
             close_label: chrome.0.dismiss(),
-            onclose: move |_| nav.cancel_close(),
+            onclose: move |()| nav.cancel_close(),
             footer: rsx! {
                 Button {
                     label: copy.cancel,

@@ -9,7 +9,7 @@
 use dioxus::prelude::*;
 use genealogy_ui::{Chord, Key as ChordKey, Modifier, Shortcut, ShortcutGroup, navigation_shortcuts};
 
-use crate::shell::focus_trap::trap_tab;
+use crate::shell::focus_trap::{dismiss_on_escape, trap_tab};
 use crate::shell::nav_state::{NavState, Overlay};
 use crate::shell::{ChromeCtx, resolved_shortcuts_from_context};
 
@@ -23,7 +23,10 @@ pub fn HelpOverlay() -> Element {
     }
     let resolved = resolved_shortcuts_from_context();
     rsx! {
-        div { class: "overlay", onclick: move |_| nav.close_overlay(),
+        div {
+            class: "overlay",
+            onclick: move |_| nav.close_overlay(),
+            onkeydown: move |event: KeyboardEvent| dismiss_on_escape(&event, || nav.dismiss_topmost()),
             div {
                 class: "help-sheet",
                 role: "dialog",

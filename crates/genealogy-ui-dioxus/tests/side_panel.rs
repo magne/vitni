@@ -44,7 +44,7 @@ fn closed_side_panel_view() -> Element {
 }
 
 fn open_modal_view() -> Element {
-    let onclose = use_callback(|_: MouseEvent| {});
+    let onclose = use_callback(|(): ()| {});
     rsx! {
         Modal {
             title: "Confirm".to_owned(),
@@ -58,7 +58,7 @@ fn open_modal_view() -> Element {
 }
 
 fn closed_modal_view() -> Element {
-    let onclose = use_callback(|_: MouseEvent| {});
+    let onclose = use_callback(|(): ()| {});
     rsx! {
         Modal {
             title: "Confirm".to_owned(),
@@ -75,7 +75,7 @@ fn closed_modal_view() -> Element {
 /// parked edit cannot be saved. The guards still have to bracket it, or `Tab` escapes a dialog with
 /// nothing to move between.
 fn modal_with_one_disabled_control() -> Element {
-    let onclose = use_callback(|_: MouseEvent| {});
+    let onclose = use_callback(|(): ()| {});
     rsx! {
         Modal {
             title: "Confirm".to_owned(),

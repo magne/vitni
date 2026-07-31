@@ -1189,7 +1189,7 @@ fn maintenance_card(
             title: chrome.prefs_rebuild_confirm_title(),
             open: confirm_open(),
             close_label: chrome.dismiss(),
-            onclose: move |_| confirm_open.set(false),
+            onclose: move |()| confirm_open.set(false),
             footer: rsx! {
                 Button {
                     label: chrome.prefs_rebuild_confirm_cancel(),
