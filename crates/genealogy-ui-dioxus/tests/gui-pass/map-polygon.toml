@@ -8,10 +8,11 @@
 # renders as fill + outline only, and a 1-vertex draft renders nothing at all), and there is no way to
 # insert a vertex mid-ring. Both are backlog items, not verification gaps.
 #
-# Note on `armed`: arming the polygon tool inserts the Finish/Clear row, which shrinks the map
-# container, and MapLibre is never told to resize — so that one frame shows an empty canvas until the
-# next click. That is a filed bug; the assertion below only needs the frame to *differ*, so it stays
-# correct once the canvas survives the resize.
+# Note on `armed`: that frame shows an empty canvas. The map is created without
+# `preserveDrawingBuffer`, so WebGL discards the drawing buffer after each composite and any render
+# that rewrites the container's class — every tool click does — leaves the canvas blank until the next
+# camera move; a screenshot is another composite read (#252). The assertion below only needs the frame
+# to *differ*, so it stays correct once that is fixed.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "The polygon tool turns canvas clicks into a ring and hands it to the geometry panel (#203)"

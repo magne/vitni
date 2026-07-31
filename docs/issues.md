@@ -138,6 +138,14 @@ long-standing "DNA match views in the UI" item is closed.
   `SidePanel` renders *inside* `.app`, so inerting the shell would inert the panel with it. The fix is
   a layer the panel can render into as a sibling of `.app` (what the overlays already use), not
   another `inert` clause.
+- **Only one unsaved new record per category can exist.** A second `⌘N` (or tabstrip `+`) for the same
+  category re-focuses the open draft instead of starting another (`NavState::open_create`), so two new
+  people cannot be sketched side by side. Deliberate today and test-locked, because the identity is the
+  category: `OpenTab::Draft(Category)` carries no draft id and `edit_key()` maps it to
+  `EditKey::draft(category)`, which is also the stash key, the create pane's component key, and how
+  `commit_draft`/`cancel_draft`/`note_save_finished` find their target — two drafts would share one
+  parked buffer and one component instance. Lifting the limit means threading a draft id through all of
+  those; the tabstrip only needs its label disambiguated. — #260
 - **Record-picker scroll-listener cleanup** — `PickerSearch::watch_scroll_close`
   (`components/record_picker.rs`) arms a `window` `scroll`/`resize` listener (via `document::eval`)
   per mount to close the floating picker on pane scroll, but never removes the JS-side listener on
@@ -173,7 +181,18 @@ Residuals from the shortcuts work (ADR 0030); see
   not a tab stop, so the ring is two buttons) and the `⌘Q` dialog's `ul.stack` over two unsaved tabs.
   What stays human: whether a freshly activated pane mounts fast enough that Save looks instant, that a
   `⌘Q` Save-all run reaches `QuitManager` after the last save (clicking Save all kills the window the
-  screenshots come from), and the slide-in motion. — #244
+  screenshots come from), and the slide-in motion. The 2026-07-31 pass could not run the Save-all half:
+  the button was disabled by an unrelated draft tab, so that check is still outstanding and this bullet is
+  blocked on #261. Everything else the pass covered — the map half — closed as #203. — #244
+- **One unsavable tab disables Save all for every other tab.** `quit_confirm_copy`
+  (`shell/close_confirm.rs`) walks the unsaved tabs and keeps the *first* blocked reason it finds, and
+  the button is disabled whenever any reason exists — so an untouched `⌘N` draft (unsaved by
+  definition, savable never, reason "Nothing has been filled in for …") blocks saving records that are
+  perfectly valid, with no hint that the reason belongs to a different tab than the one you were
+  editing. Enabling the button alone is not the fix: `save_all_then_quit` queues by the same
+  `tab_has_unsaved` predicate, so the run would reach the draft, fail `can_save()`, and
+  `abandon_save_run` mid-flight with the earlier records already saved. Gate on "no unsaved tab is
+  savable", queue on `tab_is_savable`, and say what will be left open. — #261
 - **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
   its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
   so it is neither listed by the `?` overlay nor rebindable, and it does not go through
@@ -214,16 +233,61 @@ Residuals from the shortcuts work (ADR 0030); see
   `Polygon`, so its `PlaceGeometry::Point` branch and the whole `GeoPanel::CreateHere` variant are
   unreachable; the function's doc comment still claims the opposite. Either give the tool a confirm
   step that reaches that branch, or delete the dead variant.
-- **Arming the polygon tool blanks the map canvas.** Choosing *Draw polygon* renders the
-  Finish/Clear row under the map (`screens/geography.rs`), which shrinks the map container, and
-  nothing calls MapLibre's `resize()` — so the canvas paints nothing at all until the next click on
-  it, which is also the first thing that restores it. Caught by the `map-polygon` gui-pass scenario,
-  whose `armed` frame is an empty canvas.
-- **Polygon vertices are never drawn.** `geo-draft-point` filters the draft source to `Point`
-  geometry (`screens/map_shared.rs`) while a ring is emitted as a `LineString` under three vertices
-  and a `Polygon` at three or more, so no vertex handle is ever rendered: the first click on the
-  canvas shows nothing, and a finished ring shows outline plus fill with no corners. Drawing a
-  vertex layer for the draft is the prerequisite for dragging one.
+- **Any re-render blanks the map canvas until the next camera move.** Clicking *Pan*, *Drop / move a
+  point* or *Draw polygon* — including clicking the tool that is already active, since `Signal::set`
+  has no equality check — empties the canvas; a pan or wheel-zoom brings it back. The map is created
+  without `preserveDrawingBuffer` (`screens/map_shared.rs`), so WebGL discards the drawing buffer
+  after each composite and MapLibre only draws a new frame when something asks it to; the class /
+  `data-armed` writes on the container (and the toolbar buttons' own class writes) force a composite
+  that reads an already-cleared canvas. `preserveDrawingBuffer: true` on the map options is the
+  one-line fix, or a `triggerRepaint()` after every render that touches the tool. Independently of
+  that, the Finish/Clear row really does shrink `.map-surface` with nothing calling `resize()`, so
+  that layout change needs the resize either way. Both are also why a gui-pass frame taken right
+  after a tool click is blank — a screenshot is another composite read. — #252
+- **Polygon vertices are never drawn, and cannot be moved.** `geo-draft-point` filters the draft
+  source to `Point` geometry (`screens/map_shared.rs`) while a ring is emitted as a `LineString`
+  under three vertices and a `Polygon` at three or more, so no vertex handle is ever rendered: the
+  first click shows nothing at all, the second only a hairline segment, and a finished ring has
+  outline plus fill with no corners. A draft vertex layer is the prerequisite for the drag-to-move
+  and mid-ring insertion under *In-map editing depth* below. — #259
+- **Zoom is invisible and unbounded.** No zoom readout, no `NavigationControl`, no scale bar, and no
+  `minZoom`/`maxZoom` on the map or `maxzoom` on the raster source (`screens/map_shared.rs`) — so
+  MapLibre's 0–22 default applies while `tile.openstreetmap.org` only serves to z19, and zooming past
+  it silently yields blank tiles. `maxZoom` on the map plus `maxzoom: 19` on the source, and a zoom
+  readout beside the provider select. (`fitBounds`' own `maxZoom: 15` is the only bound today, and it
+  bounds Fit alone.) — #253
+- **OSM attribution is never shown.** The map is created with `attributionControl: false` and the
+  surface's own attribution line renders an empty string (`screens/map_shared.rs`), while
+  `MapProvider::attribution` (`genealogy-app/src/config.rs`) is never read — so the tile source's
+  required credit is absent, which the OSM tile-usage policy does not allow. — #254
+- **Which place a drawn shape attaches to is invisible.** The target is the rail/picker selection, but
+  the rail's highlight compares the selection's `human_id` against the marker's UUID
+  (`screens/geography.rs`), so `.row.sel` and `aria-selected` never fire: nothing on screen says what
+  is selected until the geometry panel's title appears *after* the shape is finished. Finishing a
+  polygon with no selection also returns silently — no panel, no toast, the draft left on the canvas.
+  Fix the comparison, then show the target in the toolbar (and refuse the draw with a toast when there
+  is none). — #255
+- **The Geography place list is undocumented and geometry-only.** The rail lists places that resolved
+  a geometry *as of the slider year*, narrowed by the toolbar picker's live query
+  (`screens/geography.rs`) — so a place without geometry can never be selected there (making it
+  unreachable as a draw target), and the list silently shrinks as the year moves. It carries no label
+  saying any of that. Either list every place and mark the plotted ones, or label the list and offer
+  the unplotted ones as draw targets. — #256
+- **Geometry saved from Geography is undated; the Place Map tab stamps its slider year.** The
+  Geography panel saves `year: None` (`screens/geography.rs`) while the Place Map tab saves
+  `Some(year())` from its own independent slider, defaulting to 1900 (`screens/place.rs`). A point
+  saved from the Place tab therefore disappears from the Geography map for every year below 1900 —
+  `resolve_as_of` (`genealogy-core/src/temporal.rs`) ignores assertions dated after the target and
+  falls back only to an *undated* one, and a place with neither drops out of the marker feed
+  entirely. Decide one dating policy (an explicit dated/undated choice in both panels), and never
+  drop a marker silently — show "no geometry as of \<year\>" instead. — #257
+- **The Place Map tab cannot render an undated geometry.** Its view-model resolver filters to
+  assertions dated at or before the year and otherwise falls back to `geometries.first()`
+  (`genealogy-ui/src/view_model/place.rs`) — the first *item*, where core's `resolve_as_of` falls back
+  to the first *undated* item. With a point dated 1900 ahead of an undated polygon in the list, the
+  polygon is unreachable at every year, which is why a polygon drawn in Geography never appears on the
+  record's own map even though the *Geometry over time* table lists it. Reuse core's rule rather than
+  restating it client-side. — #258
 - **Switching provider repaints nothing.** The toolbar's provider select writes `[map]` config for
   `osm-raster` and is an explicit no-op for the other two options, but the tile URL is hardcoded in
   `maplibre_init_script` and nothing ever calls `setStyle`, so no choice can change the map. Pairs
@@ -236,20 +300,20 @@ Residuals from the shortcuts work (ADR 0030); see
 - **Provider sub-forms** — `osm-raster` is switchable from the toolbar; `maplibre-style` / `google` are
   declared in `[map]` config and round-trip but have no toolbar sub-form to collect a style URL /
   API-key-env yet.
+- **Tile caching** — tiles are fetched by the webview, and `main.rs` never gives dioxus-desktop a data
+  directory, so they land in WebKit's default unmanaged cache at a path the app neither controls nor
+  can bound. A viewport-only, size- and TTL-bounded disk cache is possible without leaving Rust: serve
+  the raster source from a `use_asset_handler("tiles", …)` route, read/write
+  `project_dirs()?.cache_dir()` (no cache-dir helper exists in `genealogy-app/src/config.rs` yet), and
+  fall through to `reqwest` with a real `User-Agent`. That seam is also the natural place to enforce
+  `MapConfig::net_allowlist`. Constraint: `research/geography-rendering.md` commits to caching no more
+  than the browser does, so bulk or offline prefetch stays out and the wording needs amending along
+  with any change here. — #262
 - **`map-provider` plugin world + geocoding** — the declarative provider ships and the Geography
   toolbar search is now a `RecordPicker` over existing places (search + jump); geocoding a *new*
   real-world address to a coordinate stays deferred. A WASM `map-provider` world supplying geocoding
   \+ custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
   never pixels).
-- **Manual webview pass outstanding** — the interactive MapLibre canvas cannot be exercised by an SSR
-  test, but it *is* exercised headless now, by three `cargo xtask gui-pass` scenarios (MapLibre renders
-  over software GL on Xvfb, tiles and all). `map-canvas` drags to pan, wheel-zooms, arms the point tool
-  and drops a coordinate; `map-polygon` picks a place, draws a three-vertex ring and finishes it into the
-  geometry panel; `map-view` frames the plotted places with *Fit* and re-dates the map from the time
-  slider. What is left is **feel** — pan/zoom smoothness and click-to-place latency, which no still image
-  carries. The parts still unscripted are unscriptable rather than unverified: there are no vertex
-  handles to render or drag and no mid-ring insertion to try (both above), and the provider select
-  neither repaints the map nor shows its GTK option popup inside the grabbed window. — #203
 
 ### GUI ⇄ CLI parity
 

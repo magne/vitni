@@ -164,17 +164,26 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (11 so far)
+### `0.9 — UI stabilization` (20 so far)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
-audit could find by reading code; the rest will come from using the GUI in earnest before 1.0, and that
-is expected rather than a planning failure. Treat the count as a floor — if 0.9 is not several times
-this size by the time it closes, the GUI probably has not been exercised hard enough.
+audit could find by reading code; the rest came from using the GUI in earnest, which is exactly how it
+was supposed to go — the 2026-07-31 manual pass on the map and the unsaved-work confirm nearly doubled
+the list on its own. Treat the count as a floor.
 
 | Item | Why it gates a release |
 | --- | --- |
-| [Manual webview pass outstanding](https://github.com/magne/genealogy/issues/203) | `manual-verify` — pan, zoom, click-to-place, polygon drawing, Fit and the time slider are scripted (`map-canvas`, `map-polygon`, `map-view`); pan/zoom smoothness and click latency are what no screenshot carries |
-| [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify` — the dialogs, their tab ring, both cancel paths and the edit stash are scripted (`unsaved-close-confirm`, `unsaved-quit-confirm`); whether a save *looks* instant, and that `⌘Q` Save-all reaches `QuitManager` after the last save, are not |
+| [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify`, blocked on #261 — the dialogs, their tab ring, both cancel paths and the edit stash are scripted (`unsaved-close-confirm`, `unsaved-quit-confirm`); whether a save *looks* instant is not, and Save all could not be clicked at all |
+| [Any re-render blanks the map canvas](https://github.com/magne/genealogy/issues/252) | Clicking any draw tool empties the canvas until the next pan or zoom — the map is created without `preserveDrawingBuffer`, so every composite reads a cleared buffer |
+| [Which place a drawn shape attaches to is invisible](https://github.com/magne/genealogy/issues/255) | The rail highlight compares `human_id` to a UUID, so nothing says what the draw target is; finishing a polygon with no selection fails silently |
+| [Geometry from Geography is undated, the Place tab stamps its year](https://github.com/magne/genealogy/issues/257) | A point saved from the Place tab vanishes from the Geography map below 1900, with no message — two panels, two dating policies |
+| [The Place Map tab cannot render an undated geometry](https://github.com/magne/genealogy/issues/258) | A polygon drawn in Geography never appears on the record's own map at any year: the view-model's fallback diverges from core's `resolve_as_of` |
+| [One unsavable tab disables Save all for every other tab](https://github.com/magne/genealogy/issues/261) | An untouched `⌘N` draft blocks ⌘Q's Save all for valid records — and enabling it as-is would abort the run mid-flight |
+| [Zoom is invisible and unbounded](https://github.com/magne/genealogy/issues/253) | No zoom readout anywhere, and no `maxZoom` — past z19 OSM serves nothing and the map goes blank |
+| [OSM attribution is never shown](https://github.com/magne/genealogy/issues/254) | The tile source's required credit is absent from both maps, which the OSM tile-usage policy does not allow |
+| [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
+| [Polygon vertices are never drawn, and cannot be moved](https://github.com/magne/genealogy/issues/259) | The first two clicks of a ring are nearly invisible and a misplaced corner can only be fixed by clearing the whole draft |
+| [Only one unsaved new record per category](https://github.com/magne/genealogy/issues/260) | Two new people cannot be sketched side by side; the draft's identity is its category, all the way down to the stash key |
 | [Record-picker scroll-listener cleanup](https://github.com/magne/genealogy/issues/204) | Leaks one inert JS listener per clear/re-search cycle |
 | ["Jump back in" recent-list write has no close/quit hook](https://github.com/magne/genealogy/issues/205) | A keyboard quit races the debounced write |
 | [`⌘S` lives outside the shortcut map](https://github.com/magne/genealogy/issues/206) | Save is neither listed by `?` nor rebindable — inconsistent with every other binding |
@@ -185,9 +194,10 @@ this size by the time it closes, the GUI probably has not been exercised hard en
 | [Map markers label with the first-asserted name](https://github.com/magne/genealogy/issues/232) | The pin reads "Oslo" at slider year 1875 while the generated title correctly reads "Kristiania" — the map contradicts the record beside it |
 | [Index `$.state.human_id`](https://github.com/magne/genealogy/issues/233) | `next_human_id` and `find_place` each full-scan the projection; the index is the prerequisite for any bulk place import not being O(n²) |
 
-The last three came out of [`research/gis-norway.md`](research/gis-norway.md); the first two are
-pre-existing defects unrelated to that work, found while reading the code. The index is the weakest fit
-of the three — an enabler rather than a defect — and is here because it is cheap and unblocks the
+The ten rows above the picker leak all came out of the 2026-07-31 manual pass; #252 through #259 are
+the map, #260 and #261 the shell. The last three of the table came out of
+[`research/gis-norway.md`](research/gis-norway.md), the two before them from reading the code. The index
+is the weakest fit — an enabler rather than a defect — and is here because it is cheap and unblocks the
 geography work that follows.
 
 Optional twelfth: *The Geography tool's Point tool cannot save at all* — the Place Map editor's "Use
