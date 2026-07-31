@@ -76,8 +76,10 @@
     <b>+ New</b> path right in the dialog. You never hit the Gramps dead-end where the record you need
     doesn’t exist yet and you must cancel out to create it first. A “+ New” child is a
     <a href="record-editing.html">deferred draft</a> — it persists only when you save the root record.</p>
-  <div class="specimen" style="display:grid;place-items:start">
-    <div class="modal" style="width:480px">
+  <div class="specimen" style="position:relative;min-height:480px;overflow:hidden">
+    <div class="overlay">
+    <button class="modal-scrim" type="button" aria-label="Dismiss"></button>
+    <div class="modal" style="width:480px" role="dialog" aria-modal="true" aria-label="Attach citation">
       <div class="m-head">Attach citation</div>
       <div class="m-body">
         <div class="search" style="min-width:0;margin:0 0 12px">
@@ -101,7 +103,11 @@
       </div>
       <div class="m-foot"><button class="btn">Cancel</button><button class="btn primary">Attach</button></div>
     </div>
+    </div>
   </div>
+  <p class="muted">Every dialog sits on the <span class="mono">.overlay</span> layer behind a
+    <span class="mono">.modal-scrim</span> click-away, traps <kbd>Tab</kbd> between its own controls, and
+    returns focus to whatever opened it — see <a href="design-system.html">design-system</a>.</p>
   <p class="muted">The same find-or-create appears <b>in-form</b> as an in-flow <a href="record-editing.html">record
     picker</a> (record-editing §6b) — the create-form variant, where “+ New” opens a nested
     <span class="mono">.draft-card</span> rather than a modal. In PR28 the side-panel and attach dialogs

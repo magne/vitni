@@ -279,6 +279,34 @@
     </div>
   </div>
 
+  <h2>Dialog layer — scrim, focus trap, motion</h2>
+  <p class="muted">A <span class="mono">.modal</span> ships on the shared <span class="mono">.overlay</span>
+    layer, which carries the backdrop wash. Over it a <span class="mono">.modal-scrim</span> button
+    catches a click outside the dialog and dismisses it — the same click-away the
+    <span class="mono">.sidepanel-scrim</span> gives the side panel; it is a
+    <span class="mono">&lt;button&gt;</span> so it has an accessible name. A pair of offscreen
+    <span class="mono">.focus-guard</span> tab stops brackets the dialog's content: tabbing onto one
+    sends focus to the opposite end, so <kbd>Tab</kbd>/<kbd>⇧Tab</kbd> cycle inside the dialog and
+    never reach the inert shell behind it. Focus moves into the dialog on open and back to the control
+    that opened it on close. Both overlays slide in; the
+    <span class="mono">prefers-reduced-motion</span> block drops the motion.</p>
+  <div class="specimen" style="position:relative;min-height:280px;overflow:hidden">
+    <div class="overlay">
+      <button class="modal-scrim" type="button" aria-label="Dismiss"></button>
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Close tab?">
+        <div class="m-head">Close tab?</div>
+        <div class="m-body">
+          <p>“Lovelace, Ada” has unsaved changes. Closing this tab discards them.</p>
+        </div>
+        <div class="m-foot">
+          <button class="btn ghost">Cancel</button>
+          <button class="btn">Discard changes</button>
+          <button class="btn primary">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <h2>Record picker &amp; nested draft</h2>
   <p class="muted">A record link is a find-or-create <b>picker</b>: an in-flow result list (never a
     floater — the <span class="mono">.detail</span> scroll container clips those) over reused
