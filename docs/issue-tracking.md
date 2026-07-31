@@ -112,17 +112,14 @@ nobody grooms weekly.
   because this is exactly how an unverified claim slipped through once already — the `## Bugs` section
   asserted test coverage for five fixes when two had none.
 
-  **An agent can get further than "not at all", so scope the label to what it actually reserves.** With
-  the recipe in [`CLAUDE.md`](../CLAUDE.md#commands) an agent builds `--features desktop`, launches under
-  `GDK_BACKEND=x11`, grabs the window with `import -window`, and reads the PNG — so rendering, layout at
-  real window widths, disabled-control appearance, marker and vertex drawing, and empty states are all
-  agent-checkable. Two things are not. **Driving** the GUI needs the window to hold the *compositor's*
-  keyboard focus: under mutter, `xdotool windowactivate` moves X focus but XTEST events still go to
-  whatever Wayland focused, so unattended clicks and chords silently do nothing (and can land in another
-  application) until a human clicks the window once. And **feel** — pan/zoom smoothness, click latency,
-  whether a save looks instant, slide-in motion — is not in a still image at all. The recipe also needs a
-  graphical session, so it is unavailable in CI. `manual-verify` means *those* residuals, not "agents
-  can't run the webview".
+  **Most of it is automatable, so scope the label to what actually needs a human.** `cargo xtask
+  gui-pass` (see [`CLAUDE.md`](../CLAUDE.md#testing-the-gui)) runs the real GUI on an Xvfb display,
+  drives it with `xdotool`, and asserts over screenshots — pan, zoom, click-to-place, overlay dismissal
+  and static appearance are all reachable there, and the scenarios are TOML files, not Rust. What is
+  left for a human is **feel**: pan/zoom smoothness, click latency, whether a save looks instant,
+  slide-in motion. Software GL is not a GPU and a still image has no frame rate. The harness needs a
+  graphical-capable machine, so it does not run in CI today. `manual-verify` means *that* residual, not
+  "agents can't run the webview" — the reason this label used to give.
 
 `docs` now has an H3 home of its own — *Docs & repo tooling* under *Platform & operations* — because
 `issue-sync` requires every bullet to sit under some `###` area to inherit a label from. `i18n` remains

@@ -1,0 +1,64 @@
+# Esc and click-away on the overlay layer. Both are `document::eval`/DOM-event behaviour that SSR
+# asserts only as markup: the handler can be attached to the wrong element and every SSR test still
+# passes — which is exactly what had happened (the dispatcher sits on `.app`, and every overlay renders
+# as a sibling of `.app`, so no keydown inside one ever reached it).
+#
+# The `match` assertions are the load-bearing ones, and each compares against the shot taken
+# *immediately before* that overlay opened — not against the first shot. Focus moves as a scenario
+# runs, and a focus ring is a real pixel difference.
+description = "Esc and click-away dismiss the command palette and the help overlay"
+
+[[step]]
+do = "shot"
+name = "before-palette"
+
+[[step]]
+do = "key"
+chord = "ctrl+k"
+label = "palette: open with ⌘K"
+
+[[step]]
+do = "shot"
+name = "palette-open"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "palette: Esc"
+
+[[step]]
+do = "shot"
+name = "palette-after-esc"
+
+[[step]]
+do = "key"
+chord = "ctrl+k"
+label = "palette: reopen"
+
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "palette: click the scrim"
+
+[[step]]
+do = "shot"
+name = "palette-after-click-away"
+
+[[assert]]
+kind = "differ"
+shots = ["before-palette", "palette-open"]
+because = "⌘K must open the command palette"
+
+[[assert]]
+kind = "match"
+shots = ["before-palette", "palette-after-esc"]
+because = "Esc must dismiss the command palette"
+
+[[assert]]
+kind = "match"
+shots = ["before-palette", "palette-after-click-away"]
+because = "a click on the scrim must dismiss the command palette"
+
+# The help overlay's `?` chord does not open under `xdotool key question` — the keysym arrives without
+# the shift state the chord matcher expects — so its Esc path has no scenario yet. Adding one is
+# blocked on driving `?` from here, not on the overlay.

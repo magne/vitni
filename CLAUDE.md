@@ -107,31 +107,55 @@ cargo fmt --all                                                      # format ev
 cargo deny --all-features check                                      # advisories, licenses, bans
 cargo xtask check                                                    # i18n-check + css-check + input-guard
 cargo xtask build-plugins                                            # lint + build plugins/* → target/plugins
+cargo xtask gui-pass                                                 # drive the real GUI headless (below)
 prek run                                                             # run git hooks manually
 ```
 
 `cargo xtask` also runs the individual checks (`i18n-check`, `css-check`, `input-guard`) plus
 `issue-sync`, `labels`, and `package` (Linux release tarball).
 
-**Seeing the GUI as an agent.** SSR tests stop at the markup; the rest is a real WebKitGTK webview, and
-it can be screenshotted — nothing about `libwebkit2gtk` is off-limits to an agent on a machine with a
-graphical session (so: not in CI):
+## Testing the GUI
+
+SSR tests (`crates/genealogy-ui-dioxus/tests/*.rs`) assert markup and are the default — fast, and they
+cover view logic. They cannot reach anything that only exists in a live webview: `document::eval`,
+CSS, the MapLibre canvas, or **which element a handler is attached to**. That last one is not
+theoretical — `Esc` dismissed no overlay for as long as the overlay layer has existed, because the
+keydown listener sits on `.app` while every overlay renders as a sibling of `.app`, and every SSR test
+still passed.
+
+**`cargo xtask gui-pass` is how you test that layer.** It runs the real GUI on its own **Xvfb**
+display, drives it with `xdotool`, and asserts over screenshots. Requires `xvfb`, `xdotool` and
+`imagemagick`, so it needs a graphical-capable machine but no desktop session — and it is *more*
+reliable than driving the GUI on your desktop, where mutter gives synthetic input to whatever the
+compositor focused, not to the window you aimed at.
 
 ```bash
-cargo build -p genealogy-ui-dioxus --features desktop
-GDK_BACKEND=x11 ./target/debug/genealogy-gui &   # XWayland, so the X11 tools below work
-id=$(xdotool search --onlyvisible --name '^Genealogy$' | tail -1)
-xwininfo -id "$id" | rg 'Absolute upper-left'    # content origin; add the PNG's own pixel coords
-import -window "$id" shot.png                    # then read shot.png
+cargo xtask gui-pass                     # every scenario
+cargo xtask gui-pass map-canvas          # one, by name
+cargo xtask gui-pass --reset             # wipe the fixture workspace, isolated home and old shots
+cargo xtask gui-pass --keep              # leave it up; attach with `x11vnc -display :99`
+cargo xtask gui-pass --workspace gen     # drive your own config + workspace instead of the fixture
 ```
 
-Read the PNG back and crop with `convert <in> -crop WxH+X+Y +repage <out>` for anything small. Driving
-the window is the weak part: `xdotool` input only reaches it while it holds the *compositor's* keyboard
-focus, which `xdotool windowactivate` does **not** grant under mutter — until a human clicks the window
-once, clicks and chords silently do nothing and keystrokes can land in another application. When it is
-focused, `mousemove` to `origin + screenshot coords` then `click 1` works, but hover first and
-re-screenshot to confirm the target. Pan/zoom smoothness, click latency and motion stay human-only —
-that is what `manual-verify` in [`docs/issue-tracking.md`](docs/issue-tracking.md) reserves.
+Scenarios are **TOML, not Rust** — `crates/genealogy-ui-dioxus/tests/gui-pass/*.toml`, so adding one
+needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `drag`, `wheel`) and `[[assert]]`s
+over the shots by name: `differ` for "the UI reacted", `match` for "the UI came back to this state",
+both with an RMSE tolerance. Read the PNGs under `target/gui-pass/shots/<scenario>/`; crop with
+`convert <in> -crop WxH+X+Y +repage <out>`.
+
+Writing one:
+
+- **Coordinates are window pixels at 1800×1200**, read straight off an earlier shot. Re-read them when
+  the rail or a toolbar moves.
+- **`match` against the shot taken immediately before the change**, never against the first shot — focus
+  rings are real pixels and move as a scenario runs.
+- Runs are **isolated by default**: a throwaway `XDG_CONFIG_HOME`/`XDG_DATA_HOME` plus a seeded fixture
+  workspace under `target/gui-pass/`. Keep it that way — a scripted click run writes events, and
+  `--real-config`/`--workspace` point it at real genealogy data.
+
+Still human-only, and what `manual-verify` in [`docs/issue-tracking.md`](docs/issue-tracking.md)
+reserves: pan/zoom smoothness, click latency, motion. Software GL is not a GPU, and a still image has
+no frame rate.
 
 The CLI's top-level commands are `init`, `rebuild`, `import`, `export`, `plugin`, plus one
 subcommand-bearing verb per aggregate, generated from `for_each_cli_command!` in
