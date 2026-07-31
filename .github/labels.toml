@@ -219,4 +219,4 @@ description = "Waiting on a third-party release, not on us"
 [[label]]
 name = "manual-verify"
 color = "006b75"
-description = "Needs a manual webview pass; agents cannot run libwebkit2gtk"
+description = "Needs a human at the webview; agents can screenshot it but not drive or feel it"

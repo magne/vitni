@@ -173,13 +173,14 @@ Residuals from the shortcuts work (ADR 0030); see
 
 - **The unsaved-work confirm has never run in a real webview.** #238, #239, and #240 shipped the
   close/quit confirm, the per-record edit stash, and Save / Save all entirely under SSR: the markup is
-  asserted, the live rendering and timing are not. Needs a human pass on the three-button footer's
-  layout at dialog width, the quit dialog's `ul.stack` list under WebKitGTK, the disabled Save's
-  appearance (`.btn.primary[disabled]`), whether a freshly activated pane mounts fast enough that Save
-  looks instant, and that a `⌘Q` Save-all run reaches `QuitManager` after the last save. #201's dialog
-  layer adds to the same pass: the backdrop scrim's click-away, `Tab`/`Shift+Tab` cycling between the
-  three buttons via the `.focus-guard` stops, focus returning to the tabstrip `✕` on close, and the
-  slide-in — all `document::eval`/CSS behaviour that SSR cannot reach. — #244
+  asserted, the live rendering and timing are not. The three-button footer at dialog width, the quit
+  dialog's `ul.stack` list under WebKitGTK, and the disabled Save's appearance (`.btn.primary[disabled]`)
+  are all settled by an agent screenshot (recipe in [`CLAUDE.md`](../CLAUDE.md#commands)). What still
+  needs a human: whether a freshly activated pane mounts fast enough that Save looks instant, that a
+  `⌘Q` Save-all run reaches `QuitManager` after the last save, and #201's dialog-layer interactions —
+  the backdrop scrim's click-away, `Tab`/`Shift+Tab` cycling between the three buttons via the
+  `.focus-guard` stops, focus returning to the tabstrip `✕` on close, and the slide-in. Those are
+  `document::eval` behaviour and motion, which SSR cannot reach and a still image does not show. — #244
 - **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
   its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
   so it is neither listed by the `?` overlay nor rebindable, and it does not go through
@@ -229,8 +230,11 @@ Residuals from the shortcuts work (ADR 0030); see
   \+ custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
   never pixels).
 - **Manual webview pass outstanding** — the interactive MapLibre canvas (pan/zoom, click-to-place feel,
-  polygon vertex rendering, the toolbar picker) cannot be exercised by an SSR test; agents can't run
-  libwebkit2gtk. — #203
+  polygon vertex rendering, the toolbar picker) cannot be exercised by an SSR test. An agent *can* launch
+  the GUI and screenshot it (recipe in [`CLAUDE.md`](../CLAUDE.md#commands); the Geography tool's toolbar,
+  time slider and empty state have been read off such a grab), but it cannot drive the canvas unattended —
+  under Wayland, synthetic input only reaches the window while a human holds it focused — and pan/zoom
+  smoothness and click latency are not in a still image at all. Those are the residuals. — #203
 
 ### GUI ⇄ CLI parity
 

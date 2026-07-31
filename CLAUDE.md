@@ -113,6 +113,26 @@ prek run                                                             # run git h
 `cargo xtask` also runs the individual checks (`i18n-check`, `css-check`, `input-guard`) plus
 `issue-sync`, `labels`, and `package` (Linux release tarball).
 
+**Seeing the GUI as an agent.** SSR tests stop at the markup; the rest is a real WebKitGTK webview, and
+it can be screenshotted — nothing about `libwebkit2gtk` is off-limits to an agent on a machine with a
+graphical session (so: not in CI):
+
+```bash
+cargo build -p genealogy-ui-dioxus --features desktop
+GDK_BACKEND=x11 ./target/debug/genealogy-gui &   # XWayland, so the X11 tools below work
+id=$(xdotool search --onlyvisible --name '^Genealogy$' | tail -1)
+xwininfo -id "$id" | rg 'Absolute upper-left'    # content origin; add the PNG's own pixel coords
+import -window "$id" shot.png                    # then read shot.png
+```
+
+Read the PNG back and crop with `convert <in> -crop WxH+X+Y +repage <out>` for anything small. Driving
+the window is the weak part: `xdotool` input only reaches it while it holds the *compositor's* keyboard
+focus, which `xdotool windowactivate` does **not** grant under mutter — until a human clicks the window
+once, clicks and chords silently do nothing and keystrokes can land in another application. When it is
+focused, `mousemove` to `origin + screenshot coords` then `click 1` works, but hover first and
+re-screenshot to confirm the target. Pan/zoom smoothness, click latency and motion stay human-only —
+that is what `manual-verify` in [`docs/issue-tracking.md`](docs/issue-tracking.md) reserves.
+
 The CLI's top-level commands are `init`, `rebuild`, `import`, `export`, `plugin`, plus one
 subcommand-bearing verb per aggregate, generated from `for_each_cli_command!` in
 `crates/genealogy-cli/src/main.rs`. Workspace selection is `--workspace`/`GENEALOGY_WORKSPACE`.
