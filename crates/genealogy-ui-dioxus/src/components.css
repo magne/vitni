@@ -593,6 +593,8 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
   position: absolute; inset: 0; z-index: calc(var(--z-modal) - 1);
   background: rgba(0, 0, 0, 0.4); border: 0; padding: 0; cursor: default;
 }
+.sidepanel { animation: slide-in-right 160ms ease-out; }
+.sidepanel-scrim { animation: fade-in 160ms ease-out; }
 
 /* ---- Small modal ---- */
 /* Bounded to the viewport (not the flex-clipped `.detail`); only `.m-body` scrolls, so the
@@ -605,6 +607,27 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .modal .m-head { flex: none; padding: var(--sp-4); border-bottom: 1px solid var(--line); font-weight: 600; font-size: var(--fs-lg); }
 .modal .m-body { flex: 1; overflow-y: auto; padding: var(--sp-4); }
 .modal .m-foot { flex: none; display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
+/* The click-away dismiss layer behind a modal. Transparent — the enclosing `.overlay` already carries
+   the backdrop wash; this is only the catcher (a `<button>`, so it has an accessible name), so strip
+   the UA button face like .menu-scrim/.picker-scrim do. */
+.modal-scrim {
+  position: absolute; inset: 0;
+  appearance: none; background: transparent; border: 0; padding: 0; margin: 0; cursor: default;
+}
+/* The dialog paints above its own scrim (a positioned sibling), and slides in with it. */
+.overlay > .modal { position: relative; animation: slide-in-down 140ms ease-out; }
+
+/* Focus guards: the pair of offscreen tab stops bracketing a trapped dialog's content
+   (`shell/focus_trap.rs`). Tabbing onto one sends focus to the opposite end of the dialog, so focus
+   cycles inside it; it never rests here, so it needs no focus ring. */
+.focus-guard { position: fixed; top: 0; left: 0; width: 1px; height: 0; padding: 0; overflow: hidden; }
+
+/* ---- Overlay motion ---- */
+/* Plain animations, so the `prefers-reduced-motion` block below neutralizes them with no
+   per-component handling. */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-in-right { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+@keyframes slide-in-down { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
 
 /* ---- States ---- */
 .empty, .loading { padding: var(--sp-8); text-align: center; color: var(--muted); }

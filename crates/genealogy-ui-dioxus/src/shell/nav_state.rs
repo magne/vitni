@@ -1007,9 +1007,21 @@ impl NavState {
             .is_some_and(|active| active.is_saved_key(category, human_id))
     }
 
-    /// Closes any open overlay (`Esc`).
+    /// Closes any open overlay.
     pub fn close_overlay(&mut self) {
         self.overlay.set(Overlay::None);
+    }
+
+    /// Dismisses the topmost dismissable layer (`Esc`). The close/quit confirm sits above every
+    /// overlay, so while one is armed `Esc` runs its **Cancel** path ([`Self::cancel_close`]) — it must
+    /// not discard the tab, and it must abandon any save run the confirm armed — and the overlay behind
+    /// it stays open. With no confirm armed it closes the overlay as before.
+    pub fn dismiss_topmost(&mut self) {
+        if self.pending_close.peek().is_some() {
+            self.cancel_close();
+            return;
+        }
+        self.close_overlay();
     }
 
     /// Renames the label of the open record tab identified by `(category, human_id)`, if it is still

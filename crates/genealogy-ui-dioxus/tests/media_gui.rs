@@ -131,6 +131,7 @@ fn save_labels() -> MediaSaveLabels {
         path_preview: "Target path".to_owned(),
         save: "Add to library".to_owned(),
         cancel: "Cancel".to_owned(),
+        dismiss: "Dismiss".to_owned(),
     }
 }
 

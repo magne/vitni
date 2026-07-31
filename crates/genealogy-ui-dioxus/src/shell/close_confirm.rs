@@ -3,6 +3,10 @@
 //! Renders only while [`NavState::pending_close`] is armed. Composes the shared [`Modal`]; mounted in
 //! `shell/root.rs` beside the other overlays.
 //!
+//! Dismissing the dialog without choosing — a click on its backdrop scrim, or `Esc` (which the shell
+//! dispatcher routes through [`NavState::dismiss_topmost`]) — takes the **Cancel** path, so neither
+//! ever discards the work.
+//!
 //! Three actions, so unsaved work has an outcome other than losing it (issue #240): **Save** /
 //! **Save all** hands the record to its own screen ([`NavState::save_then_close`] /
 //! [`NavState::save_all_then_quit`]), **Discard** applies the close as it stands, **Cancel** backs out.
@@ -74,6 +78,8 @@ pub fn CloseConfirmDialog() -> Element {
         Modal {
             title: copy.title,
             open: true,
+            close_label: chrome.0.dismiss(),
+            onclose: move |_| nav.cancel_close(),
             footer: rsx! {
                 Button {
                     label: copy.cancel,
