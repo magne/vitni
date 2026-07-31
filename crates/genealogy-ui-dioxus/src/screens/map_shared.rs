@@ -99,6 +99,34 @@ pub fn mount_maplibre(container_id: &str, center: (f64, f64), zoom: f64, mut on_
     });
 }
 
+/// The stroke every circle layer draws around its fill, so a marker stays legible over a dark tile and
+/// over another marker beneath it (per the "markers too small to see" fix).
+const CIRCLE_STROKE_COLOR: &str = "#ffffff";
+
+/// `(zoom, radius-in-px)` stops for a place marker or a draft point: a fixed radius is either an
+/// invisible dot at atlas zoom or a blob at street zoom, so the radius ramps with zoom instead.
+const POINT_RADIUS_STOPS: [(u32, u32); 4] = [(0, 7), (8, 9), (14, 12), (20, 16)];
+
+/// The same ramp for event pins, a step smaller throughout — they are plotted over the place markers.
+const EVENT_RADIUS_STOPS: [(u32, u32); 4] = [(0, 5), (8, 6), (14, 8), (20, 11)];
+
+/// The `paint` block for one circle layer: `color` fill, a `circle-radius` interpolated linearly across
+/// `radius_stops`, and a `stroke_width`-wide [`CIRCLE_STROKE_COLOR`] outline. Interpolated into
+/// [`maplibre_init_script`] as JSON, which is valid JS object syntax.
+fn circle_paint(color: &str, radius_stops: [(u32, u32); 4], stroke_width: u32) -> Value {
+    let mut radius: Vec<Value> = vec![json!("interpolate"), json!(["linear"]), json!(["zoom"])];
+    for (zoom, pixels) in radius_stops {
+        radius.push(json!(zoom));
+        radius.push(json!(pixels));
+    }
+    json!({
+        "circle-color": color,
+        "circle-radius": radius,
+        "circle-stroke-width": stroke_width,
+        "circle-stroke-color": CIRCLE_STROKE_COLOR,
+    })
+}
+
 /// The `MapLibre` bootstrap script for one container: creates the map (guarded against a re-render
 /// remount), adds the marker/event/draft `GeoJSON` sources + layers once loaded, applies any data
 /// already stashed by [`push_map_data`]/[`push_map_draft`] before the sources existed (`el.__geoPending`
@@ -126,34 +154,19 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> St
                 map.addLayer({{ id: 'geo-marker-line', type: 'line', source: 'geo-markers', filter: ['==', ['geometry-type'], 'Polygon'], paint: {{ 'line-color': '#5db3ff', 'line-width': 2 }} }});
                 map.addLayer({{
                     id: 'geo-marker-point', type: 'circle', source: 'geo-markers', filter: ['==', ['geometry-type'], 'Point'],
-                    paint: {{
-                        'circle-color': '#5db3ff',
-                        'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 7, 8, 9, 14, 12, 20, 16],
-                        'circle-stroke-width': 2,
-                        'circle-stroke-color': '#ffffff',
-                    }},
+                    paint: {marker_paint},
                 }});
                 map.addSource('geo-events', {{ type: 'geojson', data: {{ type: 'FeatureCollection', features: [] }} }});
                 map.addLayer({{
                     id: 'geo-event-point', type: 'circle', source: 'geo-events',
-                    paint: {{
-                        'circle-color': '#ffb020',
-                        'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 5, 8, 6, 14, 8, 20, 11],
-                        'circle-stroke-width': 1,
-                        'circle-stroke-color': '#ffffff',
-                    }},
+                    paint: {event_paint},
                 }});
                 map.addSource('geo-draft', {{ type: 'geojson', data: {{ type: 'FeatureCollection', features: [] }} }});
                 map.addLayer({{ id: 'geo-draft-fill', type: 'fill', source: 'geo-draft', filter: ['==', ['geometry-type'], 'Polygon'], paint: {{ 'fill-color': '#ff5d5d', 'fill-opacity': 0.2 }} }});
                 map.addLayer({{ id: 'geo-draft-line', type: 'line', source: 'geo-draft', paint: {{ 'line-color': '#ff5d5d', 'line-width': 2 }} }});
                 map.addLayer({{
                     id: 'geo-draft-point', type: 'circle', source: 'geo-draft', filter: ['==', ['geometry-type'], 'Point'],
-                    paint: {{
-                        'circle-color': '#ff5d5d',
-                        'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 7, 8, 9, 14, 12, 20, 16],
-                        'circle-stroke-width': 2,
-                        'circle-stroke-color': '#ffffff',
-                    }},
+                    paint: {draft_paint},
                 }});
                 const pending = el.__geoPending;
                 if (pending) {{
@@ -167,6 +180,9 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> St
         ",
         lat = center.0,
         lon = center.1,
+        marker_paint = circle_paint("#5db3ff", POINT_RADIUS_STOPS, 2),
+        event_paint = circle_paint("#ffb020", EVENT_RADIUS_STOPS, 1),
+        draft_paint = circle_paint("#ff5d5d", POINT_RADIUS_STOPS, 2),
     )
 }
 
@@ -176,7 +192,13 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> St
 /// the "Place map shows no marker" bug) is not lost: the init script's `load` handler re-applies
 /// whatever is stashed once the sources exist.
 pub fn push_map_data(container_id: &str, markers_json: &Value, events_json: &Value) {
-    let script = format!(
+    run_map_script(&push_data_script(container_id, markers_json, events_json));
+}
+
+/// The marker/event push script: the stash on `el.__geoPending` comes first and is unconditional, so it
+/// happens whether or not the map has finished loading; only the immediate `setData` is guarded.
+fn push_data_script(container_id: &str, markers_json: &Value, events_json: &Value) -> String {
+    format!(
         r"
         const el = document.getElementById('{container_id}');
         if (el) {{
@@ -190,15 +212,19 @@ pub fn push_map_data(container_id: &str, markers_json: &Value, events_json: &Val
             }}
         }}
         ",
-    );
-    run_map_script(&script);
+    )
 }
 
 /// Pushes the in-progress draft overlay (a dropped point or the polygon vertices so far) to the
 /// running map, stashed/applied the same load-race-proof way as [`push_map_data`].
 pub fn push_map_draft(container_id: &str, draft: &MapDraft) {
-    let geojson = draft_geojson(draft);
-    let script = format!(
+    run_map_script(&push_draft_script(container_id, &draft_geojson(draft)));
+}
+
+/// The draft push script, stashing before it consults the map for the same reason [`push_data_script`]
+/// does.
+fn push_draft_script(container_id: &str, geojson: &Value) -> String {
+    format!(
         r"
         const el = document.getElementById('{container_id}');
         if (el) {{
@@ -210,8 +236,7 @@ pub fn push_map_draft(container_id: &str, draft: &MapDraft) {
             }}
         }}
         ",
-    );
-    run_map_script(&script);
+    )
 }
 
 /// Runs a fire-and-forget script against a mounted map (a no-op under SSR).
@@ -438,9 +463,124 @@ pub fn GeometrySaveForm(
 mod tests {
     use super::{
         MapDraft, closed_ring, combined_bounds, draft_geojson, empty_feature_collection, events_geojson,
-        markers_geojson, shape_to_draft,
+        maplibre_init_script, markers_geojson, push_data_script, push_draft_script, shape_to_draft,
     };
     use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm};
+    use serde_json::{Value, json};
+
+    /// The paint each circle layer is expected to emit, written out here independently of the code that
+    /// builds it: a zoom-interpolated `circle-radius` (a fixed radius leaves a marker an invisible dot
+    /// at atlas zoom, per the "markers too small to see" fix) and a white stroke around the fill.
+    fn expected_circle_paints() -> [(&'static str, Value); 3] {
+        [
+            (
+                "geo-marker-point",
+                json!({
+                    "circle-color": "#5db3ff",
+                    "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 7, 8, 9, 14, 12, 20, 16],
+                    "circle-stroke-width": 2,
+                    "circle-stroke-color": "#ffffff",
+                }),
+            ),
+            (
+                "geo-event-point",
+                json!({
+                    "circle-color": "#ffb020",
+                    "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 5, 8, 6, 14, 8, 20, 11],
+                    "circle-stroke-width": 1,
+                    "circle-stroke-color": "#ffffff",
+                }),
+            ),
+            (
+                "geo-draft-point",
+                json!({
+                    "circle-color": "#ff5d5d",
+                    "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 7, 8, 9, 14, 12, 20, 16],
+                    "circle-stroke-width": 2,
+                    "circle-stroke-color": "#ffffff",
+                }),
+            ),
+        ]
+    }
+
+    #[test]
+    fn every_circle_layer_paints_a_zoom_interpolated_radius_with_a_white_stroke() {
+        let script = maplibre_init_script("geo-map", (59.9, 10.7), 5.0);
+        for (layer, paint) in expected_circle_paints() {
+            assert!(
+                script.contains(&format!("id: '{layer}', type: 'circle'")),
+                "the {layer} circle layer is still added:\n{script}"
+            );
+            assert!(
+                script.contains(&paint.to_string()),
+                "{layer} paints {paint} — a scalar radius or a missing stroke is a regression:\n{script}"
+            );
+        }
+    }
+
+    #[test]
+    fn pushing_marker_and_event_data_stashes_it_before_the_map_is_consulted() {
+        let markers = markers_geojson(&[]);
+        let events = events_geojson(&[]);
+        let script = push_data_script("geo-map", &markers, &events);
+        let stash = script
+            .find("el.__geoPending = Object.assign({}, el.__geoPending, ")
+            .expect("the push stashes the data");
+        assert!(
+            script[stash..].contains(&format!("{{ markers: {markers}, events: {events} }}")),
+            "both collections are stashed verbatim:\n{script}"
+        );
+        let map = script.find("el.__geoMap").expect("the push looks for a running map");
+        assert!(
+            stash < map,
+            "the stash happens unconditionally, before the map is known to exist — a push that races \
+             the map's async load must survive it:\n{script}"
+        );
+    }
+
+    #[test]
+    fn pushing_a_draft_stashes_it_before_the_map_is_consulted() {
+        let draft = MapDraft::Point((59.9, 10.7));
+        let geojson = draft_geojson(&draft);
+        let script = push_draft_script("geo-map", &geojson);
+        let stash = script
+            .find("el.__geoPending = Object.assign({}, el.__geoPending, ")
+            .expect("the push stashes the draft");
+        assert!(
+            script[stash..].contains(&format!("{{ draft: {geojson} }}")),
+            "the draft is stashed verbatim:\n{script}"
+        );
+        let map = script.find("el.__geoMap").expect("the push looks for a running map");
+        assert!(stash < map, "the stash happens before the map is consulted:\n{script}");
+    }
+
+    #[test]
+    fn the_init_scripts_load_handler_reapplies_whatever_was_stashed() {
+        let script = maplibre_init_script("geo-map", (59.9, 10.7), 5.0);
+        let load = script.find("map.on('load'").expect("the load handler");
+        let last_source = script
+            .rfind("map.addSource('geo-draft'")
+            .expect("the draft source is added");
+        let reapply = script
+            .find("const pending = el.__geoPending;")
+            .expect("the load handler reads what was stashed — without this a push that raced load is lost");
+        assert!(
+            load < reapply && last_source < reapply,
+            "the re-apply runs inside the load handler, after every source exists:\n{script}"
+        );
+        for (key, source) in [
+            ("markers", "geo-markers"),
+            ("events", "geo-events"),
+            ("draft", "geo-draft"),
+        ] {
+            assert!(
+                script[reapply..].contains(&format!(
+                    "if (pending.{key}) map.getSource('{source}').setData(pending.{key});"
+                )),
+                "stashed {key} are re-applied to '{source}':\n{script}"
+            );
+        }
+    }
 
     #[test]
     fn a_point_shape_becomes_a_geojson_point_in_lon_lat_order() {

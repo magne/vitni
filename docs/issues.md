@@ -206,11 +206,6 @@ Residuals from the shortcuts work (ADR 0030); see
 
 ### Geography & map
 
-- **Two shipped map fixes have no test coverage** — the marker load-race stash (`__geoPending` in
-  `map_shared.rs`) and the zoom-interpolated `circle-radius` + white stroke both live entirely inside
-  `format!`-built JavaScript that no test inspects, and `maplibre_init_script` is private with no test
-  module. Both are verified present in code; neither would fail if regressed. Either assert the
-  generated script text, or extract the paint expressions into testable Rust values. — #202
 - **Map markers label with the first-asserted name, not the resolved one.** `show_geography` builds each
   `PlaceMarker` label from `place.names.first()` (`genealogy-app/src/geography.rs`) while the geometry on
   that same marker *is* date-resolved, so at slider year 1875 the pin reads "Oslo" while
