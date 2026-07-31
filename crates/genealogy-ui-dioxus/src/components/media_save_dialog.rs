@@ -30,6 +30,8 @@ pub struct MediaSaveLabels {
     pub save: String,
     /// The cancel action label.
     pub cancel: String,
+    /// The accessible name for the dialog's click-away scrim.
+    pub dismiss: String,
 }
 
 /// The controlled media-save dialog. The caller owns the `draft` signal (its
@@ -76,6 +78,8 @@ pub fn MediaSaveDialog(
         Modal {
             title: labels.title.clone(),
             open,
+            close_label: labels.dismiss.clone(),
+            onclose: move |_| oncancel.call(()),
             footer: rsx! {
                 if let (Some(label), Some(onback)) = (back_label.clone(), onback) {
                     Button {

@@ -1578,6 +1578,7 @@ impl Chrome {
             path_preview: fl!(self.loader, "import-save-path-preview"),
             save: fl!(self.loader, "import-stage-save"),
             cancel: fl!(self.loader, "import-cancel"),
+            dismiss: fl!(self.loader, "dismiss"),
         }
     }
 

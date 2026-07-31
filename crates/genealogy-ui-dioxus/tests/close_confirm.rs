@@ -12,7 +12,7 @@ use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{use_record_edit, use_save_on_request};
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::close_confirm::CloseConfirmDialog;
-use genealogy_ui_dioxus::shell::nav_state::{CloseRequest, EditKey, NavState, SaveRequest, StashedEdit};
+use genealogy_ui_dioxus::shell::nav_state::{CloseRequest, EditKey, NavState, Overlay, SaveRequest, StashedEdit};
 use unic_langid::LanguageIdentifier;
 
 /// A chrome localizer for a single explicit language (deterministic for tests).
@@ -1059,6 +1059,170 @@ fn a_pane_only_saves_when_the_request_names_its_own_record() {
     assert!(
         html.contains("SAVES:0"),
         "another record's save request is not this pane's to run:\n{html}"
+    );
+}
+
+// ---- Esc, the click-away scrim, and re-opening (issue #201) -------------------------------------
+
+/// The marker block for the overlay/confirm interaction: which overlay is showing beside the open-tab
+/// count and whether the confirm is armed.
+fn overlay_probe(nav: &NavState) -> Element {
+    let overlay = match *nav.overlay.read() {
+        Overlay::None => "NONE",
+        Overlay::Palette => "PALETTE",
+        Overlay::Help => "HELP",
+    };
+    rsx! {
+        div { "OVERLAY:{overlay}" }
+        {probe(nav)}
+    }
+}
+
+fn escape_with_a_pending_close() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        nav.request_close_tab(0);
+        nav.dismiss_topmost();
+    });
+    overlay_probe(&nav)
+}
+
+#[test]
+fn escape_cancels_a_pending_close_without_discarding_the_tab() {
+    let html = render(escape_with_a_pending_close);
+    assert!(html.contains("PENDING:NONE"), "Esc dismisses the confirm:\n{html}");
+    assert!(
+        html.contains("TABS:1"),
+        "Esc takes the Cancel path, so the tab stays open:\n{html}"
+    );
+    assert!(
+        html.contains("DIRTY:[people/I0001]"),
+        "and its unsaved edit is untouched:\n{html}"
+    );
+}
+
+fn escape_with_a_pending_quit() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.request_quit();
+        nav.dismiss_topmost();
+    });
+    overlay_probe(&nav)
+}
+
+#[test]
+fn escape_cancels_a_pending_quit_without_quitting() {
+    let html = render(escape_with_a_pending_quit);
+    assert!(html.contains("PENDING:NONE"), "Esc dismisses the quit confirm:\n{html}");
+    assert!(html.contains("QUIT:0"), "and does not fire the quit:\n{html}");
+    assert!(html.contains("TABS:1"), "the draft survives:\n{html}");
+}
+
+fn escape_with_a_pending_close_abandons_the_save_run() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        nav.request_quit();
+        nav.save_all_then_quit();
+        nav.request_quit();
+        nav.dismiss_topmost();
+    });
+    overlay_probe(&nav)
+}
+
+#[test]
+fn escape_on_the_confirm_abandons_an_armed_save_run() {
+    // Esc must be the Cancel path in full, not just a `pending_close` clear.
+    let html = render(escape_with_a_pending_close_abandons_the_save_run);
+    assert!(html.contains("SAVING:NONE"), "no save stays armed:\n{html}");
+    assert!(html.contains("QUEUE:[]"), "and nothing is left queued:\n{html}");
+}
+
+fn escape_with_a_pending_close_leaves_the_overlay_alone() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.overlay.set(Overlay::Help);
+        nav.request_close_tab(0);
+        nav.dismiss_topmost();
+    });
+    overlay_probe(&nav)
+}
+
+#[test]
+fn escape_resolves_the_confirm_before_any_open_overlay() {
+    // The confirm is the topmost dialog, so one Esc dismisses it and leaves the sheet behind it.
+    let html = render(escape_with_a_pending_close_leaves_the_overlay_alone);
+    assert!(html.contains("PENDING:NONE"), "the confirm is dismissed:\n{html}");
+    assert!(
+        html.contains("OVERLAY:HELP"),
+        "one Esc closes one thing, the topmost:\n{html}"
+    );
+}
+
+fn escape_with_no_pending_close() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.overlay.set(Overlay::Palette);
+        nav.dismiss_topmost();
+    });
+    overlay_probe(&nav)
+}
+
+#[test]
+fn escape_still_closes_an_overlay_when_nothing_is_pending() {
+    let html = render(escape_with_no_pending_close);
+    assert!(
+        html.contains("OVERLAY:NONE"),
+        "Esc closes the palette as before:\n{html}"
+    );
+}
+
+fn close_requested_again_after_a_cancel() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        nav.request_close_tab(0);
+        nav.dismiss_topmost();
+        nav.request_close_tab(0);
+    });
+    overlay_probe(&nav)
+}
+
+#[test]
+fn the_confirm_re_arms_after_an_escape_cancel() {
+    let html = render(close_requested_again_after_a_cancel);
+    assert!(
+        html.contains("PENDING:SOME"),
+        "a cancelled confirm can be re-opened:\n{html}"
+    );
+    assert!(html.contains("TABS:1"), "nothing closed in between:\n{html}");
+}
+
+#[test]
+fn the_confirm_dialog_renders_a_click_away_scrim_and_focus_guards() {
+    let html = render(dialog_open_for_draft);
+    assert!(
+        html.contains(r#"class="modal-scrim""#),
+        "clicking outside the confirm cancels it:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Dismiss""#),
+        "the scrim's accessible name is localized chrome, not a literal:\n{html}"
+    );
+    assert!(
+        html.contains(r#"data-focus-trap="true""#),
+        "the confirm is a trapped dialog:\n{html}"
+    );
+    assert_eq!(
+        html.matches("data-focus-guard").count(),
+        2,
+        "the three-button footer is bracketed by both guards:\n{html}"
     );
 }
 

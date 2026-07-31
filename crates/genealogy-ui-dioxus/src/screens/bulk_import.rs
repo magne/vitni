@@ -110,6 +110,8 @@ pub struct BulkConfirmLabels {
     pub cancel: String,
     /// The "Import anyway" action label.
     pub run: String,
+    /// The accessible name for the dialog's click-away scrim.
+    pub dismiss: String,
 }
 
 /// The run the operator is about to start once they resolve the non-empty-workspace confirm — enough
@@ -402,11 +404,14 @@ fn confirm_modal(
         body: chrome.bulk_import_confirm_body(&run.workspace, run.count),
         cancel: chrome.bulk_import_confirm_cancel(),
         run: chrome.bulk_import_confirm_run(),
+        dismiss: chrome.dismiss(),
     };
     rsx! {
         Modal {
             title: labels.title,
             open: true,
+            close_label: labels.dismiss,
+            onclose: move |_| pending.set(None),
             footer: rsx! {
                 Button {
                     label: labels.cancel,

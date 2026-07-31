@@ -132,12 +132,6 @@ long-standing "DNA match views in the UI" item is closed.
   time. — #208
 - **Remember the open record's tab.** Record-detail view should restore the last-shown tab while the
   record stays open, and forget it once closed. — #209
-- **`Modal`/`SidePanel` overlay follow-ups** — `Modal` (`components/layout.rs`) still has no backdrop
-  scrim or `onclose` prop. This was harmless while `Modal` had no callers; the close/quit confirm
-  dialog (`shell/close_confirm.rs`) is now its first real caller and does **not** wire a focus trap
-  (`shell/focus_trap.rs`'s `trap_tab` is not attached) or a click-away scrim — a keyboard user tabbing
-  inside the dialog can reach the inert background, and there is no click-outside-to-cancel. Neither
-  overlay has slide-in motion beyond what the existing keyboard layer already provides. — #201
 - **Record-picker scroll-listener cleanup** — `PickerSearch::watch_scroll_close`
   (`components/record_picker.rs`) arms a `window` `scroll`/`resize` listener (via `document::eval`)
   per mount to close the floating picker on pane scroll, but never removes the JS-side listener on
@@ -169,7 +163,10 @@ Residuals from the shortcuts work (ADR 0030); see
   asserted, the live rendering and timing are not. Needs a human pass on the three-button footer's
   layout at dialog width, the quit dialog's `ul.stack` list under WebKitGTK, the disabled Save's
   appearance (`.btn.primary[disabled]`), whether a freshly activated pane mounts fast enough that Save
-  looks instant, and that a `⌘Q` Save-all run reaches `QuitManager` after the last save. — #244
+  looks instant, and that a `⌘Q` Save-all run reaches `QuitManager` after the last save. #201's dialog
+  layer adds to the same pass: the backdrop scrim's click-away, `Tab`/`Shift+Tab` cycling between the
+  three buttons via the `.focus-guard` stops, focus returning to the tabstrip `✕` on close, and the
+  slide-in — all `document::eval`/CSS behaviour that SSR cannot reach. — #244
 - **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
   its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
   so it is neither listed by the `?` overlay nor rebindable, and it does not go through

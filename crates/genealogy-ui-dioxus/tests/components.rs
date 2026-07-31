@@ -105,6 +105,8 @@ fn gallery() -> Element {
         Modal {
             title: "Delete tag?".to_owned(),
             open: true,
+            close_label: "Dismiss".to_owned(),
+            onclose: move |_| {},
             footer: rsx! { Button { label: "Delete".to_owned(), variant: ButtonVariant::Danger, onclick: move |_| {} } },
             div { "This removes the tag." }
         }
@@ -177,7 +179,12 @@ fn form_inputs_render_native_controls() {
 fn controlled_overlays_hide_when_closed() {
     fn closed() -> Element {
         rsx! {
-            Modal { title: "Hidden".to_owned(), open: false, footer: rsx! {},
+            Modal {
+                title: "Hidden".to_owned(),
+                open: false,
+                close_label: "Dismiss".to_owned(),
+                onclose: move |_| {},
+                footer: rsx! {},
                 div { "body" }
             }
             Toast { visible: false, message: "nope".to_owned() }

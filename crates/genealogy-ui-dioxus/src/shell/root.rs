@@ -101,14 +101,15 @@ pub fn Shell() -> Element {
     let active_category = entity_category(*nav.active.read());
     let is_entity = active_category.is_some();
     let app_class = if is_entity { "app has-explorer" } else { "app" };
-    // While a modal overlay (command palette / help sheet) is open the background shell is made inert
-    // so Tab and assistive tech cannot reach behind the modal (ARIA APG modal pattern, U3). The
-    // overlays are siblings of `.app`, never descendants, so inerting `.app` cannot disable them.
-    // `inert`/`aria-hidden` are emitted via `then_some` (present only when open): `inert` is a boolean
-    // HTML attribute, so on the live renderer a bare `inert: false` still renders the attribute and
-    // freezes the whole app — it must be omitted, not set to false. (SSR omits false bools, so this
-    // divergence is not caught by the SSR tests.)
-    let overlay_open = *nav.overlay.read() != Overlay::None;
+    // While a modal layer (command palette / help sheet / the close-quit confirm) is open the
+    // background shell is made inert so Tab and assistive tech cannot reach behind it (ARIA APG modal
+    // pattern, U3) — the confirm is armed through `pending_close` rather than `overlay`, so it needs
+    // its own clause. All three are siblings of `.app`, never descendants, so inerting `.app` cannot
+    // disable them. `inert`/`aria-hidden` are emitted via `then_some` (present only when open): `inert`
+    // is a boolean HTML attribute, so on the live renderer a bare `inert: false` still renders the
+    // attribute and freezes the whole app — it must be omitted, not set to false. (SSR omits false
+    // bools, so this divergence is not caught by the SSR tests.)
+    let overlay_open = *nav.overlay.read() != Overlay::None || nav.pending_close.read().is_some();
     rsx! {
         div {
             class: "{app_class}",

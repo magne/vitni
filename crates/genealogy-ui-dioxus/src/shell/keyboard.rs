@@ -45,7 +45,8 @@ pub struct ShellNotices {
 /// the `g`-prefix timing (which [`dispatch`] resolves statefully before consulting this).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShellIntent {
-    /// Close any open overlay (`Esc`).
+    /// Dismiss the topmost dismissable layer — the close/quit confirm if one is armed, otherwise any
+    /// open overlay (`Esc`).
     CloseOverlay,
     /// Open the command palette (`⌘K`/`⌘F`).
     OpenPalette,
@@ -220,7 +221,7 @@ pub fn dispatch(
     };
     event.prevent_default();
     match intent {
-        ShellIntent::CloseOverlay => nav.close_overlay(),
+        ShellIntent::CloseOverlay => nav.dismiss_topmost(),
         ShellIntent::OpenPalette => nav.overlay.set(Overlay::Palette),
         ShellIntent::NewRecord => nav.request_new(),
         ShellIntent::SwitchRecordTab(n) => nav.switch_record(n),

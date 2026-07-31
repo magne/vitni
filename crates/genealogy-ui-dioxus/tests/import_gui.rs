@@ -331,6 +331,7 @@ fn save_view() -> Element {
                 path_preview: "Path preview".to_owned(),
                 save: "Save scan".to_owned(),
                 cancel: "Cancel".to_owned(),
+                dismiss: "Dismiss".to_owned(),
             },
             payload: SaveScanPayload {
                 suggested: SaveSuggestion {
