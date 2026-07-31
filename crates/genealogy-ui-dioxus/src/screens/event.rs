@@ -1037,7 +1037,7 @@ fn event_edit_panel(
             title,
             open: true,
             close_label: loc.action_label("cancel"),
-            onclose: move |_| editing.set(None),
+            onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
                 EventEditForm::Address(seed) => rsx! {

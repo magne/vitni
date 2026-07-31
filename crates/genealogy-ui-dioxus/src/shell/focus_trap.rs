@@ -6,7 +6,8 @@
 //! enters declaratively via `autofocus` on that control and is contained by [`trap_tab`]:
 //! `Tab`/`Shift+Tab` are swallowed outright, which is correct when there is nowhere else to go.
 //!
-//! A dialog with several controls — the close/quit confirm's Cancel / Discard / Save — cannot swallow
+//! A dialog with several controls — the close/quit confirm's Cancel / Discard / Save, or any record
+//! side panel's form fields — cannot swallow
 //! `Tab` without stranding a keyboard user on whichever button happens to hold focus, so it is
 //! contained by the *cycling* trap instead: [`focus_guard`] brackets the dialog's content with a pair
 //! of offscreen tab stops, and tabbing onto one wraps focus to the opposite end of the dialog. Moving
@@ -15,10 +16,12 @@
 //! dialog contains. [`DialogFocus`] moves focus into the dialog when it opens and restores the control
 //! that had it once the dialog closes (`docs/mockups/shortcuts.html`).
 //!
-//! `Esc` is handled by [`dismiss_on_escape`], attached to each overlay's own root. It cannot be left
-//! to the shell's central keyboard dispatcher: that listener sits on `.app`, and every overlay is
-//! rendered as a *sibling* of `.app` (so inerting `.app` cannot inert the overlay), which means a
-//! keydown inside an overlay never reaches it.
+//! `Esc` is handled by [`dismiss_on_escape`], attached to each dialog layer's own root. For the
+//! overlays it cannot be left to the shell's central keyboard dispatcher: that listener sits on
+//! `.app`, and every overlay is rendered as a *sibling* of `.app` (so inerting `.app` cannot inert the
+//! overlay), which means a keydown inside an overlay never reaches it. A side panel is the mirror
+//! case — it renders *inside* `.app`, so the dispatcher would see the keydown as well, and
+//! [`dismiss_on_escape`] stops it.
 
 use dioxus::prelude::*;
 
@@ -32,13 +35,17 @@ pub fn trap_tab(event: &KeyboardEvent) {
     }
 }
 
-/// Runs `dismiss` when the key is `Esc`, so an overlay closes on it.
+/// Runs `dismiss` when the key is `Esc`, so a dialog closes on it.
 ///
-/// Attach to the overlay's **outermost** root (`div.overlay`), not the dialog: the shell's dispatcher
-/// listens on `.app`, and overlays render as siblings of `.app`, so nothing else sees this keydown.
+/// Attach to the dialog layer's **outermost** root (`div.overlay`, or `div.sidepanel` for a panel).
+/// An overlay needs it because the shell's dispatcher listens on `.app` and overlays render as
+/// siblings of `.app`, so nothing else sees the keydown; a side panel renders *inside* `.app`, so the
+/// keydown would otherwise reach the dispatcher as well — hence the `stop_propagation`, which keeps
+/// one `Esc` from both closing the panel and dismissing whatever the shell considers topmost.
 pub fn dismiss_on_escape(event: &KeyboardEvent, dismiss: impl FnOnce()) {
     if event.key() == Key::Escape {
         event.prevent_default();
+        event.stop_propagation();
         dismiss();
     }
 }
@@ -75,8 +82,13 @@ fn wrap_end(guard: FocusGuard) -> DialogEnd {
 
 /// Binds `dialog` to the open trapped dialog's root and `controls` to its focusable controls, in tab
 /// order. The guards are excluded: focusing one would bounce focus straight back to the other.
+///
+/// The *last* trapped element in the document wins, because that is the topmost layer: a side panel
+/// renders inside `.app` while the overlays render as siblings after it, so a close/quit confirm
+/// raised over an open side panel must trap in the confirm, not in the panel behind it.
 const DIALOG_CONTROLS: &str = r#"
-const dialog = document.querySelector('[data-focus-trap]');
+const traps = document.querySelectorAll('[data-focus-trap]');
+const dialog = traps.length === 0 ? null : traps[traps.length - 1];
 const controls = dialog === null ? [] : Array.from(dialog.querySelectorAll(
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]),'
   + ' textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'

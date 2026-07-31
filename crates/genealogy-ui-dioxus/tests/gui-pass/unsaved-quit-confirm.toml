@@ -1,0 +1,140 @@
+# The other half of #244: the quit confirm, and the state where Save is *blocked*. A `⌘N` draft counts
+# as unsaved the moment it opens, but nothing has been filled in, so the confirm renders its Save
+# disabled with the reason under the body — and a disabled button is not a tab stop, which turns the
+# usual three-button ring into a two-button one. That is the sharpest thing a screenshot can say about
+# the footer, so it is what this scenario asserts.
+#
+# `⌘Q` then raises the quit confirm over two unsaved tabs (the untouched draft and a dirtied
+# Kristiansand), which is the only way to see the `ul.stack` list of records at stake under WebKitGTK.
+#
+# Save all / Discard all are deliberately never clicked: both quit the app, and the next screenshot
+# would find no window. That a `⌘Q` Save-all run reaches `QuitManager` only after the last save lands
+# stays a human check, as does whether the saves *look* instant.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "The quit confirm lists both unsaved tabs, and a blocked Save is not a tab stop (#244)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Place draft"
+
+[[step]]
+do = "shot"
+name = "draft-open"
+
+[[step]]
+do = "key"
+chord = "ctrl+w"
+label = "⌘W on the untouched draft"
+
+[[step]]
+do = "shot"
+name = "blocked-confirm"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "confirm: Tab onto Discard draft"
+
+[[step]]
+do = "shot"
+name = "ring-discard"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "confirm: Tab onto the trailing guard, which wraps to Cancel"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "confirm: Tab back onto Discard draft"
+
+[[step]]
+do = "shot"
+name = "ring-cycled"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "confirm: Esc"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand, in a second tab"
+
+[[step]]
+do = "click"
+at = [1740, 145]
+label = "detail head: Edit"
+
+[[step]]
+do = "click"
+at = [1150, 438]
+label = "field: ID input"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "Tab onto the Type select"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "Type: Municipality → Parish"
+
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "park the pointer on empty list space"
+
+[[step]]
+do = "shot"
+name = "two-dirty"
+
+[[step]]
+do = "key"
+chord = "ctrl+q"
+label = "⌘Q with two tabs unsaved"
+
+[[step]]
+do = "shot"
+name = "quit-confirm"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "quit confirm: Esc"
+
+[[step]]
+do = "shot"
+name = "after-esc"
+
+[[assert]]
+kind = "differ"
+shots = ["draft-open", "blocked-confirm"]
+because = "⌘W on a draft tab must raise the close confirm"
+
+[[assert]]
+kind = "match"
+shots = ["ring-discard", "ring-cycled"]
+tolerance = 0.001
+because = "a blocked Save is not a tab stop, so two Tabs complete the confirm's ring"
+
+[[assert]]
+kind = "differ"
+shots = ["two-dirty", "quit-confirm"]
+because = "⌘Q with unsaved work must raise the quit confirm listing the records at stake"
+
+[[assert]]
+kind = "match"
+shots = ["two-dirty", "after-esc"]
+tolerance = 0.001
+because = "Esc must cancel the quit and leave both tabs open"

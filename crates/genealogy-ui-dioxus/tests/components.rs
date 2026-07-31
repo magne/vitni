@@ -98,7 +98,7 @@ fn gallery() -> Element {
             title: "Edit birth fact".to_owned(),
             open: true,
             close_label: "Close".to_owned(),
-            onclose: move |_| {},
+            onclose: move |()| {},
             footer: rsx! { Button { label: "Save".to_owned(), onclick: move |_| {} } },
             div { "panel body" }
         }

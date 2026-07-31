@@ -894,7 +894,7 @@ pub fn retract_side_panel(
             title: loc.panel_title(title_id),
             open: true,
             close_label: loc.action_label("cancel"),
-            onclose: move |_| retract.set(None),
+            onclose: move |()| retract.set(None),
             footer: rsx! {},
             {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
         }
