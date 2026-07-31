@@ -132,6 +132,19 @@ long-standing "DNA match views in the UI" item is closed.
   time. — #208
 - **Remember the open record's tab.** Record-detail view should restore the last-shown tab while the
   record stays open, and forget it once closed. — #209
+- **`SidePanel` has no focus trap or focus restore** — #201 gave `Modal` the cycling trap
+  (`shell/focus_trap.rs`'s `focus_guard` pair plus `DialogFocus`), but `SidePanel`
+  (`components/layout.rs`) still only has its scrim and `onclose`: focus never moves into the panel
+  when it opens, `Tab`/`Shift+Tab` walk straight out into the background behind it, and closing does
+  not return focus to the control that opened it. It is the app's primary edit surface — 15 call
+  sites, one `*_edit_panel` per aggregate (`screens/person.rs`, `family.rs`, `event.rs`, `place.rs`,
+  `source.rs`, `citation.rs`, `repository.rs`, `media.rs`, `note.rs`, `dna_test.rs`, `dna_match.rs`,
+  `research_note.rs`, `geography.rs`) plus `retract_side_panel` (`screens/shared.rs`) and
+  `child_removal_side_panel` (`family.rs`) — so this reaches every record edit, unlike the single
+  dialog #201 fixed. The panel's background is also never made `inert` (`shell/root.rs` inerts `.app`
+  for the overlays and the close/quit confirm only), and `docs/mockups/shortcuts.html` was downgraded
+  to match the shipped behaviour, so the design intent is now only recorded here. Wiring the same
+  guards and `DialogFocus` into `SidePanel` is the fix. — #247
 - **Record-picker scroll-listener cleanup** — `PickerSearch::watch_scroll_close`
   (`components/record_picker.rs`) arms a `window` `scroll`/`resize` listener (via `document::eval`)
   per mount to close the floating picker on pane scroll, but never removes the JS-side listener on

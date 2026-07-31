@@ -139,7 +139,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **the close/quit confirm cannot save** — the confirm landed (#200) and an in-progress edit now survives leaving its tab (#239), but keeping the edit still means cancelling, finding the record, saving, and closing again. Then the `Modal` focus trap and click-away scrim (a keyboard user can tab into the inert background), the two shipped map fixes with no test coverage, the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the three *Shell, tabs & notifications* ease-of-use items (live list updates, toasts, remembered tab). Then the three items the Norwegian-geography research surfaced: **Postgres place-detail reads fail outright** (the most severe — `show_place` and `genealogy place show` return an error on every place, on that backend), the geography markers labelled with the first-asserted name rather than the resolved one, and the `$.state.human_id` index that turns two full projection scans into probes. |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **the close/quit confirm cannot save** — the confirm landed (#200) and an in-progress edit now survives leaving its tab (#239), but keeping the edit still means cancelling, finding the record, saving, and closing again. Then the `SidePanel` focus trap and focus restore (a keyboard user tabs out of every record edit panel into the background behind it; the `Modal` half of that shipped as #201), the two shipped map fixes with no test coverage, the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the three *Shell, tabs & notifications* ease-of-use items (live list updates, toasts, remembered tab). Then the three items the Norwegian-geography research surfaced: **Postgres place-detail reads fail outright** (the most severe — `show_place` and `genealogy place show` return an error on every place, on that backend), the geography markers labelled with the first-asserted name rather than the resolved one, and the `$.state.human_id` index that turns two full projection scans into probes. |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
@@ -155,7 +155,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (12 so far)
+### `0.9 — UI stabilization` (13 so far)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
 audit could find by reading code; the rest will come from using the GUI in earnest before 1.0, and that
@@ -164,6 +164,7 @@ this size by the time it closes, the GUI probably has not been exercised hard en
 
 | Item | Why it gates a release |
 | --- | --- |
+| [`SidePanel` has no focus trap or focus restore](https://github.com/magne/genealogy/issues/247) | Accessibility defect on the app's primary edit surface — 15 call sites, one per aggregate: focus never enters the panel, `Tab` walks out into the non-inert background, and closing does not restore focus |
 | [Two shipped map fixes have no test coverage](https://github.com/magne/genealogy/issues/202) | `type/test-gap` — both would regress undetected |
 | [Manual webview pass outstanding](https://github.com/magne/genealogy/issues/203) | `manual-verify` — the interactive map canvas has never been exercised |
 | [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify` — the close/quit confirm, the per-record edit stash, and Save / Save all shipped SSR-only: live layout and timing unexercised |
@@ -182,7 +183,7 @@ pre-existing defects unrelated to that work, found while reading the code. The i
 of the three — an enabler rather than a defect — and is here because it is cheap and unblocks the
 geography work that follows.
 
-Optional fifteenth: *Point tool has no confirm step in the Geography tool* — a known inconsistency with
+Optional fourteenth: *Point tool has no confirm step in the Geography tool* — a known inconsistency with
 the Place Map editor, cheap to close alongside the map work.
 
 ### Not in either milestone
