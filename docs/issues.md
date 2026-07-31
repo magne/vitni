@@ -132,19 +132,12 @@ long-standing "DNA match views in the UI" item is closed.
   time. — #208
 - **Remember the open record's tab.** Record-detail view should restore the last-shown tab while the
   record stays open, and forget it once closed. — #209
-- **`SidePanel` has no focus trap or focus restore** — #201 gave `Modal` the cycling trap
-  (`shell/focus_trap.rs`'s `focus_guard` pair plus `DialogFocus`), but `SidePanel`
-  (`components/layout.rs`) still only has its scrim and `onclose`: focus never moves into the panel
-  when it opens, `Tab`/`Shift+Tab` walk straight out into the background behind it, and closing does
-  not return focus to the control that opened it. It is the app's primary edit surface — 15 call
-  sites, one `*_edit_panel` per aggregate (`screens/person.rs`, `family.rs`, `event.rs`, `place.rs`,
-  `source.rs`, `citation.rs`, `repository.rs`, `media.rs`, `note.rs`, `dna_test.rs`, `dna_match.rs`,
-  `research_note.rs`, `geography.rs`) plus `retract_side_panel` (`screens/shared.rs`) and
-  `child_removal_side_panel` (`family.rs`) — so this reaches every record edit, unlike the single
-  dialog #201 fixed. The panel's background is also never made `inert` (`shell/root.rs` inerts `.app`
-  for the overlays and the close/quit confirm only), and `docs/mockups/shortcuts.html` was downgraded
-  to match the shipped behaviour, so the design intent is now only recorded here. Wiring the same
-  guards and `DialogFocus` into `SidePanel` is the fix. — #247
+- **A `SidePanel`'s background is not `inert`.** The panel now traps and restores focus like `Modal`
+  (#247), so neither `Tab` nor the pointer can reach the shell behind it, but assistive tech still
+  can: `shell/root.rs` inerts `.app` for the overlays and the close/quit confirm, and every
+  `SidePanel` renders *inside* `.app`, so inerting the shell would inert the panel with it. The fix is
+  a layer the panel can render into as a sibling of `.app` (what the overlays already use), not
+  another `inert` clause.
 - **Record-picker scroll-listener cleanup** — `PickerSearch::watch_scroll_close`
   (`components/record_picker.rs`) arms a `window` `scroll`/`resize` listener (via `document::eval`)
   per mount to close the floating picker on pane scroll, but never removes the JS-side listener on
@@ -171,14 +164,16 @@ long-standing "DNA match views in the UI" item is closed.
 Residuals from the shortcuts work (ADR 0030); see
 [`archive/completed-work.md`](archive/completed-work.md). Deliberate non-goals are under *Decided*.
 
-- **The unsaved-work confirm has never run in a real webview.** #238, #239, and #240 shipped the
-  close/quit confirm, the per-record edit stash, and Save / Save all entirely under SSR: the markup is
-  asserted, the live rendering and timing are not. The three-button footer at dialog width, the quit
-  dialog's `ul.stack` list under WebKitGTK, and the disabled Save's appearance (`.btn.primary[disabled]`)
-  are all reachable as a `cargo xtask gui-pass` scenario, as are the scrim click-away and `Tab` cycling
-  through the three buttons — none is written yet (both shipped scenarios cover the map and the palette).
+- **The unsaved-work confirm's remaining webview pass is timing only.** #238, #239, and #240 shipped
+  the close/quit confirm, the per-record edit stash, and Save / Save all under SSR; two `cargo xtask
+  gui-pass` scenarios now drive them in the real webview. `unsaved-close-confirm` dirties a record,
+  raises the confirm with `⌘W`, tabs the three-button footer full circle, cancels it with both `Esc` and
+  the scrim without losing the edit, restores a parked edit after navigating away and back, and saves
+  from the dialog. `unsaved-quit-confirm` covers the blocked Save (a `⌘N` draft: the disabled button is
+  not a tab stop, so the ring is two buttons) and the `⌘Q` dialog's `ul.stack` over two unsaved tabs.
   What stays human: whether a freshly activated pane mounts fast enough that Save looks instant, that a
-  `⌘Q` Save-all run reaches `QuitManager` after the last save, and the slide-in motion. — #244
+  `⌘Q` Save-all run reaches `QuitManager` after the last save (clicking Save all kills the window the
+  screenshots come from), and the slide-in motion. — #244
 - **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
   its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
   so it is neither listed by the `?` overlay nor rebindable, and it does not go through
@@ -212,9 +207,28 @@ Residuals from the shortcuts work (ADR 0030); see
   as-of-resolved name; `PlaceView::name_as_of` already exists. — #232
 - **`geography_toolbar` takes 8 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
   fit state were threaded in — bundle them into a struct. Cosmetic cleanup.
-- **Point tool has no confirm step in the Geography tool.** The Place Map editor added a "Use this
-  point" confirm; the Geography tool's Point tool still has no equivalent (commits on click), a
-  pre-existing inconsistency.
+- **The Geography tool's Point tool cannot save at all.** The Place Map editor has a "Use this point"
+  confirm; the Geography tool has no equivalent, and contrary to what this bullet used to say it does
+  not commit on click either — it only paints a red draft dot. `open_geometry_panel`
+  (`screens/geography.rs`) is called from `on_finish_polygon` alone, whose geometry is always a
+  `Polygon`, so its `PlaceGeometry::Point` branch and the whole `GeoPanel::CreateHere` variant are
+  unreachable; the function's doc comment still claims the opposite. Either give the tool a confirm
+  step that reaches that branch, or delete the dead variant.
+- **Arming the polygon tool blanks the map canvas.** Choosing *Draw polygon* renders the
+  Finish/Clear row under the map (`screens/geography.rs`), which shrinks the map container, and
+  nothing calls MapLibre's `resize()` — so the canvas paints nothing at all until the next click on
+  it, which is also the first thing that restores it. Caught by the `map-polygon` gui-pass scenario,
+  whose `armed` frame is an empty canvas.
+- **Polygon vertices are never drawn.** `geo-draft-point` filters the draft source to `Point`
+  geometry (`screens/map_shared.rs`) while a ring is emitted as a `LineString` under three vertices
+  and a `Polygon` at three or more, so no vertex handle is ever rendered: the first click on the
+  canvas shows nothing, and a finished ring shows outline plus fill with no corners. Drawing a
+  vertex layer for the draft is the prerequisite for dragging one.
+- **Switching provider repaints nothing.** The toolbar's provider select writes `[map]` config for
+  `osm-raster` and is an explicit no-op for the other two options, but the tile URL is hardcoded in
+  `maplibre_init_script` and nothing ever calls `setStyle`, so no choice can change the map. Pairs
+  with the *Provider sub-forms* item below — the sub-forms are pointless while the map ignores the
+  setting.
 - **In-map editing depth** — true mouse-drag reposition and mid-ring vertex insertion (today: click to
   drop/move a point and click to add polygon vertices), pin-click selection on the canvas (today:
   select via the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is
@@ -228,12 +242,14 @@ Residuals from the shortcuts work (ADR 0030); see
   \+ custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
   never pixels).
 - **Manual webview pass outstanding** — the interactive MapLibre canvas cannot be exercised by an SSR
-  test, but it *is* exercised headless now: the `map-canvas` scenario of `cargo xtask gui-pass` opens the
-  Geography tool, drags to pan, wheel-zooms, arms the point tool and drops a coordinate, asserting the
-  canvas repainted at each step (MapLibre renders over software GL on Xvfb, tiles and all). What is left
-  is **feel** — pan/zoom smoothness and click-to-place latency, which no still image carries — plus the
-  parts no scenario covers yet: polygon vertex rendering and mid-ring insertion, and the toolbar picker.
-  — #203
+  test, but it *is* exercised headless now, by three `cargo xtask gui-pass` scenarios (MapLibre renders
+  over software GL on Xvfb, tiles and all). `map-canvas` drags to pan, wheel-zooms, arms the point tool
+  and drops a coordinate; `map-polygon` picks a place, draws a three-vertex ring and finishes it into the
+  geometry panel; `map-view` frames the plotted places with *Fit* and re-dates the map from the time
+  slider. What is left is **feel** — pan/zoom smoothness and click-to-place latency, which no still image
+  carries. The parts still unscripted are unscriptable rather than unverified: there are no vertex
+  handles to render or drag and no mid-ring insertion to try (both above), and the provider select
+  neither repaints the map nor shows its GTK option popup inside the grabbed window. — #203
 
 ### GUI ⇄ CLI parity
 
@@ -443,6 +459,12 @@ The `area/docs` label already existed with no `###` home; this is it.
   exempt `## Bugs` in the parser, or drop the by-design claim from the doc and require bugs to live under
   an area H3 — the two must agree, because `cargo xtask check` is a prek hook and a docs-only commit gets
   no CI (`paths-ignore` covers `docs/**`), so this is the only gate that would catch it. — #235
+- **`gui-pass` occasionally grabs a blank first shot.** Once in roughly a dozen runs the first `shot` of
+  a scenario comes back uniform (`… is blank (standard deviation 0) — the webview painted nothing`) and
+  the run aborts, passing on a re-run with nothing changed. The startup handshake in
+  `xtask/src/gui_pass.rs` waits for the window to map and then settles once; a paint the harness can
+  actually observe (a shot that must not be blank, retried) would make it deterministic instead of
+  making the first assertion of every scenario flaky.
 
 ## Decided — no action needed
 
