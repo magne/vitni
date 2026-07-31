@@ -182,8 +182,8 @@ Residuals from the shortcuts work (ADR 0030); see
   What stays human: whether a freshly activated pane mounts fast enough that Save looks instant, that a
   `⌘Q` Save-all run reaches `QuitManager` after the last save (clicking Save all kills the window the
   screenshots come from), and the slide-in motion. The 2026-07-31 pass could not run the Save-all half:
-  the button was disabled by an unrelated draft tab (see *One unsavable tab disables Save all* above), so
-  that check is still outstanding. — #244
+  the button was disabled by an unrelated draft tab, so that check is still outstanding and this bullet is
+  blocked on #261. Everything else the pass covered — the map half — closed as #203. — #244
 - **One unsavable tab disables Save all for every other tab.** `quit_confirm_copy`
   (`shell/close_confirm.rs`) walks the unsaved tabs and keeps the *first* blocked reason it finds, and
   the button is disabled whenever any reason exists — so an untouched `⌘N` draft (unsaved by
@@ -314,17 +314,6 @@ Residuals from the shortcuts work (ADR 0030); see
   real-world address to a coordinate stays deferred. A WASM `map-provider` world supplying geocoding
   \+ custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
   never pixels).
-- **Manual webview pass outstanding** — the interactive MapLibre canvas cannot be exercised by an SSR
-  test, but it *is* exercised headless now, by three `cargo xtask gui-pass` scenarios (MapLibre renders
-  over software GL on Xvfb, tiles and all). `map-canvas` drags to pan, wheel-zooms, arms the point tool
-  and drops a coordinate; `map-polygon` picks a place, draws a three-vertex ring and finishes it into the
-  geometry panel; `map-view` frames the plotted places with *Fit* and re-dates the map from the time
-  slider. What is left is **feel** — pan/zoom smoothness and click-to-place latency, which no still image
-  carries. The parts still unscripted are unscriptable rather than unverified: there are no vertex
-  handles to render or drag and no mid-ring insertion to try (both above), and the provider select
-  neither repaints the map nor shows its GTK option popup inside the grabbed window. The human pass ran
-  on 2026-07-31 against a real workspace: pan, zoom and click latency were fine, and everything it
-  turned up is filed above as its own defect. — #203
 
 ### GUI ⇄ CLI parity
 

@@ -164,7 +164,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (21 so far)
+### `0.9 — UI stabilization` (20 so far)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
 audit could find by reading code; the rest came from using the GUI in earnest, which is exactly how it
@@ -173,8 +173,7 @@ the list on its own. Treat the count as a floor.
 
 | Item | Why it gates a release |
 | --- | --- |
-| [Manual webview pass outstanding](https://github.com/magne/genealogy/issues/203) | `manual-verify` — pan, zoom, click-to-place, polygon drawing, Fit and the time slider are scripted (`map-canvas`, `map-polygon`, `map-view`); pan/zoom smoothness and click latency are what no screenshot carries |
-| [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify` — the dialogs, their tab ring, both cancel paths and the edit stash are scripted (`unsaved-close-confirm`, `unsaved-quit-confirm`); whether a save *looks* instant, and that `⌘Q` Save-all reaches `QuitManager` after the last save, are not |
+| [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify`, blocked on #261 — the dialogs, their tab ring, both cancel paths and the edit stash are scripted (`unsaved-close-confirm`, `unsaved-quit-confirm`); whether a save *looks* instant is not, and Save all could not be clicked at all |
 | [Any re-render blanks the map canvas](https://github.com/magne/genealogy/issues/252) | Clicking any draw tool empties the canvas until the next pan or zoom — the map is created without `preserveDrawingBuffer`, so every composite reads a cleared buffer |
 | [Which place a drawn shape attaches to is invisible](https://github.com/magne/genealogy/issues/255) | The rail highlight compares `human_id` to a UUID, so nothing says what the draw target is; finishing a polygon with no selection fails silently |
 | [Geometry from Geography is undated, the Place tab stamps its year](https://github.com/magne/genealogy/issues/257) | A point saved from the Place tab vanishes from the Geography map below 1900, with no message — two panels, two dating policies |
