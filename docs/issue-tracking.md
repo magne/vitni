@@ -148,7 +148,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **the close/quit confirm cannot save** — the confirm landed (#200) and an in-progress edit now survives leaving its tab (#239), but keeping the edit still means cancelling, finding the record, saving, and closing again. Then the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the three *Shell, tabs & notifications* ease-of-use items (live list updates, toasts, remembered tab). Then the three items the Norwegian-geography research surfaced: **Postgres place-detail reads fail outright** (the most severe — `show_place` and `genealogy place show` return an error on every place, on that backend), the geography markers labelled with the first-asserted name rather than the resolved one, and the `$.state.human_id` index that turns two full projection scans into probes. |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **the close/quit confirm cannot save** — the confirm landed (#200) and an in-progress edit now survives leaving its tab (#239), but keeping the edit still means cancelling, finding the record, saving, and closing again. Then the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the two remaining *Shell, tabs & notifications* ease-of-use items (toasts, remembered tab). Then the three items the Norwegian-geography research surfaced: **Postgres place-detail reads fail outright** (the most severe — `show_place` and `genealogy place show` return an error on every place, on that backend), the geography markers labelled with the first-asserted name rather than the resolved one, and the `$.state.human_id` index that turns two full projection scans into probes. |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
@@ -164,7 +164,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (20 so far)
+### `0.9 — UI stabilization` (19 so far)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
 audit could find by reading code; the rest came from using the GUI in earnest, which is exactly how it
@@ -184,19 +184,18 @@ the list on its own. Treat the count as a floor.
 | [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
 | [Polygon vertices are never drawn, and cannot be moved](https://github.com/magne/genealogy/issues/259) | The first two clicks of a ring are nearly invisible and a misplaced corner can only be fixed by clearing the whole draft |
 | [Only one unsaved new record per category](https://github.com/magne/genealogy/issues/260) | Two new people cannot be sketched side by side; the draft's identity is its category, all the way down to the stash key |
-| [Record-picker scroll-listener cleanup](https://github.com/magne/genealogy/issues/204) | Leaks one inert JS listener per clear/re-search cycle |
 | ["Jump back in" recent-list write has no close/quit hook](https://github.com/magne/genealogy/issues/205) | A keyboard quit races the debounced write |
 | [`⌘S` lives outside the shortcut map](https://github.com/magne/genealogy/issues/206) | Save is neither listed by `?` nor rebindable — inconsistent with every other binding |
-| [Live list updates on create](https://github.com/magne/genealogy/issues/207) | A created record does not appear until manual refresh |
+| [Record pickers and the command palette never see a record created while they stay open](https://github.com/magne/genealogy/issues/266) | Neither subscribes to `NavState::data_version` — the deferred half of #207, which fixed the Explorer list but not these |
 | [Toast notifications](https://github.com/magne/genealogy/issues/208) | No feedback channel for completed actions |
 | [Remember the open record's tab](https://github.com/magne/genealogy/issues/209) | Tab resets on every navigation |
 | [Postgres place-detail reads fail outright](https://github.com/magne/genealogy/issues/231) | Every `show_place` / `genealogy place show` errors on a Postgres workspace — the place screen is unusable on that backend, GUI and CLI alike |
 | [Map markers label with the first-asserted name](https://github.com/magne/genealogy/issues/232) | The pin reads "Oslo" at slider year 1875 while the generated title correctly reads "Kristiania" — the map contradicts the record beside it |
 | [Index `$.state.human_id`](https://github.com/magne/genealogy/issues/233) | `next_human_id` and `find_place` each full-scan the projection; the index is the prerequisite for any bulk place import not being O(n²) |
 
-The ten rows above the picker leak all came out of the 2026-07-31 manual pass; #252 through #259 are
-the map, #260 and #261 the shell. The last three of the table came out of
-[`research/gis-norway.md`](research/gis-norway.md), the two before them from reading the code. The index
+The ten rows right below the manual-webview-pass row all came out of the 2026-07-31 manual pass; #252
+through #259 are the map, #260 and #261 the shell. The last three of the table came out of
+[`research/gis-norway.md`](research/gis-norway.md); the rest came from reading the code. The index
 is the weakest fit — an enabler rather than a defect — and is here because it is cheap and unblocks the
 geography work that follows.
 
