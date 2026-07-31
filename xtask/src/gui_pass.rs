@@ -10,7 +10,10 @@
 //! `crates/genealogy-ui-dioxus/tests/gui-pass/`, so adding one needs no recompile. A file lists
 //! `[[step]]`s (a click, a chord, a drag, a wheel, a screenshot) and `[[assert]]`s over the shots it
 //! took — `differ` for "the UI reacted", `match` for "the UI returned to this state". Both compare
-//! with an RMSE tolerance, so a caret blink is not a difference.
+//! with an RMSE tolerance, so a caret blink is not a difference. An assertion may add `region = [x, y,
+//! w, h]` to compare a single window sub-rectangle instead of the whole shot — needed when a change is
+//! provably confined to one area but the rest of the window can legitimately repaint either way (e.g.
+//! the tabstrip repaints on every Save, so a whole-window `differ` cannot isolate a list-column change).
 //!
 //! The run is isolated by default: a throwaway `XDG_CONFIG_HOME`/`XDG_DATA_HOME` under
 //! `target/gui-pass/home` and a seeded fixture workspace, so a scripted click run can never append
@@ -99,12 +102,17 @@ enum Assertion {
         /// The RMSE the difference must exceed. Lower it for a change that repaints few pixels (a
         /// dropped map point); defaults to [`SAME_SCREEN_RMSE`].
         tolerance: Option<f64>,
+        /// `[x, y, w, h]` window pixels to compare instead of the whole shot. Absent compares the
+        /// whole window, today's behaviour.
+        region: Option<[u32; 4]>,
     },
     /// The two shots must show the same screen — the UI returned there (e.g. an overlay dismissed).
     Match {
         shots: [String; 2],
         because: String,
         tolerance: Option<f64>,
+        /// See [`Self::Differ`]'s `region`.
+        region: Option<[u32; 4]>,
     },
 }
 
@@ -124,6 +132,12 @@ impl Assertion {
     fn tolerance(&self) -> f64 {
         match self {
             Self::Differ { tolerance, .. } | Self::Match { tolerance, .. } => tolerance.unwrap_or(SAME_SCREEN_RMSE),
+        }
+    }
+
+    fn region(&self) -> Option<[u32; 4]> {
+        match self {
+            Self::Differ { region, .. } | Self::Match { region, .. } => *region,
         }
     }
 }
@@ -658,12 +672,17 @@ fn standard_deviation(path: &Path) -> Result<f64> {
     parse_metric(&String::from_utf8_lossy(&measured.stdout), path)
 }
 
-/// The normalized RMSE between two shots (0 for identical).
-fn difference(left: &Path, right: &Path) -> Result<f64> {
+/// The normalized RMSE between two shots (0 for identical), restricted to `region` (`[x, y, w, h]`
+/// window pixels) when given.
+fn difference(left: &Path, right: &Path, region: Option<[u32; 4]>) -> Result<f64> {
+    // `-extract` is a read-time setting, so placed once before both file arguments it crops each of
+    // them identically as `compare` reads it in — no temp files needed.
+    let extract = region.map(|[x, y, w, h]| format!("{w}x{h}+{x}+{y}"));
     // `compare` exits 1 when the images differ, which is the normal case here, so the status is not
     // an error signal — only an unparsable metric is.
     let compared = Command::new("compare")
         .args(["-metric", "RMSE"])
+        .args(extract.iter().flat_map(|extract| ["-extract", extract]))
         .args([left, right])
         .arg("null:")
         .output()
@@ -692,7 +711,7 @@ fn check(asserts: &[Assertion], taken: &[String], shots: &Path) -> Result<()> {
         let (Some(left), Some(right)) = (shot_path(taken, shots, left), shot_path(taken, shots, right)) else {
             bail!("gui-pass: assertion names a shot the script never took: {left} / {right}");
         };
-        let difference = difference(&left, &right)?;
+        let difference = difference(&left, &right, assertion.region())?;
         let tolerance = assertion.tolerance();
         let failed = match assertion {
             Assertion::Differ { .. } => difference <= tolerance,
