@@ -1,0 +1,109 @@
+# Polygon drawing on the Geography map (#203) — the half of the map canvas `map-canvas.toml` does not
+# reach: picking a place recentres the map, the polygon tool turns canvas clicks into a ring, and
+# finishing it hands the geometry to the provenance panel. None of it exists under SSR, which renders no
+# canvas and has no pointer.
+#
+# Two things are deliberately *not* asserted, because the app does not do them: polygon vertices are
+# never drawn as handles (the draft's point layer is filtered to `Point` geometry, so a ≥3-vertex draft
+# renders as fill + outline only, and a 1-vertex draft renders nothing at all), and there is no way to
+# insert a vertex mid-ring. Both are backlog items, not verification gaps.
+#
+# Note on `armed`: arming the polygon tool inserts the Finish/Clear row, which shrinks the map
+# container, and MapLibre is never told to resize — so that one frame shows an empty canvas until the
+# next click. That is a filed bug; the assertion below only needs the frame to *differ*, so it stays
+# correct once the canvas survives the resize.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "The polygon tool turns canvas clicks into a ring and hands it to the geometry panel (#203)"
+
+[[step]]
+do = "click"
+at = [85, 881]
+label = "rail: Geography"
+
+[[step]]
+do = "shot"
+name = "map"
+
+[[step]]
+do = "click"
+at = [300, 185]
+label = "place list: Kristiansand"
+
+[[step]]
+do = "shot"
+name = "selected"
+
+[[step]]
+do = "click"
+at = [1536, 110]
+label = "toolbar: Draw polygon"
+
+[[step]]
+do = "shot"
+name = "armed"
+
+[[step]]
+do = "click"
+at = [900, 400]
+label = "map: first vertex"
+
+[[step]]
+do = "shot"
+name = "vertex-one"
+
+[[step]]
+do = "click"
+at = [1200, 420]
+label = "map: second vertex"
+
+[[step]]
+do = "shot"
+name = "ring-open"
+
+[[step]]
+do = "click"
+at = [1100, 700]
+label = "map: third vertex"
+
+[[step]]
+do = "shot"
+name = "ring-closed"
+
+[[step]]
+do = "click"
+at = [517, 1048]
+label = "Finish polygon"
+
+[[step]]
+do = "shot"
+name = "geometry-panel"
+
+[[assert]]
+kind = "differ"
+shots = ["map", "selected"]
+because = "picking a place must recentre and zoom the map onto it"
+
+[[assert]]
+kind = "differ"
+shots = ["selected", "armed"]
+because = "arming the polygon tool must offer the finish and clear actions"
+
+[[assert]]
+kind = "differ"
+shots = ["vertex-one", "ring-open"]
+# Two vertices draw one thin red segment over a full-frame map: a few hundred pixels change, so the
+# default same-screen tolerance would swallow it.
+tolerance = 0.001
+because = "a second vertex must draw the ring's first segment"
+
+[[assert]]
+kind = "differ"
+shots = ["ring-open", "ring-closed"]
+tolerance = 0.001
+because = "a third vertex must close the ring and fill it"
+
+[[assert]]
+kind = "differ"
+shots = ["ring-closed", "geometry-panel"]
+because = "Finish polygon must open the geometry panel for the selected place"

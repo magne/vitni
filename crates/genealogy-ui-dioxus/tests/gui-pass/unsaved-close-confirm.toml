@@ -1,0 +1,197 @@
+# The unsaved-work confirm (#244), which shipped SSR-only: #238's close confirm, #239's per-record edit
+# stash and #240's Save. What SSR asserts is the markup; what this scenario asserts is that the live
+# webview honours it — the dialog is raised by a real `⌘W`, its three-button footer is the whole tab
+# ring, `Esc` and the scrim both cancel without losing the edit, and a parked edit survives navigating
+# away and back.
+#
+# Dirtying a record without a typing step: the Type `<select>` is the one control a keypress alone can
+# change. Clicking it directly opens a native GTK option popup that grabs the keyboard, so focus is
+# moved onto it with `Tab` out of the ID field instead, and `Down` picks the next option
+# (Municipality → Parish).
+#
+# The clicks on empty list space are what keep the reference frames comparable. They blur the select (a
+# focus ring is a real pixel difference, and the remounted pane after the round trip has no focus) and
+# park the pointer exactly where the scrim click later lands, so no frame differs from another by a rail
+# item's hover styling alone.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "The close confirm raised by ⌘W over a dirty record cancels, cycles and saves (#244)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "click"
+at = [1740, 145]
+label = "detail head: Edit"
+
+[[step]]
+do = "shot"
+name = "edit-mode"
+
+[[step]]
+do = "click"
+at = [1150, 438]
+label = "field: ID input"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "Tab onto the Type select"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "Type: Municipality → Parish"
+
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "park the pointer on empty list space"
+
+[[step]]
+do = "shot"
+name = "dirty"
+
+[[step]]
+do = "click"
+at = [85, 135]
+label = "rail: Dashboard"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "park the pointer where the scrim click lands"
+
+[[step]]
+do = "shot"
+name = "restored"
+
+[[step]]
+do = "key"
+chord = "ctrl+w"
+label = "⌘W on the dirty tab"
+
+[[step]]
+do = "shot"
+name = "confirm"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "confirm: Tab onto Discard changes"
+
+[[step]]
+do = "shot"
+name = "ring-discard"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "confirm: Tab onto Save"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "confirm: Tab onto the trailing guard, which wraps to Cancel"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "confirm: Tab back onto Discard changes"
+
+[[step]]
+do = "shot"
+name = "ring-cycled"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "confirm: Esc"
+
+[[step]]
+do = "shot"
+name = "after-esc"
+
+[[step]]
+do = "key"
+chord = "ctrl+w"
+label = "⌘W again"
+
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "confirm: click the scrim"
+
+[[step]]
+do = "shot"
+name = "after-click-away"
+
+[[step]]
+do = "key"
+chord = "ctrl+w"
+label = "⌘W a third time"
+
+[[step]]
+do = "click"
+at = [1072, 301]
+label = "confirm: Save"
+
+[[step]]
+do = "shot"
+name = "saved"
+
+[[assert]]
+kind = "differ"
+shots = ["edit-mode", "dirty"]
+# The changed option, the per-field reset ↺, Save turning enabled, and the tabstrip's unsaved dot —
+# each a handful of pixels, so this needs a tolerance well under the same-screen default.
+tolerance = 0.001
+because = "one keypress on the Type select must mark the record dirty and enable Save"
+
+[[assert]]
+kind = "match"
+shots = ["dirty", "restored"]
+# Not byte-identical: the pane remounts, so the field's own modified styling is redrawn.
+tolerance = 0.005
+because = "navigating away from a mid-edit record and back must restore the parked buffer"
+
+[[assert]]
+kind = "differ"
+shots = ["restored", "confirm"]
+because = "⌘W on a tab with unsaved work must raise the close confirm"
+
+[[assert]]
+kind = "match"
+shots = ["ring-discard", "ring-cycled"]
+tolerance = 0.001
+because = "the confirm's three buttons are the whole tab ring — the guards must wrap focus back"
+
+[[assert]]
+kind = "match"
+shots = ["restored", "after-esc"]
+tolerance = 0.001
+because = "Esc must cancel the confirm and leave the edit parked"
+
+[[assert]]
+kind = "match"
+shots = ["restored", "after-click-away"]
+tolerance = 0.001
+because = "a click on the scrim must cancel the confirm and leave the edit parked"
+
+[[assert]]
+kind = "differ"
+shots = ["restored", "saved"]
+because = "Save in the confirm must save the record and close the tab"

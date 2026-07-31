@@ -1,0 +1,52 @@
+# The Geography view controls (#203): the toolbar's Fit, and the "map as of <year>" time slider. Both
+# are live-webview behaviour — Fit animates a `fitBounds` on the MapLibre camera, and the slider is a
+# native range input whose value drives a re-query of the map data.
+#
+# The provider select next to them is deliberately not scripted: its option list is a GTK popup outside
+# the grabbed window, and picking any option repaints nothing (the tile URL is hardcoded), so a
+# screenshot cannot tell a working switch from a broken one.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "Fit frames the plotted places and the time slider re-dates the map (#203)"
+
+[[step]]
+do = "click"
+at = [85, 881]
+label = "rail: Geography"
+
+[[step]]
+do = "shot"
+name = "map"
+
+[[step]]
+do = "click"
+at = [1615, 110]
+label = "toolbar: Fit"
+
+[[step]]
+do = "shot"
+name = "fitted"
+
+[[step]]
+do = "click"
+at = [900, 1102]
+label = "time slider: drop the year to ~1350"
+
+[[step]]
+do = "shot"
+name = "re-dated"
+
+[[assert]]
+kind = "differ"
+shots = ["map", "fitted"]
+because = "Fit must frame the plotted places instead of the whole-world default view"
+
+[[assert]]
+kind = "differ"
+shots = ["fitted", "re-dated"]
+# What changes is the slider track and thumb, the year readout, and the caption under it — measured at
+# RMSE ≈0.02, but the tolerance stays an order of magnitude below that: Kristiansand's coordinate is a
+# scalar rather than a dated geometry, so the marker never moves and the canvas is pixel-identical, and
+# a future narrower readout must still count as a reaction.
+tolerance = 0.002
+because = "clicking the time slider track must move the year the map is shown as of"
