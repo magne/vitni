@@ -146,11 +146,6 @@ long-standing "DNA match views in the UI" item is closed.
   `commit_draft`/`cancel_draft`/`note_save_finished` find their target — two drafts would share one
   parked buffer and one component instance. Lifting the limit means threading a draft id through all of
   those; the tabstrip only needs its label disambiguated. — #260
-- **Record-picker scroll-listener cleanup** — `PickerSearch::watch_scroll_close`
-  (`components/record_picker.rs`) arms a `window` `scroll`/`resize` listener (via `document::eval`)
-  per mount to close the floating picker on pane scroll, but never removes the JS-side listener on
-  unmount, so each clear/re-search cycle leaves one inert listener behind (bounded by that, not by
-  keystrokes or scroll events). Remove it on unmount, or arm it once at a higher scope. — #204
 
 ### Lists, search & scale
 

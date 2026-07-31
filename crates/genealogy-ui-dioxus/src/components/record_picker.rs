@@ -13,7 +13,10 @@
 //! owns the hooks needed to measure the input's on-screen position and close the list on pane scroll —
 //! isolating that state in a real component scope keeps it safe under the conditional
 //! search-view/collapsed-view branching above it (a plain fn's hooks would drift out of step with
-//! that branching). [`PickerSearch`]'s props are therefore fully owned, already-localized data (never
+//! that branching), and gives the scroll/resize listener a `use_drop` to tear itself down against: the
+//! branching above unmounts [`PickerSearch`] on every pick and remounts it on every clear, so without
+//! that teardown each cycle would leave one more inert JS listener on `window` (#204).
+//! [`PickerSearch`]'s props are therefore fully owned, already-localized data (never
 //! `&Localizer`/`&RecordPicker`, which a `#[component]`'s `Clone + PartialEq` props can't carry) —
 //! [`picker_search`] resolves everything it needs while it still holds those by reference. A call site
 //! can still render a picker conditionally and the SSR tests can exercise the markup without an app;
@@ -330,6 +333,14 @@ fn PickerSearch(
     let anchor_style = use_signal(String::new);
     let mut anchor = use_signal(|| None::<MountedEvent>);
     let mut active = use_signal(|| 0usize);
+    // `name` is already this field's page-unique element-id base (it backs `id="{name}"` and
+    // `"{name}-listbox"` below), so it doubles as the `window`-scoped key `watch_scroll_close`/
+    // `unwatch_scroll_close` use to arm and later remove the exact same JS listener — see #204.
+    let scroll_close_key = format!("__pickerScrollClose_{name}");
+    use_drop({
+        let key = scroll_close_key.clone();
+        move || unwatch_scroll_close(&key)
+    });
     let open = state.read().open;
     use_effect(move || {
         if state.read().open
@@ -362,7 +373,7 @@ fn PickerSearch(
             onmounted: move |event| {
                 anchor.set(Some(event.clone()));
                 measure_anchor(event, anchor_style);
-                watch_scroll_close(state);
+                watch_scroll_close(state, &scroll_close_key);
             },
             onfocusout: move |_| state.write().open = false,
             TextInput {
@@ -460,24 +471,45 @@ fn measure_anchor(node: MountedEvent, mut style: Signal<String>) {
     });
 }
 
-/// Arms a one-shot, capture-phase `window` `scroll`/`resize` listener that closes the picker — the
-/// scrolling ancestor (`.tab-body`/`.detail`) isn't reachable from this component, but capture-phase
-/// window listeners still observe scroll events on any descendant scroller. Armed once per mount (not
-/// re-armed per open/close), so the JS-side listener outlives one pick/clear cycle; acceptable for a
-/// floating overlay that is only ever open briefly.
-fn watch_scroll_close(mut state: Signal<PickerState>) {
-    let mut listener = document::eval(
+/// Arms a capture-phase `window` `scroll`/`resize` listener that closes the picker — the scrolling
+/// ancestor (`.tab-body`/`.detail`) isn't reachable from this component, but capture-phase window
+/// listeners still observe scroll events on any descendant scroller. Armed once per mount (not
+/// re-armed per open/close); `key` stashes the listener closure on `window` under a page-unique name so
+/// [`unwatch_scroll_close`] can remove this exact listener — via a separate `document::eval` call,
+/// which shares no JS-side scope with this one — when [`PickerSearch`]'s `use_drop` fires on unmount
+/// (#204: before this, the JS-side listener outlived the mount and leaked one per pick/clear cycle).
+fn watch_scroll_close(mut state: Signal<PickerState>, key: &str) {
+    let script = format!(
         r"
         const closePicker = () => dioxus.send(true);
+        window['{key}'] = closePicker;
         window.addEventListener('scroll', closePicker, true);
         window.addEventListener('resize', closePicker, true);
-        ",
+        "
     );
+    let mut listener = document::eval(&script);
     spawn(async move {
         while listener.recv::<bool>().await.is_ok() {
             state.write().open = false;
         }
     });
+}
+
+/// Removes the `scroll`/`resize` listener [`watch_scroll_close`] stashed on `window` under `key`, run
+/// from [`PickerSearch`]'s `use_drop` on unmount. A no-op if the listener was never armed (`onmounted`
+/// never fired, e.g. under SSR).
+fn unwatch_scroll_close(key: &str) {
+    let script = format!(
+        r"
+        const closePicker = window['{key}'];
+        if (closePicker) {{
+            window.removeEventListener('scroll', closePicker, true);
+            window.removeEventListener('resize', closePicker, true);
+            delete window['{key}'];
+        }}
+        "
+    );
+    document::eval(&script);
 }
 
 /// The floating result list: a reused [`ListRow`] per matched row (already capped upstream, the one
