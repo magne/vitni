@@ -40,7 +40,9 @@ pub fn Explorer() -> Element {
 
 /// The list for one entity `category`: owns its `use_resource`, `selected`/`query` signals, wires
 /// selection to [`NavState::open_record`], keeps the row highlight in sync with the active record
-/// tab (only when it belongs to this category), and installs `[`/`]` stepping.
+/// tab (only when it belongs to this category), and installs `[`/`]` stepping. The resource also
+/// reads [`NavState::data_version`] (the rail-count idiom in `shell/root.rs`), so a create/edit/undo
+/// elsewhere in this category refetches the list without a category switch.
 #[component]
 fn ExplorerList(category: Category) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
@@ -73,6 +75,7 @@ fn ExplorerList(category: Category) -> Element {
     let list = use_resource(move || {
         let services = services.clone();
         let intent = intent.clone();
+        let _ = nav.data_version.read();
         async move { load_screen(services, intent).await }
     });
     use_record_step(nav, category, list, query, selected);
