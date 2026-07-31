@@ -76,6 +76,21 @@ fn shell_with_overlay_open() -> Element {
     }
 }
 
+/// The full shell with the close confirm armed over an unsaved draft (via an injected `NavState`), so
+/// the background `.app` should be inert and hidden from assistive tech just as an overlay makes it.
+fn shell_with_pending_close() -> Element {
+    use_context_provider(|| AppCtx::Failed("test".to_owned()));
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.request_close_tab(0);
+    });
+    rsx! {
+        Shell {}
+    }
+}
+
 /// The help overlay, forced open.
 fn help_open() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
@@ -185,6 +200,21 @@ fn an_open_overlay_inerts_and_hides_the_background_shell() {
     assert!(
         !closed.contains("inert"),
         "the shell is interactive when no overlay is open:\n{closed}"
+    );
+}
+
+#[test]
+fn a_pending_close_confirm_inerts_and_hides_the_background_shell() {
+    // The confirm is armed through `pending_close`, not `overlay`, so it needs its own inert clause —
+    // without it `Tab` inside the three-button footer reaches the shell behind the dialog (issue #201).
+    let html = render(shell_with_pending_close);
+    assert!(
+        html.contains(r#"tabindex="-1" inert"#),
+        "the background .app is inert while the confirm is armed:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="modal-scrim""#),
+        "and the confirm's click-away scrim renders over it:\n{html}"
     );
 }
 
