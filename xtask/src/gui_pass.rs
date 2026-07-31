@@ -29,7 +29,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 
-use crate::util::run_cargo;
+use crate::util::{copy_dir, run_cargo};
 
 /// Where the isolated home, the fixture workspace and the shots are written.
 const OUT_DIR: &str = "target/gui-pass";
@@ -44,6 +44,8 @@ const SCREEN: &str = "2560x1600x24";
 const WINDOW: (u32, u32) = (1800, 1200);
 /// The fixture workspace name.
 const FIXTURE_WORKSPACE: &str = "gui-pass";
+/// The pristine copy of the seeded workspace, restored before every scenario.
+const SEED_DIR: &str = "workspace-seed";
 /// Empty top-bar space, clicked once at startup to hand the webview keyboard focus (see [`focus`]).
 const FOCUS_CLICK: (i32, i32) = (900, 60);
 /// How long to wait for the window to map before giving up.
@@ -182,7 +184,7 @@ pub fn run(args: &[String]) -> Result<()> {
     let mut failed = Vec::new();
     for path in &scripts {
         let name = script_name(path);
-        match run_one(&options, &home, path, &out.join("shots").join(&name)) {
+        match run_one(&options, &out, &home, path) {
             Ok(()) => println!("gui-pass: {name} passed"),
             Err(error) => {
                 eprintln!("gui-pass: {name} FAILED: {error:#}");
@@ -206,12 +208,23 @@ pub fn run(args: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// Runs one scenario end to end.
-fn run_one(options: &Options, home: &Path, path: &Path, shots: &Path) -> Result<()> {
+/// Runs one scenario end to end, from a fresh copy of the seeded workspace and an empty shot
+/// directory — a scenario writes events (dropping a map point asserts coordinates), so sharing either
+/// would make one scenario's result depend on which ran before it.
+fn run_one(options: &Options, out: &Path, home: &Path, path: &Path) -> Result<()> {
     let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let script: Script = toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
-    println!("\n=== {} — {}", script_name(path), script.description);
-    fs::create_dir_all(shots).with_context(|| format!("creating {}", shots.display()))?;
+    let name = script_name(path);
+    println!("\n=== {name} — {}", script.description);
+    let shots = out.join("shots").join(&name);
+    if shots.exists() {
+        fs::remove_dir_all(&shots).with_context(|| format!("clearing {}", shots.display()))?;
+    }
+    fs::create_dir_all(&shots).with_context(|| format!("creating {}", shots.display()))?;
+    let shots = shots.as_path();
+    if !options.real_config {
+        restore_workspace(out)?;
+    }
 
     let mut session = start_session(options, home)?;
     let window = wait_for_window(&options.display)?;
@@ -338,7 +351,7 @@ fn preflight() -> Result<()> {
 
 /// Deletes the isolated home, the fixture workspace and the shots.
 fn reset(out: &Path) -> Result<()> {
-    for dir in ["home", "workspace", "shots"] {
+    for dir in ["home", "workspace", SEED_DIR, "shots"] {
         let path = out.join(dir);
         if path.exists() {
             fs::remove_dir_all(&path).with_context(|| format!("removing {}", path.display()))?;
@@ -386,8 +399,26 @@ fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
             "7.9956",
         ],
     )?;
+    copy_dir(&out.join("workspace"), &out.join(SEED_DIR))?;
     println!("gui-pass: seeded workspace {FIXTURE_WORKSPACE} at {workspace} with place {place}");
     Ok(())
+}
+
+/// Replaces the fixture workspace with a fresh copy of the seed, so every scenario starts from the
+/// same data. Nothing is running against it yet — this is called before the GUI launches.
+fn restore_workspace(out: &Path) -> Result<()> {
+    let seed = out.join(SEED_DIR);
+    if !seed.is_dir() {
+        bail!(
+            "gui-pass: no seed at {} — re-run with --reset to reseed the fixture",
+            seed.display()
+        );
+    }
+    let workspace = out.join("workspace");
+    if workspace.exists() {
+        fs::remove_dir_all(&workspace).with_context(|| format!("removing {}", workspace.display()))?;
+    }
+    copy_dir(&seed, &workspace)
 }
 
 /// Runs the CLI against the isolated home, returning its stdout.

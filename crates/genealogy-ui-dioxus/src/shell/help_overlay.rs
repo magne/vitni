@@ -9,7 +9,7 @@
 use dioxus::prelude::*;
 use genealogy_ui::{Chord, Key as ChordKey, Modifier, Shortcut, ShortcutGroup, navigation_shortcuts};
 
-use crate::shell::focus_trap::{dismiss_on_escape, trap_tab};
+use crate::shell::focus_trap::{DialogFocus, dismiss_on_escape, trap_tab};
 use crate::shell::nav_state::{NavState, Overlay};
 use crate::shell::{ChromeCtx, resolved_shortcuts_from_context};
 
@@ -32,8 +32,15 @@ pub fn HelpOverlay() -> Element {
                 role: "dialog",
                 aria_modal: "true",
                 aria_label: "{chrome.0.help_title()}",
+                tabindex: "-1",
+                "data-focus-trap": "true",
                 onclick: move |event| event.stop_propagation(),
                 onkeydown: move |event| trap_tab(&event),
+                // `autofocus` on the close button below does not take in the live webview, which left
+                // focus on `body` — outside this subtree, so `Esc` reached no handler and the sheet
+                // could not be closed from the keyboard at all. `DialogFocus` moves focus in (and
+                // restores it on close) the same way the `Modal` layer does.
+                DialogFocus {}
                 div { class: "h-head",
                     h3 { "{chrome.0.help_title()}" }
                     span { class: "spacer" }

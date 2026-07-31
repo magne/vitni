@@ -118,10 +118,11 @@ prek run                                                             # run git h
 
 SSR tests (`crates/genealogy-ui-dioxus/tests/*.rs`) assert markup and are the default — fast, and they
 cover view logic. They cannot reach anything that only exists in a live webview: `document::eval`,
-CSS, the MapLibre canvas, or **which element a handler is attached to**. That last one is not
-theoretical — `Esc` dismissed no overlay for as long as the overlay layer has existed, because the
-keydown listener sits on `.app` while every overlay renders as a sibling of `.app`, and every SSR test
-still passed.
+CSS, the MapLibre canvas, **which element a handler is attached to**, or **where focus actually goes**.
+Those last two are not theoretical — the first scenarios written found three shipped defects that every
+SSR test passed: `Esc` dismissed no overlay (the dispatcher is on `.app`, the overlays are siblings of
+it), `?` never opened the help sheet (its chord is declared with no modifiers, but typing `?` always
+reports Shift), and the help sheet's `autofocus` never took, leaving focus on `body`.
 
 **`cargo xtask gui-pass` is how you test that layer.** It runs the real GUI on its own **Xvfb**
 display, drives it with `xdotool`, and asserts over screenshots. Requires `xvfb`, `xdotool` and
@@ -152,6 +153,8 @@ Writing one:
 - Runs are **isolated by default**: a throwaway `XDG_CONFIG_HOME`/`XDG_DATA_HOME` plus a seeded fixture
   workspace under `target/gui-pass/`. Keep it that way — a scripted click run writes events, and
   `--real-config`/`--workspace` point it at real genealogy data.
+- Each scenario gets a **fresh GUI process, an empty shot directory, and a fresh copy of the seeded
+  workspace**, so order never matters and stale shots cannot masquerade as part of a run.
 
 Still human-only, and what `manual-verify` in [`docs/issue-tracking.md`](docs/issue-tracking.md)
 reserves: pan/zoom smoothness, click latency, motion. Software GL is not a GPU, and a still image has

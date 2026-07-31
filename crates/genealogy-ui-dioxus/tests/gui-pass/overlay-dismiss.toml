@@ -44,6 +44,28 @@ label = "palette: click the scrim"
 do = "shot"
 name = "palette-after-click-away"
 
+[[step]]
+do = "shot"
+name = "before-help"
+
+[[step]]
+do = "key"
+chord = "question"
+label = "help overlay: open with ?"
+
+[[step]]
+do = "shot"
+name = "help-open"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "help overlay: Esc"
+
+[[step]]
+do = "shot"
+name = "help-after-esc"
+
 [[assert]]
 kind = "differ"
 shots = ["before-palette", "palette-open"]
@@ -59,6 +81,17 @@ kind = "match"
 shots = ["before-palette", "palette-after-click-away"]
 because = "a click on the scrim must dismiss the command palette"
 
-# The help overlay's `?` chord does not open under `xdotool key question` — the keysym arrives without
-# the shift state the chord matcher expects — so its Esc path has no scenario yet. Adding one is
-# blocked on driving `?` from here, not on the overlay.
+[[assert]]
+kind = "differ"
+shots = ["before-help", "help-open"]
+# The sheet covers most of the window, so this is a large difference; the tolerance is raised above the
+# default only to keep a *focus ring* from passing as an opened overlay, which is how this assertion
+# first passed while `?` did nothing at all.
+tolerance = 0.04
+because = "? must open the shortcut help overlay"
+
+[[assert]]
+kind = "match"
+shots = ["before-help", "help-after-esc"]
+tolerance = 0.04
+because = "Esc must dismiss the help overlay"
