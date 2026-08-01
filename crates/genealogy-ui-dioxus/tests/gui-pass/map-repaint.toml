@@ -77,9 +77,10 @@ because = "arming the Point tool must not blank the canvas"
 kind = "painted"
 shot = "polygon-armed"
 region = [500, 200, 1250, 700]
-# The canvas measures ~0.089 at this view and a blanked one measures exactly 0; the floor is set well
-# above the default 0.005 so a mostly-blank canvas fails too, not only a perfectly uniform one.
-min_deviation = 0.05
+# The canvas measures ~0.089 at this view and a blanked one measures exactly 0. The floor sits 6x above
+# the 0.005 default, so a mostly-blank canvas fails too and not only a perfectly uniform one, but far
+# enough below 0.089 that a lighter tile area or a different default centre cannot trip it.
+min_deviation = 0.03
 because = "the Finish/Clear row shrinks the surface — the resized canvas must still show tiles"
 
 [[assert]]
