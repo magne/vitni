@@ -1,0 +1,88 @@
+# The map canvas survives a draw-tool click (#252) — arming Draw polygon inserts a Finish/Clear row
+# under the map, which shrinks `.map-surface`. MapLibre's own `trackResize` observer re-measures and
+# resizes the canvas correctly, but under WebKitGTK the frame it draws never reaches the compositor:
+# the canvas went flat `--panel-2` until the next camera move. No SSR test can see this — it renders no
+# canvas — and no whole-window assertion can either, because the rail, toolbar and time slider keep the
+# window's own standard deviation high with the map blank. Hence the `painted` asserts below, scoped to
+# a rectangle wholly inside the canvas in both the tall (Pan) and short (Polygon) layouts.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The canvas fills
+# x 461..1797, y 159..1057 with Pan armed and y 159..1018 with Polygon armed; [500, 200, 1250, 700]
+# sits inside both.
+description = "Arming a draw tool leaves the map painted, and re-arming the active one changes nothing (#252)"
+
+[[step]]
+do = "click"
+at = [85, 881]
+label = "rail: Geography"
+
+[[step]]
+do = "shot"
+name = "map"
+
+[[step]]
+do = "click"
+at = [1305, 110]
+label = "toolbar: Pan (already active)"
+
+[[step]]
+do = "shot"
+name = "pan-reclick"
+
+[[step]]
+do = "click"
+at = [1404, 110]
+label = "toolbar: Drop / move a point"
+
+[[step]]
+do = "shot"
+name = "point-armed"
+
+[[step]]
+do = "click"
+at = [1536, 110]
+label = "toolbar: Draw polygon"
+
+[[step]]
+do = "shot"
+name = "polygon-armed"
+
+[[step]]
+do = "click"
+at = [1305, 110]
+label = "toolbar: Pan"
+
+[[step]]
+do = "shot"
+name = "back-to-pan"
+
+[[assert]]
+kind = "match"
+shots = ["map", "pan-reclick"]
+because = "clicking the tool that is already active must change nothing at all — not the toolbar, not the canvas"
+
+[[assert]]
+kind = "match"
+shots = ["map", "point-armed"]
+region = [500, 200, 1250, 700]
+because = "the Point tool inserts no row, so the surface keeps its size and the canvas must be untouched"
+
+[[assert]]
+kind = "painted"
+shot = "point-armed"
+region = [500, 200, 1250, 700]
+because = "arming the Point tool must not blank the canvas"
+
+[[assert]]
+kind = "painted"
+shot = "polygon-armed"
+region = [500, 200, 1250, 700]
+# The canvas measures ~0.13 at this view and a flat fill measures 0; the floor is set well above the
+# default 0.005 so a mostly-blank canvas fails too, not only a perfectly uniform one.
+min_deviation = 0.05
+because = "the Finish/Clear row shrinks the surface — the resized canvas must still show tiles"
+
+[[assert]]
+kind = "match"
+shots = ["map", "back-to-pan"]
+because = "dropping back to Pan removes the row again, and the shrink/regrow round-trip must restore the view exactly"
