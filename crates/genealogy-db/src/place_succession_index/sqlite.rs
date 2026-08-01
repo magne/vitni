@@ -1,30 +1,15 @@
-//! The Place succession cross-reference projection (ADR 0026 §4), sqlite backend only.
-//!
-//! `SuccessionAsserted` is recorded once, on the anchor place's own event stream (`place_id`, one of
-//! `from`); its payload is self-contained (both endpoint id lists — ADR 0002), but the anchor's own
-//! `PlaceView` only ever reflects assertions recorded on *its own* stream. Reading "what did this
-//! place become?" from a `from` place that is *not* the anchor, or "what did this place come from?"
-//! from any `to` place, needs a cross-aggregate read the anchor's own projection cannot answer —
-//! exactly the derived, rebuildable index this module maintains (ADR 0010).
-//!
-//! `place_succession` holds one row per live succession assertion (its kind, date, and the assertion
-//! id a correction targets); `place_succession_link` holds one row per `(from, to)` pair the
-//! assertion names — the cartesian product of its endpoint lists — so a query on *either* endpoint's
-//! id finds the assertion directly, symmetric in both directions (ADR 0026 §4).
+//! The SQLite half of the Place succession cross-reference index (ADR 0026 §4) — see the
+//! [module header](super) for what the two tables hold and why the index exists.
 
 use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
 use genealogy_core::place::{PlaceState, PlaceView};
 use sqlx::{Pool, Row, Sqlite};
 
+use super::{PLACE_SUCCESSION_LINK_TABLE, PLACE_SUCCESSION_TABLE, SuccessionAssertion, succession_columns};
 use crate::sqlite_query;
 use crate::store::{DbError, PlaceSuccessionRecord};
 use crate::tables::PLACE_VIEW_TABLE;
-
-/// The succession-assertion metadata table: one row per live `SuccessionAsserted` assertion.
-const PLACE_SUCCESSION_TABLE: &str = "place_succession";
-/// The endpoint cross-reference table: one row per `(from, to)` pair a succession assertion names.
-const PLACE_SUCCESSION_LINK_TABLE: &str = "place_succession_link";
 
 const CREATE_PLACE_SUCCESSION_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS place_succession (
@@ -211,19 +196,10 @@ async fn delete_anchor_rows(pool: &Pool<Sqlite>, anchor_place_id: &str) -> Resul
 async fn insert_succession(
     pool: &Pool<Sqlite>,
     anchor_place_id: &str,
-    attributed: &genealogy_core::assertions::Attributed<
-        genealogy_core::assertions::Asserted<genealogy_core::place_succession::PlaceSuccessionAssertion>,
-    >,
+    attributed: &SuccessionAssertion,
 ) -> Result<(), DbError> {
     let assertion = &attributed.value.value;
-    let kind = serde_json::to_string(&assertion.kind)
-        .map_err(|e| DbError::Backend(format!("serializing succession kind: {e}")))?;
-    let date_json = assertion
-        .date
-        .as_ref()
-        .map(serde_json::to_string)
-        .transpose()
-        .map_err(|e| DbError::Backend(format!("serializing succession date: {e}")))?;
+    let (kind, date_json) = succession_columns(attributed)?;
 
     let sql = format!(
         "INSERT INTO {PLACE_SUCCESSION_TABLE} (anchor_place_id, assertion_id, kind, date_json) VALUES (?, ?, ?, ?)"

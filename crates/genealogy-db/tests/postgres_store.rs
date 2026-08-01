@@ -11,13 +11,15 @@
 #![expect(clippy::unwrap_used, reason = "tests abort on setup/assertion failure")]
 
 use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
-use genealogy_core::enums::EvidenceLevel;
+use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
+use genealogy_core::enums::{EvidenceLevel, PlaceType, SuccessionKind};
 use genealogy_core::id_format::IdFormat;
-use genealogy_core::ids::{AgentId, AssertionId, CitationId, HumanId, PersonId, SourceId};
+use genealogy_core::ids::{AgentId, AssertionId, CitationId, HumanId, PersonId, PlaceId, SourceId};
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
+use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use genealogy_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
-use genealogy_db::{CommandError, Store};
+use genealogy_db::{CommandError, PlaceSuccessionRecord, Store};
 use sqlx::migrate::Migrator;
 use test_containers_util::sqlx_pg::PostgresTestDb;
 use time::macros::datetime;
@@ -103,6 +105,25 @@ async fn name(store: &Store, n: u128, given: &str, surname: &str) {
             PersonCommandEnvelope {
                 meta: meta(n * 10 + 1),
                 command: PersonCommand::AssertName { person_id, name },
+            },
+        )
+        .await
+        .unwrap();
+}
+
+/// Creates place `n` with `human_id`, so a succession assertion has real endpoints to name.
+async fn create_place(store: &Store, n: u128, human_id: &str) {
+    let place_id = PlaceId::from_uuid(Uuid::from_u128(n));
+    store
+        .execute_place(
+            &place_id.to_string(),
+            PlaceCommandEnvelope {
+                meta: meta(n * 10 + 2),
+                command: PlaceCommand::CreatePlace {
+                    place_id,
+                    human_id: HumanId::new(human_id),
+                    place_type: PlaceType::Municipality,
+                },
             },
         )
         .await
@@ -209,6 +230,280 @@ async fn rebuild_reproduces_the_projection_from_the_log() {
     assert_eq!(after, before, "rebuild reproduces the projection identically");
     let found = store.find_person("I0001").await.unwrap().expect("exists after rebuild");
     assert_eq!(found.names()[0].given.as_deref(), Some("Ada"));
+}
+
+/// The three places every succession test names: Aker, Kristiania and Oslo, already created.
+async fn three_places(store: &Store) -> (PlaceId, PlaceId, PlaceId) {
+    for (n, human_id) in [(1, "P0001"), (2, "P0002"), (3, "P0003")] {
+        create_place(store, n, human_id).await;
+    }
+    (
+        PlaceId::from_uuid(Uuid::from_u128(1)),
+        PlaceId::from_uuid(Uuid::from_u128(2)),
+        PlaceId::from_uuid(Uuid::from_u128(3)),
+    )
+}
+
+/// Dispatches one Place command against `place_id`'s own stream under assertion id `assertion`.
+async fn place_command(store: &Store, assertion: u128, place_id: PlaceId, command: PlaceCommand) {
+    store
+        .execute_place(
+            &place_id.to_string(),
+            PlaceCommandEnvelope {
+                meta: meta(assertion),
+                command,
+            },
+        )
+        .await
+        .unwrap();
+}
+
+/// An `AssertSuccession` anchored on `from[0]` — the place whose stream records it (ADR 0026 §3).
+fn succession(from: &[PlaceId], to: &[PlaceId], kind: SuccessionKind, date: Option<GenealogicalDate>) -> PlaceCommand {
+    PlaceCommand::AssertSuccession {
+        place_id: from[0],
+        from: from.to_vec(),
+        to: to.to_vec(),
+        kind,
+        date,
+    }
+}
+
+/// A minimal exact-year `GenealogicalDate`, with `sort_value` set directly (data-model §7.1).
+fn year(value: i32) -> GenealogicalDate {
+    GenealogicalDate {
+        calendar: Calendar::Gregorian,
+        quality: DateQuality::Normal,
+        modifier: GenealogicalDateBody::Structured(DateModifier::None(DatePoint {
+            year: Some(value),
+            month: None,
+            day: None,
+        })),
+        time: None,
+        new_year_begins: None,
+        sort_value: i64::from(value),
+        original_text: None,
+    }
+}
+
+/// The `assertion_id` string [`meta`] mints for `assertion` — what a succession row must carry.
+fn assertion_id(assertion: u128) -> String {
+    AssertionId::from_uuid(Uuid::from_u128(assertion)).to_string()
+}
+
+/// The counterpart place ids of a succession read, sorted so the assertion is order-independent.
+fn counterparts(records: &[PlaceSuccessionRecord]) -> Vec<String> {
+    let mut ids: Vec<String> = records.iter().map(|r| r.place_id.clone()).collect();
+    ids.sort();
+    ids
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn place_detail_reads_are_supported_on_postgres() {
+    // #231 at the db layer: on Postgres both succession reads used to return `Unsupported`, so every
+    // place-detail read failed outright. With no succession asserted they must answer "none", not
+    // "unavailable".
+    let (store, _db) = store().await;
+    create_place(&store, 1, "P0001").await;
+
+    let place_id = PlaceId::from_uuid(Uuid::from_u128(1)).to_string();
+    assert_eq!(store.place_successors(&place_id).await.unwrap(), vec![]);
+    assert_eq!(store.place_predecessors(&place_id).await.unwrap(), vec![]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn place_succession_index_is_symmetric_on_postgres() {
+    let (store, _db) = store().await;
+    let (aker, kristiania, oslo) = three_places(&store).await;
+
+    // Aker + Kristiania merged into Oslo (1948) — recorded once, on Aker's stream, naming both
+    // endpoint lists (ADR 0026 §3).
+    place_command(
+        &store,
+        500,
+        aker,
+        succession(&[aker, kristiania], &[oslo], SuccessionKind::Merged, Some(year(1948))),
+    )
+    .await;
+
+    let predecessors = store.place_predecessors(&oslo.to_string()).await.unwrap();
+    let mut expected = vec![aker.to_string(), kristiania.to_string()];
+    expected.sort();
+    assert_eq!(counterparts(&predecessors), expected);
+    assert_eq!(predecessors[0].kind, "\"Merged\"", "kind is JSON-serialized");
+    assert_eq!(predecessors[0].assertion_id, assertion_id(500));
+    let date_json = predecessors[0].date_json.as_ref().expect("the dated succession");
+    let date: GenealogicalDate = serde_json::from_str(date_json).unwrap();
+    assert_eq!(date.sort_value, 1948, "date_json round-trips");
+
+    assert_eq!(
+        counterparts(&store.place_successors(&aker.to_string()).await.unwrap()),
+        vec![oslo.to_string()]
+    );
+    // The navigation the index exists for: Kristiania is a `from` endpoint but not the anchor, so its
+    // own projection cannot answer this.
+    assert_eq!(
+        counterparts(&store.place_successors(&kristiania.to_string()).await.unwrap()),
+        vec![oslo.to_string()]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn each_anchors_succession_rows_are_reindexed_independently() {
+    // Two anchors each assert into Oslo; a later assertion on Aker's stream reindexes *Aker* only, so
+    // Kristiania's row must survive untouched and Aker's must not double.
+    let (store, _db) = store().await;
+    let (aker, kristiania, oslo) = three_places(&store).await;
+
+    place_command(
+        &store,
+        500,
+        aker,
+        succession(&[aker], &[oslo], SuccessionKind::Absorbed, None),
+    )
+    .await;
+    place_command(
+        &store,
+        501,
+        kristiania,
+        succession(&[kristiania], &[oslo], SuccessionKind::Absorbed, None),
+    )
+    .await;
+    place_command(
+        &store,
+        502,
+        aker,
+        succession(&[aker], &[oslo], SuccessionKind::Merged, Some(year(1948))),
+    )
+    .await;
+
+    let predecessors = store.place_predecessors(&oslo.to_string()).await.unwrap();
+    let mut expected = vec![aker.to_string(), aker.to_string(), kristiania.to_string()];
+    expected.sort();
+    assert_eq!(
+        counterparts(&predecessors),
+        expected,
+        "Aker's two assertions plus Kristiania's one — no duplicates from the reindex"
+    );
+    assert_eq!(
+        counterparts(&store.place_successors(&kristiania.to_string()).await.unwrap()),
+        vec![oslo.to_string()],
+        "Kristiania's row survives Aker's reindex"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn retracting_a_succession_clears_the_postgres_index() {
+    let (store, _db) = store().await;
+    let (aker, kristiania, oslo) = three_places(&store).await;
+    place_command(
+        &store,
+        500,
+        aker,
+        succession(&[aker, kristiania], &[oslo], SuccessionKind::Merged, Some(year(1948))),
+    )
+    .await;
+
+    place_command(
+        &store,
+        501,
+        aker,
+        PlaceCommand::RetractAssertion {
+            place_id: aker,
+            target: AssertionId::from_uuid(Uuid::from_u128(500)),
+        },
+    )
+    .await;
+
+    // The assertion left the anchor's projection, so the reindex must drop every row it produced —
+    // including the links reachable from the two non-anchor endpoints.
+    for place_id in [aker, kristiania, oslo] {
+        let id = place_id.to_string();
+        assert_eq!(store.place_successors(&id).await.unwrap(), vec![]);
+        assert_eq!(store.place_predecessors(&id).await.unwrap(), vec![]);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn superseding_a_succession_replaces_the_postgres_index_rows() {
+    // `SupersedeAssertion` emits the retraction and the replacement in one dispatch batch, so the
+    // reindex sees both at once — the delete-and-reinsert case.
+    let (store, _db) = store().await;
+    let (aker, kristiania, oslo) = three_places(&store).await;
+    place_command(
+        &store,
+        500,
+        aker,
+        succession(&[aker, kristiania], &[oslo], SuccessionKind::Merged, Some(year(1948))),
+    )
+    .await;
+
+    place_command(
+        &store,
+        501,
+        aker,
+        PlaceCommand::SupersedeAssertion {
+            place_id: aker,
+            target: AssertionId::from_uuid(Uuid::from_u128(500)),
+            replacement: Box::new(succession(&[aker], &[oslo], SuccessionKind::Absorbed, Some(year(1950)))),
+        },
+    )
+    .await;
+
+    let successors = store.place_successors(&aker.to_string()).await.unwrap();
+    assert_eq!(successors.len(), 1, "the superseded row is gone, the replacement is in");
+    assert_eq!(successors[0].place_id, oslo.to_string());
+    assert_eq!(successors[0].kind, "\"Absorbed\"");
+    assert_eq!(successors[0].assertion_id, assertion_id(501));
+    assert_eq!(
+        store.place_successors(&kristiania.to_string()).await.unwrap(),
+        vec![],
+        "Kristiania was only an endpoint of the superseded assertion"
+    );
+}
+
+/// Both succession reads for each of `places`, each list sorted, for a content-based rebuild
+/// comparison. Not id-based on purpose: the metadata table's identity sequence keeps climbing across
+/// a rebuild, and the rebuild inserts in `human_id` order rather than command order, so row ids and
+/// cross-anchor ordering legitimately differ.
+async fn succession_dump(
+    store: &Store,
+    places: &[PlaceId],
+) -> Vec<(String, Vec<PlaceSuccessionRecord>, Vec<PlaceSuccessionRecord>)> {
+    let mut dump = Vec::new();
+    for place_id in places {
+        let id = place_id.to_string();
+        let mut successors = store.place_successors(&id).await.unwrap();
+        let mut predecessors = store.place_predecessors(&id).await.unwrap();
+        successors.sort_by(|a, b| (&a.place_id, &a.assertion_id).cmp(&(&b.place_id, &b.assertion_id)));
+        predecessors.sort_by(|a, b| (&a.place_id, &a.assertion_id).cmp(&(&b.place_id, &b.assertion_id)));
+        dump.push((id, successors, predecessors));
+    }
+    dump
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn rebuild_reproduces_the_postgres_succession_index() {
+    let (store, _db) = store().await;
+    let (aker, kristiania, oslo) = three_places(&store).await;
+    place_command(
+        &store,
+        500,
+        aker,
+        succession(&[aker, kristiania], &[oslo], SuccessionKind::Merged, Some(year(1948))),
+    )
+    .await;
+
+    let before = succession_dump(&store, &[aker, kristiania, oslo]).await;
+    assert!(
+        before.iter().any(|(_, s, p)| !s.is_empty() || !p.is_empty()),
+        "the comparison is only meaningful over a non-empty index"
+    );
+
+    store.rebuild_projections().await.unwrap();
+
+    let after = succession_dump(&store, &[aker, kristiania, oslo]).await;
+    assert_eq!(before, after, "rebuild must reproduce the succession index");
 }
 
 /// The ordered `human_id`s of every person projection.

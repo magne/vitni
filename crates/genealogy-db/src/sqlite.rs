@@ -57,9 +57,9 @@ macro_rules! sqlite_wire_place_indexes {
     (place, $pool:expr, $framework:expr) => {
         $framework
             .append_query(Box::new(crate::geo_index::PlaceGeometryIndexQuery::new($pool.clone())))
-            .append_query(Box::new(crate::place_succession_index::PlaceSuccessionIndexQuery::new(
-                $pool.clone(),
-            )))
+            .append_query(Box::new(
+                crate::place_succession_index::sqlite::PlaceSuccessionIndexQuery::new($pool.clone()),
+            ))
     };
     ($other:ident, $pool:expr, $framework:expr) => {
         $framework
@@ -112,7 +112,7 @@ macro_rules! sqlite_store {
                 // The Place succession cross-reference index (ADR 0026 §4) is likewise derived,
                 // keyed by its own tables, and sqlite-only; its `Query` is appended only to the
                 // Place framework below.
-                crate::place_succession_index::create_tables(&pool)
+                crate::place_succession_index::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating place succession index: {e}")))?;
                 $(
@@ -153,7 +153,7 @@ macro_rules! sqlite_store {
                 // index (ADR 0026 §4) are derived from the (now freshly rebuilt) Place projection
                 // above, not replayed from raw events themselves.
                 crate::geo_index::rebuild_index(&self.pool).await?;
-                crate::place_succession_index::rebuild_index(&self.pool).await?;
+                crate::place_succession_index::sqlite::rebuild_index(&self.pool).await?;
                 Ok(())
             }
         }
@@ -234,7 +234,7 @@ impl SqliteStore {
         &self,
         place_id: &str,
     ) -> Result<Vec<crate::store::PlaceSuccessionRecord>, DbError> {
-        crate::place_succession_index::successors(&self.pool, place_id).await
+        crate::place_succession_index::sqlite::successors(&self.pool, place_id).await
     }
 
     /// Every place a succession names `from`, from `place_id`'s perspective as a `to` endpoint
@@ -243,7 +243,7 @@ impl SqliteStore {
         &self,
         place_id: &str,
     ) -> Result<Vec<crate::store::PlaceSuccessionRecord>, DbError> {
-        crate::place_succession_index::predecessors(&self.pool, place_id).await
+        crate::place_succession_index::sqlite::predecessors(&self.pool, place_id).await
     }
 
     /// Every research note whose `subjects` set names the subject serialized under `subject_kind`
@@ -1286,6 +1286,73 @@ mod tests {
         store.rebuild_projections().await.unwrap();
         let after = dump_place_succession_links(&store).await;
         assert_eq!(before, after, "rebuild must reproduce the succession index identically");
+    }
+
+    #[tokio::test]
+    async fn retracting_a_succession_clears_the_sqlite_index() {
+        use genealogy_core::enums::{PlaceType, SuccessionKind};
+        use genealogy_core::ids::PlaceId;
+        use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+
+        let (store, _dir) = store().await;
+        let aker = PlaceId::from_uuid(Uuid::from_u128(1));
+        let kristiania = PlaceId::from_uuid(Uuid::from_u128(2));
+        let oslo = PlaceId::from_uuid(Uuid::from_u128(3));
+        for (n, place_id, human_id) in [(2, aker, "P0001"), (3, kristiania, "P0002"), (4, oslo, "P0003")] {
+            store
+                .execute_place(
+                    &place_id.to_string(),
+                    PlaceCommandEnvelope {
+                        meta: meta(n),
+                        command: PlaceCommand::CreatePlace {
+                            place_id,
+                            human_id: HumanId::new(human_id),
+                            place_type: PlaceType::Municipality,
+                        },
+                    },
+                )
+                .await
+                .unwrap();
+        }
+        store
+            .execute_place(
+                &aker.to_string(),
+                PlaceCommandEnvelope {
+                    meta: meta(5),
+                    command: PlaceCommand::AssertSuccession {
+                        place_id: aker,
+                        from: vec![aker, kristiania],
+                        to: vec![oslo],
+                        kind: SuccessionKind::Merged,
+                        date: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        store
+            .execute_place(
+                &aker.to_string(),
+                PlaceCommandEnvelope {
+                    meta: meta(6),
+                    command: PlaceCommand::RetractAssertion {
+                        place_id: aker,
+                        target: AssertionId::from_uuid(Uuid::from_u128(5)),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        // The assertion left the anchor's projection, so the reindex must drop every row it produced
+        // — including the links reachable from the two non-anchor endpoints.
+        for place_id in [aker, kristiania, oslo] {
+            let id = place_id.to_string();
+            assert_eq!(store.place_successors(&id).await.unwrap(), vec![]);
+            assert_eq!(store.place_predecessors(&id).await.unwrap(), vec![]);
+        }
+        assert!(dump_place_succession_links(&store).await.is_empty());
     }
 
     #[tokio::test]

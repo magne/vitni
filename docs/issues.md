@@ -439,13 +439,6 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   virtualization** under *Lists, search & scale*.
 - **Research-note reverse lookup is a `json_each` scan, not a materialized index** — fine now (~2 ms at
   ~2250 notes); a materialized side-index is a follow-up only if note volume grows.
-- **Postgres place-detail reads fail outright.** `show_place_resolved` — the shared body of both
-  `show_place` and `show_place_as_of` — calls `place_predecessors`/`place_successors` with `?`
-  propagation, and both return `DbError::Unsupported` on Postgres, so **every** place-detail read errors
-  on that backend: the GUI place screen and `genealogy place show` alike. Not a spatial problem and needs
-  no PostGIS — the succession index is a plain relational join that was only ever wired into the SQLite
-  path. Tolerating `Unsupported` as an empty list is the one-line stopgap; mirroring
-  `place_succession_index` for `Pool<Postgres>` is the fix. — #231
 - **Postgres spatial mirror** — `places_in_bbox` returns `Unsupported` on Postgres (SQLite R\*Tree only);
   the native geometry + GiST index is a later feature-gated follow-up. It would also back the
   `places_containing` query under *Places*, and once containment exists on both engines the two must

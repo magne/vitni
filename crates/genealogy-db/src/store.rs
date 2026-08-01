@@ -347,8 +347,11 @@ impl Store {
     /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when the sqlite backend is not
     /// compiled in, or the active backend is Postgres.
     #[cfg_attr(
-        not(any(feature = "sqlite", feature = "postgres")),
-        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+        not(feature = "sqlite"),
+        expect(
+            clippy::unused_async,
+            reason = "neutral async API; the spatial index is sqlite-only (ADR 0024 §3)"
+        )
     )]
     pub async fn places_in_bbox(
         &self,
@@ -357,6 +360,8 @@ impl Store {
         max_lat: f64,
         max_lon: f64,
     ) -> Result<Vec<String>, DbError> {
+        #[cfg(not(feature = "sqlite"))]
+        let _ = (min_lat, min_lon, max_lat, max_lon);
         #[cfg(any(feature = "sqlite", feature = "postgres"))]
         {
             match &self.backend {
@@ -370,7 +375,6 @@ impl Store {
         }
         #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
         {
-            let _ = (min_lat, min_lon, max_lat, max_lon);
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
     }
@@ -378,12 +382,9 @@ impl Store {
     /// Every place a succession names `to`, from `place_id`'s perspective as a `from` endpoint —
     /// "what did this place become?" (ADR 0026 §4), via the cross-aggregate succession index.
     ///
-    /// Sqlite-only for now, mirroring [`Self::places_in_bbox`]'s Postgres deferral.
-    ///
     /// # Errors
     ///
-    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when the sqlite backend is not
-    /// compiled in, or the active backend is Postgres.
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when no backend is compiled in.
     #[cfg_attr(
         not(any(feature = "sqlite", feature = "postgres")),
         expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
@@ -395,9 +396,7 @@ impl Store {
                 #[cfg(feature = "sqlite")]
                 Backend::Sqlite(s) => s.place_successors(place_id).await,
                 #[cfg(feature = "postgres")]
-                Backend::Postgres(_) => Err(DbError::Unsupported(
-                    "place_successors is not yet implemented for the postgres backend (ADR 0026 follow-up)".to_owned(),
-                )),
+                Backend::Postgres(p) => p.place_successors(place_id).await,
             }
         }
         #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
@@ -411,12 +410,9 @@ impl Store {
     /// "what did this place come from?" (ADR 0026 §4), the symmetric counterpart of
     /// [`Self::place_successors`].
     ///
-    /// Sqlite-only for now, mirroring [`Self::places_in_bbox`]'s Postgres deferral.
-    ///
     /// # Errors
     ///
-    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when the sqlite backend is not
-    /// compiled in, or the active backend is Postgres.
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when no backend is compiled in.
     #[cfg_attr(
         not(any(feature = "sqlite", feature = "postgres")),
         expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
@@ -428,10 +424,7 @@ impl Store {
                 #[cfg(feature = "sqlite")]
                 Backend::Sqlite(s) => s.place_predecessors(place_id).await,
                 #[cfg(feature = "postgres")]
-                Backend::Postgres(_) => Err(DbError::Unsupported(
-                    "place_predecessors is not yet implemented for the postgres backend (ADR 0026 follow-up)"
-                        .to_owned(),
-                )),
+                Backend::Postgres(p) => p.place_predecessors(place_id).await,
             }
         }
         #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
