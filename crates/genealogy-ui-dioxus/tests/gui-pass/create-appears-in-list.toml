@@ -1,0 +1,73 @@
+# #207: creating a record must make it show up in the Explorer list beside it, with no manual
+# refresh. The fixture seeds no tags, so Tags starts on the empty-list message — as clean a
+# before/after as a region assertion gets. Whole-window `differ` cannot prove this on its own (Save
+# always repaints the tabstrip, draft-tab-becomes-saved-tab, either way), so the assertion is scoped to
+# `aside.list` with `region`.
+#
+# Tags' create form autofocuses Name, so no click into the field is needed — only `key` steps to type
+# it (the schema has no text-entry step, so this is one `key` per character). Save is a click, not a
+# chord — `record_keydown`'s `⌘S` is scoped to a record already in edit mode, not a fresh create draft.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "Creating a tag makes it appear in the Explorer list without a manual refresh (#207)"
+
+[[step]]
+do = "click"
+at = [85, 564]
+label = "rail: Tags"
+
+[[step]]
+do = "shot"
+name = "list-before"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Tag draft, Name autofocused"
+
+[[step]]
+do = "key"
+chord = "shift+t"
+label = "type: T"
+
+[[step]]
+do = "key"
+chord = "shift+r"
+label = "type: R"
+
+[[step]]
+do = "key"
+chord = "e"
+label = "type: e"
+
+[[step]]
+do = "key"
+chord = "e"
+label = "type: e"
+
+[[step]]
+do = "key"
+chord = "minus"
+label = "type: -"
+
+[[step]]
+do = "key"
+chord = "7"
+label = "type: 7"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New tag: Save"
+
+[[step]]
+do = "shot"
+name = "list-after"
+
+[[assert]]
+kind = "differ"
+shots = ["list-before", "list-after"]
+because = "the Tags list must gain the new row without a category switch (#207)"
+# `aside.list` only — the rail count and the tabstrip both legitimately repaint on Save too, so a
+# whole-window (or rail-including) region would not isolate the list itself changing.
+region = [208, 0, 300, 1200]

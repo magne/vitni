@@ -141,8 +141,9 @@ cargo xtask gui-pass --workspace gen     # drive your own config + workspace ins
 Scenarios are **TOML, not Rust** — `crates/genealogy-ui-dioxus/tests/gui-pass/*.toml`, so adding one
 needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `drag`, `wheel`) and `[[assert]]`s
 over the shots by name: `differ` for "the UI reacted", `match` for "the UI came back to this state",
-both with an RMSE tolerance. Read the PNGs under `target/gui-pass/shots/<scenario>/`; crop with
-`convert <in> -crop WxH+X+Y +repage <out>`.
+both with an RMSE tolerance and an optional `region = [x, y, w, h]` to compare one window
+sub-rectangle instead of the whole shot. Read the PNGs under `target/gui-pass/shots/<scenario>/`; crop
+with `convert <in> -crop WxH+X+Y +repage <out>`.
 
 Writing one:
 
@@ -150,6 +151,8 @@ Writing one:
   the rail or a toolbar moves.
 - **`match` against the shot taken immediately before the change**, never against the first shot — focus
   rings are real pixels and move as a scenario runs.
+- **`region` when a whole-window compare can't isolate the change** — e.g. a repaint elsewhere in the
+  window (the tabstrip on every Save) would otherwise mask or fake a `differ`/`match` result.
 - Runs are **isolated by default**: a throwaway `XDG_CONFIG_HOME`/`XDG_DATA_HOME` plus a seeded fixture
   workspace under `target/gui-pass/`. Keep it that way — a scripted click run writes events, and
   `--real-config`/`--workspace` point it at real genealogy data.

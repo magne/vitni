@@ -79,6 +79,18 @@ jobs:
         with:
           persist-credentials: false
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      # This job links every test binary in the workspace against the whole dependency tree, and ran
+      # the runner's disk out from under the linker — `rust-lld` mmaps its output file, so a full disk
+      # surfaces as `ld terminated with signal 7 [Bus error]`, not as ENOSPC. The runner's hosted
+      # toolcache (mounted at /__t, several GB of preinstalled language runtimes) is dead weight here:
+      # the container image brings its own pinned toolchain and nextest. It shares a filesystem with
+      # the workspace, so dropping it gives that space to `target/`. `df` brackets it so the next
+      # disk failure is diagnosable from the log rather than by inference.
+      - name: reclaim runner disk
+        run: |
+          df -h /__w
+          rm -rf /__t/*
+          df -h /__w
       # Plugin components must exist before the tests: the plugin-host discovery/interpreter tests
       # load the built wasm from target/plugins. `plugins/*` are excluded from the workspace, so only
       # this xtask builds them (and building them is itself the plugin lint/compile check).

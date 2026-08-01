@@ -393,7 +393,8 @@ pub fn finish_record_save(
     }
 }
 
-/// Finishes a create form's commit: on success the draft tab becomes the stored record in place
+/// Finishes a create form's commit: on success marks the workspace changed (so the Explorer list and
+/// rail counts refetch, same as an edit save) and the draft tab becomes the stored record in place
 /// ([`NavState::commit_draft`]), labelled `label` — or the record's own id when that is empty or absent;
 /// on failure the error is shown as a shell notice and the draft is left as it was.
 ///
@@ -407,6 +408,7 @@ pub fn finish_draft_commit(
 ) {
     match committed {
         Ok(human_id) => {
+            nav.mark_changed();
             let label = label
                 .filter(|label| !label.is_empty())
                 .unwrap_or_else(|| human_id.clone());

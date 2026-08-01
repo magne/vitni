@@ -126,8 +126,6 @@ long-standing "DNA match views in the UI" item is closed.
 
 ### Shell, tabs & notifications
 
-- **Live list updates on create.** Creating an entity should immediately insert it into the matching
-  entity list, with no manual refresh. — #207
 - **Toast notifications.** Show a toast at the bottom of the work area, auto-dismissed after a set
   time. — #208
 - **Remember the open record's tab.** Record-detail view should restore the last-shown tab while the
@@ -146,6 +144,10 @@ long-standing "DNA match views in the UI" item is closed.
   `commit_draft`/`cancel_draft`/`note_save_finished` find their target — two drafts would share one
   parked buffer and one component instance. Lifting the limit means threading a draft id through all of
   those; the tabstrip only needs its label disambiguated. — #260
+- **Record pickers and the command palette never see a record created while they stay open.** Both
+  load their rows once per open (`use_existing_picker` in `screens/shared.rs`; the palette's
+  `use_resource` in `shell/palette.rs`) and never subscribe to `NavState::data_version` — the deferred
+  half of #207, which fixed the Explorer list but not these. — #266
 
 ### Lists, search & scale
 
