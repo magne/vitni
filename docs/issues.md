@@ -564,6 +564,14 @@ decision, not a gap.
   fix is a repaint (`redraw()` on the animation frame after a container resize, `screens/map_shared.rs`),
   not a resize. Adding a resize would only re-clear the drawing buffer and fire spurious `move` events.
   `preserveDrawingBuffer: true` was tried and changed nothing.
+- **Only a layout change ever blanked the canvas, not "any re-render".** #252's title and body said
+  clicking *Pan*, *Drop / move a point* or *Draw polygon* all empty the canvas, and blamed the
+  container's `class` / `data-armed` writes. Measured on the unfixed tree, neither of the first two
+  blanked anything: arming Point left the canvas region byte-identical to the frame before it, and
+  re-clicking the active Pan tool likewise. Only Polygon — the one tool that inserts a row and shrinks
+  the surface — went flat. A class write on the container is harmless; the trigger was always the
+  resize. The `map-repaint` scenario keeps both non-blanking cases asserted so a future change cannot
+  quietly make them true.
 
 ### Architecture
 
