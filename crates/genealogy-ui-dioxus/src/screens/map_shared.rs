@@ -133,6 +133,13 @@ fn circle_paint(color: &str, radius_stops: [(u32, u32); 4], stroke_width: u32) -
 /// — otherwise a push that races this async `load` event is silently dropped, and nothing ever
 /// re-applies it, per the "Place map shows no marker" bug), and arms the click listener. Source/layer
 /// ids are scoped to each map instance, so two containers on the page never collide.
+///
+/// It also arms a repaint observer, which is what keeps the canvas visible across a layout change
+/// (#252). Arming a draw tool inserts a Finish/Clear row under the map, shrinking `.map-surface`;
+/// `MapLibre`'s own `trackResize` observer does re-measure and resize the canvas correctly, but under
+/// `WebKitGTK` the frame it draws never reaches the compositor, so the map went blank until the next
+/// camera move. Forcing one more `redraw()` on the animation frame after the resize does composite.
+/// `redraw()` changes no layout, so the observer cannot re-trigger itself.
 fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> String {
     format!(
         r"
@@ -176,6 +183,7 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> St
                 }}
             }});
             map.on('click', (e) => {{ dioxus.send(JSON.stringify([e.lngLat.lng, e.lngLat.lat])); }});
+            new ResizeObserver(() => {{ requestAnimationFrame(() => el.__geoMap && el.__geoMap.redraw()); }}).observe(el);
         }}
         ",
         lat = center.0,
@@ -516,6 +524,26 @@ mod tests {
                 "{layer} paints {paint} — a scalar radius or a missing stroke is a regression:\n{script}"
             );
         }
+    }
+
+    /// `MapLibre`'s own `trackResize` observer resizes the canvas correctly when the surface shrinks,
+    /// but under `WebKitGTK` the frame it draws never composites and the map goes blank until the next
+    /// camera move (#252). One more `redraw()` on the animation frame after the resize does composite.
+    #[test]
+    fn a_container_resize_forces_a_repaint_so_arming_a_draw_tool_cannot_blank_the_map() {
+        let script = maplibre_init_script("geo-map", (59.9, 10.7), 5.0);
+        let observer = script
+            .find("new ResizeObserver(")
+            .expect("the container is watched for the layout changes a draw tool causes");
+        assert!(
+            script[observer..].contains("requestAnimationFrame(() => el.__geoMap && el.__geoMap.redraw())"),
+            "the repaint is deferred to the next animation frame, after MapLibre's own resize has \
+             run — redrawing inside the observer callback is the frame that does not composite:\n{script}"
+        );
+        assert!(
+            script[observer..].contains(").observe(el)"),
+            "the observer watches the map's own container:\n{script}"
+        );
     }
 
     #[test]
