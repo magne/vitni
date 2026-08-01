@@ -23,7 +23,7 @@ use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE,
 
 use super::map_shared::{
     DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapDraft, events_geojson, fit_bounds, geo_point, map_surface,
-    markers_geojson, push_map_data, push_map_draft,
+    markers_geojson, push_map_data, push_map_draft, select_tool,
 };
 use super::prelude::*;
 use crate::i18n::Chrome;
@@ -260,7 +260,7 @@ fn geography_toolbar(
     picker: &RecordPicker,
     services: &Services,
     provider: Memo<MapProvider>,
-    mut tool: Signal<DrawTool>,
+    tool: Signal<DrawTool>,
     marker_count: usize,
     event_count: usize,
     fit_shapes: &[MarkerShapeVm],
@@ -272,7 +272,7 @@ fn geography_toolbar(
                 label,
                 small: true,
                 variant: if active { ButtonVariant::Primary } else { ButtonVariant::Default },
-                onclick: move |_| tool.set(this),
+                onclick: move |_| select_tool(tool, this),
             }
         }
     };

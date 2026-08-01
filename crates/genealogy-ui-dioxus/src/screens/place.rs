@@ -7,7 +7,7 @@ use genealogy_ui::{
 use super::geography::geography_time_slider;
 use super::map_shared::{
     DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapDraft, events_geojson, fit_bounds, geo_point, map_surface,
-    markers_geojson, push_map_data, push_map_draft, shape_to_draft,
+    markers_geojson, push_map_data, push_map_draft, select_tool, shape_to_draft,
 };
 use super::prelude::*;
 
@@ -957,14 +957,14 @@ fn PlaceMapEditor(
 }
 
 /// One draw-tool toggle button (Pan/Point/Polygon), highlighted while active.
-fn draw_tool_button(mut tool: Signal<DrawTool>, this: DrawTool, label: String) -> Element {
+fn draw_tool_button(tool: Signal<DrawTool>, this: DrawTool, label: String) -> Element {
     let active = tool() == this;
     rsx! {
         Button {
             label,
             small: true,
             variant: if active { ButtonVariant::Primary } else { ButtonVariant::Default },
-            onclick: move |_| tool.set(this),
+            onclick: move |_| select_tool(tool, this),
         }
     }
 }

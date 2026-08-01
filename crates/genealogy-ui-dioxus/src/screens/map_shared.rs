@@ -31,6 +31,14 @@ pub enum DrawTool {
     Polygon,
 }
 
+/// Arms `next` on a map surface's toolbar. [`Signal::set`] has no equality check of its own, so
+/// clicking the tool that is already active would otherwise re-render the whole screen for nothing.
+pub fn select_tool(mut tool: Signal<DrawTool>, next: DrawTool) {
+    if tool() != next {
+        tool.set(next);
+    }
+}
+
 /// The in-progress shape being drawn, before it is committed to a [`PlaceGeometry`] and handed to a
 /// save form.
 #[derive(Debug, Clone, PartialEq)]
