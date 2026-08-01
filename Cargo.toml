@@ -41,9 +41,10 @@ tracing = "0.1.41"
 # event-store backends (genealogy-db, feature-gated)
 sqlite-es = "0.5.0"
 postgres-es = "0.5.0"
-# plugin host (genealogy-plugin-host; ADR 0007, 0011)
-wasmtime = "47.0.2"
-wasmtime-wasi = "47.0.2"
+# plugin host (genealogy-plugin-host; ADR 0007, 0011). Floor held at 47.0.3: 47.0.2 carries
+# RUSTSEC-2026-0222 and RUSTSEC-2026-0223, both of which break VM state isolation the sandbox relies on.
+wasmtime = "47.0.3"
+wasmtime-wasi = "47.0.3"
 # plugin bundle signing (genealogy-plugin-host, xtask; ADR 0014): ed25519 detached signatures over a
 # sha2 digest, verified against an embedded trust root. Held at the pre-release: 3.0.0 requires
 # curve25519-dalek ^5.0.0, while `russh` (via the `testcontainers` dev-dependency) requires
