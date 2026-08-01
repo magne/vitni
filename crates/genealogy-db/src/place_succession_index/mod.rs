@@ -17,6 +17,8 @@
 //! is load-bearing: `genealogy-app` parses `kind` back with `serde_json`, so any drift between the
 //! two engines would be an engine-dependent, user-visible bug.
 
+#[cfg(feature = "postgres")]
+pub(crate) mod postgres;
 #[cfg(feature = "sqlite")]
 pub(crate) mod sqlite;
 

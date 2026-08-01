@@ -10,7 +10,7 @@
 
 #[cfg(feature = "sqlite")]
 mod geo_index;
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod place_succession_index;
 #[cfg(feature = "postgres")]
 mod postgres;

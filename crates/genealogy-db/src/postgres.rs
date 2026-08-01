@@ -15,6 +15,7 @@ use postgres_es::{PostgresEventRepository, PostgresViewRepository, postgres_cqrs
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
 
+use crate::place_succession_index;
 use crate::postgres_query;
 use crate::registry::{for_each_db_aggregate, for_each_db_external_id_aggregate, for_each_db_human_id_aggregate};
 use crate::resolver::PostgresRefStore;
@@ -58,6 +59,24 @@ macro_rules! postgres_open_cqrs {
     }};
 }
 
+/// Appends the Place-only succession-index (ADR 0026 §4) `Query` to the `place` `CqrsFramework`,
+/// leaving every other aggregate's framework untouched. Dispatches on the registry's literal
+/// `$snake` token — the same "wiring by tag" shape as [`postgres_open_cqrs!`] — rather than naming
+/// `place` after the per-aggregate repetition, which a plain `let` can't see across macro hygiene.
+///
+/// The SQLite twin also appends a geometry index; that one is `geo-types`/`geozero`-backed and
+/// sqlite-only, so the Postgres mirror is a separate follow-up (ADR 0024 §3).
+macro_rules! postgres_wire_place_indexes {
+    (place, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(
+            place_succession_index::postgres::PlaceSuccessionIndexQuery::new($pool.clone()),
+        ))
+    };
+    ($other:ident, $pool:expr, $framework:expr) => {
+        $framework
+    };
+}
+
 /// Selects the read-model lookup for `find_*`, keyed by the registry `find_param` column: Tag is
 /// keyed by its own id (`find_view_by_id`), every other aggregate by its `human_id`.
 macro_rules! postgres_find_query {
@@ -99,9 +118,17 @@ macro_rules! postgres_store {
                         .await
                         .map_err(|e| DbError::Backend(format!("creating projection table {table}: {e}")))?;
                 }
+                // The Place succession cross-reference index (ADR 0026 §4) is not one of the generic
+                // per-aggregate projections: it is derived from the Place projection and keyed by its
+                // own tables. Its DDL is created up front, and its `Query` is appended only to the
+                // Place framework below (`postgres_wire_place_indexes!`).
+                place_succession_index::postgres::create_tables(&pool)
+                    .await
+                    .map_err(|e| DbError::Backend(format!("creating place succession index: {e}")))?;
                 $(
                     let repo = Arc::new(PostgresViewRepository::<$View, $State>::new($table_const, pool.clone()));
                     let $snake = postgres_open_cqrs!(pool, repo, $wiring);
+                    let $snake = postgres_wire_place_indexes!($snake, pool, $snake);
                 )+
                 Ok(Self { $($snake,)+ pool })
             }
@@ -132,6 +159,9 @@ macro_rules! postgres_store {
                 $(
                     rebuild_view::<$State, $View>(&self.pool, $table_const, $upcasters).await?;
                 )+
+                // Place's succession cross-reference index (ADR 0026 §4) is derived from the (now
+                // freshly rebuilt) Place projection above, not replayed from raw events itself.
+                place_succession_index::postgres::rebuild_index(&self.pool).await?;
                 Ok(())
             }
         }
@@ -192,6 +222,24 @@ impl PostgresStore {
 
     pub(crate) async fn count(&self, table: &str) -> Result<u64, DbError> {
         postgres_query::count_rows(&self.pool, table).await
+    }
+
+    /// Every place a succession names `to`, from `place_id`'s perspective as a `from` endpoint
+    /// (ADR 0026 §4), via the succession cross-reference index.
+    pub(crate) async fn place_successors(
+        &self,
+        place_id: &str,
+    ) -> Result<Vec<crate::store::PlaceSuccessionRecord>, DbError> {
+        place_succession_index::postgres::successors(&self.pool, place_id).await
+    }
+
+    /// Every place a succession names `from`, from `place_id`'s perspective as a `to` endpoint
+    /// (ADR 0026 §4), the symmetric counterpart of [`Self::place_successors`].
+    pub(crate) async fn place_predecessors(
+        &self,
+        place_id: &str,
+    ) -> Result<Vec<crate::store::PlaceSuccessionRecord>, DbError> {
+        place_succession_index::postgres::predecessors(&self.pool, place_id).await
     }
 
     /// Every research note whose `subjects` set names the subject serialized under `subject_kind`

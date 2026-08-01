@@ -1289,6 +1289,73 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn retracting_a_succession_clears_the_sqlite_index() {
+        use genealogy_core::enums::{PlaceType, SuccessionKind};
+        use genealogy_core::ids::PlaceId;
+        use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+
+        let (store, _dir) = store().await;
+        let aker = PlaceId::from_uuid(Uuid::from_u128(1));
+        let kristiania = PlaceId::from_uuid(Uuid::from_u128(2));
+        let oslo = PlaceId::from_uuid(Uuid::from_u128(3));
+        for (n, place_id, human_id) in [(2, aker, "P0001"), (3, kristiania, "P0002"), (4, oslo, "P0003")] {
+            store
+                .execute_place(
+                    &place_id.to_string(),
+                    PlaceCommandEnvelope {
+                        meta: meta(n),
+                        command: PlaceCommand::CreatePlace {
+                            place_id,
+                            human_id: HumanId::new(human_id),
+                            place_type: PlaceType::Municipality,
+                        },
+                    },
+                )
+                .await
+                .unwrap();
+        }
+        store
+            .execute_place(
+                &aker.to_string(),
+                PlaceCommandEnvelope {
+                    meta: meta(5),
+                    command: PlaceCommand::AssertSuccession {
+                        place_id: aker,
+                        from: vec![aker, kristiania],
+                        to: vec![oslo],
+                        kind: SuccessionKind::Merged,
+                        date: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        store
+            .execute_place(
+                &aker.to_string(),
+                PlaceCommandEnvelope {
+                    meta: meta(6),
+                    command: PlaceCommand::RetractAssertion {
+                        place_id: aker,
+                        target: AssertionId::from_uuid(Uuid::from_u128(5)),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        // The assertion left the anchor's projection, so the reindex must drop every row it produced
+        // — including the links reachable from the two non-anchor endpoints.
+        for place_id in [aker, kristiania, oslo] {
+            let id = place_id.to_string();
+            assert_eq!(store.place_successors(&id).await.unwrap(), vec![]);
+            assert_eq!(store.place_predecessors(&id).await.unwrap(), vec![]);
+        }
+        assert!(dump_place_succession_links(&store).await.is_empty());
+    }
+
+    #[tokio::test]
     async fn dna_test_for_a_missing_person_is_rejected_through_services() {
         use genealogy_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
         use genealogy_core::dna_test::error::DnaTestError;
