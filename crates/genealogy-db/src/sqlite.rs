@@ -57,9 +57,9 @@ macro_rules! sqlite_wire_place_indexes {
     (place, $pool:expr, $framework:expr) => {
         $framework
             .append_query(Box::new(crate::geo_index::PlaceGeometryIndexQuery::new($pool.clone())))
-            .append_query(Box::new(crate::place_succession_index::PlaceSuccessionIndexQuery::new(
-                $pool.clone(),
-            )))
+            .append_query(Box::new(
+                crate::place_succession_index::sqlite::PlaceSuccessionIndexQuery::new($pool.clone()),
+            ))
     };
     ($other:ident, $pool:expr, $framework:expr) => {
         $framework
@@ -112,7 +112,7 @@ macro_rules! sqlite_store {
                 // The Place succession cross-reference index (ADR 0026 §4) is likewise derived,
                 // keyed by its own tables, and sqlite-only; its `Query` is appended only to the
                 // Place framework below.
-                crate::place_succession_index::create_tables(&pool)
+                crate::place_succession_index::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating place succession index: {e}")))?;
                 $(
@@ -153,7 +153,7 @@ macro_rules! sqlite_store {
                 // index (ADR 0026 §4) are derived from the (now freshly rebuilt) Place projection
                 // above, not replayed from raw events themselves.
                 crate::geo_index::rebuild_index(&self.pool).await?;
-                crate::place_succession_index::rebuild_index(&self.pool).await?;
+                crate::place_succession_index::sqlite::rebuild_index(&self.pool).await?;
                 Ok(())
             }
         }
@@ -234,7 +234,7 @@ impl SqliteStore {
         &self,
         place_id: &str,
     ) -> Result<Vec<crate::store::PlaceSuccessionRecord>, DbError> {
-        crate::place_succession_index::successors(&self.pool, place_id).await
+        crate::place_succession_index::sqlite::successors(&self.pool, place_id).await
     }
 
     /// Every place a succession names `from`, from `place_id`'s perspective as a `to` endpoint
@@ -243,7 +243,7 @@ impl SqliteStore {
         &self,
         place_id: &str,
     ) -> Result<Vec<crate::store::PlaceSuccessionRecord>, DbError> {
-        crate::place_succession_index::predecessors(&self.pool, place_id).await
+        crate::place_succession_index::sqlite::predecessors(&self.pool, place_id).await
     }
 
     /// Every research note whose `subjects` set names the subject serialized under `subject_kind`
