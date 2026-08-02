@@ -221,15 +221,15 @@ Residuals from the shortcuts work (ADR 0030); see
   that same marker *is* date-resolved, so at slider year 1875 the pin reads "Oslo" while
   `generated_title` beside it correctly reads "Kristiania" — the map contradicts the record. Use the
   as-of-resolved name; `PlaceView::name_as_of` already exists. — #232
-- **`geography_toolbar` takes 8 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
-  fit state were threaded in — bundle them into a struct. Cosmetic cleanup.
+- **`geography_toolbar` takes 9 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
+  fit + draw-target state were threaded in — bundle them into a struct. Cosmetic cleanup.
 - **The Geography tool's Point tool cannot save at all.** The Place Map editor has a "Use this point"
   confirm; the Geography tool has no equivalent, and contrary to what this bullet used to say it does
   not commit on click either — it only paints a red draft dot. `open_geometry_panel`
   (`screens/geography.rs`) is called from `on_finish_polygon` alone, whose geometry is always a
   `Polygon`, so its `PlaceGeometry::Point` branch and the whole `GeoPanel::CreateHere` variant are
-  unreachable; the function's doc comment still claims the opposite. Either give the tool a confirm
-  step that reaches that branch, or delete the dead variant.
+  unreachable. Either give the tool a confirm step that reaches that branch, or delete the dead
+  variant.
 - **Polygon vertices are never drawn, and cannot be moved.** `geo-draft-point` filters the draft
   source to `Point` geometry (`screens/map_shared.rs`) while a ring is emitted as a `LineString`
   under three vertices and a `Polygon` at three or more, so no vertex handle is ever rendered: the
@@ -246,13 +246,6 @@ Residuals from the shortcuts work (ADR 0030); see
   surface's own attribution line renders an empty string (`screens/map_shared.rs`), while
   `MapProvider::attribution` (`genealogy-app/src/config.rs`) is never read — so the tile source's
   required credit is absent, which the OSM tile-usage policy does not allow. — #254
-- **Which place a drawn shape attaches to is invisible.** The target is the rail/picker selection, but
-  the rail's highlight compares the selection's `human_id` against the marker's UUID
-  (`screens/geography.rs`), so `.row.sel` and `aria-selected` never fire: nothing on screen says what
-  is selected until the geometry panel's title appears *after* the shape is finished. Finishing a
-  polygon with no selection also returns silently — no panel, no toast, the draft left on the canvas.
-  Fix the comparison, then show the target in the toolbar (and refuse the draw with a toast when there
-  is none). — #255
 - **The Geography place list is undocumented and geometry-only.** The rail lists places that resolved
   a geometry *as of the slider year*, narrowed by the toolbar picker's live query
   (`screens/geography.rs`) — so a place without geometry can never be selected there (making it
@@ -274,6 +267,10 @@ Residuals from the shortcuts work (ADR 0030); see
   polygon is unreachable at every year, which is why a polygon drawn in Geography never appears on the
   record's own map even though the *Geometry over time* table lists it. Reuse core's rule rather than
   restating it client-side. — #258
+- **The draft is never cleared after a successful save either.** `geo_edit_panel`'s `onsaved`
+  (`screens/geography.rs`) sets `panel`/`reload`/`toast` but not `draft`, so the red draft ring sits on
+  top of the newly-saved boundary until the user clicks Clear by hand. Found while fixing #255 — the
+  same "keep the draft, let the user clear it" behaviour is right for a *refusal*, wrong for a *save*.
 - **Switching provider repaints nothing.** The toolbar's provider select writes `[map]` config for
   `osm-raster` and is an explicit no-op for the other two options, but the tile URL is hardcoded in
   `maplibre_init_script` and nothing ever calls `setStyle`, so no choice can change the map. Pairs
