@@ -70,12 +70,16 @@
       ADR&nbsp;0026 (succession &amp; temporal resolution).
     </div>
 
-    <!-- Toolbar: search, counts, the draw tools (Pan/Point/Polygon — in the toolbar, not floating
-         over the map), and the provider select. -->
+    <!-- Toolbar: search, counts, the draw-target chip (which place a finished point/polygon will
+         attach to — "Drawing on Oslo P0001" when the rail/picker has a selection, "No place selected"
+         when it doesn't; finishing a shape with no target is refused with a toast, #255), the draw
+         tools (Pan/Point/Polygon — in the toolbar, not floating over the map), and the provider
+         select. -->
     <div class="geo-toolbar" style="margin-bottom:10px">
       <input class="filter" style="width:220px" placeholder="🔍 Search or geocode a place…">
       <span class="chip">Places 5,128</span>
       <span class="chip">Events 3,910</span>
+      <span class="chip"><span class="chip-icon" aria-hidden="true">🎯</span>Drawing on Oslo <span class="row-id">P0001</span></span>
       <span class="spacer"></span>
       <button class="btn sm primary" title="Pan">✋ Pan</button>
       <button class="btn sm" title="Drop / move a point">📍 Point</button>
@@ -120,10 +124,20 @@
 
         <!-- Polygon tool only: commit the drawn ring onto the rail-selected place, or start over. The
              row appears between the map and the time slider, so arming the tool shrinks the map
-             surface — which is why the map is repainted whenever its container resizes (#252). -->
+             surface — which is why the map is repainted whenever its container resizes (#252).
+             Finishing with no draw target selected is refused with a toast; the drafted ring is
+             deliberately kept on the canvas, so picking a place and pressing Finish again commits the
+             same geometry (#255). -->
         <div class="wrap" style="gap:8px">
           <button class="btn sm primary">Finish polygon</button>
           <button class="btn sm ghost">Clear</button>
+        </div>
+
+        <!-- Refusal specimen: no draw target selected, so Finish polygon refused the shape instead of
+             discarding it silently. -->
+        <div class="wrap" style="gap:8px;align-items:center">
+          <span class="chip"><span class="chip-icon" aria-hidden="true">🎯</span>No place selected</span>
+          <div class="toast">Pick a place in the list first — a drawn shape attaches to the selected place. <span class="src-link">Dismiss</span></div>
         </div>
 
         <!-- Time slider: the map reflects names, boundaries, and jurisdictions in effect that year -->
