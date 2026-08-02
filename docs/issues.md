@@ -267,10 +267,19 @@ Residuals from the shortcuts work (ADR 0030); see
   polygon is unreachable at every year, which is why a polygon drawn in Geography never appears on the
   record's own map even though the *Geometry over time* table lists it. Reuse core's rule rather than
   restating it client-side. — #258
+- **"Clear" empties the draft state but never erases the ring.** `on_clear_draft`
+  (`screens/geography.rs`) sets `draft` to `MapDraft::Empty` — a following "Finish polygon" is correctly
+  a no-op, so the state *is* cleared — yet the red ring stays painted on the canvas, so the map keeps
+  showing a shape the app no longer holds. Whatever re-pushes the draft overlay for a *new* vertex does
+  not fire for the empty one (`push_map_draft`'s empty `FeatureCollection` never reaches
+  `geo-draft`). Found while writing the `map-draw-target` gui-pass scenario for #255, and reproduced
+  unchanged on `main` — it is why that scenario proves "the draft survived the refusal" by finishing
+  again rather than by clicking Clear.
 - **The draft is never cleared after a successful save either.** `geo_edit_panel`'s `onsaved`
   (`screens/geography.rs`) sets `panel`/`reload`/`toast` but not `draft`, so the red draft ring sits on
-  top of the newly-saved boundary until the user clicks Clear by hand. Found while fixing #255 — the
-  same "keep the draft, let the user clear it" behaviour is right for a *refusal*, wrong for a *save*.
+  top of the newly-saved boundary. Found while fixing #255 — the same "keep the draft, let the user
+  clear it" behaviour is right for a *refusal*, wrong for a *save*. Note the manual escape hatch is
+  itself broken: see the Clear bullet above.
 - **Switching provider repaints nothing.** The toolbar's provider select writes `[map]` config for
   `osm-raster` and is an explicit no-op for the other two options, but the tile URL is hardcoded in
   `maplibre_init_script` and nothing ever calls `setStyle`, so no choice can change the map. Pairs

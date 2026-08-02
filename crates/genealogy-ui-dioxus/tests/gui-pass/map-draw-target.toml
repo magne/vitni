@@ -5,16 +5,15 @@
 #
 # Trap: the toast is *not* an overlay — `.toast` has no `position` (`components.css`) and renders as a
 # sibling grid row of the screen column, so showing it shrinks the map surface (and, post-#252, repaints
-# the canvas) and moves the Finish/Clear row up from y=1048 to y=995. Clear's coordinate below is read
-# off that post-toast layout, not off `map-polygon.toml`'s (pre-toast) row.
+# the canvas) and moves the Finish/Clear row up from y=1048 to y=995. The second Finish click below is
+# read off that post-toast layout, not off `map-polygon.toml`'s (pre-toast) row.
 #
-# Order matters: Clear is clicked *before* picking a place in the rail, not after. Picking a place
-# recentres/zooms the map onto it (street level for Kristiansand), which pushes this scenario's
-# world-view triangle entirely outside the viewport — a canvas-region `differ` comparing shots either
-# side of that recentre would pass or fail on the recentre alone, not on whether the draft survived. So
-# "the draft survives the refusal" is asserted *before* the rail click (refused vs cleared, same view),
-# and "picking a place highlights it" is asserted last, over the rail region only (unaffected by canvas
-# recentring either way).
+# "The draft survives the refusal" is asserted by *finishing again* after picking a place, not by
+# clicking Clear and watching the ring vanish: Clear empties the draft state but never erases the ring
+# from the canvas (a pre-existing defect found while writing this scenario — see the Clear bullet in
+# `docs/issues.md`), so a canvas compare either side of Clear proves nothing. Re-finishing is also the
+# recovery path the refusal toast actually promises: the geometry panel can only open if the draft
+# still held its three vertices.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "Finishing a shape with no draw target is refused, and the draft survives the refusal (#255)"
@@ -63,21 +62,21 @@ name = "refused"
 
 [[step]]
 do = "click"
-at = [605, 995]
-label = "Clear"
-
-[[step]]
-do = "shot"
-name = "cleared"
-
-[[step]]
-do = "click"
 at = [300, 185]
 label = "place list: Kristiansand"
 
 [[step]]
 do = "shot"
 name = "targeted"
+
+[[step]]
+do = "click"
+at = [517, 995]
+label = "Finish polygon (post-toast row)"
+
+[[step]]
+do = "shot"
+name = "recovered"
 
 [[assert]]
 kind = "differ"
@@ -86,13 +85,13 @@ because = "finishing with no draw target must say why instead of failing silentl
 
 [[assert]]
 kind = "differ"
-shots = ["refused", "cleared"]
-region = [500, 200, 1250, 700]
-tolerance = 0.001
-because = "a refused draft must survive on the canvas to be fixed, not be discarded"
+shots = ["refused", "targeted"]
+# The rail's Kristiansand row only. A whole-window compare here is answered by the recentre the
+# selection triggers, which says nothing about the highlight this issue is about.
+region = [208, 155, 240, 60]
+because = "picking a place must highlight it as the draw target"
 
 [[assert]]
 kind = "differ"
-shots = ["cleared", "targeted"]
-region = [208, 155, 240, 60]
-because = "picking a place must highlight it as the draw target"
+shots = ["targeted", "recovered"]
+because = "a refused draft must survive, so finishing again with a target opens the geometry panel"
