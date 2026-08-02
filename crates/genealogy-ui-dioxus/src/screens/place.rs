@@ -940,7 +940,7 @@ fn PlaceMapEditor(
                     GeometrySaveForm {
                         human_id: human_id.clone(),
                         geometry,
-                        year: Some(year()),
+                        slider_year: year(),
                         onsaved: move |()| { pending.set(None); on_saved.call(()); },
                     }
                     Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| pending.set(None) }

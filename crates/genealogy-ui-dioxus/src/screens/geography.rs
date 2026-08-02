@@ -217,7 +217,7 @@ pub fn GeographyScreen() -> Element {
                 }
             }
         }
-        {geo_edit_panel(&chrome.0, panel, reload, toast, &saved_label)}
+        {geo_edit_panel(&chrome.0, panel, reload, toast, &saved_label, year())}
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
@@ -475,6 +475,7 @@ fn geo_edit_panel(
     mut reload: Signal<u32>,
     mut toast: Signal<Option<String>>,
     saved_label: &str,
+    slider_year: i32,
 ) -> Element {
     let current = panel();
     if current == GeoPanel::None {
@@ -504,7 +505,7 @@ fn geo_edit_panel(
                     GeometrySaveForm {
                         human_id,
                         geometry,
-                        year: None,
+                        slider_year,
                         onsaved: move |()| { panel.set(GeoPanel::None); reload += 1; toast.set(Some(saved.clone())); },
                     }
                 },

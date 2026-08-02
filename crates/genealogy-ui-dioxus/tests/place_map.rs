@@ -6,7 +6,7 @@
 
 use dioxus::prelude::*;
 use genealogy_ui::{ConfidenceLevel, Localizer, MarkerShapeVm, PlaceGeometryVm};
-use genealogy_ui_dioxus::screens::place_geometry_table;
+use genealogy_ui_dioxus::screens::{effective_date_choice, place_geometry_table};
 
 fn loc() -> Localizer {
     Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
@@ -143,4 +143,63 @@ fn no_geometries_yet_shows_the_empty_state() {
         "the empty-state help points at the draw tools:\n{html}"
     );
     assert!(!html.contains(">Retract<"), "no rows, so no retract buttons:\n{html}");
+}
+
+#[component]
+fn EffectiveDateUndated() -> Element {
+    effective_date_choice(&loc(), 1900, false, |_: String| {})
+}
+
+#[component]
+fn EffectiveDateDated() -> Element {
+    effective_date_choice(&loc(), 1900, true, |_: String| {})
+}
+
+#[test]
+fn the_save_form_offers_both_effective_date_choices_with_undated_preselected() {
+    let html = render(EffectiveDateUndated);
+    assert!(
+        html.contains(r#"role="radiogroup""#) && html.matches(r#"role="radio""#).count() == 2,
+        "the dated/undated choice is a two-option radiogroup:\n{html}"
+    );
+    assert!(
+        html.contains("Undated — applies to every year"),
+        "the undated option says it resolves at every year:\n{html}"
+    );
+    assert!(
+        html.contains("As of 1900"),
+        "the dated option is labelled with the slider year:\n{html}"
+    );
+    assert!(html.contains("Effective date"), "the group is labelled:\n{html}");
+    let undated_first = html
+        .find("Undated")
+        .expect("the undated option renders before the dated one");
+    let checked = html
+        .find(r#"aria-checked="true""#)
+        .expect("exactly one option is checked");
+    assert!(
+        checked < undated_first,
+        "the undated option is the preselected default — a saved shape must resolve at every \
+         year unless the operator opts into dating it:\n{html}"
+    );
+}
+
+#[test]
+fn picking_the_dated_choice_moves_the_checked_state_and_the_tab_stop() {
+    let html = render(EffectiveDateDated);
+    let dated = html.find("As of 1900").expect("the dated option renders");
+    let checked = html
+        .find(r#"aria-checked="true""#)
+        .expect("exactly one option is checked");
+    assert!(checked < dated, "the dated option is the checked one:\n{html}");
+    assert_eq!(
+        html.matches(r#"aria-checked="true""#).count(),
+        1,
+        "a single-choice group checks exactly one option:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"tabindex="0""#).count(),
+        1,
+        "the roving tab stop follows the selection:\n{html}"
+    );
 }
