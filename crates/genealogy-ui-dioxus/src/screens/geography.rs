@@ -713,6 +713,7 @@ mod tests {
                 lat: 59.9,
                 lon: 10.7,
             }],
+            unplotted_count: 0,
             resolved_year: None,
             provider: MapProviderVm::OsmRaster {
                 tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
