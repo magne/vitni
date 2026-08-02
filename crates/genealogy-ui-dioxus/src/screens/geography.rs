@@ -353,7 +353,7 @@ pub fn geography_rail(
             div { class: "list-rows",
                 for marker in markers {
                     {
-                        let is_selected = selected.read().as_ref().is_some_and(|(id, _)| *id == marker.id);
+                        let is_selected = selected.read().as_ref().is_some_and(|(id, _)| *id == marker.human_id);
                         let target = (marker.human_id.clone(), marker.name.clone());
                         rsx! {
                             div {
