@@ -67,6 +67,7 @@ pub fn GeographyScreen() -> Element {
     let loc = state.data_loc();
     let coordinate_invalid = loc.place_coordinate_invalid();
     let chrome = use_context::<ChromeCtx>();
+    let no_draw_target = chrome.0.geography_draw_target_required();
     let loading = state.chrome().loading();
 
     let year = use_signal(|| DEFAULT_YEAR);
@@ -167,6 +168,7 @@ pub fn GeographyScreen() -> Element {
     };
     let marker_count = vm.as_ref().map_or(0, |vm| vm.markers.len());
     let event_count = vm.as_ref().map_or(0, |vm| vm.events.len());
+    let draw_target = selected();
     // The "⤢ Fit" toolbar button's target: every currently filtered marker's shape (mirrors what
     // `update_geography_data` pushes to the map, so Fit frames exactly what is shown).
     let fit_shapes: Vec<MarkerShapeVm> = vm.as_ref().map_or_else(Vec::new, |vm| {
@@ -186,7 +188,7 @@ pub fn GeographyScreen() -> Element {
             exterior: vertices.iter().map(|&(lat, lon)| geo_point(lat, lon)).collect(),
             holes: Vec::new(),
         };
-        open_geometry_panel(selected, panel, geometry);
+        open_geometry_panel(selected, panel, toast, &no_draw_target, geometry);
     };
     let on_clear_draft = move |_| draft.set(MapDraft::Empty);
 
@@ -194,7 +196,7 @@ pub fn GeographyScreen() -> Element {
     rsx! {
         div { style: "display:flex;flex-direction:column;height:100%;min-height:0;gap:var(--sp-3)",
             h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-geography\")}" }
-            {geography_toolbar(loc, &chrome.0, &picker, &services, provider, tool, marker_count, event_count, &fit_shapes)}
+            {geography_toolbar(loc, &chrome.0, &picker, &services, provider, tool, marker_count, event_count, &fit_shapes, draw_target.as_ref())}
             div { class: "geo", style: "flex:1;min-height:0",
                 {geography_rail(&chrome.0, vm.as_ref(), selected, &filter().query)}
                 div { class: "geo-main",
@@ -225,26 +227,38 @@ pub fn GeographyScreen() -> Element {
     }
 }
 
-/// Opens the geometry panel for the rail-selected place, or (no selection) stashes the point for the
-/// quick-create form — only reachable from the Point-tool path (a polygon draft always targets an
-/// existing selected place; polygon-drawn creation is deferred, see the PR report).
-fn open_geometry_panel(
-    selected: Signal<Option<(String, String)>>,
-    mut panel: Signal<GeoPanel>,
-    geometry: PlaceGeometry,
-) {
-    if let Some((human_id, name)) = selected() {
-        panel.set(GeoPanel::AssertOnSelected {
+/// The panel a finished geometry opens, or `None` when there is no draw target to attach it to.
+fn geometry_panel_for(selected: Option<(String, String)>, geometry: PlaceGeometry) -> Option<GeoPanel> {
+    if let Some((human_id, name)) = selected {
+        return Some(GeoPanel::AssertOnSelected {
             human_id,
             name,
             geometry,
         });
-        return;
     }
-    let PlaceGeometry::Point(point) = &geometry else { return };
-    panel.set(GeoPanel::CreateHere {
+    let PlaceGeometry::Point(point) = &geometry else {
+        return None;
+    };
+    Some(GeoPanel::CreateHere {
         point: (point.latitude.to_degrees(), point.longitude.to_degrees()),
-    });
+    })
+}
+
+/// Opens the geometry panel for the rail-selected place (the only caller today is the polygon
+/// finish; the `Point`/`CreateHere` branch is retained for that tool but currently unreachable, see
+/// the PR report). A polygon with no draw target is refused with a toast; the draft is deliberately
+/// kept on the canvas, so picking a place and pressing Finish again commits the same geometry.
+fn open_geometry_panel(
+    selected: Signal<Option<(String, String)>>,
+    mut panel: Signal<GeoPanel>,
+    mut toast: Signal<Option<String>>,
+    no_target: &str,
+    geometry: PlaceGeometry,
+) {
+    match geometry_panel_for(selected(), geometry) {
+        Some(next) => panel.set(next),
+        None => toast.set(Some(no_target.to_owned())),
+    }
 }
 
 /// The top toolbar: a Place picker (searches every place in the workspace, not just already-plotted
@@ -252,7 +266,7 @@ fn open_geometry_panel(
 /// marker/event counts, the draw tools, and the provider select.
 #[expect(
     clippy::too_many_arguments,
-    reason = "a toolbar threads the screen's picker + provider + draw-tool state"
+    reason = "a toolbar threads the screen's picker + provider + draw-tool + draw-target state"
 )]
 fn geography_toolbar(
     loc: &Localizer,
@@ -264,6 +278,7 @@ fn geography_toolbar(
     marker_count: usize,
     event_count: usize,
     fit_shapes: &[MarkerShapeVm],
+    draw_target: Option<&(String, String)>,
 ) -> Element {
     let tool_button = |this: DrawTool, label: String| {
         let active = tool() == this;
@@ -282,6 +297,7 @@ fn geography_toolbar(
             div { style: "width:240px", {record_picker(loc, picker)} }
             Chip { label: format!("{marker_count}") }
             Chip { label: format!("{event_count}") }
+            {geography_draw_target(chrome, draw_target)}
             span { class: "spacer" }
             {tool_button(DrawTool::Pan, chrome.geography_tool_pan())}
             {tool_button(DrawTool::Point, chrome.geography_tool_point())}
@@ -294,6 +310,24 @@ fn geography_toolbar(
             }
             {geography_provider_select(chrome, services, provider)}
         }
+    }
+}
+
+/// The toolbar's draw-target readout: which place a finished point/polygon will attach to. Split out
+/// of [`geography_toolbar`] because the toolbar as a whole needs `Services` and a reactive `Memo`, so
+/// only this slice is SSR-testable (see the module doc). Keeps showing the target even when the
+/// picker's live query has filtered that marker out of the rail — the target persists through a
+/// search, so this is not a bug.
+pub fn geography_draw_target(chrome: &Chrome, target: Option<&(String, String)>) -> Element {
+    match target {
+        Some((human_id, name)) => rsx! {
+            Chip {
+                icon: Some("🎯".to_owned()),
+                label: chrome.geography_drawing_on(name),
+                id_label: Some(human_id.clone()),
+            }
+        },
+        None => rsx! { Chip { icon: Some("🎯".to_owned()), label: chrome.geography_draw_target_none() } },
     }
 }
 
@@ -353,7 +387,7 @@ pub fn geography_rail(
             div { class: "list-rows",
                 for marker in markers {
                     {
-                        let is_selected = selected.read().as_ref().is_some_and(|(id, _)| *id == marker.id);
+                        let is_selected = selected.read().as_ref().is_some_and(|(id, _)| *id == marker.human_id);
                         let target = (marker.human_id.clone(), marker.name.clone());
                         rsx! {
                             div {
@@ -611,8 +645,9 @@ fn update_geography_data(vm: &GeographyVm, query: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{filtered_markers, provider_kind, selected_marker_shape};
-    use genealogy_app::MapProvider;
+    use super::{GeoPanel, filtered_markers, geometry_panel_for, provider_kind, selected_marker_shape};
+    use crate::screens::map_shared::geo_point;
+    use genealogy_app::{MapProvider, PlaceGeometry};
     use genealogy_ui::{EventPinVm, GeographyVm, MapProviderVm, MarkerShapeVm, PlaceMarkerVm};
 
     #[test]
@@ -704,5 +739,40 @@ mod tests {
         let vm = geography_vm();
         let selection = ("P9999".to_owned(), "Not loaded yet".to_owned());
         assert_eq!(selected_marker_shape(&vm, Some(&selection)), None);
+    }
+
+    fn polygon() -> PlaceGeometry {
+        PlaceGeometry::Polygon {
+            exterior: vec![geo_point(59.9, 10.7), geo_point(60.0, 10.8), geo_point(60.1, 10.6)],
+            holes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_polygon_with_no_draw_target_opens_no_panel() {
+        assert_eq!(geometry_panel_for(None, polygon()), None);
+    }
+
+    #[test]
+    fn a_polygon_asserts_onto_the_selected_place() {
+        let selected = Some(("P0001".to_owned(), "Oslo".to_owned()));
+        assert_eq!(
+            geometry_panel_for(selected, polygon()),
+            Some(GeoPanel::AssertOnSelected {
+                human_id: "P0001".to_owned(),
+                name: "Oslo".to_owned(),
+                geometry: polygon(),
+            })
+        );
+    }
+
+    #[test]
+    fn a_point_with_no_draw_target_still_offers_the_quick_create_form() {
+        let geometry = PlaceGeometry::Point(geo_point(59.9, 10.7));
+        let panel = geometry_panel_for(None, geometry);
+        let Some(GeoPanel::CreateHere { point }) = panel else {
+            panic!("expected a CreateHere panel, got {panel:?}");
+        };
+        assert_eq!(point, (59.9, 10.7));
     }
 }

@@ -164,7 +164,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (17 so far)
+### `0.9 — UI stabilization` (16 so far)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
 audit could find by reading code; the rest came from using the GUI in earnest, which is exactly how it
@@ -174,7 +174,6 @@ the list on its own. Treat the count as a floor.
 | Item | Why it gates a release |
 | --- | --- |
 | [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify`, blocked on #261 — the dialogs, their tab ring, both cancel paths and the edit stash are scripted (`unsaved-close-confirm`, `unsaved-quit-confirm`); whether a save *looks* instant is not, and Save all could not be clicked at all |
-| [Which place a drawn shape attaches to is invisible](https://github.com/magne/genealogy/issues/255) | The rail highlight compares `human_id` to a UUID, so nothing says what the draw target is; finishing a polygon with no selection fails silently |
 | [Geometry from Geography is undated, the Place tab stamps its year](https://github.com/magne/genealogy/issues/257) | A point saved from the Place tab vanishes from the Geography map below 1900, with no message — two panels, two dating policies |
 | [The Place Map tab cannot render an undated geometry](https://github.com/magne/genealogy/issues/258) | A polygon drawn in Geography never appears on the record's own map at any year: the view-model's fallback diverges from core's `resolve_as_of` |
 | [One unsavable tab disables Save all for every other tab](https://github.com/magne/genealogy/issues/261) | An untouched `⌘N` draft blocks ⌘Q's Save all for valid records — and enabling it as-is would abort the run mid-flight |
@@ -191,7 +190,7 @@ the list on its own. Treat the count as a floor.
 | [Map markers label with the first-asserted name](https://github.com/magne/genealogy/issues/232) | The pin reads "Oslo" at slider year 1875 while the generated title correctly reads "Kristiania" — the map contradicts the record beside it |
 | [Index `$.state.human_id`](https://github.com/magne/genealogy/issues/233) | `next_human_id` and `find_place` each full-scan the projection; the index is the prerequisite for any bulk place import not being O(n²) |
 
-The nine rows right below the manual-webview-pass row all came out of the 2026-07-31 manual pass; #253
+The eight rows right below the manual-webview-pass row all came out of the 2026-07-31 manual pass; #253
 through #259 are the map, #260 and #261 the shell. The last two of the table came out of
 [`research/gis-norway.md`](research/gis-norway.md); the rest came from reading the code. The index
 is the weakest fit — an enabler rather than a defect — and is here because it is cheap and unblocks the
