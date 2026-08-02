@@ -225,6 +225,23 @@ pub fn GeographyScreen() -> Element {
     }
 }
 
+/// The panel a finished geometry opens, or `None` when there is no draw target to attach it to.
+fn geometry_panel_for(selected: Option<(String, String)>, geometry: PlaceGeometry) -> Option<GeoPanel> {
+    if let Some((human_id, name)) = selected {
+        return Some(GeoPanel::AssertOnSelected {
+            human_id,
+            name,
+            geometry,
+        });
+    }
+    let PlaceGeometry::Point(point) = &geometry else {
+        return None;
+    };
+    Some(GeoPanel::CreateHere {
+        point: (point.latitude.to_degrees(), point.longitude.to_degrees()),
+    })
+}
+
 /// Opens the geometry panel for the rail-selected place, or (no selection) stashes the point for the
 /// quick-create form — only reachable from the Point-tool path (a polygon draft always targets an
 /// existing selected place; polygon-drawn creation is deferred, see the PR report).
@@ -233,18 +250,9 @@ fn open_geometry_panel(
     mut panel: Signal<GeoPanel>,
     geometry: PlaceGeometry,
 ) {
-    if let Some((human_id, name)) = selected() {
-        panel.set(GeoPanel::AssertOnSelected {
-            human_id,
-            name,
-            geometry,
-        });
-        return;
+    if let Some(next) = geometry_panel_for(selected(), geometry) {
+        panel.set(next);
     }
-    let PlaceGeometry::Point(point) = &geometry else { return };
-    panel.set(GeoPanel::CreateHere {
-        point: (point.latitude.to_degrees(), point.longitude.to_degrees()),
-    });
 }
 
 /// The top toolbar: a Place picker (searches every place in the workspace, not just already-plotted
@@ -611,8 +619,9 @@ fn update_geography_data(vm: &GeographyVm, query: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{filtered_markers, provider_kind, selected_marker_shape};
-    use genealogy_app::MapProvider;
+    use super::{GeoPanel, filtered_markers, geometry_panel_for, provider_kind, selected_marker_shape};
+    use crate::screens::map_shared::geo_point;
+    use genealogy_app::{MapProvider, PlaceGeometry};
     use genealogy_ui::{EventPinVm, GeographyVm, MapProviderVm, MarkerShapeVm, PlaceMarkerVm};
 
     #[test]
@@ -704,5 +713,40 @@ mod tests {
         let vm = geography_vm();
         let selection = ("P9999".to_owned(), "Not loaded yet".to_owned());
         assert_eq!(selected_marker_shape(&vm, Some(&selection)), None);
+    }
+
+    fn polygon() -> PlaceGeometry {
+        PlaceGeometry::Polygon {
+            exterior: vec![geo_point(59.9, 10.7), geo_point(60.0, 10.8), geo_point(60.1, 10.6)],
+            holes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_polygon_with_no_draw_target_opens_no_panel() {
+        assert_eq!(geometry_panel_for(None, polygon()), None);
+    }
+
+    #[test]
+    fn a_polygon_asserts_onto_the_selected_place() {
+        let selected = Some(("P0001".to_owned(), "Oslo".to_owned()));
+        assert_eq!(
+            geometry_panel_for(selected, polygon()),
+            Some(GeoPanel::AssertOnSelected {
+                human_id: "P0001".to_owned(),
+                name: "Oslo".to_owned(),
+                geometry: polygon(),
+            })
+        );
+    }
+
+    #[test]
+    fn a_point_with_no_draw_target_still_offers_the_quick_create_form() {
+        let geometry = PlaceGeometry::Point(geo_point(59.9, 10.7));
+        let panel = geometry_panel_for(None, geometry);
+        let Some(GeoPanel::CreateHere { point }) = panel else {
+            panic!("expected a CreateHere panel, got {panel:?}");
+        };
+        assert_eq!(point, (59.9, 10.7));
     }
 }
