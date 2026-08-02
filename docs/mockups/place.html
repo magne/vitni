@@ -19,6 +19,9 @@
         linear-gradient(90deg, color-mix(in srgb, var(--line) 60%, transparent) 1px, transparent 1px);
       background-size: 48px 48px;
     }
+    /* The inner container is where MapLibre mounts its canvas; here it only carries `is-capturing`,
+       so it must not repaint over the fake tile grid the surface draws. */
+    .map-surface > .map-container { border: 0; background-color: transparent; }
     .map-pin {
       position: absolute; left: 50%; top: 50%; transform: translate(-50%, -100%);
       font-size: 30px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); pointer-events: none;
@@ -266,19 +269,36 @@
           </div>
 
           <div class="card map-card">
-            <div class="map-surface geo-capture" role="img"
+            <div class="map-surface" role="img"
                  aria-label="Map of New York: its 1898 consolidated boundary, its point, and event pins, as of the selected year">
-              <div class="map-zoom" aria-hidden="true"><button>+</button><button>−</button></div>
-              <!-- this place's boundary (dated geometry, resolved as-of the slider year) -->
-              <div class="poly" style="left:26%;top:24%;width:230px;height:150px"></div>
-              <!-- this place's point -->
-              <div class="pin" style="left:44%;top:46%" title="New York (point)">📍</div>
-              <!-- events that occurred at THIS place -->
-              <div class="pin event" style="left:38%;top:40%" title="Baptism 1841">👶</div>
-              <div class="pin event" style="left:50%;top:52%" title="Marriage 1866">💍</div>
-              <div class="cluster" style="left:55%;top:38%" title="24 events here">24</div>
+              <!-- MapLibre mounts on this inner container; `is-capturing` is on it (not on the
+                   surface) while the Point or Polygon tool is armed, and only swaps the cursor. -->
+              <div class="map-container is-capturing" style="position:absolute;inset:0">
+                <div class="map-zoom" aria-hidden="true"><button>+</button><button>−</button></div>
+                <!-- this place's boundary (dated geometry, resolved as-of the slider year) -->
+                <div class="poly" style="left:26%;top:24%;width:230px;height:150px"></div>
+                <!-- this place's point -->
+                <div class="pin" style="left:44%;top:46%" title="New York (point)">📍</div>
+                <!-- events that occurred at THIS place -->
+                <div class="pin event" style="left:38%;top:40%" title="Baptism 1841">👶</div>
+                <div class="pin event" style="left:50%;top:52%" title="Marriage 1866">💍</div>
+                <div class="cluster" style="left:55%;top:38%" title="24 events here">24</div>
+              </div>
               <div class="map-attr">© OpenStreetMap contributors</div>
             </div>
+          </div>
+
+          <!-- Draft actions, one row at a time: the Point tool shows this pair once a point has been
+               dropped, the Polygon tool shows Finish/Clear the moment it is armed. Either row sits
+               between the map card and the time slider, so arming a tool shrinks the map surface —
+               which is why the map is repainted whenever its container resizes (#252). -->
+          <div class="wrap" style="gap:8px">
+            <button class="btn sm primary">Use this point</button>
+            <button class="btn sm ghost">Clear</button>
+          </div>
+          <div class="wrap" style="gap:8px">
+            <button class="btn sm primary">Finish polygon</button>
+            <button class="btn sm ghost">Clear</button>
           </div>
 
           <!-- Time slider: names, boundary, and jurisdiction resolve as-of the year (ADR 0026). -->

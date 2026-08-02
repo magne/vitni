@@ -8,13 +8,8 @@
 # renders as fill + outline only, and a 1-vertex draft renders nothing at all), and there is no way to
 # insert a vertex mid-ring. Both are backlog items, not verification gaps.
 #
-# Note on `armed`: that frame shows an empty canvas. The map is created without
-# `preserveDrawingBuffer`, so WebGL discards the drawing buffer after each composite and any render
-# that rewrites the container's class — every tool click does — leaves the canvas blank until the next
-# camera move; a screenshot is another composite read (#252). The assertion below only needs the frame
-# to *differ*, so it stays correct once that is fixed.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The canvas
+# region asserted below sits inside the surface both before and after the Finish/Clear row shrinks it.
 description = "The polygon tool turns canvas clicks into a ring and hands it to the geometry panel (#203)"
 
 [[step]]
@@ -89,6 +84,14 @@ because = "picking a place must recentre and zoom the map onto it"
 kind = "differ"
 shots = ["selected", "armed"]
 because = "arming the polygon tool must offer the finish and clear actions"
+
+[[assert]]
+kind = "painted"
+shot = "armed"
+region = [500, 200, 1250, 700]
+# Until #252 this frame's canvas was flat: the row shrank the surface, MapLibre resized the canvas, and
+# the repaint never composited. The `differ` above passed anyway — a blanked canvas differs too.
+because = "the Finish/Clear row must not cost the map its tiles"
 
 [[assert]]
 kind = "differ"

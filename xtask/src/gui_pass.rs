@@ -9,11 +9,13 @@
 //! Scenarios are **data, not code**: each is a TOML file under
 //! `crates/genealogy-ui-dioxus/tests/gui-pass/`, so adding one needs no recompile. A file lists
 //! `[[step]]`s (a click, a chord, a drag, a wheel, a screenshot) and `[[assert]]`s over the shots it
-//! took — `differ` for "the UI reacted", `match` for "the UI returned to this state". Both compare
-//! with an RMSE tolerance, so a caret blink is not a difference. An assertion may add `region = [x, y,
-//! w, h]` to compare a single window sub-rectangle instead of the whole shot — needed when a change is
-//! provably confined to one area but the rest of the window can legitimately repaint either way (e.g.
-//! the tabstrip repaints on every Save, so a whole-window `differ` cannot isolate a list-column change).
+//! took — `differ` for "the UI reacted", `match` for "the UI returned to this state", `painted` for
+//! "this area is not a flat fill". The first two compare with an RMSE tolerance, so a caret blink is
+//! not a difference. Any assertion may add `region = [x, y, w, h]` to work on a single window
+//! sub-rectangle instead of the whole shot — needed when a change is provably confined to one area but
+//! the rest of the window can legitimately repaint either way (e.g. the tabstrip repaints on every
+//! Save, so a whole-window `differ` cannot isolate a list-column change), and needed by `painted`,
+//! whose whole-window form the surrounding chrome would always answer for.
 //!
 //! The run is isolated by default: a throwaway `XDG_CONFIG_HOME`/`XDG_DATA_HOME` under
 //! `target/gui-pass/home` and a seeded fixture workspace, so a scripted click run can never append
@@ -91,7 +93,7 @@ enum Step {
     Wheel { at: [i32; 2], clicks: i32, label: String },
 }
 
-/// One check over two shots the script took.
+/// One check over the shots the script took.
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 enum Assertion {
@@ -114,32 +116,18 @@ enum Assertion {
         /// See [`Self::Differ`]'s `region`.
         region: Option<[u32; 4]>,
     },
-}
-
-impl Assertion {
-    fn shots(&self) -> &[String; 2] {
-        match self {
-            Self::Differ { shots, .. } | Self::Match { shots, .. } => shots,
-        }
-    }
-
-    fn because(&self) -> &str {
-        match self {
-            Self::Differ { because, .. } | Self::Match { because, .. } => because,
-        }
-    }
-
-    fn tolerance(&self) -> f64 {
-        match self {
-            Self::Differ { tolerance, .. } | Self::Match { tolerance, .. } => tolerance.unwrap_or(SAME_SCREEN_RMSE),
-        }
-    }
-
-    fn region(&self) -> Option<[u32; 4]> {
-        match self {
-            Self::Differ { region, .. } | Self::Match { region, .. } => *region,
-        }
-    }
+    /// One shot must not be a flat colour over `region` — the whole-shot [`assert_painted`] every
+    /// grab already runs cannot see a blank *area*, because the rail, toolbar and tabstrip around it
+    /// keep the window's own deviation high. Scope it to the map canvas and a blanked canvas fails.
+    Painted {
+        shot: String,
+        because: String,
+        /// See [`Self::Differ`]'s `region`; absent measures the whole window, which only the chrome
+        /// around a blank area would then answer for.
+        region: Option<[u32; 4]>,
+        /// The standard deviation the region must exceed; defaults to [`MIN_STANDARD_DEVIATION`].
+        min_deviation: Option<f64>,
+    },
 }
 
 /// How the run is configured.
@@ -649,8 +637,8 @@ fn grab(display: &str, window: &str, path: &Path) -> Result<()> {
 /// Fails if a screenshot is a flat colour — an unpainted webview, which is otherwise easy to mistake
 /// for a passing run.
 fn assert_painted(path: &Path) -> Result<()> {
-    let deviation = standard_deviation(path)?;
-    if deviation <= MIN_STANDARD_DEVIATION {
+    let deviation = standard_deviation(path, None)?;
+    if painted_failed(deviation, MIN_STANDARD_DEVIATION) {
         bail!(
             "{} is blank (standard deviation {deviation}) — the webview painted nothing",
             path.display()
@@ -659,17 +647,33 @@ fn assert_painted(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// A screenshot's pixel standard deviation, normalized to 0..1.
-fn standard_deviation(path: &Path) -> Result<f64> {
+/// Whether a measured deviation counts as blank. Inclusive at the threshold, so a perfectly uniform
+/// fill measured as exactly the threshold still fails.
+fn painted_failed(deviation: f64, threshold: f64) -> bool {
+    deviation <= threshold
+}
+
+/// A screenshot's pixel standard deviation, normalized to 0..1, restricted to `region`
+/// (`[x, y, w, h]` window pixels) when given.
+fn standard_deviation(path: &Path, region: Option<[u32; 4]>) -> Result<f64> {
     let measured = Command::new("identify")
         .args(["-format", "%[fx:standard_deviation]"])
-        .arg(path)
+        .arg(read_region(path, region))
         .output()
         .with_context(|| format!("measuring {}", path.display()))?;
     if !measured.status.success() {
         bail!("identify failed on {}", path.display());
     }
     parse_metric(&String::from_utf8_lossy(&measured.stdout), path)
+}
+
+/// `path` with an `ImageMagick` read modifier appended, so only `region` is read in — the cropping
+/// [`difference`] gets from `compare -extract`, which `identify` does not accept.
+fn read_region(path: &Path, region: Option<[u32; 4]>) -> String {
+    match region {
+        Some([x, y, w, h]) => format!("{}[{w}x{h}+{x}+{y}]", path.display()),
+        None => path.display().to_string(),
+    }
 }
 
 /// The normalized RMSE between two shots (0 for identical), restricted to `region` (`[x, y, w, h]`
@@ -707,29 +711,92 @@ fn parse_metric(text: &str, path: &Path) -> Result<f64> {
 fn check(asserts: &[Assertion], taken: &[String], shots: &Path) -> Result<()> {
     let mut failures = Vec::new();
     for assertion in asserts {
-        let [left, right] = assertion.shots();
-        let (Some(left), Some(right)) = (shot_path(taken, shots, left), shot_path(taken, shots, right)) else {
-            bail!("gui-pass: assertion names a shot the script never took: {left} / {right}");
-        };
-        let difference = difference(&left, &right, assertion.region())?;
-        let tolerance = assertion.tolerance();
-        let failed = match assertion {
-            Assertion::Differ { .. } => difference <= tolerance,
-            Assertion::Match { .. } => difference > tolerance,
-        };
-        if failed {
-            failures.push(format!(
-                "{} vs {} (RMSE {difference:.4}): {}",
-                name_of(&left),
-                name_of(&right),
-                assertion.because()
-            ));
+        if let Some(failure) = check_one(assertion, taken, shots)? {
+            failures.push(failure);
         }
     }
     if !failures.is_empty() {
         bail!("{}", failures.join("; "));
     }
     Ok(())
+}
+
+/// One assertion's verdict: `None` when it held, else the message describing how it did not.
+fn check_one(assertion: &Assertion, taken: &[String], shots: &Path) -> Result<Option<String>> {
+    match assertion {
+        Assertion::Differ {
+            shots: named,
+            because,
+            tolerance,
+            region,
+        } => {
+            let (left, right, difference) = compare(named, taken, shots, *region)?;
+            let tolerance = tolerance.unwrap_or(SAME_SCREEN_RMSE);
+            Ok((difference <= tolerance).then(|| pair_failure(&left, &right, difference, *region, because)))
+        }
+        Assertion::Match {
+            shots: named,
+            because,
+            tolerance,
+            region,
+        } => {
+            let (left, right, difference) = compare(named, taken, shots, *region)?;
+            let tolerance = tolerance.unwrap_or(SAME_SCREEN_RMSE);
+            Ok((difference > tolerance).then(|| pair_failure(&left, &right, difference, *region, because)))
+        }
+        Assertion::Painted {
+            shot,
+            because,
+            region,
+            min_deviation,
+        } => {
+            let Some(path) = shot_path(taken, shots, shot) else {
+                bail!("gui-pass: assertion names a shot the script never took: {shot}");
+            };
+            let deviation = standard_deviation(&path, *region)?;
+            let threshold = min_deviation.unwrap_or(MIN_STANDARD_DEVIATION);
+            Ok(painted_failed(deviation, threshold).then(|| {
+                format!(
+                    "{} {} is flat (standard deviation {deviation:.4} <= {threshold}): {because}",
+                    name_of(&path),
+                    describe_region(*region),
+                )
+            }))
+        }
+    }
+}
+
+/// Resolves an assertion's two shot names to paths and measures their difference.
+fn compare(
+    named: &[String; 2],
+    taken: &[String],
+    shots: &Path,
+    region: Option<[u32; 4]>,
+) -> Result<(PathBuf, PathBuf, f64)> {
+    let [left, right] = named;
+    let (Some(left), Some(right)) = (shot_path(taken, shots, left), shot_path(taken, shots, right)) else {
+        bail!("gui-pass: assertion names a shot the script never took: {left} / {right}");
+    };
+    let difference = difference(&left, &right, region)?;
+    Ok((left, right, difference))
+}
+
+/// The failure message for a two-shot assertion.
+fn pair_failure(left: &Path, right: &Path, difference: f64, region: Option<[u32; 4]>, because: &str) -> String {
+    format!(
+        "{} vs {} over {} (RMSE {difference:.4}): {because}",
+        name_of(left),
+        name_of(right),
+        describe_region(region),
+    )
+}
+
+/// How a failure names the area it measured.
+fn describe_region(region: Option<[u32; 4]>) -> String {
+    match region {
+        Some([x, y, w, h]) => format!("region {w}x{h}+{x}+{y}"),
+        None => "whole window".to_owned(),
+    }
 }
 
 /// A shot's file name, for messages.
@@ -746,4 +813,110 @@ fn shot_file(shots: &Path, index: usize, name: &str) -> PathBuf {
 fn shot_path(taken: &[String], shots: &Path, name: &str) -> Option<PathBuf> {
     let index = taken.iter().position(|shot| shot == name)?;
     Some(shot_file(shots, index + 1, name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Assertion, MIN_STANDARD_DEVIATION, Script, describe_region, painted_failed, read_region};
+    use std::path::Path;
+
+    fn asserts(toml: &str) -> Vec<Assertion> {
+        let script: Script = toml::from_str(toml).expect("the scenario parses");
+        script.asserts
+    }
+
+    #[test]
+    fn a_painted_assert_defaults_its_region_and_threshold() {
+        let parsed = asserts(
+            r#"
+            description = "a scenario"
+
+            [[assert]]
+            kind = "painted"
+            shot = "armed"
+            because = "arming a draw tool must not blank the canvas"
+            "#,
+        );
+        let [
+            Assertion::Painted {
+                shot,
+                region,
+                min_deviation,
+                because,
+            },
+        ] = parsed.as_slice()
+        else {
+            panic!("one painted assertion, got {} others", parsed.len());
+        };
+        assert_eq!(shot, "armed");
+        assert_eq!(*region, None);
+        assert_eq!(*min_deviation, None);
+        assert_eq!(because, "arming a draw tool must not blank the canvas");
+    }
+
+    #[test]
+    fn a_painted_assert_carries_its_region_and_threshold_when_given() {
+        let parsed = asserts(
+            r#"
+            description = "a scenario"
+
+            [[assert]]
+            kind = "painted"
+            shot = "polygon-armed"
+            region = [740, 140, 1050, 760]
+            min_deviation = 0.02
+            because = "the canvas region must show tiles, not a flat fill"
+            "#,
+        );
+        let [
+            Assertion::Painted {
+                region, min_deviation, ..
+            },
+        ] = parsed.as_slice()
+        else {
+            panic!("one painted assertion, got {} others", parsed.len());
+        };
+        assert_eq!(*region, Some([740, 140, 1050, 760]));
+        assert_eq!(*min_deviation, Some(0.02));
+    }
+
+    #[test]
+    fn a_flat_region_fails_the_painted_predicate() {
+        assert!(painted_failed(0.0, MIN_STANDARD_DEVIATION), "a uniform fill is blank");
+        assert!(
+            painted_failed(MIN_STANDARD_DEVIATION, MIN_STANDARD_DEVIATION),
+            "the threshold itself is blank — the bound is inclusive, as assert_painted's is"
+        );
+    }
+
+    #[test]
+    fn a_textured_region_passes_the_painted_predicate() {
+        assert!(!painted_failed(0.18, MIN_STANDARD_DEVIATION), "map tiles are textured");
+        assert!(
+            !painted_failed(0.03, 0.02),
+            "a caller-raised threshold still passes on a region above it"
+        );
+    }
+
+    #[test]
+    fn a_failure_names_the_region_it_measured() {
+        assert_eq!(describe_region(Some([740, 140, 1050, 760])), "region 1050x760+740+140");
+        assert_eq!(describe_region(None), "whole window");
+    }
+
+    /// `identify` rejects the `-extract` flag `compare` takes, so a region reaches it as a read
+    /// modifier on the file name instead. Getting this wrong measures the whole window and the
+    /// assertion silently stops being able to see a blank canvas.
+    #[test]
+    fn a_region_reaches_identify_as_a_read_modifier() {
+        let path = Path::new("target/gui-pass/shots/map-repaint/04-polygon-armed.png");
+        assert_eq!(
+            read_region(path, Some([740, 140, 1050, 760])),
+            "target/gui-pass/shots/map-repaint/04-polygon-armed.png[1050x760+740+140]"
+        );
+        assert_eq!(
+            read_region(path, None),
+            "target/gui-pass/shots/map-repaint/04-polygon-armed.png"
+        );
+    }
 }

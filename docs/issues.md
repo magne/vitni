@@ -230,17 +230,6 @@ Residuals from the shortcuts work (ADR 0030); see
   `Polygon`, so its `PlaceGeometry::Point` branch and the whole `GeoPanel::CreateHere` variant are
   unreachable; the function's doc comment still claims the opposite. Either give the tool a confirm
   step that reaches that branch, or delete the dead variant.
-- **Any re-render blanks the map canvas until the next camera move.** Clicking *Pan*, *Drop / move a
-  point* or *Draw polygon* — including clicking the tool that is already active, since `Signal::set`
-  has no equality check — empties the canvas; a pan or wheel-zoom brings it back. The map is created
-  without `preserveDrawingBuffer` (`screens/map_shared.rs`), so WebGL discards the drawing buffer
-  after each composite and MapLibre only draws a new frame when something asks it to; the class /
-  `data-armed` writes on the container (and the toolbar buttons' own class writes) force a composite
-  that reads an already-cleared canvas. `preserveDrawingBuffer: true` on the map options is the
-  one-line fix, or a `triggerRepaint()` after every render that touches the tool. Independently of
-  that, the Finish/Clear row really does shrink `.map-surface` with nothing calling `resize()`, so
-  that layout change needs the resize either way. Both are also why a gui-pass frame taken right
-  after a tool click is blank — a screenshot is another composite read. — #252
 - **Polygon vertices are never drawn, and cannot be moved.** `geo-draft-point` filters the draft
   source to `Point` geometry (`screens/map_shared.rs`) while a ring is emitted as a `LineString`
   under three vertices and a `Polygon` at three or more, so no vertex handle is ever rendered: the
@@ -564,6 +553,25 @@ decision, not a gap.
 - **External ids have no frontend entry point** — person `add_external_id` (module-level, not even
   root-exported) and `add_family_external_id` are used only inside `import.rs` for resolve-or-create.
   External ids are importer bookkeeping, not user-editable data.
+
+### Geography map
+
+- **The map needs no explicit `map.resize()` call.** #252 read the blank canvas as a missing resize:
+  arming the Polygon tool inserts a Finish/Clear row that shrinks `.map-surface`, and nothing in our
+  code calls `resize()`. Measured on the real webview, MapLibre's own `trackResize` observer does
+  re-measure and resize the canvas correctly — the frame taken right after the shrink is pixel-identical
+  to the settled one. What it fails to do under WebKitGTK is get that frame to the compositor, so the
+  fix is a repaint (`redraw()` on the animation frame after a container resize, `screens/map_shared.rs`),
+  not a resize. Adding a resize would only re-clear the drawing buffer and fire spurious `move` events.
+  `preserveDrawingBuffer: true` was tried and changed nothing.
+- **Only a layout change ever blanked the canvas, not "any re-render".** #252's title and body said
+  clicking *Pan*, *Drop / move a point* or *Draw polygon* all empty the canvas, and blamed the
+  container's `class` / `data-armed` writes. Measured on the unfixed tree, neither of the first two
+  blanked anything: arming Point left the canvas region byte-identical to the frame before it, and
+  re-clicking the active Pan tool likewise. Only Polygon — the one tool that inserts a row and shrinks
+  the surface — went flat. A class write on the container is harmless; the trigger was always the
+  resize. The `map-repaint` scenario keeps both non-blanking cases asserted so a future change cannot
+  quietly make them true.
 
 ### Architecture
 
