@@ -239,3 +239,41 @@ fn a_blank_filter_lists_every_marker() {
         "both markers listed:\n{html}"
     );
 }
+
+#[component]
+fn RailWithSelectedMarker() -> Element {
+    let selected = use_signal(|| Some(("P0001".to_owned(), "Oslo".to_owned())));
+    let vm = two_marker_geography_vm();
+    geography_rail(&chrome(), Some(&vm), selected, "")
+}
+
+#[test]
+fn the_selected_row_is_highlighted_and_announced() {
+    let mut vdom = VirtualDom::new(RailWithSelectedMarker);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"class="row sel""#),
+        "the selected row carries the sel modifier class:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-selected="true""#),
+        "the selected row is announced to assistive tech:\n{html}"
+    );
+}
+
+#[test]
+fn only_the_selected_row_is_announced_as_selected() {
+    let mut vdom = VirtualDom::new(RailWithSelectedMarker);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert_eq!(
+        html.matches(r#"aria-selected="true""#).count(),
+        1,
+        "only the one selected row is announced:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-selected="false""#),
+        "the non-selected row is announced as not selected:\n{html}"
+    );
+}
