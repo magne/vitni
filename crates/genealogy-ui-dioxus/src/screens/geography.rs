@@ -168,6 +168,7 @@ pub fn GeographyScreen() -> Element {
     };
     let marker_count = vm.as_ref().map_or(0, |vm| vm.markers.len());
     let event_count = vm.as_ref().map_or(0, |vm| vm.events.len());
+    let draw_target = selected();
     // The "⤢ Fit" toolbar button's target: every currently filtered marker's shape (mirrors what
     // `update_geography_data` pushes to the map, so Fit frames exactly what is shown).
     let fit_shapes: Vec<MarkerShapeVm> = vm.as_ref().map_or_else(Vec::new, |vm| {
@@ -195,7 +196,7 @@ pub fn GeographyScreen() -> Element {
     rsx! {
         div { style: "display:flex;flex-direction:column;height:100%;min-height:0;gap:var(--sp-3)",
             h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-geography\")}" }
-            {geography_toolbar(loc, &chrome.0, &picker, &services, provider, tool, marker_count, event_count, &fit_shapes)}
+            {geography_toolbar(loc, &chrome.0, &picker, &services, provider, tool, marker_count, event_count, &fit_shapes, draw_target.as_ref())}
             div { class: "geo", style: "flex:1;min-height:0",
                 {geography_rail(&chrome.0, vm.as_ref(), selected, &filter().query)}
                 div { class: "geo-main",
@@ -265,7 +266,7 @@ fn open_geometry_panel(
 /// marker/event counts, the draw tools, and the provider select.
 #[expect(
     clippy::too_many_arguments,
-    reason = "a toolbar threads the screen's picker + provider + draw-tool state"
+    reason = "a toolbar threads the screen's picker + provider + draw-tool + draw-target state"
 )]
 fn geography_toolbar(
     loc: &Localizer,
@@ -277,6 +278,7 @@ fn geography_toolbar(
     marker_count: usize,
     event_count: usize,
     fit_shapes: &[MarkerShapeVm],
+    draw_target: Option<&(String, String)>,
 ) -> Element {
     let tool_button = |this: DrawTool, label: String| {
         let active = tool() == this;
@@ -295,6 +297,7 @@ fn geography_toolbar(
             div { style: "width:240px", {record_picker(loc, picker)} }
             Chip { label: format!("{marker_count}") }
             Chip { label: format!("{event_count}") }
+            {geography_draw_target(chrome, draw_target)}
             span { class: "spacer" }
             {tool_button(DrawTool::Pan, chrome.geography_tool_pan())}
             {tool_button(DrawTool::Point, chrome.geography_tool_point())}
@@ -312,11 +315,20 @@ fn geography_toolbar(
 
 /// The toolbar's draw-target readout: which place a finished point/polygon will attach to. Split out
 /// of [`geography_toolbar`] because the toolbar as a whole needs `Services` and a reactive `Memo`, so
-/// only this slice is SSR-testable (see the module doc).
-///
-/// Stub pending the green commit — pinned red by `the_toolbar_names_the_place_a_drawn_shape_attaches_to`.
-pub fn geography_draw_target(chrome: &Chrome, _target: Option<&(String, String)>) -> Element {
-    rsx! { Chip { icon: Some("🎯".to_owned()), label: chrome.geography_draw_target_none() } }
+/// only this slice is SSR-testable (see the module doc). Keeps showing the target even when the
+/// picker's live query has filtered that marker out of the rail — the target persists through a
+/// search, so this is not a bug.
+pub fn geography_draw_target(chrome: &Chrome, target: Option<&(String, String)>) -> Element {
+    match target {
+        Some((human_id, name)) => rsx! {
+            Chip {
+                icon: Some("🎯".to_owned()),
+                label: chrome.geography_drawing_on(name),
+                id_label: Some(human_id.clone()),
+            }
+        },
+        None => rsx! { Chip { icon: Some("🎯".to_owned()), label: chrome.geography_draw_target_none() } },
+    }
 }
 
 /// The provider select: a kind picker that immediately persists the built-in defaults for
