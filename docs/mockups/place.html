@@ -288,6 +288,11 @@
             </div>
           </div>
 
+          <!-- Shown instead of a shape when this place holds geometry but none of it resolves as of
+               the slider year — every assertion is dated later and none is undated. A place with no
+               geometry at all gets the "No geometry yet" empty state in the table below instead. -->
+          <div class="section-note">No geometry as of 1850.</div>
+
           <!-- Draft actions, one row at a time: the Point tool shows this pair once a point has been
                dropped, the Polygon tool shows Finish/Clear the moment it is armed. Either row sits
                between the map card and the time slider, so arming a tool shrinks the map surface —
@@ -347,7 +352,9 @@
                edit, through the existing PlaceEdit / change-set path (no separate map-write). The
                in-progress draft (a boundary with draggable vertex handles) and the no-geometry-yet
                empty state are the same card/toolbar at a different moment; matching every other tab
-               on this page, only the primary state is shown here rather than stacking all of them. -->
+               on this page, only the primary state is shown here rather than stacking all of them.
+               The one exception is the "No geometry as of …" note above, drawn next to the plotted
+               shape it replaces so both halves of the resolve-as-of rule are visible at once. -->
           <div class="card" style="margin-top:10px">
             <div class="section-note" style="margin-top:0">
               Dropping a point or closing a boundary emits the same audited
@@ -356,6 +363,17 @@
               reason. Nothing bypasses the event log.
             </div>
             <div class="stack">
+              <!-- The same dated/undated choice the Geography tool's save panel shows, with the same
+                   undated default: an undated (primary) assertion resolves at every year, so a shape
+                   saved here never vanishes from the atlas. The dated option carries this tab's own
+                   slider year. Neither panel decides the policy — the choice is the operator's. -->
+              <div class="field" style="margin-bottom:0">
+                <label>Effective date</label>
+                <div class="resn-set" role="radiogroup" aria-label="Effective date" style="gap:8px">
+                  <button class="resn" type="button" role="radio" tabindex="0" aria-checked="true">Undated — applies to every year</button>
+                  <button class="resn" type="button" role="radio" tabindex="-1" aria-checked="false">As of 1900</button>
+                </div>
+              </div>
               <div class="field" style="margin-bottom:0">
                 <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
                 <input class="in" value="Traced the 1898 consolidated boundary from the annexation map">

@@ -93,6 +93,11 @@
       </select>
     </div>
 
+    <!-- Places holding geometry that does not resolve as of the slider year: every assertion is
+         dated later and none is undated, so the map cannot plot them. Shown only when the count is
+         above zero. A place nobody ever located has no geometry at all and is not counted here. -->
+    <div class="section-note">1 place has no geometry as of 1850.</div>
+
     <div class="geo">
       <!-- Rail: place list -->
       <aside class="geo-rail">
@@ -225,6 +230,16 @@
         reason. Nothing bypasses the event log.
       </div>
       <div class="stack">
+        <!-- Undated is the default in both this panel and the Place → Map tab: an undated (primary)
+             assertion resolves at every year, so a saved shape never vanishes from the other panel.
+             Dating is opt-in, and the dated option carries the panel's own slider year. -->
+        <div class="field" style="margin-bottom:0">
+          <label>Effective date</label>
+          <div class="resn-set" role="radiogroup" aria-label="Effective date" style="gap:8px">
+            <button class="resn" type="button" role="radio" tabindex="0" aria-checked="true">Undated — applies to every year</button>
+            <button class="resn" type="button" role="radio" tabindex="-1" aria-checked="false">As of 1900</button>
+          </div>
+        </div>
         <div class="field" style="margin-bottom:0">
           <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
           <input class="in" value="Traced parish boundary from the 1886 amt map">
