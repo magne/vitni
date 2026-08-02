@@ -62,7 +62,7 @@ pub use family::{
 };
 pub use geography::{
     GeographyScreen, geography_draw_target, geography_empty_state, geography_map_surface, geography_rail,
-    geography_time_slider,
+    geography_time_slider, geography_unplotted_note,
 };
 pub use help::{HelpScreen, render_doc};
 pub use import::{
@@ -79,8 +79,8 @@ pub use person::{
     person_name_citation_field, person_record_fields, timeline_panel,
 };
 pub use place::{
-    PlaceEditForm, SuccessionFormState, place_geometry_table, place_hierarchy_table, place_map, place_names_table,
-    place_overview, place_record_fields, place_succession_card, place_succession_form_fields,
+    PlaceEditForm, SuccessionFormState, place_geometry_table, place_hierarchy_table, place_map, place_map_as_of_note,
+    place_names_table, place_overview, place_record_fields, place_succession_card, place_succession_form_fields,
 };
 pub use plugin_panel::{PluginPanelScreen, plugin_table, submit_outcome_view};
 pub use preferences::{

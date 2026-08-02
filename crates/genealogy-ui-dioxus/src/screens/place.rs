@@ -921,6 +921,7 @@ fn PlaceMapEditor(
             div { class: "card map-card",
                 {map_surface(PLACE_MAP_CONTAINER_ID, aria, tool, on_map_click, center, 13.0)}
             }
+            {place_map_as_of_note(loc, &detail.geometries, resolved_shape.as_ref(), year())}
             if matches!(tool(), DrawTool::Point) && matches!(draft(), MapDraft::Point(_)) {
                 div { class: "wrap", style: "gap:8px",
                     Button { label: chrome.place_map_confirm_point(), small: true, variant: ButtonVariant::Primary, onclick: on_confirm_point }
@@ -1006,6 +1007,24 @@ fn push_this_place(detail: &PlaceDetail, shape: Option<&MarkerShapeVm>) {
         &markers_geojson(&markers),
         &events_geojson(&detail.events),
     );
+}
+
+/// The "No geometry as of {year}." note (ADR 0026 §1): the place holds geometry, but all of it is
+/// dated after the slider year and none is undated, so the map has nothing to draw. Renders nothing
+/// when a shape did resolve, and nothing when the place has no geometry at all — the geometry table's
+/// own "No geometry yet" empty state owns that case (#256's scope, not this one's).
+pub fn place_map_as_of_note(
+    loc: &Localizer,
+    geometries: &[PlaceGeometryVm],
+    resolved_shape: Option<&MarkerShapeVm>,
+    year: i32,
+) -> Element {
+    if resolved_shape.is_some() || geometries.is_empty() {
+        return rsx! {};
+    }
+    rsx! {
+        div { class: "section-note", "{loc.place_map_none_as_of(year)}" }
+    }
 }
 
 /// The "Geometry over time" table (ADR 0024/0026): one row per dated (or undated/primary) geometry

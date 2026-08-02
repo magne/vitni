@@ -168,6 +168,7 @@ pub fn GeographyScreen() -> Element {
     };
     let marker_count = vm.as_ref().map_or(0, |vm| vm.markers.len());
     let event_count = vm.as_ref().map_or(0, |vm| vm.events.len());
+    let unplotted_count = vm.as_ref().map_or(0, |vm| vm.unplotted_count);
     let draw_target = selected();
     // The "⤢ Fit" toolbar button's target: every currently filtered marker's shape (mirrors what
     // `update_geography_data` pushes to the map, so Fit frames exactly what is shown).
@@ -197,6 +198,7 @@ pub fn GeographyScreen() -> Element {
         div { style: "display:flex;flex-direction:column;height:100%;min-height:0;gap:var(--sp-3)",
             h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-geography\")}" }
             {geography_toolbar(loc, &chrome.0, &picker, &services, provider, tool, marker_count, event_count, &fit_shapes, draw_target.as_ref())}
+            {geography_unplotted_note(&chrome.0, unplotted_count, year())}
             div { class: "geo", style: "flex:1;min-height:0",
                 {geography_rail(&chrome.0, vm.as_ref(), selected, &filter().query)}
                 div { class: "geo-main",
@@ -408,6 +410,18 @@ pub fn geography_rail(
                 }
             }
         }
+    }
+}
+
+/// The note counting the places whose geometry does not resolve as of the slider year (ADR 0026 §1):
+/// they hold geometry, all of it dated later, so the map cannot plot them. Without this they were
+/// simply absent — no marker, no rail row, no message (#257). Renders nothing at a count of zero.
+pub fn geography_unplotted_note(chrome: &Chrome, count: usize, year: i32) -> Element {
+    if count == 0 {
+        return rsx! {};
+    }
+    rsx! {
+        div { class: "section-note", "{chrome.geography_unplotted_note(count, year)}" }
     }
 }
 
