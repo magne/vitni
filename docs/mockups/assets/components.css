@@ -446,6 +446,10 @@ select.in {
   /* button-safe: a restriction toggle is a real <button> for keyboard activation */
   appearance: none; font-family: inherit;
 }
+/* A radiogroup's checked option. The per-kind rules below win for a restriction pill (two attribute
+   selectors beat one), so this only ever paints a single-choice radio — which otherwise had no
+   checked state at all, leaving the selection invisible. */
+.resn[aria-checked="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .resn[aria-pressed="true"][data-kind="confidential"], .resn[aria-checked="true"][data-kind="confidential"] { color: var(--resn-confidential); border-color: var(--resn-confidential); background: color-mix(in srgb, var(--resn-confidential) 12%, transparent); }
 .resn[aria-pressed="true"][data-kind="locked"],       .resn[aria-checked="true"][data-kind="locked"]       { color: var(--resn-locked); border-color: var(--resn-locked); background: color-mix(in srgb, var(--resn-locked) 12%, transparent); }
 .resn[aria-pressed="true"][data-kind="privacy"],      .resn[aria-checked="true"][data-kind="privacy"]      { color: var(--resn-privacy); border-color: var(--resn-privacy); background: color-mix(in srgb, var(--resn-privacy) 12%, transparent); }

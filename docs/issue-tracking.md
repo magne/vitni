@@ -174,8 +174,6 @@ the list on its own. Treat the count as a floor.
 | Item | Why it gates a release |
 | --- | --- |
 | [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify`, blocked on #261 — the dialogs, their tab ring, both cancel paths and the edit stash are scripted (`unsaved-close-confirm`, `unsaved-quit-confirm`); whether a save *looks* instant is not, and Save all could not be clicked at all |
-| [Geometry from Geography is undated, the Place tab stamps its year](https://github.com/magne/genealogy/issues/257) | A point saved from the Place tab vanishes from the Geography map below 1900, with no message — two panels, two dating policies |
-| [The Place Map tab cannot render an undated geometry](https://github.com/magne/genealogy/issues/258) | A polygon drawn in Geography never appears on the record's own map at any year: the view-model's fallback diverges from core's `resolve_as_of` |
 | [One unsavable tab disables Save all for every other tab](https://github.com/magne/genealogy/issues/261) | An untouched `⌘N` draft blocks ⌘Q's Save all for valid records — and enabling it as-is would abort the run mid-flight |
 | [Zoom is invisible and unbounded](https://github.com/magne/genealogy/issues/253) | No zoom readout anywhere, and no `maxZoom` — past z19 OSM serves nothing and the map goes blank |
 | [OSM attribution is never shown](https://github.com/magne/genealogy/issues/254) | The tile source's required credit is absent from both maps, which the OSM tile-usage policy does not allow |
