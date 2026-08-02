@@ -150,9 +150,10 @@ pub use genealogy_core::repository::RepositoryError;
 pub use genealogy_core::research_note::{ResearchNoteError, SubjectRef};
 pub use genealogy_core::source::SourceError;
 pub use genealogy_core::tag::TagError;
+pub use genealogy_core::temporal::resolve_as_of;
 pub use genealogy_core::text::{Attribute, ExternalId, Rect, Url};
 pub use genealogy_db::DbError;
-pub use geography::{EventPin, GeographySummary, PlaceMarker, show_geography, year_only_date};
+pub use geography::{EventPin, GeographySummary, PlaceMarker, UnplottedPlace, show_geography, year_only_date};
 pub use history::{
     ActivityDetail, ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_dna_match,
     change_log_for_dna_test, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,

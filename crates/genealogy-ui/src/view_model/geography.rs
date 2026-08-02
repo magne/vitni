@@ -278,6 +278,7 @@ mod tests {
                 geometry: PlaceGeometry::Point(coord("59.9139", "10.7522")),
             }],
             events: Vec::new(),
+            unplotted: Vec::new(),
             resolved_as_of: None,
         };
         let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
@@ -307,6 +308,7 @@ mod tests {
                 },
             }],
             events: Vec::new(),
+            unplotted: Vec::new(),
             resolved_as_of: None,
         };
         let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
@@ -332,6 +334,7 @@ mod tests {
                 place_human_id: "P0001".to_owned(),
                 point: coord("59.9", "10.7"),
             }],
+            unplotted: Vec::new(),
             resolved_as_of: None,
         };
         let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
@@ -345,6 +348,7 @@ mod tests {
         let summary = genealogy_app::GeographySummary {
             markers: Vec::new(),
             events: Vec::new(),
+            unplotted: Vec::new(),
             resolved_as_of: Some(year_date(1900)),
         };
         let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
