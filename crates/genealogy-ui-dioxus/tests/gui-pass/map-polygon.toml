@@ -10,6 +10,11 @@
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The canvas
 # region asserted below sits inside the surface both before and after the Finish/Clear row shrinks it.
+#
+# Also asserts the rail highlight and the toolbar draw-target chip (#255): the whole-window `differ`
+# below passes today only because the map recentres, and says nothing about either. The chip sits
+# before `span.spacer` in the toolbar (`.geo-toolbar .spacer { flex: 1 }` absorbs its width change), so
+# it never moves the Pan/Point/Polygon/Fit toolbar buttons this scenario (and `map-canvas.toml`) clicks.
 description = "The polygon tool turns canvas clicks into a ring and hands it to the geometry panel (#203)"
 
 [[step]]
@@ -79,6 +84,18 @@ name = "geometry-panel"
 kind = "differ"
 shots = ["map", "selected"]
 because = "picking a place must recentre and zoom the map onto it"
+
+[[assert]]
+kind = "differ"
+shots = ["map", "selected"]
+region = [208, 155, 240, 60]
+because = "the rail must highlight the row a drawn shape will attach to (#255)"
+
+[[assert]]
+kind = "differ"
+shots = ["map", "selected"]
+region = [520, 95, 260, 40]
+because = "the toolbar must name the place a drawn shape will attach to (#255)"
 
 [[assert]]
 kind = "differ"
