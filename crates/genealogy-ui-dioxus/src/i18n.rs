@@ -657,6 +657,13 @@ impl Chrome {
         fl!(self.loader, "geography-clear-draft")
     }
 
+    /// Refuses a finished shape when nothing is selected as its draw target — the draft is kept on
+    /// the canvas so picking a place and finishing again commits the same geometry.
+    #[must_use]
+    pub fn geography_draw_target_required(&self) -> String {
+        fl!(self.loader, "geography-draw-target-required")
+    }
+
     /// The Place Map tab's "Use this point" action, confirming a dropped point as the pending
     /// geometry to save (Phase 9's map editor).
     #[must_use]

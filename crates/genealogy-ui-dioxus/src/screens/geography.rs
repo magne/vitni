@@ -67,6 +67,7 @@ pub fn GeographyScreen() -> Element {
     let loc = state.data_loc();
     let coordinate_invalid = loc.place_coordinate_invalid();
     let chrome = use_context::<ChromeCtx>();
+    let no_draw_target = chrome.0.geography_draw_target_required();
     let loading = state.chrome().loading();
 
     let year = use_signal(|| DEFAULT_YEAR);
@@ -186,7 +187,7 @@ pub fn GeographyScreen() -> Element {
             exterior: vertices.iter().map(|&(lat, lon)| geo_point(lat, lon)).collect(),
             holes: Vec::new(),
         };
-        open_geometry_panel(selected, panel, geometry);
+        open_geometry_panel(selected, panel, toast, &no_draw_target, geometry);
     };
     let on_clear_draft = move |_| draft.set(MapDraft::Empty);
 
@@ -242,16 +243,20 @@ fn geometry_panel_for(selected: Option<(String, String)>, geometry: PlaceGeometr
     })
 }
 
-/// Opens the geometry panel for the rail-selected place, or (no selection) stashes the point for the
-/// quick-create form — only reachable from the Point-tool path (a polygon draft always targets an
-/// existing selected place; polygon-drawn creation is deferred, see the PR report).
+/// Opens the geometry panel for the rail-selected place (the only caller today is the polygon
+/// finish; the `Point`/`CreateHere` branch is retained for that tool but currently unreachable, see
+/// the PR report). A polygon with no draw target is refused with a toast; the draft is deliberately
+/// kept on the canvas, so picking a place and pressing Finish again commits the same geometry.
 fn open_geometry_panel(
     selected: Signal<Option<(String, String)>>,
     mut panel: Signal<GeoPanel>,
+    mut toast: Signal<Option<String>>,
+    no_target: &str,
     geometry: PlaceGeometry,
 ) {
-    if let Some(next) = geometry_panel_for(selected(), geometry) {
-        panel.set(next);
+    match geometry_panel_for(selected(), geometry) {
+        Some(next) => panel.set(next),
+        None => toast.set(Some(no_target.to_owned())),
     }
 }
 

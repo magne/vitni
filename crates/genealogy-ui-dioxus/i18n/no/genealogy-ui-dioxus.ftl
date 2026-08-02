@@ -203,6 +203,7 @@ geography-tool-point = Slipp / flytt et punkt
 geography-tool-polygon = Tegn polygon
 geography-finish-polygon = Fullfør polygon
 geography-clear-draft = Tøm
+geography-draw-target-required = Velg et sted i listen først — en tegnet form knyttes til det valgte stedet.
 place-map-confirm-point = Bruk dette punktet
 geography-tool-fit = Tilpass
 place-map-fit-title = Zoom til dette stedets geometri

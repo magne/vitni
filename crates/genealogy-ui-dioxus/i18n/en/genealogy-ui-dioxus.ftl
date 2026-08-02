@@ -204,6 +204,7 @@ geography-tool-point = Drop / move a point
 geography-tool-polygon = Draw polygon
 geography-finish-polygon = Finish polygon
 geography-clear-draft = Clear
+geography-draw-target-required = Pick a place in the list first — a drawn shape attaches to the selected place.
 place-map-confirm-point = Use this point
 geography-tool-fit = Fit
 place-map-fit-title = Zoom to this place's geometry
