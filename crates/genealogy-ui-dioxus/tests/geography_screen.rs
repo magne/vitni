@@ -8,7 +8,8 @@ use dioxus::prelude::*;
 use genealogy_ui::{EventPinVm, GeographyVm, MapProviderVm, MarkerShapeVm, PlaceMarkerVm};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
-    DrawTool, geography_empty_state, geography_map_surface, geography_rail, geography_time_slider,
+    DrawTool, geography_draw_target, geography_empty_state, geography_map_surface, geography_rail,
+    geography_time_slider,
 };
 
 fn chrome() -> Chrome {
@@ -237,6 +238,33 @@ fn a_blank_filter_lists_every_marker() {
     assert!(
         html.contains("Oslo") && html.contains("Nordland"),
         "both markers listed:\n{html}"
+    );
+}
+
+fn draw_target_view() -> Element {
+    let target = Some(("P0001".to_owned(), "Oslo".to_owned()));
+    geography_draw_target(&chrome(), target.as_ref())
+}
+
+#[test]
+fn the_toolbar_names_the_place_a_drawn_shape_attaches_to() {
+    let html = render(draw_target_view);
+    assert!(html.contains("Drawing on Oslo"), "the target's name is shown:\n{html}");
+    assert!(html.contains("P0001"), "the target's human id is shown:\n{html}");
+    assert!(html.contains(r#"class="chip""#), "the readout is a chip:\n{html}");
+}
+
+fn no_draw_target_view() -> Element {
+    geography_draw_target(&chrome(), None)
+}
+
+#[test]
+fn the_toolbar_says_when_there_is_no_draw_target() {
+    let html = render(no_draw_target_view);
+    assert!(html.contains("No place selected"), "the empty state is named:\n{html}");
+    assert!(
+        !html.contains("Drawing on"),
+        "no target is claimed when there is none:\n{html}"
     );
 }
 

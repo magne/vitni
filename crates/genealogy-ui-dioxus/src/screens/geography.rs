@@ -310,6 +310,15 @@ fn geography_toolbar(
     }
 }
 
+/// The toolbar's draw-target readout: which place a finished point/polygon will attach to. Split out
+/// of [`geography_toolbar`] because the toolbar as a whole needs `Services` and a reactive `Memo`, so
+/// only this slice is SSR-testable (see the module doc).
+///
+/// Stub pending the green commit — pinned red by `the_toolbar_names_the_place_a_drawn_shape_attaches_to`.
+pub fn geography_draw_target(chrome: &Chrome, _target: Option<&(String, String)>) -> Element {
+    rsx! { Chip { icon: Some("🎯".to_owned()), label: chrome.geography_draw_target_none() } }
+}
+
 /// The provider select: a kind picker that immediately persists the built-in defaults for
 /// OSM/MapLibre-demo choices. Google and a custom `MapLibre` style need key/URL entry the mockup shows
 /// as a picker-only affordance; wiring that full sub-form is deferred (see the PR report) — selecting

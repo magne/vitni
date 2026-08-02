@@ -664,6 +664,18 @@ impl Chrome {
         fl!(self.loader, "geography-draw-target-required")
     }
 
+    /// The toolbar's draw-target chip, naming the place a finished shape will attach to.
+    #[must_use]
+    pub fn geography_drawing_on(&self, place: &str) -> String {
+        fl!(self.loader, "geography-drawing-on", place = place)
+    }
+
+    /// The toolbar's draw-target chip when nothing is selected.
+    #[must_use]
+    pub fn geography_draw_target_none(&self) -> String {
+        fl!(self.loader, "geography-draw-target-none")
+    }
+
     /// The Place Map tab's "Use this point" action, confirming a dropped point as the pending
     /// geometry to save (Phase 9's map editor).
     #[must_use]
