@@ -276,7 +276,20 @@
                 <div class="pin event" style="left:38%;top:40%" title="Baptism 1841">👶</div>
                 <div class="pin event" style="left:50%;top:52%" title="Marriage 1866">💍</div>
                 <div class="cluster" style="left:55%;top:38%" title="24 events here">24</div>
+                <!-- The Polygon tool is armed above, so this is the ring being drawn: dashed, with a
+                     draggable handle per vertex. Drawn last, as the app draws them (the `geo-draft`
+                     source's `vertex`-tagged Point features, under a circle layer added after every
+                     marker layer). Pressing a handle grabs it instead of dropping another vertex
+                     there; dragging moves that corner without panning the map. Same behaviour and
+                     the same stand-in classes as the Geography tool (#259). -->
+                <div class="poly draft" style="left:52%;top:56%;width:140px;height:100px"></div>
+                <div class="vtx" style="left:52%;top:56%"></div>
+                <div class="vtx" style="left:64%;top:60%"></div>
+                <div class="vtx" style="left:57%;top:70%"></div>
               </div>
+              <!-- The tile source's required credit, from the configured `[map]` provider rather than
+                   MapLibre's own AttributionControl (disabled, so one DOM/CSS treatment covers every
+                   provider kind), and naming the tiles actually drawn (#254). -->
               <div class="map-attr">© OpenStreetMap contributors</div>
             </div>
           </div>
@@ -343,11 +356,12 @@
 
           <!-- Edit writes an audited assertion — same reason/confidence envelope as a typed field
                edit, through the existing PlaceEdit / change-set path (no separate map-write). The
-               in-progress draft (a boundary with draggable vertex handles) and the no-geometry-yet
-               empty state are the same card/toolbar at a different moment; matching every other tab
-               on this page, only the primary state is shown here rather than stacking all of them.
-               The one exception is the "No geometry as of …" note above, drawn next to the plotted
-               shape it replaces so both halves of the resolve-as-of rule are visible at once. -->
+               in-progress draft is drawn on the canvas above — a dashed boundary with a draggable
+               handle per vertex — while the no-geometry-yet empty state is the same card/toolbar at a
+               different moment; matching every other tab on this page, only the primary state is shown
+               here rather than stacking all of them. The other exception is the "No geometry as of …"
+               note above, drawn next to the plotted shape it replaces so both halves of the
+               resolve-as-of rule are visible at once. -->
           <div class="card" style="margin-top:10px">
             <div class="section-note" style="margin-top:0">
               Dropping a point or closing a boundary emits the same audited

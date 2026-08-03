@@ -39,6 +39,10 @@
       position: absolute; border: 2px solid var(--accent);
       background: color-mix(in srgb, var(--accent) 18%, transparent); border-radius: 30% 40% 35% 45%;
     }
+    /* the ring being drawn — dashed, with a draggable handle per vertex (same rules as place.html) */
+    .poly.draft { border-style: dashed; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+    .vtx { position: absolute; width: 10px; height: 10px; transform: translate(-50%, -50%);
+      border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); cursor: grab; }
     .map-attr {
       position: absolute; right: 6px; bottom: 6px;
       background: color-mix(in srgb, var(--panel) 85%, transparent);
@@ -131,6 +135,23 @@
           <div class="pin event" style="left:52%;top:40%" title="Baptism 1841">👶</div>
           <div class="pin event" style="left:49%;top:48%" title="Marriage 1866">💍</div>
           <div class="cluster" style="left:60%;top:52%" title="18 events here">18</div>
+          <!-- The ring being drawn, with a draggable handle on every vertex. Last in the DOM here
+               because the app draws the handles last too: they are the `geo-draft` source's
+               `vertex`-tagged Point features under the `geo-draft-point` circle layer, added after
+               every marker and event layer, so a handle is never hidden under a pin. A handle is
+               grabbable only while the Point or Polygon tool is armed, and pressing one grabs it
+               rather than dropping another vertex there; dragging it moves that corner without
+               panning the map. Mid-ring insertion is not offered — a vertex can be moved, not
+               inserted between two others (#259). -->
+          <div class="poly draft" style="left:52%;top:52%;width:150px;height:110px"></div>
+          <div class="vtx" style="left:52%;top:52%"></div>
+          <div class="vtx" style="left:63%;top:56%"></div>
+          <div class="vtx" style="left:56%;top:66%"></div>
+          <!-- The tile source's required credit, per its own terms: the string comes from the
+               configured `[map]` provider, not from MapLibre's own AttributionControl (which the app
+               disables so one DOM/CSS treatment covers every provider kind) — and it credits the
+               tiles actually drawn, so a provider with no raster adapter yet still shows OSM's
+               credit over OSM's tiles (#254). -->
           <div class="map-attr">© OpenStreetMap contributors</div>
         </div>
 
