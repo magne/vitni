@@ -1,19 +1,22 @@
-# #205: the "Jump back in" recent list must survive a quit, not a debounced flush a fast quit can
-# race past. `root.rs`'s recent-list write was a plain `use_effect`, which runs on the post-render
-# flush, not at mutation time — unlike window geometry, which reads its signal directly inside a wry
-# `CloseRequested`/`Destroyed` handler (`window_geometry.rs`). No SSR test can see this: SSR never
-# mounts `dioxus::desktop`, so neither the effect queue nor a real quit exists to race.
+# #205: `RecentPersistenceManager` (`recent_persistence.rs`) persists the "Jump back in" list via a
+# plain `use_effect`, plus a `CloseRequested`/`Destroyed` wry handler that reads the signal directly and
+# backs the effect up — mirroring `WindowGeometryManager`'s established close-hook precedent
+# (`window_geometry.rs`).
+#
+# `⌘Q` cannot exercise the backstop: it arrives as its own webview→Rust IPC round trip, so by the time
+# it is processed the effect from opening the record (a separate, earlier IPC round trip) has already
+# flushed — confirmed experimentally, including with the close-hook temporarily removed, and true no
+# matter how tight the timing between the two steps is made. Xvfb also runs no window manager
+# (`gui_pass.rs:49`), so there is no titlebar ✕ / session-logout / `wmctrl -c` here either — the actual
+# path the handler exists for, an OS/WM-initiated close that reaches `CloseRequested` outside that IPC
+# queue with an effect still pending. Neither this scenario nor this harness can drive that path; what
+# this scenario does prove is that the manager is mounted and reads the right signal — it would fail if
+# `RecentPersistenceManager` were left unmounted or wired to the wrong list.
 #
 # `ctrl+q` with nothing dirty runs `NavState::quit_now` immediately — no confirm dialog, see
 # `unsaved-quit-confirm.toml`. `await-exit` then waits for the GUI process itself to exit, and the
 # `manifest` assertion reads `target/gui-pass/workspace/workspace.toml` off disk, not a screenshot —
 # the only way to prove the write reached disk rather than just the in-memory signal.
-#
-# No shot is taken between opening the record and the quit chord: an assertion over a screenshot would
-# only add avoidable delay before `ctrl+q`, narrowing the window this scenario is trying to hit. The
-# Kristiansand click also turns off the harness's default 4s post-click settle (`settle = false`) —
-# with it left on, the queued effect has ample time to flush no matter what, so nothing here could ever
-# distinguish the eager write from the close-hook backing it up.
 #
 # Coordinates are window pixels at 1800x1200, read off `sidepanel-focus.toml` /
 # `unsaved-quit-confirm.toml`, whose "rail: Places" and "explorer: Kristiansand" clicks match.
@@ -28,7 +31,6 @@ label = "rail: Places"
 do = "click"
 at = [300, 99]
 label = "explorer: Kristiansand"
-settle = false
 
 [[step]]
 do = "key"

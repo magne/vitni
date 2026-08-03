@@ -86,15 +86,7 @@ enum Step {
     /// Grab the window into `NN-<name>.png`, and make it referenceable by `name` in an assertion.
     Shot { name: String },
     /// Move the pointer to `at` and click button 1.
-    Click {
-        at: [i32; 2],
-        label: String,
-        /// Skip the post-click settle. Only for a step deliberately racing the next one (e.g. #205's
-        /// close-hook scenario, which needs the chord right behind the click); every other scenario
-        /// wants the default settle, so this defaults to `true`.
-        #[serde(default = "settle_default")]
-        settle: bool,
-    },
+    Click { at: [i32; 2], label: String },
     /// Send a chord in `xdotool key` syntax (`ctrl+k`, `Escape`, `question`).
     Key { chord: String, label: String },
     /// Press at `from`, move by `by`, release — a canvas drag (map pan).
@@ -579,13 +571,11 @@ fn drive(display: &str, window: &str, steps: &[Step], shots: &Path, session: &mu
                 println!("  shot {}", path.display());
                 taken.push(name.clone());
             }
-            Step::Click { at, label, settle } => {
+            Step::Click { at, label } => {
                 println!("  {label}");
                 xdotool(display, &["mousemove", &at[0].to_string(), &at[1].to_string()])?;
                 xdotool(display, &["click", "1"])?;
-                if *settle {
-                    self::settle();
-                }
+                settle();
             }
             Step::Key { chord, label } => {
                 println!("  {label}");
@@ -660,11 +650,6 @@ fn wheel(display: &str, at: [i32; 2], clicks: i32) -> Result<()> {
 /// Lets the webview repaint and any network tile fetch land.
 fn settle() {
     sleep(Duration::from_secs(4));
-}
-
-/// The default for [`Step::Click`]'s `settle` field.
-fn settle_default() -> bool {
-    true
 }
 
 /// Runs `xdotool` against the headless display.
