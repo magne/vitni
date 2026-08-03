@@ -212,11 +212,6 @@ Residuals from the shortcuts work (ADR 0030); see
 
 ### Geography & map
 
-- **Map markers label with the first-asserted name, not the resolved one.** `show_geography` builds each
-  `PlaceMarker` label from `place.names.first()` (`genealogy-app/src/geography.rs`) while the geometry on
-  that same marker *is* date-resolved, so at slider year 1875 the pin reads "Oslo" while
-  `generated_title` beside it correctly reads "Kristiania" — the map contradicts the record. Use the
-  as-of-resolved name; `PlaceView::name_as_of` already exists. — #232
 - **`geography_toolbar` takes 9 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
   fit + draw-target state were threaded in — bundle them into a struct. Cosmetic cleanup.
 - **The Geography tool's Point tool cannot save at all.** The Place Map editor has a "Use this point"

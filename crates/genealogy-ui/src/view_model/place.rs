@@ -1244,6 +1244,7 @@ mod place_detail_events_tests {
             human_id: "P0090".to_owned(),
             id: "place-id".to_owned(),
             generated_title: "Nordgarden".to_owned(),
+            resolved_name: Some("Nordgarden".to_owned()),
             resolved_as_of: None,
             place_type: None,
             place_type_confidence: None,
