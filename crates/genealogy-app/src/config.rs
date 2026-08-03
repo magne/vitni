@@ -369,6 +369,28 @@ impl MapProvider {
             attribution: "© OpenStreetMap contributors".to_owned(),
         }
     }
+
+    /// The credit this provider's terms require the map to display. Mandatory on every variant, so
+    /// this is infallible — a frontend rendering the map has no case where it may show nothing.
+    #[must_use]
+    pub fn attribution(&self) -> &str {
+        match self {
+            Self::OsmRaster { attribution, .. }
+            | Self::MaplibreStyle { attribution, .. }
+            | Self::Google { attribution, .. } => attribution,
+        }
+    }
+
+    /// The `{z}/{x}/{y}` template a `raster` tile source can fetch, or `None` for a provider served
+    /// some other way — a vector style is a whole `style.json` and the Google adapter does not exist
+    /// yet (ADR 0025 §4), so neither has a tile URL a raster source could use.
+    #[must_use]
+    pub fn raster_tile_url(&self) -> Option<&str> {
+        match self {
+            Self::OsmRaster { tile_url, .. } => Some(tile_url),
+            Self::MaplibreStyle { .. } | Self::Google { .. } => None,
+        }
+    }
 }
 
 /// The `[map]` configuration section (ADR 0025 §3): the geography view's tile/style provider and its
@@ -847,16 +869,57 @@ pub fn set_default_workspace(path: &Path, name: &str) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Config, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, SuretyLabelOverride, SuretyLabelOverrides,
-        ThemeMode, add_trusted_publisher, load, load_or_bootstrap, remove_trusted_publisher, save,
-        set_default_workspace, set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale,
-        set_workspace_default_surety,
+        Config, DateFormat, Engine, IdFormats, LocaleDefaults, MapProvider, NumberFormat, SuretyLabelOverride,
+        SuretyLabelOverrides, ThemeMode, add_trusted_publisher, load, load_or_bootstrap, remove_trusted_publisher,
+        save, set_default_workspace, set_operator_identity, set_workspace_default_id_formats,
+        set_workspace_default_locale, set_workspace_default_surety,
     };
     use genealogy_core::provenance::Confidence;
     use std::path::{Path, PathBuf};
 
     fn config_at(path: &Path) -> Config {
         load_or_bootstrap(path).expect("bootstrap")
+    }
+
+    /// Every provider's terms require its credit to be displayed, which is why `attribution` is
+    /// mandatory on all three variants — so reading it back is infallible, with no per-kind branch for
+    /// a caller to get wrong.
+    #[test]
+    fn every_provider_kind_reports_the_credit_its_terms_require() {
+        assert_eq!(MapProvider::default_osm().attribution(), "© OpenStreetMap contributors");
+        let style = MapProvider::MaplibreStyle {
+            style_url: "https://tiles.example/style.json".to_owned(),
+            attribution: "© Example".to_owned(),
+            api_key_env: None,
+        };
+        assert_eq!(style.attribution(), "© Example");
+        let google = MapProvider::Google {
+            api_key_env: "GOOGLE_MAPS_KEY".to_owned(),
+            attribution: "© Google".to_owned(),
+        };
+        assert_eq!(google.attribution(), "© Google");
+    }
+
+    /// Only a raster provider names a URL a `raster` tile source can fetch. A vector style URL is a
+    /// whole `style.json` and Google needs an adapter that does not exist yet — reporting either here
+    /// would put a non-tile URL where the map interpolates `{z}/{x}/{y}`.
+    #[test]
+    fn only_a_raster_provider_names_a_tile_url_the_map_can_fetch() {
+        assert_eq!(
+            MapProvider::default_osm().raster_tile_url(),
+            Some("https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+        );
+        let style = MapProvider::MaplibreStyle {
+            style_url: "https://tiles.example/style.json".to_owned(),
+            attribution: "© Example".to_owned(),
+            api_key_env: None,
+        };
+        assert_eq!(style.raster_tile_url(), None);
+        let google = MapProvider::Google {
+            api_key_env: "GOOGLE_MAPS_KEY".to_owned(),
+            attribution: "© Google".to_owned(),
+        };
+        assert_eq!(google.raster_tile_url(), None);
     }
 
     #[test]
