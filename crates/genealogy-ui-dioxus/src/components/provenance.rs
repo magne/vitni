@@ -317,8 +317,9 @@ fn ProvenanceDnaMatches(draft: Signal<ProvenanceDraft>) -> Element {
 /// (`record-editing.html` §6b): a required source find-or-create picker (its own "+ New" creates a
 /// source inline by title) plus a page input. Add commits the citation via
 /// [`commit_citation_change_set`] and appends the returned `human_id` to the draft — commit-on-add,
-/// so the record persists even if the outer form is later cancelled. A commit failure is shown in
-/// place, not swallowed.
+/// so the record persists even if the outer form is later cancelled, and marks the workspace changed
+/// like any other create ([`NavState::mark_changed`]). A commit failure is shown in place, not
+/// swallowed.
 #[component]
 fn ProvenanceNewCitation(draft: Signal<ProvenanceDraft>, onclose: EventHandler<()>) -> Element {
     let mut draft = draft;
@@ -359,6 +360,12 @@ fn ProvenanceNewCitation(draft: Signal<ProvenanceDraft>, onclose: EventHandler<(
             match commit_citation_change_set(services, request, ProvenanceDraft::default()).await {
                 Ok(id) => {
                     draft.write().citations.push(id);
+                    // A commit-on-add is a create like any other: mark the workspace changed so the
+                    // rail counts, the Explorer list and every open picker refetch (#207, #266). This
+                    // is the one create that runs with a picker still mounted beside it.
+                    if let Some(mut nav) = nav {
+                        nav.mark_changed();
+                    }
                     onclose.call(());
                 }
                 Err(message) => error.set(Some(message)),

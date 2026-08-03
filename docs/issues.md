@@ -144,6 +144,16 @@ long-standing "DNA match views in the UI" item is closed.
   `commit_draft`/`cancel_draft`/`note_save_finished` find their target — two drafts would share one
   parked buffer and one component instance. Lifting the limit means threading a draft id through all of
   those; the tabstrip only needs its label disambiguated. — #260
+- **Detail-tab clicks do nothing while a record is docked.** With a split open
+  (`NavState::docked_record`, `⌘⇧1…9` or a tab dragged onto the pane), clicking a related-item tab —
+  Overview / Map / Names / Hierarchy … — changes nothing in *either* pane; the identical click switches
+  tabs as soon as the dock is closed. Reproduced headlessly on 2026-08-04: a `match` over the active
+  pane's tab strip before/after the click reads RMSE 0.0000 while docked, and a `differ` over the same
+  region passes once undocked. SSR cannot see it — the markup is identical either way, and
+  `tests/dock.rs` asserts the split renders, not that it stays operable. Suspect the duplicate element
+  ids `Tabs` emits (`id="tab-{id}"`, `aria-controls="panel-{id}"`) once two panes render the same
+  strip, but that is a hypothesis, not a diagnosis. Docking is unusable for anything but the Overview
+  tab until this is fixed. — #279
 
 ### Lists, search & scale
 
