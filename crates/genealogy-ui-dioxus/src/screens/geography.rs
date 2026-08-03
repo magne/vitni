@@ -22,8 +22,8 @@ use genealogy_app::{ConfigStore, FileConfigStore, MapConfig, MapProvider, PlaceG
 use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
 
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapDraft, events_geojson, fit_bounds, geo_point, map_surface,
-    markers_geojson, push_map_data, push_map_draft, select_tool,
+    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, events_geojson, fit_bounds, geo_point,
+    map_surface, markers_geojson, push_map_data, push_map_draft, select_tool,
 };
 use super::prelude::*;
 use crate::i18n::Chrome;
@@ -450,7 +450,8 @@ pub fn geography_map_surface(
     on_map_click: impl FnMut(f64, f64) + Clone + 'static,
 ) -> Element {
     let aria = chrome.geography_map_aria(marker_count, event_count);
-    map_surface(MAP_CONTAINER_ID, aria, tool, on_map_click, DEFAULT_CENTER, 4.0)
+    let labels = MapControlLabels::from_chrome(chrome);
+    map_surface(MAP_CONTAINER_ID, aria, tool, on_map_click, DEFAULT_CENTER, 4.0, labels)
 }
 
 /// The time slider: a year `<input type=range>` over [`TIME_SLIDER_RANGE`], captioned with the

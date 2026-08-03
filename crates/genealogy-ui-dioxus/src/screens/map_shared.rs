@@ -7,11 +7,12 @@
 //! toolbar/rail differ.
 
 use genealogy_app::{GeoCoordinates, Microdegrees, PlaceGeometry};
-use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm};
+use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm, ZOOM_RANGE};
 use serde_json::{Value, json};
 use std::str::FromStr;
 
 use super::prelude::*;
+use crate::i18n::Chrome;
 
 /// The default map view when nothing else pins a center (Oslo, a reasonable Norwegian default
 /// matching every other Norway-flavoured example in this codebase's docs/fixtures).
@@ -73,6 +74,7 @@ pub fn map_surface(
     on_map_click: impl FnMut(f64, f64) + Clone + 'static,
     center: (f64, f64),
     zoom: f64,
+    labels: MapControlLabels,
 ) -> Element {
     let capturing = !matches!(tool(), DrawTool::Pan);
     rsx! {
@@ -85,7 +87,7 @@ pub fn map_surface(
                 class: if capturing { "map-container is-capturing" } else { "map-container" },
                 style: "position:absolute;inset:0",
                 "data-armed": if capturing { "true" } else { "false" },
-                onmounted: move |_| mount_maplibre(container_id, center, zoom, on_map_click.clone()),
+                onmounted: move |_| mount_maplibre(container_id, center, zoom, &labels, on_map_click.clone()),
             }
             div { class: "map-attr", "" }
         }
@@ -136,8 +138,14 @@ pub fn parse_map_message(payload: &str) -> Option<MapMessage> {
 /// script) and arms the persistent message listener, streaming every click as a tagged payload over
 /// `dioxus.send`, read in a loop for the surface's lifetime — not a one-shot eval per click, so the
 /// map stays interactive without a Rust round trip blocking each gesture.
-pub fn mount_maplibre(container_id: &str, center: (f64, f64), zoom: f64, mut on_click: impl FnMut(f64, f64) + 'static) {
-    let mut listener = document::eval(&maplibre_init_script(container_id, center, zoom));
+pub fn mount_maplibre(
+    container_id: &str,
+    center: (f64, f64),
+    zoom: f64,
+    labels: &MapControlLabels,
+    mut on_click: impl FnMut(f64, f64) + 'static,
+) {
+    let mut listener = document::eval(&maplibre_init_script(container_id, center, zoom, labels));
     spawn(async move {
         while let Ok(payload) = listener.recv::<String>().await {
             match parse_map_message(&payload) {
@@ -146,6 +154,61 @@ pub fn mount_maplibre(container_id: &str, center: (f64, f64), zoom: f64, mut on_
             }
         }
     });
+}
+
+/// Every string a `MapLibre` control renders, localized by this app (ADR 0003) rather than by
+/// `MapLibre`'s own bundled i18n — its built-in defaults *are* its own i18n, which the ADR forbids.
+/// Handed to the map through the constructor's `locale` option.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MapControlLabels {
+    /// The zoom-in button's tooltip/`aria-label`.
+    pub zoom_in: String,
+    /// The zoom-out button's tooltip/`aria-label`.
+    pub zoom_out: String,
+    /// The scale bar's metre unit.
+    pub meters: String,
+    /// The scale bar's kilometre unit.
+    pub kilometers: String,
+}
+
+impl MapControlLabels {
+    /// Resolves every control string from the app's own chrome catalogue.
+    #[must_use]
+    pub fn from_chrome(chrome: &Chrome) -> Self {
+        Self {
+            zoom_in: chrome.geography_zoom_in(),
+            zoom_out: chrome.geography_zoom_out(),
+            meters: chrome.geography_scale_meters(),
+            kilometers: chrome.geography_scale_kilometers(),
+        }
+    }
+}
+
+/// The `locale` table for the constructor: exactly the keys the controls this map adds will look up.
+/// `NavigationControl.ResetBearing` is deliberately absent — `showCompass: false`, so no control ever
+/// reads it, and an unused Fluent message is what `cargo xtask i18n-check` warns about. Interpolated
+/// as JSON (like [`circle_paint`]), which is both valid JS object syntax and escaping-safe for
+/// translated text.
+fn control_locale(labels: &MapControlLabels) -> Value {
+    json!({
+        "NavigationControl.ZoomIn": labels.zoom_in,
+        "NavigationControl.ZoomOut": labels.zoom_out,
+        "ScaleControl.Meters": labels.meters,
+        "ScaleControl.Kilometers": labels.kilometers,
+    })
+}
+
+/// The controls added once the map has loaded, plus the opening zoom measurement: the zoom buttons
+/// (a pointer-free way to change zoom, top-left where `place.html`'s `.map-zoom` stand-in draws them)
+/// and a metric scale bar (bottom-left, clear of the attribution). Split out of
+/// [`maplibre_init_script`] to keep that function inside the line cap and to give the control block
+/// its own test seam.
+fn map_controls_script() -> String {
+    "
+                map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
+                map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
+                dioxus.send(JSON.stringify({ zoom: map.getZoom() }));"
+        .to_owned()
 }
 
 /// The stroke every circle layer draws around its fill, so a marker stays legible over a dark tile and
@@ -189,7 +252,7 @@ fn circle_paint(color: &str, radius_stops: [(u32, u32); 4], stroke_width: u32) -
 /// `WebKitGTK` the frame it draws never reaches the compositor, so the map went blank until the next
 /// camera move. Forcing one more `redraw()` on the animation frame after the resize does composite.
 /// `redraw()` changes no layout, so the observer cannot re-trigger itself.
-fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> String {
+fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64, labels: &MapControlLabels) -> String {
     format!(
         r"
         const el = document.getElementById('{container_id}');
@@ -199,11 +262,14 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> St
                 style: {{ version: 8, sources: {{}}, layers: [] }},
                 center: [{lon}, {lat}],
                 zoom: {zoom},
+                minZoom: {min_zoom},
+                maxZoom: {max_zoom},
+                locale: {locale},
                 attributionControl: false,
             }});
             el.__geoMap = map;
             map.on('load', () => {{
-                map.addSource('geo-tiles', {{ type: 'raster', tiles: ['https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png'], tileSize: 256 }});
+                map.addSource('geo-tiles', {{ type: 'raster', tiles: ['https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png'], tileSize: 256, maxzoom: {max_zoom} }});
                 map.addLayer({{ id: 'geo-tile-layer', type: 'raster', source: 'geo-tiles' }});
                 map.addSource('geo-markers', {{ type: 'geojson', data: {{ type: 'FeatureCollection', features: [] }} }});
                 map.addLayer({{ id: 'geo-marker-fill', type: 'fill', source: 'geo-markers', filter: ['==', ['geometry-type'], 'Polygon'], paint: {{ 'fill-color': '#5db3ff', 'fill-opacity': 0.25 }} }});
@@ -229,17 +295,22 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> St
                     if (pending.markers) map.getSource('geo-markers').setData(pending.markers);
                     if (pending.events) map.getSource('geo-events').setData(pending.events);
                     if (pending.draft) map.getSource('geo-draft').setData(pending.draft);
-                }}
+                }}{controls}
             }});
             map.on('click', (e) => {{ dioxus.send(JSON.stringify({{ click: [e.lngLat.lng, e.lngLat.lat] }})); }});
+            map.on('zoomend', () => {{ dioxus.send(JSON.stringify({{ zoom: map.getZoom() }})); }});
             new ResizeObserver(() => {{ requestAnimationFrame(() => el.__geoMap && el.__geoMap.redraw()); }}).observe(el);
         }}
         ",
         lat = center.0,
         lon = center.1,
+        min_zoom = ZOOM_RANGE.0,
+        max_zoom = ZOOM_RANGE.1,
+        locale = control_locale(labels),
         marker_paint = circle_paint("#5db3ff", POINT_RADIUS_STOPS, 2),
         event_paint = circle_paint("#ffb020", EVENT_RADIUS_STOPS, 1),
         draft_paint = circle_paint("#ff5d5d", POINT_RADIUS_STOPS, 2),
+        controls = map_controls_script(),
     )
 }
 
@@ -410,19 +481,31 @@ pub fn fit_bounds(container_id: &str, shapes: &[MarkerShapeVm]) {
     let Some(bounds) = combined_bounds(shapes) else {
         return;
     };
-    let script = format!(
+    run_map_script(&fit_bounds_script(
+        container_id,
+        bounds.min_lat,
+        bounds.max_lat,
+        bounds.min_lon,
+        bounds.max_lon,
+    ));
+}
+
+/// How far in Fit will go. A framing choice rather than a camera bound: fitting a single point has no
+/// extent of its own, so without a ceiling `fitBounds` slams to the camera's maximum. Sits inside
+/// [`ZOOM_RANGE`], which bounds every other way the camera moves.
+const FIT_MAX_ZOOM: f64 = 15.0;
+
+/// The `fitBounds` script for one `(lat, lon)` box (the [`push_data_script`]/[`push_draft_script`]
+/// precedent: the script text is its own testable function).
+fn fit_bounds_script(container_id: &str, min_lat: f64, max_lat: f64, min_lon: f64, max_lon: f64) -> String {
+    format!(
         r"
         const map = document.getElementById('{container_id}')?.__geoMap;
         if (map) {{
-            map.fitBounds([[{min_lon}, {min_lat}], [{max_lon}, {max_lat}]], {{ padding: 40, maxZoom: 15, duration: 300 }});
+            map.fitBounds([[{min_lon}, {min_lat}], [{max_lon}, {max_lat}]], {{ padding: 40, maxZoom: {FIT_MAX_ZOOM}, duration: 300 }});
         }}
         ",
-        min_lon = bounds.min_lon,
-        min_lat = bounds.min_lat,
-        max_lon = bounds.max_lon,
-        max_lat = bounds.max_lat,
-    );
-    run_map_script(&script);
+    )
 }
 
 fn shape_geojson(shape: &MarkerShapeVm) -> Value {
@@ -577,12 +660,27 @@ pub fn effective_date_choice(
 #[cfg(test)]
 mod tests {
     use super::{
-        MapDraft, MapMessage, closed_ring, combined_bounds, draft_geojson, empty_feature_collection, events_geojson,
-        maplibre_init_script, markers_geojson, parse_map_message, push_data_script, push_draft_script, save_year,
-        shape_to_draft,
+        FIT_MAX_ZOOM, MapControlLabels, MapDraft, MapMessage, closed_ring, combined_bounds, draft_geojson,
+        empty_feature_collection, events_geojson, fit_bounds_script, maplibre_init_script, markers_geojson,
+        parse_map_message, push_data_script, push_draft_script, save_year, shape_to_draft,
     };
-    use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm};
+    use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm, ZOOM_RANGE};
     use serde_json::{Value, json};
+
+    /// Stand-in control labels: in the app every one of these is a Fluent lookup (ADR 0003), so the
+    /// tests assert the supplied text reaches the script rather than any particular wording.
+    fn labels() -> MapControlLabels {
+        MapControlLabels {
+            zoom_in: "Zoom in".to_owned(),
+            zoom_out: "Zoom out".to_owned(),
+            meters: "m".to_owned(),
+            kilometers: "km".to_owned(),
+        }
+    }
+
+    fn init_script() -> String {
+        maplibre_init_script("geo-map", (59.9, 10.7), 5.0, &labels())
+    }
 
     /// The paint each circle layer is expected to emit, written out here independently of the code that
     /// builds it: a zoom-interpolated `circle-radius` (a fixed radius leaves a marker an invisible dot
@@ -652,16 +750,151 @@ mod tests {
     /// an untagged `[lng, lat]` array is exactly what [`parse_map_message`] now refuses.
     #[test]
     fn the_click_emitter_tags_its_payload_so_the_channel_can_carry_more_than_clicks() {
-        let script = maplibre_init_script("geo-map", (59.9, 10.7), 5.0);
+        let script = init_script();
         assert!(
             script.contains("dioxus.send(JSON.stringify({ click: [e.lngLat.lng, e.lngLat.lat] }))"),
             "the click rides the shared channel under its own key:\n{script}"
         );
     }
 
+    /// The defect: with no `minZoom`/`maxZoom` the camera keeps `MapLibre`'s own 0–22 default, three
+    /// levels past the last raster tile the OSM source serves, and a wheel gesture silently blanked
+    /// the map.
+    #[test]
+    fn the_camera_is_bounded_to_the_zooms_the_tiles_exist_at() {
+        let script = init_script();
+        let map = script.find("new maplibregl.Map(").expect("the map is constructed");
+        for bound in [
+            format!("minZoom: {}", ZOOM_RANGE.0),
+            format!("maxZoom: {}", ZOOM_RANGE.1),
+        ] {
+            assert!(
+                script[map..].contains(&bound),
+                "the constructor carries `{bound}`:\n{script}"
+            );
+        }
+    }
+
+    /// A raster source with no `maxzoom` makes `MapLibre` request tiles that 404 above the source's
+    /// last level; declaring it makes `MapLibre` overzoom the z19 tile instead.
+    #[test]
+    fn the_raster_source_declares_the_last_zoom_it_serves_so_maplibre_overzooms() {
+        let script = init_script();
+        let source = script
+            .find("map.addSource('geo-tiles'")
+            .expect("the tile source is added");
+        let end = script[source..].find(");").expect("the addSource call ends") + source;
+        assert!(
+            script[source..end].contains(&format!("maxzoom: {}", ZOOM_RANGE.1)),
+            "the raster source names the last zoom it serves:\n{}",
+            &script[source..end]
+        );
+    }
+
+    #[test]
+    fn the_navigation_control_is_added_once_the_map_has_loaded() {
+        let script = init_script();
+        let load = script.find("map.on('load'").expect("the load handler");
+        let control = script
+            .find("new maplibregl.NavigationControl(")
+            .expect("a pointer-free way to change zoom exists at all");
+        assert!(
+            load < control,
+            "the control is added inside the load handler, not against a map with no style yet:\n{script}"
+        );
+        assert!(
+            script[control..].contains("{ showCompass: false }"),
+            "only the zoom buttons: there is no bearing/pitch gesture on this map to reset:\n{script}"
+        );
+        assert!(
+            script[control..].contains("'top-left'"),
+            "the zoom buttons sit top-left, where place.html's `.map-zoom` stand-in puts them:\n{script}"
+        );
+    }
+
+    #[test]
+    fn a_metric_scale_bar_is_added_bottom_left() {
+        let script = init_script();
+        let control = script
+            .find("new maplibregl.ScaleControl(")
+            .expect("a scale bar says what the zoom level means on the ground");
+        assert!(
+            script[control..].contains("{ unit: 'metric' }"),
+            "metric only — an imperial unit is out of scope:\n{script}"
+        );
+        assert!(
+            script[control..].contains("'bottom-left'"),
+            "the scale bar sits bottom-left, clear of the attribution:\n{script}"
+        );
+    }
+
+    /// ADR 0003 in executable form: `MapLibre`'s own control text is its own i18n, so every string it
+    /// renders comes from this app's Fluent catalogue through the `locale` option instead.
+    #[test]
+    fn the_controls_take_their_text_from_the_apps_own_catalogue() {
+        let script = init_script();
+        let locale = script.find("locale: ").expect("the constructor carries a locale table");
+        for (key, text) in [
+            ("NavigationControl.ZoomIn", "Zoom in"),
+            ("NavigationControl.ZoomOut", "Zoom out"),
+            ("ScaleControl.Meters", "m"),
+            ("ScaleControl.Kilometers", "km"),
+        ] {
+            assert!(
+                script[locale..].contains(&format!(r#""{key}":"{text}""#)),
+                "{key} is localized by the app, not by MapLibre:\n{script}"
+            );
+        }
+        assert!(
+            !script.contains("ResetBearing"),
+            "no key for a control this map never adds — i18n-check warns on an unused message:\n{script}"
+        );
+    }
+
+    /// `zoomend`, not `zoom`: `zoom` fires per animation frame, so one gesture would be ~20 round
+    /// trips and ~20 re-renders (the #252 class of `WebKitGTK` problem).
+    #[test]
+    fn the_zoom_emitter_reports_a_settled_camera_and_an_opening_measurement() {
+        let script = init_script();
+        assert!(
+            !script.contains("map.on('zoom',"),
+            "a per-frame `zoom` listener would round-trip the whole gesture:\n{script}"
+        );
+        let emitter = script
+            .find("map.on('zoomend'")
+            .expect("the settled camera is reported back");
+        assert!(
+            script[emitter..].contains("dioxus.send(JSON.stringify({ zoom: map.getZoom() }))"),
+            "the settled level rides the shared channel under its own key:\n{script}"
+        );
+        let load = script.find("map.on('load'").expect("the load handler");
+        let opening = script
+            .find("dioxus.send(JSON.stringify({ zoom: map.getZoom() }))")
+            .expect("an emit exists");
+        assert!(
+            load < opening && opening < emitter,
+            "the first readout is a measurement taken inside the load handler, not the seed value:\n{script}"
+        );
+    }
+
+    /// Fit's own ceiling is a framing choice (don't slam to street level for a single point), so it
+    /// has to sit inside the camera's range rather than fight it.
+    #[test]
+    fn fit_stops_inside_the_cameras_own_range() {
+        assert!(
+            ZOOM_RANGE.0 <= FIT_MAX_ZOOM && FIT_MAX_ZOOM <= ZOOM_RANGE.1,
+            "Fit's ceiling {FIT_MAX_ZOOM} is a zoom the camera allows"
+        );
+        let script = fit_bounds_script("geo-map", 59.0, 60.0, 5.0, 6.0);
+        assert!(
+            script.contains(&format!("maxZoom: {FIT_MAX_ZOOM}")),
+            "Fit passes its own ceiling, named rather than inlined:\n{script}"
+        );
+    }
+
     #[test]
     fn every_circle_layer_paints_a_zoom_interpolated_radius_with_a_white_stroke() {
-        let script = maplibre_init_script("geo-map", (59.9, 10.7), 5.0);
+        let script = init_script();
         for (layer, paint) in expected_circle_paints() {
             assert!(
                 script.contains(&format!("id: '{layer}', type: 'circle'")),
@@ -679,7 +912,7 @@ mod tests {
     /// camera move (#252). One more `redraw()` on the animation frame after the resize does composite.
     #[test]
     fn a_container_resize_forces_a_repaint_so_arming_a_draw_tool_cannot_blank_the_map() {
-        let script = maplibre_init_script("geo-map", (59.9, 10.7), 5.0);
+        let script = init_script();
         let observer = script
             .find("new ResizeObserver(")
             .expect("the container is watched for the layout changes a draw tool causes");
@@ -732,7 +965,7 @@ mod tests {
 
     #[test]
     fn the_init_scripts_load_handler_reapplies_whatever_was_stashed() {
-        let script = maplibre_init_script("geo-map", (59.9, 10.7), 5.0);
+        let script = init_script();
         let load = script.find("map.on('load'").expect("the load handler");
         let last_source = script
             .rfind("map.addSource('geo-draft'")

@@ -6,8 +6,8 @@ use genealogy_ui::{
 
 use super::geography::geography_time_slider;
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapDraft, events_geojson, fit_bounds, geo_point, map_surface,
-    markers_geojson, push_map_data, push_map_draft, select_tool, shape_to_draft,
+    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, events_geojson, fit_bounds, geo_point,
+    map_surface, markers_geojson, push_map_data, push_map_draft, select_tool, shape_to_draft,
 };
 use super::prelude::*;
 
@@ -919,7 +919,7 @@ fn PlaceMapEditor(
                 }
             }
             div { class: "card map-card",
-                {map_surface(PLACE_MAP_CONTAINER_ID, aria, tool, on_map_click, center, 13.0)}
+                {map_surface(PLACE_MAP_CONTAINER_ID, aria, tool, on_map_click, center, 13.0, MapControlLabels::from_chrome(chrome))}
             }
             {place_map_as_of_note(loc, &detail.geometries, resolved_shape.as_ref(), year())}
             if matches!(tool(), DrawTool::Point) && matches!(draft(), MapDraft::Point(_)) {
