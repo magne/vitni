@@ -12,7 +12,7 @@ use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{use_record_edit, use_save_on_request};
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::close_confirm::CloseConfirmDialog;
-use genealogy_ui_dioxus::shell::nav_state::{CloseRequest, EditKey, NavState, Overlay, SaveRequest, StashedEdit};
+use genealogy_ui_dioxus::shell::nav_state::{EditKey, NavState, Overlay, SaveRequest, SaveThen, StashedEdit};
 use unic_langid::LanguageIdentifier;
 
 /// A chrome localizer for a single explicit language (deterministic for tests).
@@ -116,6 +116,18 @@ fn probe(nav: &NavState) -> Element {
         div { "QUEUE:[{queue}]" }
         div { "ACTIVE:{active}" }
     }
+}
+
+/// The markup of the dialog button whose visible label is `label`, from its `<button` to its
+/// `</button>`. A bare `html.contains("disabled")` cannot tell which control carries the attribute, so
+/// every Save/Save-all gate assertion below is made against this slice alone.
+fn button_markup(html: &str, label: &str) -> String {
+    let close = format!(">{label}</button>");
+    let Some(end) = html.find(&close) else {
+        return String::new();
+    };
+    let start = html[..end].rfind("<button").unwrap_or(0);
+    html[start..end + close.len()].to_owned()
 }
 
 /// Reports the armed save as finished, `ok` or not, the way the record's own screen does once its
@@ -954,7 +966,7 @@ fn the_quit_dialog_lists_every_record_with_unsaved_work() {
     assert!(html.contains("Cancel"), "Cancel backs out:\n{html}");
 }
 
-/// The quit confirm where one of the dirty records cannot be saved.
+/// The quit confirm where one of the dirty records cannot be saved and the other can.
 fn quit_dialog_with_one_invalid_record() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
@@ -971,13 +983,155 @@ fn quit_dialog_with_one_invalid_record() -> Element {
 }
 
 #[test]
-fn one_unsavable_record_disables_save_all_and_names_it() {
+fn save_all_runs_when_any_unsaved_record_is_savable() {
+    // Ada's edit is valid; Bob's is not. Save all keeps Ada's work and leaves Bob open, which is worth
+    // offering — disabling it over Bob would make Ada's only outcomes Discard all or Cancel.
     let html = render(quit_dialog_with_one_invalid_record);
-    assert!(html.contains("disabled"), "Save all cannot run:\n{html}");
+    assert!(
+        !button_markup(&html, "Save all").contains("disabled"),
+        "Save all runs for the records it can save:\n{html}"
+    );
+    assert!(
+        html.contains("<li>Bob — can"),
+        "the list marks the record that will be left open:\n{html}"
+    );
+    assert!(
+        html.contains("<li>Ada</li>"),
+        "the savable record is listed plainly:\n{html}"
+    );
+    assert!(
+        html.contains("the rest are left open"),
+        "the body says what Save all does with the records it cannot save:\n{html}"
+    );
+}
+
+/// The quit confirm where nothing unsaved can be saved: an invalid edit beside an untouched draft.
+fn quit_dialog_with_nothing_savable() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0002", "Bob"));
+        nav.open_create(Category::People);
+        mark_dirty_invalid(&mut nav, Category::People, "I0002");
+        nav.request_quit();
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn save_all_is_disabled_when_no_unsaved_record_is_savable() {
+    let html = render(quit_dialog_with_nothing_savable);
+    assert!(
+        button_markup(&html, "Save all").contains("disabled"),
+        "with nothing savable Save all is dead, not silently inert:\n{html}"
+    );
     assert!(
         html.contains("&#34;Bob&#34; is missing required fields"),
         "the body names the record standing in the way:\n{html}"
     );
+}
+
+/// The quit confirm from issue #261: a valid edit of a stored record beside an untouched `⌘N` draft.
+fn quit_dialog_with_a_valid_record_and_an_untouched_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_create(Category::People);
+        mark_dirty(&mut nav, Category::People, "I0001");
+        nav.request_quit();
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn an_untouched_draft_does_not_block_save_all_for_a_valid_record() {
+    // A `⌘N` draft is unsaved by definition and savable never, so gating on it would mean no ⌘Q over an
+    // open draft could ever save anything.
+    let html = render(quit_dialog_with_a_valid_record_and_an_untouched_draft);
+    assert!(
+        !button_markup(&html, "Save all").contains("disabled"),
+        "an untouched draft does not speak for the records beside it:\n{html}"
+    );
+    assert!(
+        html.contains("<li>New People — can"),
+        "the draft is the entry marked as staying open:\n{html}"
+    );
+    assert!(
+        html.contains("<li>Ada</li>"),
+        "the valid record is listed plainly:\n{html}"
+    );
+}
+
+fn save_all_over_a_mixed_strip() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_create(Category::Tags);
+        nav.open_record(record("I0003", "Cecil"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty(&mut nav, Category::People, "I0003");
+        nav.request_quit();
+        nav.save_all_then_quit();
+    });
+    probe(&nav)
+}
+
+#[test]
+fn save_all_queues_only_the_savable_records() {
+    // Queueing by "unsaved" instead would put the untouched draft in the run, where it fails its own
+    // `can_save()` gate and aborts the run with Ada already saved.
+    let html = render(save_all_over_a_mixed_strip);
+    assert!(
+        html.contains("SAVING:people/I0001"),
+        "the first savable record in strip order is armed:\n{html}"
+    );
+    assert!(
+        html.contains("QUEUE:[people/I0003]"),
+        "the untouched draft is not part of the run:\n{html}"
+    );
+}
+
+fn partial_save_all_run() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_create(Category::Tags);
+        mark_dirty(&mut nav, Category::People, "I0001");
+        nav.stash_edit(
+            EditKey::draft(Category::Tags),
+            StashedEdit::new(TagDraft::new(), TagDraft::new(), ProvenanceDraft::default()),
+        );
+        nav.request_quit();
+        nav.save_all_then_quit();
+        finish_armed(&mut nav, true);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_partial_save_all_leaves_the_unsavable_tab_open_without_quitting() {
+    // The run covered what it could; the record it could not save keeps its work, on screen, in a
+    // running app — the one thing that must never happen is losing it without a Discard all.
+    let html = render(partial_save_all_run);
+    assert!(
+        html.contains("QUIT:0"),
+        "a run that could not cover everything does not quit:\n{html}"
+    );
+    assert!(
+        html.contains("TABS:2"),
+        "the unsavable record's tab stays open:\n{html}"
+    );
+    assert!(
+        html.contains("DIRTY:[tags/*]"),
+        "its work is still parked, and only Ada's was spent:\n{html}"
+    );
+    assert!(html.contains("SAVING:NONE"), "the run is over:\n{html}");
+    assert!(html.contains("QUEUE:[]"), "with nothing left queued:\n{html}");
 }
 
 /// A stand-in for an aggregate's detail pane: the shared edit buffer plus the save-on-request wiring,
@@ -1045,7 +1199,7 @@ fn pane_ignores_another_records_save() -> Element {
         // Re-arm for a record this pane is not showing.
         nav.save_request.set(Some(SaveRequest {
             key: EditKey::saved(Category::Tags, "T0002"),
-            then: CloseRequest::Quit,
+            then: SaveThen::Quit,
         }));
     });
     rsx! {

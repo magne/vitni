@@ -154,6 +154,10 @@ quit-confirm-list-intro = Poster med ulagret arbeid:
 quit-confirm-save-all = Lagre alle
 quit-confirm-discard-all = Forkast alle
 quit-confirm-cancel = Avbryt
+# Avslutt-dialogens delvis-lagring: «Lagre alle» kjører så snart *én* av postene kan lagres, så de som
+# ikke kan lagres merkes i listen og notatet sier at de blir stående åpne i stedet for å gå tapt.
+quit-confirm-item-blocked = { $label } — kan ikke lagres ennå
+quit-confirm-leaves-open = Lagre alle lagrer postene den kan; resten blir stående åpne og programmet fortsetter.
 # Hvorfor lagring ikke er tilgjengelig — vises i brødteksten istedenfor en død knapp.
 close-confirm-cannot-save = «{ $label }» mangler påkrevde felter og kan ikke lagres ennå.
 close-confirm-nothing-to-save = Ingenting er fylt ut for «{ $label }» ennå, så det er ingenting å lagre.

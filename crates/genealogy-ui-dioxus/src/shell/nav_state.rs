@@ -48,6 +48,22 @@ pub enum CloseRequest {
     Quit,
 }
 
+/// How a save run ends once every record it queued has saved.
+///
+/// Distinct from [`CloseRequest`], which is what the *confirm* was armed for: a Save all over a strip
+/// where some record cannot be saved runs anyway, saves the ones it can, and then ends in
+/// [`Self::StayOpen`] rather than the quit the confirm was raised by — the records it could not save
+/// keep their work, on screen, in a running app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveThen {
+    /// Close the record tab at this 0-based index.
+    CloseTab(usize),
+    /// Quit the application.
+    Quit,
+    /// Do nothing further: the run covered only part of the unsaved work.
+    StayOpen,
+}
+
 /// The record whose save the shell has asked for, so a close/quit can keep the work instead of
 /// discarding it (the confirm's **Save** / **Save all**).
 ///
@@ -60,7 +76,7 @@ pub struct SaveRequest {
     /// The editor being saved right now.
     pub key: EditKey,
     /// What to do once every record in the run has saved.
-    pub then: CloseRequest,
+    pub then: SaveThen,
 }
 
 /// The active colour theme, mirrored onto `[data-theme]` at the shell root.
@@ -747,28 +763,45 @@ impl NavState {
         };
         self.pending_close.set(None);
         self.save_queue.set(Vec::new());
-        self.begin_save(tab.edit_key(), CloseRequest::Tab(index));
+        self.begin_save(tab.edit_key(), SaveThen::CloseTab(index));
     }
 
-    /// Saves every open tab holding unsaved work, in strip order, and then quits (the quit confirm's
-    /// **Save all**): queues them all and arms the first. Quits straight away when nothing is dirty
-    /// after all.
+    /// Saves every open tab that *can* be saved ([`Self::tab_is_savable`]), in strip order, and then
+    /// quits (the quit confirm's **Save all**): queues them and arms the first.
+    ///
+    /// The exception the name does not carry: the run quits only when it covered every tab holding
+    /// unsaved work. A record that cannot be saved yet — an invalid edit, an untouched `⌘N` draft — is
+    /// neither saved nor discarded; it stays open with its work intact and the app keeps running, so
+    /// the run ends in [`SaveThen::StayOpen`] instead. With nothing savable at all the confirm is
+    /// simply dismissed, unless nothing is unsaved either, in which case the quit fires.
     pub fn save_all_then_quit(&mut self) {
         let tabs = self.records.peek().clone();
         let mut queue = Vec::new();
+        let mut unsaved = 0_usize;
         for (index, tab) in tabs.iter().enumerate() {
-            if self.tab_has_unsaved(index) {
+            if !self.tab_has_unsaved(index) {
+                continue;
+            }
+            unsaved += 1;
+            if self.tab_is_savable(index) {
                 queue.push(tab.edit_key());
             }
         }
         self.pending_close.set(None);
         if queue.is_empty() {
-            self.quit_now();
+            if unsaved == 0 {
+                self.quit_now();
+            }
             return;
         }
+        let then = if queue.len() == unsaved {
+            SaveThen::Quit
+        } else {
+            SaveThen::StayOpen
+        };
         let first = queue.remove(0);
         self.save_queue.set(queue);
-        self.begin_save(first, CloseRequest::Quit);
+        self.begin_save(first, then);
     }
 
     /// Reports the outcome of the save the shell asked for: `(category, human_id)` names the editor
@@ -777,7 +810,7 @@ impl NavState {
     /// run.
     ///
     /// On success the record's parked edit is dropped and the next queued record is armed; once the
-    /// queue empties the close/quit the run was for is applied. On failure the whole run is abandoned
+    /// queue empties the run's [`SaveThen`] terminus is applied. On failure the whole run is abandoned
     /// with every tab left open — the screen has already reported the error.
     pub fn note_save_finished(&mut self, category: Category, human_id: Option<&str>, ok: bool) {
         let Some(request) = self.save_request.peek().clone() else {
@@ -800,7 +833,7 @@ impl NavState {
 
     /// Arms `key`'s save for the run ending in `then`, activating its tab first: only the active tab's
     /// pane is mounted, and the pane is what knows how to save.
-    fn begin_save(&mut self, key: EditKey, then: CloseRequest) {
+    fn begin_save(&mut self, key: EditKey, then: SaveThen) {
         self.reveal_editor(&key);
         self.save_request.set(Some(SaveRequest { key, then }));
     }
@@ -818,8 +851,8 @@ impl NavState {
         }
     }
 
-    /// Arms the next queued record, or — with the queue drained — applies the close/quit the run was
-    /// for. `saved` is the request that just finished.
+    /// Arms the next queued record, or — with the queue drained — applies the run's [`SaveThen`]
+    /// terminus. `saved` is the request that just finished.
     fn advance_save_run(&mut self, saved: &SaveRequest) {
         let next = if self.save_queue.peek().is_empty() {
             None
@@ -832,12 +865,13 @@ impl NavState {
         }
         self.save_request.set(None);
         match saved.then {
-            CloseRequest::Tab(index) => {
+            SaveThen::CloseTab(index) => {
                 if let Some(index) = self.save_close_index(index, &saved.key) {
                     self.close_record(index);
                 }
             }
-            CloseRequest::Quit => self.quit_now(),
+            SaveThen::Quit => self.quit_now(),
+            SaveThen::StayOpen => (),
         }
     }
 
