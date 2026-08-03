@@ -2151,6 +2151,21 @@ impl Chrome {
         fl!(self.loader, "quit-confirm-cancel")
     }
 
+    /// One entry in the quit confirm's list, marked as a record **Save all** cannot save: it is left
+    /// open rather than saved or discarded. Unlike [`Self::close_confirm_cannot_save`] this does not
+    /// disable the action — the records beside it are still saved.
+    #[must_use]
+    pub fn quit_confirm_item_blocked(&self, label: &str) -> String {
+        fl!(self.loader, "quit-confirm-item-blocked", label = label)
+    }
+
+    /// The quit confirm's note about a partial **Save all**: it saves what it can and leaves the rest
+    /// open with the app still running, so nothing is lost without an explicit Discard all.
+    #[must_use]
+    pub fn quit_confirm_leaves_open(&self) -> String {
+        fl!(self.loader, "quit-confirm-leaves-open")
+    }
+
     /// The plugin manager's heading.
     #[must_use]
     pub fn plugin_manager_title(&self) -> String {

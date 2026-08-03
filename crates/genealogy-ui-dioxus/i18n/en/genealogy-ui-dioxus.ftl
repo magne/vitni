@@ -154,6 +154,10 @@ quit-confirm-list-intro = Records with unsaved work:
 quit-confirm-save-all = Save all
 quit-confirm-discard-all = Discard all
 quit-confirm-cancel = Cancel
+# The quit dialog's partial-save copy: Save all runs whenever *any* listed record can be saved, so the
+# ones it cannot save are marked in the list and the note says they are left open rather than lost.
+quit-confirm-item-blocked = { $label } — can't be saved yet
+quit-confirm-leaves-open = Save all saves the records it can; the rest are left open and the app keeps running.
 # Why the save action is unavailable — shown in the body instead of leaving a dead button.
 close-confirm-cannot-save = "{ $label }" is missing required fields, so it can't be saved yet.
 close-confirm-nothing-to-save = Nothing has been filled in for "{ $label }" yet, so there is nothing to save.
