@@ -111,13 +111,12 @@ pub(crate) fn place_point(place: &PlaceSummary) -> Option<GeoCoordinates> {
         .and_then(|geometry| geometry.representative_point())
 }
 
-/// A place's display name for the map rail and the unplotted report: its first asserted name,
-/// falling back to the `human_id`.
+/// A place's display name for the map rail and the unplotted report: its own name resolved **as
+/// of** the feed's year (ADR 0026 §1) — the same resolution the marker's geometry uses, so a
+/// renamed place's pin tracks the slider instead of always showing the first-asserted name. Falls
+/// back to the `human_id` when the place has no name at all.
 fn place_display_name(place: &PlaceSummary) -> String {
-    place
-        .names
-        .first()
-        .map_or_else(|| place.human_id.clone(), |name| name.text.clone())
+    place.resolved_name.clone().unwrap_or_else(|| place.human_id.clone())
 }
 
 /// Builds one [`EventPin`] per event whose place resolved a point in `points` (keyed by the place's

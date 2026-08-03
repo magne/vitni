@@ -118,6 +118,12 @@ pub struct PlaceSummary {
     /// The generated title (e.g. "Saint Petersburg, Russia"): the place's own resolved name
     /// followed by each ancestor's resolved name up the transitive hierarchy walk (ADR 0026 §1).
     pub generated_title: String,
+    /// The place's own name resolved **as of** [`Self::resolved_as_of`] (ADR 0026 §1) — the
+    /// first-asserted name when that is `None`, and `None` when the place has no name at all.
+    /// Unlike [`Self::generated_title`], this never appends the ancestor chain — the geography
+    /// view's map marker (ADR 0025 §1) reads this so a label tracks the same as-of resolution as
+    /// the marker's geometry.
+    pub resolved_name: Option<String>,
     /// The date this summary is resolved **as of** (ADR 0026 §1) — `None` for the current/primary
     /// resolution `show_place`/`list_places` use; `Some` only from `show_place_as_of`.
     pub resolved_as_of: Option<GenealogicalDate>,
@@ -1256,6 +1262,7 @@ fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&Gene
         human_id,
         id: view.place_id().map(|id| id.to_string()).unwrap_or_default(),
         generated_title: title,
+        resolved_name: own_name.clone(),
         resolved_as_of: as_of.cloned(),
         place_type: view.place_type().cloned(),
         place_type_confidence: view.asserted_place_type().and_then(|a| a.confidence),
