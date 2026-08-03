@@ -881,23 +881,32 @@ mod tests {
         load_or_bootstrap(path).expect("bootstrap")
     }
 
+    /// A vector style, for the two accessor tests below: neither cares about the URL itself, only that
+    /// a non-raster provider still names its credit and names no raster tile URL.
+    fn maplibre_style() -> MapProvider {
+        MapProvider::MaplibreStyle {
+            style_url: "https://tiles.example/style.json".to_owned(),
+            attribution: "© Example".to_owned(),
+            api_key_env: None,
+        }
+    }
+
+    /// The same for the Google variant, which has no tile adapter yet (ADR 0025 §4).
+    fn google() -> MapProvider {
+        MapProvider::Google {
+            api_key_env: "GOOGLE_MAPS_KEY".to_owned(),
+            attribution: "© Google".to_owned(),
+        }
+    }
+
     /// Every provider's terms require its credit to be displayed, which is why `attribution` is
     /// mandatory on all three variants — so reading it back is infallible, with no per-kind branch for
     /// a caller to get wrong.
     #[test]
     fn every_provider_kind_reports_the_credit_its_terms_require() {
         assert_eq!(MapProvider::default_osm().attribution(), "© OpenStreetMap contributors");
-        let style = MapProvider::MaplibreStyle {
-            style_url: "https://tiles.example/style.json".to_owned(),
-            attribution: "© Example".to_owned(),
-            api_key_env: None,
-        };
-        assert_eq!(style.attribution(), "© Example");
-        let google = MapProvider::Google {
-            api_key_env: "GOOGLE_MAPS_KEY".to_owned(),
-            attribution: "© Google".to_owned(),
-        };
-        assert_eq!(google.attribution(), "© Google");
+        assert_eq!(maplibre_style().attribution(), "© Example");
+        assert_eq!(google().attribution(), "© Google");
     }
 
     /// Only a raster provider names a URL a `raster` tile source can fetch. A vector style URL is a
@@ -909,17 +918,8 @@ mod tests {
             MapProvider::default_osm().raster_tile_url(),
             Some("https://tile.openstreetmap.org/{z}/{x}/{y}.png")
         );
-        let style = MapProvider::MaplibreStyle {
-            style_url: "https://tiles.example/style.json".to_owned(),
-            attribution: "© Example".to_owned(),
-            api_key_env: None,
-        };
-        assert_eq!(style.raster_tile_url(), None);
-        let google = MapProvider::Google {
-            api_key_env: "GOOGLE_MAPS_KEY".to_owned(),
-            attribution: "© Google".to_owned(),
-        };
-        assert_eq!(google.raster_tile_url(), None);
+        assert_eq!(maplibre_style().raster_tile_url(), None);
+        assert_eq!(google().raster_tile_url(), None);
     }
 
     #[test]
