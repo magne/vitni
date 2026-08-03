@@ -13,21 +13,22 @@
 //! `screens::map_shared`. A `use_effect` pushes updated marker/event/draft `GeoJSON` to the running map
 //! whenever the loaded data, the picker's query, or the in-progress draft changes.
 //!
-//! Interactive canvas behavior (pan/zoom, the actual click-to-place feel, polygon vertex rendering)
-//! and the toolbar picker (needs `AppCtx`'s `Services`, so it isn't SSR-testable in isolation) cannot
-//! be exercised by an SSR test; see the module's test coverage and the PR report for the items needing
-//! manual GUI verification.
+//! Interactive canvas behavior (pan/zoom, the actual click-to-place feel, polygon vertex rendering and
+//! dragging) and the toolbar picker (needs `AppCtx`'s `Services`, so it isn't SSR-testable in
+//! isolation) cannot be exercised by an SSR test. The canvas half is scripted against the real webview
+//! instead (`cargo xtask gui-pass`, the `map-*.toml` scenarios); pan/zoom smoothness and click latency
+//! are what remain human-only.
 
 use genealogy_app::{ConfigStore, FileConfigStore, MapConfig, MapProvider, PlaceGeometry, PlaceType};
 use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
 
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapZoomReadout, events_geojson, fit_bounds,
-    geo_point, map_surface, markers_geojson, push_map_data, push_map_draft, select_tool,
+    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapCredit, MapDraft, MapZoomReadout, events_geojson,
+    fit_bounds, geo_point, map_surface, markers_geojson, push_map_data, push_map_draft, rendered_credit, select_tool,
 };
 use super::prelude::*;
 use crate::i18n::Chrome;
-use crate::services::Services;
+use crate::services::{Services, map_config};
 
 /// The mount id of the map's container `div`, referenced by the init/update JS.
 const MAP_CONTAINER_ID: &str = "geography-map";
@@ -128,23 +129,6 @@ pub fn GeographyScreen() -> Element {
     let provider_dir = services.dir.clone();
     let provider = use_memo(move || map_config(&provider_dir).resolved_provider());
 
-    // The clicked-point stream (armed once at mount) turns into a draft point/vertex, gated by the
-    // active tool; `on_map_click` owns that decision so the mount closure stays a thin trigger.
-    let on_click_tool = tool;
-    let mut on_click_draft = draft;
-    let on_map_click = move |lat: f64, lon: f64| match on_click_tool() {
-        DrawTool::Pan => {}
-        DrawTool::Point => on_click_draft.set(MapDraft::Point((lat, lon))),
-        DrawTool::Polygon => {
-            let mut vertices = match on_click_draft() {
-                MapDraft::Polygon(vertices) => vertices,
-                _ => Vec::new(),
-            };
-            vertices.push((lat, lon));
-            on_click_draft.set(MapDraft::Polygon(vertices));
-        }
-    };
-
     // Re-push marker/event GeoJSON whenever the loaded data or the picker's live query changes (the
     // typed search hides non-matching markers on the map, not just the rail).
     use_effect(move || {
@@ -212,7 +196,7 @@ pub fn GeographyScreen() -> Element {
                     } else if marker_count == 0 && event_count == 0 {
                         {geography_empty_state(&chrome.0)}
                     } else {
-                        {geography_map_surface(&chrome.0, marker_count, event_count, tool, zoom, on_map_click)}
+                        {geography_map_surface(&chrome.0, marker_count, event_count, tool, draft, zoom, rendered_credit(&provider()))}
                     }
                     if matches!(tool(), DrawTool::Polygon) {
                         div { class: "wrap", style: "gap:8px",
@@ -449,18 +433,30 @@ pub fn geography_empty_state(chrome: &Chrome) -> Element {
 
 /// The map surface: the shared `MapLibre` mount (`screens::map_shared::map_surface`) at the
 /// Geography-tool's own container id, default center, and world/country-level zoom. `zoom` is the
-/// live camera level the toolbar's [`MapZoomReadout`] shows.
+/// live camera level the toolbar's [`MapZoomReadout`] shows; `credit` names the tiles it fetches and
+/// the attribution drawn over them (#254). `draft` is the in-progress shape every canvas gesture
+/// resolves against — a click appends to it, a handle drag moves one of its vertices (#259).
 pub fn geography_map_surface(
     chrome: &Chrome,
     marker_count: usize,
     event_count: usize,
     tool: Signal<DrawTool>,
+    draft: Signal<MapDraft>,
     zoom: Signal<f64>,
-    on_map_click: impl FnMut(f64, f64) + Clone + 'static,
+    credit: MapCredit,
 ) -> Element {
     let aria = chrome.geography_map_aria(marker_count, event_count);
     let labels = MapControlLabels::from_chrome(chrome);
-    map_surface(MAP_CONTAINER_ID, aria, tool, on_map_click, DEFAULT_CENTER, zoom, labels)
+    map_surface(
+        MAP_CONTAINER_ID,
+        aria,
+        tool,
+        draft,
+        DEFAULT_CENTER,
+        zoom,
+        credit,
+        labels,
+    )
 }
 
 /// The time slider: a year `<input type=range>` over [`TIME_SLIDER_RANGE`], captioned with the
@@ -611,18 +607,6 @@ fn GeographyCreateForm(point: (f64, f64), onsaved: EventHandler<()>) -> Element 
     }
 }
 
-/// Reads the configured `[map]` provider from the workspace's config store, falling back to the
-/// built-in OSM default on any read error (mirrors `services::ai_config`'s fallback pattern).
-fn map_config(dir: &std::path::Path) -> MapConfig {
-    match FileConfigStore::for_workspace(dir.to_path_buf()).load_map_config() {
-        Ok(config) => config,
-        Err(error) => {
-            tracing::warn!(%error, "could not read the map config; using the built-in default");
-            MapConfig::default()
-        }
-    }
-}
-
 /// The provider's stable kind token, for the select's current value.
 fn provider_kind(provider: &MapProvider) -> String {
     match provider {
@@ -673,7 +657,7 @@ mod tests {
     use super::{GeoPanel, filtered_markers, geometry_panel_for, provider_kind, selected_marker_shape};
     use crate::screens::map_shared::geo_point;
     use genealogy_app::{MapProvider, PlaceGeometry};
-    use genealogy_ui::{EventPinVm, GeographyVm, MapProviderVm, MarkerShapeVm, PlaceMarkerVm};
+    use genealogy_ui::{EventPinVm, GeographyVm, MarkerShapeVm, PlaceMarkerVm};
 
     #[test]
     fn provider_kind_tokens_round_trip_the_select_value() {
@@ -740,10 +724,6 @@ mod tests {
             }],
             unplotted_count: 0,
             resolved_year: None,
-            provider: MapProviderVm::OsmRaster {
-                tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
-                attribution: "© OpenStreetMap contributors".to_owned(),
-            },
         }
     }
 

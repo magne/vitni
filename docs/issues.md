@@ -169,19 +169,6 @@ long-standing "DNA match views in the UI" item is closed.
 Residuals from the shortcuts work (ADR 0030); see
 [`archive/completed-work.md`](archive/completed-work.md). Deliberate non-goals are under *Decided*.
 
-- **The unsaved-work confirm's remaining webview pass is timing only.** #238, #239, and #240 shipped
-  the close/quit confirm, the per-record edit stash, and Save / Save all under SSR; two `cargo xtask
-  gui-pass` scenarios now drive them in the real webview. `unsaved-close-confirm` dirties a record,
-  raises the confirm with `⌘W`, tabs the three-button footer full circle, cancels it with both `Esc` and
-  the scrim without losing the edit, restores a parked edit after navigating away and back, and saves
-  from the dialog. `unsaved-quit-confirm` covers the blocked Save (a `⌘N` draft: the disabled button is
-  not a tab stop, so the ring is two buttons), the `⌘Q` dialog's `ul.stack` over two unsaved tabs, and —
-  since #261 — a **Save all** click: the partial run saves the dirtied record, leaves the untouched
-  draft open and does not quit, which is what makes it screenshottable at all. What stays human: whether
-  a freshly activated pane mounts fast enough that Save looks instant, that a *complete* `⌘Q` Save-all
-  run reaches `QuitManager` after the last save (that one does kill the window the screenshots come
-  from), and the slide-in motion. Everything else the pass covered — the map half — closed as #203. —
-  #244
 - **A titlebar/WM-initiated close bypasses the unsaved-work confirm entirely.** `⌘W`/`⌘Q` route through
   `NavState::request_close`/`request_quit`, which raise the confirm; an OS/WM-initiated close (titlebar
   ✕, session logout, `wmctrl -c`) reaches `WindowEvent::CloseRequested` directly in the tao event loop
@@ -214,6 +201,10 @@ Residuals from the shortcuts work (ADR 0030); see
 
 - **`geography_toolbar` takes 11 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
   fit + draw-target + zoom state were threaded in — bundle them into a struct. Cosmetic cleanup.
+  `map_surface` (`screens/map_shared.rs`) now carries the same `#[expect]` for the same reason, after
+  the draft signal and the tile credit joined its container/aria/tool/center/zoom/labels arguments, and
+  `mount_maplibre` is at 7 — over the 5-positional-parameter house limit but under clippy's threshold,
+  so nothing flags it. All three want the same fix: one struct for the surface's mount parameters.
 - **The Geography tool's Point tool cannot save at all.** The Place Map editor has a "Use this point"
   confirm; the Geography tool has no equivalent, and contrary to what this bullet used to say it does
   not commit on click either — it only paints a red draft dot. `open_geometry_panel`
@@ -221,16 +212,6 @@ Residuals from the shortcuts work (ADR 0030); see
   `Polygon`, so its `PlaceGeometry::Point` branch and the whole `GeoPanel::CreateHere` variant are
   unreachable. Either give the tool a confirm step that reaches that branch, or delete the dead
   variant.
-- **Polygon vertices are never drawn, and cannot be moved.** `geo-draft-point` filters the draft
-  source to `Point` geometry (`screens/map_shared.rs`) while a ring is emitted as a `LineString`
-  under three vertices and a `Polygon` at three or more, so no vertex handle is ever rendered: the
-  first click shows nothing at all, the second only a hairline segment, and a finished ring has
-  outline plus fill with no corners. A draft vertex layer is the prerequisite for the drag-to-move
-  and mid-ring insertion under *In-map editing depth* below. — #259
-- **OSM attribution is never shown.** The map is created with `attributionControl: false` and the
-  surface's own attribution line renders an empty string (`screens/map_shared.rs`), while
-  `MapProvider::attribution` (`genealogy-app/src/config.rs`) is never read — so the tile source's
-  required credit is absent, which the OSM tile-usage policy does not allow. — #254
 - **The Geography place list is undocumented and geometry-only.** The rail lists places that resolved
   a geometry *as of the slider year*, narrowed by the toolbar picker's live query
   (`screens/geography.rs`) — so a place without geometry can never be selected there (making it
@@ -251,14 +232,16 @@ Residuals from the shortcuts work (ADR 0030); see
   clear it" behaviour is right for a *refusal*, wrong for a *save*. Note the manual escape hatch is
   itself broken: see the Clear bullet above.
 - **Switching provider repaints nothing.** The toolbar's provider select writes `[map]` config for
-  `osm-raster` and is an explicit no-op for the other two options, but the tile URL is hardcoded in
-  `maplibre_init_script` and nothing ever calls `setStyle`, so no choice can change the map. Pairs
-  with the *Provider sub-forms* item below — the sub-forms are pointless while the map ignores the
-  setting.
-- **In-map editing depth** — true mouse-drag reposition and mid-ring vertex insertion (today: click to
-  drop/move a point and click to add polygon vertices), pin-click selection on the canvas (today:
-  select via the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is
-  wired; polygon draws onto an existing place).
+  `osm-raster` and is an explicit no-op for the other two options. The raster tile URL now follows that
+  config (`rendered_credit`, `screens/map_shared.rs` — the credit and the URL are resolved together so
+  the map cannot credit a source it does not fetch), but nothing calls `setStyle`, the provider is read
+  once when the screen mounts, and neither vector kind has an adapter — so no choice made in the
+  toolbar changes the map you are looking at. Pairs with the *Provider sub-forms* item below — the
+  sub-forms are pointless while the map ignores the setting.
+- **In-map editing depth** — mid-ring vertex insertion (today: a vertex can be dragged to a new
+  position, but not inserted between two others), pin-click selection on the canvas (today: select via
+  the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is wired;
+  polygon draws onto an existing place).
 - **Provider sub-forms** — `osm-raster` is switchable from the toolbar; `maplibre-style` / `google` are
   declared in `[map]` config and round-trip but have no toolbar sub-form to collect a style URL /
   API-key-env yet.

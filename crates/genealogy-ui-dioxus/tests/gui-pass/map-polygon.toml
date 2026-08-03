@@ -3,10 +3,10 @@
 # finishing it hands the geometry to the provenance panel. None of it exists under SSR, which renders no
 # canvas and has no pointer.
 #
-# Two things are deliberately *not* asserted, because the app does not do them: polygon vertices are
-# never drawn as handles (the draft's point layer is filtered to `Point` geometry, so a ≥3-vertex draft
-# renders as fill + outline only, and a 1-vertex draft renders nothing at all), and there is no way to
-# insert a vertex mid-ring. Both are backlog items, not verification gaps.
+# Since #259 the first click also draws a handle: each draft vertex is its own `vertex`-tagged Point
+# feature in the `geo-draft` source, so the `first-vertex` assertion below is over a canvas that used to
+# paint nothing at all. Dragging a handle is `map-vertex-drag.toml`; inserting a vertex mid-ring is
+# still a backlog item, not a verification gap.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The canvas
 # region asserted below sits inside the surface both before and after the Finish/Clear row shrinks it.
@@ -109,6 +109,18 @@ region = [500, 200, 1250, 700]
 # Until #252 this frame's canvas was flat: the row shrank the surface, MapLibre resized the canvas, and
 # the repaint never composited. The `differ` above passed anyway — a blanked canvas differs too.
 because = "the Finish/Clear row must not cost the map its tiles"
+
+[[assert]]
+kind = "differ"
+shots = ["armed", "vertex-one"]
+# The 80x80 box centred on this scenario's own first-vertex click at [900, 400]. The camera does not
+# move between these two adjacent shots (arming the tool only shrinks the surface, and the `painted`
+# assertion above already covers that repaint), so the only thing that can change inside the box is the
+# handle. Region-scoped and tight: one ~24px circle on a full-frame map is far under the whole-window
+# tolerance. Before #259 this click painted nothing whatsoever.
+region = [860, 360, 80, 80]
+tolerance = 0.001
+because = "the first polygon vertex must draw a visible handle, not wait for a second click (#259)"
 
 [[assert]]
 kind = "differ"

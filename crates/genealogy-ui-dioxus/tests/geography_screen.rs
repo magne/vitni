@@ -5,15 +5,25 @@
 //! this way; see the PR report for what needs manual GUI verification).
 
 use dioxus::prelude::*;
-use genealogy_ui::{EventPinVm, GeographyVm, MapProviderVm, MarkerShapeVm, PlaceMarkerVm};
+use genealogy_ui::{EventPinVm, GeographyVm, MarkerShapeVm, PlaceMarkerVm};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
-    DrawTool, geography_draw_target, geography_empty_state, geography_map_surface, geography_rail,
+    DrawTool, MapCredit, MapDraft, geography_draw_target, geography_empty_state, geography_map_surface, geography_rail,
     geography_time_slider, geography_unplotted_note,
 };
 
 fn chrome() -> Chrome {
     Chrome::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+/// The credit the surface is handed in these renders. Not a Fluent lookup: an attribution is the tile
+/// provider's own required wording (it arrives from `[map]` config), so it is shown verbatim in every
+/// locale — which is why the assertions below pin the supplied text rather than any translation.
+fn credit() -> MapCredit {
+    MapCredit {
+        tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
+        attribution: "© OpenStreetMap contributors".to_owned(),
+    }
 }
 
 fn render(view: fn() -> Element) -> String {
@@ -43,7 +53,8 @@ fn no_resolved_geometry_shows_the_empty_state() {
 fn MapSurfaceWithMarkers() -> Element {
     let tool = use_signal(|| DrawTool::Pan);
     let zoom = use_signal(|| 4.0);
-    geography_map_surface(&chrome(), 3, 5, tool, zoom, |_lat: f64, _lon: f64| {})
+    let draft = use_signal(|| MapDraft::Empty);
+    geography_map_surface(&chrome(), 3, 5, tool, draft, zoom, credit())
 }
 
 #[test]
@@ -65,11 +76,55 @@ fn the_map_surface_carries_the_container_and_an_accessible_marker_count() {
     );
 }
 
+/// The tile source's terms require its credit to be visible, and `MapLibre`'s own
+/// `AttributionControl` is disabled — so this static overlay is the only thing that shows it. Before
+/// #254 the box rendered with a literal empty string in it.
+#[test]
+fn the_map_surface_shows_the_tile_sources_required_credit() {
+    let mut vdom = VirtualDom::new(MapSurfaceWithMarkers);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"class="map-attr""#),
+        "the attribution overlay is rendered:\n{html}"
+    );
+    assert!(
+        html.contains("© OpenStreetMap contributors"),
+        "the overlay carries the configured credit text, not an empty box:\n{html}"
+    );
+}
+
+#[component]
+fn MapSurfaceWithNoCredit() -> Element {
+    let tool = use_signal(|| DrawTool::Pan);
+    let zoom = use_signal(|| 4.0);
+    let blank = MapCredit {
+        tile_url: String::new(),
+        attribution: String::new(),
+    };
+    let draft = use_signal(|| MapDraft::Empty);
+    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, blank)
+}
+
+/// `.map-attr` is a bordered panel in the stylesheet, so rendering it around nothing draws a small
+/// empty box over the corner of the map — worse than drawing nothing at all.
+#[test]
+fn an_empty_credit_renders_no_overlay_at_all() {
+    let mut vdom = VirtualDom::new(MapSurfaceWithNoCredit);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        !html.contains("map-attr"),
+        "no credit means no empty bordered box:\n{html}"
+    );
+}
+
 #[component]
 fn MapSurfacePanHasNoCaptureOverlay() -> Element {
     let tool = use_signal(|| DrawTool::Pan);
     let zoom = use_signal(|| 4.0);
-    geography_map_surface(&chrome(), 0, 0, tool, zoom, |_lat: f64, _lon: f64| {})
+    let draft = use_signal(|| MapDraft::Empty);
+    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, credit())
 }
 
 #[test]
@@ -87,7 +142,8 @@ fn pan_mode_does_not_arm_the_crosshair_cursor() {
 fn MapSurfacePointModeHasCaptureOverlay() -> Element {
     let tool = use_signal(|| DrawTool::Point);
     let zoom = use_signal(|| 4.0);
-    geography_map_surface(&chrome(), 0, 0, tool, zoom, |_lat: f64, _lon: f64| {})
+    let draft = use_signal(|| MapDraft::Empty);
+    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, credit())
 }
 
 #[test]
@@ -149,10 +205,6 @@ fn geography_vm() -> GeographyVm {
         }],
         unplotted_count: 0,
         resolved_year: Some(1900),
-        provider: MapProviderVm::OsmRaster {
-            tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
-            attribution: "© OpenStreetMap contributors".to_owned(),
-        },
     }
 }
 
@@ -205,10 +257,6 @@ fn two_marker_geography_vm() -> GeographyVm {
         events: Vec::new(),
         unplotted_count: 0,
         resolved_year: None,
-        provider: MapProviderVm::OsmRaster {
-            tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
-            attribution: "© OpenStreetMap contributors".to_owned(),
-        },
     }
 }
 

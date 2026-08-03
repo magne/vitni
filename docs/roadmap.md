@@ -402,7 +402,7 @@ Plan: [`docs/archive/plans/places-geography-temporal.md`](archive/plans/places-g
   audited `GeometryAsserted` event, no separate map-write path. A time slider resolves as-of a year via
   `show_place_as_of`, and the map **provider** is a declarative `[map]` client/presentation-config
   descriptor. Research: [`docs/research/geography-rendering.md`](research/geography-rendering.md).
-  Honest residuals (scoped follow-ups, not blockers): true mouse-drag / mid-ring vertex insertion,
+  Honest residuals (scoped follow-ups, not blockers): mid-ring vertex insertion,
   pin-click selection, polygon-drawn place creation, the `maplibre-style`/`google` provider sub-forms,
   viewport-scoped `places_in_bbox` loading, defaulting the edit date to the slider year, dated
   `add_place_name`/`assert_place_enclosed_by` use-cases, and the `map-provider` plugin world +

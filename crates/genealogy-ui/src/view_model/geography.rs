@@ -5,7 +5,7 @@
 //! Coordinates are decimal degrees (`f64`), mirroring the Phase-6 [`crate::MapPointVm`] convention —
 //! the same reason [`GeographyVm`] is `PartialEq` but not `Eq`.
 
-use genealogy_app::{GeographySummary, MapProvider, PlaceGeometry};
+use genealogy_app::{GeographySummary, PlaceGeometry};
 
 use crate::i18n::Localizer;
 
@@ -95,64 +95,6 @@ pub struct EventPinVm {
     pub lon: f64,
 }
 
-/// The map component's provider descriptor (ADR 0025 §3) — never carries key *material*, only the
-/// **name** of the environment variable holding it (mirrors [`MapProvider`]); the renderer resolves
-/// the value at the point it builds the tile/style request, keeping it out of the view-model and any
-/// log built from one.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MapProviderVm {
-    /// A raster XYZ tile source.
-    OsmRaster {
-        /// The `{z}/{x}/{y}` tile URL template.
-        tile_url: String,
-        /// The attribution string to display.
-        attribution: String,
-    },
-    /// A `MapLibre` GL JS vector style.
-    MaplibreStyle {
-        /// The style URL.
-        style_url: String,
-        /// The attribution string to display.
-        attribution: String,
-        /// The environment variable name holding the style's API key, if it needs one.
-        api_key_env: Option<String>,
-    },
-    /// A paid Google Maps style. Declared for configuration completeness (ADR 0025 §3); the v1 map
-    /// component has no Google tile adapter yet (no plugin/geocoding work in this phase, ADR 0025
-    /// §4) — selecting it renders the empty-provider state until that adapter lands, mirroring how
-    /// `AiProvider::Plugin` is "named but not yet supported".
-    Google {
-        /// The environment variable name holding the API key.
-        api_key_env: String,
-        /// The attribution string to display.
-        attribution: String,
-    },
-}
-
-impl From<MapProvider> for MapProviderVm {
-    fn from(provider: MapProvider) -> Self {
-        match provider {
-            MapProvider::OsmRaster { tile_url, attribution } => Self::OsmRaster { tile_url, attribution },
-            MapProvider::MaplibreStyle {
-                style_url,
-                attribution,
-                api_key_env,
-            } => Self::MaplibreStyle {
-                style_url,
-                attribution,
-                api_key_env,
-            },
-            MapProvider::Google {
-                api_key_env,
-                attribution,
-            } => Self::Google {
-                api_key_env,
-                attribution,
-            },
-        }
-    }
-}
-
 /// The Geography tool's full view: every resolved place marker and event pin, the year they were
 /// resolved as of (`None` for the current/primary resolution), and the map's provider descriptor.
 #[derive(Debug, Clone, PartialEq)]
@@ -167,15 +109,12 @@ pub struct GeographyVm {
     pub unplotted_count: usize,
     /// The time-slider year this view is resolved as of; `None` for the current/primary resolution.
     pub resolved_year: Option<i32>,
-    /// The map's provider descriptor.
-    pub provider: MapProviderVm,
 }
 
 impl GeographyVm {
-    /// Builds the view from the app's [`GeographySummary`] feed and the configured provider,
-    /// localizing every marker/pin label.
+    /// Builds the view from the app's [`GeographySummary`] feed, localizing every marker/pin label.
     #[must_use]
-    pub fn from_summary(summary: &GeographySummary, provider: MapProvider, loc: &Localizer) -> Self {
+    pub fn from_summary(summary: &GeographySummary, loc: &Localizer) -> Self {
         let markers = summary
             .markers
             .iter()
@@ -188,7 +127,6 @@ impl GeographyVm {
             events,
             unplotted_count: summary.unplotted.len(),
             resolved_year,
-            provider: provider.into(),
         }
     }
 }
@@ -255,11 +193,11 @@ pub(crate) fn event_pin_vm(pin: &genealogy_app::EventPin, loc: &Localizer) -> Ev
 
 #[cfg(test)]
 mod tests {
-    use super::{GeographyVm, MapProviderVm, MarkerShapeVm, ZOOM_RANGE, clamp_slider_year, clamp_zoom};
+    use super::{GeographyVm, MarkerShapeVm, ZOOM_RANGE, clamp_slider_year, clamp_zoom};
     use crate::i18n::Localizer;
     use genealogy_app::{
         Calendar, DateModifier, DatePoint, DateQuality, EventPin, EventType, GenealogicalDate, GenealogicalDateBody,
-        GeoCoordinates, MapProvider, Microdegrees, PlaceGeometry, PlaceMarker, PlaceType,
+        GeoCoordinates, Microdegrees, PlaceGeometry, PlaceMarker, PlaceType,
     };
     use std::str::FromStr;
 
@@ -304,7 +242,7 @@ mod tests {
             unplotted: Vec::new(),
             resolved_as_of: None,
         };
-        let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
+        let vm = GeographyVm::from_summary(&summary, &loc());
         assert_eq!(vm.markers.len(), 1);
         let marker = &vm.markers[0];
         assert_eq!(marker.human_id, "P0001");
@@ -334,7 +272,7 @@ mod tests {
             unplotted: Vec::new(),
             resolved_as_of: None,
         };
-        let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
+        let vm = GeographyVm::from_summary(&summary, &loc());
         match &vm.markers[0].shape {
             MarkerShapeVm::Polygon { exterior, holes } => {
                 assert_eq!(exterior.len(), 3);
@@ -360,7 +298,7 @@ mod tests {
             unplotted: Vec::new(),
             resolved_as_of: None,
         };
-        let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
+        let vm = GeographyVm::from_summary(&summary, &loc());
         assert_eq!(vm.events.len(), 1);
         assert_eq!(vm.events[0].place_human_id, "P0001");
         assert!((vm.events[0].lat - 59.9).abs() < 1e-6);
@@ -374,14 +312,14 @@ mod tests {
             unplotted: Vec::new(),
             resolved_as_of: Some(year_date(1900)),
         };
-        let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
+        let vm = GeographyVm::from_summary(&summary, &loc());
         assert_eq!(vm.resolved_year, Some(1900));
     }
 
     #[test]
     fn no_as_of_date_leaves_the_resolved_year_unset() {
         let summary = genealogy_app::GeographySummary::default();
-        let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
+        let vm = GeographyVm::from_summary(&summary, &loc());
         assert_eq!(vm.resolved_year, None);
     }
 
@@ -404,28 +342,14 @@ mod tests {
             ],
             resolved_as_of: Some(year_date(1850)),
         };
-        let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
+        let vm = GeographyVm::from_summary(&summary, &loc());
         assert_eq!(vm.unplotted_count, 2);
     }
 
     #[test]
     fn nothing_unplotted_counts_zero_so_the_note_stays_hidden() {
-        let vm = GeographyVm::from_summary(
-            &genealogy_app::GeographySummary::default(),
-            MapProvider::default_osm(),
-            &loc(),
-        );
+        let vm = GeographyVm::from_summary(&genealogy_app::GeographySummary::default(), &loc());
         assert_eq!(vm.unplotted_count, 0);
-    }
-
-    #[test]
-    fn the_osm_default_provider_maps_to_its_vm_variant() {
-        let vm = GeographyVm::from_summary(
-            &genealogy_app::GeographySummary::default(),
-            MapProvider::default_osm(),
-            &loc(),
-        );
-        assert!(matches!(vm.provider, MapProviderVm::OsmRaster { .. }));
     }
 
     #[test]

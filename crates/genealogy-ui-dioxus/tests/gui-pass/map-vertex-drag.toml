@@ -1,0 +1,84 @@
+# Dragging a draft polygon vertex (#259) — the half `map-polygon.toml` cannot reach: that scenario proves
+# a handle is *drawn*, this one proves a handle can be *grabbed and moved*. None of it exists under SSR,
+# which has no canvas and no pointer; and the drag lives entirely in the init script's `mousedown` /
+# `mousemove` / window `mouseup` listeners, so no Rust test can reach it either.
+#
+# Modelled on `map-draw-target.toml`: the rail row is never clicked, so `fit_bounds` never fires and the
+# camera is provably still for the whole run. That is what makes the "a far-off tile region matches"
+# assertion below meaningful — it is the check that would have caught a missing `e.preventDefault()` on
+# the press, which would let the grab pan the whole basemap under the handle instead of moving one corner.
+#
+# Read by eye, not only by RMSE: if the tiles never loaded, the two `differ` assertions still pass (the
+# red draft graphics change against a flat background) and the `match` passes vacuously. Look at
+# `target/gui-pass/shots/map-vertex-drag/` and confirm the grabbed corner actually moved.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "A draft polygon vertex handle can be grabbed and dragged to a new position (#259)"
+
+[[step]]
+do = "click"
+at = [85, 881]
+label = "rail: Geography"
+
+[[step]]
+do = "click"
+at = [1480, 110]
+label = "toolbar: Draw polygon"
+
+[[step]]
+do = "click"
+at = [900, 400]
+label = "map: first vertex"
+
+[[step]]
+do = "click"
+at = [1200, 420]
+label = "map: second vertex"
+
+[[step]]
+do = "click"
+at = [1100, 700]
+label = "map: third vertex"
+
+[[step]]
+do = "shot"
+name = "ring-closed"
+
+# Grabs the first vertex's handle and drops it 180px left and 150px up. Far enough that the moved corner
+# and the vacated one land in disjoint 80x80 boxes, and still well inside the map surface.
+[[step]]
+do = "drag"
+from = [900, 400]
+by = [-180, -150]
+label = "map: drag the first vertex's handle"
+
+[[step]]
+do = "shot"
+name = "dragged"
+
+[[assert]]
+kind = "differ"
+shots = ["ring-closed", "dragged"]
+# The box the handle was grabbed from. The ring's fill and both its adjacent edges leave with it, so this
+# is the largest of the three changes — but still region-scoped, because a whole-window compare here is
+# also answered by the drop point.
+region = [860, 360, 80, 80]
+tolerance = 0.001
+because = "the grabbed corner must leave the position it was pressed at"
+
+[[assert]]
+kind = "differ"
+shots = ["ring-closed", "dragged"]
+# The box the handle was dropped in, centred on [720, 250].
+region = [680, 210, 80, 80]
+tolerance = 0.001
+because = "the dragged corner must arrive where the pointer was released"
+
+[[assert]]
+kind = "match"
+shots = ["ring-closed", "dragged"]
+# A tile-only strip along the bottom of the map surface: below the ring's lowest vertex (y=700) and clear
+# of the Finish/Clear row and the scale bar in the bottom-left corner. If the press had not called
+# `e.preventDefault()`, MapLibre's own dragPan would have moved every tile in this strip.
+region = [700, 800, 900, 120]
+because = "grabbing a handle must not pan the basemap under it"
