@@ -48,9 +48,9 @@ use genealogy_app::{
 use genealogy_app::{ancestors, check_persons, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use genealogy_app::{
-    CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MapProvider, MediaChangeSet, NewPlaceEntry,
-    NoteChangeSet, PartnerInput, PlaceChangeSet, PlaceRefInput, PlaceSuccessionInput, RepositoryChangeSet,
-    SourceChangeSet, assert_event_date_value, assert_media_date_value, assert_place_coordinates, assert_place_geometry,
+    CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MediaChangeSet, NewPlaceEntry, NoteChangeSet,
+    PartnerInput, PlaceChangeSet, PlaceRefInput, PlaceSuccessionInput, RepositoryChangeSet, SourceChangeSet,
+    assert_event_date_value, assert_media_date_value, assert_place_coordinates, assert_place_geometry,
     assert_place_succession, build_genealogical_date, commit_citation_change_set, commit_dna_test_change_set,
     commit_event_change_set, commit_family_change_set, commit_media_change_set, commit_note_change_set,
     commit_place_change_set, commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build,
@@ -139,11 +139,11 @@ pub enum IntentOutcome {
     DuplicateCandidates(Vec<DuplicateCandidateVm>),
     /// The Merge tool's compare/merge wizard, loaded for a chosen pair.
     MergeCompare(Box<MergeCompareVm>),
-    /// The Geography tool's markers, event pins, and time-slider resolution (ADR 0025 §1). The
-    /// provider descriptor is [`MapProvider::default_osm`]'s placeholder here — `dispatch` has no
-    /// config access by design (workspace + localizer only); the renderer overwrites `provider` with
-    /// the configured one it reads separately (mirrors how the assisted-import `[ai]` config is read
-    /// outside `dispatch`, `genealogy-ui-dioxus/src/services.rs`).
+    /// The Geography tool's markers, event pins, and time-slider resolution (ADR 0025 §1). The map's
+    /// tile provider is deliberately absent: `dispatch` has no config access by design (workspace +
+    /// localizer only), so the renderer reads the client-scope `[map]` section itself, the same way the
+    /// assisted-import `[ai]` config is read outside `dispatch`
+    /// (`genealogy-ui-dioxus/src/services.rs`).
     Geography(Box<GeographyVm>),
     /// The requested record id was not found.
     NotFound {
@@ -261,15 +261,15 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
 }
 
 /// Loads the Geography tool's markers and event pins, resolved as of `year` (ADR 0025 §1, ADR 0026
-/// §1). The provider descriptor is the [`MapProvider::default_osm`] placeholder — see
-/// [`IntentOutcome::Geography`]'s doc for why `dispatch` cannot resolve the configured one itself.
+/// §1). Carries no tile provider — see [`IntentOutcome::Geography`]'s doc for why `dispatch` cannot
+/// resolve the configured one itself.
 async fn show_geography_view(
     workspace: &Workspace,
     loc: &Localizer,
     year: Option<i32>,
 ) -> Result<IntentOutcome, AppError> {
     let summary = show_geography(workspace, year).await?;
-    let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), loc);
+    let vm = GeographyVm::from_summary(&summary, loc);
     Ok(IntentOutcome::Geography(Box::new(vm)))
 }
 

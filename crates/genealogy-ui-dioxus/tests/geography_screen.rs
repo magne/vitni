@@ -5,7 +5,7 @@
 //! this way; see the PR report for what needs manual GUI verification).
 
 use dioxus::prelude::*;
-use genealogy_ui::{EventPinVm, GeographyVm, MapProviderVm, MarkerShapeVm, PlaceMarkerVm};
+use genealogy_ui::{EventPinVm, GeographyVm, MarkerShapeVm, PlaceMarkerVm};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
     DrawTool, MapCredit, MapDraft, geography_draw_target, geography_empty_state, geography_map_surface, geography_rail,
@@ -205,10 +205,6 @@ fn geography_vm() -> GeographyVm {
         }],
         unplotted_count: 0,
         resolved_year: Some(1900),
-        provider: MapProviderVm::OsmRaster {
-            tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
-            attribution: "© OpenStreetMap contributors".to_owned(),
-        },
     }
 }
 
@@ -261,10 +257,6 @@ fn two_marker_geography_vm() -> GeographyVm {
         events: Vec::new(),
         unplotted_count: 0,
         resolved_year: None,
-        provider: MapProviderVm::OsmRaster {
-            tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
-            attribution: "© OpenStreetMap contributors".to_owned(),
-        },
     }
 }
 

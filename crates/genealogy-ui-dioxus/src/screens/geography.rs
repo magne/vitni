@@ -656,7 +656,7 @@ mod tests {
     use super::{GeoPanel, filtered_markers, geometry_panel_for, provider_kind, selected_marker_shape};
     use crate::screens::map_shared::geo_point;
     use genealogy_app::{MapProvider, PlaceGeometry};
-    use genealogy_ui::{EventPinVm, GeographyVm, MapProviderVm, MarkerShapeVm, PlaceMarkerVm};
+    use genealogy_ui::{EventPinVm, GeographyVm, MarkerShapeVm, PlaceMarkerVm};
 
     #[test]
     fn provider_kind_tokens_round_trip_the_select_value() {
@@ -723,10 +723,6 @@ mod tests {
             }],
             unplotted_count: 0,
             resolved_year: None,
-            provider: MapProviderVm::OsmRaster {
-                tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
-                attribution: "© OpenStreetMap contributors".to_owned(),
-            },
         }
     }
 
