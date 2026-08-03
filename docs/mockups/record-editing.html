@@ -288,7 +288,11 @@
     is <b>never stored</b>. Same validation, dirty-tracking, and Save/Cancel as edit — the only difference
     is create starts empty and Save <i>creates</i> the record instead of <i>updating</i> it. Cancel discards
     the draft; nothing is written. On Save the draft tab becomes the stored record in place, and the
-    Explorer list beside it gains the new row and the rail's count badge updates — no manual refresh.</p>
+    Explorer list beside it gains the new row and the rail's count badge updates — no manual refresh.
+    The same holds for every <b>record picker</b> still open elsewhere (§6b, and the existing-only pickers
+    of <a href="edit-patterns.html">edit-patterns</a> §c) and for the open <a href="search-palette.html">command
+    palette</a>: each reloads its options after any create, edit or undo, so a record created while it stays
+    open is pickable in it without reopening the form.</p>
   <div class="specimen">
     <div class="label">New person — unsaved draft</div>
     <div class="card" style="margin-bottom:0">
