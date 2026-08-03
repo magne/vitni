@@ -107,20 +107,25 @@ pub fn rendered_credit(provider: &MapProvider) -> MapCredit {
 /// `MapLibre`'s own `AttributionControl` stays disabled and this static overlay carries the text
 /// instead, so one treatment works for every provider kind (`docs/research/geography-rendering.md`).
 /// The overlay is omitted entirely when the credit is empty — an empty bordered box is not a credit.
+///
+/// `tool` and `draft` are the caller's own draw state, passed rather than a click callback: every
+/// gesture on the canvas (a click appending a vertex, a handle drag moving one) resolves against the
+/// same pair, so both screens get identical behaviour from one implementation instead of two copies of
+/// the same closure.
 #[must_use = "renders the map surface; drop it and nothing is shown"]
 #[expect(
     clippy::too_many_arguments,
-    reason = "a map surface is the mount id + label + the caller's draw-tool, camera, credit, control-label and click state; the precedent is geography_toolbar"
+    reason = "a map surface is the mount id + label + the caller's draw state, camera, credit and control labels; the precedent is geography_toolbar"
 )]
 pub fn map_surface(
     container_id: &'static str,
     aria_label: String,
     tool: Signal<DrawTool>,
+    draft: Signal<MapDraft>,
     center: (f64, f64),
     zoom: Signal<f64>,
     credit: MapCredit,
     labels: MapControlLabels,
-    on_map_click: impl FnMut(f64, f64) + Clone + 'static,
 ) -> Element {
     let capturing = !matches!(tool(), DrawTool::Pan);
     let attribution = credit.attribution.clone();
@@ -135,7 +140,7 @@ pub fn map_surface(
                 style: "position:absolute;inset:0",
                 "data-armed": if capturing { "true" } else { "false" },
                 onmounted: move |_| {
-                    mount_maplibre(container_id, center, zoom, &labels, &credit.tile_url, on_map_click.clone());
+                    mount_maplibre(container_id, center, zoom, &labels, &credit.tile_url, tool, draft);
                 },
             }
             if !attribution.is_empty() {
@@ -163,6 +168,16 @@ pub enum MapMessage {
     },
     /// The camera settled at this zoom level (`zoomend`, plus one measurement at `load`).
     Zoom(f64),
+    /// A draft vertex handle was dragged and released at this point (#259). Reported once per gesture,
+    /// on release — the webview rubber-bands the shape itself while the pointer moves.
+    VertexMoved {
+        /// The vertex's index into the draft's own (unclosed) vertex list.
+        index: usize,
+        /// The vertex's new latitude in decimal degrees.
+        lat: f64,
+        /// The vertex's new longitude in decimal degrees.
+        lon: f64,
+    },
 }
 
 /// Parses one `dioxus.send` payload into a [`MapMessage`], or `None` for anything this build does not
@@ -179,14 +194,76 @@ pub fn parse_map_message(payload: &str) -> Option<MapMessage> {
             lon: lng.as_f64()?,
         });
     }
+    if let Some(vertex) = value.get("vertex").and_then(Value::as_array) {
+        let [index, lng, lat] = vertex.as_slice() else {
+            return None;
+        };
+        // `as_u64` is what rejects a negative or fractional index; nothing here uses an `as` cast.
+        return Some(MapMessage::VertexMoved {
+            index: usize::try_from(index.as_u64()?).ok()?,
+            lat: lat.as_f64()?,
+            lon: lng.as_f64()?,
+        });
+    }
     if let Some(zoom) = value.get("zoom") {
         return Some(MapMessage::Zoom(zoom.as_f64()?));
     }
     None
 }
 
+/// The draft with the vertex at `index` moved to `(lat, lon)`. An index the draft does not have leaves
+/// it unchanged — the index arrives from the webview, so it is untrusted input rather than a bug to
+/// fail on. Returns a new draft; the caller writes it back to its own signal.
+#[must_use]
+pub fn move_vertex(draft: &MapDraft, index: usize, lat: f64, lon: f64) -> MapDraft {
+    let mut moved = draft.clone();
+    match &mut moved {
+        MapDraft::Empty => {}
+        MapDraft::Point(point) => {
+            if index == 0 {
+                *point = (lat, lon);
+            }
+        }
+        MapDraft::Polygon(vertices) => {
+            if let Some(vertex) = vertices.get_mut(index) {
+                *vertex = (lat, lon);
+            }
+        }
+    }
+    moved
+}
+
+/// Applies a canvas click to the caller's draft, gated by the armed tool: `Pan` ignores it, `Point`
+/// drops (or re-drops) the single point, `Polygon` appends a vertex. Shared by both map screens, which
+/// previously carried identical copies of this closure.
+///
+/// Reads and writes the same signal, so the read has to finish before the write: `draft()` returns an
+/// owned clone and its guard is dropped at the end of that statement. Holding a read guard across a
+/// [`Signal::set`] on the same signal panics at runtime, and no lint catches it.
+pub fn apply_map_click(tool: Signal<DrawTool>, mut draft: Signal<MapDraft>, lat: f64, lon: f64) {
+    match tool() {
+        DrawTool::Pan => {}
+        DrawTool::Point => draft.set(MapDraft::Point((lat, lon))),
+        DrawTool::Polygon => {
+            let mut vertices = match draft() {
+                MapDraft::Polygon(vertices) => vertices,
+                MapDraft::Empty | MapDraft::Point(_) => Vec::new(),
+            };
+            vertices.push((lat, lon));
+            draft.set(MapDraft::Polygon(vertices));
+        }
+    }
+}
+
+/// Applies a released vertex drag to the caller's draft (#259). Clones out of the `peek()` borrow before
+/// writing, for the same reason [`apply_map_click`] documents.
+pub fn apply_vertex_move(mut draft: Signal<MapDraft>, index: usize, lat: f64, lon: f64) {
+    let current = draft.peek().clone();
+    draft.set(move_vertex(&current, index, lat, lon));
+}
+
 /// Mounts `MapLibre` on `container_id` (a no-op under SSR, where there is no webview to run the
-/// script) and arms the persistent message listener, streaming every click as a tagged payload over
+/// script) and arms the persistent message listener, streaming every gesture as a tagged payload over
 /// `dioxus.send`, read in a loop for the surface's lifetime — not a one-shot eval per click, so the
 /// map stays interactive without a Rust round trip blocking each gesture.
 pub fn mount_maplibre(
@@ -195,15 +272,17 @@ pub fn mount_maplibre(
     zoom: Signal<f64>,
     labels: &MapControlLabels,
     tile_url: &str,
-    mut on_click: impl FnMut(f64, f64) + 'static,
+    tool: Signal<DrawTool>,
+    draft: Signal<MapDraft>,
 ) {
     let script = maplibre_init_script(container_id, center, *zoom.peek(), labels, tile_url);
     let mut listener = document::eval(&script);
     spawn(async move {
         while let Ok(payload) = listener.recv::<String>().await {
             match parse_map_message(&payload) {
-                Some(MapMessage::Click { lat, lon }) => on_click(lat, lon),
+                Some(MapMessage::Click { lat, lon }) => apply_map_click(tool, draft, lat, lon),
                 Some(MapMessage::Zoom(level)) => set_zoom(zoom, level),
+                Some(MapMessage::VertexMoved { index, lat, lon }) => apply_vertex_move(draft, index, lat, lon),
                 None => {}
             }
         }
@@ -308,6 +387,78 @@ const MAP_CONTROLS_SCRIPT: &str = "
                 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
                 dioxus.send(JSON.stringify({ zoom: map.getZoom() }));";
 
+/// Drag-to-move for the draft vertex handles (#259), armed inside [`maplibre_init_script`]'s own
+/// single-map guard so a re-render cannot register a second copy of any of it. Interpolated as a value,
+/// so its braces need no `format!` escaping.
+///
+/// The gesture rubber-bands entirely in the webview and reports once on release, which is the same
+/// choice this module makes for `zoomend` over `zoom`: a `dioxus.send` per frame would round-trip a
+/// whole drag through Rust and re-render (and therefore remount) the surface on every one.
+///
+/// Three details are load-bearing:
+///
+/// - `properties.vertex` is compared against `undefined`/`null`, never tested for truthiness — vertex
+///   `0` is a real handle and a falsy value.
+/// - `e.preventDefault()` on the press is what suppresses `dragPan`; without it a grab also pans the
+///   basemap under the handle.
+/// - the release listens on **`window`**, not the map: the map's own `mouseup` only fires over the
+///   canvas, so releasing outside it would leave the drag armed.
+const MAP_VERTEX_DRAG_SCRIPT: &str = "
+            const vertexAt = (point) => {
+                if (!map.getLayer('geo-draft-point')) return null;
+                for (const hit of map.queryRenderedFeatures(point, { layers: ['geo-draft-point'] })) {
+                    const index = hit.properties ? hit.properties.vertex : undefined;
+                    if (index !== undefined && index !== null) return index;
+                }
+                return null;
+            };
+            const handleAt = (point) => vertexAt(point) !== null;
+            const moveDraftVertex = (data, index, lng, lat) => {
+                const features = data.features || [];
+                for (const feature of features) {
+                    if (feature.properties && feature.properties.vertex === index) {
+                        feature.geometry.coordinates = [lng, lat];
+                    }
+                }
+                const shape = features[0] && features[0].geometry;
+                if (!shape) return;
+                if (shape.type === 'LineString' && shape.coordinates[index]) {
+                    shape.coordinates[index] = [lng, lat];
+                }
+                if (shape.type === 'Polygon') {
+                    const ring = shape.coordinates[0] || [];
+                    if (!ring[index]) return;
+                    ring[index] = [lng, lat];
+                    if (index === 0) ring[ring.length - 1] = [lng, lat];
+                }
+            };
+            map.on('mousedown', (e) => {
+                if (el.dataset.armed !== 'true') return;
+                const index = vertexAt(e.point);
+                if (index === null) return;
+                el.__geoDrag = { index: index, moved: false, lng: e.lngLat.lng, lat: e.lngLat.lat };
+                e.preventDefault();
+            });
+            map.on('mousemove', (e) => {
+                const drag = el.__geoDrag;
+                if (!drag) return;
+                drag.moved = true;
+                drag.lng = e.lngLat.lng;
+                drag.lat = e.lngLat.lat;
+                const draft = el.__geoPending && el.__geoPending.draft;
+                if (!draft) return;
+                moveDraftVertex(draft, drag.index, drag.lng, drag.lat);
+                const source = map.getSource('geo-draft');
+                if (source) source.setData(draft);
+            });
+            window.addEventListener('mouseup', () => {
+                const drag = el.__geoDrag;
+                el.__geoDrag = null;
+                if (drag && drag.moved) dioxus.send(JSON.stringify({ vertex: [drag.index, drag.lng, drag.lat] }));
+            });
+            map.on('mouseenter', 'geo-draft-point', () => { map.getCanvas().style.cursor = 'grab'; });
+            map.on('mouseleave', 'geo-draft-point', () => { map.getCanvas().style.cursor = ''; });";
+
 /// The stroke every circle layer draws around its fill, so a marker stays legible over a dark tile and
 /// over another marker beneath it (per the "markers too small to see" fix).
 const CIRCLE_STROKE_COLOR: &str = "#ffffff";
@@ -399,8 +550,8 @@ fn maplibre_init_script(
                     if (pending.events) map.getSource('geo-events').setData(pending.events);
                     if (pending.draft) map.getSource('geo-draft').setData(pending.draft);
                 }}{controls}
-            }});
-            map.on('click', (e) => {{ dioxus.send(JSON.stringify({{ click: [e.lngLat.lng, e.lngLat.lat] }})); }});
+            }});{vertex_drag}
+            map.on('click', (e) => {{ if (!handleAt(e.point)) dioxus.send(JSON.stringify({{ click: [e.lngLat.lng, e.lngLat.lat] }})); }});
             map.on('zoomend', () => {{ dioxus.send(JSON.stringify({{ zoom: map.getZoom() }})); }});
             new ResizeObserver(() => {{ requestAnimationFrame(() => el.__geoMap && el.__geoMap.redraw()); }}).observe(el);
         }}
@@ -414,6 +565,7 @@ fn maplibre_init_script(
         event_paint = circle_paint("#ffb020", EVENT_RADIUS_STOPS, 1),
         draft_paint = circle_paint("#ff5d5d", POINT_RADIUS_STOPS, 2),
         controls = MAP_CONTROLS_SCRIPT,
+        vertex_drag = MAP_VERTEX_DRAG_SCRIPT,
     )
 }
 
@@ -790,8 +942,8 @@ mod tests {
     use super::{
         FIT_MAX_ZOOM, MapControlLabels, MapDraft, MapMessage, closed_ring, combined_bounds, draft_geojson,
         empty_feature_collection, events_geojson, fit_bounds_script, format_zoom, maplibre_init_script,
-        markers_geojson, parse_map_message, push_data_script, push_draft_script, rendered_credit, save_year,
-        shape_to_draft, zoom_changed,
+        markers_geojson, move_vertex, parse_map_message, push_data_script, push_draft_script, rendered_credit,
+        save_year, shape_to_draft, zoom_changed,
     };
     use genealogy_app::MapProvider;
     use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm, ZOOM_RANGE};
@@ -907,6 +1059,28 @@ mod tests {
         assert_eq!(parse_map_message(r#"{"zoom":14.23}"#), Some(MapMessage::Zoom(14.23)));
     }
 
+    /// The dragged handle reports the same `[lng, lat]` swap a click does, with the index it addresses
+    /// in front. Index `0` is the case to watch: it is a real vertex, not an absent one.
+    #[test]
+    fn a_vertex_payload_carries_its_index_and_swaps_the_webviews_lng_lat_order() {
+        assert_eq!(
+            parse_map_message(r#"{"vertex":[2,10.7,59.9]}"#),
+            Some(MapMessage::VertexMoved {
+                index: 2,
+                lat: 59.9,
+                lon: 10.7
+            })
+        );
+        assert_eq!(
+            parse_map_message(r#"{"vertex":[0,10.7,59.9]}"#),
+            Some(MapMessage::VertexMoved {
+                index: 0,
+                lat: 59.9,
+                lon: 10.7
+            })
+        );
+    }
+
     #[test]
     fn an_untagged_or_unknown_payload_is_ignored_rather_than_guessed_at() {
         for payload in [
@@ -915,10 +1089,153 @@ mod tests {
             r#"{"bearing":90}"#,
             r#"{"click":[10.7]}"#,
             r#"{"zoom":"14.2"}"#,
+            r#"{"vertex":[0,10.7]}"#,
+            r#"{"vertex":["0",10.7,59.9]}"#,
+            r#"{"vertex":[-1,10.7,59.9]}"#,
+            r#"{"vertex":[1.5,10.7,59.9]}"#,
             "not json at all",
         ] {
             assert_eq!(parse_map_message(payload), None, "{payload} names no known message");
         }
+    }
+
+    /// A drag rewrites the grabbed vertex and nothing else — the neighbours keep their coordinates, so
+    /// the ring's shape only changes at the corner that was moved.
+    #[test]
+    fn moving_a_vertex_rewrites_only_the_one_it_addresses() {
+        let draft = MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)]);
+        assert_eq!(
+            move_vertex(&draft, 1, 62.5, 4.5),
+            MapDraft::Polygon(vec![(60.0, 5.0), (62.5, 4.5), (61.0, 6.0)])
+        );
+    }
+
+    #[test]
+    fn moving_a_point_drafts_only_vertex_repositions_it() {
+        let draft = MapDraft::Point((59.9, 10.7));
+        assert_eq!(move_vertex(&draft, 0, 60.1, 11.2), MapDraft::Point((60.1, 11.2)));
+    }
+
+    /// The index arrives from the webview, so it is untrusted input: an index the draft does not have
+    /// leaves the draft alone rather than growing it or failing.
+    #[test]
+    fn a_vertex_index_past_the_last_one_leaves_the_draft_unchanged() {
+        let draft = MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0)]);
+        assert_eq!(move_vertex(&draft, 7, 62.5, 4.5), draft);
+        let point = MapDraft::Point((59.9, 10.7));
+        assert_eq!(move_vertex(&point, 1, 62.5, 4.5), point);
+    }
+
+    #[test]
+    fn an_empty_draft_has_no_vertex_to_move() {
+        assert_eq!(move_vertex(&MapDraft::Empty, 0, 62.5, 4.5), MapDraft::Empty);
+    }
+
+    /// Grabbing a handle has to suppress `dragPan`, or the press both grabs the vertex and pans the
+    /// whole basemap under it. `preventDefault` on `MapLibre`'s own mouse event is what does that.
+    #[test]
+    fn pressing_a_handle_suppresses_the_maps_own_drag_pan() {
+        let script = init_script();
+        let press = script.find("map.on('mousedown'").expect("the press is listened for");
+        let end = script[press..]
+            .find("map.on('mousemove'")
+            .expect("the move handler follows")
+            + press;
+        assert!(
+            script[press..end].contains("e.preventDefault()"),
+            "the press cancels MapLibre's own drag behaviour:\n{}",
+            &script[press..end]
+        );
+    }
+
+    /// Pan is still pan: the same `data-armed` attribute the surface renders for the crosshair cursor
+    /// gates the grab, so dragging over a handle with no tool armed pans the map as it always did.
+    #[test]
+    fn a_handle_is_grabbable_only_while_a_draw_tool_is_armed() {
+        let script = init_script();
+        let press = script.find("map.on('mousedown'").expect("the press is listened for");
+        let end = script[press..]
+            .find("map.on('mousemove'")
+            .expect("the move handler follows")
+            + press;
+        assert!(
+            script[press..end].contains("el.dataset.armed !== 'true'"),
+            "an unarmed surface never grabs a handle:\n{}",
+            &script[press..end]
+        );
+    }
+
+    /// The handle rubber-bands in the webview and commits once on release — the same reasoning as this
+    /// module's `zoomend`-not-`zoom` choice: a `dioxus.send` per `mousemove` would round-trip the whole
+    /// gesture through Rust and re-render the surface ~20 times.
+    #[test]
+    fn a_drag_reports_once_on_release_rather_than_once_per_frame() {
+        let script = init_script();
+        let move_start = script.find("map.on('mousemove'").expect("the move handler exists");
+        let release = script
+            .find("window.addEventListener('mouseup'")
+            .expect("the gesture ends on a window listener, so releasing off-canvas still ends it");
+        assert!(
+            !script[move_start..release].contains("dioxus.send"),
+            "the move only repaints the webview's own copy of the draft:\n{}",
+            &script[move_start..release]
+        );
+        assert!(
+            script[release..].contains("dioxus.send(JSON.stringify({ vertex: [drag.index, drag.lng, drag.lat] }))"),
+            "the release reports the moved vertex under its own key:\n{script}"
+        );
+        assert!(
+            !script.contains("map.on('mouseup'"),
+            "the map's own mouseup only fires over the canvas, which would leave a drag armed:\n{script}"
+        );
+    }
+
+    /// A short drag still fires the map's own `click`, so the click emitter has to refuse a click that
+    /// landed on a handle — otherwise pressing a corner would append a vertex on top of moving it.
+    #[test]
+    fn a_click_on_a_handle_grabs_it_instead_of_appending_a_vertex() {
+        let script = init_script();
+        assert!(
+            script.contains(
+                "if (!handleAt(e.point)) dioxus.send(JSON.stringify({ click: [e.lngLat.lng, e.lngLat.lat] }))"
+            ),
+            "the click emitter is guarded by the same hit test the grab uses:\n{script}"
+        );
+    }
+
+    /// A re-render remounts the surface and re-runs this script; the `__geoMap` guard is what stops a
+    /// second map being built, and the drag listeners have to sit inside it or they stack up.
+    #[test]
+    fn the_drag_listeners_are_armed_inside_the_single_map_guard() {
+        let script = init_script();
+        let guard = script
+            .find("if (el && !el.__geoMap && window.maplibregl)")
+            .expect("the single-map guard");
+        let press = script.find("map.on('mousedown'").expect("the press is listened for");
+        let release = script
+            .find("window.addEventListener('mouseup'")
+            .expect("the release is listened for");
+        assert!(
+            guard < press && guard < release,
+            "both drag listeners are armed inside the guard:\n{script}"
+        );
+    }
+
+    /// `place.html` draws its vertex specimens with `cursor: grab`; the canvas-drawn handles say the
+    /// same thing by swapping the canvas cursor while the pointer is over one.
+    #[test]
+    fn hovering_a_handle_says_it_can_be_grabbed() {
+        let script = init_script();
+        for event in ["mouseenter", "mouseleave"] {
+            assert!(
+                script.contains(&format!("map.on('{event}', 'geo-draft-point'")),
+                "the {event} cursor swap is scoped to the handle layer:\n{script}"
+            );
+        }
+        assert!(
+            script.contains("map.getCanvas().style.cursor = 'grab'"),
+            "hovering a handle shows the grab cursor:\n{script}"
+        );
     }
 
     /// The channel carries more than one kind of message, so the click emitter must tag itself —

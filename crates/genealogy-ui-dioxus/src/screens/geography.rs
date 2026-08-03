@@ -128,23 +128,6 @@ pub fn GeographyScreen() -> Element {
     let provider_dir = services.dir.clone();
     let provider = use_memo(move || map_config(&provider_dir).resolved_provider());
 
-    // The clicked-point stream (armed once at mount) turns into a draft point/vertex, gated by the
-    // active tool; `on_map_click` owns that decision so the mount closure stays a thin trigger.
-    let on_click_tool = tool;
-    let mut on_click_draft = draft;
-    let on_map_click = move |lat: f64, lon: f64| match on_click_tool() {
-        DrawTool::Pan => {}
-        DrawTool::Point => on_click_draft.set(MapDraft::Point((lat, lon))),
-        DrawTool::Polygon => {
-            let mut vertices = match on_click_draft() {
-                MapDraft::Polygon(vertices) => vertices,
-                _ => Vec::new(),
-            };
-            vertices.push((lat, lon));
-            on_click_draft.set(MapDraft::Polygon(vertices));
-        }
-    };
-
     // Re-push marker/event GeoJSON whenever the loaded data or the picker's live query changes (the
     // typed search hides non-matching markers on the map, not just the rail).
     use_effect(move || {
@@ -212,7 +195,7 @@ pub fn GeographyScreen() -> Element {
                     } else if marker_count == 0 && event_count == 0 {
                         {geography_empty_state(&chrome.0)}
                     } else {
-                        {geography_map_surface(&chrome.0, marker_count, event_count, tool, zoom, rendered_credit(&provider()), on_map_click)}
+                        {geography_map_surface(&chrome.0, marker_count, event_count, tool, draft, zoom, rendered_credit(&provider()))}
                     }
                     if matches!(tool(), DrawTool::Polygon) {
                         div { class: "wrap", style: "gap:8px",
@@ -450,15 +433,16 @@ pub fn geography_empty_state(chrome: &Chrome) -> Element {
 /// The map surface: the shared `MapLibre` mount (`screens::map_shared::map_surface`) at the
 /// Geography-tool's own container id, default center, and world/country-level zoom. `zoom` is the
 /// live camera level the toolbar's [`MapZoomReadout`] shows; `credit` names the tiles it fetches and
-/// the attribution drawn over them (#254).
+/// the attribution drawn over them (#254). `draft` is the in-progress shape every canvas gesture
+/// resolves against — a click appends to it, a handle drag moves one of its vertices (#259).
 pub fn geography_map_surface(
     chrome: &Chrome,
     marker_count: usize,
     event_count: usize,
     tool: Signal<DrawTool>,
+    draft: Signal<MapDraft>,
     zoom: Signal<f64>,
     credit: MapCredit,
-    on_map_click: impl FnMut(f64, f64) + Clone + 'static,
 ) -> Element {
     let aria = chrome.geography_map_aria(marker_count, event_count);
     let labels = MapControlLabels::from_chrome(chrome);
@@ -466,11 +450,11 @@ pub fn geography_map_surface(
         MAP_CONTAINER_ID,
         aria,
         tool,
+        draft,
         DEFAULT_CENTER,
         zoom,
         credit,
         labels,
-        on_map_click,
     )
 }
 

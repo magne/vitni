@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 use genealogy_ui::{EventPinVm, GeographyVm, MapProviderVm, MarkerShapeVm, PlaceMarkerVm};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
-    DrawTool, MapCredit, geography_draw_target, geography_empty_state, geography_map_surface, geography_rail,
+    DrawTool, MapCredit, MapDraft, geography_draw_target, geography_empty_state, geography_map_surface, geography_rail,
     geography_time_slider, geography_unplotted_note,
 };
 
@@ -53,7 +53,8 @@ fn no_resolved_geometry_shows_the_empty_state() {
 fn MapSurfaceWithMarkers() -> Element {
     let tool = use_signal(|| DrawTool::Pan);
     let zoom = use_signal(|| 4.0);
-    geography_map_surface(&chrome(), 3, 5, tool, zoom, credit(), |_lat: f64, _lon: f64| {})
+    let draft = use_signal(|| MapDraft::Empty);
+    geography_map_surface(&chrome(), 3, 5, tool, draft, zoom, credit())
 }
 
 #[test]
@@ -101,7 +102,8 @@ fn MapSurfaceWithNoCredit() -> Element {
         tile_url: String::new(),
         attribution: String::new(),
     };
-    geography_map_surface(&chrome(), 0, 0, tool, zoom, blank, |_lat: f64, _lon: f64| {})
+    let draft = use_signal(|| MapDraft::Empty);
+    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, blank)
 }
 
 /// `.map-attr` is a bordered panel in the stylesheet, so rendering it around nothing draws a small
@@ -121,7 +123,8 @@ fn an_empty_credit_renders_no_overlay_at_all() {
 fn MapSurfacePanHasNoCaptureOverlay() -> Element {
     let tool = use_signal(|| DrawTool::Pan);
     let zoom = use_signal(|| 4.0);
-    geography_map_surface(&chrome(), 0, 0, tool, zoom, credit(), |_lat: f64, _lon: f64| {})
+    let draft = use_signal(|| MapDraft::Empty);
+    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, credit())
 }
 
 #[test]
@@ -139,7 +142,8 @@ fn pan_mode_does_not_arm_the_crosshair_cursor() {
 fn MapSurfacePointModeHasCaptureOverlay() -> Element {
     let tool = use_signal(|| DrawTool::Point);
     let zoom = use_signal(|| 4.0);
-    geography_map_surface(&chrome(), 0, 0, tool, zoom, credit(), |_lat: f64, _lon: f64| {})
+    let draft = use_signal(|| MapDraft::Empty);
+    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, credit())
 }
 
 #[test]

@@ -848,21 +848,6 @@ fn PlaceMapEditor(
         draft.set(shape_to_draft(&geometry.shape));
     });
 
-    let on_click_tool = tool;
-    let mut on_click_draft = draft;
-    let on_map_click = move |lat: f64, lon: f64| match on_click_tool() {
-        DrawTool::Pan => {}
-        DrawTool::Point => on_click_draft.set(MapDraft::Point((lat, lon))),
-        DrawTool::Polygon => {
-            let mut vertices = match on_click_draft() {
-                MapDraft::Polygon(vertices) => vertices,
-                _ => Vec::new(),
-            };
-            vertices.push((lat, lon));
-            on_click_draft.set(MapDraft::Polygon(vertices));
-        }
-    };
-
     // Re-push this place's as-of-year shape whenever the loaded geometries or the slider year change
     // (resolved client-side over the already-loaded list — see `resolve_geometry_as_of`, no extra
     // query). Falls back to the scalar coordinate (`place_map_display_shape`) when the place has no
@@ -938,11 +923,11 @@ fn PlaceMapEditor(
                     PLACE_MAP_CONTAINER_ID,
                     aria,
                     tool,
+                    draft,
                     center,
                     zoom,
                     rendered_credit(&provider()),
                     MapControlLabels::from_chrome(chrome),
-                    on_map_click,
                 )}
             }
             {place_map_as_of_note(loc, &detail.geometries, resolved_shape.as_ref(), year())}
