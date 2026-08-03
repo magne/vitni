@@ -92,16 +92,57 @@ pub fn map_surface(
     }
 }
 
+/// One message the mounted map sends back over its single `dioxus.send` channel. Both emitters live
+/// inside the init script's own `if (el && !el.__geoMap …)` guard, so they cannot diverge from the map
+/// or from each other.
+///
+/// This is an **ephemeral webview transport**, not the ADR 0002/0004 event encoding: nothing here is
+/// ever persisted, so its shape carries no compatibility obligation and an unrecognized payload is
+/// simply dropped.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MapMessage {
+    /// The operator clicked the canvas, in `(lat, lon)` decimal degrees.
+    Click {
+        /// Latitude in decimal degrees.
+        lat: f64,
+        /// Longitude in decimal degrees.
+        lon: f64,
+    },
+    /// The camera settled at this zoom level (`zoomend`, plus one measurement at `load`).
+    Zoom(f64),
+}
+
+/// Parses one `dioxus.send` payload into a [`MapMessage`], or `None` for anything this build does not
+/// recognize. Hand-parsed off [`Value`] rather than derived — this crate has `serde_json` but no
+/// `serde`, and a two-variant transport does not justify the dependency.
+#[must_use]
+pub fn parse_map_message(payload: &str) -> Option<MapMessage> {
+    let value: Value = serde_json::from_str(payload).ok()?;
+    if let Some(click) = value.get("click").and_then(Value::as_array) {
+        let [lng, lat] = click.as_slice() else { return None };
+        // MapLibre reports `[lng, lat]`; every view-model here is `(lat, lon)`.
+        return Some(MapMessage::Click {
+            lat: lat.as_f64()?,
+            lon: lng.as_f64()?,
+        });
+    }
+    if let Some(zoom) = value.get("zoom") {
+        return Some(MapMessage::Zoom(zoom.as_f64()?));
+    }
+    None
+}
+
 /// Mounts `MapLibre` on `container_id` (a no-op under SSR, where there is no webview to run the
-/// script) and arms the persistent click listener, streaming every click as a `[lng, lat]` payload
-/// over `dioxus.send`, read in a loop for the surface's lifetime — not a one-shot eval per click, so
-/// the map stays interactive without a Rust round trip blocking each gesture.
+/// script) and arms the persistent message listener, streaming every click as a tagged payload over
+/// `dioxus.send`, read in a loop for the surface's lifetime — not a one-shot eval per click, so the
+/// map stays interactive without a Rust round trip blocking each gesture.
 pub fn mount_maplibre(container_id: &str, center: (f64, f64), zoom: f64, mut on_click: impl FnMut(f64, f64) + 'static) {
     let mut listener = document::eval(&maplibre_init_script(container_id, center, zoom));
     spawn(async move {
         while let Ok(payload) = listener.recv::<String>().await {
-            if let Ok(click) = serde_json::from_str::<[f64; 2]>(&payload) {
-                on_click(click[1], click[0]);
+            match parse_map_message(&payload) {
+                Some(MapMessage::Click { lat, lon }) => on_click(lat, lon),
+                Some(MapMessage::Zoom(_)) | None => {}
             }
         }
     });
@@ -190,7 +231,7 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> St
                     if (pending.draft) map.getSource('geo-draft').setData(pending.draft);
                 }}
             }});
-            map.on('click', (e) => {{ dioxus.send(JSON.stringify([e.lngLat.lng, e.lngLat.lat])); }});
+            map.on('click', (e) => {{ dioxus.send(JSON.stringify({{ click: [e.lngLat.lng, e.lngLat.lat] }})); }});
             new ResizeObserver(() => {{ requestAnimationFrame(() => el.__geoMap && el.__geoMap.redraw()); }}).observe(el);
         }}
         ",
@@ -536,8 +577,9 @@ pub fn effective_date_choice(
 #[cfg(test)]
 mod tests {
     use super::{
-        MapDraft, closed_ring, combined_bounds, draft_geojson, empty_feature_collection, events_geojson,
-        maplibre_init_script, markers_geojson, push_data_script, push_draft_script, save_year, shape_to_draft,
+        MapDraft, MapMessage, closed_ring, combined_bounds, draft_geojson, empty_feature_collection, events_geojson,
+        maplibre_init_script, markers_geojson, parse_map_message, push_data_script, push_draft_script, save_year,
+        shape_to_draft,
     };
     use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm};
     use serde_json::{Value, json};
@@ -575,6 +617,46 @@ mod tests {
                 }),
             ),
         ]
+    }
+
+    /// `GeoJSON`/`MapLibre` order coordinates `[lng, lat]` while every view-model here is `(lat, lon)`,
+    /// so the swap on the way in is the easiest thing in this module to get backwards.
+    #[test]
+    fn a_click_payload_swaps_the_webviews_lng_lat_order_into_lat_lon() {
+        assert_eq!(
+            parse_map_message(r#"{"click":[10.7,59.9]}"#),
+            Some(MapMessage::Click { lat: 59.9, lon: 10.7 })
+        );
+    }
+
+    #[test]
+    fn a_zoom_payload_carries_the_measured_level() {
+        assert_eq!(parse_map_message(r#"{"zoom":14.23}"#), Some(MapMessage::Zoom(14.23)));
+    }
+
+    #[test]
+    fn an_untagged_or_unknown_payload_is_ignored_rather_than_guessed_at() {
+        for payload in [
+            "[]",
+            "[10.7,59.9]",
+            r#"{"bearing":90}"#,
+            r#"{"click":[10.7]}"#,
+            r#"{"zoom":"14.2"}"#,
+            "not json at all",
+        ] {
+            assert_eq!(parse_map_message(payload), None, "{payload} names no known message");
+        }
+    }
+
+    /// The channel carries more than one kind of message, so the click emitter must tag itself —
+    /// an untagged `[lng, lat]` array is exactly what [`parse_map_message`] now refuses.
+    #[test]
+    fn the_click_emitter_tags_its_payload_so_the_channel_can_carry_more_than_clicks() {
+        let script = maplibre_init_script("geo-map", (59.9, 10.7), 5.0);
+        assert!(
+            script.contains("dioxus.send(JSON.stringify({ click: [e.lngLat.lng, e.lngLat.lat] }))"),
+            "the click rides the shared channel under its own key:\n{script}"
+        );
     }
 
     #[test]
