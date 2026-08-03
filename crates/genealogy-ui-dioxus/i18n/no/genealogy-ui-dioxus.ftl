@@ -213,6 +213,10 @@ place-map-open-in-geography = Åpne i Geografi ↗
 place-map-open-in-geography-title = Åpne dette stedet i Geografi-verktøyet
 geography-time-slider-label = Kart per
 geography-time-caption = Viser kartet slik det var i { $year }.
+geography-unplotted-note = { $count ->
+    [one] { $count } sted har ingen geometri per { $year }.
+   *[other] { $count } steder har ingen geometri per { $year }.
+}
 geography-empty-heading = Ingen steder å vise ennå
 geography-empty-help = Steder trenger en koordinat eller grense før de vises her — angi én fra stedets Oversikt-fane, eller tegn én direkte på kartet.
 geography-create-here = Nytt sted her

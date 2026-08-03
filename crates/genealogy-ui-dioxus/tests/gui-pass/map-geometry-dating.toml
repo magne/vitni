@@ -1,0 +1,108 @@
+# The Effective-date choice inside the Geography tool's geometry panel (#257) — the half SSR cannot
+# reach. `place_map.rs` proves the markup: two radios, undated preselected, the roving tab stop on the
+# checked one. It cannot prove the radios are reachable inside a live `SidePanel`: whether a click on
+# the option actually lands on the `role="radio"` button (rather than the panel scroll container or the
+# label above it), and whether the group's own Arrow-key handler runs once focus is on it.
+#
+# The draw-up is `map-polygon.toml`'s, verbatim: select Kristiansand in the rail so a finished shape has
+# a target, arm Polygon, click three vertices, Finish. Reusing its coordinates keeps the two scenarios
+# in step when the rail or toolbar moves.
+#
+# The Effective-date radios sit above the provenance block in the panel, so their y is fixed by the
+# scope note's height, not by the panel's scroll position. The asserted region is the radio pair only:
+# a whole-window compare here is answered by the map's own tile repaint behind the panel, which says
+# nothing about the radios.
+#
+# Writing this found a defect no SSR test could: `.resn` had a checked-state rule only for the
+# restriction pills' three `data-kind`s, so a *radiogroup*'s checked option painted exactly like an
+# unchecked one — the selection was invisible in every RadioGroup the app ships (Preferences' theme,
+# the import mode switch, and this one). The first run of this scenario compared two identical crops.
+# The generic `.resn[aria-checked="true"]` rule in `components.css` is what these asserts now see.
+#
+# The unplotted-note (`.section-note` between the toolbar and the `.geo` grid) never renders in this
+# run — the fixture's single place has a scalar coordinate, so it resolves at every year and the count
+# is zero. That is why the coordinates below match `map-polygon.toml`'s.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "The geometry panel's Effective-date radios take a click and an Arrow key (#257)"
+
+[[step]]
+do = "click"
+at = [85, 881]
+label = "rail: Geography"
+
+[[step]]
+do = "click"
+at = [300, 185]
+label = "place list: Kristiansand"
+
+[[step]]
+do = "click"
+at = [1536, 110]
+label = "toolbar: Draw polygon"
+
+[[step]]
+do = "click"
+at = [900, 400]
+label = "map: first vertex"
+
+[[step]]
+do = "click"
+at = [1200, 420]
+label = "map: second vertex"
+
+[[step]]
+do = "click"
+at = [1100, 700]
+label = "map: third vertex"
+
+[[step]]
+do = "click"
+at = [517, 1048]
+label = "Finish polygon"
+
+[[step]]
+do = "shot"
+name = "undated"
+
+[[step]]
+do = "click"
+at = [1698, 223]
+label = "panel: As of 1900"
+
+[[step]]
+do = "shot"
+name = "dated"
+
+[[step]]
+do = "key"
+chord = "Left"
+label = "Arrow Left back to Undated"
+
+[[step]]
+do = "shot"
+name = "undated-again"
+
+[[assert]]
+kind = "painted"
+shot = "undated"
+region = [1432, 210, 312, 26]
+# The panel opens over the map; if the radios never rendered, this region would be the panel's own flat
+# background and every `differ` below would then be comparing two blanks.
+because = "the geometry panel must render the Effective-date radios at all"
+
+[[assert]]
+kind = "differ"
+shots = ["undated", "dated"]
+region = [1432, 210, 312, 26]
+# Two small buttons inside a full-frame window: the default same-screen tolerance would swallow the
+# checked-state swap even over this crop.
+tolerance = 0.001
+because = "clicking the dated option must move the checked state onto it"
+
+[[assert]]
+kind = "differ"
+shots = ["dated", "undated-again"]
+region = [1432, 210, 312, 26]
+tolerance = 0.001
+because = "the group's Arrow keys must move the selection back once a click has focused it"

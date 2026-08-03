@@ -56,8 +56,23 @@ pub struct EventPin {
     pub point: GeoCoordinates,
 }
 
-/// The geography view's data feed (ADR 0025 §1): every resolved place marker and event pin, plus the
-/// date they were resolved **as of** (echoed for the time-slider caption, mirroring
+/// A place that *has* geometry but none of it resolves as of the feed's year (ADR 0026 §1) — every
+/// assertion is dated later, and there is no undated/primary one to fall back to, nor a scalar
+/// coordinate. Reported rather than dropped so the map can say why the place is missing instead of
+/// leaving a silent hole. A place with **no** geometry assertion at all is never in this list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnplottedPlace {
+    /// The place's user-facing identifier (e.g. `P0001`).
+    pub human_id: String,
+    /// The place's stable `PlaceId` (a UUID string) — the join/navigation key.
+    pub id: String,
+    /// The place's display name (falls back to the `human_id`).
+    pub name: String,
+}
+
+/// The geography view's data feed (ADR 0025 §1): every resolved place marker and event pin, the
+/// places whose geometry does not resolve as of the feed's year, plus the date they were resolved
+/// **as of** (echoed for the time-slider caption, mirroring
 /// [`crate::place::PlaceSummary::resolved_as_of`]).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct GeographySummary {
@@ -65,6 +80,8 @@ pub struct GeographySummary {
     pub markers: Vec<PlaceMarker>,
     /// Every event whose place resolved a geometry, ready to pin.
     pub events: Vec<EventPin>,
+    /// Every place holding geometry that does not resolve as of this feed's year.
+    pub unplotted: Vec<UnplottedPlace>,
     /// The date this feed is resolved **as of**; `None` for the current/primary resolution.
     pub resolved_as_of: Option<GenealogicalDate>,
 }
@@ -92,6 +109,15 @@ pub(crate) fn place_point(place: &PlaceSummary) -> Option<GeoCoordinates> {
         .map(|geometry_ref| geometry_ref.geometry.clone())
         .or_else(|| place.coordinates_point.map(PlaceGeometry::Point))
         .and_then(|geometry| geometry.representative_point())
+}
+
+/// A place's display name for the map rail and the unplotted report: its first asserted name,
+/// falling back to the `human_id`.
+fn place_display_name(place: &PlaceSummary) -> String {
+    place
+        .names
+        .first()
+        .map_or_else(|| place.human_id.clone(), |name| name.text.clone())
 }
 
 /// Builds one [`EventPin`] per event whose place resolved a point in `points` (keyed by the place's
@@ -132,6 +158,7 @@ pub async fn show_geography(workspace: &Workspace, year: Option<i32>) -> Result<
 
     let mut points = std::collections::HashMap::new();
     let mut markers = Vec::new();
+    let mut unplotted = Vec::new();
     for place in &places {
         // Prefer the dated ADR 0024 geometry; fall back to the scalar coordinate (`AssertCoordinates`)
         // so a place nobody has drawn a boundary/point for yet — the common case for GEDCOM-imported
@@ -141,18 +168,25 @@ pub async fn show_geography(workspace: &Workspace, year: Option<i32>) -> Result<
             .as_ref()
             .map(|geometry_ref| geometry_ref.geometry.clone())
             .or_else(|| place.coordinates_point.map(PlaceGeometry::Point));
-        let Some(geometry) = geometry else { continue };
-        let Some(point) = geometry.representative_point() else {
+        let plotted = geometry.and_then(|geometry| geometry.representative_point().map(|point| (geometry, point)));
+        let Some((geometry, point)) = plotted else {
+            // Nothing to plot. A place that *has* geometry is reported — every assertion is dated
+            // after `as_of` and none is undated — rather than leaving a silent hole on the map. A
+            // place with no geometry at all was never locatable and stays out of both lists (#256).
+            if !place.geometries.is_empty() {
+                unplotted.push(UnplottedPlace {
+                    human_id: place.human_id.clone(),
+                    id: place.id.clone(),
+                    name: place_display_name(place),
+                });
+            }
             continue;
         };
         points.insert(place.id.clone(), point);
         markers.push(PlaceMarker {
             human_id: place.human_id.clone(),
             id: place.id.clone(),
-            name: place
-                .names
-                .first()
-                .map_or_else(|| place.human_id.clone(), |name| name.text.clone()),
+            name: place_display_name(place),
             place_type: place.place_type.clone(),
             geometry,
         });
@@ -163,6 +197,7 @@ pub async fn show_geography(workspace: &Workspace, year: Option<i32>) -> Result<
     Ok(GeographySummary {
         markers,
         events,
+        unplotted,
         resolved_as_of: as_of,
     })
 }

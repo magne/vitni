@@ -721,6 +721,13 @@ impl Chrome {
         fl!(self.loader, "geography-time-caption", year = year)
     }
 
+    /// The note counting the places whose geometry does not resolve as of the slider year — those
+    /// places are absent from the map, and this is what says so instead of leaving a silent hole.
+    #[must_use]
+    pub fn geography_unplotted_note(&self, count: usize, year: i32) -> String {
+        fl!(self.loader, "geography-unplotted-note", count = count, year = year)
+    }
+
     /// The empty-state heading when no place has a resolved geometry to plot.
     #[must_use]
     pub fn geography_empty_heading(&self) -> String {

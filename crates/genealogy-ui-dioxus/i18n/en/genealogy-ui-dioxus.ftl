@@ -214,6 +214,10 @@ place-map-open-in-geography = Open in Geography ↗
 place-map-open-in-geography-title = Open this place in the Geography atlas
 geography-time-slider-label = Map as of
 geography-time-caption = Showing the map as of { $year }.
+geography-unplotted-note = { $count ->
+    [one] { $count } place has no geometry as of { $year }.
+   *[other] { $count } places have no geometry as of { $year }.
+}
 geography-empty-heading = No places to plot yet
 geography-empty-help = Places need a coordinate or boundary before they show up here — set one from a place's Overview tab, or draw one directly on this map.
 geography-create-here = New place here

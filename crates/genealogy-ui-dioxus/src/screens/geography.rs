@@ -168,6 +168,7 @@ pub fn GeographyScreen() -> Element {
     };
     let marker_count = vm.as_ref().map_or(0, |vm| vm.markers.len());
     let event_count = vm.as_ref().map_or(0, |vm| vm.events.len());
+    let unplotted_count = vm.as_ref().map_or(0, |vm| vm.unplotted_count);
     let draw_target = selected();
     // The "⤢ Fit" toolbar button's target: every currently filtered marker's shape (mirrors what
     // `update_geography_data` pushes to the map, so Fit frames exactly what is shown).
@@ -197,6 +198,7 @@ pub fn GeographyScreen() -> Element {
         div { style: "display:flex;flex-direction:column;height:100%;min-height:0;gap:var(--sp-3)",
             h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-geography\")}" }
             {geography_toolbar(loc, &chrome.0, &picker, &services, provider, tool, marker_count, event_count, &fit_shapes, draw_target.as_ref())}
+            {geography_unplotted_note(&chrome.0, unplotted_count, year())}
             div { class: "geo", style: "flex:1;min-height:0",
                 {geography_rail(&chrome.0, vm.as_ref(), selected, &filter().query)}
                 div { class: "geo-main",
@@ -217,7 +219,7 @@ pub fn GeographyScreen() -> Element {
                 }
             }
         }
-        {geo_edit_panel(&chrome.0, panel, reload, toast, &saved_label)}
+        {geo_edit_panel(&chrome.0, panel, reload, toast, &saved_label, year())}
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
@@ -411,6 +413,18 @@ pub fn geography_rail(
     }
 }
 
+/// The note counting the places whose geometry does not resolve as of the slider year (ADR 0026 §1):
+/// they hold geometry, all of it dated later, so the map cannot plot them. Without this they were
+/// simply absent — no marker, no rail row, no message (#257). Renders nothing at a count of zero.
+pub fn geography_unplotted_note(chrome: &Chrome, count: usize, year: i32) -> Element {
+    if count == 0 {
+        return rsx! {};
+    }
+    rsx! {
+        div { class: "section-note", "{chrome.geography_unplotted_note(count, year)}" }
+    }
+}
+
 /// The empty state: no place has a resolved geometry to plot yet.
 pub fn geography_empty_state(chrome: &Chrome) -> Element {
     rsx! {
@@ -475,6 +489,7 @@ fn geo_edit_panel(
     mut reload: Signal<u32>,
     mut toast: Signal<Option<String>>,
     saved_label: &str,
+    slider_year: i32,
 ) -> Element {
     let current = panel();
     if current == GeoPanel::None {
@@ -504,7 +519,7 @@ fn geo_edit_panel(
                     GeometrySaveForm {
                         human_id,
                         geometry,
-                        year: None,
+                        slider_year,
                         onsaved: move |()| { panel.set(GeoPanel::None); reload += 1; toast.set(Some(saved.clone())); },
                     }
                 },
@@ -713,6 +728,7 @@ mod tests {
                 lat: 59.9,
                 lon: 10.7,
             }],
+            unplotted_count: 0,
             resolved_year: None,
             provider: MapProviderVm::OsmRaster {
                 tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),

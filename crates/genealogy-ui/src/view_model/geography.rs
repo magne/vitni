@@ -143,6 +143,10 @@ pub struct GeographyVm {
     pub markers: Vec<PlaceMarkerVm>,
     /// Every event whose place resolved a geometry, ready to pin.
     pub events: Vec<EventPinVm>,
+    /// How many places hold geometry that does not resolve as of this view's year — the count the
+    /// screen's note renders so those places are reported, not silently absent. A count is all the
+    /// note needs; the places themselves stay in [`GeographySummary::unplotted`].
+    pub unplotted_count: usize,
     /// The time-slider year this view is resolved as of; `None` for the current/primary resolution.
     pub resolved_year: Option<i32>,
     /// The map's provider descriptor.
@@ -164,6 +168,7 @@ impl GeographyVm {
         Self {
             markers,
             events,
+            unplotted_count: summary.unplotted.len(),
             resolved_year,
             provider: provider.into(),
         }
@@ -278,6 +283,7 @@ mod tests {
                 geometry: PlaceGeometry::Point(coord("59.9139", "10.7522")),
             }],
             events: Vec::new(),
+            unplotted: Vec::new(),
             resolved_as_of: None,
         };
         let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
@@ -307,6 +313,7 @@ mod tests {
                 },
             }],
             events: Vec::new(),
+            unplotted: Vec::new(),
             resolved_as_of: None,
         };
         let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
@@ -332,6 +339,7 @@ mod tests {
                 place_human_id: "P0001".to_owned(),
                 point: coord("59.9", "10.7"),
             }],
+            unplotted: Vec::new(),
             resolved_as_of: None,
         };
         let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
@@ -345,6 +353,7 @@ mod tests {
         let summary = genealogy_app::GeographySummary {
             markers: Vec::new(),
             events: Vec::new(),
+            unplotted: Vec::new(),
             resolved_as_of: Some(year_date(1900)),
         };
         let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
@@ -356,6 +365,39 @@ mod tests {
         let summary = genealogy_app::GeographySummary::default();
         let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
         assert_eq!(vm.resolved_year, None);
+    }
+
+    #[test]
+    fn the_places_that_did_not_resolve_are_counted_for_the_note() {
+        let summary = genealogy_app::GeographySummary {
+            markers: Vec::new(),
+            events: Vec::new(),
+            unplotted: vec![
+                genealogy_app::UnplottedPlace {
+                    human_id: "P0001".to_owned(),
+                    id: "place-1".to_owned(),
+                    name: "Vågå".to_owned(),
+                },
+                genealogy_app::UnplottedPlace {
+                    human_id: "P0002".to_owned(),
+                    id: "place-2".to_owned(),
+                    name: "Lom".to_owned(),
+                },
+            ],
+            resolved_as_of: Some(year_date(1850)),
+        };
+        let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), &loc());
+        assert_eq!(vm.unplotted_count, 2);
+    }
+
+    #[test]
+    fn nothing_unplotted_counts_zero_so_the_note_stays_hidden() {
+        let vm = GeographyVm::from_summary(
+            &genealogy_app::GeographySummary::default(),
+            MapProvider::default_osm(),
+            &loc(),
+        );
+        assert_eq!(vm.unplotted_count, 0);
     }
 
     #[test]

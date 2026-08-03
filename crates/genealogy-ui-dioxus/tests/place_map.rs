@@ -6,7 +6,7 @@
 
 use dioxus::prelude::*;
 use genealogy_ui::{ConfidenceLevel, Localizer, MarkerShapeVm, PlaceGeometryVm};
-use genealogy_ui_dioxus::screens::place_geometry_table;
+use genealogy_ui_dioxus::screens::{effective_date_choice, place_geometry_table, place_map_as_of_note};
 
 fn loc() -> Localizer {
     Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
@@ -143,4 +143,111 @@ fn no_geometries_yet_shows_the_empty_state() {
         "the empty-state help points at the draw tools:\n{html}"
     );
     assert!(!html.contains(">Retract<"), "no rows, so no retract buttons:\n{html}");
+}
+
+#[component]
+fn EffectiveDateUndated() -> Element {
+    effective_date_choice(&loc(), 1900, false, |_: String| {})
+}
+
+#[component]
+fn EffectiveDateDated() -> Element {
+    effective_date_choice(&loc(), 1900, true, |_: String| {})
+}
+
+#[test]
+fn the_save_form_offers_both_effective_date_choices_with_undated_preselected() {
+    let html = render(EffectiveDateUndated);
+    assert!(
+        html.contains(r#"role="radiogroup""#) && html.matches(r#"role="radio""#).count() == 2,
+        "the dated/undated choice is a two-option radiogroup:\n{html}"
+    );
+    assert!(
+        html.contains("Undated — applies to every year"),
+        "the undated option says it resolves at every year:\n{html}"
+    );
+    assert!(
+        html.contains("As of 1900"),
+        "the dated option is labelled with the slider year:\n{html}"
+    );
+    assert!(html.contains("Effective date"), "the group is labelled:\n{html}");
+    let undated_first = html
+        .find("Undated")
+        .expect("the undated option renders before the dated one");
+    let checked = html
+        .find(r#"aria-checked="true""#)
+        .expect("exactly one option is checked");
+    assert!(
+        checked < undated_first,
+        "the undated option is the preselected default — a saved shape must resolve at every \
+         year unless the operator opts into dating it:\n{html}"
+    );
+}
+
+#[test]
+fn picking_the_dated_choice_moves_the_checked_state_and_the_tab_stop() {
+    let html = render(EffectiveDateDated);
+    let dated = html.find("As of 1900").expect("the dated option renders");
+    let checked = html
+        .find(r#"aria-checked="true""#)
+        .expect("exactly one option is checked");
+    assert!(checked < dated, "the dated option is the checked one:\n{html}");
+    assert_eq!(
+        html.matches(r#"aria-checked="true""#).count(),
+        1,
+        "a single-choice group checks exactly one option:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"tabindex="0""#).count(),
+        1,
+        "the roving tab stop follows the selection:\n{html}"
+    );
+}
+
+fn dated_only_note_view() -> Element {
+    place_map_as_of_note(&loc(), &[polygon_geometry()], None, 1850)
+}
+
+fn resolved_note_view() -> Element {
+    place_map_as_of_note(
+        &loc(),
+        &[polygon_geometry()],
+        Some(&MarkerShapeVm::Point { lat: 59.9, lon: 10.7 }),
+        1900,
+    )
+}
+
+fn no_geometry_note_view() -> Element {
+    place_map_as_of_note(&loc(), &[], None, 1850)
+}
+
+#[test]
+fn a_place_whose_geometry_all_postdates_the_year_says_so() {
+    let html = render(dated_only_note_view);
+    assert!(
+        html.contains("No geometry as of 1850."),
+        "the note names the year nothing resolved at:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="section-note""#),
+        "the note reuses the section-note design-system class:\n{html}"
+    );
+}
+
+#[test]
+fn a_resolved_geometry_renders_no_as_of_note() {
+    let html = render(resolved_note_view);
+    assert!(
+        !html.contains("No geometry as of"),
+        "a plotted shape needs no explanation:\n{html}"
+    );
+}
+
+#[test]
+fn a_place_with_no_geometry_at_all_renders_no_as_of_note() {
+    let html = render(no_geometry_note_view);
+    assert!(
+        !html.contains("No geometry as of"),
+        "the geometry table's own \"No geometry yet\" empty state owns that case:\n{html}"
+    );
 }

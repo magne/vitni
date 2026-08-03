@@ -436,16 +436,35 @@ pub fn draft_geojson(draft: &MapDraft) -> Value {
     }
 }
 
-/// The assert-geometry form (ADR 0025 §2): the drafted shape plus the standard reason/confidence
-/// provenance block, dispatched via [`PlaceEdit::AssertGeometry`] — the same audited path a
-/// typed-field edit uses. Shared by the Geography tool's "assert onto selected place" panel and the
-/// Place screen's own Map-tab save-geometry card (Phase 9); only `year` differs (each screen binds
-/// its own time slider — `None` for an undated/primary assertion).
+/// The `RadioGroup` choice id of an undated (primary) assertion — the default.
+const EFFECTIVE_UNDATED: &str = "undated";
+
+/// The `RadioGroup` choice id of an assertion dated to the caller's slider year.
+const EFFECTIVE_DATED: &str = "dated";
+
+/// The year an assert-geometry save stamps: the slider year when the operator picked a dated
+/// assertion, `None` (undated/primary) otherwise. An undated assertion is ADR 0026 §1's fallback, so
+/// it resolves at every year — which is why it is the default and a saved shape never vanishes.
+#[must_use]
+pub fn save_year(dated: bool, slider_year: i32) -> Option<i32> {
+    dated.then_some(slider_year)
+}
+
+/// The assert-geometry form (ADR 0025 §2): the drafted shape, the dated/undated effective-date
+/// choice, and the standard reason/confidence provenance block, dispatched via
+/// [`PlaceEdit::AssertGeometry`] — the same audited path a typed-field edit uses. Shared by the
+/// Geography tool's "assert onto selected place" panel and the Place screen's own Map-tab
+/// save-geometry card (Phase 9).
+///
+/// `slider_year` is only the year the *dated* choice would stamp; the caller passes its own time
+/// slider's year and cannot express a dating policy of its own, so both panels stamp dates the same
+/// way (#257 — the Place tab used to hardcode its slider year while Geography hardcoded undated,
+/// and a point saved from one vanished from the other).
 #[component]
 pub fn GeometrySaveForm(
     human_id: String,
     geometry: PlaceGeometry,
-    year: Option<i32>,
+    slider_year: i32,
     onsaved: EventHandler<()>,
 ) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
@@ -454,14 +473,20 @@ pub fn GeometrySaveForm(
     let services = state.services().clone();
     let loc = state.data_loc();
     let prov = use_signal(ProvenanceDraft::default);
+    let mut dated = use_signal(|| false);
     rsx! {
         div { class: "faint", style: "font-size:var(--fs-xs)", "{loc.place_map_scope_note()}" }
+        {effective_date_choice(loc, slider_year, dated(), move |picked: String| dated.set(picked == EFFECTIVE_DATED))}
         {provenance_block(loc, prov)}
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,
             onclick: move |_| {
-                let edit = PlaceEdit::AssertGeometry { human_id: human_id.clone(), geometry: geometry.clone(), year };
+                let edit = PlaceEdit::AssertGeometry {
+                    human_id: human_id.clone(),
+                    geometry: geometry.clone(),
+                    year: save_year(dated(), slider_year),
+                };
                 let services = services.clone();
                 let prov = prov();
                 let onsaved = onsaved;
@@ -475,11 +500,44 @@ pub fn GeometrySaveForm(
     }
 }
 
+/// The effective-date choice: both options visible, undated first and preselected. Split out of
+/// [`GeometrySaveForm`] (which needs `AppCtx`) so an SSR test can render it over a plain localizer.
+#[must_use = "renders the effective-date choice; drop it and the form loses its dating control"]
+pub fn effective_date_choice(
+    loc: &Localizer,
+    slider_year: i32,
+    dated: bool,
+    mut onselect: impl FnMut(String) + 'static,
+) -> Element {
+    let choices = vec![
+        RadioChoice {
+            id: EFFECTIVE_UNDATED.to_owned(),
+            label: loc.place_geometry_effective_undated(),
+        },
+        RadioChoice {
+            id: EFFECTIVE_DATED.to_owned(),
+            label: loc.place_geometry_effective_dated(slider_year),
+        },
+    ];
+    let selected = if dated { EFFECTIVE_DATED } else { EFFECTIVE_UNDATED };
+    rsx! {
+        div { class: "field",
+            label { class: "lbl", "{loc.place_geometry_effective_label()}" }
+            RadioGroup {
+                group_label: loc.place_geometry_effective_label(),
+                choices,
+                selected: selected.to_owned(),
+                onselect: move |id: String| onselect(id),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         MapDraft, closed_ring, combined_bounds, draft_geojson, empty_feature_collection, events_geojson,
-        maplibre_init_script, markers_geojson, push_data_script, push_draft_script, shape_to_draft,
+        maplibre_init_script, markers_geojson, push_data_script, push_draft_script, save_year, shape_to_draft,
     };
     use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm};
     use serde_json::{Value, json};
@@ -712,6 +770,17 @@ mod tests {
             shape_to_draft(&shape),
             MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)])
         );
+    }
+
+    #[test]
+    fn the_default_undated_choice_stamps_no_year_so_the_shape_resolves_at_every_year() {
+        assert_eq!(save_year(false, 1900), None);
+    }
+
+    #[test]
+    fn the_dated_choice_stamps_the_slider_year() {
+        assert_eq!(save_year(true, 1900), Some(1900));
+        assert_eq!(save_year(true, 1600), Some(1600));
     }
 
     #[test]

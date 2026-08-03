@@ -1,15 +1,16 @@
 //! `show_geography`/`show_place` integration tests: a place with only a scalar `AssertCoordinates`
 //! point (no dedicated ADR 0024 geometry assertion — the common case for a GEDCOM-imported or
 //! manually geocoded place) must still show up as a marker, not silently vanish from the map. A
-//! place's own `show_place` summary also carries the events that occurred there (the Place Map tab's
-//! event pins), scoped to just that one place.
+//! place with geometry that resolves to nothing as of the feed's year is *reported* as unplotted
+//! rather than dropped in silence. A place's own `show_place` summary also carries the events that
+//! occurred there (the Place Map tab's event pins), scoped to just that one place.
 
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use genealogy_app::{
     AppDefaults, EventType, GeoCoordinates, Microdegrees, MutationMeta, NewEvent, NewPlace, OperatorConfig,
     PlaceGeometry, PlaceType, Provenance, Session, Workspace, WorkspaceDefaults, assert_place_coordinates,
-    assert_place_geometry, create_event, create_place, link_place, show_geography, show_place,
+    assert_place_geometry, create_event, create_place, link_place, show_geography, show_place, year_only_date,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_core::provenance::{Agent, AgentKind};
@@ -147,6 +148,140 @@ async fn a_place_with_neither_geometry_nor_coordinates_is_not_a_marker() {
     assert!(
         !summary.markers.iter().any(|marker| marker.human_id == human_id),
         "an unlocated place is not plotted"
+    );
+}
+
+/// Creates a place with a single geometry assertion, dated `year` when given.
+async fn place_with_geometry(ws: &Workspace, session: &Session, name: &str, year: Option<i32>) -> String {
+    let human_id = create_place(
+        ws,
+        session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::Parish,
+            name: Some(name.to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("place");
+    assert_place_geometry(
+        ws,
+        session,
+        &human_id,
+        PlaceGeometry::Point(point("61.9", "8.8")),
+        year.map(year_only_date),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert geometry");
+    human_id
+}
+
+#[tokio::test]
+async fn a_place_whose_only_geometry_postdates_the_feed_is_reported_unplotted() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = place_with_geometry(&ws, &session, "Vågå", Some(1900)).await;
+
+    let summary = show_geography(&ws, Some(1850)).await.expect("show_geography");
+    assert!(
+        !summary.markers.iter().any(|marker| marker.human_id == human_id),
+        "a geometry dated 1900 does not resolve as of 1850"
+    );
+    let unplotted = summary
+        .unplotted
+        .iter()
+        .find(|place| place.human_id == human_id)
+        .expect("the place is reported, not silently dropped");
+    assert_eq!(unplotted.name, "Vågå");
+}
+
+#[tokio::test]
+async fn the_same_place_is_a_marker_and_not_unplotted_at_its_geometrys_own_year() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = place_with_geometry(&ws, &session, "Vågå", Some(1900)).await;
+
+    let summary = show_geography(&ws, Some(1900)).await.expect("show_geography");
+    assert!(summary.markers.iter().any(|marker| marker.human_id == human_id));
+    assert!(
+        summary.unplotted.is_empty(),
+        "a resolved place is not also reported unplotted"
+    );
+}
+
+#[tokio::test]
+async fn an_undated_geometry_plots_at_every_year() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = place_with_geometry(&ws, &session, "Vågå", None).await;
+
+    for year in [1600, 1900, 2000] {
+        let summary = show_geography(&ws, Some(year)).await.expect("show_geography");
+        assert!(
+            summary.markers.iter().any(|marker| marker.human_id == human_id),
+            "an undated/primary geometry resolves as of {year}"
+        );
+        assert!(summary.unplotted.is_empty(), "nothing is unplotted as of {year}");
+    }
+}
+
+#[tokio::test]
+async fn a_scalar_coordinate_place_is_a_marker_at_every_year_and_never_unplotted() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_place(
+        &ws,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::Farm,
+            name: Some("Nordgarden".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("place");
+    assert_place_coordinates(&ws, &session, &human_id, point("61.5", "9.0"), MutationMeta::default())
+        .await
+        .expect("assert coordinates");
+
+    for year in [1600, 2000] {
+        let summary = show_geography(&ws, Some(year)).await.expect("show_geography");
+        assert!(
+            summary.markers.iter().any(|marker| marker.human_id == human_id),
+            "the GEDCOM-import case still plots as of {year}"
+        );
+        assert!(summary.unplotted.is_empty(), "nothing is unplotted as of {year}");
+    }
+}
+
+#[tokio::test]
+async fn a_place_with_no_geometry_and_no_coordinate_is_in_neither_list() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_place(
+        &ws,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::County,
+            name: Some("Nordland".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("place");
+
+    let summary = show_geography(&ws, Some(1850)).await.expect("show_geography");
+    assert!(!summary.markers.iter().any(|marker| marker.human_id == human_id));
+    assert!(
+        !summary.unplotted.iter().any(|place| place.human_id == human_id),
+        "a place nobody ever located is #256's scope, not an unplotted-as-of report"
     );
 }
 

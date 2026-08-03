@@ -9,7 +9,7 @@ use genealogy_ui::{EventPinVm, GeographyVm, MapProviderVm, MarkerShapeVm, PlaceM
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
     DrawTool, geography_draw_target, geography_empty_state, geography_map_surface, geography_rail,
-    geography_time_slider,
+    geography_time_slider, geography_unplotted_note,
 };
 
 fn chrome() -> Chrome {
@@ -144,6 +144,7 @@ fn geography_vm() -> GeographyVm {
             lat: 59.9,
             lon: 10.7,
         }],
+        unplotted_count: 0,
         resolved_year: Some(1900),
         provider: MapProviderVm::OsmRaster {
             tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
@@ -199,6 +200,7 @@ fn two_marker_geography_vm() -> GeographyVm {
             },
         ],
         events: Vec::new(),
+        unplotted_count: 0,
         resolved_year: None,
         provider: MapProviderVm::OsmRaster {
             tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
@@ -303,5 +305,48 @@ fn only_the_selected_row_is_announced_as_selected() {
     assert!(
         html.contains(r#"aria-selected="false""#),
         "the non-selected row is announced as not selected:\n{html}"
+    );
+}
+
+fn unplotted_note_view() -> Element {
+    geography_unplotted_note(&chrome(), 1, 1850)
+}
+
+fn unplotted_note_plural_view() -> Element {
+    geography_unplotted_note(&chrome(), 3, 1850)
+}
+
+fn no_unplotted_note_view() -> Element {
+    geography_unplotted_note(&chrome(), 0, 1850)
+}
+
+#[test]
+fn the_places_that_did_not_resolve_are_named_in_a_note_not_silently_absent() {
+    let html = render(unplotted_note_view);
+    assert!(
+        html.contains("1 place has no geometry as of 1850."),
+        "the note counts the places and names the year:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="section-note""#),
+        "the note reuses the section-note design-system class:\n{html}"
+    );
+}
+
+#[test]
+fn the_unplotted_note_pluralizes_its_count() {
+    let html = render(unplotted_note_plural_view);
+    assert!(
+        html.contains("3 places have no geometry as of 1850."),
+        "the plural form is used for more than one place:\n{html}"
+    );
+}
+
+#[test]
+fn nothing_unplotted_renders_no_note_at_all() {
+    let html = render(no_unplotted_note_view);
+    assert!(
+        !html.contains("section-note") && !html.contains("no geometry"),
+        "a count of zero renders nothing — an empty note is noise:\n{html}"
     );
 }

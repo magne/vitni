@@ -252,21 +252,6 @@ Residuals from the shortcuts work (ADR 0030); see
   unreachable as a draw target), and the list silently shrinks as the year moves. It carries no label
   saying any of that. Either list every place and mark the plotted ones, or label the list and offer
   the unplotted ones as draw targets. — #256
-- **Geometry saved from Geography is undated; the Place Map tab stamps its slider year.** The
-  Geography panel saves `year: None` (`screens/geography.rs`) while the Place Map tab saves
-  `Some(year())` from its own independent slider, defaulting to 1900 (`screens/place.rs`). A point
-  saved from the Place tab therefore disappears from the Geography map for every year below 1900 —
-  `resolve_as_of` (`genealogy-core/src/temporal.rs`) ignores assertions dated after the target and
-  falls back only to an *undated* one, and a place with neither drops out of the marker feed
-  entirely. Decide one dating policy (an explicit dated/undated choice in both panels), and never
-  drop a marker silently — show "no geometry as of \<year\>" instead. — #257
-- **The Place Map tab cannot render an undated geometry.** Its view-model resolver filters to
-  assertions dated at or before the year and otherwise falls back to `geometries.first()`
-  (`genealogy-ui/src/view_model/place.rs`) — the first *item*, where core's `resolve_as_of` falls back
-  to the first *undated* item. With a point dated 1900 ahead of an undated polygon in the list, the
-  polygon is unreachable at every year, which is why a polygon drawn in Geography never appears on the
-  record's own map even though the *Geometry over time* table lists it. Reuse core's rule rather than
-  restating it client-side. — #258
 - **"Clear" empties the draft state but never erases the ring.** `on_clear_draft`
   (`screens/geography.rs`) sets `draft` to `MapDraft::Empty` — a following "Finish polygon" is correctly
   a no-op, so the state *is* cleared — yet the red ring stays painted on the canvas, so the map keeps

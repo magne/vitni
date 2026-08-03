@@ -62,14 +62,14 @@ pub use family::{
 };
 pub use geography::{
     GeographyScreen, geography_draw_target, geography_empty_state, geography_map_surface, geography_rail,
-    geography_time_slider,
+    geography_time_slider, geography_unplotted_note,
 };
 pub use help::{HelpScreen, render_doc};
 pub use import::{
     ConfirmChrome, ConfirmStage, ImportModeLabels, ImportModeSwitch, ImportRowStatus, ImportScreen, RecordsLabels,
     RecordsStage, SaveStage, SourceLabels, SourceStage, SummaryLabels, SummaryStage, WizardLabels,
 };
-pub use map_shared::DrawTool;
+pub use map_shared::{DrawTool, effective_date_choice};
 pub use media::{MediaEditForm, media_attributes_table, media_overview, media_record_fields};
 pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen, merge_blocked_card, merge_wizard_foot};
 pub use note::{NoteEditForm, note_content_tab, note_language_tab, note_record_fields, note_references_table};
@@ -79,8 +79,8 @@ pub use person::{
     person_name_citation_field, person_record_fields, timeline_panel,
 };
 pub use place::{
-    PlaceEditForm, SuccessionFormState, place_geometry_table, place_hierarchy_table, place_map, place_names_table,
-    place_overview, place_record_fields, place_succession_card, place_succession_form_fields,
+    PlaceEditForm, SuccessionFormState, place_geometry_table, place_hierarchy_table, place_map, place_map_as_of_note,
+    place_names_table, place_overview, place_record_fields, place_succession_card, place_succession_form_fields,
 };
 pub use plugin_panel::{PluginPanelScreen, plugin_table, submit_outcome_view};
 pub use preferences::{

@@ -644,6 +644,31 @@ impl Localizer {
         fl!(self.loader, "place-map-aria", place = place)
     }
 
+    /// The "No geometry as of {year}." note shown when a place holds geometry but none of it
+    /// resolves as of the Map tab's slider year (ADR 0026 §1).
+    #[must_use]
+    pub fn place_map_none_as_of(&self, year: i32) -> String {
+        fl!(self.loader, "place-map-none-as-of", year = year)
+    }
+
+    /// The group label of the assert-geometry form's dated/undated choice.
+    #[must_use]
+    pub fn place_geometry_effective_label(&self) -> String {
+        fl!(self.loader, "place-geometry-effective-label")
+    }
+
+    /// The undated (primary) choice: the assertion resolves at every year (ADR 0026 §1's fallback).
+    #[must_use]
+    pub fn place_geometry_effective_undated(&self) -> String {
+        fl!(self.loader, "place-geometry-effective-undated")
+    }
+
+    /// The dated choice, labelled with the year the save would stamp.
+    #[must_use]
+    pub fn place_geometry_effective_dated(&self, year: i32) -> String {
+        fl!(self.loader, "place-geometry-effective-dated", year = year)
+    }
+
     /// The localized label for a geometry's kind (point/polygon — ADR 0024).
     #[must_use]
     pub fn geometry_kind_point(&self) -> String {

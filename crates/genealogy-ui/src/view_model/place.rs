@@ -106,17 +106,19 @@ pub struct PlaceGeometryVm {
 }
 
 /// Resolves which of a place's dated geometry assertions is in effect **as of** `year` — the
-/// latest-dated one at or before `year`, falling back to the first-asserted (undated/primary) one
-/// when none qualifies. Mirrors `genealogy_app::place`'s server-side `resolved_geometry` rule
-/// (ADR 0026 §1), evaluated client-side over the already-loaded [`PlaceDetail::geometries`] so the
-/// Map tab's time slider needs no extra round trip. `None` only when `geometries` is empty.
+/// latest-dated one at or before `year`, falling back to the first **undated** (primary) one when
+/// none qualifies, and to nothing when the place has neither. This is `genealogy_app::resolve_as_of`
+/// itself (ADR 0026 §1) — the one rule the server-side `resolved_geometry` runs — evaluated
+/// client-side over the already-loaded [`PlaceDetail::geometries`] so the Map tab's time slider needs
+/// no extra round trip.
+///
+/// The vm keys assertions by a bare year and core by a `sort_value`; both are monotonic and the rule
+/// is `<=` on a monotonic key, so the year widens to `i64` and resolves identically.
 #[must_use]
 pub fn resolve_geometry_as_of(geometries: &[PlaceGeometryVm], year: i32) -> Option<&PlaceGeometryVm> {
-    geometries
-        .iter()
-        .filter(|geometry| geometry.year.is_some_and(|asserted| asserted <= year))
-        .max_by_key(|geometry| geometry.year)
-        .or_else(|| geometries.first())
+    genealogy_app::resolve_as_of(geometries.iter(), i64::from(year), |geometry| {
+        geometry.year.map(i64::from)
+    })
 }
 
 /// A place's single point coordinate, ready for the read-only Map tab: the parsed decimal-degree
@@ -1006,12 +1008,28 @@ mod place_geometry_tests {
     }
 
     #[test]
-    fn a_query_year_predating_every_assertion_falls_back_to_the_first_asserted_one() {
-        // Mirrors the app-side rule: when nothing qualifies, the fallback is the first-asserted
-        // (primary) geometry — even a dated one — not `None`.
+    fn nothing_dated_at_or_before_the_year_and_nothing_undated_resolves_to_nothing() {
+        // Mirrors the app-side rule: the fallback is the first **undated** assertion, so a set of
+        // purely later-dated ones resolves to nothing rather than plotting a shape that is not in
+        // effect. This is what lets the Map tab say "No geometry as of 1900." truthfully.
         let geometries = vec![dated(1950), dated(1980)];
-        let resolved = resolve_geometry_as_of(&geometries, 1900).expect("falls back to the first-asserted");
-        assert_eq!(resolved.assertion_id, "assert-1950");
+        assert!(resolve_geometry_as_of(&geometries, 1900).is_none());
+    }
+
+    #[test]
+    fn an_undated_assertion_listed_after_a_dated_one_is_still_the_fallback() {
+        // Assertion order must not decide the fallback — only "is it undated" does. Falling back to
+        // the first *item* plots the 1900 shape at 1850, the exact divergence from the app-side rule.
+        let geometries = vec![dated(1900), undated()];
+        let resolved = resolve_geometry_as_of(&geometries, 1850).expect("the undated assertion");
+        assert_eq!(resolved.assertion_id, "assert-undated");
+    }
+
+    #[test]
+    fn a_dated_assertion_at_or_before_the_year_beats_an_undated_one() {
+        let geometries = vec![undated(), dated(1898)];
+        let resolved = resolve_geometry_as_of(&geometries, 1950).expect("the dated assertion");
+        assert_eq!(resolved.assertion_id, "assert-1898");
     }
 }
 
