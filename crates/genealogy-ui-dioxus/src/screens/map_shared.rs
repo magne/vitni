@@ -388,7 +388,7 @@ fn maplibre_init_script(
                 }});
                 map.addSource('geo-draft', {{ type: 'geojson', data: {{ type: 'FeatureCollection', features: [] }} }});
                 map.addLayer({{ id: 'geo-draft-fill', type: 'fill', source: 'geo-draft', filter: ['==', ['geometry-type'], 'Polygon'], paint: {{ 'fill-color': '#ff5d5d', 'fill-opacity': 0.2 }} }});
-                map.addLayer({{ id: 'geo-draft-line', type: 'line', source: 'geo-draft', paint: {{ 'line-color': '#ff5d5d', 'line-width': 2 }} }});
+                map.addLayer({{ id: 'geo-draft-line', type: 'line', source: 'geo-draft', filter: ['!=', ['geometry-type'], 'Point'], paint: {{ 'line-color': '#ff5d5d', 'line-width': 2 }} }});
                 map.addLayer({{
                     id: 'geo-draft-point', type: 'circle', source: 'geo-draft', filter: ['==', ['geometry-type'], 'Point'],
                     paint: {draft_paint},
@@ -638,28 +638,53 @@ pub fn closed_ring(points: &[(f64, f64)]) -> Vec<[f64; 2]> {
     ring
 }
 
-/// Converts the in-progress draft to a `GeoJSON` `FeatureCollection` (empty, a point, or a polygon
-/// preview drawn as a closed ring once it has at least 3 vertices, else an open line).
+/// One draggable draft vertex: a `Point` feature tagged with its own index into [`MapDraft`]'s
+/// unclosed vertex list. The tag is what the drag script's hit test reads back to know which vertex it
+/// grabbed, so it must stay a number (`0` is a real index, and the script therefore never tests it for
+/// truthiness).
+fn vertex_feature(index: usize, lat: f64, lon: f64) -> Value {
+    json!({
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [lon, lat] },
+        "properties": { "vertex": index },
+    })
+}
+
+/// The polygon draft's own shape feature: a closed ring once it has at least 3 vertices, else the open
+/// line through whatever has been clicked so far. Carries no `vertex` property, so a hit test can only
+/// ever land on a handle.
+fn polygon_shape_feature(vertices: &[(f64, f64)]) -> Value {
+    let geometry = if vertices.len() >= 3 {
+        json!({ "type": "Polygon", "coordinates": [closed_ring(vertices)] })
+    } else {
+        let line: Vec<[f64; 2]> = vertices.iter().map(|&(lat, lon)| [lon, lat]).collect();
+        json!({ "type": "LineString", "coordinates": line })
+    };
+    json!({ "type": "Feature", "geometry": geometry, "properties": {} })
+}
+
+/// Converts the in-progress draft to a `GeoJSON` `FeatureCollection`: the shape feature first (so the
+/// existing index-0 assertions and the drag script's ring rewrite both still address it), then one
+/// [`vertex_feature`] handle per vertex the operator placed (#259 — before this a ring drew as fill plus
+/// outline with no corners, and a one-vertex draft drew nothing at all).
+///
+/// A point draft's single feature *is* its handle rather than gaining a second coincident one: two
+/// features under one `queryRenderedFeatures` hit test have no defined order between them.
 #[must_use]
 pub fn draft_geojson(draft: &MapDraft) -> Value {
     match draft {
         MapDraft::Empty => empty_feature_collection(),
         MapDraft::Point((lat, lon)) => json!({
             "type": "FeatureCollection",
-            "features": [{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [lon, lat] }, "properties": {} }],
+            "features": [vertex_feature(0, *lat, *lon)],
         }),
-        MapDraft::Polygon(vertices) if vertices.len() >= 3 => json!({
-            "type": "FeatureCollection",
-            "features": [{ "type": "Feature", "geometry": { "type": "Polygon", "coordinates": [closed_ring(vertices)] }, "properties": {} }],
-        }),
-        MapDraft::Polygon(vertices) => json!({
-            "type": "FeatureCollection",
-            "features": [{
-                "type": "Feature",
-                "geometry": { "type": "LineString", "coordinates": vertices.iter().map(|&(lat, lon)| [lon, lat]).collect::<Vec<_>>() },
-                "properties": {},
-            }],
-        }),
+        MapDraft::Polygon(vertices) => {
+            let mut features = vec![polygon_shape_feature(vertices)];
+            for (index, &(lat, lon)) in vertices.iter().enumerate() {
+                features.push(vertex_feature(index, lat, lon));
+            }
+            json!({ "type": "FeatureCollection", "features": features })
+        }
     }
 }
 
@@ -1237,6 +1262,124 @@ mod tests {
     fn a_three_vertex_polygon_draft_previews_as_a_closed_polygon() {
         let geojson = draft_geojson(&MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)]));
         assert_eq!(geojson["features"][0]["geometry"]["type"], "Polygon");
+    }
+
+    /// #259: a ring used to render as fill + outline with no corners, because the only feature in the
+    /// collection was the shape itself and the draft's circle layer filters to `Point`. Each vertex now
+    /// gets its own `Point` feature tagged with its index — that tag is what a drag hit-test reads.
+    #[test]
+    fn every_polygon_vertex_gets_its_own_indexed_handle_feature() {
+        let vertices = vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)];
+        let geojson = draft_geojson(&MapDraft::Polygon(vertices.clone()));
+        let features = geojson["features"].as_array().expect("a feature collection");
+        assert_eq!(
+            features.len(),
+            vertices.len() + 1,
+            "one shape feature plus one handle per vertex:\n{geojson}"
+        );
+        for (index, &(lat, lon)) in vertices.iter().enumerate() {
+            let handle = &features[index + 1];
+            assert_eq!(
+                handle["properties"]["vertex"],
+                json!(index),
+                "handle {index} names its own position in the ring:\n{geojson}"
+            );
+            assert_eq!(
+                handle["geometry"],
+                json!({ "type": "Point", "coordinates": [lon, lat] }),
+                "handle {index} sits on its vertex, in GeoJSON lon/lat order:\n{geojson}"
+            );
+        }
+    }
+
+    /// The shape feature stays at index 0: the existing geometry-type assertions address it that way,
+    /// and the drag script rewrites `features[0]`'s coordinates as the ring it belongs to.
+    #[test]
+    fn the_shape_feature_stays_first_ahead_of_the_handles() {
+        for (vertices, geometry) in [
+            (vec![(60.0, 5.0), (61.0, 5.0)], "LineString"),
+            (vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)], "Polygon"),
+        ] {
+            let geojson = draft_geojson(&MapDraft::Polygon(vertices));
+            assert_eq!(geojson["features"][0]["geometry"]["type"], geometry);
+            assert_eq!(
+                geojson["features"][0]["properties"],
+                json!({}),
+                "the shape carries no vertex tag, so a hit test can never grab it:\n{geojson}"
+            );
+        }
+    }
+
+    /// One feature, not two: a point draft's own feature *is* its handle. A second coincident feature
+    /// would put two hits under one `queryRenderedFeatures` call, and which one comes back first is
+    /// not something this code gets to decide.
+    #[test]
+    fn a_point_draft_is_its_own_handle_rather_than_a_second_coincident_feature() {
+        let geojson = draft_geojson(&MapDraft::Point((59.9, 10.7)));
+        let features = geojson["features"].as_array().expect("a feature collection");
+        assert_eq!(features.len(), 1, "exactly one feature under the hit test:\n{geojson}");
+        assert_eq!(features[0]["properties"]["vertex"], json!(0));
+        assert_eq!(
+            features[0]["geometry"],
+            json!({ "type": "Point", "coordinates": [10.7, 59.9] })
+        );
+    }
+
+    /// The first click of a polygon used to paint nothing at all: a 1-coordinate `LineString` has no
+    /// segment to stroke and the point layer filtered it out. Its handle is now the visible feedback
+    /// that the click landed.
+    #[test]
+    fn a_single_vertex_polygon_draft_still_draws_one_handle() {
+        let geojson = draft_geojson(&MapDraft::Polygon(vec![(60.0, 5.0)]));
+        let features = geojson["features"].as_array().expect("a feature collection");
+        assert_eq!(features.len(), 2, "the shape feature plus one handle:\n{geojson}");
+        assert_eq!(features[1]["properties"]["vertex"], json!(0));
+    }
+
+    /// Index `0` has to survive as the number `0`, not as `false`/absent: the drag script compares it
+    /// against `undefined`/`null` precisely because it cannot test it for truthiness.
+    #[test]
+    fn the_first_handles_index_round_trips_as_the_number_zero() {
+        let geojson = draft_geojson(&MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)]));
+        let encoded = geojson.to_string();
+        let decoded: Value = serde_json::from_str(&encoded).expect("the collection round trips");
+        assert_eq!(decoded["features"][1]["properties"]["vertex"], json!(0));
+        assert!(
+            encoded.contains(r#""vertex":0"#),
+            "the tag is encoded as a number:\n{encoded}"
+        );
+    }
+
+    /// A ring's closing point is `closed_ring`'s rendering concern, not a vertex the operator placed —
+    /// so it gets no handle, and handle indices address `MapDraft`'s own unclosed list.
+    #[test]
+    fn the_rings_duplicated_closing_point_gets_no_handle_of_its_own() {
+        let geojson = draft_geojson(&MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)]));
+        let ring = geojson["features"][0]["geometry"]["coordinates"][0]
+            .as_array()
+            .expect("a closed ring");
+        assert_eq!(ring.len(), 4, "the rendered ring repeats its first point");
+        assert_eq!(
+            geojson["features"].as_array().map(Vec::len),
+            Some(4),
+            "but only three handles exist:\n{geojson}"
+        );
+    }
+
+    /// The draft outline is a `line` layer over the same source, so without a filter it would try to
+    /// stroke every handle `Point` too — and each vertex added would re-stroke the whole ring.
+    #[test]
+    fn the_draft_outline_layer_ignores_the_handle_features() {
+        let script = init_script();
+        let layer = script
+            .find("id: 'geo-draft-line'")
+            .expect("the draft outline layer is added");
+        let end = script[layer..].find("});").expect("the addLayer call ends") + layer;
+        assert!(
+            script[layer..end].contains("filter: ['!=', ['geometry-type'], 'Point']"),
+            "the outline skips the handles:\n{}",
+            &script[layer..end]
+        );
     }
 
     #[test]
