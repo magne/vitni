@@ -17,6 +17,7 @@ use crate::components::record_picker::{
 };
 use crate::components::{Chip, SelectChoice, SelectInput, TextInput};
 use crate::services::{Services, commit_citation_change_set, load_picker_rows};
+use crate::shell::nav_state::{NavState, data_version_ticket};
 
 /// One evidence-analysis axis select in the block: its accessible name and its options (the first of
 /// which is the unset "—"), tagged with the axis it drives.
@@ -169,8 +170,10 @@ fn ProvenanceCitations(draft: Signal<ProvenanceDraft>) -> Element {
     let mut new_open = use_signal(|| false);
     let ctx = try_consume_context::<AppCtx>();
     let services = ctx_services(ctx.as_ref());
+    let nav = try_consume_context::<NavState>();
     let row_services = services.clone();
     let rows = use_resource(move || {
+        let _ = data_version_ticket(nav);
         let services = row_services.clone();
         async move {
             match services {
@@ -246,8 +249,10 @@ fn ProvenanceDnaMatches(draft: Signal<ProvenanceDraft>) -> Element {
     let mut picker_state = use_signal(PickerState::default);
     let ctx = try_consume_context::<AppCtx>();
     let services = ctx_services(ctx.as_ref());
+    let nav = try_consume_context::<NavState>();
     let row_services = services.clone();
     let rows = use_resource(move || {
+        let _ = data_version_ticket(nav);
         let services = row_services.clone();
         async move {
             match services {
@@ -323,8 +328,10 @@ fn ProvenanceNewCitation(draft: Signal<ProvenanceDraft>, onclose: EventHandler<(
     let mut error = use_signal(|| None::<String>);
     let ctx = try_consume_context::<AppCtx>();
     let services = ctx_services(ctx.as_ref());
+    let nav = try_consume_context::<NavState>();
     let source_services = services.clone();
     let source_rows = use_resource(move || {
+        let _ = data_version_ticket(nav);
         let services = source_services.clone();
         async move {
             match services {

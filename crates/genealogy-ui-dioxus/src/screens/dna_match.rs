@@ -26,17 +26,20 @@ pub fn DnaMatchCreateRecord() -> Element {
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::DnaMatchDraft>(Category::DnaMatches);
     let mut draft = record.draft;
-    // The two existing-test pickers: options load once; each excludes the other's pick so a match is
-    // never asserted between a test and itself. Pick/clear drive the draft's (required) test ids.
+    // The two existing-test pickers: their options refetch after any mutation (#266); each excludes the
+    // other's pick so a match is never asserted between a test and itself. Pick/clear drive the draft's
+    // (required) test ids.
     let test_a_state = use_signal(genealogy_ui::PickerState::default);
     let test_b_state = use_signal(genealogy_ui::PickerState::default);
     let test_a_services = services.clone();
     let test_a_rows = use_resource(move || {
+        let _ = data_version_ticket(Some(nav));
         let services = test_a_services.clone();
         async move { load_picker_rows(services, Category::DnaTests).await }
     });
     let test_b_services = services.clone();
     let test_b_rows = use_resource(move || {
+        let _ = data_version_ticket(Some(nav));
         let services = test_b_services.clone();
         async move { load_picker_rows(services, Category::DnaTests).await }
     });

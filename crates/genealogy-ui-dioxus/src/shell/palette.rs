@@ -3,8 +3,9 @@
 //! Blends records (the loaded entity lists, filtered by the query), commands (create a record, find
 //! duplicates, open a tool/help), and the recently-opened records into one keyboard-navigable
 //! listbox. The decision logic is the framework-free [`genealogy_ui::palette`] module; this component
-//! is the thin Dioxus binding: it loads the rows once per open, filters them per keystroke with
-//! [`palette_groups`], and renders the ARIA combobox/listbox from `search-palette.html`.
+//! is the thin Dioxus binding: it loads the rows on open (and again after any create/edit/undo, via
+//! [`data_version_ticket`] — #266), filters them per keystroke with [`palette_groups`], and renders
+//! the ARIA combobox/listbox from `search-palette.html`.
 
 use dioxus::prelude::*;
 use genealogy_app::RecentItem;
@@ -18,7 +19,7 @@ use crate::components::TextInput;
 use crate::services::load_palette_rows;
 use crate::shell::ChromeCtx;
 use crate::shell::focus_trap::{dismiss_on_escape, trap_tab};
-use crate::shell::nav_state::{NavState, Overlay};
+use crate::shell::nav_state::{NavState, Overlay, data_version_ticket};
 
 /// One rendered palette option: its flat index (for `aria-activedescendant`), decorative icon,
 /// already-localized label + kind badge, and the entry to activate.
@@ -56,9 +57,11 @@ pub fn CommandPalette() -> Element {
             active.set(0);
         }
     });
-    // Load every pickable category's rows once per open (empty while closed / host-free).
+    // Load every pickable category's rows per open (empty while closed / host-free), and again after
+    // any mutation, so a record created while the palette stays open is findable in it (#266).
     let rows = use_resource(move || {
         let services = services.clone();
+        let _ = data_version_ticket(Some(nav));
         let open = *nav.overlay.read() == Overlay::Palette;
         async move {
             match (open, services) {

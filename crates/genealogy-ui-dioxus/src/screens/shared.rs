@@ -992,10 +992,14 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
 // ---------------------------------------------------------------------------------------------------
 
 /// Builds an existing-only record picker for a side-panel link field (`edit-patterns.html` §c): loads
-/// `category`'s rows once via [`load_picker_rows`], owns the live [`PickerState`], and wires no-op
+/// `category`'s rows via [`load_picker_rows`], owns the live [`PickerState`], and wires no-op
 /// pick/clear callbacks — the picked id is read from the returned picker's `state.selection` at submit.
 /// "+ New" is never offered; a side panel commits one immediate command, so inline creation there is
 /// the flagged follow-up. A custom hook (loads rows, holds state), so callers get a ready picker.
+///
+/// The rows resource subscribes to [`data_version_ticket`], so a record created or edited elsewhere
+/// while the picker stays open shows up in it without a reopen (#266). [`NavState`] is resolved here
+/// rather than inside the closure, and optionally — the host-free SSR tests mount no shell.
 pub fn use_existing_picker(
     services: Services,
     category: Category,
@@ -1005,7 +1009,9 @@ pub fn use_existing_picker(
     exclude: Vec<String>,
 ) -> RecordPicker {
     let state = use_signal(PickerState::default);
+    let nav = try_consume_context::<NavState>();
     let rows = use_resource(move || {
+        let _ = data_version_ticket(nav);
         let services = services.clone();
         async move { load_picker_rows(services, category).await }
     });

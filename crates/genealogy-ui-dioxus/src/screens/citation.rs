@@ -17,10 +17,12 @@ pub fn CitationCreateRecord() -> Element {
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::CitationDraft>(Category::Citations);
     let mut draft = record.draft;
-    // The find-or-create source picker: options load once; pick/clear/"+ New" drive the draft's link.
+    // The find-or-create source picker: its options refetch after any mutation (#266); pick/clear/
+    // "+ New" drive the draft's link.
     let source_state = use_signal(genealogy_ui::PickerState::default);
     let source_services = services.clone();
     let source_rows = use_resource(move || {
+        let _ = data_version_ticket(Some(nav));
         let services = source_services.clone();
         async move { load_picker_rows(services, Category::Sources).await }
     });

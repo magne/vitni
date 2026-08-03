@@ -43,7 +43,10 @@ pub struct PickerConfig {
     pub allow_new: bool,
 }
 
-/// The load state of a picker's options, loaded once per open form via `load_picker_rows`.
+/// The load state of a picker's options, loaded via `load_picker_rows` when the form opens and again
+/// after every create/edit/undo (the call site's resource subscribes to
+/// [`data_version_ticket`](crate::shell::nav_state::data_version_ticket) — #266). A refetch keeps the
+/// last `Ready` rows on screen, so a reload is never a "Loading" flash.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PickerOptions {
     /// The options are still loading.
@@ -74,7 +77,7 @@ pub struct RecordPicker {
     pub config: PickerConfig,
     /// The live query / open / selection state (owned by the call site so it reseeds cleanly).
     pub state: Signal<PickerState>,
-    /// The options to search, loaded once per form.
+    /// The options to search, refetched whenever the workspace data changes.
     pub options: PickerOptions,
     /// Record ids to hide from the results (e.g. already-picked ids).
     pub exclude: Vec<String>,
