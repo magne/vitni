@@ -13,10 +13,11 @@
 //! `screens::map_shared`. A `use_effect` pushes updated marker/event/draft `GeoJSON` to the running map
 //! whenever the loaded data, the picker's query, or the in-progress draft changes.
 //!
-//! Interactive canvas behavior (pan/zoom, the actual click-to-place feel, polygon vertex rendering)
-//! and the toolbar picker (needs `AppCtx`'s `Services`, so it isn't SSR-testable in isolation) cannot
-//! be exercised by an SSR test; see the module's test coverage and the PR report for the items needing
-//! manual GUI verification.
+//! Interactive canvas behavior (pan/zoom, the actual click-to-place feel, polygon vertex rendering and
+//! dragging) and the toolbar picker (needs `AppCtx`'s `Services`, so it isn't SSR-testable in
+//! isolation) cannot be exercised by an SSR test. The canvas half is scripted against the real webview
+//! instead (`cargo xtask gui-pass`, the `map-*.toml` scenarios); pan/zoom smoothness and click latency
+//! are what remain human-only.
 
 use genealogy_app::{ConfigStore, FileConfigStore, MapConfig, MapProvider, PlaceGeometry, PlaceType};
 use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};

@@ -93,7 +93,7 @@ pub fn rendered_credit(provider: &MapProvider) -> MapCredit {
     }
 }
 
-/// The generic `MapLibre` mount surface (draw-tool crosshair cursor + attribution placeholder), shared
+/// The generic `MapLibre` mount surface (draw-tool crosshair cursor + the tile source's credit), shared
 /// by the Geography tool (whole-atlas view) and the Place screen's per-place Map tab. `container_id`
 /// distinguishes the two DOM mounts (each is its own `MapLibre` instance) so both can coexist if ever
 /// shown together.
