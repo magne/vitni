@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use genealogy_app::{
-    AiConfig, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, PluginTrust,
+    AiConfig, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, MapConfig, PluginTrust,
     PluginTrustConfig, PreferenceLayers, ResolvedLocale, Session, ShortcutConfig, SuretyLabelOverrides, TagSummary,
     Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers,
     read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides, workspace_counts,
@@ -1005,6 +1005,19 @@ fn ai_config(services: &Services) -> AiConfig {
         Err(error) => {
             tracing::warn!(%error, "could not read the AI config; falling back to the global config");
             services.config.ai.clone()
+        }
+    }
+}
+
+/// Reads the client-scope `[map]` config for the workspace at `dir`, falling back to the built-in
+/// default (OSM raster) on any read error — the same fallback shape as [`ai_config`], which its doc
+/// comment already claimed to mirror while living in `screens::geography`.
+pub(crate) fn map_config(dir: &Path) -> MapConfig {
+    match FileConfigStore::for_workspace(dir.to_path_buf()).load_map_config() {
+        Ok(config) => config,
+        Err(error) => {
+            tracing::warn!(%error, "could not read the map config; using the built-in default");
+            MapConfig::default()
         }
     }
 }

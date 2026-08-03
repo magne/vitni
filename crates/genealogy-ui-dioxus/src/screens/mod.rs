@@ -69,7 +69,7 @@ pub use import::{
     ConfirmChrome, ConfirmStage, ImportModeLabels, ImportModeSwitch, ImportRowStatus, ImportScreen, RecordsLabels,
     RecordsStage, SaveStage, SourceLabels, SourceStage, SummaryLabels, SummaryStage, WizardLabels,
 };
-pub use map_shared::{DrawTool, MapControlLabels, MapZoomReadout, effective_date_choice};
+pub use map_shared::{DrawTool, MapControlLabels, MapCredit, MapZoomReadout, effective_date_choice, rendered_credit};
 pub use media::{MediaEditForm, media_attributes_table, media_overview, media_record_fields};
 pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen, merge_blocked_card, merge_wizard_foot};
 pub use note::{NoteEditForm, note_content_tab, note_language_tab, note_record_fields, note_references_table};

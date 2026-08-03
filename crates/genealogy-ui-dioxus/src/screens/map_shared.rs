@@ -6,7 +6,7 @@
 //! [`PlaceEdit::AssertGeometry`] path; only the container id/center/zoom and the caller's own
 //! toolbar/rail differ.
 
-use genealogy_app::{GeoCoordinates, Microdegrees, PlaceGeometry};
+use genealogy_app::{GeoCoordinates, MapProvider, Microdegrees, PlaceGeometry};
 use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm, ZOOM_RANGE, clamp_zoom};
 use serde_json::{Value, json};
 use std::str::FromStr;
@@ -63,6 +63,36 @@ pub fn geo_point(lat: f64, lon: f64) -> GeoCoordinates {
     }
 }
 
+/// The tile source a mounted map fetches, and the credit shown over it. Resolved as a pair by
+/// [`rendered_credit`] so the two can never come from different providers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MapCredit {
+    /// The `{z}/{x}/{y}` template the raster source fetches.
+    pub tile_url: String,
+    /// The attribution to display, per the tile source's own terms.
+    pub attribution: String,
+}
+
+/// The tile URL and credit for `provider` — **as the map will actually render it**, which is not the
+/// same thing as the configured `kind`. This map has one raster source and nothing calls `setStyle`,
+/// so a configured vector style or Google provider still paints OpenStreetMap tiles; crediting the
+/// configured provider there would put someone else's terms over OSM's pixels. A provider that serves
+/// raster tiles supplies both halves itself; anything else falls back to the built-in default, which
+/// is where the URL literal lives (once, in `genealogy-app`).
+#[must_use]
+pub fn rendered_credit(provider: &MapProvider) -> MapCredit {
+    let fallback = MapProvider::default_osm();
+    let rendered = if provider.raster_tile_url().is_some() {
+        provider
+    } else {
+        &fallback
+    };
+    MapCredit {
+        tile_url: rendered.raster_tile_url().unwrap_or_default().to_owned(),
+        attribution: rendered.attribution().to_owned(),
+    }
+}
+
 /// The generic `MapLibre` mount surface (draw-tool crosshair cursor + attribution placeholder), shared
 /// by the Geography tool (whole-atlas view) and the Place screen's per-place Map tab. `container_id`
 /// distinguishes the two DOM mounts (each is its own `MapLibre` instance) so both can coexist if ever
@@ -72,17 +102,28 @@ pub fn geo_point(lat: f64, lon: f64) -> GeoCoordinates {
 /// back to — the caller renders it with [`MapZoomReadout`]. It is read only via [`Signal::peek`] here,
 /// never `.read()`: a subscribed surface re-renders on a zoom gesture, and a re-rendered surface
 /// remounts, which rebuilds the map.
+///
+/// `credit` supplies both the tiles the map fetches and the attribution drawn over them (#254).
+/// `MapLibre`'s own `AttributionControl` stays disabled and this static overlay carries the text
+/// instead, so one treatment works for every provider kind (`docs/research/geography-rendering.md`).
+/// The overlay is omitted entirely when the credit is empty — an empty bordered box is not a credit.
 #[must_use = "renders the map surface; drop it and nothing is shown"]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a map surface is the mount id + label + the caller's draw-tool, camera, credit, control-label and click state; the precedent is geography_toolbar"
+)]
 pub fn map_surface(
     container_id: &'static str,
     aria_label: String,
     tool: Signal<DrawTool>,
-    on_map_click: impl FnMut(f64, f64) + Clone + 'static,
     center: (f64, f64),
     zoom: Signal<f64>,
+    credit: MapCredit,
     labels: MapControlLabels,
+    on_map_click: impl FnMut(f64, f64) + Clone + 'static,
 ) -> Element {
     let capturing = !matches!(tool(), DrawTool::Pan);
+    let attribution = credit.attribution.clone();
     rsx! {
         div {
             class: "map-surface",
@@ -93,9 +134,13 @@ pub fn map_surface(
                 class: if capturing { "map-container is-capturing" } else { "map-container" },
                 style: "position:absolute;inset:0",
                 "data-armed": if capturing { "true" } else { "false" },
-                onmounted: move |_| mount_maplibre(container_id, center, zoom, &labels, on_map_click.clone()),
+                onmounted: move |_| {
+                    mount_maplibre(container_id, center, zoom, &labels, &credit.tile_url, on_map_click.clone());
+                },
             }
-            div { class: "map-attr", "" }
+            if !attribution.is_empty() {
+                div { class: "map-attr", "{attribution}" }
+            }
         }
     }
 }
@@ -149,9 +194,10 @@ pub fn mount_maplibre(
     center: (f64, f64),
     zoom: Signal<f64>,
     labels: &MapControlLabels,
+    tile_url: &str,
     mut on_click: impl FnMut(f64, f64) + 'static,
 ) {
-    let script = maplibre_init_script(container_id, center, *zoom.peek(), labels);
+    let script = maplibre_init_script(container_id, center, *zoom.peek(), labels, tile_url);
     let mut listener = document::eval(&script);
     spawn(async move {
         while let Ok(payload) = listener.recv::<String>().await {
@@ -303,7 +349,13 @@ fn circle_paint(color: &str, radius_stops: [(u32, u32); 4], stroke_width: u32) -
 /// `WebKitGTK` the frame it draws never reaches the compositor, so the map went blank until the next
 /// camera move. Forcing one more `redraw()` on the animation frame after the resize does composite.
 /// `redraw()` changes no layout, so the observer cannot re-trigger itself.
-fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64, labels: &MapControlLabels) -> String {
+fn maplibre_init_script(
+    container_id: &str,
+    center: (f64, f64),
+    zoom: f64,
+    labels: &MapControlLabels,
+    tile_url: &str,
+) -> String {
     format!(
         r"
         const el = document.getElementById('{container_id}');
@@ -320,7 +372,7 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64, label
             }});
             el.__geoMap = map;
             map.on('load', () => {{
-                map.addSource('geo-tiles', {{ type: 'raster', tiles: ['https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png'], tileSize: 256, maxzoom: {max_zoom} }});
+                map.addSource('geo-tiles', {{ type: 'raster', tiles: ['{tile_url}'], tileSize: 256, maxzoom: {max_zoom} }});
                 map.addLayer({{ id: 'geo-tile-layer', type: 'raster', source: 'geo-tiles' }});
                 map.addSource('geo-markers', {{ type: 'geojson', data: {{ type: 'FeatureCollection', features: [] }} }});
                 map.addLayer({{ id: 'geo-marker-fill', type: 'fill', source: 'geo-markers', filter: ['==', ['geometry-type'], 'Polygon'], paint: {{ 'fill-color': '#5db3ff', 'fill-opacity': 0.25 }} }});
@@ -713,9 +765,10 @@ mod tests {
     use super::{
         FIT_MAX_ZOOM, MapControlLabels, MapDraft, MapMessage, closed_ring, combined_bounds, draft_geojson,
         empty_feature_collection, events_geojson, fit_bounds_script, format_zoom, maplibre_init_script,
-        markers_geojson, parse_map_message, push_data_script, push_draft_script, save_year, shape_to_draft,
-        zoom_changed,
+        markers_geojson, parse_map_message, push_data_script, push_draft_script, rendered_credit, save_year,
+        shape_to_draft, zoom_changed,
     };
+    use genealogy_app::MapProvider;
     use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm, ZOOM_RANGE};
     use serde_json::{Value, json};
 
@@ -730,8 +783,53 @@ mod tests {
         }
     }
 
+    /// A tile URL that is deliberately *not* the built-in OSM one, so an assertion can tell "the
+    /// configured URL reached the script" apart from "the old hardcoded literal is still there".
+    const OTHER_TILE_URL: &str = "https://tiles.example/{z}/{x}/{y}.png";
+
     fn init_script() -> String {
-        maplibre_init_script("geo-map", (59.9, 10.7), 5.0, &labels())
+        maplibre_init_script("geo-map", (59.9, 10.7), 5.0, &labels(), OTHER_TILE_URL)
+    }
+
+    /// The raster URL is hardcoded in the init script and nothing calls `setStyle`, so a configured
+    /// vector/Google provider still paints OSM tiles. Printing its own `attribution()` would then
+    /// credit a source the operator never sees — the credit has to follow the pixels.
+    #[test]
+    fn a_non_raster_provider_credits_the_tiles_that_are_actually_rendered() {
+        let credit = rendered_credit(&MapProvider::Google {
+            api_key_env: "GOOGLE_MAPS_KEY".to_owned(),
+            attribution: "© Google".to_owned(),
+        });
+        assert_eq!(credit.attribution, "© OpenStreetMap contributors");
+        assert_eq!(credit.tile_url, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+    }
+
+    /// The pair is resolved together on purpose: a raster provider's URL and its credit must never be
+    /// taken from different providers, or the map shows one source's terms over another's tiles.
+    #[test]
+    fn a_configured_raster_provider_supplies_both_its_url_and_its_own_credit() {
+        let credit = rendered_credit(&MapProvider::OsmRaster {
+            tile_url: OTHER_TILE_URL.to_owned(),
+            attribution: "© Example tiles".to_owned(),
+        });
+        assert_eq!(credit.tile_url, OTHER_TILE_URL);
+        assert_eq!(credit.attribution, "© Example tiles");
+    }
+
+    /// And the resolved URL is what the map fetches — before this the template was a literal inside
+    /// the script, so config and pixels could disagree with nothing to catch it.
+    #[test]
+    fn the_tile_source_fetches_the_resolved_url_rather_than_a_hardcoded_one() {
+        let script = init_script();
+        let source = script
+            .find("map.addSource('geo-tiles'")
+            .expect("the tile source is added");
+        let end = script[source..].find(");").expect("the addSource call ends") + source;
+        assert!(
+            script[source..end].contains(&format!("tiles: ['{OTHER_TILE_URL}']")),
+            "the raster source fetches the URL it was handed:\n{}",
+            &script[source..end]
+        );
     }
 
     /// The paint each circle layer is expected to emit, written out here independently of the code that

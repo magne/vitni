@@ -22,12 +22,12 @@ use genealogy_app::{ConfigStore, FileConfigStore, MapConfig, MapProvider, PlaceG
 use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
 
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapZoomReadout, events_geojson, fit_bounds,
-    geo_point, map_surface, markers_geojson, push_map_data, push_map_draft, select_tool,
+    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapCredit, MapDraft, MapZoomReadout, events_geojson,
+    fit_bounds, geo_point, map_surface, markers_geojson, push_map_data, push_map_draft, rendered_credit, select_tool,
 };
 use super::prelude::*;
 use crate::i18n::Chrome;
-use crate::services::Services;
+use crate::services::{Services, map_config};
 
 /// The mount id of the map's container `div`, referenced by the init/update JS.
 const MAP_CONTAINER_ID: &str = "geography-map";
@@ -212,7 +212,7 @@ pub fn GeographyScreen() -> Element {
                     } else if marker_count == 0 && event_count == 0 {
                         {geography_empty_state(&chrome.0)}
                     } else {
-                        {geography_map_surface(&chrome.0, marker_count, event_count, tool, zoom, on_map_click)}
+                        {geography_map_surface(&chrome.0, marker_count, event_count, tool, zoom, rendered_credit(&provider()), on_map_click)}
                     }
                     if matches!(tool(), DrawTool::Polygon) {
                         div { class: "wrap", style: "gap:8px",
@@ -449,18 +449,29 @@ pub fn geography_empty_state(chrome: &Chrome) -> Element {
 
 /// The map surface: the shared `MapLibre` mount (`screens::map_shared::map_surface`) at the
 /// Geography-tool's own container id, default center, and world/country-level zoom. `zoom` is the
-/// live camera level the toolbar's [`MapZoomReadout`] shows.
+/// live camera level the toolbar's [`MapZoomReadout`] shows; `credit` names the tiles it fetches and
+/// the attribution drawn over them (#254).
 pub fn geography_map_surface(
     chrome: &Chrome,
     marker_count: usize,
     event_count: usize,
     tool: Signal<DrawTool>,
     zoom: Signal<f64>,
+    credit: MapCredit,
     on_map_click: impl FnMut(f64, f64) + Clone + 'static,
 ) -> Element {
     let aria = chrome.geography_map_aria(marker_count, event_count);
     let labels = MapControlLabels::from_chrome(chrome);
-    map_surface(MAP_CONTAINER_ID, aria, tool, on_map_click, DEFAULT_CENTER, zoom, labels)
+    map_surface(
+        MAP_CONTAINER_ID,
+        aria,
+        tool,
+        DEFAULT_CENTER,
+        zoom,
+        credit,
+        labels,
+        on_map_click,
+    )
 }
 
 /// The time slider: a year `<input type=range>` over [`TIME_SLIDER_RANGE`], captioned with the
@@ -607,18 +618,6 @@ fn GeographyCreateForm(point: (f64, f64), onsaved: EventHandler<()>) -> Element 
                     }
                 });
             },
-        }
-    }
-}
-
-/// Reads the configured `[map]` provider from the workspace's config store, falling back to the
-/// built-in OSM default on any read error (mirrors `services::ai_config`'s fallback pattern).
-fn map_config(dir: &std::path::Path) -> MapConfig {
-    match FileConfigStore::for_workspace(dir.to_path_buf()).load_map_config() {
-        Ok(config) => config,
-        Err(error) => {
-            tracing::warn!(%error, "could not read the map config; using the built-in default");
-            MapConfig::default()
         }
     }
 }

@@ -7,9 +7,11 @@ use genealogy_ui::{
 use super::geography::geography_time_slider;
 use super::map_shared::{
     DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapZoomReadout, events_geojson, fit_bounds,
-    geo_point, map_surface, markers_geojson, push_map_data, push_map_draft, select_tool, shape_to_draft,
+    geo_point, map_surface, markers_geojson, push_map_data, push_map_draft, rendered_credit, select_tool,
+    shape_to_draft,
 };
 use super::prelude::*;
+use crate::services::map_config;
 
 /// The create-mode place record: an uncommitted [`PlaceDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). Save commits the whole place; Cancel discards. Save is
@@ -820,6 +822,13 @@ fn PlaceMapEditor(
     let chrome = state.chrome();
     let mut nav = use_context::<NavState>();
 
+    // The configured tile provider, so this surface credits the source it renders (#254). A read-once
+    // cache with no reactive dependency, exactly like the Geography tool's own memo: switching provider
+    // in the Geography toolbar does not repaint either surface until the screen is rebuilt — the
+    // existing "Switching provider repaints nothing" behaviour, not something this memo introduces.
+    let provider_dir = state.services().dir.clone();
+    let provider = use_memo(move || map_config(&provider_dir).resolved_provider());
+
     let year = use_signal(|| PLACE_MAP_DEFAULT_YEAR);
     let zoom = use_signal(|| PLACE_MAP_DEFAULT_ZOOM);
     let mut tool = use_signal(|| DrawTool::Pan);
@@ -925,7 +934,16 @@ fn PlaceMapEditor(
                 }
             }
             div { class: "card map-card",
-                {map_surface(PLACE_MAP_CONTAINER_ID, aria, tool, on_map_click, center, zoom, MapControlLabels::from_chrome(chrome))}
+                {map_surface(
+                    PLACE_MAP_CONTAINER_ID,
+                    aria,
+                    tool,
+                    center,
+                    zoom,
+                    rendered_credit(&provider()),
+                    MapControlLabels::from_chrome(chrome),
+                    on_map_click,
+                )}
             }
             {place_map_as_of_note(loc, &detail.geometries, resolved_shape.as_ref(), year())}
             if matches!(tool(), DrawTool::Point) && matches!(draft(), MapDraft::Point(_)) {
