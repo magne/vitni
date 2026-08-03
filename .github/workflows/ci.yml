@@ -99,8 +99,13 @@ jobs:
       # Everything except the postgres integration tests, which need a Docker daemon. GitHub blocks
       # `--network host` on container jobs and puts spawned testcontainers on an unreachable network,
       # so those run in the native `postgres` job below instead.
+      # `--lib --bins --tests` (not `--all-targets`) so nextest skips `benches/store.rs`: run
+      # 30783699764 showed 15 `genealogy-db::bench/store` entries at ~140 s each, ~18 minutes of
+      # this job for benchmarks nobody asserts on in CI. The clippy job keeps `--all-targets`, so
+      # the bench code still builds and lints; run it deliberately with
+      # `cargo bench -p genealogy-db --features sqlite`.
       - name: test
-        run: cargo nextest run --workspace --all-features --all-targets -E 'not binary_id(=genealogy-db::postgres_store)'
+        run: cargo nextest run --workspace --all-features --lib --bins --tests -E 'not binary_id(=genealogy-db::postgres_store)'
       # nextest does not run doctests; keep them a separate cargo step.
       - name: doctests
         run: cargo test --workspace --all-features --doc

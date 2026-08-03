@@ -85,5 +85,5 @@ framework namespace. A new renderer changes nothing in `genealogy-ui`, so that g
 
 - `genealogy-ui` must be untouched. Run the framework-free guard —
   `cargo test -p genealogy-ui --test framework_free` — and the full gates
-  (`cargo nextest run --workspace --all-features --all-targets`, clippy, fmt, i18n-check,
+  (`cargo nextest run --workspace --all-features --lib --bins --tests`, clippy, fmt, i18n-check,
   `cargo deny check`). A second renderer that reused `genealogy-ui` as-is leaves every one green.

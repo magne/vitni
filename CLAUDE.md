@@ -100,7 +100,7 @@ is its own export). When wiring a new app→UI path, add the `pub use` first, or
 cargo build --workspace                                              # build every crate
 cargo run -p genealogy-cli                                           # run the `genealogy` binary
 cargo run -p genealogy-ui-dioxus --features desktop                  # run the GUI
-cargo nextest run --workspace --all-features --all-targets           # all tests (see note below)
+cargo nextest run --workspace --all-features --lib --bins --tests    # all tests (see note below)
 cargo test -p genealogy-core <name>                                  # single test by name in one crate
 cargo clippy --workspace --all-targets --all-features -- -D warnings # lint (zero warnings)
 cargo fmt --all                                                      # format every crate
@@ -171,7 +171,12 @@ subcommand-bearing verb per aggregate, generated from `for_each_cli_command!` in
 > cargo command without `-p`/`--workspace` (`--all` for `fmt`) silently covers the CLI crate
 > alone, skipping most tests, the other crates' `#[cfg(test)]` targets, and `xtask`. `cargo deny`
 > and `cargo xtask` are unaffected. `nextest` is the local runner; CI uses `cargo test` and runs
-> doctests separately, which neither `--all-targets` nor `nextest` covers.
+> doctests separately, which neither `--lib --bins --tests` nor `nextest` covers.
+
+`--lib --bins --tests` deliberately excludes `benches/`: each `genealogy-db` bench takes ~140 s
+(15 of them, run `30783699764`), so nextest running them costs ~18 minutes it doesn't need to.
+Clippy still runs `--all-targets`, so the bench code stays linted. Run benches deliberately with
+`cargo bench -p genealogy-db --features sqlite`.
 
 ## Git
 
