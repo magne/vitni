@@ -22,6 +22,24 @@ pub fn clamp_slider_year(year: i32) -> i32 {
     year.clamp(TIME_SLIDER_RANGE.0, TIME_SLIDER_RANGE.1)
 }
 
+/// The map camera's allowed zoom range. The ceiling is the last zoom the raster tile source actually
+/// serves (`tile.openstreetmap.org` stops at z19); `MapLibre`'s own default ceiling is 22, so three
+/// levels past the last existing tile the map went blank. The floor keeps the whole globe in view
+/// without letting a gesture zoom out into repeated world copies.
+pub const ZOOM_RANGE: (f64, f64) = (1.0, 19.0);
+
+/// Clamps a zoom level into [`ZOOM_RANGE`] — the map's own `minZoom`/`maxZoom` bound the camera, so
+/// this is what keeps a *readout* (or any zoom a caller computes itself) inside the same range.
+/// Non-finite input falls back to the floor: [`f64::clamp`] panics on a non-finite bound and
+/// propagates `NaN` otherwise, and `panic` is deny-level in this workspace.
+#[must_use]
+pub fn clamp_zoom(zoom: f64) -> f64 {
+    if !zoom.is_finite() {
+        return ZOOM_RANGE.0;
+    }
+    zoom.clamp(ZOOM_RANGE.0, ZOOM_RANGE.1)
+}
+
 /// One place's shape on the map, in decimal degrees — a point, or a polygon boundary (exterior ring
 /// plus any holes).
 #[derive(Debug, Clone, PartialEq)]
@@ -237,7 +255,7 @@ pub(crate) fn event_pin_vm(pin: &genealogy_app::EventPin, loc: &Localizer) -> Ev
 
 #[cfg(test)]
 mod tests {
-    use super::{GeographyVm, MapProviderVm, MarkerShapeVm, clamp_slider_year};
+    use super::{GeographyVm, MapProviderVm, MarkerShapeVm, ZOOM_RANGE, clamp_slider_year, clamp_zoom};
     use crate::i18n::Localizer;
     use genealogy_app::{
         Calendar, DateModifier, DatePoint, DateQuality, EventPin, EventType, GenealogicalDate, GenealogicalDateBody,
@@ -423,5 +441,39 @@ mod tests {
     #[test]
     fn a_year_above_range_clamps_to_the_maximum() {
         assert_eq!(clamp_slider_year(9999), 2200);
+    }
+
+    #[test]
+    fn the_zoom_range_is_ordered_low_to_high() {
+        assert!(ZOOM_RANGE.0 < ZOOM_RANGE.1, "a floor above the ceiling clamps nothing");
+    }
+
+    #[test]
+    fn a_zoom_within_range_is_unchanged() {
+        assert!((clamp_zoom(14.2) - 14.2).abs() < 1e-9);
+    }
+
+    /// The defect itself: `MapLibre`'s own default ceiling is 22, three levels past the last raster
+    /// tile the OSM source serves, and a wheel gesture past it blanked the map.
+    #[test]
+    fn a_zoom_above_range_clamps_to_the_last_zoom_the_tiles_exist_at() {
+        assert!((clamp_zoom(22.0) - ZOOM_RANGE.1).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_zoom_below_range_clamps_up_to_the_floor() {
+        assert!((clamp_zoom(-3.0) - ZOOM_RANGE.0).abs() < 1e-9);
+    }
+
+    /// `f64::clamp` panics on a non-finite bound *and* propagates `NaN` — and `panic` is deny-level
+    /// here, so the guard runs first and a nonsense reading falls back to the floor.
+    #[test]
+    fn a_non_finite_zoom_falls_back_to_the_floor_instead_of_propagating() {
+        for nonsense in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(
+                (clamp_zoom(nonsense) - ZOOM_RANGE.0).abs() < 1e-9,
+                "{nonsense} must not reach the map as a camera bound"
+            );
+        }
     }
 }
