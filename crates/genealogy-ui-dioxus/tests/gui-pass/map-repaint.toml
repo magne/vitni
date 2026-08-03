@@ -22,7 +22,7 @@ name = "map"
 
 [[step]]
 do = "click"
-at = [1305, 110]
+at = [1249, 110]
 label = "toolbar: Pan (already active)"
 
 [[step]]
@@ -31,7 +31,7 @@ name = "pan-reclick"
 
 [[step]]
 do = "click"
-at = [1404, 110]
+at = [1348, 110]
 label = "toolbar: Drop / move a point"
 
 [[step]]
@@ -40,7 +40,7 @@ name = "point-armed"
 
 [[step]]
 do = "click"
-at = [1536, 110]
+at = [1480, 110]
 label = "toolbar: Draw polygon"
 
 [[step]]
@@ -49,7 +49,7 @@ name = "polygon-armed"
 
 [[step]]
 do = "click"
-at = [1305, 110]
+at = [1249, 110]
 label = "toolbar: Pan"
 
 [[step]]

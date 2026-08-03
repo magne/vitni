@@ -212,8 +212,8 @@ Residuals from the shortcuts work (ADR 0030); see
 
 ### Geography & map
 
-- **`geography_toolbar` takes 9 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
-  fit + draw-target state were threaded in — bundle them into a struct. Cosmetic cleanup.
+- **`geography_toolbar` takes 11 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
+  fit + draw-target + zoom state were threaded in — bundle them into a struct. Cosmetic cleanup.
 - **The Geography tool's Point tool cannot save at all.** The Place Map editor has a "Use this point"
   confirm; the Geography tool has no equivalent, and contrary to what this bullet used to say it does
   not commit on click either — it only paints a red draft dot. `open_geometry_panel`
@@ -227,12 +227,6 @@ Residuals from the shortcuts work (ADR 0030); see
   first click shows nothing at all, the second only a hairline segment, and a finished ring has
   outline plus fill with no corners. A draft vertex layer is the prerequisite for the drag-to-move
   and mid-ring insertion under *In-map editing depth* below. — #259
-- **Zoom is invisible and unbounded.** No zoom readout, no `NavigationControl`, no scale bar, and no
-  `minZoom`/`maxZoom` on the map or `maxzoom` on the raster source (`screens/map_shared.rs`) — so
-  MapLibre's 0–22 default applies while `tile.openstreetmap.org` only serves to z19, and zooming past
-  it silently yields blank tiles. `maxZoom` on the map plus `maxzoom: 19` on the source, and a zoom
-  readout beside the provider select. (`fitBounds`' own `maxZoom: 15` is the only bound today, and it
-  bounds Fit alone.) — #253
 - **OSM attribution is never shown.** The map is created with `attributionControl: false` and the
   surface's own attribution line renders an empty string (`screens/map_shared.rs`), while
   `MapProvider::attribution` (`genealogy-app/src/config.rs`) is never read — so the tile source's

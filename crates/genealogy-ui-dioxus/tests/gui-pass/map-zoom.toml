@@ -1,0 +1,152 @@
+# Bounded, visible zoom on the Geography map (#253) — the only honest proof for any of it. SSR renders
+# no canvas, runs no script, and adds no MapLibre control: it cannot show that the zoom buttons exist,
+# that pressing one moves the camera, that a tile is still drawn at the camera's ceiling, or that the
+# ceiling and floor actually stop a gesture. `tests/map_zoom.rs` covers the readout's own markup.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The MapLibre
+# controls are positioned by MapLibre itself, 10px inside the canvas: the canvas fills x 461..1797,
+# y 159..1057 with Pan armed, so the `+`/`−` buttons land at (487, 182)/(487, 212) and the scale bar
+# at x 472..554, y 1026..1046. The readout sits between Fit and the provider select at x 1607..1633.
+#
+# Notch counts are measured, not guessed: one `xdotool click 4` moves MapLibre's camera ≈0.167 of a
+# zoom level, so a first attempt at 40 notches only reached z11.7 and every clamp assert below compared
+# two mid-gesture frames instead. 120 notches from z5 overshoots the z19 ceiling by five whole levels,
+# and 180 back out overshoots the z1 floor by the same margin — the point is to arrive *past* the bound
+# so the follow-up batch has nothing left to do.
+description = "The map's zoom is bounded to the tiles, and visible and adjustable without a wheel (#253)"
+
+[[step]]
+do = "click"
+at = [85, 881]
+label = "rail: Geography"
+
+[[step]]
+do = "shot"
+name = "map"
+
+[[step]]
+do = "click"
+at = [487, 182]
+label = "map: NavigationControl +"
+
+[[step]]
+do = "shot"
+name = "nav-zoomed-in"
+
+[[step]]
+do = "wheel"
+at = [1130, 600]
+clicks = 120
+label = "map: 120 notches in — past the source's last zoom"
+
+[[step]]
+do = "shot"
+name = "at-ceiling"
+
+[[step]]
+do = "wheel"
+at = [1130, 600]
+clicks = 60
+label = "map: 60 more notches in"
+
+[[step]]
+do = "shot"
+name = "still-at-ceiling"
+
+[[step]]
+do = "wheel"
+at = [1130, 600]
+clicks = -180
+label = "map: 180 notches out — past the whole-globe view"
+
+[[step]]
+do = "shot"
+name = "at-floor"
+
+[[step]]
+do = "wheel"
+at = [1130, 600]
+clicks = -60
+label = "map: 60 more notches out"
+
+[[step]]
+do = "shot"
+name = "still-at-floor"
+
+# The NavigationControl exists *and* drives the camera. A `differ` over the canvas answers both: no
+# control means no click target and an unchanged frame.
+[[assert]]
+kind = "differ"
+shots = ["map", "nav-zoomed-in"]
+region = [500, 200, 1250, 700]
+because = "pressing the map's own + button must zoom the camera in, with no wheel involved"
+
+# The readout's own rectangle only, here and below. A whole-window compare is answered by the canvas
+# redraw, which says nothing about whether the level shown ever changed.
+[[assert]]
+kind = "differ"
+shots = ["map", "nav-zoomed-in"]
+region = [1596, 100, 42, 20]
+tolerance = 0.001
+because = "the readout must follow the camera, not stay at the level the map opened with"
+
+# The whole point of `maxzoom` on the raster source: past the last zoom the source serves, MapLibre
+# must overzoom the last real tile instead of requesting 404s and leaving the canvas blank.
+#
+# The floor is *not* map-repaint.toml's 0.03: that one is calibrated for the default whole-continent
+# view (≈0.089), and at z19 the canvas is one z19 forest tile blown up — genuinely low-contrast, and
+# measured at 0.0299 here. A blanked canvas is still exactly 0 (flat `--panel-2`), so 0.01 keeps the
+# assert meaningful while leaving room for a different tile under the same gesture.
+[[assert]]
+kind = "painted"
+shot = "at-ceiling"
+region = [500, 200, 1250, 700]
+min_deviation = 0.01
+because = "tiles must still be drawn at the camera's zoom ceiling"
+
+[[assert]]
+kind = "match"
+shots = ["at-ceiling", "still-at-ceiling"]
+because = "maxZoom must stop the camera — 60 more notches in can change nothing at all"
+
+[[assert]]
+kind = "match"
+shots = ["at-ceiling", "still-at-ceiling"]
+region = [1596, 100, 42, 20]
+tolerance = 0.001
+because = "the readout must sit still at the ceiling too, not creep past the last zoom the tiles exist at"
+
+[[assert]]
+kind = "differ"
+shots = ["at-ceiling", "at-floor"]
+region = [500, 200, 1250, 700]
+because = "zooming back out must move the camera, or the pair of floor asserts below prove nothing"
+
+# The floor view keeps map-repaint.toml's 0.03: a whole-globe frame has coastlines in it and measures
+# 0.062 here, twice the threshold.
+[[assert]]
+kind = "painted"
+shot = "at-floor"
+region = [500, 200, 1250, 700]
+min_deviation = 0.03
+because = "tiles must still be drawn at the camera's zoom floor"
+
+[[assert]]
+kind = "match"
+shots = ["at-floor", "still-at-floor"]
+because = "minZoom must stop the camera — 60 more notches out can change nothing at all"
+
+[[assert]]
+kind = "match"
+shots = ["at-floor", "still-at-floor"]
+region = [1596, 100, 42, 20]
+tolerance = 0.001
+because = "the readout must sit still at the floor too"
+
+# The scale bar. At the opening view this rectangle is open sea, so without the control it is a flat
+# fill and the default deviation floor already fails it.
+[[assert]]
+kind = "painted"
+shot = "map"
+region = [472, 1026, 84, 22]
+because = "a metric scale bar must be drawn bottom-left, saying what the zoom level means on the ground"

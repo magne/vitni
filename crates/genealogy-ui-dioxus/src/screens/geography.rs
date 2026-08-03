@@ -22,8 +22,8 @@ use genealogy_app::{ConfigStore, FileConfigStore, MapConfig, MapProvider, PlaceG
 use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
 
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapDraft, events_geojson, fit_bounds, geo_point, map_surface,
-    markers_geojson, push_map_data, push_map_draft, select_tool,
+    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapZoomReadout, events_geojson, fit_bounds,
+    geo_point, map_surface, markers_geojson, push_map_data, push_map_draft, select_tool,
 };
 use super::prelude::*;
 use crate::i18n::Chrome;
@@ -34,6 +34,10 @@ const MAP_CONTAINER_ID: &str = "geography-map";
 
 /// The mockup's initial time-slider year (`geography.html`).
 const DEFAULT_YEAR: i32 = 1900;
+
+/// The zoom the atlas opens at: the whole-continent view the mockup sketches, wide enough that every
+/// marker in a Norwegian workspace is on screen before anyone touches Fit.
+const GEOGRAPHY_DEFAULT_ZOOM: f64 = 4.0;
 
 /// Which side panel (if any) the screen shows: creating a new place at a clicked point, or asserting
 /// a geometry onto the currently rail-selected place.
@@ -71,6 +75,7 @@ pub fn GeographyScreen() -> Element {
     let loading = state.chrome().loading();
 
     let year = use_signal(|| DEFAULT_YEAR);
+    let zoom = use_signal(|| GEOGRAPHY_DEFAULT_ZOOM);
     let tool = use_signal(|| DrawTool::Pan);
     let selected = use_signal(|| None::<(String, String)>);
     let mut draft = use_signal(|| MapDraft::Empty);
@@ -197,7 +202,7 @@ pub fn GeographyScreen() -> Element {
     rsx! {
         div { style: "display:flex;flex-direction:column;height:100%;min-height:0;gap:var(--sp-3)",
             h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-geography\")}" }
-            {geography_toolbar(loc, &chrome.0, &picker, &services, provider, tool, marker_count, event_count, &fit_shapes, draw_target.as_ref())}
+            {geography_toolbar(loc, &chrome.0, &picker, &services, provider, tool, zoom, marker_count, event_count, &fit_shapes, draw_target.as_ref())}
             {geography_unplotted_note(&chrome.0, unplotted_count, year())}
             div { class: "geo", style: "flex:1;min-height:0",
                 {geography_rail(&chrome.0, vm.as_ref(), selected, &filter().query)}
@@ -207,7 +212,7 @@ pub fn GeographyScreen() -> Element {
                     } else if marker_count == 0 && event_count == 0 {
                         {geography_empty_state(&chrome.0)}
                     } else {
-                        {geography_map_surface(&chrome.0, marker_count, event_count, tool, on_map_click)}
+                        {geography_map_surface(&chrome.0, marker_count, event_count, tool, zoom, on_map_click)}
                     }
                     if matches!(tool(), DrawTool::Polygon) {
                         div { class: "wrap", style: "gap:8px",
@@ -265,10 +270,10 @@ fn open_geometry_panel(
 
 /// The top toolbar: a Place picker (searches every place in the workspace, not just already-plotted
 /// markers — geocoding a real-world address is a separate, still-deferred follow-up, ADR 0025 §4),
-/// marker/event counts, the draw tools, and the provider select.
+/// marker/event counts, the draw tools, the live zoom readout, and the provider select.
 #[expect(
     clippy::too_many_arguments,
-    reason = "a toolbar threads the screen's picker + provider + draw-tool + draw-target state"
+    reason = "a toolbar threads the screen's picker + provider + draw-tool + zoom + draw-target state"
 )]
 fn geography_toolbar(
     loc: &Localizer,
@@ -277,6 +282,7 @@ fn geography_toolbar(
     services: &Services,
     provider: Memo<MapProvider>,
     tool: Signal<DrawTool>,
+    zoom: Signal<f64>,
     marker_count: usize,
     event_count: usize,
     fit_shapes: &[MarkerShapeVm],
@@ -310,6 +316,7 @@ fn geography_toolbar(
                 variant: ButtonVariant::Ghost,
                 onclick: move |_| fit_bounds(MAP_CONTAINER_ID, &fit_shapes),
             }
+            MapZoomReadout { zoom }
             {geography_provider_select(chrome, services, provider)}
         }
     }
@@ -441,16 +448,19 @@ pub fn geography_empty_state(chrome: &Chrome) -> Element {
 }
 
 /// The map surface: the shared `MapLibre` mount (`screens::map_shared::map_surface`) at the
-/// Geography-tool's own container id, default center, and world/country-level zoom.
+/// Geography-tool's own container id, default center, and world/country-level zoom. `zoom` is the
+/// live camera level the toolbar's [`MapZoomReadout`] shows.
 pub fn geography_map_surface(
     chrome: &Chrome,
     marker_count: usize,
     event_count: usize,
     tool: Signal<DrawTool>,
+    zoom: Signal<f64>,
     on_map_click: impl FnMut(f64, f64) + Clone + 'static,
 ) -> Element {
     let aria = chrome.geography_map_aria(marker_count, event_count);
-    map_surface(MAP_CONTAINER_ID, aria, tool, on_map_click, DEFAULT_CENTER, 4.0)
+    let labels = MapControlLabels::from_chrome(chrome);
+    map_surface(MAP_CONTAINER_ID, aria, tool, on_map_click, DEFAULT_CENTER, zoom, labels)
 }
 
 /// The time slider: a year `<input type=range>` over [`TIME_SLIDER_RANGE`], captioned with the

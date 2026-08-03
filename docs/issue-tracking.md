@@ -174,7 +174,6 @@ the list on its own. Treat the count as a floor.
 | Item | Why it gates a release |
 | --- | --- |
 | [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify` — the dialogs, their tab ring, both cancel paths, the edit stash and a partial Save all are scripted (`unsaved-close-confirm`, `unsaved-quit-confirm`); whether a save *looks* instant is not, nor is the quit at the end of a complete Save-all run |
-| [Zoom is invisible and unbounded](https://github.com/magne/genealogy/issues/253) | No zoom readout anywhere, and no `maxZoom` — past z19 OSM serves nothing and the map goes blank |
 | [OSM attribution is never shown](https://github.com/magne/genealogy/issues/254) | The tile source's required credit is absent from both maps, which the OSM tile-usage policy does not allow |
 | [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
 | [Polygon vertices are never drawn, and cannot be moved](https://github.com/magne/genealogy/issues/259) | The first two clicks of a ring are nearly invisible and a misplaced corner can only be fixed by clearing the whole draft |
@@ -185,7 +184,7 @@ the list on its own. Treat the count as a floor.
 | [Remember the open record's tab](https://github.com/magne/genealogy/issues/209) | Tab resets on every navigation |
 | [Index `$.state.human_id`](https://github.com/magne/genealogy/issues/233) | `next_human_id` and `find_place` each full-scan the projection; the index is the prerequisite for any bulk place import not being O(n²) |
 
-The five rows right below the manual-webview-pass row all came out of the 2026-07-31 manual pass; #253
+The four rows right below the manual-webview-pass row all came out of the 2026-07-31 manual pass; #254
 through #259 are the map, #260 the shell. The last two of the table came out of
 [`research/gis-norway.md`](research/gis-norway.md); the rest came from reading the code. The index
 is the weakest fit — an enabler rather than a defect — and is here because it is cheap and unblocks the

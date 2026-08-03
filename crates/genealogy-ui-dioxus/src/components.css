@@ -1016,6 +1016,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 .time-slider { display: flex; align-items: center; gap: 10px; }
 .time-slider input[type="range"] { flex: 1; }
 .time-year { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4ch; }
+.map-zoom-readout {
+  font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums;
+  min-width: 6ch; text-align: right;
+}
 
 /* ---- Media image frames + crop overlay (media.html; ADR 0017 §GUI) ----
    Shared with docs/mockups/assets/components.css; the app-only helpers below (.media-*, .crop-capture)

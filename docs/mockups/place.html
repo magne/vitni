@@ -44,15 +44,6 @@
     .poly.draft { border-style: dashed; background: color-mix(in srgb, var(--accent) 10%, transparent); }
     .vtx { position: absolute; width: 10px; height: 10px; transform: translate(-50%, -50%);
       border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); cursor: grab; }
-    .map-zoom {
-      position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column;
-      border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden;
-    }
-    .map-zoom button {
-      background: var(--panel); color: var(--ink); border: 0; width: 28px; height: 28px;
-      font-size: 16px; cursor: default;
-    }
-    .map-zoom button + button { border-top: 1px solid var(--line); }
   </style>
 </head>
 <body>
@@ -251,14 +242,15 @@
             <a href="geography.html">Geography</a> tool shows this place among all others.
           </div>
 
-          <!-- Toolbar: draw tools + provider + fit. Scoped to THIS place (no place search here —
-               that lives in the Geography atlas). -->
+          <!-- Toolbar: draw tools + fit + the live zoom readout (#253) + provider. Scoped to THIS
+               place (no place search here — that lives in the Geography atlas). -->
           <div class="geo-toolbar" style="margin-bottom:10px">
             <button class="btn sm primary" title="Pan / select">✋ Pan</button>
             <button class="btn sm" title="Drop or move this place's point">📍 Point</button>
             <button class="btn sm" title="Draw / edit a boundary polygon">⬠ Polygon</button>
             <button class="btn sm ghost" title="Zoom to this place's geometry">⤢ Fit</button>
             <span class="spacer"></span>
+            <span class="map-zoom-readout" aria-label="Zoom level 13.0">z13.0</span>
             <label class="muted" style="font-size:var(--fs-xs)">Provider</label>
             <select class="in" style="width:auto">
               <option selected>OpenStreetMap</option>
@@ -275,6 +267,7 @@
                    surface) while the Point or Polygon tool is armed, and only swaps the cursor. -->
               <div class="map-container is-capturing" style="position:absolute;inset:0">
                 <div class="map-zoom" aria-hidden="true"><button>+</button><button>−</button></div>
+                <div class="map-scale" aria-hidden="true">500 m</div>
                 <!-- this place's boundary (dated geometry, resolved as-of the slider year) -->
                 <div class="poly" style="left:26%;top:24%;width:230px;height:150px"></div>
                 <!-- this place's point -->

@@ -38,7 +38,7 @@ name = "zoomed"
 
 [[step]]
 do = "click"
-at = [1404, 110]
+at = [1348, 110]
 label = "toolbar: Drop / move a point"
 
 [[step]]

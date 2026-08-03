@@ -770,6 +770,44 @@ impl Chrome {
         fl!(self.loader, "geography-screen-label")
     }
 
+    /// The toolbar's zoom readout. `level` is already formatted to one decimal (`format_zoom`) —
+    /// no Fluent message in this repo interpolates a float.
+    #[must_use]
+    pub fn geography_zoom_readout(&self, level: &str) -> String {
+        fl!(self.loader, "geography-zoom-readout", level = level)
+    }
+
+    /// The zoom readout's accessible name — `z14.2` alone does not say what the number measures.
+    #[must_use]
+    pub fn geography_zoom_aria(&self, level: &str) -> String {
+        fl!(self.loader, "geography-zoom-aria", level = level)
+    }
+
+    /// The map's zoom-in button. `MapLibre` ships its own translations for its controls; ADR 0003
+    /// forbids a framework's built-in i18n, so the app hands it this instead.
+    #[must_use]
+    pub fn geography_zoom_in(&self) -> String {
+        fl!(self.loader, "geography-zoom-in")
+    }
+
+    /// The map's zoom-out button (see [`Self::geography_zoom_in`]).
+    #[must_use]
+    pub fn geography_zoom_out(&self) -> String {
+        fl!(self.loader, "geography-zoom-out")
+    }
+
+    /// The scale bar's metre unit.
+    #[must_use]
+    pub fn geography_scale_meters(&self) -> String {
+        fl!(self.loader, "geography-scale-meters")
+    }
+
+    /// The scale bar's kilometre unit.
+    #[must_use]
+    pub fn geography_scale_kilometers(&self) -> String {
+        fl!(self.loader, "geography-scale-kilometers")
+    }
+
     /// The accessible name for the Preferences settings sub-nav.
     #[must_use]
     pub fn prefs_nav_label(&self) -> String {
