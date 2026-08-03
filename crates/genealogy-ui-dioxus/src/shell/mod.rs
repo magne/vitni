@@ -22,6 +22,7 @@ pub mod nav_state;
 pub mod palette;
 pub mod quit_manager;
 pub mod rail;
+pub mod recent_persistence;
 pub mod root;
 pub mod roving;
 pub mod statusbar;

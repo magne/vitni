@@ -1,0 +1,45 @@
+# #205: the "Jump back in" recent list must survive a quit, not a debounced flush a fast quit can
+# race past. `root.rs`'s recent-list write was a plain `use_effect`, which runs on the post-render
+# flush, not at mutation time — unlike window geometry, which reads its signal directly inside a wry
+# `CloseRequested`/`Destroyed` handler (`window_geometry.rs`). No SSR test can see this: SSR never
+# mounts `dioxus::desktop`, so neither the effect queue nor a real quit exists to race.
+#
+# `ctrl+q` with nothing dirty runs `NavState::quit_now` immediately — no confirm dialog, see
+# `unsaved-quit-confirm.toml`. `await-exit` then waits for the GUI process itself to exit, and the
+# `manifest` assertion reads `target/gui-pass/workspace/workspace.toml` off disk, not a screenshot —
+# the only way to prove the write reached disk rather than just the in-memory signal.
+#
+# No shot is taken between opening the record and the quit chord: an assertion over a screenshot would
+# only add avoidable delay before `ctrl+q`, narrowing the window this scenario is trying to hit. The
+# Kristiansand click also turns off the harness's default 4s post-click settle (`settle = false`) —
+# with it left on, the queued effect has ample time to flush no matter what, so nothing here could ever
+# distinguish the eager write from the close-hook backing it up.
+#
+# Coordinates are window pixels at 1800x1200, read off `sidepanel-focus.toml` /
+# `unsaved-quit-confirm.toml`, whose "rail: Places" and "explorer: Kristiansand" clicks match.
+description = "The recent list survives a quit, not just an in-memory signal (#205)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+settle = false
+
+[[step]]
+do = "key"
+chord = "ctrl+q"
+label = "⌘Q with nothing dirty: quit_now runs with no confirm"
+
+[[step]]
+do = "await-exit"
+label = "wait for the GUI process to exit"
+
+[[assert]]
+kind = "manifest"
+contains = 'label = "Kristiansand"'
+because = "opening Kristiansand must reach workspace.toml's recent list before the process exits"
