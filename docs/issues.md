@@ -182,6 +182,13 @@ Residuals from the shortcuts work (ADR 0030); see
   run reaches `QuitManager` after the last save (that one does kill the window the screenshots come
   from), and the slide-in motion. Everything else the pass covered — the map half — closed as #203. —
   #244
+- **A titlebar/WM-initiated close bypasses the unsaved-work confirm entirely.** `⌘W`/`⌘Q` route through
+  `NavState::request_close`/`request_quit`, which raise the confirm; an OS/WM-initiated close (titlebar
+  ✕, session logout, `wmctrl -c`) reaches `WindowEvent::CloseRequested` directly in the tao event loop
+  instead, and nothing intercepts it there to raise the same dialog (`rg CloseRequested` matches only
+  `window_geometry.rs` and `recent_persistence.rs`, both persistence backstops, neither a confirm gate)
+  — so unsaved work is discarded silently. `cargo xtask gui-pass` cannot drive this to prove it either
+  way: its Xvfb display runs no window manager, so there is no titlebar to close.
 - **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
   its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
   so it is neither listed by the `?` overlay nor rebindable, and it does not go through

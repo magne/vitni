@@ -1,20 +1,25 @@
 //! "Jump back in" recent-list persistence (#205): an eager `use_effect` writes the list on every
 //! change, plus a `CloseRequested`/`Destroyed` backstop that reads the signal directly rather than
-//! waiting on the effect queue — mirroring [`WindowGeometryManager`](super::window_geometry), whose
-//! own `CloseRequested` handler is why geometry never had this gap.
+//! waiting on the effect queue — mirroring [`WindowGeometryManager`](super::window_geometry), the only
+//! other place in this crate that installs such a handler (`rg CloseRequested` turns up nothing else).
 //!
-//! `use_effect` runs on the post-render flush, not at mutation time. A quit that closes the window
-//! before that flush lands would otherwise lose the write; the wry handler reads
-//! [`NavState::recent`](super::nav_state::NavState::recent) with `.peek()` and persists it itself, so
-//! the list reaches disk regardless of whether the queued effect got a turn first.
+//! `⌘Q` cannot lose the write: it reaches `NavState` as its own webview→Rust IPC message, so by the
+//! time it is processed, the effect from whatever mutated `recent` earlier (opening a record is its own,
+//! prior IPC message) has already run — the effect queue is flushed as part of handling one message
+//! before the next is even looked at. The gap this backstop closes is an **OS/WM-initiated** close —
+//! the titlebar ✕, a session logout, `wmctrl -c` — which reaches `CloseRequested` directly from the tao
+//! event loop, never through that queue, and so can arrive with the effect still pending. `gui-pass`
+//! cannot drive that path: its Xvfb display runs no window manager (`gui_pass.rs:49`), so
+//! `recent-survives-quit.toml` proves the manager is mounted and reads the right signal, not that this
+//! specific backstop fires — see that scenario's header for the experiment that established this.
 //!
 //! Mounted inside the [`Shell`](super::root::Shell) so the desktop window hook has context. The
 //! non-desktop build (the SSR interpreter test) compiles an inert no-op so the shell renders host-free.
 
 use dioxus::prelude::*;
 
-/// Persists the "Jump back in" list on every change, and again on window close so a quit can never
-/// race the effect queue. Renders nothing.
+/// Persists the "Jump back in" list on every change, and again on window close so an OS/WM-initiated
+/// close (outside the app's own IPC queue) can never lose a pending write. Renders nothing.
 #[cfg(feature = "desktop")]
 #[component]
 pub fn RecentPersistenceManager() -> Element {
@@ -50,6 +55,9 @@ pub fn RecentPersistenceManager() -> Element {
         });
     }
 
+    // Only reachable when a close arrives outside the webview's own IPC queue (titlebar ✕, session
+    // logout, `wmctrl -c`) with the effect above still pending — a `⌘Q` quit is itself an IPC message,
+    // so the effect has always already run by the time this handler would see one (see the module doc).
     use_wry_event_handler(move |event, _| {
         let Event::WindowEvent { event, .. } = event else {
             return;
