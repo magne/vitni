@@ -858,22 +858,24 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 }
 
 /* Stand-ins for the two MapLibre controls the mockups do not load (#253): the app adds a real
-   `NavigationControl` top-left and a `ScaleControl` bottom-left over the live canvas. These draw
-   where they land so the mockup keeps describing the shipped screen. */
+   `NavigationControl` top-left and a `ScaleControl` bottom-left over the live canvas. MapLibre's own
+   vendored stylesheet owns their real appearance — light chrome over the light raster tiles, not this
+   sheet's dark panel tokens — so these copy those values rather than re-theming them, and the mockup
+   keeps describing the shipped screen. The app sheet adds no rule for either. */
 .map-zoom {
-  position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; z-index: 800;
-  border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden;
+  position: absolute; left: 10px; top: 10px; display: flex; flex-direction: column; z-index: 800;
+  background: #fff; border-radius: 4px; overflow: hidden;
 }
 .map-zoom button {
-  background: var(--panel); color: var(--ink); border: 0; width: 28px; height: 28px;
+  background: #fff; color: #333; border: 0; width: 29px; height: 29px;
   font-size: 16px; cursor: default;
 }
-.map-zoom button + button { border-top: 1px solid var(--line); }
+.map-zoom button + button { border-top: 1px solid rgba(0, 0, 0, 0.1); }
 .map-scale {
-  position: absolute; left: 8px; bottom: 8px; z-index: 800;
-  padding: 0 4px; min-width: 80px; font-size: var(--fs-xs); color: var(--muted);
-  background: color-mix(in srgb, var(--panel) 85%, transparent);
-  border: 1px solid var(--line); border-top: 0; text-align: center;
+  position: absolute; left: 10px; bottom: 10px; z-index: 800;
+  padding: 0 5px; min-width: 80px; font-size: 10px; color: #333;
+  background: rgba(255, 255, 255, 0.75);
+  border: 2px solid #333; border-top: 0; text-align: center;
 }
 
 /* ---- Media image placeholders (media.html preview/gallery, import.html scan) ----

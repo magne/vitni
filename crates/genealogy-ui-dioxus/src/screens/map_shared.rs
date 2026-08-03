@@ -809,9 +809,8 @@ mod tests {
         );
     }
 
-    /// The defect: with no `minZoom`/`maxZoom` the camera keeps `MapLibre`'s own 0–22 default, three
-    /// levels past the last raster tile the OSM source serves, and a wheel gesture silently blanked
-    /// the map.
+    /// One decimal, because `MapLibre` zoom is fractional: an integer readout would sit on the same
+    /// number through most of a wheel gesture and read as stuck.
     #[test]
     fn the_readout_shows_one_decimal_so_a_gesture_is_visible_without_being_noisy() {
         assert_eq!(format_zoom(14.234), "14.2");
