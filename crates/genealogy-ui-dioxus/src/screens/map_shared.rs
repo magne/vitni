@@ -253,16 +253,14 @@ fn control_locale(labels: &MapControlLabels) -> Value {
 
 /// The controls added once the map has loaded, plus the opening zoom measurement: the zoom buttons
 /// (a pointer-free way to change zoom, top-left where `place.html`'s `.map-zoom` stand-in draws them)
-/// and a metric scale bar (bottom-left, clear of the attribution). Split out of
-/// [`maplibre_init_script`] to keep that function inside the line cap and to give the control block
-/// its own test seam.
-fn map_controls_script() -> String {
-    "
+/// and a metric scale bar (bottom-left, clear of the attribution). Interpolated into
+/// [`maplibre_init_script`]'s `load` handler rather than written inline there, so that function stays
+/// inside the line cap. The zoom emit is last, so the first readout is a measurement of the loaded
+/// camera rather than the seed value the script was built with.
+const MAP_CONTROLS_SCRIPT: &str = "
                 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
                 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
-                dioxus.send(JSON.stringify({ zoom: map.getZoom() }));"
-        .to_owned()
-}
+                dioxus.send(JSON.stringify({ zoom: map.getZoom() }));";
 
 /// The stroke every circle layer draws around its fill, so a marker stays legible over a dark tile and
 /// over another marker beneath it (per the "markers too small to see" fix).
@@ -363,7 +361,7 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64, label
         marker_paint = circle_paint("#5db3ff", POINT_RADIUS_STOPS, 2),
         event_paint = circle_paint("#ffb020", EVENT_RADIUS_STOPS, 1),
         draft_paint = circle_paint("#ff5d5d", POINT_RADIUS_STOPS, 2),
-        controls = map_controls_script(),
+        controls = MAP_CONTROLS_SCRIPT,
     )
 }
 
