@@ -2,7 +2,6 @@
 //! installs the central keyboard dispatcher.
 
 use dioxus::prelude::*;
-use genealogy_app::ConfigStore;
 use genealogy_ui::{Category, Destination, Tool};
 
 use crate::app::{AppCtx, StartupPrefs};
@@ -21,6 +20,7 @@ use crate::shell::nav_state::{NavState, Overlay, entity_category};
 use crate::shell::palette::CommandPalette;
 use crate::shell::quit_manager::QuitManager;
 use crate::shell::rail::Rail;
+use crate::shell::recent_persistence::RecentPersistenceManager;
 use crate::shell::statusbar::ShellStatusbar;
 use crate::shell::tabstrip::RecordTabstrip;
 use crate::shell::topbar::Topbar;
@@ -55,19 +55,6 @@ pub fn Shell() -> Element {
         _ => None,
     };
     crate::media_asset::use_media_asset_handler(media_root);
-    // Persist the "Jump back in" list whenever it changes — best-effort, never blocks the UI, and a
-    // no-op under SSR tests (no workspace). Mirrors the theme/geometry persistence precedent.
-    let recent_dir = match try_consume_context::<AppCtx>() {
-        Some(AppCtx::Ready(state)) => Some(state.services().dir.clone()),
-        _ => None,
-    };
-    use_effect(move || {
-        let recent = nav.recent.read().clone();
-        let Some(dir) = &recent_dir else { return };
-        if let Err(error) = genealogy_app::FileConfigStore::for_workspace(dir.clone()).store_recent(&recent) {
-            tracing::warn!(%error, "could not persist the recent list");
-        }
-    });
     let gp = use_keyboard_dispatch();
     let chrome = use_context::<ChromeCtx>();
     // The rail count badges: refetched whenever a mutation bumps `data_version`. Degrades to no
@@ -147,6 +134,7 @@ pub fn Shell() -> Element {
             }
             WindowGeometryManager {}
             QuitManager {}
+            RecentPersistenceManager {}
         }
         // Siblings of `.app` (not descendants) so inerting `.app` cannot inert the modal itself.
         CommandPalette {}
