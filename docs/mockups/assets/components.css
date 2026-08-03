@@ -852,6 +852,29 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 .time-slider { display: flex; align-items: center; gap: 10px; }
 .time-slider input[type="range"] { flex: 1; }
 .time-year { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4ch; }
+.map-zoom-readout {
+  font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums;
+  min-width: 6ch; text-align: right;
+}
+
+/* Stand-ins for the two MapLibre controls the mockups do not load (#253): the app adds a real
+   `NavigationControl` top-left and a `ScaleControl` bottom-left over the live canvas. These draw
+   where they land so the mockup keeps describing the shipped screen. */
+.map-zoom {
+  position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; z-index: 800;
+  border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden;
+}
+.map-zoom button {
+  background: var(--panel); color: var(--ink); border: 0; width: 28px; height: 28px;
+  font-size: 16px; cursor: default;
+}
+.map-zoom button + button { border-top: 1px solid var(--line); }
+.map-scale {
+  position: absolute; left: 8px; bottom: 8px; z-index: 800;
+  padding: 0 4px; min-width: 80px; font-size: var(--fs-xs); color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  border: 1px solid var(--line); border-top: 0; text-align: center;
+}
 
 /* ---- Media image placeholders (media.html preview/gallery, import.html scan) ----
    No real files ship with the mockups, so these classes stand in for an <img>: a

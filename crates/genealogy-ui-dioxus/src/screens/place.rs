@@ -6,8 +6,8 @@ use genealogy_ui::{
 
 use super::geography::geography_time_slider;
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, events_geojson, fit_bounds, geo_point,
-    map_surface, markers_geojson, push_map_data, push_map_draft, select_tool, shape_to_draft,
+    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapZoomReadout, events_geojson, fit_bounds,
+    geo_point, map_surface, markers_geojson, push_map_data, push_map_draft, select_tool, shape_to_draft,
 };
 use super::prelude::*;
 
@@ -798,6 +798,10 @@ const PLACE_MAP_CONTAINER_ID: &str = "place-map";
 /// The Place Map tab's default time-slider year (matches the Geography tool's own default).
 const PLACE_MAP_DEFAULT_YEAR: i32 = 1900;
 
+/// The zoom the Map tab opens at: town level, since the surface is framed on this one place rather
+/// than on the whole atlas.
+const PLACE_MAP_DEFAULT_ZOOM: f64 = 13.0;
+
 /// The interactive Map tab body: draw tools, the map surface (this place's resolved-as-of-year
 /// geometry only — no other places, no event pins; Geography shows those), the time slider, the
 /// "Geometry over time" table, and the save-geometry card once a shape is confirmed. Every save
@@ -817,6 +821,7 @@ fn PlaceMapEditor(
     let mut nav = use_context::<NavState>();
 
     let year = use_signal(|| PLACE_MAP_DEFAULT_YEAR);
+    let zoom = use_signal(|| PLACE_MAP_DEFAULT_ZOOM);
     let mut tool = use_signal(|| DrawTool::Pan);
     let mut draft = use_signal(|| MapDraft::Empty);
     let mut pending = use_signal(|| None::<PlaceGeometry>);
@@ -909,6 +914,7 @@ fn PlaceMapEditor(
                     },
                 }
                 span { class: "spacer" }
+                MapZoomReadout { zoom }
                 {geography_provider_select_placeholder(loc)}
                 Button {
                     label: chrome.place_map_open_in_geography(),
@@ -919,7 +925,7 @@ fn PlaceMapEditor(
                 }
             }
             div { class: "card map-card",
-                {map_surface(PLACE_MAP_CONTAINER_ID, aria, tool, on_map_click, center, 13.0, MapControlLabels::from_chrome(chrome))}
+                {map_surface(PLACE_MAP_CONTAINER_ID, aria, tool, on_map_click, center, zoom, MapControlLabels::from_chrome(chrome))}
             }
             {place_map_as_of_note(loc, &detail.geometries, resolved_shape.as_ref(), year())}
             if matches!(tool(), DrawTool::Point) && matches!(draft(), MapDraft::Point(_)) {

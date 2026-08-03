@@ -7,12 +7,13 @@
 //! toolbar/rail differ.
 
 use genealogy_app::{GeoCoordinates, Microdegrees, PlaceGeometry};
-use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm, ZOOM_RANGE};
+use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm, ZOOM_RANGE, clamp_zoom};
 use serde_json::{Value, json};
 use std::str::FromStr;
 
 use super::prelude::*;
 use crate::i18n::Chrome;
+use crate::shell::ChromeCtx;
 
 /// The default map view when nothing else pins a center (Oslo, a reasonable Norwegian default
 /// matching every other Norway-flavoured example in this codebase's docs/fixtures).
@@ -66,6 +67,11 @@ pub fn geo_point(lat: f64, lon: f64) -> GeoCoordinates {
 /// by the Geography tool (whole-atlas view) and the Place screen's per-place Map tab. `container_id`
 /// distinguishes the two DOM mounts (each is its own `MapLibre` instance) so both can coexist if ever
 /// shown together.
+///
+/// `zoom` is both the level the map opens at and where the mounted map reports every settled camera
+/// back to — the caller renders it with [`MapZoomReadout`]. It is read only via [`Signal::peek`] here,
+/// never `.read()`: a subscribed surface re-renders on a zoom gesture, and a re-rendered surface
+/// remounts, which rebuilds the map.
 #[must_use = "renders the map surface; drop it and nothing is shown"]
 pub fn map_surface(
     container_id: &'static str,
@@ -73,7 +79,7 @@ pub fn map_surface(
     tool: Signal<DrawTool>,
     on_map_click: impl FnMut(f64, f64) + Clone + 'static,
     center: (f64, f64),
-    zoom: f64,
+    zoom: Signal<f64>,
     labels: MapControlLabels,
 ) -> Element {
     let capturing = !matches!(tool(), DrawTool::Pan);
@@ -141,19 +147,66 @@ pub fn parse_map_message(payload: &str) -> Option<MapMessage> {
 pub fn mount_maplibre(
     container_id: &str,
     center: (f64, f64),
-    zoom: f64,
+    zoom: Signal<f64>,
     labels: &MapControlLabels,
     mut on_click: impl FnMut(f64, f64) + 'static,
 ) {
-    let mut listener = document::eval(&maplibre_init_script(container_id, center, zoom, labels));
+    let script = maplibre_init_script(container_id, center, *zoom.peek(), labels);
+    let mut listener = document::eval(&script);
     spawn(async move {
         while let Ok(payload) = listener.recv::<String>().await {
             match parse_map_message(&payload) {
                 Some(MapMessage::Click { lat, lon }) => on_click(lat, lon),
-                Some(MapMessage::Zoom(_)) | None => {}
+                Some(MapMessage::Zoom(level)) => set_zoom(zoom, level),
+                None => {}
             }
         }
     });
+}
+
+/// The toolbar's live zoom readout. Its own `#[component]` on purpose: it subscribes to `zoom` in its
+/// own scope, so a zoom gesture repaints these ~15 characters instead of re-rendering the surface —
+/// and a re-rendered surface remounts, which rebuilds the map.
+#[component]
+pub fn MapZoomReadout(zoom: Signal<f64>) -> Element {
+    let chrome = use_context::<ChromeCtx>();
+    let level = format_zoom(zoom());
+    rsx! {
+        span {
+            class: "map-zoom-readout",
+            aria_label: chrome.0.geography_zoom_aria(&level),
+            "{chrome.0.geography_zoom_readout(&level)}"
+        }
+    }
+}
+
+/// How far the camera must move before the readout is worth re-rendering. `MapLibre` reports a settled
+/// zoom as a float, so this is an epsilon compare rather than an identity one (`clippy::float_cmp` is
+/// live) — and z14.2000001 renders as `z14.2` either way, so there would be nothing to repaint.
+const ZOOM_READOUT_EPSILON: f64 = 0.05;
+
+/// Whether a newly measured zoom is a different *reading* than `current`. Clamps **first**, so a level
+/// outside [`ZOOM_RANGE`] compares as the bound it is pinned to instead of as a fresh value.
+#[must_use]
+pub fn zoom_changed(current: f64, next: f64) -> bool {
+    (clamp_zoom(current) - clamp_zoom(next)).abs() >= ZOOM_READOUT_EPSILON
+}
+
+/// Stores a newly measured zoom, ignoring a reading that would render the same. `.peek()` so writing
+/// the signal never subscribes the mount closure that owns it — a subscribed surface re-renders on a
+/// zoom gesture, and a re-rendered surface remounts, which rebuilds the map.
+pub fn set_zoom(mut zoom: Signal<f64>, level: f64) {
+    if zoom_changed(*zoom.peek(), level) {
+        zoom.set(clamp_zoom(level));
+    }
+}
+
+/// The zoom level as the readout shows it: one decimal, formatted Rust-side like the Place screen's
+/// `{lat:.4}` coordinate readout — no Fluent message in this repo interpolates a float, so the
+/// readout's own message takes this string.
+#[must_use]
+pub fn format_zoom(zoom: f64) -> String {
+    format!("{:.1}", clamp_zoom(zoom))
 }
 
 /// Every string a `MapLibre` control renders, localized by this app (ADR 0003) rather than by
@@ -661,8 +714,9 @@ pub fn effective_date_choice(
 mod tests {
     use super::{
         FIT_MAX_ZOOM, MapControlLabels, MapDraft, MapMessage, closed_ring, combined_bounds, draft_geojson,
-        empty_feature_collection, events_geojson, fit_bounds_script, maplibre_init_script, markers_geojson,
-        parse_map_message, push_data_script, push_draft_script, save_year, shape_to_draft,
+        empty_feature_collection, events_geojson, fit_bounds_script, format_zoom, maplibre_init_script,
+        markers_geojson, parse_map_message, push_data_script, push_draft_script, save_year, shape_to_draft,
+        zoom_changed,
     };
     use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm, ZOOM_RANGE};
     use serde_json::{Value, json};
@@ -760,6 +814,27 @@ mod tests {
     /// The defect: with no `minZoom`/`maxZoom` the camera keeps `MapLibre`'s own 0–22 default, three
     /// levels past the last raster tile the OSM source serves, and a wheel gesture silently blanked
     /// the map.
+    #[test]
+    fn the_readout_shows_one_decimal_so_a_gesture_is_visible_without_being_noisy() {
+        assert_eq!(format_zoom(14.234), "14.2");
+        assert_eq!(format_zoom(4.0), "4.0");
+        assert_eq!(format_zoom(18.96), "19.0");
+    }
+
+    #[test]
+    fn a_zoom_that_renders_identically_is_not_a_change() {
+        assert!(!zoom_changed(14.2, 14.201), "the readout would print z14.2 either way");
+        assert!(zoom_changed(14.2, 14.3), "one tenth of a level is a visible change");
+    }
+
+    /// Pins the clamp-then-compare order: z25 is not reachable, so it compares as the ceiling it is
+    /// pinned to. Comparing first would let an out-of-range reading re-render the readout forever.
+    #[test]
+    fn an_out_of_range_reading_compares_as_the_bound_it_clamps_to() {
+        assert!(!zoom_changed(ZOOM_RANGE.1, 25.0));
+        assert!(!zoom_changed(ZOOM_RANGE.0, -8.0));
+    }
+
     #[test]
     fn the_camera_is_bounded_to_the_zooms_the_tiles_exist_at() {
         let script = init_script();

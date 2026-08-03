@@ -42,7 +42,8 @@ fn no_resolved_geometry_shows_the_empty_state() {
 #[component]
 fn MapSurfaceWithMarkers() -> Element {
     let tool = use_signal(|| DrawTool::Pan);
-    geography_map_surface(&chrome(), 3, 5, tool, |_lat: f64, _lon: f64| {})
+    let zoom = use_signal(|| 4.0);
+    geography_map_surface(&chrome(), 3, 5, tool, zoom, |_lat: f64, _lon: f64| {})
 }
 
 #[test]
@@ -67,7 +68,8 @@ fn the_map_surface_carries_the_container_and_an_accessible_marker_count() {
 #[component]
 fn MapSurfacePanHasNoCaptureOverlay() -> Element {
     let tool = use_signal(|| DrawTool::Pan);
-    geography_map_surface(&chrome(), 0, 0, tool, |_lat: f64, _lon: f64| {})
+    let zoom = use_signal(|| 4.0);
+    geography_map_surface(&chrome(), 0, 0, tool, zoom, |_lat: f64, _lon: f64| {})
 }
 
 #[test]
@@ -84,7 +86,8 @@ fn pan_mode_does_not_arm_the_crosshair_cursor() {
 #[component]
 fn MapSurfacePointModeHasCaptureOverlay() -> Element {
     let tool = use_signal(|| DrawTool::Point);
-    geography_map_surface(&chrome(), 0, 0, tool, |_lat: f64, _lon: f64| {})
+    let zoom = use_signal(|| 4.0);
+    geography_map_surface(&chrome(), 0, 0, tool, zoom, |_lat: f64, _lon: f64| {})
 }
 
 #[test]
