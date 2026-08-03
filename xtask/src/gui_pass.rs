@@ -8,14 +8,18 @@
 //!
 //! Scenarios are **data, not code**: each is a TOML file under
 //! `crates/genealogy-ui-dioxus/tests/gui-pass/`, so adding one needs no recompile. A file lists
-//! `[[step]]`s (a click, a chord, a drag, a wheel, a screenshot) and `[[assert]]`s over the shots it
-//! took — `differ` for "the UI reacted", `match` for "the UI returned to this state", `painted` for
-//! "this area is not a flat fill". The first two compare with an RMSE tolerance, so a caret blink is
-//! not a difference. Any assertion may add `region = [x, y, w, h]` to work on a single window
-//! sub-rectangle instead of the whole shot — needed when a change is provably confined to one area but
-//! the rest of the window can legitimately repaint either way (e.g. the tabstrip repaints on every
-//! Save, so a whole-window `differ` cannot isolate a list-column change), and needed by `painted`,
-//! whose whole-window form the surrounding chrome would always answer for.
+//! `[[step]]`s (a click, a chord, a drag, a wheel, a screenshot, or `await-exit` to wait for the GUI
+//! process itself to quit) and `[[assert]]`s over the shots it took — `differ` for "the UI reacted",
+//! `match` for "the UI returned to this state", `painted` for "this area is not a flat fill". The
+//! first two compare with an RMSE tolerance, so a caret blink is not a difference. Any assertion may
+//! add `region = [x, y, w, h]` to work on a single window sub-rectangle instead of the whole shot —
+//! needed when a change is provably confined to one area but the rest of the window can legitimately
+//! repaint either way (e.g. the tabstrip repaints on every Save, so a whole-window `differ` cannot
+//! isolate a list-column change), and needed by `painted`, whose whole-window form the surrounding
+//! chrome would always answer for. `manifest` is different again: it checks
+//! `target/gui-pass/workspace/workspace.toml` on disk for a substring, proving a write reached disk
+//! rather than only an in-memory signal — unavailable under `--real-config`, where that path is the
+//! caller's own workspace.
 //!
 //! The run is isolated by default: a throwaway `XDG_CONFIG_HOME`/`XDG_DATA_HOME` under
 //! `target/gui-pass/home` and a seeded fixture workspace, so a scripted click run can never append
@@ -55,6 +59,8 @@ const SEED_DIR: &str = "workspace-seed";
 const FOCUS_CLICK: (i32, i32) = (900, 60);
 /// How long to wait for the window to map before giving up.
 const WINDOW_TIMEOUT: Duration = Duration::from_secs(45);
+/// How long [`Step::AwaitExit`] waits for the GUI process to exit before failing.
+const AWAIT_EXIT_TIMEOUT: Duration = Duration::from_secs(15);
 /// Standard deviation below which a screenshot is treated as blank (an unpainted or black window).
 const MIN_STANDARD_DEVIATION: f64 = 0.005;
 /// Normalized RMSE below which two shots count as the same screen. Above the caret blink and text
@@ -91,6 +97,9 @@ enum Step {
     },
     /// Scroll the wheel at a point: `clicks` notches up (button 4) or down (button 5) when negative.
     Wheel { at: [i32; 2], clicks: i32, label: String },
+    /// Wait for the GUI process to exit (e.g. after a quit chord), failing if it is still up after
+    /// [`AWAIT_EXIT_TIMEOUT`]. Proves a quit actually happened, rather than assuming a chord worked.
+    AwaitExit { label: String },
 }
 
 /// One check over the shots the script took.
@@ -128,6 +137,11 @@ enum Assertion {
         /// The standard deviation the region must exceed; defaults to [`MIN_STANDARD_DEVIATION`].
         min_deviation: Option<f64>,
     },
+    /// `target/gui-pass/workspace/workspace.toml` must contain `contains` as a substring — proves a
+    /// write reached disk, not just an in-memory signal (e.g. a recent list surviving a quit).
+    /// Substring matching, not a TOML-path DSL: this has exactly one caller. Unavailable under
+    /// `--real-config`, where the workspace path is the caller's own and unsafe to assert over.
+    Manifest { contains: String, because: String },
 }
 
 /// How the run is configured.
@@ -237,7 +251,7 @@ fn run_one(options: &Options, out: &Path, home: &Path, path: &Path) -> Result<()
     focus(&options.display, &window)?;
     settle();
 
-    let taken = drive(&options.display, &window, &script.steps, shots)?;
+    let taken = drive(&options.display, &window, &script.steps, shots, &mut session)?;
     if options.keep {
         session.keep = true;
         println!(
@@ -245,7 +259,10 @@ fn run_one(options: &Options, out: &Path, home: &Path, path: &Path) -> Result<()
             options.display, options.display
         );
     }
-    check(&script.asserts, &taken, shots)
+    // `--real-config` points the isolated fixture's workspace path at the caller's own workspace,
+    // which a `manifest` assertion must not read — see `Assertion::Manifest`.
+    let workspace = (!options.real_config).then(|| out.join("workspace"));
+    check(&script.asserts, &taken, shots, workspace.as_deref())
 }
 
 /// The scenario files to run: the named ones (a bare name, or a path), else every file in
@@ -543,7 +560,7 @@ fn focus(display: &str, window: &str) -> Result<()> {
 }
 
 /// Runs every step, returning the shot names in the order they were taken.
-fn drive(display: &str, window: &str, steps: &[Step], shots: &Path) -> Result<Vec<String>> {
+fn drive(display: &str, window: &str, steps: &[Step], shots: &Path, session: &mut Session) -> Result<Vec<String>> {
     let mut taken = Vec::new();
     for step in steps {
         match step {
@@ -575,9 +592,37 @@ fn drive(display: &str, window: &str, steps: &[Step], shots: &Path) -> Result<Ve
                 wheel(display, *at, *clicks)?;
                 settle();
             }
+            Step::AwaitExit { label } => {
+                println!("  {label}");
+                await_exit(session)?;
+            }
         }
     }
     Ok(taken)
+}
+
+/// Waits for the GUI child to exit, failing if it is still up after [`AWAIT_EXIT_TIMEOUT`].
+///
+/// Takes the child out of `session.gui` up front: a successful `try_wait` reaps the process, and once
+/// reaped the OS is free to recycle its pid, so `Session::drop`'s `kill`/`wait` must never run against
+/// it again. On timeout the child is put back so `drop` still cleans up the (still-running) process.
+fn await_exit(session: &mut Session) -> Result<()> {
+    let Some(mut gui) = session.gui.take() else {
+        bail!("gui-pass: await-exit with no GUI process left to wait for");
+    };
+    let poll = Duration::from_millis(200);
+    let mut waited = Duration::ZERO;
+    loop {
+        if gui.try_wait().context("polling the GUI process")?.is_some() {
+            return Ok(());
+        }
+        if waited >= AWAIT_EXIT_TIMEOUT {
+            session.gui = Some(gui);
+            bail!("gui-pass: the GUI process is still running after {AWAIT_EXIT_TIMEOUT:?}");
+        }
+        sleep(poll);
+        waited += poll;
+    }
 }
 
 /// Presses, moves and releases button 1 — a canvas drag.
@@ -707,11 +752,12 @@ fn parse_metric(text: &str, path: &Path) -> Result<f64> {
         .with_context(|| format!("parsing the metric for {}: {text:?}", path.display()))
 }
 
-/// Checks every assertion, reporting all failures rather than the first.
-fn check(asserts: &[Assertion], taken: &[String], shots: &Path) -> Result<()> {
+/// Checks every assertion, reporting all failures rather than the first. `workspace` is the fixture
+/// workspace directory, `None` under `--real-config` (see [`Assertion::Manifest`]).
+fn check(asserts: &[Assertion], taken: &[String], shots: &Path, workspace: Option<&Path>) -> Result<()> {
     let mut failures = Vec::new();
     for assertion in asserts {
-        if let Some(failure) = check_one(assertion, taken, shots)? {
+        if let Some(failure) = check_one(assertion, taken, shots, workspace)? {
             failures.push(failure);
         }
     }
@@ -722,7 +768,12 @@ fn check(asserts: &[Assertion], taken: &[String], shots: &Path) -> Result<()> {
 }
 
 /// One assertion's verdict: `None` when it held, else the message describing how it did not.
-fn check_one(assertion: &Assertion, taken: &[String], shots: &Path) -> Result<Option<String>> {
+fn check_one(
+    assertion: &Assertion,
+    taken: &[String],
+    shots: &Path,
+    workspace: Option<&Path>,
+) -> Result<Option<String>> {
     match assertion {
         Assertion::Differ {
             shots: named,
@@ -762,6 +813,18 @@ fn check_one(assertion: &Assertion, taken: &[String], shots: &Path) -> Result<Op
                     describe_region(*region),
                 )
             }))
+        }
+        Assertion::Manifest { contains, because } => {
+            let Some(workspace) = workspace else {
+                bail!(
+                    "gui-pass: the manifest assertion needs the isolated fixture workspace; \
+                     --real-config points at the caller's own workspace, which this cannot safely read"
+                );
+            };
+            let manifest = workspace.join("workspace.toml");
+            let text = fs::read_to_string(&manifest).with_context(|| format!("reading {}", manifest.display()))?;
+            Ok((!text.contains(contains.as_str()))
+                .then(|| format!("{} does not contain {contains:?}: {because}", manifest.display())))
         }
     }
 }
