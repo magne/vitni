@@ -175,21 +175,13 @@ Residuals from the shortcuts work (ADR 0030); see
   raises the confirm with `⌘W`, tabs the three-button footer full circle, cancels it with both `Esc` and
   the scrim without losing the edit, restores a parked edit after navigating away and back, and saves
   from the dialog. `unsaved-quit-confirm` covers the blocked Save (a `⌘N` draft: the disabled button is
-  not a tab stop, so the ring is two buttons) and the `⌘Q` dialog's `ul.stack` over two unsaved tabs.
-  What stays human: whether a freshly activated pane mounts fast enough that Save looks instant, that a
-  `⌘Q` Save-all run reaches `QuitManager` after the last save (clicking Save all kills the window the
-  screenshots come from), and the slide-in motion. The 2026-07-31 pass could not run the Save-all half:
-  the button was disabled by an unrelated draft tab, so that check is still outstanding and this bullet is
-  blocked on #261. Everything else the pass covered — the map half — closed as #203. — #244
-- **One unsavable tab disables Save all for every other tab.** `quit_confirm_copy`
-  (`shell/close_confirm.rs`) walks the unsaved tabs and keeps the *first* blocked reason it finds, and
-  the button is disabled whenever any reason exists — so an untouched `⌘N` draft (unsaved by
-  definition, savable never, reason "Nothing has been filled in for …") blocks saving records that are
-  perfectly valid, with no hint that the reason belongs to a different tab than the one you were
-  editing. Enabling the button alone is not the fix: `save_all_then_quit` queues by the same
-  `tab_has_unsaved` predicate, so the run would reach the draft, fail `can_save()`, and
-  `abandon_save_run` mid-flight with the earlier records already saved. Gate on "no unsaved tab is
-  savable", queue on `tab_is_savable`, and say what will be left open. — #261
+  not a tab stop, so the ring is two buttons), the `⌘Q` dialog's `ul.stack` over two unsaved tabs, and —
+  since #261 — a **Save all** click: the partial run saves the dirtied record, leaves the untouched
+  draft open and does not quit, which is what makes it screenshottable at all. What stays human: whether
+  a freshly activated pane mounts fast enough that Save looks instant, that a *complete* `⌘Q` Save-all
+  run reaches `QuitManager` after the last save (that one does kill the window the screenshots come
+  from), and the slide-in motion. Everything else the pass covered — the map half — closed as #203. —
+  #244
 - **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
   its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
   so it is neither listed by the `?` overlay nor rebindable, and it does not go through

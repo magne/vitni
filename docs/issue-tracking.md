@@ -173,8 +173,7 @@ the list on its own. Treat the count as a floor.
 
 | Item | Why it gates a release |
 | --- | --- |
-| [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify`, blocked on #261 — the dialogs, their tab ring, both cancel paths and the edit stash are scripted (`unsaved-close-confirm`, `unsaved-quit-confirm`); whether a save *looks* instant is not, and Save all could not be clicked at all |
-| [One unsavable tab disables Save all for every other tab](https://github.com/magne/genealogy/issues/261) | An untouched `⌘N` draft blocks ⌘Q's Save all for valid records — and enabling it as-is would abort the run mid-flight |
+| [Manual webview pass for the unsaved-work confirm](https://github.com/magne/genealogy/issues/244) | `manual-verify` — the dialogs, their tab ring, both cancel paths, the edit stash and a partial Save all are scripted (`unsaved-close-confirm`, `unsaved-quit-confirm`); whether a save *looks* instant is not, nor is the quit at the end of a complete Save-all run |
 | [Zoom is invisible and unbounded](https://github.com/magne/genealogy/issues/253) | No zoom readout anywhere, and no `maxZoom` — past z19 OSM serves nothing and the map goes blank |
 | [OSM attribution is never shown](https://github.com/magne/genealogy/issues/254) | The tile source's required credit is absent from both maps, which the OSM tile-usage policy does not allow |
 | [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
@@ -188,8 +187,8 @@ the list on its own. Treat the count as a floor.
 | [Map markers label with the first-asserted name](https://github.com/magne/genealogy/issues/232) | The pin reads "Oslo" at slider year 1875 while the generated title correctly reads "Kristiania" — the map contradicts the record beside it |
 | [Index `$.state.human_id`](https://github.com/magne/genealogy/issues/233) | `next_human_id` and `find_place` each full-scan the projection; the index is the prerequisite for any bulk place import not being O(n²) |
 
-The eight rows right below the manual-webview-pass row all came out of the 2026-07-31 manual pass; #253
-through #259 are the map, #260 and #261 the shell. The last two of the table came out of
+The five rows right below the manual-webview-pass row all came out of the 2026-07-31 manual pass; #253
+through #259 are the map, #260 the shell. The last two of the table came out of
 [`research/gis-norway.md`](research/gis-norway.md); the rest came from reading the code. The index
 is the weakest fit — an enabler rather than a defect — and is here because it is cheap and unblocks the
 geography work that follows.

@@ -6,13 +6,21 @@
 #
 # `⌘Q` then raises the quit confirm over two unsaved tabs (the untouched draft and a dirtied
 # Kristiansand), which is the only way to see the `ul.stack` list of records at stake under WebKitGTK.
+# Its **Save all** is live even though the draft can never be saved (#261), so the run is clicked here:
+# it saves Kristiansand, leaves the draft open, and does *not* quit — which is what makes the click
+# screenshottable at all. The window still standing in `after-save-all` is half the assertion; the other
+# half is the tabstrip, where Kristiansand's `●` is gone and the draft's is not.
 #
-# Save all / Discard all are deliberately never clicked: both quit the app, and the next screenshot
-# would find no window. That a `⌘Q` Save-all run reaches `QuitManager` only after the last save lands
-# stays a human check, as does whether the saves *look* instant.
+# Discard all is still deliberately never clicked: it quits, and the next screenshot would find no
+# window. That a *complete* `⌘Q` Save-all run reaches `QuitManager` only after the last save lands stays
+# a human check, as does whether the saves *look* instant.
+#
+# The click on empty list space before the second `⌘Q` is not cosmetic: dismissing a modal with `Esc`
+# leaves nothing in the webview focused, and a chord that reaches no focused element reaches no
+# dispatcher either.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
-description = "The quit confirm lists both unsaved tabs, and a blocked Save is not a tab stop (#244)"
+description = "The quit confirm lists both unsaved tabs, and a partial Save all keeps the app up (#244, #261)"
 
 [[step]]
 do = "click"
@@ -117,6 +125,29 @@ label = "quit confirm: Esc"
 do = "shot"
 name = "after-esc"
 
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "empty list space: put keyboard focus back in the app after Esc"
+
+[[step]]
+do = "key"
+chord = "ctrl+q"
+label = "⌘Q again, this time to run Save all"
+
+[[step]]
+do = "shot"
+name = "quit-confirm-2"
+
+[[step]]
+do = "click"
+at = [1061, 473]
+label = "quit confirm: Save all"
+
+[[step]]
+do = "shot"
+name = "after-save-all"
+
 [[assert]]
 kind = "differ"
 shots = ["draft-open", "blocked-confirm"]
@@ -138,3 +169,31 @@ kind = "match"
 shots = ["two-dirty", "after-esc"]
 tolerance = 0.001
 because = "Esc must cancel the quit and leave both tabs open"
+
+[[assert]]
+kind = "match"
+shots = ["quit-confirm", "quit-confirm-2"]
+tolerance = 0.001
+# Without this the differ below passes on a dialog that never opened, which is how the first draft of
+# this scenario "passed": after Esc nothing in the webview holds focus, so the second ⌘Q went nowhere.
+because = "the second ⌘Q must raise the same dialog, or the Save all click lands on the pane behind it"
+
+[[assert]]
+kind = "differ"
+shots = ["quit-confirm-2", "after-save-all"]
+because = "Save all must dismiss the dialog and leave the app running — a quit here would lose the window this shot needs"
+
+[[assert]]
+kind = "differ"
+# Kristiansand's tab alone; the rest of the window repaints on any save, which would fake this.
+region = [728, 85, 155, 40]
+shots = ["two-dirty", "after-save-all"]
+because = "the record Save all could save loses its unsaved marker"
+
+[[assert]]
+kind = "match"
+# The draft's tab alone, in the same frame.
+region = [588, 85, 135, 40]
+shots = ["two-dirty", "after-save-all"]
+tolerance = 0.001
+because = "the record it could not save is left open, still marked unsaved — not saved, and not discarded"
