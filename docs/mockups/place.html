@@ -280,8 +280,10 @@
                      draggable handle per vertex. Drawn last, as the app draws them (the `geo-draft`
                      source's `vertex`-tagged Point features, under a circle layer added after every
                      marker layer). Pressing a handle grabs it instead of dropping another vertex
-                     there; dragging moves that corner without panning the map. Same behaviour and
-                     the same stand-in classes as the Geography tool (#259). -->
+                     there; dragging moves that corner without panning the map. The Point tool's own
+                     dropped point is such a handle too: drag it to move it, or click elsewhere on the
+                     canvas to re-drop it. Same behaviour and the same stand-in classes as the
+                     Geography tool (#259). -->
                 <div class="poly draft" style="left:52%;top:56%;width:140px;height:100px"></div>
                 <div class="vtx" style="left:52%;top:56%"></div>
                 <div class="vtx" style="left:64%;top:60%"></div>

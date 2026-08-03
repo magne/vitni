@@ -202,7 +202,9 @@ Residuals from the shortcuts work (ADR 0030); see
 - **`geography_toolbar` takes 11 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
   fit + draw-target + zoom state were threaded in — bundle them into a struct. Cosmetic cleanup.
   `map_surface` (`screens/map_shared.rs`) now carries the same `#[expect]` for the same reason, after
-  the draft signal and the tile credit joined its container/aria/tool/center/zoom/labels arguments.
+  the draft signal and the tile credit joined its container/aria/tool/center/zoom/labels arguments, and
+  `mount_maplibre` is at 7 — over the 5-positional-parameter house limit but under clippy's threshold,
+  so nothing flags it. All three want the same fix: one struct for the surface's mount parameters.
 - **The Geography tool's Point tool cannot save at all.** The Place Map editor has a "Use this point"
   confirm; the Geography tool has no equivalent, and contrary to what this bullet used to say it does
   not commit on click either — it only paints a red draft dot. `open_geometry_panel`
