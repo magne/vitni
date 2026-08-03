@@ -29,7 +29,7 @@ name = "no-target"
 
 [[step]]
 do = "click"
-at = [1536, 110]
+at = [1480, 110]
 label = "toolbar: Draw polygon"
 
 [[step]]

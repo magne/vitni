@@ -20,7 +20,7 @@ name = "map"
 
 [[step]]
 do = "click"
-at = [1615, 110]
+at = [1558, 110]
 label = "toolbar: Fit"
 
 [[step]]
