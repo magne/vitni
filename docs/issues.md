@@ -186,9 +186,6 @@ Residuals from the shortcuts work (ADR 0030); see
   its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
   so it is neither listed by the `?` overlay nor rebindable, and it does not go through
   `NavState`/`resolved_shortcuts` at all. — #206
-- **The "Jump back in" recent-list write has no close/quit hook.** `shell/window_geometry.rs` flushes
-  window geometry on `WindowEvent::CloseRequested`; the recent-list persistence effect in
-  `shell/root.rs` has no equivalent, so a keyboard quit can race the debounced write. — #205
 - **Chord entry is a typed canonical string, not live key capture.** `keydown` is inert under SSR and
   `cargo xtask input-guard` forbids a raw form element outside the primitives, so the Preferences
   rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.

@@ -179,7 +179,6 @@ the list on its own. Treat the count as a floor.
 | [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
 | [Polygon vertices are never drawn, and cannot be moved](https://github.com/magne/genealogy/issues/259) | The first two clicks of a ring are nearly invisible and a misplaced corner can only be fixed by clearing the whole draft |
 | [Only one unsaved new record per category](https://github.com/magne/genealogy/issues/260) | Two new people cannot be sketched side by side; the draft's identity is its category, all the way down to the stash key |
-| ["Jump back in" recent-list write has no close/quit hook](https://github.com/magne/genealogy/issues/205) | A keyboard quit races the debounced write |
 | [`⌘S` lives outside the shortcut map](https://github.com/magne/genealogy/issues/206) | Save is neither listed by `?` nor rebindable — inconsistent with every other binding |
 | [Record pickers and the command palette never see a record created while they stay open](https://github.com/magne/genealogy/issues/266) | Neither subscribes to `NavState::data_version` — the deferred half of #207, which fixed the Explorer list but not these |
 | [Toast notifications](https://github.com/magne/genealogy/issues/208) | No feedback channel for completed actions |
