@@ -17,6 +17,7 @@ use genealogy_core::enums::{EvidenceLevel, FactType, PlaceType, Sex};
 use genealogy_core::fact::Fact;
 use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use genealogy_core::geo::{GeoCoordinates, Microdegrees};
+use genealogy_core::id_format::IdFormat;
 use genealogy_core::ids::{
     AgentId, AssertionId, CitationId, FamilyId, HumanId, PersonId, PlaceId, ResearchNoteId, SourceId,
 };
@@ -88,6 +89,18 @@ fn person_name(i: usize) -> PersonName {
         language: None,
         transliterations: Vec::new(),
     }
+}
+
+/// The `HumanId` format [`add_person`] renders ids in — `I%07d`, matching `format!("I{:07}", …)`.
+fn person_id_format() -> IdFormat {
+    IdFormat::parse("I%07d").expect("valid format")
+}
+
+/// The last `human_id` [`add_person`] allocates for a `persons`-sized dataset (`i + 1` maxes at
+/// `persons`) — a real point lookup, unlike the hard-coded `I0000001` first-row hit this replaces
+/// (`docs/research/performance-profiling.md` §9).
+fn last_person_human_id(persons: usize) -> String {
+    person_id_format().render(persons as u64)
 }
 
 /// Point coordinates for place `i`, spread over a small Norwegian lat/lon grid so a wide viewport
@@ -324,31 +337,56 @@ async fn open_store() -> (Store, TempDir) {
     (Store::open(&url).await.expect("open store"), dir)
 }
 
+/// One benchmark dataset: the store and the sizes needed to derive bench inputs (a real point
+/// lookup key, throughput). `_dir` just keeps the backing temp file alive.
+struct Dataset {
+    persons: usize,
+    events: u64,
+    store: Store,
+    _dir: TempDir,
+}
+
 /// The headline replay benchmark: `rebuild_projections` clears and re-derives every projection from
 /// the whole event log. Throughput is set in events so criterion reports per-event replay cost.
-fn bench_rebuild(c: &mut Criterion, rt: &tokio::runtime::Runtime, datasets: &[(u64, Store, TempDir)]) {
+fn bench_rebuild(c: &mut Criterion, rt: &tokio::runtime::Runtime, datasets: &[Dataset]) {
     let mut group = c.benchmark_group("rebuild");
     group.sample_size(10);
-    for (events, store, _dir) in datasets {
-        group.throughput(Throughput::Elements(*events));
-        group.bench_with_input(BenchmarkId::from_parameter(events), events, |b, _| {
-            b.iter(|| rt.block_on(store.rebuild_projections()).expect("rebuild projections"));
+    for dataset in datasets {
+        group.throughput(Throughput::Elements(dataset.events));
+        group.bench_with_input(BenchmarkId::from_parameter(dataset.events), &dataset.events, |b, _| {
+            b.iter(|| {
+                rt.block_on(dataset.store.rebuild_projections())
+                    .expect("rebuild projections");
+            });
         });
     }
     group.finish();
 }
 
 /// The hot read paths, each at every dataset size: full person list, single person detail, the
-/// spatial bbox query, and the research-note reverse-by-subject lookup.
-fn bench_queries(c: &mut Criterion, rt: &tokio::runtime::Runtime, datasets: &[(u64, Store, TempDir)]) {
+/// next-`human_id` allocation, the spatial bbox query, and the research-note reverse-by-subject
+/// lookup.
+fn bench_queries(c: &mut Criterion, rt: &tokio::runtime::Runtime, datasets: &[Dataset]) {
     let subject = SubjectRef::Person(PersonId::from_uuid(Uuid::from_u128(PERSON_BASE)));
+    let format = person_id_format();
     let mut group = c.benchmark_group("query");
-    for (events, store, _dir) in datasets {
+    for dataset in datasets {
+        let events = &dataset.events;
+        let store = &dataset.store;
         group.bench_with_input(BenchmarkId::new("list_persons", events), events, |b, _| {
             b.iter(|| rt.block_on(store.list_persons()).expect("list persons"));
         });
+        // The last allocated id, not the first — `fetch_optional` stops at the first row hit, so
+        // looking up `I0000001` measured a first-row scan, not an indexed point lookup.
+        let last_id = last_person_human_id(dataset.persons);
         group.bench_with_input(BenchmarkId::new("find_person", events), events, |b, _| {
-            b.iter(|| rt.block_on(store.find_person("I0000001")).expect("find person"));
+            b.iter(|| rt.block_on(store.find_person(&last_id)).expect("find person"));
+        });
+        group.bench_with_input(BenchmarkId::new("next_person_human_id", events), events, |b, _| {
+            b.iter(|| {
+                rt.block_on(store.next_person_human_id(&format))
+                    .expect("next person human id")
+            });
         });
         group.bench_with_input(BenchmarkId::new("places_in_bbox", events), events, |b, _| {
             b.iter(|| {
@@ -374,11 +412,16 @@ fn bench_queries(c: &mut Criterion, rt: &tokio::runtime::Runtime, datasets: &[(u
 /// benchmarks against the shared stores.
 fn benches(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-    let mut datasets: Vec<(u64, Store, TempDir)> = Vec::with_capacity(PERSON_SIZES.len());
+    let mut datasets: Vec<Dataset> = Vec::with_capacity(PERSON_SIZES.len());
     for persons in PERSON_SIZES {
         let (store, dir) = rt.block_on(open_store());
         let events = rt.block_on(build_dataset(&store, persons));
-        datasets.push((events, store, dir));
+        datasets.push(Dataset {
+            persons,
+            events,
+            store,
+            _dir: dir,
+        });
     }
     bench_rebuild(c, &rt, &datasets);
     bench_queries(c, &rt, &datasets);
