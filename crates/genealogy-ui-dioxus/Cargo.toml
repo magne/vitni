@@ -30,8 +30,10 @@ dioxus = { workspace = true }
 dark-light = { workspace = true, optional = true }
 serde_json = { workspace = true }
 # `sync` backs the assisted-import driver's mpsc/oneshot channels between the plugin invocation and the
-# wizard (ADR 0017 §5); `async-trait` makes the channel-backed `Presenter` object-safe.
-tokio = { workspace = true, features = ["sync"] }
+# wizard (ADR 0017 §5); `time` backs the shell toast's auto-dismiss timer (`shell/toast.rs`), which is
+# not behind the `desktop` feature — unlike `shell/window_geometry.rs`'s timer, which gets `time`
+# transitively from `desktop`; `async-trait` makes the channel-backed `Presenter` object-safe.
+tokio = { workspace = true, features = ["sync", "time"] }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

@@ -49,12 +49,14 @@ pub fn FamilyCreateRecord() -> Element {
     let partner_onclear = use_callback(move |()| partner_state_reset.write().clear());
     let mut pending_new_open = pending_new;
     let partner_onnew = use_callback(move |_query: String| pending_new_open.set(Some(NewPersonFields::default())));
+    let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::FamilyDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let services = services.clone();
+        let created = created_label.clone();
         spawn(async move {
             let committed = commit_family_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Families, None, nav);
+            finish_draft_commit(committed, Category::Families, None, created, nav);
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -371,9 +373,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     let mut retract_reason = use_signal(String::new);
     let mut removing_child = use_signal(|| None::<ChildRemoval>);
     let mut removal_reason = use_signal(String::new);
-    let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
-    let dismiss_label = state.data_loc().action_label("dismiss");
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -409,6 +409,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     let submit_services = services.clone();
     let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
+    let mut submit_nav = nav;
     let on_submit = use_callback(move |(edit, prov): (FamilyEdit, ProvenanceDraft)| {
         let services = submit_services.clone();
         let saved = submit_saved.clone();
@@ -417,9 +418,9 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
                 Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
-                    toast.set(Some(saved));
+                    submit_nav.notify(saved);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(message) => submit_nav.notify_error(message),
             }
         });
     });
@@ -427,6 +428,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     let batch_services = services.clone();
     let batch_saved = saved_label.clone();
     let mut editing_for_batch = editing;
+    let mut batch_nav = nav;
     let on_submit_batch = use_callback(move |edits: Vec<(FamilyEdit, ProvenanceDraft)>| {
         let services = batch_services.clone();
         let saved = batch_saved.clone();
@@ -444,9 +446,9 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
                 Ok(()) => {
                     editing_for_batch.set(None);
                     reload += 1;
-                    toast.set(Some(saved));
+                    batch_nav.notify(saved);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(message) => batch_nav.notify_error(message),
             }
         });
     });
@@ -477,6 +479,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let retract_saved = saved_label.clone();
+    let mut retract_nav = nav;
     let on_retract_confirm = use_callback(move |()| {
         let Some(RetractTarget { assertion_id, .. }) = retract() else {
             return;
@@ -494,9 +497,9 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
                 Ok(_) => {
                     retract.set(None);
                     reload += 1;
-                    toast.set(Some(saved));
+                    retract_nav.notify(saved);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(message) => retract_nav.notify_error(message),
             }
         });
     });
@@ -510,6 +513,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     let removal_services = state.services().clone();
     let removal_human = human_id.clone();
     let removal_saved = saved_label.clone();
+    let mut removal_nav = nav;
     let on_child_remove_confirm = use_callback(move |()| {
         let Some(ChildRemoval { human_id: child, .. }) = removing_child() else {
             return;
@@ -530,9 +534,9 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
                 Ok(_) => {
                     removing_child.set(None);
                     reload += 1;
-                    toast.set(Some(saved));
+                    removal_nav.notify(saved);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(message) => removal_nav.notify_error(message),
             }
         });
     });
@@ -547,15 +551,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         let saved = saved_label.clone();
         spawn(async move {
             let effective = apply_record_edits(services, edits, prov, current.clone(), save_family_edit).await;
-            finish_record_save(
-                effective,
-                Category::Families,
-                &current,
-                record_nav,
-                reload,
-                toast,
-                &saved,
-            );
+            finish_record_save(effective, Category::Families, &current, record_nav, reload, &saved);
         });
     });
 
@@ -623,7 +619,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         on_region,
     };
 
-    let body = match &*data.read_unchecked() {
+    match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
@@ -678,16 +674,6 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
-    };
-
-    rsx! {
-        {body}
-        Toast {
-            visible: toast().is_some(),
-            message: toast().unwrap_or_default(),
-            action_label: dismiss_label,
-            onaction: move |_| toast.set(None),
-        }
     }
 }
 

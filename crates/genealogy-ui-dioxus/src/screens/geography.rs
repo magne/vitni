@@ -81,7 +81,6 @@ pub fn GeographyScreen() -> Element {
     let selected = use_signal(|| None::<(String, String)>);
     let mut draft = use_signal(|| MapDraft::Empty);
     let panel = use_signal(|| GeoPanel::None);
-    let mut toast = use_signal(|| None::<String>);
     let reload = use_signal(|| 0_u32);
 
     // Consumes a pending "Open in Geography ↗" focus target (the Place Map tab's own toolbar button),
@@ -171,14 +170,14 @@ pub fn GeographyScreen() -> Element {
     let on_finish_polygon = move |_| {
         let MapDraft::Polygon(vertices) = draft() else { return };
         if vertices.len() < 3 {
-            toast.set(Some(coordinate_invalid.clone()));
+            nav.notify_error(coordinate_invalid.clone());
             return;
         }
         let geometry = PlaceGeometry::Polygon {
             exterior: vertices.iter().map(|&(lat, lon)| geo_point(lat, lon)).collect(),
             holes: Vec::new(),
         };
-        open_geometry_panel(selected, panel, toast, &no_draw_target, geometry);
+        open_geometry_panel(selected, panel, nav, &no_draw_target, geometry);
     };
     let on_clear_draft = move |_| draft.set(MapDraft::Empty);
 
@@ -208,13 +207,7 @@ pub fn GeographyScreen() -> Element {
                 }
             }
         }
-        {geo_edit_panel(&chrome.0, panel, reload, toast, &saved_label, year())}
-        Toast {
-            visible: toast().is_some(),
-            message: toast().unwrap_or_default(),
-            action_label: state.data_loc().action_label("dismiss"),
-            onaction: move |_| toast.set(None),
-        }
+        {geo_edit_panel(&chrome.0, panel, reload, nav, &saved_label, year())}
     }
 }
 
@@ -237,18 +230,19 @@ fn geometry_panel_for(selected: Option<(String, String)>, geometry: PlaceGeometr
 
 /// Opens the geometry panel for the rail-selected place (the only caller today is the polygon
 /// finish; the `Point`/`CreateHere` branch is retained for that tool but currently unreachable, see
-/// the PR report). A polygon with no draw target is refused with a toast; the draft is deliberately
-/// kept on the canvas, so picking a place and pressing Finish again commits the same geometry.
+/// the PR report). A polygon with no draw target is refused with a shell error notice; the draft is
+/// deliberately kept on the canvas, so picking a place and pressing Finish again commits the same
+/// geometry.
 fn open_geometry_panel(
     selected: Signal<Option<(String, String)>>,
     mut panel: Signal<GeoPanel>,
-    mut toast: Signal<Option<String>>,
+    mut nav: NavState,
     no_target: &str,
     geometry: PlaceGeometry,
 ) {
     match geometry_panel_for(selected(), geometry) {
         Some(next) => panel.set(next),
-        None => toast.set(Some(no_target.to_owned())),
+        None => nav.notify_error(no_target.to_owned()),
     }
 }
 
@@ -493,7 +487,7 @@ fn geo_edit_panel(
     chrome: &Chrome,
     mut panel: Signal<GeoPanel>,
     mut reload: Signal<u32>,
-    mut toast: Signal<Option<String>>,
+    mut nav: NavState,
     saved_label: &str,
     slider_year: i32,
 ) -> Element {
@@ -514,11 +508,15 @@ fn geo_edit_panel(
             close_label: chrome.close(),
             onclose: move |()| panel.set(GeoPanel::None),
             footer: rsx! {},
+            // Mounted outside any `.detail` pane (this is a tool screen, not a record detail), so it
+            // needs to escape all the way to the viewport itself rather than fall through to
+            // `.workarea` (the toast layer's own containing block, #208).
+            viewport_anchored: true,
             {match current {
                 GeoPanel::CreateHere { point } => rsx! {
                     GeographyCreateForm {
                         point,
-                        onsaved: move |()| { panel.set(GeoPanel::None); reload += 1; toast.set(Some(saved.clone())); },
+                        onsaved: move |()| { panel.set(GeoPanel::None); reload += 1; nav.notify(saved.clone()); },
                     }
                 },
                 GeoPanel::AssertOnSelected { human_id, geometry, .. } => rsx! {
@@ -526,7 +524,7 @@ fn geo_edit_panel(
                         human_id,
                         geometry,
                         slider_year,
-                        onsaved: move |()| { panel.set(GeoPanel::None); reload += 1; toast.set(Some(saved.clone())); },
+                        onsaved: move |()| { panel.set(GeoPanel::None); reload += 1; nav.notify(saved.clone()); },
                     }
                 },
                 GeoPanel::None => rsx! {},

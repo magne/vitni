@@ -251,7 +251,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
    work-area height and scroll internally — a percentage height on a block child did not resolve to
    the constrained height, letting the detail pane grow unbounded (sticky header then rode over the
    tabs with no scrollbar). */
-.workarea { overflow: hidden; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
+.workarea {
+  position: relative; overflow: hidden; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr);
+}
 /* The editor area: one detail pane, or two side-by-side when a record is docked. The entity list is
    the shell-level Explorer column now, so this grid no longer carries a leading list column. */
 .master-detail {
@@ -579,24 +581,32 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .specimen .prov { position: static; margin-top: 0; box-shadow: none; max-width: none; }
 
 /* ---- Side panel (slide-in editor) ---- */
-/* Positioned against `.detail` (not an in-flow flex child) so a tall panel is bounded by the
-   viewport rather than clipped by the pane's `overflow:hidden`; only `.sp-body` scrolls, so the
-   head/foot (incl. Cancel/Save) stay reachable. */
+/* `position: absolute`, escaping into the nearest positioned ancestor — `.detail` for a record's own
+   side panels, bounding it to that pane rather than the whole window — rather than an in-flow flex
+   child clipped by the pane's `overflow:hidden`. Never `.workarea` itself: that is `position:
+   relative` only for the toast layer's containing block (#208). `SidePanel`'s `viewport_anchored`
+   prop switches a panel mounted with no `.detail` ancestor (Geography's own geometry panel, the one
+   caller outside a record's detail pane) to `.sidepanel-viewport` below, so it still escapes all the
+   way to the true viewport instead of landing on `.workarea` by accident. Only `.sp-body` scrolls, so
+   the head/foot (incl. Cancel/Save) stay reachable. */
 .sidepanel {
   position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-modal);
   display: flex; flex-direction: column;
   border: 1px solid var(--line); border-radius: var(--r-lg);
   background: var(--panel); box-shadow: var(--shadow-2); width: min(380px, 92vw);
 }
+.sidepanel.sidepanel-viewport { position: fixed; }
 .sidepanel .sp-head { flex: none; display: flex; align-items: center; padding: var(--sp-4); border-bottom: 1px solid var(--line); }
 .sidepanel .sp-head h3 { font-size: var(--fs-lg); }
 .sidepanel .sp-body { flex: 1; overflow-y: auto; padding: var(--sp-4); }
 .sidepanel .sp-foot { flex: none; display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
-/* The click-away dismiss layer behind the side panel (mirrors .picker-scrim/.menu-scrim). */
+/* The click-away dismiss layer behind the side panel (mirrors .picker-scrim/.menu-scrim). Same
+   `.sidepanel-scrim-viewport` escape hatch as `.sidepanel-viewport` above, for the same reason. */
 .sidepanel-scrim {
   position: absolute; inset: 0; z-index: calc(var(--z-modal) - 1);
   background: rgba(0, 0, 0, 0.4); border: 0; padding: 0; cursor: default;
 }
+.sidepanel-scrim.sidepanel-scrim-viewport { position: fixed; }
 .sidepanel { animation: slide-in-right 160ms ease-out; }
 .sidepanel-scrim { animation: fade-in 160ms ease-out; }
 
@@ -641,6 +651,16 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
   background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--ok);
   border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); box-shadow: var(--shadow-2);
 }
+.toast.error { border-left-color: var(--err); }
+/* The shell's one notice layer (#208), pinned to the bottom of the work area, out of grid flow so a
+   notice never shifts the layout it reports on. `.toast` itself stays an unpositioned surface — the
+   `.modal`/`.overlay` convention — so the mockups' inline `.toast` specimens keep rendering in flow. */
+.toast-layer {
+  position: absolute; left: 0; right: 0; bottom: var(--sp-4);
+  display: flex; justify-content: center;
+  z-index: var(--z-toast); pointer-events: none;
+}
+.toast-layer .toast { pointer-events: auto; }
 
 /* ---- Status bar ---- */
 .statusbar {

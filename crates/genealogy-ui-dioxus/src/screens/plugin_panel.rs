@@ -21,7 +21,7 @@ pub fn PluginPanelScreen() -> Element {
     let chrome = state.chrome();
     let loading = chrome.loading();
     let mut reloads = use_signal(|| 0_u32);
-    let mut toast = use_signal(|| None::<String>);
+    let mut nav = use_context::<NavState>();
 
     let plugins_services = services.clone();
     let plugins = use_resource(move || {
@@ -37,7 +37,7 @@ pub fn PluginPanelScreen() -> Element {
         spawn(async move {
             match set_plugin_enabled(services, id, enabled).await {
                 Ok(()) => reloads += 1,
-                Err(message) => toast.set(Some(message)),
+                Err(message) => nav.notify_error(message),
             }
         });
     });
@@ -70,12 +70,6 @@ pub fn PluginPanelScreen() -> Element {
                     }
                 },
             }}
-            Toast {
-                visible: toast().is_some(),
-                message: toast().unwrap_or_default(),
-                action_label: Some(state.data_loc().action_label("dismiss")),
-                onaction: move |_| toast.set(None),
-            }
             TrustStoreCard {}
             div { class: "card", style: "margin-top:16px",
                 h3 { "{state.chrome().run_plugin()}" }
@@ -172,7 +166,7 @@ fn PluginGrantCard(row: PluginRow, onsaved: Callback<()>) -> Element {
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let mut toast = use_signal(|| None::<String>);
+    let mut nav = use_context::<NavState>();
 
     let declared: Vec<String> = row.capabilities.iter().map(|c| c.interface_name().to_owned()).collect();
     let vm = genealogy_ui::plugin_grant_vm(loc, &row.id, row.trust, &declared, row.approved.as_ref());
@@ -189,7 +183,7 @@ fn PluginGrantCard(row: PluginRow, onsaved: Callback<()>) -> Element {
         spawn(async move {
             match set_plugin_grants(services, id, set).await {
                 Ok(()) => onsaved.call(()),
-                Err(message) => toast.set(Some(message)),
+                Err(message) => nav.notify_error(message),
             }
         });
     };
@@ -224,12 +218,6 @@ fn PluginGrantCard(row: PluginRow, onsaved: Callback<()>) -> Element {
                 for capability in vm.capabilities.iter() {
                     {grant_switch(loc, capability, approved)}
                 }
-            }
-            Toast {
-                visible: toast().is_some(),
-                message: toast().unwrap_or_default(),
-                action_label: Some(loc.action_label("dismiss")),
-                onaction: move |_| toast.set(None),
             }
         }
     }
@@ -275,7 +263,7 @@ fn TrustStoreCard() -> Element {
     let services = state.services().clone();
     let loc = state.data_loc();
     let mut reloads = use_signal(|| 0_u32);
-    let mut toast = use_signal(|| None::<String>);
+    let mut nav = use_context::<NavState>();
     let mut publisher = use_signal(String::new);
     let mut key = use_signal(String::new);
 
@@ -298,7 +286,7 @@ fn TrustStoreCard() -> Element {
                     key.set(String::new());
                     reloads += 1;
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(message) => nav.notify_error(message),
             }
         });
     };
@@ -309,7 +297,7 @@ fn TrustStoreCard() -> Element {
         spawn(async move {
             match unpin_publisher(services, name).await {
                 Ok(()) => reloads += 1,
-                Err(message) => toast.set(Some(message)),
+                Err(message) => nav.notify_error(message),
             }
         });
     });
@@ -356,12 +344,6 @@ fn TrustStoreCard() -> Element {
                     variant: ButtonVariant::Primary,
                     onclick: on_pin,
                 }
-            }
-            Toast {
-                visible: toast().is_some(),
-                message: toast().unwrap_or_default(),
-                action_label: Some(loc.action_label("dismiss")),
-                onaction: move |_| toast.set(None),
             }
         }
     }

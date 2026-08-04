@@ -17,6 +17,7 @@ pub fn TagCreateRecord() -> Element {
     let draft_badge = loc.record_draft_badge();
     let save_label = loc.action_label("save");
     let cancel_label = loc.action_label("cancel");
+    let created_label = loc.action_label("created");
     let edit = use_record_create::<TagDraft>(Category::Tags);
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
@@ -26,9 +27,10 @@ pub fn TagCreateRecord() -> Element {
         };
         let services = services.clone();
         let name = request.name.clone();
+        let created = created_label.clone();
         spawn(async move {
             let committed = commit_tag_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Tags, Some(name), nav);
+            finish_draft_commit(committed, Category::Tags, Some(name), created, nav);
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -79,9 +81,7 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
     let mut reload = use_signal(|| 0_u32);
-    let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
-    let dismiss_label = state.data_loc().action_label("dismiss");
 
     let id_for_resource = id.clone();
     let services_for_resource = services.clone();
@@ -127,9 +127,9 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
                     // A rename/recolour changes what every applied-tag chip and reference elsewhere
                     // shows; bump the shared data version so those re-resolve rather than cache stale.
                     nav.mark_changed();
-                    toast.set(Some(saved));
+                    nav.notify(saved);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(message) => nav.notify_error(message),
             }
         });
     });
@@ -151,7 +151,7 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
     });
     use_save_on_request(Category::Tags, Some(&id), edit, save_now);
 
-    let body = match &*data.read_unchecked() {
+    match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
@@ -182,16 +182,6 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::DataQuality(_),
         )) => rsx! {},
-    };
-
-    rsx! {
-        {body}
-        Toast {
-            visible: toast().is_some(),
-            message: toast().unwrap_or_default(),
-            action_label: dismiss_label,
-            onaction: move |_| toast.set(None),
-        }
     }
 }
 

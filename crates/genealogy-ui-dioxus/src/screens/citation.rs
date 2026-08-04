@@ -31,14 +31,16 @@ pub fn CitationCreateRecord() -> Element {
     let source_onclear = use_callback(move |()| draft.write().source = RecordLink::Empty);
     let source_onnew =
         use_callback(move |_query: String| draft.write().source = RecordLink::New(NewSourceFields::default()));
+    let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::CitationDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
         };
         let services = services.clone();
+        let created = created_label.clone();
         spawn(async move {
             let committed = commit_citation_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Citations, None, nav);
+            finish_draft_commit(committed, Category::Citations, None, created, nav);
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -442,9 +444,7 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
     let editing = use_signal(|| None::<CitationEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
-    let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
-    let dismiss_label = state.data_loc().action_label("dismiss");
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -482,6 +482,7 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
     let submit_services = services.clone();
     let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
+    let mut submit_nav = nav;
     let on_submit = use_callback(move |(edit, prov): (CitationEdit, ProvenanceDraft)| {
         let services = submit_services.clone();
         let saved = submit_saved.clone();
@@ -490,9 +491,9 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
                 Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
-                    toast.set(Some(saved));
+                    submit_nav.notify(saved);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(message) => submit_nav.notify_error(message),
             }
         });
     });
@@ -523,6 +524,7 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let retract_saved = saved_label.clone();
+    let mut retract_nav = nav;
     let on_retract_confirm = use_callback(move |()| {
         let Some(RetractTarget { assertion_id, .. }) = retract() else {
             return;
@@ -540,9 +542,9 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
                 Ok(_) => {
                     retract.set(None);
                     reload += 1;
-                    toast.set(Some(saved));
+                    retract_nav.notify(saved);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(message) => retract_nav.notify_error(message),
             }
         });
     });
@@ -557,15 +559,7 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
         let saved = saved_label.clone();
         spawn(async move {
             let effective = apply_record_edits(services, edits, prov, current.clone(), save_citation_edit).await;
-            finish_record_save(
-                effective,
-                Category::Citations,
-                &current,
-                record_nav,
-                reload,
-                toast,
-                &saved,
-            );
+            finish_record_save(effective, Category::Citations, &current, record_nav, reload, &saved);
         });
     });
 
@@ -628,7 +622,7 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
         on_region,
     };
 
-    let body = match &*data.read_unchecked() {
+    match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
@@ -678,16 +672,6 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
-    };
-
-    rsx! {
-        {body}
-        Toast {
-            visible: toast().is_some(),
-            message: toast().unwrap_or_default(),
-            action_label: dismiss_label,
-            onaction: move |_| toast.set(None),
-        }
     }
 }
 

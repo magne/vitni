@@ -32,10 +32,8 @@ pub fn MergeScreen() -> Element {
     let chrome = use_context::<ChromeCtx>();
     let mut nav = use_context::<NavState>();
     let mut mode = use_signal(|| MergeMode::Duplicates);
-    let mut toast = use_signal(|| None::<String>);
     let mut reason = use_signal(String::new);
     let mut blocked = use_signal(|| None::<MergeBlockedVm>);
-    let dismiss_label = state.data_loc().action_label("dismiss");
 
     let duplicates_services = state.services().clone();
     let duplicates_data = use_resource(move || {
@@ -86,13 +84,13 @@ pub fn MergeScreen() -> Element {
             blocked.set(None);
             match merge_persons(services, request).await {
                 Ok(result) => {
-                    toast.set(Some(result.summary));
+                    nav.notify(result.summary);
                     reason.set(String::new());
                     nav.mark_changed();
                     mode.set(MergeMode::Duplicates);
                 }
                 Err(MergeFailure::Blocked(vm)) => blocked.set(Some(vm)),
-                Err(MergeFailure::Other(message)) => toast.set(Some(message)),
+                Err(MergeFailure::Other(message)) => nav.notify_error(message),
             }
         });
     });
@@ -111,12 +109,6 @@ pub fn MergeScreen() -> Element {
                     on_merge,
                     on_cancel,
                 ),
-            }
-            Toast {
-                visible: toast().is_some(),
-                message: toast().unwrap_or_default(),
-                action_label: Some(dismiss_label),
-                onaction: move |_| toast.set(None),
             }
         }
     }

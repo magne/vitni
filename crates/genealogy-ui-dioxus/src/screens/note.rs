@@ -21,13 +21,15 @@ pub fn NoteCreateRecord() -> Element {
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::NoteDraft>(Category::Notes);
+    let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::NoteDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let label = request.text.clone().unwrap_or_default();
         let services = services.clone();
+        let created = created_label.clone();
         spawn(async move {
             let committed = commit_note_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Notes, Some(label), nav);
+            finish_draft_commit(committed, Category::Notes, Some(label), created, nav);
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -185,9 +187,7 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
     let active = use_detail_tab(Category::Notes, &human_id);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<NoteEditForm>);
-    let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
-    let dismiss_label = state.data_loc().action_label("dismiss");
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -230,6 +230,7 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
     let submit_services = services.clone();
     let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
+    let mut submit_nav = nav;
     let on_submit = use_callback(move |(edit, prov): (NoteEdit, ProvenanceDraft)| {
         let services = submit_services.clone();
         let saved = submit_saved.clone();
@@ -238,9 +239,9 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
                 Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
-                    toast.set(Some(saved));
+                    submit_nav.notify(saved);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(message) => submit_nav.notify_error(message),
             }
         });
     });
@@ -266,7 +267,7 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
         let saved = saved_label.clone();
         spawn(async move {
             let effective = apply_record_edits(services, edits, prov, current.clone(), save_note_edit).await;
-            finish_record_save(effective, Category::Notes, &current, record_nav, reload, toast, &saved);
+            finish_record_save(effective, Category::Notes, &current, record_nav, reload, &saved);
         });
     });
 
@@ -306,7 +307,7 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
     });
     use_save_on_request(Category::Notes, Some(&human_id), record, save_now);
 
-    let body = match &*data.read_unchecked() {
+    match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
@@ -352,16 +353,6 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
-    };
-
-    rsx! {
-        {body}
-        Toast {
-            visible: toast().is_some(),
-            message: toast().unwrap_or_default(),
-            action_label: dismiss_label,
-            onaction: move |_| toast.set(None),
-        }
     }
 }
 
