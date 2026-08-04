@@ -1212,6 +1212,7 @@ impl Localizer {
             "reject" => fl!(self.loader, "action-reject"),
             "cancel" => fl!(self.loader, "action-cancel"),
             "saved" => fl!(self.loader, "action-saved"),
+            "created" => fl!(self.loader, "action-created"),
             "dismiss" => fl!(self.loader, "action-dismiss"),
             "close" => fl!(self.loader, "action-close"),
             _ => fl!(self.loader, "action-save"),

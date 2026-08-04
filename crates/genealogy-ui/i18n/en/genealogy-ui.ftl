@@ -223,6 +223,7 @@ action-new-citation = + New citation
 action-save = Save
 action-cancel = Cancel
 action-saved = Saved
+action-created = Created
 record-draft-badge = draft · not saved
 record-unset = —
 action-dismiss = Dismiss
