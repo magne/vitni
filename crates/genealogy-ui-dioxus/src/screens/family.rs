@@ -31,11 +31,13 @@ pub fn FamilyCreateRecord() -> Element {
     let record = use_record_create::<genealogy_ui::FamilyDraft>(Category::Families);
     let mut draft = record.draft;
     // The People picker adds one partner at a time: a pick appends an existing-partner chip and resets
-    // the search; "+ New person" opens the pending new-partner draft card. Options load once per form.
+    // the search; "+ New person" opens the pending new-partner draft card. The options refetch after
+    // any mutation, so a person created elsewhere is pickable without reopening the form (#266).
     let partner_state = use_signal(genealogy_ui::PickerState::default);
     let pending_new = use_signal(|| None::<NewPersonFields>);
     let partner_services = services.clone();
     let partner_rows = use_resource(move || {
+        let _ = data_version_ticket(Some(nav));
         let services = partner_services.clone();
         async move { load_picker_rows(services, Category::People).await }
     });

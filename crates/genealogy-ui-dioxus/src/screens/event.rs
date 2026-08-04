@@ -18,10 +18,12 @@ pub fn EventCreateRecord() -> Element {
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::EventDraft>(Category::Events);
     let mut draft = record.draft;
-    // The find-or-create place picker: options load once; pick/clear/"+ New" drive the draft's link.
+    // The find-or-create place picker: its options refetch after any mutation (#266); pick/clear/
+    // "+ New" drive the draft's link.
     let place_state = use_signal(genealogy_ui::PickerState::default);
     let place_services = services.clone();
     let place_rows = use_resource(move || {
+        let _ = data_version_ticket(Some(nav));
         let services = place_services.clone();
         async move { load_picker_rows(services, Category::Places).await }
     });
@@ -408,11 +410,13 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     };
     let record = use_record_edit::<genealogy_ui::EventDraft>(Category::Events, &human_id, &seed);
 
-    // The existing-place picker: its options load once, and pick/clear/reset drive the draft's place
-    // link (inline place creation is create-only, so this picker never offers "+ New").
+    // The existing-place picker: its options refetch after any mutation (#266), and pick/clear/reset
+    // drive the draft's place link (inline place creation is create-only, so this picker never offers
+    // "+ New").
     let place_state = use_signal(genealogy_ui::PickerState::default);
     let place_services = services.clone();
     let place_rows = use_resource(move || {
+        let _ = data_version_ticket(Some(nav));
         let services = place_services.clone();
         async move { load_picker_rows(services, Category::Places).await }
     });

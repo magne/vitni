@@ -251,6 +251,11 @@
     Save/Cancel while a record is dirty. Everything except confidence is optional — but the slot is
     always there, because History displays the "why" and the prov popover displays the citations,
     and neither can be shown if it was never collected.</p>
+  <p class="muted">The block's citations picker offers <b>“+ New citation”</b>, and unlike the nested
+    drafts of §6b that card <b>commits as soon as you press Add</b> — the citation (and a source created
+    with it) persists even if the surrounding form is cancelled. Because it is a create like any other,
+    it updates the rail counts, the Explorer list and every open picker, so the citation it just made is
+    immediately attachable from the picker beside it.</p>
   <div class="specimen">
     <div class="label">Provenance block — shown while the draft is dirty</div>
     <div class="card" style="margin-bottom:0">
@@ -288,7 +293,11 @@
     is <b>never stored</b>. Same validation, dirty-tracking, and Save/Cancel as edit — the only difference
     is create starts empty and Save <i>creates</i> the record instead of <i>updating</i> it. Cancel discards
     the draft; nothing is written. On Save the draft tab becomes the stored record in place, and the
-    Explorer list beside it gains the new row and the rail's count badge updates — no manual refresh.</p>
+    Explorer list beside it gains the new row and the rail's count badge updates — no manual refresh.
+    The same holds for every <b>record picker</b> still open elsewhere (§6b, and the existing-only pickers
+    of <a href="edit-patterns.html">edit-patterns</a> §c) and for the open <a href="search-palette.html">command
+    palette</a>: each reloads its options after any create, edit or undo, so a record created while it stays
+    open is pickable in it without reopening the form.</p>
   <div class="specimen">
     <div class="label">New person — unsaved draft</div>
     <div class="card" style="margin-bottom:0">

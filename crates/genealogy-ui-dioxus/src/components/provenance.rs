@@ -17,6 +17,7 @@ use crate::components::record_picker::{
 };
 use crate::components::{Chip, SelectChoice, SelectInput, TextInput};
 use crate::services::{Services, commit_citation_change_set, load_picker_rows};
+use crate::shell::nav_state::{NavState, data_version_ticket};
 
 /// One evidence-analysis axis select in the block: its accessible name and its options (the first of
 /// which is the unset "—"), tagged with the axis it drives.
@@ -169,8 +170,10 @@ fn ProvenanceCitations(draft: Signal<ProvenanceDraft>) -> Element {
     let mut new_open = use_signal(|| false);
     let ctx = try_consume_context::<AppCtx>();
     let services = ctx_services(ctx.as_ref());
+    let nav = try_consume_context::<NavState>();
     let row_services = services.clone();
     let rows = use_resource(move || {
+        let _ = data_version_ticket(nav);
         let services = row_services.clone();
         async move {
             match services {
@@ -246,8 +249,10 @@ fn ProvenanceDnaMatches(draft: Signal<ProvenanceDraft>) -> Element {
     let mut picker_state = use_signal(PickerState::default);
     let ctx = try_consume_context::<AppCtx>();
     let services = ctx_services(ctx.as_ref());
+    let nav = try_consume_context::<NavState>();
     let row_services = services.clone();
     let rows = use_resource(move || {
+        let _ = data_version_ticket(nav);
         let services = row_services.clone();
         async move {
             match services {
@@ -312,8 +317,9 @@ fn ProvenanceDnaMatches(draft: Signal<ProvenanceDraft>) -> Element {
 /// (`record-editing.html` §6b): a required source find-or-create picker (its own "+ New" creates a
 /// source inline by title) plus a page input. Add commits the citation via
 /// [`commit_citation_change_set`] and appends the returned `human_id` to the draft — commit-on-add,
-/// so the record persists even if the outer form is later cancelled. A commit failure is shown in
-/// place, not swallowed.
+/// so the record persists even if the outer form is later cancelled, and marks the workspace changed
+/// like any other create ([`NavState::mark_changed`]). A commit failure is shown in place, not
+/// swallowed.
 #[component]
 fn ProvenanceNewCitation(draft: Signal<ProvenanceDraft>, onclose: EventHandler<()>) -> Element {
     let mut draft = draft;
@@ -323,8 +329,10 @@ fn ProvenanceNewCitation(draft: Signal<ProvenanceDraft>, onclose: EventHandler<(
     let mut error = use_signal(|| None::<String>);
     let ctx = try_consume_context::<AppCtx>();
     let services = ctx_services(ctx.as_ref());
+    let nav = try_consume_context::<NavState>();
     let source_services = services.clone();
     let source_rows = use_resource(move || {
+        let _ = data_version_ticket(nav);
         let services = source_services.clone();
         async move {
             match services {
@@ -352,6 +360,12 @@ fn ProvenanceNewCitation(draft: Signal<ProvenanceDraft>, onclose: EventHandler<(
             match commit_citation_change_set(services, request, ProvenanceDraft::default()).await {
                 Ok(id) => {
                     draft.write().citations.push(id);
+                    // A commit-on-add is a create like any other: mark the workspace changed so the
+                    // rail counts, the Explorer list and every open picker refetch (#207, #266). This
+                    // is the one create that runs with a picker still mounted beside it.
+                    if let Some(mut nav) = nav {
+                        nav.mark_changed();
+                    }
                     onclose.call(());
                 }
                 Err(message) => error.set(Some(message)),

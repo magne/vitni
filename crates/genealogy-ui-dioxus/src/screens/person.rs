@@ -43,11 +43,13 @@ pub fn PersonCreateRecord() -> Element {
     let source_state = use_signal(genealogy_ui::PickerState::default);
     let citation_services = services.clone();
     let citation_rows = use_resource(move || {
+        let _ = data_version_ticket(Some(nav));
         let services = citation_services.clone();
         async move { load_picker_rows(services, Category::Citations).await }
     });
     let source_services = services.clone();
     let source_rows = use_resource(move || {
+        let _ = data_version_ticket(Some(nav));
         let services = source_services.clone();
         async move { load_picker_rows(services, Category::Sources).await }
     });

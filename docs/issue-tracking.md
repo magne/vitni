@@ -175,8 +175,8 @@ the list on its own. Treat the count as a floor.
 | --- | --- |
 | [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
 | [Only one unsaved new record per category](https://github.com/magne/genealogy/issues/260) | Two new people cannot be sketched side by side; the draft's identity is its category, all the way down to the stash key |
+| [Detail-tab clicks do nothing while a record is docked](https://github.com/magne/genealogy/issues/279) | A docked split is Overview-only: clicking any related-item tab is inert in both panes until the dock closes |
 | [`⌘S` lives outside the shortcut map](https://github.com/magne/genealogy/issues/206) | Save is neither listed by `?` nor rebindable — inconsistent with every other binding |
-| [Record pickers and the command palette never see a record created while they stay open](https://github.com/magne/genealogy/issues/266) | Neither subscribes to `NavState::data_version` — the deferred half of #207, which fixed the Explorer list but not these |
 | [Toast notifications](https://github.com/magne/genealogy/issues/208) | No feedback channel for completed actions |
 | [Remember the open record's tab](https://github.com/magne/genealogy/issues/209) | Tab resets on every navigation |
 | [Index `$.state.human_id`](https://github.com/magne/genealogy/issues/233) | `next_human_id` and `find_place` each full-scan the projection; the index is the prerequisite for any bulk place import not being O(n²) |

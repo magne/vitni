@@ -112,7 +112,9 @@
     picker</a> (record-editing §6b) — the create-form variant, where “+ New” opens a nested
     <span class="mono">.draft-card</span> rather than a modal. In PR28 the side-panel and attach dialogs
     convert to <b>existing-only</b> pickers (you search instead of typing a memorized id); the inline
-    <b>+ New</b> inside those side panels is a flagged follow-up.</p>
+    <b>+ New</b> inside those side panels is a flagged follow-up. An existing-only picker reloads its
+    options after every create, edit or undo, so a record created elsewhere while the panel stays open is
+    pickable in it — no reopen (<a href="record-editing.html">record-editing</a> §6).</p>
   <p class="muted"><b>Links that carry a role pick it in the same dialog.</b> When the attachment is a
     typed relationship — a person joining an event (<span class="mono">ParticipantRole</span>), a child
     joining a family (<span class="mono">ChildParentRelationship</span> per parent) — the dialog adds the

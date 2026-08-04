@@ -1,0 +1,107 @@
+# #266: a record picker must see a record created while it stays open, and that create must mark the
+# workspace changed like any other (#207). The two are one story here, because the provenance block's
+# "+ New citation" card is the only place in the app that creates a record with a picker still mounted
+# beside it — every other create switches the active record tab, which unmounts the pane and the picker
+# with it (`screens/record_detail.rs` mounts only the active tab's pane).
+#
+# The surface: a Place's Hierarchy tab → "Add succession" side panel, whose provenance block carries a
+# citations picker. Creating a citation inline needs a source, so the card's own source picker creates
+# one by title ("+ New source \"s\"") — that commits `S0001` and `C0001` in one Add.
+#
+# The C0001 chip the Add appends is detached again before the second shot: the chip adds a row above
+# the picker, which would move the floating result list ~24px and make a region compare differ for the
+# layout rather than for the rows. Detaching restores the geometry exactly; the citation record stays.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "An open picker sees a record created beside it, and the create updates the rail count (#266)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "click"
+at = [827, 248]
+label = "detail tab: Hierarchy"
+
+[[step]]
+do = "click"
+at = [606, 607]
+label = "Hierarchy: Add succession"
+
+[[step]]
+do = "click"
+at = [1663, 806]
+label = "provenance: open the citations picker"
+
+[[step]]
+do = "shot"
+name = "picker-before"
+
+[[step]]
+do = "click"
+at = [1632, 912]
+label = "citations picker: + New citation"
+
+[[step]]
+do = "click"
+at = [1673, 940]
+label = "new citation card: the source picker"
+
+[[step]]
+do = "key"
+chord = "s"
+label = "type: s"
+
+[[step]]
+do = "click"
+at = [1680, 1047]
+label = "source picker: + New source \"s\""
+
+[[step]]
+do = "shot"
+name = "rail-before"
+
+[[step]]
+do = "click"
+at = [1646, 1065]
+label = "new citation card: Add citation — commits S0001 + C0001"
+
+[[step]]
+do = "shot"
+name = "rail-after"
+
+[[step]]
+do = "click"
+at = [1633, 778]
+label = "detach the C0001 chip, restoring the picker's on-screen position"
+
+[[step]]
+do = "click"
+at = [1663, 806]
+label = "provenance: reopen the citations picker"
+
+[[step]]
+do = "shot"
+name = "picker-after"
+
+[[assert]]
+kind = "differ"
+shots = ["picker-before", "picker-after"]
+because = "the reopened picker must list the citation created in it, not 'No matches' (#266)"
+# The floating result list only — the panel around it repaints for the detach either way, and the list
+# is where "No matches" becomes a C0001 row.
+region = [1560, 830, 220, 110]
+
+[[assert]]
+kind = "differ"
+shots = ["rail-before", "rail-after"]
+because = "an inline create marks the workspace changed, so the rail's Citations count goes 0 → 1 (#207)"
+# The rail's Citations row alone: the panel behind the pointer repaints on Add regardless.
+region = [0, 335, 208, 45]

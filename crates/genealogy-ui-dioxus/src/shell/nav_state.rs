@@ -1187,3 +1187,15 @@ impl NavState {
         self.active_record.set(index);
     }
 }
+
+/// Subscribes the calling reactive scope to [`NavState::data_version`] and returns the current ticket,
+/// or 0 when no shell is mounted (host-free SSR probes provide no [`NavState`]).
+///
+/// Call it in the **synchronous** part of a `use_resource` closure — that is the part Dioxus subscribes
+/// on — so the resource refetches after every create/edit/undo ([`NavState::mark_changed`]). Take the
+/// state as an argument rather than consuming the context here: the context must be consumed in the
+/// component/hook body, not inside the closure the resource re-runs.
+#[must_use]
+pub fn data_version_ticket(nav: Option<NavState>) -> u32 {
+    nav.map_or(0, |nav| *nav.data_version.read())
+}

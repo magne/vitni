@@ -16,10 +16,12 @@ pub fn DnaTestCreateRecord() -> Element {
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::DnaTestDraft>(Category::DnaTests);
     let mut draft = record.draft;
-    // The existing-person picker: options load once; pick/clear drive the draft's (required) person id.
+    // The existing-person picker: its options refetch after any mutation (#266); pick/clear drive the
+    // draft's (required) person id.
     let person_state = use_signal(genealogy_ui::PickerState::default);
     let person_services = services.clone();
     let person_rows = use_resource(move || {
+        let _ = data_version_ticket(Some(nav));
         let services = person_services.clone();
         async move { load_picker_rows(services, Category::People).await }
     });
