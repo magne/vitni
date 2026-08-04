@@ -768,7 +768,7 @@ fn family_detail(
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
-        div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record, on_record_save),
+        div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record),
             DetailContainer {
                 title: detail.title.clone(),
                 id_label: Some(detail.human_id.clone()),

@@ -1,0 +1,82 @@
+# `⌘S` as a shell-dispatched, rebindable `ShortcutAction::SaveRecord` (#206). SSR proves the map lists
+# it and that `NavState::request_save_active` picks the right editor; what SSR cannot reach is whether a
+# real `Ctrl+S` keypress — routed through the shell's `onkeydown`, not a per-pane handler — actually
+# reaches the dispatcher and drives the mounted pane's own Save, and whether a second press with nothing
+# left dirty raises the "Nothing to save" notice instead of silently doing nothing.
+#
+# Dirtying a record without a typing step: same trick as `unsaved-close-confirm.toml` — the Type
+# `<select>` is the one control a keypress alone can change, reached via `Tab` off the ID field rather
+# than a native click (which would open a GTK popup that grabs the keyboard).
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "Ctrl+S saves the dirty active record and reports nothing to save on a second press (#206)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "click"
+at = [1740, 145]
+label = "detail head: Edit"
+
+[[step]]
+do = "click"
+at = [1150, 438]
+label = "field: ID input"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "Tab onto the Type select"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "Type: Municipality → Parish"
+
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "park the pointer on empty list space"
+
+[[step]]
+do = "shot"
+name = "dirty"
+
+[[step]]
+do = "key"
+chord = "ctrl+s"
+label = "Ctrl+S on the dirty tab"
+
+[[step]]
+do = "shot"
+name = "saved"
+
+[[step]]
+do = "key"
+chord = "ctrl+s"
+label = "Ctrl+S again with nothing dirty"
+
+[[step]]
+do = "shot"
+name = "nothing-to-save"
+
+[[assert]]
+kind = "differ"
+shots = ["dirty", "saved"]
+# The saved toast, the tabstrip's unsaved dot clearing, and the return to view mode (Save/Cancel
+# swapping back to Edit) — a handful of pixels, well under the same-screen default tolerance.
+tolerance = 0.001
+because = "Ctrl+S must save the dirty record and return it to view mode"
+
+[[assert]]
+kind = "differ"
+shots = ["saved", "nothing-to-save"]
+because = "a second Ctrl+S with nothing left dirty must raise the Nothing to save notice"

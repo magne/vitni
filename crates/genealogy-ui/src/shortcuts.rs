@@ -279,12 +279,14 @@ pub enum ShortcutAction {
     Quit,
     /// Close the active record tab (`⌘W`).
     CloseCurrentTab,
+    /// Save the record the operator is looking at (`⌘S`).
+    SaveRecord,
 }
 
 impl ShortcutAction {
     /// Every action, used to assert the map is exhaustive.
     #[must_use]
-    pub const fn all() -> [Self; 22] {
+    pub const fn all() -> [Self; 23] {
         [
             Self::CommandPalette,
             Self::NewRecord,
@@ -308,6 +310,7 @@ impl ShortcutAction {
             Self::Edit,
             Self::Quit,
             Self::CloseCurrentTab,
+            Self::SaveRecord,
         ]
     }
 
@@ -338,6 +341,7 @@ impl ShortcutAction {
             Self::Edit => "edit",
             Self::Quit => "quit",
             Self::CloseCurrentTab => "close-tab",
+            Self::SaveRecord => "save-record",
         }
     }
 
@@ -391,7 +395,8 @@ pub fn shortcuts() -> Vec<Shortcut> {
     };
     use ShortcutAction::{
         AddSource, Close, CloseCurrentTab, CommandPalette, DockRecordTab, Edit, Find, FirstTab, Help, LastTab,
-        MoveDown, MoveUp, NewRecord, NextRecord, NextTab, Open, PrevRecord, PrevTab, Quit, Redo, SwitchRecordTab, Undo,
+        MoveDown, MoveUp, NewRecord, NextRecord, NextTab, Open, PrevRecord, PrevTab, Quit, Redo, SaveRecord,
+        SwitchRecordTab, Undo,
     };
     use ShortcutGroup::{Global, WithinScreen};
     let no_mod = Modifier::NONE;
@@ -400,6 +405,7 @@ pub fn shortcuts() -> Vec<Shortcut> {
     vec![
         shortcut(CommandPalette, command, Char('k'), Global, "sc-command-palette"),
         shortcut(NewRecord, command, Char('n'), Global, "sc-new-record"),
+        shortcut(SaveRecord, command, Char('s'), Global, "sc-save-record"),
         shortcut(Find, command, Char('f'), Global, "sc-find"),
         shortcut(Undo, command, Char('z'), Global, "sc-undo"),
         shortcut(Redo, command_shift, Char('z'), Global, "sc-redo"),
@@ -587,7 +593,7 @@ mod tests {
             .iter()
             .filter(|entry| entry.group == ShortcutGroup::WithinScreen)
             .count();
-        assert_eq!(global, 11);
+        assert_eq!(global, 12);
         assert_eq!(within, 11);
     }
 
@@ -727,9 +733,37 @@ mod tests {
             .iter()
             .find(|entry| entry.action == ShortcutAction::Quit)
             .expect("quit present");
-        assert_eq!(quit.chord, shortcuts()[9].chord, "quit keeps its default chord");
+        let default_quit = shortcuts()
+            .into_iter()
+            .find(|entry| entry.action == ShortcutAction::Quit)
+            .expect("quit present in the default map");
+        assert_eq!(quit.chord, default_quit.chord, "quit keeps its default chord");
         assert_eq!(errors.len(), 1);
         assert!(matches!(&errors[0], BindingError::UnparsableChord { id, .. } if id == "quit"));
+    }
+
+    #[test]
+    fn save_record_is_a_rebindable_global_chord() {
+        let map = shortcuts();
+        let save = map
+            .iter()
+            .find(|entry| entry.action == ShortcutAction::SaveRecord)
+            .expect("save-record present");
+        assert_eq!(save.group, ShortcutGroup::Global);
+        assert_eq!(save.chord.modifier, Modifier::COMMAND);
+        assert_eq!(save.chord.key, super::Key::Char('s'));
+        assert_eq!(save.label_id, "sc-save-record");
+        assert_eq!(save.action.config_id(), "save-record");
+
+        let overrides = BTreeMap::from([("save-record".to_owned(), "mod+shift+s".to_owned())]);
+        let (resolved, errors) = resolved_shortcuts(&overrides);
+        assert!(errors.is_empty());
+        let overridden = resolved
+            .iter()
+            .find(|entry| entry.action == ShortcutAction::SaveRecord)
+            .expect("save-record present");
+        assert_eq!(overridden.chord, Chord::from_str("mod+shift+s").expect("parses"));
+        assert_no_duplicate_chords(&resolved);
     }
 
     #[test]

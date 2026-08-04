@@ -751,7 +751,7 @@ fn citation_detail(
     let subtitle = detail.page.clone();
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
-        div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record, on_record_save),
+        div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record),
             DetailContainer {
                 title: detail.source.clone().unwrap_or_else(|| detail.human_id.clone()),
                 subtitle,

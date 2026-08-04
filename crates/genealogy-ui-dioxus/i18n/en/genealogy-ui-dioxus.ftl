@@ -105,6 +105,7 @@ palette-hint-anywhere = { $chord } from anywhere
 # Keyboard notices (the shell toast bound to a shortcut outcome)
 kbd-nothing-to-undo = Nothing to undo
 kbd-redo-unavailable = Redo isn't available — the log is append-only; re-apply the change from the History tab.
+kbd-nothing-to-save = Nothing to save
 notice-dismiss = Dismiss
 
 help-title = Keyboard shortcuts
@@ -115,6 +116,7 @@ help-col-within = Within a screen
 # Shortcut descriptions (the ? overlay rows)
 sc-command-palette = Command palette
 sc-new-record = New (context-aware)
+sc-save-record = Save record
 sc-find = Find / filter
 sc-undo = Undo
 sc-redo = Redo

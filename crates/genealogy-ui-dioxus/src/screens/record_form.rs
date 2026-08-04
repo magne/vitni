@@ -192,10 +192,15 @@ fn use_edit_write_through<D: RecordDraft>(key: EditKey, state: RecordEditState<D
 /// Fires **once per armed request** (the `ran` latch, peeked so writing it cannot re-trigger the
 /// effect). A record queued for saving whose draft turns out not to be savable is reported as a
 /// failure rather than left hanging — the run stops and every tab stays open.
+///
+/// Returns to view mode after `save` runs (`state.editing.set(false)`), the same as the pane's own
+/// Save button (`record_head_actions`): without it a shell-driven save (the close/quit confirm's
+/// **Save**, or `⌘S`) leaves the pane in edit mode with a stale `seed`, so the record still reads as
+/// dirty, keeps its parked buffer, and keeps the tabstrip's unsaved marker lit.
 pub fn use_save_on_request<D: RecordDraft>(
     category: Category,
     human_id: Option<&str>,
-    state: RecordEditState<D>,
+    mut state: RecordEditState<D>,
     save: Callback<()>,
 ) {
     let mut nav = use_context::<NavState>();
@@ -218,6 +223,7 @@ pub fn use_save_on_request<D: RecordDraft>(
         ran.set(true);
         if state.can_save() {
             save.call(());
+            state.editing.set(false);
         } else {
             nav.note_save_finished(key.category, key.human_id.as_deref(), false);
         }
@@ -325,14 +331,12 @@ where
 
 /// The record-scope keyboard shortcuts (`record-editing.html` §9), attached to a converted detail
 /// pane's wrapper. In view mode `e`/`F2` enters edit; in edit mode `Esc` cancels (stopping propagation
-/// so the shell's overlay-close does not also fire) and Ctrl/⌘+`s` saves when the draft can be saved.
+/// so the shell's overlay-close does not also fire). Save is the shell's `ShortcutAction::SaveRecord`
+/// (`⌘S`, ADR 0030) — a rebindable `Global` chord dispatched from the shell root and routed here via
+/// `use_save_on_request`, not a chord this pane's own keydown handles.
 /// Typing an unmodified `s`/`e` inside an input never reaches here — the inputs stop that propagation
 /// via `keep_typing_local`.
-pub fn record_keydown<D: RecordDraft>(
-    event: &KeyboardEvent,
-    mut state: RecordEditState<D>,
-    on_save: Callback<(D, ProvenanceDraft)>,
-) {
+pub fn record_keydown<D: RecordDraft>(event: &KeyboardEvent, mut state: RecordEditState<D>) {
     let key = event.key();
     let modifiers = event.modifiers();
     let typed = if let Key::Character(character) = &key {
@@ -351,10 +355,6 @@ pub fn record_keydown<D: RecordDraft>(
     if key == Key::Escape {
         event.stop_propagation();
         state.cancel();
-    } else if typed == Some("s") && chord && state.can_save() {
-        event.prevent_default();
-        on_save.call((state.draft.read().clone(), state.prov.read().clone()));
-        state.editing.set(false);
     }
 }
 

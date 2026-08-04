@@ -148,7 +148,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **the close/quit confirm cannot save** — the confirm landed (#200) and an in-progress edit now survives leaving its tab (#239), but keeping the edit still means cancelling, finding the record, saving, and closing again. Then the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, a WM-initiated close bypassing the confirm entirely, and `⌘S` outside the shortcut map. |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **the close/quit confirm cannot save** — the confirm landed (#200) and an in-progress edit now survives leaving its tab (#239), but keeping the edit still means cancelling, finding the record, saving, and closing again. Then the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, and a WM-initiated close bypassing the confirm entirely. |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
@@ -164,7 +164,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (20 so far)
+### `0.9 — UI stabilization` (19 so far)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
 audit could find by reading code; the rest came from using the GUI in earnest, which is exactly how it
@@ -180,10 +180,14 @@ the list on its own. Treat the count as a floor.
 | [Only one unsaved new record per category](https://github.com/magne/genealogy/issues/260) | Two new people cannot be sketched side by side; the draft's identity is its category, all the way down to the stash key |
 | [Switching map provider repaints nothing](https://github.com/magne/genealogy/issues/283) | The select accepts and persists two providers the map then ignores, with nothing in the UI saying so |
 | [A docked split mounts two detail panes, breaking `NavState`'s single-mount assumptions](https://github.com/magne/genealogy/issues/284) | One `⌘Z` retracts an assertion in **both** panes' records; fixed with #279, filed so the invariant has a home |
-| [`⌘S` lives outside the shortcut map](https://github.com/magne/genealogy/issues/206) | Save is neither listed by `?` nor rebindable — inconsistent with every other binding |
 
 #256 and #260 came out of the 2026-07-31 manual pass — the map and the shell respectively; #281–#284
 came out of the 2026-08-04 sweep alongside the #279 trace; the rest came from reading the code.
+
+**#206 is closed and dropped from this table:** `⌘S` is now `ShortcutAction::SaveRecord`, a `Global`,
+rebindable chord dispatched by the shell and routed to the mounted pane through the existing
+save-request machinery — listed by `?`, editable in Preferences, and working uniformly across every
+aggregate screen and create draft instead of only the 5 that wired it by hand.
 
 **#208 is closed and dropped from this table:** the 19 screen-local toasts (each with its own
 `use_signal`, disappearing silently on a tab switch and shifting the layout it reported on) are unified

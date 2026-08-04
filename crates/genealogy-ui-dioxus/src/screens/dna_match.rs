@@ -602,7 +602,7 @@ fn dna_match_detail(
     let labels = RecordActionLabels::resolve(loc);
     let status_actions = dna_match_status_actions(loc, on_submit, human_id);
     rsx! {
-        div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record, on_record_save),
+        div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record),
             DetailContainer {
                 title: detail.title.clone(),
                 id_label: Some(detail.human_id.clone()),
