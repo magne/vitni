@@ -28,9 +28,13 @@ const NEXT_HUMAN_ID_PAGE_SIZE: usize = 32;
 /// maximum. Working numerically (not lexicographically) also keeps allocation correct across
 /// width growth (`I9999` → `I10000`). An empty projection (or none matching the format) yields the
 /// first id. Runs on one acquired connection, per `_human_id_len_idx`'s per-length-group shape.
+///
+/// Every query it issues is an index probe over `_human_id_len_idx`, so the cost tracks how many
+/// distinct id widths a workspace holds (one, normally) rather than how many rows the projection
+/// has — the point of issue #233.
 pub(crate) async fn next_human_id(pool: &Pool<Sqlite>, table: &str, format: &IdFormat) -> Result<String, DbError> {
     let mut conn = pool.acquire().await.map_err(|e| DbError::Backend(e.to_string()))?;
-    let lengths = distinct_human_id_lengths(&mut conn, table).await?;
+    let lengths = human_id_lengths_descending(&mut conn, table).await?;
 
     let mut highest: Option<u64> = None;
     for len in lengths {
@@ -41,15 +45,43 @@ pub(crate) async fn next_human_id(pool: &Pool<Sqlite>, table: &str, format: &IdF
     Ok(format.render(highest.map_or(1, |max| max + 1)))
 }
 
-/// Returns every distinct `human_id` length present in `table` — a skip-scan over
-/// `_human_id_len_idx`, the group boundaries [`next_human_id`] takes its per-group max within.
-async fn distinct_human_id_lengths(conn: &mut SqliteConnection, table: &str) -> Result<Vec<i64>, DbError> {
-    let sql = format!("SELECT DISTINCT length(human_id) AS len FROM {table} WHERE human_id IS NOT NULL");
-    let rows = sqlx::query(&sql)
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(|e| DbError::Backend(e.to_string()))?;
-    Ok(rows.iter().map(|row| row.get("len")).collect())
+/// Returns every distinct `human_id` length present in `table`, longest first — the group boundaries
+/// [`next_human_id`] takes its per-group max within.
+///
+/// Walks the lengths one at a time, each step an index probe for "the longest id shorter than the
+/// last one", so it reads one row per distinct length. `SELECT DISTINCT length(human_id)` reads the
+/// same answer off *every* row instead: SQLite has no loose index scan, so it walks the whole index
+/// (measured at 50 000 rows: 1.745 ms against 0.010 ms for one probe here), which would leave the
+/// allocator O(rows) — the scan issue #233 exists to remove.
+async fn human_id_lengths_descending(conn: &mut SqliteConnection, table: &str) -> Result<Vec<i64>, DbError> {
+    let mut lengths = Vec::new();
+    let mut shorter_than: Option<i64> = None;
+    loop {
+        let sql = match shorter_than {
+            None => format!(
+                "SELECT length(human_id) AS len FROM {table} WHERE human_id IS NOT NULL \
+                 ORDER BY length(human_id) DESC LIMIT 1"
+            ),
+            Some(_) => format!(
+                "SELECT length(human_id) AS len FROM {table} WHERE human_id IS NOT NULL \
+                 AND length(human_id) < ? ORDER BY length(human_id) DESC LIMIT 1"
+            ),
+        };
+        let mut query = sqlx::query(&sql);
+        if let Some(bound) = shorter_than {
+            query = query.bind(bound);
+        }
+        let row = query
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|e| DbError::Backend(e.to_string()))?;
+        let Some(row) = row else {
+            return Ok(lengths);
+        };
+        let len: i64 = row.get("len");
+        lengths.push(len);
+        shorter_than = Some(len);
+    }
 }
 
 /// Returns the numeric max among the `human_id`s of length `len` in `table`, or `None` if none of

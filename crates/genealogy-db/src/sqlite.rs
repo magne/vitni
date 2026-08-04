@@ -1804,6 +1804,27 @@ mod tests {
             !allocator_plan.iter().any(|step| step.contains("USE TEMP B-TREE")),
             "the length index should already provide the DESC order, got {allocator_plan:?}"
         );
+
+        // The allocator's length walk steps by index probe — `SEARCH … (<expr><?)` — so it reads one
+        // row per distinct id width. `SELECT DISTINCT length(human_id)` would answer the same
+        // question by walking every index entry (SQLite has no loose index scan), which is the
+        // per-row read issue #233 removes.
+        let length_walk_plan = explain_query_plan(
+            &store.pool,
+            "SELECT length(human_id) AS len FROM person_view WHERE human_id IS NOT NULL \
+             AND length(human_id) < 8 ORDER BY length(human_id) DESC LIMIT 1",
+        )
+        .await;
+        assert!(
+            length_walk_plan
+                .iter()
+                .any(|step| step.contains("SEARCH") && step.contains("USING INDEX person_view_human_id_len_idx")),
+            "expected the length walk to probe the length index, got {length_walk_plan:?}"
+        );
+        assert!(
+            !length_walk_plan.iter().any(|step| step.contains("USE TEMP B-TREE")),
+            "the length index should already provide the DESC order, got {length_walk_plan:?}"
+        );
     }
 
     #[tokio::test]

@@ -24,10 +24,11 @@ const NEXT_HUMAN_ID_PAGE_SIZE: usize = 32;
 /// max across groups. Grouping first is required because `IdFormat::extract_number` does not check
 /// digit count, so a lexical scan across mixed widths would hand back a non-maximal number. An
 /// empty projection (or none matching the format) yields the first id. Runs on one acquired
-/// connection, per `_human_id_len_idx`'s per-length-group shape.
+/// connection, per `_human_id_len_idx`'s per-length-group shape. Every query it issues is an index
+/// probe, so its cost tracks the number of distinct id widths, not the row count (issue #233).
 pub(crate) async fn next_human_id(pool: &Pool<Postgres>, table: &str, format: &IdFormat) -> Result<String, DbError> {
     let mut conn = pool.acquire().await.map_err(|e| DbError::Backend(e.to_string()))?;
-    let lengths = distinct_human_id_lengths(&mut conn, table).await?;
+    let lengths = human_id_lengths_descending(&mut conn, table).await?;
 
     let mut highest: Option<u64> = None;
     for len in lengths {
@@ -38,15 +39,39 @@ pub(crate) async fn next_human_id(pool: &Pool<Postgres>, table: &str, format: &I
     Ok(format.render(highest.map_or(1, |max| max + 1)))
 }
 
-/// Returns every distinct `human_id` length present in `table` — a skip-scan over
-/// `_human_id_len_idx`, the group boundaries [`next_human_id`] takes its per-group max within.
-async fn distinct_human_id_lengths(conn: &mut PgConnection, table: &str) -> Result<Vec<i32>, DbError> {
-    let sql = format!("SELECT DISTINCT length(human_id) AS len FROM {table} WHERE human_id IS NOT NULL");
-    let rows = sqlx::query(&sql)
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(|e| DbError::Backend(e.to_string()))?;
-    Ok(rows.iter().map(|row| row.get("len")).collect())
+/// Returns every distinct `human_id` length present in `table`, longest first — the Postgres twin of
+/// [`crate::sqlite_query::human_id_lengths_descending`], and for the same reason: one index probe per
+/// distinct length rather than `SELECT DISTINCT length(human_id)`, which reads the answer off every
+/// row and would leave the allocator O(rows).
+async fn human_id_lengths_descending(conn: &mut PgConnection, table: &str) -> Result<Vec<i32>, DbError> {
+    let mut lengths = Vec::new();
+    let mut shorter_than: Option<i32> = None;
+    loop {
+        let sql = match shorter_than {
+            None => format!(
+                "SELECT length(human_id) AS len FROM {table} WHERE human_id IS NOT NULL \
+                 ORDER BY length(human_id) DESC LIMIT 1"
+            ),
+            Some(_) => format!(
+                "SELECT length(human_id) AS len FROM {table} WHERE human_id IS NOT NULL \
+                 AND length(human_id) < $1 ORDER BY length(human_id) DESC LIMIT 1"
+            ),
+        };
+        let mut query = sqlx::query(&sql);
+        if let Some(bound) = shorter_than {
+            query = query.bind(bound);
+        }
+        let row = query
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|e| DbError::Backend(e.to_string()))?;
+        let Some(row) = row else {
+            return Ok(lengths);
+        };
+        let len: i32 = row.get("len");
+        lengths.push(len);
+        shorter_than = Some(len);
+    }
 }
 
 /// Returns the numeric max among the `human_id`s of length `len` in `table`, or `None` if none of
