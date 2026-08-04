@@ -23,8 +23,8 @@ use crate::schema;
 use crate::store::{CommandError, DbError, map_aggregate_error};
 use crate::tables::{
     ALL_VIEW_TABLES, CITATION_VIEW_TABLE, DNA_MATCH_VIEW_TABLE, DNA_TEST_VIEW_TABLE, EVENT_VIEW_TABLE,
-    FAMILY_VIEW_TABLE, MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, REPOSITORY_VIEW_TABLE,
-    RESEARCH_NOTE_VIEW_TABLE, SOURCE_VIEW_TABLE, TAG_VIEW_TABLE,
+    FAMILY_VIEW_TABLE, HUMAN_ID_VIEW_TABLES, MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE,
+    REPOSITORY_VIEW_TABLE, RESEARCH_NOTE_VIEW_TABLE, SOURCE_VIEW_TABLE, TAG_VIEW_TABLE,
 };
 
 /// The default pool size for a Postgres workspace connection.
@@ -113,11 +113,12 @@ macro_rules! postgres_store {
                 schema::init_postgres(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("initializing event store: {e}")))?;
-                for &table in ALL_VIEW_TABLES {
-                    schema::create_postgres_view_table(&pool, table)
-                        .await
-                        .map_err(|e| DbError::Backend(format!("creating projection table {table}: {e}")))?;
-                }
+                // Drops and recreates any view table left over from before the `human_id` column
+                // existed (ADR 0032), creates every table fresh, and indexes the human-id-bearing
+                // ones; returns which tables were dropped, so their aggregate's event log can be
+                // replayed to repopulate them below (rebuilding needs the aggregate's `State`/`View`
+                // types, which this untyped helper does not have).
+                let stale_tables = migrate_postgres_view_tables(&pool).await?;
                 // The Place succession cross-reference index (ADR 0026 §4) is not one of the generic
                 // per-aggregate projections: it is derived from the Place projection and keyed by its
                 // own tables. Its DDL is created up front, and its `Query` is appended only to the
@@ -129,6 +130,13 @@ macro_rules! postgres_store {
                     let repo = Arc::new(PostgresViewRepository::<$View, $State>::new($table_const, pool.clone()));
                     let $snake = postgres_open_cqrs!(pool, repo, $wiring);
                     let $snake = postgres_wire_place_indexes!($snake, pool, $snake);
+                    if stale_tables.contains(&$table_const) {
+                        tracing::info!(
+                            table = $table_const,
+                            "projection table predated the human_id column; rebuilding from the event log"
+                        );
+                        rebuild_view::<$State, $View>(&pool, $table_const, $upcasters).await?;
+                    }
                 )+
                 Ok(Self { $($snake,)+ pool })
             }
@@ -252,6 +260,37 @@ impl PostgresStore {
     ) -> Result<Vec<genealogy_core::research_note::ResearchNoteView>, DbError> {
         postgres_query::list_views_by_subject(&self.pool, RESEARCH_NOTE_VIEW_TABLE, subject_kind, subject_value).await
     }
+}
+
+/// Brings every view table to the current shape (ADR 0032) — the Postgres twin of
+/// [`crate::sqlite::migrate_sqlite_view_tables`]: drops any table left over from before the
+/// generated `human_id` column existed (a generated column cannot be added by `ALTER TABLE`, so a
+/// shape change is a drop, not a migration), recreates every table (idempotent when nothing was
+/// stale), and indexes the human-id-bearing ones (`HUMAN_ID_VIEW_TABLES`). Returns which tables
+/// were dropped, so the caller — which has the aggregate `State`/`View` types this untyped helper
+/// does not — can replay their event logs to repopulate them.
+async fn migrate_postgres_view_tables(pool: &Pool<Postgres>) -> Result<Vec<&'static str>, DbError> {
+    let mut stale_tables = Vec::new();
+    for &table in ALL_VIEW_TABLES {
+        let was_stale = schema::postgres_view_table_is_stale(pool, table)
+            .await
+            .map_err(|e| DbError::Backend(format!("probing projection table {table}: {e}")))?;
+        if was_stale {
+            schema::drop_postgres_view_table(pool, table)
+                .await
+                .map_err(|e| DbError::Backend(format!("dropping stale projection table {table}: {e}")))?;
+            stale_tables.push(table);
+        }
+        schema::create_postgres_view_table(pool, table)
+            .await
+            .map_err(|e| DbError::Backend(format!("creating projection table {table}: {e}")))?;
+    }
+    for &table in HUMAN_ID_VIEW_TABLES {
+        schema::create_postgres_human_id_indexes(pool, table)
+            .await
+            .map_err(|e| DbError::Backend(format!("creating human_id indexes for {table}: {e}")))?;
+    }
+    Ok(stale_tables)
 }
 
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).

@@ -19,8 +19,8 @@ use crate::sqlite_query;
 use crate::store::{CommandError, DbError, map_aggregate_error};
 use crate::tables::{
     ALL_VIEW_TABLES, CITATION_VIEW_TABLE, DNA_MATCH_VIEW_TABLE, DNA_TEST_VIEW_TABLE, EVENT_VIEW_TABLE,
-    FAMILY_VIEW_TABLE, MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, REPOSITORY_VIEW_TABLE,
-    RESEARCH_NOTE_VIEW_TABLE, SOURCE_VIEW_TABLE, TAG_VIEW_TABLE,
+    FAMILY_VIEW_TABLE, HUMAN_ID_VIEW_TABLES, MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE,
+    REPOSITORY_VIEW_TABLE, RESEARCH_NOTE_VIEW_TABLE, SOURCE_VIEW_TABLE, TAG_VIEW_TABLE,
 };
 
 /// Builds one aggregate's `CqrsFramework` in `open()`, matching the registry `wiring` column: a
@@ -97,11 +97,12 @@ macro_rules! sqlite_store {
                 schema::init_sqlite(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("initializing event store: {e}")))?;
-                for &table in ALL_VIEW_TABLES {
-                    schema::create_sqlite_view_table(&pool, table)
-                        .await
-                        .map_err(|e| DbError::Backend(format!("creating projection table {table}: {e}")))?;
-                }
+                // Drops and recreates any view table left over from before the `human_id` column
+                // existed (ADR 0032), creates every table fresh, and indexes the human-id-bearing
+                // ones; returns which tables were dropped, so their aggregate's event log can be
+                // replayed to repopulate them below (rebuilding needs the aggregate's `State`/`View`
+                // types, which this untyped helper does not have).
+                let stale_tables = migrate_sqlite_view_tables(&pool).await?;
                 // The Place geometry spatial index (ADR 0024 §3) is not one of the generic
                 // per-aggregate projections: it is derived from the Place projection, keyed by its
                 // own tables, and sqlite-only. Its DDL is created up front, and its `Query` is
@@ -119,6 +120,13 @@ macro_rules! sqlite_store {
                     let repo = Arc::new(SqliteViewRepository::<$View, $State>::new($table_const, pool.clone()));
                     let $snake = sqlite_open_cqrs!(pool, repo, $wiring);
                     let $snake = sqlite_wire_place_indexes!($snake, pool, $snake);
+                    if stale_tables.contains(&$table_const) {
+                        tracing::info!(
+                            table = $table_const,
+                            "projection table predated the human_id column; rebuilding from the event log"
+                        );
+                        rebuild_view::<$State, $View>(&pool, $table_const, $upcasters).await?;
+                    }
                 )+
                 Ok(Self { $($snake,)+ pool })
             }
@@ -255,6 +263,36 @@ impl SqliteStore {
     ) -> Result<Vec<genealogy_core::research_note::ResearchNoteView>, DbError> {
         sqlite_query::list_views_by_subject(&self.pool, RESEARCH_NOTE_VIEW_TABLE, subject_kind, subject_value).await
     }
+}
+
+/// Brings every view table to the current shape (ADR 0032): drops any table left over from before
+/// the generated `human_id` column existed (SQLite cannot `ALTER TABLE ADD COLUMN ... STORED`, so
+/// a shape change is a drop, not a migration), recreates every table (idempotent when nothing was
+/// stale), and indexes the human-id-bearing ones (`HUMAN_ID_VIEW_TABLES`). Returns which tables
+/// were dropped, so the caller — which has the aggregate `State`/`View` types this untyped helper
+/// does not — can replay their event logs to repopulate them.
+async fn migrate_sqlite_view_tables(pool: &Pool<Sqlite>) -> Result<Vec<&'static str>, DbError> {
+    let mut stale_tables = Vec::new();
+    for &table in ALL_VIEW_TABLES {
+        let was_stale = schema::sqlite_view_table_is_stale(pool, table)
+            .await
+            .map_err(|e| DbError::Backend(format!("probing projection table {table}: {e}")))?;
+        if was_stale {
+            schema::drop_sqlite_view_table(pool, table)
+                .await
+                .map_err(|e| DbError::Backend(format!("dropping stale projection table {table}: {e}")))?;
+            stale_tables.push(table);
+        }
+        schema::create_sqlite_view_table(pool, table)
+            .await
+            .map_err(|e| DbError::Backend(format!("creating projection table {table}: {e}")))?;
+    }
+    for &table in HUMAN_ID_VIEW_TABLES {
+        schema::create_sqlite_human_id_indexes(pool, table)
+            .await
+            .map_err(|e| DbError::Backend(format!("creating human_id indexes for {table}: {e}")))?;
+    }
+    Ok(stale_tables)
 }
 
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).
@@ -1706,5 +1744,138 @@ mod tests {
             .await
             .unwrap();
         assert!(none_found.is_empty());
+    }
+
+    /// Runs `EXPLAIN QUERY PLAN` for `sql` against `pool` and returns each step's `detail` — the
+    /// plan-shape assertions (ADR 0032) read for `SEARCH ... USING INDEX ...` vs. a full `SCAN`.
+    async fn explain_query_plan(pool: &sqlx::Pool<sqlx::Sqlite>, sql: &str) -> Vec<String> {
+        sqlx::query(&format!("EXPLAIN QUERY PLAN {sql}"))
+            .fetch_all(pool)
+            .await
+            .unwrap()
+            .iter()
+            .map(|row| row.get("detail"))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn the_human_id_lookup_and_allocator_queries_use_their_indexes() {
+        let (store, _dir) = store().await;
+        let person_id = PersonId::from_uuid(Uuid::from_u128(1));
+        store
+            .execute_person(
+                &person_id.to_string(),
+                PersonCommandEnvelope {
+                    meta: meta(2),
+                    command: PersonCommand::CreatePerson {
+                        person_id,
+                        human_id: HumanId::new("I0001"),
+                        evidence_level: EvidenceLevel::Conclusion,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        // `find_person` (ADR 0009's secondary-lookup surface) hits the equality index, not a scan.
+        let find_plan =
+            explain_query_plan(&store.pool, "SELECT payload FROM person_view WHERE human_id = 'I0001'").await;
+        assert!(
+            find_plan
+                .iter()
+                .any(|step| step.contains("USING INDEX person_view_human_id_idx")),
+            "expected the equality index, got {find_plan:?}"
+        );
+
+        // The allocator's per-length-group descending scan hits the length index and needs no
+        // temp b-tree to satisfy `ORDER BY human_id DESC` — the index already provides that order.
+        let allocator_plan = explain_query_plan(
+            &store.pool,
+            "SELECT human_id FROM person_view WHERE length(human_id) = 5 ORDER BY human_id DESC LIMIT 32",
+        )
+        .await;
+        assert!(
+            allocator_plan
+                .iter()
+                .any(|step| step.contains("USING INDEX person_view_human_id_len_idx")),
+            "expected the length index, got {allocator_plan:?}"
+        );
+        assert!(
+            !allocator_plan.iter().any(|step| step.contains("USE TEMP B-TREE")),
+            "the length index should already provide the DESC order, got {allocator_plan:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_legacy_view_table_is_dropped_and_rebuilt_from_the_log_on_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let url = format!("sqlite://{}", dir.path().join("ws.sqlite3").display());
+        let store = SqliteStore::open(&url).await.unwrap();
+        let person_id = PersonId::from_uuid(Uuid::from_u128(1));
+        store
+            .execute_person(
+                &person_id.to_string(),
+                PersonCommandEnvelope {
+                    meta: meta(2),
+                    command: PersonCommand::CreatePerson {
+                        person_id,
+                        human_id: HumanId::new("I0001"),
+                        evidence_level: EvidenceLevel::Conclusion,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        let pool = store.pool.clone();
+        drop(store);
+
+        // Downgrade `person_view` to the pre-ADR-0032, three-column shape — what a workspace
+        // created before the `human_id` column existed would still have on disk. The event log
+        // (untouched here) is what the reopen below must replay to repopulate it.
+        sqlx::query("DROP TABLE person_view").execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE person_view (\
+             view_id TEXT NOT NULL PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        drop(pool);
+
+        // Reopening detects the stale shape, drops and recreates the table, and replays the
+        // (intact) event log to repopulate it.
+        let store = SqliteStore::open(&url).await.unwrap();
+        assert!(
+            !super::schema::sqlite_view_table_is_stale(&store.pool, super::PERSON_VIEW_TABLE)
+                .await
+                .unwrap(),
+            "reopen must have brought person_view to the current shape"
+        );
+        let indexes: Vec<String> =
+            sqlx::query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'person_view'")
+                .fetch_all(&store.pool)
+                .await
+                .unwrap()
+                .iter()
+                .map(|row| row.get("name"))
+                .collect();
+        assert!(indexes.contains(&"person_view_human_id_idx".to_owned()));
+        assert!(indexes.contains(&"person_view_human_id_len_idx".to_owned()));
+
+        // The row survived — not by carrying over the dropped table's data, but rebuilt from the
+        // (untouched) event log.
+        let view = store.find_person("I0001").await.unwrap().expect("rebuilt from the log");
+        assert_eq!(view.human_id().map(ToString::to_string), Some("I0001".to_owned()));
+
+        // Reopening again is idempotent: the table is already current, so no further drop/rebuild
+        // happens, and the row is neither lost nor duplicated.
+        drop(store);
+        let store = SqliteStore::open(&url).await.unwrap();
+        let rows: i64 = sqlx::query("SELECT COUNT(*) AS n FROM person_view")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap()
+            .get("n");
+        assert_eq!(rows, 1, "a second reopen must not duplicate or drop the rebuilt row");
     }
 }

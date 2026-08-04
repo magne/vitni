@@ -1,45 +1,112 @@
 //! Read-model queries over the conclusion projections — private SQLite internals.
 //!
 //! Each aggregate's projection is one row per instance in its `*_view` table
-//! (`view_id, version, payload`), where `payload` is the serialized view. Every view serializes as
-//! `{ "state": { … } }`, so the user-facing identifier is at the JSON path `$.state.human_id`
-//! (SQLite `json_extract`, the secondary-lookup surface fixed by ADR 0009). The queries are generic
-//! over the view type and parameterized by the (code-supplied, trusted) table name, so every
-//! aggregate reuses one implementation. These functions are `pub(crate)`; the engine-neutral
-//! surface is [`crate::store::Store`].
+//! (`view_id, version, payload, human_id`), where `payload` is the serialized view and `human_id`
+//! is a `GENERATED ALWAYS ... STORED` column mirroring the JSON path `$.state.human_id` (ADR 0032,
+//! superseding the `json_extract` scans ADR 0009 originally fixed), indexed for every aggregate
+//! but Tag (`HUMAN_ID_VIEW_TABLES`). The queries are generic over the view type and parameterized
+//! by the (code-supplied, trusted) table name, so every aggregate reuses one implementation. These
+//! functions are `pub(crate)`; the engine-neutral surface is [`crate::store::Store`].
 
 use genealogy_core::id_format::IdFormat;
 use serde::de::DeserializeOwned;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row, Sqlite, SqliteConnection};
 
 use crate::store::{DbError, StoredEvent};
 
+/// How many candidate ids a `next_human_id` length-group page fetches at a time; a page is
+/// re-fetched (with the last row as the new keyset cursor) only when every id in it fails to
+/// parse under `format` — junk this deep is not the expected case.
+const NEXT_HUMAN_ID_PAGE_SIZE: usize = 32;
+
 /// Returns the next free `human_id` for `format` in `table` (e.g. `I0001`, then `I0002`).
 ///
-/// Reads every stored `human_id`, extracts each id's numeric part with the format, takes the
-/// maximum, and renders `max + 1`. Working numerically (not lexicographically) keeps allocation
-/// correct across width growth (`I9999` → `I10000`) and for arbitrary prefix/suffix patterns. An
-/// empty projection (or none matching the format) yields the first id.
+/// Groups the indexed `human_id` values by length and takes the numeric max within each group via
+/// [`max_number_in_length_group`], then the max across groups — grouping first because
+/// `IdFormat::extract_number` does not check digit count, so a lexical/descending scan across
+/// mixed widths (`I00000003` sorts after `I10001`) would hand back a number that is not the true
+/// maximum. Working numerically (not lexicographically) also keeps allocation correct across
+/// width growth (`I9999` → `I10000`). An empty projection (or none matching the format) yields the
+/// first id. Runs on one acquired connection, per `_human_id_len_idx`'s per-length-group shape.
 pub(crate) async fn next_human_id(pool: &Pool<Sqlite>, table: &str, format: &IdFormat) -> Result<String, DbError> {
-    let sql = format!("SELECT json_extract(payload, '$.state.human_id') AS human_id FROM {table}");
-    let rows = sqlx::query(&sql)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| DbError::Backend(e.to_string()))?;
+    let mut conn = pool.acquire().await.map_err(|e| DbError::Backend(e.to_string()))?;
+    let lengths = distinct_human_id_lengths(&mut conn, table).await?;
 
-    let mut highest = 0u64;
-    let mut seen = false;
-    for row in rows {
-        let stored: Option<String> = row.get("human_id");
-        let Some(stored) = stored else { continue };
-        if let Some(number) = format.extract_number(&stored) {
-            seen = true;
-            highest = highest.max(number);
+    let mut highest: Option<u64> = None;
+    for len in lengths {
+        if let Some(candidate) = max_number_in_length_group(&mut conn, table, len, format).await? {
+            highest = Some(highest.map_or(candidate, |current| current.max(candidate)));
         }
     }
+    Ok(format.render(highest.map_or(1, |max| max + 1)))
+}
 
-    let next = if seen { highest + 1 } else { 1 };
-    Ok(format.render(next))
+/// Returns every distinct `human_id` length present in `table` — a skip-scan over
+/// `_human_id_len_idx`, the group boundaries [`next_human_id`] takes its per-group max within.
+async fn distinct_human_id_lengths(conn: &mut SqliteConnection, table: &str) -> Result<Vec<i64>, DbError> {
+    let sql = format!("SELECT DISTINCT length(human_id) AS len FROM {table} WHERE human_id IS NOT NULL");
+    let rows = sqlx::query(&sql)
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+    Ok(rows.iter().map(|row| row.get("len")).collect())
+}
+
+/// Returns the numeric max among the `human_id`s of length `len` in `table`, or `None` if none of
+/// them parse under `format`.
+///
+/// Within one length, lexical order is numeric order, so a descending scan's first parseable value
+/// is the group's max — no need to read the whole group. Pages in
+/// [`NEXT_HUMAN_ID_PAGE_SIZE`]-row chunks (keyset-paged on `human_id`) so a run of unparseable ids
+/// longer than one page cannot hide a real max behind it.
+async fn max_number_in_length_group(
+    conn: &mut SqliteConnection,
+    table: &str,
+    len: i64,
+    format: &IdFormat,
+) -> Result<Option<u64>, DbError> {
+    let mut cursor: Option<String> = None;
+    loop {
+        let page = fetch_length_group_page(conn, table, len, cursor.as_deref()).await?;
+        for human_id in &page {
+            if let Some(number) = format.extract_number(human_id) {
+                return Ok(Some(number));
+            }
+        }
+        if page.len() < NEXT_HUMAN_ID_PAGE_SIZE {
+            return Ok(None);
+        }
+        cursor = page.into_iter().next_back();
+    }
+}
+
+/// Fetches one descending, keyset-paged page of `human_id`s of length `len` in `table`, strictly
+/// below `cursor` (the previous page's last row) when given.
+async fn fetch_length_group_page(
+    conn: &mut SqliteConnection,
+    table: &str,
+    len: i64,
+    cursor: Option<&str>,
+) -> Result<Vec<String>, DbError> {
+    let sql = match cursor {
+        None => format!(
+            "SELECT human_id FROM {table} WHERE length(human_id) = ? \
+             ORDER BY human_id DESC LIMIT {NEXT_HUMAN_ID_PAGE_SIZE}"
+        ),
+        Some(_) => format!(
+            "SELECT human_id FROM {table} WHERE length(human_id) = ? AND human_id < ? \
+             ORDER BY human_id DESC LIMIT {NEXT_HUMAN_ID_PAGE_SIZE}"
+        ),
+    };
+    let mut query = sqlx::query(&sql).bind(len);
+    if let Some(cursor) = cursor {
+        query = query.bind(cursor);
+    }
+    let rows = query
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+    Ok(rows.iter().map(|row| row.get("human_id")).collect())
 }
 
 /// Loads the view in `table` whose `human_id` equals `human_id`, if any.
@@ -48,7 +115,7 @@ pub(crate) async fn find_view_by_human_id<V: DeserializeOwned>(
     table: &str,
     human_id: &str,
 ) -> Result<Option<V>, DbError> {
-    let sql = format!("SELECT payload FROM {table} WHERE json_extract(payload, '$.state.human_id') = ?");
+    let sql = format!("SELECT payload FROM {table} WHERE human_id = ?");
     let row = sqlx::query(&sql)
         .bind(human_id)
         .fetch_optional(pool)
@@ -113,7 +180,7 @@ pub(crate) async fn list_views_by_subject<V: DeserializeOwned>(
         "SELECT payload FROM {table} WHERE EXISTS (\
          SELECT 1 FROM json_each(payload, '$.state.subjects') je \
          WHERE json_extract(je.value, '$.{subject_kind}') = ?) \
-         ORDER BY json_extract(payload, '$.state.human_id')"
+         ORDER BY human_id"
     );
     let rows = sqlx::query(&sql)
         .bind(subject_value)
@@ -154,7 +221,7 @@ pub(crate) async fn find_view_by_id<V: DeserializeOwned>(
 
 /// Loads every view in `table`, ordered by `human_id`.
 pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Sqlite>, table: &str) -> Result<Vec<V>, DbError> {
-    let sql = format!("SELECT payload FROM {table} ORDER BY json_extract(payload, '$.state.human_id')");
+    let sql = format!("SELECT payload FROM {table} ORDER BY human_id");
     let rows = sqlx::query(&sql)
         .fetch_all(pool)
         .await
@@ -224,7 +291,7 @@ pub(crate) async fn read_recent_events(pool: &Pool<Sqlite>, limit: u32) -> Resul
 /// Lets the change-log resolve an event's `aggregate_id` (a UUID) to the user-facing id a frontend
 /// links to.
 pub(crate) async fn human_id_index(pool: &Pool<Sqlite>, table: &str) -> Result<Vec<(String, String)>, DbError> {
-    let sql = format!("SELECT view_id, json_extract(payload, '$.state.human_id') AS human_id FROM {table}");
+    let sql = format!("SELECT view_id, human_id FROM {table}");
     let rows = sqlx::query(&sql)
         .fetch_all(pool)
         .await
