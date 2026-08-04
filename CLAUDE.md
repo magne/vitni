@@ -150,8 +150,9 @@ path is the caller's own). Read the PNGs under `target/gui-pass/shots/<scenario>
 
 Writing one:
 
-- **Coordinates are window pixels at 1800×1200**, read straight off an earlier shot. Re-read them when
-  the rail or a toolbar moves.
+- **Coordinates are window pixels at the scenario's `window`, 1800×1200 by default**, read straight off
+  an earlier shot. Re-read them when the rail or a toolbar moves, and never carry one scenario's
+  coordinates into another `window` size — a narrow-window layout reflows, it doesn't just crop.
 - **`match` against the shot taken immediately before the change**, never against the first shot — focus
   rings are real pixels and move as a scenario runs.
 - **`region` when a whole-window compare can't isolate the change** — e.g. a repaint elsewhere in the

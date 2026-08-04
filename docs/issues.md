@@ -17,10 +17,17 @@ Two conventions:
 
 ## Bugs
 
-Two open defects, both found by code reading rather than use, and both tracked under the area they
-affect: *Postgres place-detail reads fail outright* under *Performance & scale*, and *map markers label
-with the first-asserted name* under *Geography & map*. The five Phase 9 map/geometry bugs are fixed and
-archived; two of those fixes ship without test coverage, also tracked under *Geography & map*.
+No open defects here. The two this preamble used to name are fixed and their bullets deleted per §6 of
+[`issue-tracking.md`](issue-tracking.md) — *Postgres place-detail reads fail outright* with #231 and
+*map markers label with the first-asserted name* with #232 — but the preamble was not updated with
+them, so it went on advertising bullets the file no longer held. The five Phase 9 map/geometry bugs are
+fixed and archived; the two of those fixes that ship without test coverage now have the bullet
+[`archive/completed-work.md`](archive/completed-work.md) always claimed they had, under *Geography &
+map*.
+
+Open bugs take their `area/*` from whichever area they affect, plus `type/bug`, and live under that
+area's `###` heading — see the [`issue-sync`](#docs--repo-tooling) item for the one place that rule and
+the tool disagree.
 
 ## Records & data model
 
@@ -128,8 +135,6 @@ long-standing "DNA match views in the UI" item is closed.
 
 - **Toast notifications.** Show a toast at the bottom of the work area, auto-dismissed after a set
   time. — #208
-- **Remember the open record's tab.** Record-detail view should restore the last-shown tab while the
-  record stays open, and forget it once closed. — #209
 - **A `SidePanel`'s background is not `inert`.** The panel now traps and restores focus like `Modal`
   (#247), so neither `Tab` nor the pointer can reach the shell behind it, but assistive tech still
   can: `shell/root.rs` inerts `.app` for the overlays and the close/quit confirm, and every
@@ -144,16 +149,27 @@ long-standing "DNA match views in the UI" item is closed.
   `commit_draft`/`cancel_draft`/`note_save_finished` find their target — two drafts would share one
   parked buffer and one component instance. Lifting the limit means threading a draft id through all of
   those; the tabstrip only needs its label disambiguated. — #260
-- **Detail-tab clicks do nothing while a record is docked.** With a split open
-  (`NavState::docked_record`, `⌘⇧1…9` or a tab dragged onto the pane), clicking a related-item tab —
-  Overview / Map / Names / Hierarchy … — changes nothing in *either* pane; the identical click switches
-  tabs as soon as the dock is closed. Reproduced headlessly on 2026-08-04: a `match` over the active
-  pane's tab strip before/after the click reads RMSE 0.0000 while docked, and a `differ` over the same
-  region passes once undocked. SSR cannot see it — the markup is identical either way, and
-  `tests/dock.rs` asserts the split renders, not that it stays operable. Suspect the duplicate element
-  ids `Tabs` emits (`id="tab-{id}"`, `aria-controls="panel-{id}"`) once two panes render the same
-  strip, but that is a hypothesis, not a diagnosis. Docking is unusable for anything but the Overview
-  tab until this is fixed. — #279
+- **A docked pane's tab-strip hit region sits above its painted row.** The residual of #279's
+  user-visible symptom: with a split open, a tab strip's clickable region is ~9–14px above the row as
+  painted, in *both* panes, so a click aimed at the visible label misses. Measured at 1800×1200 — the
+  active pane's label paints centred on y≈249 and a click there does nothing (RMSE 0.0007 over the pane
+  region) while y=240 switches; the docked pane paints at y≈295 and only y=285 hits. At 1280×840 the row
+  paints at y≈273 and lands at y=260, so it does not scale with the window. Reproduces on `main` and
+  above the 1280px breakpoint, so it is independent of the `.split-2` collapse fixed with #279. Not
+  duplicate ids (see *Decided*), not a stale VDOM subtree (forcing a rebuild and a remount each changed
+  nothing), not `.tabs`'s `mask-image`. Probably a WebKitGTK software-GL paint/hit-test misalignment
+  inside a multi-track CSS grid — **check a real GPU first**: if it is Xvfb-only it is a harness caveat,
+  not a shipped defect. The two `docked-*` gui-pass scenarios aim above each label and say so. — #285
+- **A docked split mounts two detail panes, breaking `NavState`'s single-mount assumptions.**
+  `edit_drafts`, `save_request`/`save_queue` and `pending_step` each document their design as safe
+  *because* "only the active tab's pane is mounted" (`shell/nav_state.rs`), which a dock makes false.
+  Audited one by one, only `pending_undo` is actually broken: `use_record_undo` (`screens/shared.rs`) is
+  called by all 13 detail panes and latches a *per-pane* `seen` against a *shell-wide* counter, so one
+  `⌘Z` retracts the newest undoable assertion of **both** records and two "Nothing to undo" notices race
+  for `nav.notice`. `use_save_on_request` already compares an `EditKey`, and `use_record_step` has a
+  single caller in `shell/explorer.rs`, so save and `[`/`]` stepping are correct — their stated reasons
+  are not. The class is what matters: a shell-wide ticket a *detail pane* consumes must be addressed,
+  not bumped. — #284
 
 ### Lists, search & scale
 
@@ -181,7 +197,7 @@ Residuals from the shortcuts work (ADR 0030); see
   instead, and nothing intercepts it there to raise the same dialog (`rg CloseRequested` matches only
   `window_geometry.rs` and `recent_persistence.rs`, both persistence backstops, neither a confirm gate)
   — so unsaved work is discarded silently. `cargo xtask gui-pass` cannot drive this to prove it either
-  way: its Xvfb display runs no window manager, so there is no titlebar to close.
+  way: its Xvfb display runs no window manager, so there is no titlebar to close. — #281
 - **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
   its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
   so it is neither listed by the `?` overlay nor rebindable, and it does not go through
@@ -211,39 +227,44 @@ Residuals from the shortcuts work (ADR 0030); see
   the draft signal and the tile credit joined its container/aria/tool/center/zoom/labels arguments, and
   `mount_maplibre` is at 7 — over the 5-positional-parameter house limit but under clippy's threshold,
   so nothing flags it. All three want the same fix: one struct for the surface's mount parameters.
-- **The Geography tool's Point tool cannot save at all.** The Place Map editor has a "Use this point"
-  confirm; the Geography tool has no equivalent, and contrary to what this bullet used to say it does
-  not commit on click either — it only paints a red draft dot. `open_geometry_panel`
-  (`screens/geography.rs`) is called from `on_finish_polygon` alone, whose geometry is always a
-  `Polygon`, so its `PlaceGeometry::Point` branch and the whole `GeoPanel::CreateHere` variant are
-  unreachable. Either give the tool a confirm step that reaches that branch, or delete the dead
-  variant.
+- **The Geography draw-and-save path cannot commit a point, and never erases a draft.** Three defects
+  in one flow. (a) *The Point tool cannot save at all* — the Place Map editor has a "Use this point"
+  confirm; the Geography tool has no equivalent and does not commit on click either, it only paints a
+  red draft dot. `open_geometry_panel` (`screens/geography.rs`) is called from `on_finish_polygon`
+  alone, whose geometry is always a `Polygon`, so its `PlaceGeometry::Point` branch and the whole
+  `GeoPanel::CreateHere` variant are unreachable; either give the tool a confirm step that reaches that
+  branch, or delete the dead variant. (b) *"Clear" empties the draft state but never erases the ring* —
+  `on_clear_draft` sets `draft` to `MapDraft::Empty`, so a following "Finish polygon" is correctly a
+  no-op and the state *is* cleared, yet the red ring stays painted and the map keeps showing a shape the
+  app no longer holds. The cause is **not** diagnosed: this bullet used to blame `push_map_draft`'s
+  empty `FeatureCollection` never reaching `geo-draft`, but `push_draft_script` calls `draft.setData`
+  unconditionally, so the `use_effect` not re-firing for an empty draft is the likelier failure.
+  `screens/place.rs` has the identical `on_clear_draft` behind two Clear buttons, so the Place Map
+  editor has this half too. (c) *The draft is never cleared after a successful save either* —
+  `geo_edit_panel`'s `onsaved` sets `panel`/`reload`/`toast` but not `draft`, so the ring sits on top of
+  the boundary just saved; keeping the draft is right for a *refusal* (#255) and wrong for a save, and
+  per (b) the manual escape hatch is broken. (b) is why the `map-draw-target` scenario proves "the draft
+  survived the refusal" by finishing again rather than by clicking Clear. — #282
+- **Two shipped map fixes have no test coverage.** The marker load-race stash (`__geoPending`,
+  `screens/map_shared.rs`) and the zoom-interpolated `circle-radius` both live entirely inside
+  `format!`-built JavaScript that no test inspects, so neither the SSR suite nor `gui-pass` would notice
+  a regression in either. Recorded by the 2026-07-27 verification note in
+  [`archive/completed-work.md`](archive/completed-work.md), which says the gap "is now tracked under
+  *Geography & map*" — it was not, until this bullet. It is also the only cited evidence for the
+  `type/test-gap` label in [`issue-tracking.md`](issue-tracking.md) §2.
 - **The Geography place list is undocumented and geometry-only.** The rail lists places that resolved
   a geometry *as of the slider year*, narrowed by the toolbar picker's live query
   (`screens/geography.rs`) — so a place without geometry can never be selected there (making it
   unreachable as a draw target), and the list silently shrinks as the year moves. It carries no label
   saying any of that. Either list every place and mark the plotted ones, or label the list and offer
   the unplotted ones as draw targets. — #256
-- **"Clear" empties the draft state but never erases the ring.** `on_clear_draft`
-  (`screens/geography.rs`) sets `draft` to `MapDraft::Empty` — a following "Finish polygon" is correctly
-  a no-op, so the state *is* cleared — yet the red ring stays painted on the canvas, so the map keeps
-  showing a shape the app no longer holds. Whatever re-pushes the draft overlay for a *new* vertex does
-  not fire for the empty one (`push_map_draft`'s empty `FeatureCollection` never reaches
-  `geo-draft`). Found while writing the `map-draw-target` gui-pass scenario for #255, and reproduced
-  unchanged on `main` — it is why that scenario proves "the draft survived the refusal" by finishing
-  again rather than by clicking Clear.
-- **The draft is never cleared after a successful save either.** `geo_edit_panel`'s `onsaved`
-  (`screens/geography.rs`) sets `panel`/`reload`/`toast` but not `draft`, so the red draft ring sits on
-  top of the newly-saved boundary. Found while fixing #255 — the same "keep the draft, let the user
-  clear it" behaviour is right for a *refusal*, wrong for a *save*. Note the manual escape hatch is
-  itself broken: see the Clear bullet above.
 - **Switching provider repaints nothing.** The toolbar's provider select writes `[map]` config for
   `osm-raster` and is an explicit no-op for the other two options. The raster tile URL now follows that
   config (`rendered_credit`, `screens/map_shared.rs` — the credit and the URL are resolved together so
   the map cannot credit a source it does not fetch), but nothing calls `setStyle`, the provider is read
   once when the screen mounts, and neither vector kind has an adapter — so no choice made in the
   toolbar changes the map you are looking at. Pairs with the *Provider sub-forms* item below — the
-  sub-forms are pointless while the map ignores the setting.
+  sub-forms are pointless while the map ignores the setting. — #283
 - **In-map editing depth** — mid-ring vertex insertion (today: a vertex can be dragged to a new
   position, but not inserted between two others), pin-click selection on the canvas (today: select via
   the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is wired;
@@ -467,7 +488,11 @@ The `area/docs` label already existed with no `###` home; this is it.
   the run aborts, passing on a re-run with nothing changed. The startup handshake in
   `xtask/src/gui_pass.rs` waits for the window to map and then settles once; a paint the harness can
   actually observe (a shot that must not be blank, retried) would make it deterministic instead of
-  making the first assertion of every scenario flaky.
+  making the first assertion of every scenario flaky. A second flake class was observed on 2026-08-04:
+  `map-polygon` failed its "a second vertex must draw the ring's first segment" `differ` at RMSE 0.0000
+  during a full-suite run and passed on an immediate re-run of the same scenario — a draw that had not
+  reached the canvas within the 4 s settle. Both classes are the same missing capability: the harness
+  waits a fixed time instead of waiting for the paint it is about to assert on.
 
 ## Decided — no action needed
 
@@ -513,6 +538,20 @@ decision, not a gap.
 - **External ids have no frontend entry point** — person `add_external_id` (module-level, not even
   root-exported) and `add_family_external_id` are used only inside `import.rs` for resolve-or-create.
   External ids are importer bookkeeping, not user-editable data.
+
+### Shell & panes
+
+- **Duplicate `id`/`aria-controls` cannot make a handler inert.** #279 read a docked split's dead tab
+  clicks as the duplicate element ids two mounted `Tabs` strips emit. Measured against the interpreter:
+  dioxus-desktop resolves an event target by walking up to the nearest `data-dioxus-id`, which is
+  stamped per `ElementId` and unique by construction — the document `id` is never consulted, so
+  duplicate ids cannot stop an `onclick` firing. The primary pane's subtree is not even re-diffed when
+  a dock opens (`MasterDetail` hands the same `detail` `Element` back down, `VNode: PartialEq` is
+  `Rc::ptr_eq`, and `diff_node` short-circuits), so its listeners are untouched. The real cause was
+  layout: `.master-detail.split-2` collapsing at the default window width, and a tab strip that moves
+  when a pane halves. The ids **were** scoped per pane anyway — two elements claiming one id is a real
+  ARIA defect — but scoping them fixes accessibility, not the clicks. Do not reach for id collisions to
+  explain a dead Dioxus handler.
 
 ### Geography map
 

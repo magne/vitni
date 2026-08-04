@@ -1,0 +1,110 @@
+# #279's CSS half: `main.rs`'s `DEFAULT_WINDOW_SIZE` is 1280x840, exactly the app's own default window
+# — and, before the `components.css:819-836` fix, that is precisely where a docked split broke.
+# `max-width: 1280px` is *inclusive*, so at the default window `.master-detail.split-2` collapsed to one
+# column with no `grid-template-rows`; with no explicit rows the two panes fall into content-sized
+# implicit rows, and at this window's exact height (840, shorter than the 1800x1200 harness default)
+# that measures as the docked pane's row overlapping the active pane's lower half, not a clean
+# off-screen clip — `git stash`-ing just the CSS change and re-running this scenario reproduced that
+# overlap, confirmed by eye against the saved shot. The fix's breakpoint is exclusive (`1279.98px`), so
+# at exactly 1280 the split now stays two columns, side by side.
+#
+# `painted` over the docked pane's own region is a floor, not the discriminator: the pre-fix overlap
+# still paints *something* there (the active pane's own content bleeding into the same screen area), so
+# this assertion does not itself fail pre-fix — confirmed by running it against the stashed CSS. What
+# does fail pre-fix is the `differ` below: the pre-fix layout has no second column at all, so a click
+# aimed at the active pane's own (correctly two-column) tab position lands somewhere else entirely and
+# nothing visibly changes. That is the operable regression check; `painted` only guards against a
+# future regression back to a fully blank pane.
+#
+# The fixture seeds exactly one record (place Kristiansand); this scenario opens a second (Oslo) to
+# have two tabs to dock, following the same steps `docked-detail-tabs.toml` measured (its own header
+# comment covers the create-form field order, and the hit-region offset every post-dock click here is
+# also aimed above — the same separately-filed defect, which shows up at this window size too). At 386px
+# the header's badge row wraps, so this pane's tab row paints ~24px lower than at 1800 wide: y≈273 here
+# against y≈249 there, and the click that lands is y=260.
+#
+# Regions and coordinates were read off this scenario's own `docked-narrow` shot, never carried over from
+# `docked-detail-tabs.toml`'s 1800x1200 ones — a narrower window is a different layout, not a crop.
+description = "The default 1280x840 window keeps a docked split as two columns, not a clipped single one (#279)"
+window = [1280, 840]
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Place draft"
+
+[[step]]
+do = "click"
+at = [630, 737]
+label = "field: Name"
+
+[[step]]
+do = "key"
+chord = "shift+o"
+label = "type: O"
+
+[[step]]
+do = "key"
+chord = "s"
+label = "type: s"
+
+[[step]]
+do = "key"
+chord = "l"
+label = "type: l"
+
+[[step]]
+do = "key"
+chord = "o"
+label = "type: o"
+
+[[step]]
+do = "click"
+at = [1236, 150]
+label = "New place: Save"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand, in a second tab"
+
+[[step]]
+do = "key"
+chord = "ctrl+shift+1"
+label = "⌘⇧1: dock Oslo beside Kristiansand"
+
+[[step]]
+do = "shot"
+name = "docked-narrow"
+
+[[step]]
+do = "click"
+at = [706, 260]
+label = "active pane (Kristiansand): Names tab (aimed above the painted label — see header)"
+
+[[step]]
+do = "shot"
+name = "active-clicked"
+
+[[assert]]
+kind = "painted"
+shot = "docked-narrow"
+region = [894, 92, 386, 720]
+because = "the docked pane is on screen at the app's own default window, not clipped off it (#279)"
+
+[[assert]]
+kind = "differ"
+shots = ["docked-narrow", "active-clicked"]
+region = [508, 92, 386, 720]
+because = "the active pane's own tab strip is operable at the default window (#279)"
+
+[[assert]]
+kind = "match"
+shots = ["docked-narrow", "active-clicked"]
+region = [894, 92, 386, 720]
+because = "clicking the active pane's tab must not disturb the docked pane"

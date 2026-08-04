@@ -8,6 +8,7 @@ use super::prelude::*;
 use crate::components::{MediaViewer, MediaViewerLabels, PickerOptions, ProvenanceAxis, ProvenanceBlock};
 use crate::i18n::Chrome;
 use crate::services::{Services, resolve_record_name};
+use crate::shell::nav_state::EditKey;
 use crate::shell::{CachedName, NameCache, NameState};
 
 /// The workspace-registration field set's state: whether the (Preferences-only) disclosure is open,
@@ -87,8 +88,10 @@ fn database_url_field(_chrome: &Chrome, _database_url: Signal<String>) -> Elemen
 /// [`NavState::pending_step`] and, when the keyboard dispatcher arms a step, opens the neighbouring
 /// record in the list's current (filtered + sorted) order via [`genealogy_ui::step_row`].
 ///
-/// Only the mounted screen runs this effect, so the step always targets the screen the operator is
-/// looking at. Call it beside the screen's `pending_create` effect, passing the screen's `category`,
+/// Only the Explorer runs this effect (its one caller — `shell/explorer.rs`), and the Explorer is a
+/// single shell-level list, never duplicated by a detail split, so the step always targets the screen
+/// the operator is looking at regardless of whether a record is docked. Call it beside the screen's
+/// `pending_create` effect, passing the screen's `category`,
 /// its loaded `list` resource, and its `query`/`selected` signals. A no-op until the list has loaded.
 pub fn use_record_step(
     mut nav: NavState,
@@ -119,28 +122,32 @@ pub fn use_record_step(
 }
 
 /// Wires the `⌘Z` record-scoped undo into a detail pane: observes [`NavState::pending_undo`] and,
-/// when the keyboard dispatcher arms an undo, retracts the newest undoable assertion of the pane's
+/// when it names `(category, human_id)`, retracts the newest undoable assertion of the pane's
 /// already-loaded change log (`docs/mockups` locked decision — undo is active-record-scoped, not
 /// workspace-global; there is no redo because the log is append-only).
 ///
-/// `busy` guards while an edit form / side panel is open (native text undo or the open form takes
-/// precedence — the record undo is skipped). `history` is the pane's loaded change log; the newest
+/// The address *is* the scoping: with a docked split open two panes are mounted, but a request armed
+/// for one names only that `(category, human_id)`, so the other pane's call to this hook reads the
+/// same [`NavState::pending_undo`] and finds it addressed elsewhere and does nothing (#279). `busy`
+/// guards while an edit form / side panel is open (native text undo or the open form takes precedence
+/// — the record undo is skipped). `history` is the pane's loaded change log; the newest
 /// [`genealogy_ui::first_undoable`] entry is retracted via `on_undo` (which dispatches the pane's own
 /// `XEdit::UndoAssertion`). When nothing is undoable, `nothing_to_undo` is shown as a shell notice.
 pub fn use_record_undo(
     mut nav: NavState,
+    category: Category,
+    human_id: &str,
     busy: Memo<bool>,
     history: Memo<Vec<genealogy_ui::HistoryEntryVm>>,
     nothing_to_undo: String,
     on_undo: Callback<String>,
 ) {
-    let mut seen = use_signal(|| *nav.pending_undo.peek());
+    let key = EditKey::saved(category, human_id);
     use_effect(move || {
-        let ticket = *nav.pending_undo.read();
-        if ticket == *seen.peek() {
+        if nav.pending_undo.read().as_ref() != Some(&key) {
             return;
         }
-        seen.set(ticket);
+        nav.pending_undo.set(None);
         if *busy.peek() {
             return;
         }
@@ -150,6 +157,23 @@ pub fn use_record_undo(
             None => nav.notify(nothing_to_undo.clone()),
         }
     });
+}
+
+/// The remembered-tab hook for a detail pane's `Tabs` (#209): seeds the active index from the shell in
+/// a `use_hook` (so the very first render already shows the tab the operator left — no flash of
+/// Overview), and writes it back via [`NavState::remember_tab`] in a `use_effect` whenever it changes.
+/// Reuses [`EditKey`] — the tabstrip's own key for "this open editor" — so [`NavState::close_record`]
+/// and [`NavState::rename_record`] each need only the one-line addition they already carry.
+#[must_use]
+pub fn use_detail_tab(category: Category, human_id: &str) -> Signal<usize> {
+    let mut nav = use_context::<NavState>();
+    let key = EditKey::saved(category, human_id);
+    let seed_key = key.clone();
+    let active = use_hook(move || Signal::new(nav.remembered_tab(&seed_key)));
+    use_effect(move || {
+        nav.remember_tab(key.clone(), *active.read());
+    });
+    active
 }
 
 /// A clickable link to another record's detail screen: opens it as a tab and navigates to its

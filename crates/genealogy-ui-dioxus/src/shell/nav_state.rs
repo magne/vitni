@@ -25,6 +25,34 @@ pub fn entity_category(destination: Destination) -> Option<Category> {
     }
 }
 
+/// Which pane of a possibly-docked split is rendering: the single/active pane, or the second pane
+/// docked beside it (`.master-detail.split-2`). Provided as context only by
+/// [`DockedRecordDetail`](crate::screens::DockedRecordDetail), as its first hook, ahead of the record
+/// it renders — an undocked pane never sees a `PaneRole` in context at all, and every callsite treats
+/// that absence the same as [`Self::Active`] (an unprefixed id), so single-pane markup stays
+/// byte-identical to before docking existed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaneRole {
+    /// The single/active pane. Never provided as context — the absence of a `PaneRole` *is* this, in
+    /// practice; the variant exists so a caller can still name it explicitly (e.g. a test standing up
+    /// two panes side by side).
+    Active,
+    /// The second pane docked beside the active one.
+    Docked,
+}
+
+impl PaneRole {
+    /// The prefix this pane's tab/panel ids carry: empty for [`Self::Active`], `"docked-"` for
+    /// [`Self::Docked`] — what keeps two mounted panes' `id`/`aria-controls` from colliding (#279).
+    #[must_use]
+    pub fn id_prefix(self) -> &'static str {
+        match self {
+            Self::Active => "",
+            Self::Docked => "docked-",
+        }
+    }
+}
+
 /// Which overlay, if any, is layered over the shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Overlay {
@@ -70,7 +98,8 @@ pub enum SaveThen {
 /// The shell cannot save generically — save is per-screen and differently shaped per aggregate — so it
 /// arms the request and the record's own screen runs its existing save closure
 /// (`use_save_on_request`), reporting back through [`NavState::note_save_finished`]. The target tab is
-/// activated first, because only the active tab's pane is mounted.
+/// activated first, so its pane is mounted at all: a record's pane exists only while its tab is active
+/// (or, with a split open, docked), and a save target need not be either yet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SaveRequest {
     /// The editor being saved right now.
@@ -245,8 +274,9 @@ impl EditKey {
 
 /// One record's in-progress edit, parked in the shell so it survives its pane unmounting.
 ///
-/// Only the active tab's pane is mounted (`screens/record_detail.rs` keys the detail pane on the
-/// record's id), so the edit buffer cannot live in the pane: activating another tab would drop it.
+/// A record's pane exists only while its tab is active or docked (`screens/record_detail.rs` keys the
+/// detail pane on the record's id), so the edit buffer cannot live in the pane: leaving both would
+/// drop it.
 /// `draft` and `seed` are the pane's typed `D: RecordDraft` erased to [`Any`], because one map holds
 /// every aggregate's draft type; recover them with [`NavState::stashed_edit`].
 #[derive(Clone)]
@@ -312,10 +342,12 @@ pub struct NavState {
     /// The recently-opened records (newest first, capped), driving the dashboard "Jump back in" list.
     /// Seeded from the workspace manifest at startup and persisted on change.
     pub recent: Signal<Vec<RecentItem>>,
-    /// A monotonically-increasing "undo the active record" ticket — bumped by `⌘Z` when a record is
-    /// open on its own screen; the active detail pane observes the bump and retracts the newest
-    /// undoable assertion of its already-loaded change log.
-    pub pending_undo: Signal<u32>,
+    /// The record `⌘Z` should undo, or `None` when no undo is armed. Set by [`Self::request_undo`] for
+    /// the active record only; the detail pane whose `(category, human_id)` this names observes it
+    /// (`use_record_undo`), retracts the newest undoable assertion of its already-loaded change log,
+    /// and clears it. The address itself is the scoping: with a docked split open two panes are
+    /// mounted, and only the addressed one answers — never the docked one (#279).
+    pub pending_undo: Signal<Option<EditKey>>,
     /// A pending prev/next-record step (`[` = `-1`, `]` = `+1`), set by the keyboard dispatcher and
     /// consumed by the active master-detail screen to open the neighbouring record.
     pub pending_step: Signal<Option<i8>>,
@@ -338,21 +370,27 @@ pub struct NavState {
     /// `None` when the confirm dialog is not showing. Set by [`Self::request_close_tab`] /
     /// [`Self::request_quit`]; resolved by [`Self::confirm_close`] / [`Self::cancel_close`].
     pub pending_close: Signal<Option<CloseRequest>>,
-    /// The in-progress edits parked per editor — the shell's edit-buffer store. Only the active tab's
-    /// pane is mounted, so the buffer cannot live in the pane: `use_record_edit` hydrates from here on
-    /// mount ([`Self::stashed_edit`]) and writes through on every change ([`Self::stash_edit`]), which
-    /// is what lets several records be mid-edit at once.
+    /// The in-progress edits parked per editor — the shell's edit-buffer store. A record's pane exists
+    /// only while its tab is active or docked, so the buffer cannot live in the pane: `use_record_edit`
+    /// hydrates from here on mount ([`Self::stashed_edit`]) and writes through on every change
+    /// ([`Self::stash_edit`]), which is what lets several records be mid-edit at once.
     ///
     /// The **keyset is the dirty set**: the tabstrip's unsaved marker and the close/quit confirm both
     /// read it through [`Self::tab_has_unsaved`], so an edit can never be discarded silently. Keyed like
     /// [`Self::docked_record`] so it survives tab reorders and closes.
     pub edit_drafts: Signal<BTreeMap<EditKey, StashedEdit>>,
+    /// The remembered active related-item tab per open editor (#209), keyed like [`Self::edit_drafts`].
+    /// Index `0` is stored as *absence* — [`Self::remember_tab`]/[`Self::remembered_tab`] — so the map
+    /// stays the size of the operator's actual deviations from Overview. A record's pane exists only
+    /// while its tab is active or docked, so the index cannot live in the pane: `use_detail_tab` seeds
+    /// from here on mount and writes through on every change, the same shape as [`Self::edit_drafts`].
+    pub detail_tabs: Signal<BTreeMap<EditKey, usize>>,
     /// The record whose save is running right now (the confirm's Save / Save all), or `None` when no
     /// save run is in flight. The record's own screen observes it, saves, and reports back through
     /// [`Self::note_save_finished`] — see [`SaveRequest`].
     pub save_request: Signal<Option<SaveRequest>>,
     /// The records still to save in the current run, in strip order: Save all walks them one at a time,
-    /// arming [`Self::save_request`] for each in turn, because only the active tab's pane is mounted.
+    /// arming [`Self::save_request`] for each in turn, activating it first so its pane is mounted.
     pub save_queue: Signal<Vec<EditKey>>,
     /// A monotonically-increasing "quit the application" ticket, bumped once a quit is confirmed (or
     /// requested with nothing unsaved). The desktop-only `QuitManager` observes it and closes the
@@ -396,7 +434,7 @@ impl NavState {
             theme_mode: Signal::new(mode),
             theme: Signal::new(resolved),
             recent: Signal::new(recent),
-            pending_undo: Signal::new(0),
+            pending_undo: Signal::new(None),
             pending_step: Signal::new(None),
             palette_seed: Signal::new(String::new()),
             notice: Signal::new(None),
@@ -404,17 +442,22 @@ impl NavState {
             research_note_subject: Signal::new(None),
             pending_close: Signal::new(None),
             edit_drafts: Signal::new(BTreeMap::new()),
+            detail_tabs: Signal::new(BTreeMap::new()),
             save_request: Signal::new(None),
             save_queue: Signal::new(Vec::new()),
             quit_requested: Signal::new(0),
         }
     }
 
-    /// Requests an undo of the active record (`⌘Z`) by bumping [`Self::pending_undo`]; the active
-    /// detail pane observes the bump and retracts the newest undoable assertion.
+    /// Requests an undo of the active record (`⌘Z`) by addressing [`Self::pending_undo`] at it; the
+    /// detail pane it names observes the address and retracts the newest undoable assertion. A no-op
+    /// when the active tab is a draft — a draft has no undo hook, so arming one would stick.
     pub fn request_undo(&mut self) {
-        let next = self.pending_undo.peek().wrapping_add(1);
-        self.pending_undo.set(next);
+        let Some(record) = self.active_record_ref() else {
+            return;
+        };
+        self.pending_undo
+            .set(Some(EditKey::saved(record.category, &record.human_id)));
     }
 
     /// Requests a prev/next-record step (`[`/`]`) on the active master-detail screen.
@@ -638,6 +681,7 @@ impl NavState {
         }
         let closed = self.records.write().remove(index);
         self.drop_edit(&closed.edit_key());
+        self.forget_tab(&closed.edit_key());
         let remaining = self.records.read().len();
         if remaining == 0 {
             self.active_record.set(None);
@@ -688,6 +732,40 @@ impl NavState {
             return;
         }
         self.edit_drafts.write().remove(key);
+    }
+
+    /// The remembered active related-item tab for `key`'s editor (#209), or `0` (Overview) when
+    /// nothing is remembered — index 0 is stored as absence, see [`Self::detail_tabs`].
+    /// Peeks rather than reads, like [`Self::stashed_edit`]: its caller is `use_detail_tab`'s mount-time
+    /// `use_hook`, and subscribing a pane to the whole map there would re-render every mounted pane on
+    /// any other record's tab change.
+    #[must_use]
+    pub fn remembered_tab(&self, key: &EditKey) -> usize {
+        self.detail_tabs.peek().get(key).copied().unwrap_or(0)
+    }
+
+    /// Remembers `index` as `key`'s active tab, or forgets it when `index` is `0` — the default, so
+    /// storing it would only grow the map without changing what [`Self::remembered_tab`] returns.
+    ///
+    /// Writes only on an actual change: `use_detail_tab`'s effect re-runs on every pane render, and an
+    /// unconditional `write()` would mark the signal dirty each time.
+    pub fn remember_tab(&mut self, key: EditKey, index: usize) {
+        if index == 0 {
+            self.forget_tab(&key);
+            return;
+        }
+        if self.detail_tabs.peek().get(&key) == Some(&index) {
+            return;
+        }
+        self.detail_tabs.write().insert(key, index);
+    }
+
+    /// Forgets `key`'s remembered tab (its record closed). A no-op when nothing is remembered.
+    pub fn forget_tab(&mut self, key: &EditKey) {
+        if !self.detail_tabs.peek().contains_key(key) {
+            return;
+        }
+        self.detail_tabs.write().remove(key);
     }
 
     /// Whether an in-progress edit is parked under `key`.
@@ -831,8 +909,9 @@ impl NavState {
         self.advance_save_run(&request);
     }
 
-    /// Arms `key`'s save for the run ending in `then`, activating its tab first: only the active tab's
-    /// pane is mounted, and the pane is what knows how to save.
+    /// Arms `key`'s save for the run ending in `then`, activating its tab first: a save target's pane
+    /// may not be mounted yet (active or docked are the only mounted states), and the pane is what
+    /// knows how to save.
     fn begin_save(&mut self, key: EditKey, then: SaveThen) {
         self.reveal_editor(&key);
         self.save_request.set(Some(SaveRequest { key, then }));
@@ -1086,7 +1165,8 @@ impl NavState {
         {
             docked_id.clone_from(&new_human_id);
         }
-        self.rekey_stashed_edit(category, old_human_id, &new_human_id);
+        Self::rekey_by_id(&mut self.edit_drafts, category, old_human_id, &new_human_id);
+        Self::rekey_by_id(&mut self.detail_tabs, category, old_human_id, &new_human_id);
         self.rekey_save_run(category, old_human_id, &new_human_id);
         let mut records = self.records.write();
         let Some(OpenTab::Saved(record)) = records
@@ -1098,17 +1178,25 @@ impl NavState {
         record.human_id = new_human_id;
     }
 
-    /// Moves a parked edit from `old_human_id` to `new_human_id` (a rename), so it stays attached to the
-    /// record — and the confirm still fires — for a record that changed id mid-edit. A no-op when
-    /// nothing is parked for the old id.
-    fn rekey_stashed_edit(&mut self, category: Category, old_human_id: &str, new_human_id: &str) {
+    /// Moves the entry keyed by `(category, old_human_id)` in `map` to `new_human_id` (a rename), so it
+    /// stays attached to the record for a record that changed id mid-edit — the shared re-key step
+    /// every per-editor map needs ([`Self::edit_drafts`]'s parked edit, [`Self::detail_tabs`]'s
+    /// remembered tab). A no-op when nothing is keyed under the old id.
+    fn rekey_by_id<V>(
+        map: &mut Signal<BTreeMap<EditKey, V>>,
+        category: Category,
+        old_human_id: &str,
+        new_human_id: &str,
+    ) where
+        V: 'static,
+    {
         let old = EditKey::saved(category, old_human_id);
-        if !self.edit_drafts.peek().contains_key(&old) {
+        if !map.peek().contains_key(&old) {
             return;
         }
-        let mut edits = self.edit_drafts.write();
-        if let Some(edit) = edits.remove(&old) {
-            edits.insert(EditKey::saved(category, new_human_id), edit);
+        let mut entries = map.write();
+        if let Some(value) = entries.remove(&old) {
+            entries.insert(EditKey::saved(category, new_human_id), value);
         }
     }
 

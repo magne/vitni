@@ -106,8 +106,8 @@ pub use shared::{
     MediaTabState, RegisterFields, RetractTarget, RowRetract, attach_picker_form, citation_table, create_record_frame,
     create_record_header, id_list, media_gallery, media_tab, media_viewer_labels, non_empty, picker_selection_id,
     provenance_block, provenance_block_dna, provenance_claim_row, provenance_cue, register_fields_form, retract_panel,
-    retract_side_panel, row_actions_cell, source_cue, source_media_type_choices, tag_chips, use_existing_picker,
-    use_record_step,
+    retract_side_panel, row_actions_cell, source_cue, source_media_type_choices, tag_chips, use_detail_tab,
+    use_existing_picker, use_record_step, use_record_undo,
 };
 pub use source::{
     SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_record_fields,

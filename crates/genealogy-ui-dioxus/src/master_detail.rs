@@ -12,7 +12,7 @@ use genealogy_ui::{ListQuery, RowSort, RowVm, visible_rows};
 
 use crate::components::{Badge, ListRow, TabItem, Tabs, TextInput};
 use crate::screens::DockedRecordDetail;
-use crate::shell::nav_state::NavState;
+use crate::shell::nav_state::{NavState, PaneRole};
 use crate::shell::roving::roving_vertical;
 
 /// The editor area: the active record's detail pane, plus a second docked pane when a record is
@@ -254,6 +254,9 @@ pub fn DetailContainer(
     /// The active tab's panel content.
     children: Element,
 ) -> Element {
+    // The docked pane's own title is a subordinate `<h2>`, not a second `<h1>`: `PaneRole` is provided
+    // only there (`DockedRecordDetail`), so the active/undocked pane's markup is unchanged (#279).
+    let docked = try_consume_context::<PaneRole>() == Some(PaneRole::Docked);
     rsx! {
         div { class: "detail-head",
             if let Some(color) = avatar_color {
@@ -264,7 +267,11 @@ pub fn DetailContainer(
                 div { class: "avatar-lg", aria_hidden: "true", "{avatar}" }
             }
             div { class: "detail-id",
-                h1 { class: "detail-title", "{title}" }
+                if docked {
+                    h2 { class: "detail-title", "{title}" }
+                } else {
+                    h1 { class: "detail-title", "{title}" }
+                }
                 if let Some(subtitle) = subtitle {
                     div { class: "detail-sub", "{subtitle}" }
                 }
