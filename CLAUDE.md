@@ -139,8 +139,9 @@ cargo xtask gui-pass --workspace gen     # drive your own config + workspace ins
 ```
 
 Scenarios are **TOML, not Rust** — `crates/genealogy-ui-dioxus/tests/gui-pass/*.toml`, so adding one
-needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `drag`, `wheel`, `await-exit` to wait
-for the GUI process to quit) and `[[assert]]`s over the shots by name: `differ` for "the UI reacted",
+needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `drag`, `wheel`, `wait` to sleep and
+let a timed effect fire, `await-exit` to wait for the GUI process to quit) and `[[assert]]`s over the
+shots by name: `differ` for "the UI reacted",
 `match` for "the UI came back to this state", both with an RMSE tolerance and an optional
 `region = [x, y, w, h]` to compare one window sub-rectangle instead of the whole shot; `manifest`
 checks `target/gui-pass/workspace/workspace.toml` on disk for a substring instead, proving a write

@@ -1,0 +1,50 @@
+# The shell's one notice layer (#208): a confirmation/error toast is pinned to the bottom of the work
+# area and auto-dismisses on its own — neither of which SSR can prove. `toast.rs` proves the markup
+# (`.toast-layer > .toast`, the roles, the seq-gated `expire_notice`); this proves the *timer* actually
+# fires in the real webview, and that the toast never shifts the layout it reports on.
+#
+# `ctrl+z` with no record open is the simplest way to raise a toast without touching any data: the
+# keyboard dispatcher's Undo falls back to `nav.notify(nothing_to_undo)` straight from the Dashboard.
+#
+# The `differ`/`match` pair against `before` (not against each other) is what proves both halves at
+# once: `toast` must differ from `before` (the toast appeared) and `gone` must match `before` (it went
+# away on its own, and the region it sat over is back to exactly what it was — not just "no visible
+# toast", but no residual layout shift either). The region is the toast's own footprint at the bottom
+# of the work area, read off the `toast` shot at the default 1800x1200 window — not the whole window,
+# since the tabstrip/statusbar around it can legitimately repaint on their own.
+description = "A shell notice appears at the bottom of the work area and auto-dismisses on its own (#208)"
+
+[[step]]
+do = "shot"
+name = "before"
+
+[[step]]
+do = "key"
+chord = "ctrl+z"
+label = "⌘Z with no record open: the Nothing-to-undo notice"
+
+[[step]]
+do = "shot"
+name = "toast"
+
+[[step]]
+do = "wait"
+seconds = 8
+label = "wait past the 6s auto-dismiss"
+
+[[step]]
+do = "shot"
+name = "gone"
+
+[[assert]]
+kind = "differ"
+shots = ["before", "toast"]
+region = [650, 1080, 500, 70]
+because = "⌘Z with nothing to undo must raise the shell toast at the bottom of the work area"
+
+[[assert]]
+kind = "match"
+shots = ["before", "gone"]
+region = [650, 1080, 500, 70]
+tolerance = 0.001
+because = "the toast must auto-dismiss on its own after 6s, leaving no residual layout shift behind"
