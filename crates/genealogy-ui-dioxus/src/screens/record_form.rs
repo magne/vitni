@@ -360,7 +360,8 @@ pub fn record_keydown<D: RecordDraft>(
 
 /// Finishes a whole-record save: on success marks the workspace changed and either re-keys the open
 /// tab to the record's new `human_id` (a rename remounts the detail pane by the new id) or bumps
-/// `reload` to refetch; either way shows the saved toast. On failure shows the error toast.
+/// `reload` to refetch; either way shows the shell's saved notice. On failure shows it as an error
+/// notice, which stays until dismissed.
 ///
 /// Reports the outcome to the shell last ([`NavState::note_save_finished`]), so a save the close/quit
 /// confirm asked for resolves only once this pane has finished writing its own signals — the tab may
@@ -372,7 +373,6 @@ pub fn finish_record_save(
     current: &str,
     mut nav: NavState,
     mut reload: Signal<u32>,
-    mut toast: Signal<Option<String>>,
     saved: &str,
 ) {
     match effective {
@@ -383,20 +383,21 @@ pub fn finish_record_save(
             } else {
                 nav.rename_record(category, current, effective.clone());
             }
-            toast.set(Some(saved.to_owned()));
+            nav.notify(saved.to_owned());
             nav.note_save_finished(category, Some(&effective), true);
         }
         Err(message) => {
-            toast.set(Some(message));
+            nav.notify_error(message);
             nav.note_save_finished(category, Some(current), false);
         }
     }
 }
 
 /// Finishes a create form's commit: on success marks the workspace changed (so the Explorer list and
-/// rail counts refetch, same as an edit save) and the draft tab becomes the stored record in place
-/// ([`NavState::commit_draft`]), labelled `label` — or the record's own id when that is empty or absent;
-/// on failure the error is shown as a shell notice and the draft is left as it was.
+/// rail counts refetch, same as an edit save), the draft tab becomes the stored record in place
+/// ([`NavState::commit_draft`]) labelled `label` — or the record's own id when that is empty or absent
+/// — and shows `created` as the shell's confirmation notice (create had no completion feedback at all
+/// before #208); on failure the error is shown as a sticky shell notice and the draft is left as it was.
 ///
 /// Every `*CreateRecord` screen ends its save here, so the close/quit confirm's Save can drive a create
 /// draft through the same path a saved record takes ([`use_save_on_request`]).
@@ -404,6 +405,7 @@ pub fn finish_draft_commit(
     committed: Result<String, String>,
     category: Category,
     label: Option<String>,
+    created: String,
     mut nav: NavState,
 ) {
     match committed {
@@ -417,10 +419,11 @@ pub fn finish_draft_commit(
                 human_id,
                 label,
             });
+            nav.notify(created);
             nav.note_save_finished(category, None, true);
         }
         Err(message) => {
-            nav.notify(message);
+            nav.notify_error(message);
             nav.note_save_finished(category, None, false);
         }
     }

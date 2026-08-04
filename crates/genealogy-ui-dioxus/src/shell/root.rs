@@ -5,7 +5,6 @@ use dioxus::prelude::*;
 use genealogy_ui::{Category, Destination, Tool};
 
 use crate::app::{AppCtx, StartupPrefs};
-use crate::components::Toast;
 use crate::master_detail::MasterDetail;
 use crate::screens::{
     DashboardScreen, ExportScreen, GeographyScreen, HelpScreen, ImportScreen, MergeScreen, PedigreeScreen,
@@ -23,6 +22,7 @@ use crate::shell::rail::Rail;
 use crate::shell::recent_persistence::RecentPersistenceManager;
 use crate::shell::statusbar::ShellStatusbar;
 use crate::shell::tabstrip::RecordTabstrip;
+use crate::shell::toast::ShellToast;
 use crate::shell::topbar::Topbar;
 use crate::shell::window_geometry::WindowGeometryManager;
 use crate::shell::{ChromeCtx, CountsCtx, NameCache, ShortcutsCtx};
@@ -79,9 +79,6 @@ pub fn Shell() -> Element {
         nothing_to_undo: chrome.0.kbd_nothing_to_undo(),
         redo_unavailable: chrome.0.kbd_redo_unavailable(),
     };
-    let notice = nav.notice.read().clone();
-    let notice_dismiss = chrome.0.notice_dismiss();
-    let mut notice_nav = nav;
     // Two shell shapes (see `entity_category`): an entity category shows `rail | Explorer | editor`
     // (the record tabstrip + editor host mount); a tool/Dashboard/Help destination shows
     // `rail | screen` (no Explorer, no tabstrip — the screen fills the area right of the rail).
@@ -123,14 +120,9 @@ pub fn Shell() -> Element {
                 }
                 main { class: "workarea", id: "main", role: "main", tabindex: "-1",
                     Workarea {}
+                    ShellToast {}
                 }
                 ShellStatusbar {}
-            }
-            Toast {
-                visible: notice.is_some(),
-                message: notice.unwrap_or_default(),
-                action_label: notice_dismiss,
-                onaction: move |_| notice_nav.dismiss_notice(),
             }
             WindowGeometryManager {}
             QuitManager {}

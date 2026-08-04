@@ -14,7 +14,11 @@ use genealogy_ui_dioxus::shell::nav_state::NavState;
 /// The shell-level marker block: the data-change ticket and the shell notice, if any.
 fn probe(nav: &NavState) -> Element {
     let version = *nav.data_version.read();
-    let notice = nav.notice.read().clone().unwrap_or_else(|| "NONE".to_owned());
+    let notice = nav
+        .notice
+        .read()
+        .as_ref()
+        .map_or_else(|| "NONE".to_owned(), |notice| notice.message.clone());
     rsx! {
         div { "VERSION:{version}" }
         div { "NOTICE:{notice}" }
@@ -30,7 +34,13 @@ fn render(app: fn() -> Element) -> String {
 fn create_ok() -> Element {
     let nav = use_context_provider(NavState::new);
     use_hook(move || {
-        finish_draft_commit(Ok("P0001".to_owned()), Category::People, None, nav);
+        finish_draft_commit(
+            Ok("P0001".to_owned()),
+            Category::People,
+            None,
+            "Created".to_owned(),
+            nav,
+        );
     });
     probe(&nav)
 }
@@ -44,10 +54,26 @@ fn a_successful_create_bumps_the_data_version() {
     );
 }
 
+#[test]
+fn a_successful_create_leaves_the_created_notice() {
+    // Create had no feedback for a completed action at all (#208) — the shell notice is the fix.
+    let html = render(create_ok);
+    assert!(
+        html.contains("NOTICE:Created"),
+        "a successful create surfaces a confirmation, same as an edit save:\n{html}"
+    );
+}
+
 fn create_err() -> Element {
     let nav = use_context_provider(NavState::new);
     use_hook(move || {
-        finish_draft_commit(Err("could not save".to_owned()), Category::People, None, nav);
+        finish_draft_commit(
+            Err("could not save".to_owned()),
+            Category::People,
+            None,
+            "Created".to_owned(),
+            nav,
+        );
     });
     probe(&nav)
 }

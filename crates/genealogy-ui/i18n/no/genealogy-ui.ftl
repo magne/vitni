@@ -223,6 +223,7 @@ action-new-citation = + Ny sitering
 action-save = Lagre
 action-cancel = Avbryt
 action-saved = Lagret
+action-created = Opprettet
 record-draft-badge = utkast · ikke lagret
 record-unset = —
 action-dismiss = Lukk

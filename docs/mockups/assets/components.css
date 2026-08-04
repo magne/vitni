@@ -204,7 +204,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
    ==================================================================== */
 /* A grid with a shrinkable row so `.master-detail`/`.detail` are bound to the work-area height and
    scroll internally rather than growing the shell (sticky header would else ride over the tabs). */
-.workarea { overflow: hidden; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
+.workarea {
+  position: relative; overflow: hidden; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr);
+}
 /* The editor area: one detail pane, or two side-by-side when a record is docked. The entity list is
    the shell-level Explorer column now, so this grid no longer carries a leading list column. */
 .master-detail {
@@ -507,11 +509,17 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .sidepanel .sp-head h3 { font-size: var(--fs-lg); }
 .sidepanel .sp-body { padding: var(--sp-4); }
 .sidepanel .sp-foot { display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
-/* The click-away dismiss layer behind the side panel (mirrors .picker-scrim). */
+/* The click-away dismiss layer behind the side panel (mirrors .picker-scrim). `absolute`, escaping
+   into the nearest positioned ancestor (`.detail`) — never `.workarea` itself, which is `position:
+   relative` only for the toast layer's containing block (#208). A panel mounted with no `.detail`
+   ancestor (Geography's own geometry panel) carries `.sidepanel-viewport`/`.sidepanel-scrim-viewport`
+   instead, escaping all the way to the viewport. */
 .sidepanel-scrim {
   position: absolute; inset: 0; z-index: calc(var(--z-modal) - 1);
   background: rgba(0, 0, 0, 0.4); border: 0; padding: 0; cursor: default;
 }
+.sidepanel.sidepanel-viewport { position: fixed; }
+.sidepanel-scrim.sidepanel-scrim-viewport { position: fixed; }
 .sidepanel { animation: slide-in-right 160ms ease-out; }
 .sidepanel-scrim { animation: fade-in 160ms ease-out; }
 
@@ -553,6 +561,16 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
   background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--ok);
   border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); box-shadow: var(--shadow-2);
 }
+.toast.error { border-left-color: var(--err); }
+/* The shell's one notice layer (#208), pinned to the bottom of the work area, out of grid flow so a
+   notice never shifts the layout it reports on. `.toast` itself stays an unpositioned surface — the
+   `.modal`/`.overlay` convention — so the mockups' inline `.toast` specimens keep rendering in flow. */
+.toast-layer {
+  position: absolute; left: 0; right: 0; bottom: var(--sp-4);
+  display: flex; justify-content: center;
+  z-index: var(--z-toast); pointer-events: none;
+}
+.toast-layer .toast { pointer-events: auto; }
 
 /* ---- Status bar ---- */
 .statusbar {

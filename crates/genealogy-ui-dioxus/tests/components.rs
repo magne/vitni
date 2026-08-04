@@ -9,7 +9,7 @@ use genealogy_ui_dioxus::components::{
     Badge, Breadcrumb, Button, ButtonVariant, Card, Checkbox, Chip, ConfidenceBadge, EmptyState, EvidenceAxisChip,
     HistoryEntry, HistoryTimeline, IconButton, Input, LabeledValue, ListRow, Modal, NoSourceFlag, NumberInput,
     ProvenancePopover, RestrictionChoice, RestrictionSet, Select, SelectChoice, SidePanel, SourceLink, StatusLine,
-    TabItem, Table, Tabs, Toast,
+    TabItem, Table, Tabs, Toast, ToastKind,
 };
 
 /// A gallery instantiating each component with representative props.
@@ -85,7 +85,7 @@ fn gallery() -> Element {
             }],
             onundo: move |_| {},
         }
-        Toast { visible: true, message: "Saved".to_owned(), action_label: Some("Undo".to_owned()), onaction: move |_| {} }
+        {toast_specimens()}
         Card { title: Some("Facts".to_owned()),
             div { "card body" }
         }
@@ -109,6 +109,20 @@ fn gallery() -> Element {
             onclose: move |()| {},
             footer: rsx! { Button { label: "Delete".to_owned(), variant: ButtonVariant::Danger, onclick: move |_| {} } },
             div { "This removes the tag." }
+        }
+    }
+}
+
+/// The info and error toast specimens, factored out of [`gallery`] to keep it under the line cap.
+fn toast_specimens() -> Element {
+    rsx! {
+        Toast { visible: true, message: "Saved".to_owned(), action_label: Some("Undo".to_owned()), onaction: move |_| {} }
+        Toast {
+            visible: true,
+            message: "Could not save".to_owned(),
+            kind: ToastKind::Error,
+            action_label: Some("Dismiss".to_owned()),
+            onaction: move |_| {},
         }
     }
 }
@@ -147,6 +161,17 @@ fn components_carry_their_aria_roles() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in rendered HTML:\n{html}");
     }
+}
+
+#[test]
+fn an_error_toast_carries_the_error_class_and_an_assertive_role() {
+    let html = render();
+    assert!(html.contains(r#"class="toast error""#), "the error class:\n{html}");
+    assert!(
+        html.contains(r#"role="alert""#),
+        "announced assertively, not as a status:\n{html}"
+    );
+    assert!(html.contains("Could not save"), "the error message:\n{html}");
 }
 
 #[test]

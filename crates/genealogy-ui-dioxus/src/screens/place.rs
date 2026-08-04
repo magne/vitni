@@ -26,15 +26,17 @@ pub fn PlaceCreateRecord() -> Element {
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::PlaceDraft>(Category::Places);
     let mut draft = record.draft;
+    let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::PlaceDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
         };
         let label = request.name.clone().unwrap_or_default();
         let services = services.clone();
+        let created = created_label.clone();
         spawn(async move {
             let committed = commit_place_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Places, Some(label), nav);
+            finish_draft_commit(committed, Category::Places, Some(label), created, nav);
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -292,9 +294,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
     let editing = use_signal(|| None::<PlaceEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
-    let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
-    let dismiss_label = state.data_loc().action_label("dismiss");
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -330,6 +330,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
     let submit_services = services.clone();
     let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
+    let mut submit_nav = nav;
     let on_submit = use_callback(move |(edit, prov): (PlaceEdit, ProvenanceDraft)| {
         let services = submit_services.clone();
         let saved = submit_saved.clone();
@@ -338,22 +339,22 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
                 Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
-                    toast.set(Some(saved));
+                    submit_nav.notify(saved);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(message) => submit_nav.notify_error(message),
             }
         });
     });
 
     // The Map tab's `GeometrySaveForm` dispatches its own `save_place_edit` (shared with the Geography
-    // tool); this only reloads the detail + surfaces the toast once it has (mirrors `on_submit`'s Ok
+    // tool); this only reloads the detail + surfaces the notice once it has (mirrors `on_submit`'s Ok
     // arm without repeating the dispatch).
     let mut map_saved_reload = reload;
-    let mut map_saved_toast = toast;
+    let mut map_saved_nav = nav;
     let map_saved_label = saved_label.clone();
     let on_map_saved = use_callback(move |()| {
         map_saved_reload += 1;
-        map_saved_toast.set(Some(map_saved_label.clone()));
+        map_saved_nav.notify(map_saved_label.clone());
     });
 
     // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
@@ -382,6 +383,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let retract_saved = saved_label.clone();
+    let mut retract_nav = nav;
     let on_retract_confirm = use_callback(move |()| {
         let Some(RetractTarget { assertion_id, .. }) = retract() else {
             return;
@@ -399,9 +401,9 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
                 Ok(_) => {
                     retract.set(None);
                     reload += 1;
-                    toast.set(Some(saved));
+                    retract_nav.notify(saved);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(message) => retract_nav.notify_error(message),
             }
         });
     });
@@ -416,7 +418,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
         let saved = saved_label.clone();
         spawn(async move {
             let effective = apply_record_edits(services, edits, prov, current.clone(), save_place_edit).await;
-            finish_record_save(effective, Category::Places, &current, record_nav, reload, toast, &saved);
+            finish_record_save(effective, Category::Places, &current, record_nav, reload, &saved);
         });
     });
 
@@ -479,7 +481,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
         on_region,
     };
 
-    let body = match &*data.read_unchecked() {
+    match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
@@ -530,16 +532,6 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
-    };
-
-    rsx! {
-        {body}
-        Toast {
-            visible: toast().is_some(),
-            message: toast().unwrap_or_default(),
-            action_label: dismiss_label,
-            onaction: move |_| toast.set(None),
-        }
     }
 }
 
@@ -842,7 +834,6 @@ fn PlaceMapEditor(
     let mut tool = use_signal(|| DrawTool::Pan);
     let mut draft = use_signal(|| MapDraft::Empty);
     let mut pending = use_signal(|| None::<PlaceGeometry>);
-    let mut toast = use_signal(|| None::<String>);
 
     // A "Geometry over time" row's Edit loads that assertion's own shape back into the draw state
     // (rather than opening a side panel) so it can be adjusted and re-saved through the same
@@ -876,7 +867,7 @@ fn PlaceMapEditor(
     let on_finish_polygon = move |_| {
         let MapDraft::Polygon(vertices) = draft() else { return };
         if vertices.len() < 3 {
-            toast.set(Some(coordinate_invalid.clone()));
+            nav.notify_error(coordinate_invalid.clone());
             return;
         }
         pending.set(Some(PlaceGeometry::Polygon {
@@ -964,12 +955,6 @@ fn PlaceMapEditor(
                     Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| pending.set(None) }
                 }
             }
-        }
-        Toast {
-            visible: toast().is_some(),
-            message: toast().unwrap_or_default(),
-            action_label: loc.action_label("dismiss"),
-            onaction: move |_| toast.set(None),
         }
     }
 }

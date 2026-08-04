@@ -165,7 +165,7 @@
     </div>
   </div>
   <div class="specimen wrap" style="align-items:center">
-    <div class="toast">✓ Saved · <span class="src-link">Undo</span></div>
+    <div class="toast">✓ Saved · <span class="src-link">Dismiss</span></div>
     <span class="muted" style="font-size:var(--fs-sm)">Confirmation is an <span class="mono">aria-live="polite"</span> region; it announces without stealing focus.</span>
   </div>
 
@@ -215,7 +215,7 @@
       <div class="fact-row"><span class="badge">Cancel</span><span class="grow">Leaves the tab open with the edit intact — the next <kbd>⌘</kbd><kbd>W</kbd> asks again.</span></div>
       <div class="fact-row"><span class="badge">Save</span><span class="grow">Commits the record, then closes the tab. Saving from the record itself clears the marker and the confirm the same way: the draft matches what is stored again, so the tab closes with no prompt. So does <b>Cancel</b> on the record (§5), which reverts the draft.</span></div>
       <div class="fact-row"><span class="badge">disabled</span><span class="grow">Save is offered only for work that can be saved. A draft missing a required field, or a create form nothing has been typed into (“Nothing has been filled in for “New person” yet, so there is nothing to save.”), gets a <b>disabled</b> Save and the reason in the body — never a button that silently does nothing.</span></div>
-      <div class="fact-row"><span class="badge">failed</span><span class="grow">A save that fails leaves every tab open with its edit parked and the screen's own error toast showing. Nothing closes and nothing quits on a failure.</span></div>
+      <div class="fact-row"><span class="badge">failed</span><span class="grow">A save that fails leaves every tab open with its edit parked and the shell's error toast showing, staying until dismissed. Nothing closes and nothing quits on a failure.</span></div>
     </div>
   </div>
   <p class="muted">Quitting with several records mid-edit is one dialog over the whole set — see

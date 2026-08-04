@@ -13,6 +13,8 @@ use dioxus::prelude::*;
 use genealogy_app::{RecentItem, ThemeMode, push_recent};
 use genealogy_ui::{Category, Destination, NavHistory, NavLocation, ProvenanceDraft, RecordDraft, RecordRef, Tool};
 
+use crate::components::ToastKind;
+
 /// The entity category a destination shows a list + editor for, or `None` when the destination is a
 /// full-width screen with no Explorer/editor (a tool, the workspace Dashboard, or Help). This is the
 /// single source of truth for the two shell shapes: `Some` ⇒ `rail | Explorer | editor`, `None` ⇒
@@ -307,6 +309,20 @@ impl StashedEdit {
     }
 }
 
+/// A transient shell notice (a toast): an already-localized `message`, its [`ToastKind`] (info
+/// auto-dismisses, error is sticky), and the `seq` ticket that makes a per-notice auto-dismiss timer
+/// safe — [`NavState::expire_notice`] clears the live notice only when `seq` still matches, so a
+/// superseded or manually dismissed toast's stale timer is a no-op rather than killing its successor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notice {
+    /// The already-localized message.
+    pub message: String,
+    /// Info (auto-dismissing) or error (sticky).
+    pub kind: ToastKind,
+    /// The ticket this notice was raised under.
+    pub seq: u32,
+}
+
 /// Shell-wide navigation/UI state, provided as context so every shell region shares one source of
 /// truth. All fields are signals, so reads subscribe the reading component and writes from the
 /// keyboard dispatcher re-render only the subscribers.
@@ -356,7 +372,11 @@ pub struct NavState {
     pub palette_seed: Signal<String>,
     /// A transient shell notice (a toast), e.g. "Nothing to undo" or the redo-unavailable
     /// explanation. `None` hides it.
-    pub notice: Signal<Option<String>>,
+    pub notice: Signal<Option<Notice>>,
+    /// The ticket the next raised [`Notice`] carries ([`Self::notify`]/[`Self::notify_error`]) —
+    /// bumped on every notice so [`Self::expire_notice`] can tell a stale timer from the live notice's
+    /// own.
+    pub notice_seq: Signal<u32>,
     /// A `(human_id, name)` the Geography tool should pre-select in its rail on next mount (the Place
     /// Map tab's "Open in Geography ↗"), or `None`. Set by [`Self::open_geography_focused`];
     /// `GeographyScreen` consumes and clears it once, on mount.
@@ -438,6 +458,7 @@ impl NavState {
             pending_step: Signal::new(None),
             palette_seed: Signal::new(String::new()),
             notice: Signal::new(None),
+            notice_seq: Signal::new(0),
             geography_focus: Signal::new(None),
             research_note_subject: Signal::new(None),
             pending_close: Signal::new(None),
@@ -465,14 +486,52 @@ impl NavState {
         self.pending_step.set(Some(delta));
     }
 
-    /// Shows a transient shell notice (a toast).
+    /// Shows a transient shell notice (a toast) that auto-dismisses (`ShellToast` arms a 6s timer for
+    /// [`ToastKind::Info`]).
     pub fn notify(&mut self, message: String) {
-        self.notice.set(Some(message));
+        let seq = self.raise_notice_seq();
+        self.notice.set(Some(Notice {
+            message,
+            kind: ToastKind::Info,
+            seq,
+        }));
     }
 
-    /// Dismisses the shell notice.
+    /// Shows a transient shell error notice (a toast) that stays until [`Self::dismiss_notice`] —
+    /// `ShellToast` arms no auto-dismiss timer for [`ToastKind::Error`].
+    pub fn notify_error(&mut self, message: String) {
+        let seq = self.raise_notice_seq();
+        self.notice.set(Some(Notice {
+            message,
+            kind: ToastKind::Error,
+            seq,
+        }));
+    }
+
+    /// Bumps and returns the ticket the next raised notice carries.
+    fn raise_notice_seq(&mut self) -> u32 {
+        let next = self.notice_seq.peek().wrapping_add(1);
+        self.notice_seq.set(next);
+        next
+    }
+
+    /// Dismisses the shell notice, whichever kind it is (the toast's own Dismiss action).
     pub fn dismiss_notice(&mut self) {
         self.notice.set(None);
+    }
+
+    /// Clears the shell notice raised under `seq`, if it is still live — the auto-dismiss timer
+    /// `ShellToast` arms for an info notice. A no-op when `seq` is stale (the notice was superseded or
+    /// already dismissed) or the live notice is an error (sticky; no timer clears it).
+    pub fn expire_notice(&mut self, seq: u32) {
+        let live = self
+            .notice
+            .peek()
+            .as_ref()
+            .is_some_and(|notice| notice.seq == seq && notice.kind == ToastKind::Info);
+        if live {
+            self.notice.set(None);
+        }
     }
 
     /// Opens the command palette pre-seeded with `query` (the top-bar search's Enter).

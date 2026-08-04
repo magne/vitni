@@ -27,6 +27,7 @@ pub mod root;
 pub mod roving;
 pub mod statusbar;
 pub mod tabstrip;
+pub mod toast;
 pub mod topbar;
 pub mod window_geometry;
 

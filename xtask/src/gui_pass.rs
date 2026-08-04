@@ -11,8 +11,9 @@
 //! `window = [w, h]` sets the size the window is resized to before its steps run, defaulting to
 //! [`WINDOW`] when omitted — the narrow-window case (below `--bp-lg`) needs its own coordinates, never
 //! a single-pane layout's carried over (see `CLAUDE.md`'s "Writing one"). A file lists `[[step]]`s (a
-//! click, a chord, a drag, a wheel, a screenshot, or `await-exit` to wait for the GUI process itself to
-//! quit) and `[[assert]]`s over the shots it took — `differ` for "the UI reacted",
+//! click, a chord, a drag, a wheel, a screenshot, `wait` to sleep and let a timed effect fire, or
+//! `await-exit` to wait for the GUI process itself to quit) and `[[assert]]`s over the shots it took —
+//! `differ` for "the UI reacted",
 //! `match` for "the UI returned to this state", `painted` for "this area is not a flat fill". The
 //! first two compare with an RMSE tolerance, so a caret blink is not a difference. Any assertion may
 //! add `region = [x, y, w, h]` to work on a single window sub-rectangle instead of the whole shot —
@@ -129,6 +130,9 @@ enum Step {
     /// Wait for the GUI process to exit (e.g. after a quit chord), failing if it is still up after
     /// [`AWAIT_EXIT_TIMEOUT`]. Proves a quit actually happened, rather than assuming a chord worked.
     AwaitExit { label: String },
+    /// Sleep for `seconds`, then let the webview settle — proving a timed effect (e.g. a toast's
+    /// auto-dismiss) in the real webview rather than assuming it fires.
+    Wait { seconds: u64, label: String },
 }
 
 /// One check over the shots the script took.
@@ -623,6 +627,11 @@ fn drive(display: &str, window: &str, steps: &[Step], shots: &Path, session: &mu
             Step::AwaitExit { label } => {
                 println!("  {label}");
                 await_exit(session)?;
+            }
+            Step::Wait { seconds, label } => {
+                println!("  {label}");
+                sleep(Duration::from_secs(*seconds));
+                settle();
             }
         }
     }

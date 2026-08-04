@@ -49,6 +49,13 @@ pub fn EmptyState(
 /// Unlike an overlay, a panel renders *inside* `.app`, so the shell cannot inert the background around
 /// it (inerting `.app` would inert the panel too). The trap closes the keyboard path and the scrim the
 /// pointer one; the background staying reachable to assistive tech is tracked in `docs/issues.md`.
+///
+/// `position: absolute`, escaping into the nearest positioned ancestor — a record's own `.detail`
+/// pane for every `*DetailPane`'s side panel, bounding it to that pane rather than the whole window.
+/// A panel mounted somewhere with no such ancestor (Geography's own geometry panel, the one
+/// non-`.detail` caller) sets `viewport_anchored` instead, so it escapes all the way to the viewport
+/// as before — `.workarea` is `position: relative` in its own right (the toast layer's containing
+/// block, #208), and `.sidepanel` must never fall through to *that* by accident.
 #[component]
 pub fn SidePanel(
     /// The already-localized panel title.
@@ -63,20 +70,34 @@ pub fn SidePanel(
     children: Element,
     /// The footer (e.g. action buttons).
     footer: Element,
+    /// Escapes all the way to the viewport instead of the nearest positioned ancestor — for a panel
+    /// mounted outside a record's `.detail` pane (Geography's geometry panel).
+    #[props(default)]
+    viewport_anchored: bool,
 ) -> Element {
     if !open {
         return rsx! {};
     }
+    let scrim_class = if viewport_anchored {
+        "sidepanel-scrim sidepanel-scrim-viewport"
+    } else {
+        "sidepanel-scrim"
+    };
+    let panel_class = if viewport_anchored {
+        "sidepanel sidepanel-viewport"
+    } else {
+        "sidepanel"
+    };
     rsx! {
         button {
-            class: "sidepanel-scrim",
+            class: scrim_class,
             r#type: "button",
             aria_label: "{close_label}",
             onmousedown: move |event: MouseEvent| event.prevent_default(),
             onclick: move |_| onclose.call(()),
         }
         div {
-            class: "sidepanel",
+            class: panel_class,
             role: "dialog",
             aria_modal: "true",
             aria_label: "{title}",

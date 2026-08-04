@@ -133,8 +133,6 @@ long-standing "DNA match views in the UI" item is closed.
 
 ### Shell, tabs & notifications
 
-- **Toast notifications.** Show a toast at the bottom of the work area, auto-dismissed after a set
-  time. — #208
 - **A `SidePanel`'s background is not `inert`.** The panel now traps and restores focus like `Modal`
   (#247), so neither `Tab` nor the pointer can reach the shell behind it, but assistive tech still
   can: `shell/root.rs` inerts `.app` for the overlays and the close/quit confirm, and every
@@ -241,7 +239,7 @@ Residuals from the shortcuts work (ADR 0030); see
   unconditionally, so the `use_effect` not re-firing for an empty draft is the likelier failure.
   `screens/place.rs` has the identical `on_clear_draft` behind two Clear buttons, so the Place Map
   editor has this half too. (c) *The draft is never cleared after a successful save either* —
-  `geo_edit_panel`'s `onsaved` sets `panel`/`reload`/`toast` but not `draft`, so the ring sits on top of
+  `geo_edit_panel`'s `onsaved` sets `panel`/`reload`/the shell notice but not `draft`, so the ring sits on top of
   the boundary just saved; keeping the draft is right for a *refusal* (#255) and wrong for a save, and
   per (b) the manual escape hatch is broken. (b) is why the `map-draw-target` scenario proves "the draft
   survived the refusal" by finishing again rather than by clicking Clear. — #282
