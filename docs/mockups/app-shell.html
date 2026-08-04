@@ -204,6 +204,24 @@
       </div>
     </div>
 
+    <!-- Feedback — the toast layer (#208): one shell-owned notice channel, not a per-screen toast -->
+    <h2 style="border:0;margin:var(--sp-6) 0 12px;font-size:21px">Feedback — the toast layer</h2>
+    <p class="muted">Every save/undo/error confirmation goes through <b>one shell-owned notice</b>,
+      rendered by <b>one positioned layer</b> — <span class="mono">.toast-layer</span> — pinned to the
+      bottom-centre of the work area, out of grid flow so a notice never shifts the layout it reports
+      on. Only one toast is ever up at a time; a second notification <b>replaces</b> it rather than
+      stacking. A confirmation (<span class="mono">role="status"</span>,
+      <span class="mono">aria-live="polite"</span>) auto-dismisses after 6 seconds; an error
+      (<span class="mono">role="alert"</span>, <span class="mono">aria-live="assertive"</span>) stays
+      up until <b>Dismiss</b> is clicked. <span class="mono">.toast</span> is the surface component (it
+      also appears in flow elsewhere, e.g. the <a href="design-system.html">design system</a>
+      specimens); <span class="mono">.toast-layer</span> is the one place the shell actually positions
+      it.</p>
+    <div class="specimen wrap" style="align-items:center">
+      <div class="toast">✓ Saved · <span class="src-link">Dismiss</span></div>
+      <div class="toast error">⚠ Could not save · <span class="src-link">Dismiss</span></div>
+    </div>
+
   </div>
 </div>
 
