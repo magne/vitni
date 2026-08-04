@@ -59,7 +59,10 @@ a generated column in (PG 12+ supports it, at the cost of a table rewrite).
    key on Postgres) serves `next_human_id`'s new per-length-group descending scan — grouping by
    length first because `IdFormat::extract_number` does not check digit count, so a lexical scan
    across mixed widths (`I00000003` sorts after `I10001`) would hand back a number that is not the
-   true maximum. Neither index is `UNIQUE`: duplicate `human_id`s are not prevented anywhere today,
+   true maximum. The length groups themselves are enumerated by walking that index one probe at a
+   time, because `SELECT DISTINCT length(human_id)` visits every index entry on SQLite (no loose
+   index scan) and would keep the allocator O(rows) — measured in
+   `docs/research/performance-profiling.md`. Neither index is `UNIQUE`: duplicate `human_id`s are not prevented anywhere today,
    and a workspace already holding one must still open. Tag has no `human_id`; its column is always
    `NULL`, which is also what `list_tags`' existing `ORDER BY` over an always-`NULL` expression
    already assumed.

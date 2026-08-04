@@ -122,35 +122,43 @@ re-measurement corrects finding 3 above and gives the before/after numbers `docs
 asked for. **Quick mode** (fewer samples than a full run — the invocation is in *Reproducing* below),
 same machine and sizes as above:
 
-| query (mean)                    |     before |      after | note |
-| -------------------------------- | ---------: | ---------: | ---- |
-| `find_person`, 1 052 ev          |    23.8 µs |    22.2 µs | before looked up `I0000001` (first row); after looks up the *last* allocated id — a real indexed point lookup, still flat |
-| `find_person`, 10 530 ev         |    25.4 µs |    20.4 µs | ″ |
-| `find_person`, 52 650 ev         |    24.2 µs |    30.3 µs | ″ — within quick-mode noise of the smaller sizes |
-| `next_person_human_id`, 1 052 ev |  not benched before | 58.2 µs | new case; a single length-group page hit |
-| `next_person_human_id`, 10 530 ev |  not benched before | 123 µs | |
-| `next_person_human_id`, 52 650 ev |  not benched before | 485 µs | grows with table size — see below |
-| `list_persons`, 1 052 ev         |   890 µs |   616 µs | `ORDER BY human_id` (indexed column) replaces `ORDER BY json_extract(...)` |
-| `list_persons`, 10 530 ev        |  13.1 ms |  8.56 ms | ″ |
-| `list_persons`, 52 650 ev        |  64.6 ms |  46.4 ms | ″ |
+Both lookups are benched against the **last** allocated id, not the first. The old `find_person` row
+in the table above looks up `I0000001`, and `fetch_optional` stops a scan at its first hit, so it
+timed a first-row hit and reported it as an index. The `before` column here is the pre-#233 query
+shapes (`json_extract(payload,'$.state.human_id')` scan for both) measured against that same last-id
+lookup, so the two columns differ only in how the id is found:
 
-`find_person` stays flat, now for the right reason: `EXPLAIN QUERY PLAN` shows
-`SEARCH person_view USING INDEX person_view_human_id_idx (human_id=?)`, not a scan (a unit test
-pins this — `sqlite::tests::the_human_id_lookup_and_allocator_queries_use_their_indexes`).
-`list_persons` got faster as a side effect: ordering by the indexed generated column avoids both a
-`json_extract` per row during the sort comparison and (per `EXPLAIN QUERY PLAN`) the temp b-tree the
-expression-based `ORDER BY` needed.
+| query (mean)                      |   before |   after | change |
+| --------------------------------- | -------: | ------: | -----: |
+| `find_person`, 1 052 ev           |   325 µs | 25.5 µs |   13 × |
+| `find_person`, 10 530 ev          |  3.16 ms | 22.4 µs |  141 × |
+| `find_person`, 52 650 ev          |  14.3 ms | 21.8 µs |  654 × |
+| `next_person_human_id`, 1 052 ev  |   514 µs | 60.4 µs |  8.5 × |
+| `next_person_human_id`, 10 530 ev |  4.63 ms | 63.4 µs |   73 × |
+| `next_person_human_id`, 52 650 ev |  24.3 ms | 57.7 µs |  421 × |
+| `list_persons`, 1 052 ev          |   890 µs |  616 µs |  1.4 × |
+| `list_persons`, 10 530 ev         |  13.1 ms | 8.56 ms |  1.5 × |
+| `list_persons`, 52 650 ev         |  64.6 ms | 46.4 ms |  1.4 × |
 
-`next_person_human_id` is **not flat** in this fixture, growing with table size even though the
-benched dataset's ids (`I{:07}`, all one digit width) all fall in a single length group, which the
-per-length-group design (data-model rationale in ADR 0032) expects to be an near-O(1) page hit. The
-`SELECT DISTINCT length(human_id) ...` group-boundary query is the suspect: `EXPLAIN QUERY PLAN`
-reports it as a `SCAN ... USING INDEX ..._len_idx`, and whether SQLite executes that as a true
-skip-scan (visiting one row per distinct length) or a full index walk (visiting every row) is a
-query-planner choice this research did not pin down. Recorded as an open question, not a regression
-in the allocator's *correctness* — every allocator test (mixed padding, junk paging, all-junk) still
-passes; only its scaling shape needs a closer look, and only if profiling later shows it matters at
-real workspace sizes.
+**Both hot paths are now flat in table size** — 50 × the rows (180 → 9 000 persons) leaves both
+within noise of each other, where before each grew linearly. That is what issue #233 asked for.
+`EXPLAIN QUERY PLAN` shows `SEARCH person_view USING INDEX person_view_human_id_idx (human_id=?)` for
+the lookup, and a `SEARCH … USING INDEX person_view_human_id_len_idx (<expr><?)` probe for the
+allocator's length walk; a unit test pins both
+(`sqlite::tests::the_human_id_lookup_and_allocator_queries_use_their_indexes`).
+
+`list_persons` got moderately faster as a side effect — ordering by the indexed generated column
+avoids a `json_extract` per row during the sort and the temp b-tree the expression-based `ORDER BY`
+needed — but it stays O(n): it still loads and decodes every payload, which finding 1 above is about.
+
+**One planner trap worth recording.** The allocator enumerates its length groups by walking them one
+index probe at a time ("the longest id shorter than the last one"). The obvious
+`SELECT DISTINCT length(human_id) …` is not equivalent: SQLite has no loose index scan, so it visits
+every index entry. Measured directly on a 50 000-row table, 1.745 ms against 0.010 ms for one probe —
+which is the difference between an allocator that reads every row and one that does not, and it does
+not show up as a plan difference (both report `… USING INDEX …_len_idx`). The first version of this
+change shipped the `DISTINCT` form and benched at 58/123/485 µs across the three sizes — visibly O(n)
+under a 100 × smaller constant than the JSON scan, but still O(n).
 
 **Rebuild write cost.** ADR 0032's decision to add both indexes to all 12 human-id tables trades read
 speed for write cost on every projection insert/update, paid during `rebuild_projections` and every
