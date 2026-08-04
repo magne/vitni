@@ -10,8 +10,10 @@
 # once: `toast` must differ from `before` (the toast appeared) and `gone` must match `before` (it went
 # away on its own, and the region it sat over is back to exactly what it was — not just "no visible
 # toast", but no residual layout shift either). The region is the toast's own footprint at the bottom
-# of the work area, read off the `toast` shot at the default 1800x1200 window — not the whole window,
-# since the tabstrip/statusbar around it can legitimately repaint on their own.
+# of the work area — the changed-pixel bbox between the `before` and `toast` shots is `218x54+895+1102`
+# at the default 1800x1200 window, padded a few pixels here. Not the whole window, since the
+# tabstrip/statusbar around it can legitimately repaint on their own; and not a loose box around the
+# toast either, which would dilute the `differ` RMSE with unchanged background.
 description = "A shell notice appears at the bottom of the work area and auto-dismisses on its own (#208)"
 
 [[step]]
@@ -22,6 +24,16 @@ name = "before"
 do = "key"
 chord = "ctrl+z"
 label = "⌘Z with no record open: the Nothing-to-undo notice"
+
+# Sent twice deliberately. A single synthetic keypress is occasionally lost on this display (observed
+# once in four runs of this scenario: all three shots came back byte-identical, so the notice was never
+# raised at all), and a lost keypress would read as "the toast layer is broken". Two presses are two
+# independent chances; the second only replaces the same notice, and the 6s dismissal clock restarts
+# from whichever one landed — still well inside the 4s settle before the `toast` shot.
+[[step]]
+do = "key"
+chord = "ctrl+z"
+label = "⌘Z again — a lost first keypress must not read as a broken toast layer"
 
 [[step]]
 do = "shot"
@@ -39,12 +51,12 @@ name = "gone"
 [[assert]]
 kind = "differ"
 shots = ["before", "toast"]
-region = [650, 1080, 500, 70]
+region = [888, 1096, 232, 66]
 because = "⌘Z with nothing to undo must raise the shell toast at the bottom of the work area"
 
 [[assert]]
 kind = "match"
 shots = ["before", "gone"]
-region = [650, 1080, 500, 70]
+region = [888, 1096, 232, 66]
 tolerance = 0.001
 because = "the toast must auto-dismiss on its own after 6s, leaving no residual layout shift behind"
