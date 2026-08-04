@@ -61,7 +61,7 @@ workspace (~585k events at ~5.85 events/person) **≈ 60-90 s**.
 
 | query                          |  1 052 ev | 10 530 ev | 52 650 ev | scaling |
 | ------------------------------ | --------: | --------: | --------: | ------- |
-| `find_person` (by `HumanId`)   |   24.8 µs |   24.5 µs |   26.3 µs | **flat / O(1)** — indexed |
+| `find_person` (by `HumanId`)   |   24.8 µs |   24.5 µs |   26.3 µs | **not actually indexed — see the ADR 0032 update below** |
 | `list_persons` (full list)     |    845 µs |   9.51 ms |   61.7 ms | **O(n)** — full scan + per-row JSON decode (~6.8 µs/person) |
 | `places_in_bbox` (R\*Tree)     |   44.1 µs |    194 µs |    861 µs | O(matches) — ~0.76 µs/place; here the bbox covers every place (worst case) |
 | `research_notes_for_subject`   |   69.6 µs |    416 µs |   1.98 ms | O(notes) — full-table `json_each` scan (~0.88 µs/note; returns 1 row) |
@@ -106,10 +106,69 @@ condition under which snapshotting would pay off.
    count) even though it returns one row: 2 ms at 2 250 notes. Fine now; if research-note volume ever
    grows large, materialize a `(research_note_id, subject_kind, subject_value)` side-index at
    projection time and query that — the same shape as the external-id lookup. Recorded, not urgent.
-3. **`find_person` is flat and indexed** (~25 µs across all sizes) — no action.
+3. **`find_person` was flat, but not because it was indexed — see the ADR 0032 update below.** It
+   looks up `I0000001`, the first-inserted row, and `fetch_optional` stops the scan at the first
+   hit; the flat ~25 µs across sizes is a first-row hit, not evidence of an index.
 4. **`places_in_bbox` scales with match count, not table size** — the R\*Tree does its job; the
    benched worst case (bbox covering every place) is the ceiling, and a realistic viewport returns a
    subset, so the real-world number is lower.
+
+## ADR 0032 update — the `human_id` index (2026-08-04)
+
+[ADR 0032](../adr/0032-projection-schema-evolution-by-replay.md) added a `GENERATED ALWAYS ... STORED`
+`human_id` column plus two indexes to every human-id-bearing view table, replacing the
+`json_extract`/`->>` scans `next_human_id` and `find_view_by_human_id` did before (issue #233). This
+re-measurement corrects finding 3 above and gives the before/after numbers `docs/issues.md`'s bullet
+asked for. **Quick mode** (fewer samples than a full run — the invocation is in *Reproducing* below),
+same machine and sizes as above:
+
+| query (mean)                    |     before |      after | note |
+| -------------------------------- | ---------: | ---------: | ---- |
+| `find_person`, 1 052 ev          |    23.8 µs |    22.2 µs | before looked up `I0000001` (first row); after looks up the *last* allocated id — a real indexed point lookup, still flat |
+| `find_person`, 10 530 ev         |    25.4 µs |    20.4 µs | ″ |
+| `find_person`, 52 650 ev         |    24.2 µs |    30.3 µs | ″ — within quick-mode noise of the smaller sizes |
+| `next_person_human_id`, 1 052 ev |  not benched before | 58.2 µs | new case; a single length-group page hit |
+| `next_person_human_id`, 10 530 ev |  not benched before | 123 µs | |
+| `next_person_human_id`, 52 650 ev |  not benched before | 485 µs | grows with table size — see below |
+| `list_persons`, 1 052 ev         |   890 µs |   616 µs | `ORDER BY human_id` (indexed column) replaces `ORDER BY json_extract(...)` |
+| `list_persons`, 10 530 ev        |  13.1 ms |  8.56 ms | ″ |
+| `list_persons`, 52 650 ev        |  64.6 ms |  46.4 ms | ″ |
+
+`find_person` stays flat, now for the right reason: `EXPLAIN QUERY PLAN` shows
+`SEARCH person_view USING INDEX person_view_human_id_idx (human_id=?)`, not a scan (a unit test
+pins this — `sqlite::tests::the_human_id_lookup_and_allocator_queries_use_their_indexes`).
+`list_persons` got faster as a side effect: ordering by the indexed generated column avoids both a
+`json_extract` per row during the sort comparison and (per `EXPLAIN QUERY PLAN`) the temp b-tree the
+expression-based `ORDER BY` needed.
+
+`next_person_human_id` is **not flat** in this fixture, growing with table size even though the
+benched dataset's ids (`I{:07}`, all one digit width) all fall in a single length group, which the
+per-length-group design (data-model rationale in ADR 0032) expects to be an near-O(1) page hit. The
+`SELECT DISTINCT length(human_id) ...` group-boundary query is the suspect: `EXPLAIN QUERY PLAN`
+reports it as a `SCAN ... USING INDEX ..._len_idx`, and whether SQLite executes that as a true
+skip-scan (visiting one row per distinct length) or a full index walk (visiting every row) is a
+query-planner choice this research did not pin down. Recorded as an open question, not a regression
+in the allocator's *correctness* — every allocator test (mixed padding, junk paging, all-junk) still
+passes; only its scaling shape needs a closer look, and only if profiling later shows it matters at
+real workspace sizes.
+
+**Rebuild write cost.** ADR 0032's decision to add both indexes to all 12 human-id tables trades read
+speed for write cost on every projection insert/update, paid during `rebuild_projections` and every
+live command. Quick-mode `rebuild` numbers, same sizes:
+
+| events | before (mean) | after (mean) | change |
+| -----: | ------------: | -----------: | -----: |
+|  1 052 |       76.0 ms |      77.4 ms |   +1.8 % |
+| 10 530 |      925.2 ms |     962.7 ms |   +4.1 % |
+| 52 650 |      5.585 s |      5.947 s |   +6.5 % |
+
+Smaller than the 20–40 % expected going in (from an isolated bulk-insert measurement of ~+71 % showing
+the two index writes' raw cost) — in `rebuild_projections` that cost is a modest fraction of the total
+per-event cost, which also covers the R\*Tree geometry index and the succession cross-reference index
+on `place`, and quick mode's smaller sample count makes each number noisier than the full-run figures
+elsewhere in this doc. Criterion's own significance test calls all three "No change in performance
+detected" at `p > 0.05`; read the row as an upper bound on the write cost, not a precise regression
+figure.
 
 ## Reproducing
 
@@ -117,6 +176,19 @@ condition under which snapshotting would pay off.
 cargo bench -p genealogy-db                 # full run (~3-4 min): fixture build + rebuild + query
 cargo bench -p genealogy-db -- rebuild      # rebuild group only
 cargo bench -p genealogy-db -- query        # query group only
+```
+
+**`--quick` needs the compiled binary, not `cargo bench -- --quick`.** `cargo bench` also runs the
+lib's unit tests in bench mode, and `--quick` is forwarded to every binary it runs; the unit-test
+binary doesn't understand it and the whole invocation aborts before the actual `store` bench ever
+runs (`error: Unrecognized option: 'quick'`). Build once, then invoke the `store` binary directly,
+passing the `--bench` flag criterion normally receives from `cargo bench` itself so it doesn't fall
+back to its own "smoke test" mode (`cargo test --benches`'s mode, which just prints `Testing … /
+Success` with no timings):
+
+```bash
+cargo bench -p genealogy-db --bench store --features sqlite --no-run
+./target/release/deps/store-<hash> --bench --quick   # <hash> from the build output above
 ```
 
 The fixture is built once per size and shared by both groups; criterion writes estimates under

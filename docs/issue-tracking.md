@@ -148,7 +148,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **the close/quit confirm cannot save** — the confirm landed (#200) and an in-progress edit now survives leaving its tab (#239), but keeping the edit still means cancelling, finding the record, saving, and closing again. Then the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the two remaining *Shell, tabs & notifications* ease-of-use items (toasts, remembered tab). Then the Norwegian-geography research's remaining item: the `$.state.human_id` index that turns two full projection scans into probes. |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **the close/quit confirm cannot save** — the confirm landed (#200) and an in-progress edit now survives leaving its tab (#239), but keeping the edit still means cancelling, finding the record, saving, and closing again. Then the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, `⌘S` outside the shortcut map, and the two remaining *Shell, tabs & notifications* ease-of-use items (toasts, remembered tab). |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
@@ -179,12 +179,9 @@ the list on its own. Treat the count as a floor.
 | [`⌘S` lives outside the shortcut map](https://github.com/magne/genealogy/issues/206) | Save is neither listed by `?` nor rebindable — inconsistent with every other binding |
 | [Toast notifications](https://github.com/magne/genealogy/issues/208) | No feedback channel for completed actions |
 | [Remember the open record's tab](https://github.com/magne/genealogy/issues/209) | Tab resets on every navigation |
-| [Index `$.state.human_id`](https://github.com/magne/genealogy/issues/233) | `next_human_id` and `find_place` each full-scan the projection; the index is the prerequisite for any bulk place import not being O(n²) |
 
-The first two rows came out of the 2026-07-31 manual pass; #256 is the map, #260 the shell. The last two
-of the table came out of [`research/gis-norway.md`](research/gis-norway.md); the rest came from reading
-the code. The index is the weakest fit — an enabler rather than a defect — and is here because it is
-cheap and unblocks the geography work that follows.
+The first two rows came out of the 2026-07-31 manual pass; #256 is the map, #260 the shell. The last row
+came out of [`research/gis-norway.md`](research/gis-norway.md); the rest came from reading the code.
 
 Optional extra: *The Geography tool's Point tool cannot save at all* — the Place Map editor's "Use
 this point" confirm has no equivalent there, which leaves `GeoPanel::CreateHere` unreachable. Cheap to
