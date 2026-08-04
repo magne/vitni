@@ -863,17 +863,39 @@ impl NavState {
         }
     }
 
+    /// Whether any open tab holds work that quitting would discard ([`Self::tab_has_unsaved`] over the
+    /// whole strip) — the question both `⌘Q` and a window-manager close have to ask.
+    #[must_use]
+    pub fn has_unsaved_work(&self) -> bool {
+        let open = self.records.peek().len();
+        (0..open).any(|index| self.tab_has_unsaved(index))
+    }
+
     /// Requests quitting the application (`⌘Q`): arms the confirm dialog if any open tab holds unsaved
-    /// work ([`Self::tab_has_unsaved`] — a draft or an in-progress edit), otherwise bumps
+    /// work ([`Self::has_unsaved_work`] — a draft or an in-progress edit), otherwise bumps
     /// [`Self::quit_requested`] immediately (nothing to lose).
     pub fn request_quit(&mut self) {
-        let open = self.records.peek().len();
-        let unsaved = (0..open).any(|index| self.tab_has_unsaved(index));
-        if unsaved {
+        if self.has_unsaved_work() {
             self.pending_close.set(Some(CloseRequest::Quit));
         } else {
             self.quit_now();
         }
+    }
+
+    /// Requests quitting on behalf of a close the app did not start — the titlebar `✕`, a session
+    /// logout, `wmctrl -c` — and answers **whether the caller must stop it**.
+    ///
+    /// `true` means unsaved work is at stake: the quit confirm is armed and nothing has been discarded,
+    /// so the native close has to be blocked until the operator answers, and it is
+    /// [`Self::quit_requested`] that finishes the job afterwards. `false` deliberately leaves the quit
+    /// ticket alone — with nothing to lose it is the window's *own* close that proceeds, and bumping the
+    /// ticket would only ask for a second one.
+    pub fn request_window_close(&mut self) -> bool {
+        if !self.has_unsaved_work() {
+            return false;
+        }
+        self.pending_close.set(Some(CloseRequest::Quit));
+        true
     }
 
     /// Whether the confirm can offer **Save** for the open tab at `index`: an in-progress edit is

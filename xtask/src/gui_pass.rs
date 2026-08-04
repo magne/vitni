@@ -11,8 +11,9 @@
 //! `window = [w, h]` sets the size the window is resized to before its steps run, defaulting to
 //! [`WINDOW`] when omitted — the narrow-window case (below `--bp-lg`) needs its own coordinates, never
 //! a single-pane layout's carried over (see `CLAUDE.md`'s "Writing one"). A file lists `[[step]]`s (a
-//! click, a chord, a drag, a wheel, a screenshot, `wait` to sleep and let a timed effect fire, or
-//! `await-exit` to wait for the GUI process itself to quit) and `[[assert]]`s over the shots it took —
+//! click, a chord, a drag, a wheel, a screenshot, `wait` to sleep and let a timed effect fire,
+//! `wm-close` to ask the window to close the way a window manager does, or `await-exit` to wait for the
+//! GUI process itself to quit) and `[[assert]]`s over the shots it took —
 //! `differ` for "the UI reacted",
 //! `match` for "the UI returned to this state", `painted` for "this area is not a flat fill". The
 //! first two compare with an RMSE tolerance, so a caret blink is not a difference. Any assertion may
@@ -29,6 +30,11 @@
 //! `target/gui-pass/home` and a seeded fixture workspace, so a scripted click run can never append
 //! assertions to real genealogy data. `--real-config` (optionally with `--workspace <name>`) points
 //! the same scripts at the caller's own config and workspaces when reproducing something in real data.
+//!
+//! Running no window manager does not put the **window-manager close** out of reach: [`Step::WmClose`]
+//! sends the toplevel the `WM_DELETE_WINDOW` `ClientMessage` the ICCCM defines for it, and GDK dispatches
+//! it from its own event handling with no WM in sight — so the titlebar `✕` / session-logout path
+//! (issue #281) is scriptable, and `wm-close-confirm.toml` drives it.
 //!
 //! What it cannot settle: pan/zoom smoothness, click latency and motion. Software GL is not the
 //! user's GPU. Those stay the `manual-verify` residual (see `docs/issue-tracking.md`).
@@ -130,6 +136,10 @@ enum Step {
     /// Wait for the GUI process to exit (e.g. after a quit chord), failing if it is still up after
     /// [`AWAIT_EXIT_TIMEOUT`]. Proves a quit actually happened, rather than assuming a chord worked.
     AwaitExit { label: String },
+    /// Ask the window to close the way a window manager does — the titlebar `✕`, a session logout,
+    /// `wmctrl -c` — by sending it a `WM_DELETE_WINDOW` `ClientMessage` (see [`wm_close`]). Not
+    /// `xdotool windowclose`, which is `XDestroyWindow` and never reaches the app at all.
+    WmClose { label: String },
     /// Sleep for `seconds`, then let the webview settle — proving a timed effect (e.g. a toast's
     /// auto-dismiss) in the real webview rather than assuming it fires.
     Wait { seconds: u64, label: String },
@@ -628,6 +638,11 @@ fn drive(display: &str, window: &str, steps: &[Step], shots: &Path, session: &mu
                 println!("  {label}");
                 await_exit(session)?;
             }
+            Step::WmClose { label } => {
+                println!("  {label}");
+                wm_close(display, window)?;
+                settle();
+            }
             Step::Wait { seconds, label } => {
                 println!("  {label}");
                 sleep(Duration::from_secs(*seconds));
@@ -660,6 +675,48 @@ fn await_exit(session: &mut Session) -> Result<()> {
         sleep(poll);
         waited += poll;
     }
+}
+
+/// Asks the window to close the way a window manager does, by sending it the `WM_DELETE_WINDOW`
+/// `ClientMessage` the ICCCM defines for it — the titlebar `✕`, a session logout and `wmctrl -c` all
+/// arrive this way, and nothing the app does to itself ever produces one.
+///
+/// `xdotool windowclose` is not this: it is `XDestroyWindow`, which tears the window down in the server
+/// without the client ever hearing about it. Sending the message straight to the toplevel works even
+/// though this display runs no window manager — GDK dispatches it from its own event handling, so the
+/// close reaches tao's `WindowEvent::CloseRequested` exactly as it would on a real desktop.
+fn wm_close(display: &str, window: &str) -> Result<()> {
+    use x11rb::protocol::xproto::{ClientMessageEvent, ConnectionExt as _, EventMask};
+    use x11rb::wrapper::ConnectionExt as _;
+
+    let id: u32 = window
+        .parse()
+        .with_context(|| format!("parsing the window id {window:?}"))?;
+    let (connection, _) = x11rb::connect(Some(display)).with_context(|| format!("connecting to {display}"))?;
+    let protocols = connection
+        .intern_atom(false, b"WM_PROTOCOLS")
+        .context("interning WM_PROTOCOLS")?
+        .reply()
+        .context("interning WM_PROTOCOLS")?
+        .atom;
+    let delete = connection
+        .intern_atom(false, b"WM_DELETE_WINDOW")
+        .context("interning WM_DELETE_WINDOW")?
+        .reply()
+        .context("interning WM_DELETE_WINDOW")?
+        .atom;
+    let event = ClientMessageEvent::new(32, id, protocols, [delete, x11rb::CURRENT_TIME, 0, 0, 0]);
+    // `NO_EVENT` addresses the toplevel itself rather than whatever is selecting for events on it,
+    // which is what a window manager sends and what GDK is listening for.
+    connection
+        .send_event(false, id, EventMask::NO_EVENT, event)
+        .with_context(|| format!("sending WM_DELETE_WINDOW to {window}"))?;
+    // A round trip, not a `flush`: the connection is dropped as this returns, and a flushed-but-not-yet
+    // processed request can still be lost with the socket. `sync` waits for the reply to a
+    // `GetInputFocus` queued behind the send, which the server can only answer once it has processed the
+    // send itself — so the message is on its way to the GUI before this connection goes away.
+    connection.sync().context("waiting for the X server to process it")?;
+    Ok(())
 }
 
 /// Presses, moves and releases button 1 — a canvas drag.

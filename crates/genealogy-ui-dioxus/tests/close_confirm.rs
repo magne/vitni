@@ -1,8 +1,10 @@
 //! SSR-probe assertions for the close-tab/quit confirm flow on [`NavState`] (PR1 §1.4): closing a
 //! *clean* saved tab is immediate; closing one that holds unsaved work — a draft, or a saved record
 //! with an in-progress edit parked in [`NavState::edit_drafts`] (issue #200) — arms the confirm dialog
-//! instead of discarding it silently. Like `dock.rs`, each probe drives `NavState` in `use_hook` and renders a
-//! small marker the test inspects.
+//! instead of discarding it silently. The same holds for the close the *window manager* starts — the
+//! titlebar ✕, a session logout, `wmctrl -c` (issue #281) — which arrives as
+//! [`NavState::request_window_close`] and answers whether the caller must stop it. Like `dock.rs`, each
+//! probe drives `NavState` in `use_hook` and renders a small marker the test inspects.
 
 use std::rc::Rc;
 
@@ -263,6 +265,135 @@ fn confirming_a_pending_quit_fires_it() {
     assert!(
         html.contains("TABS:1"),
         "the draft tab itself is untouched by a quit:\n{html}"
+    );
+}
+
+// ---- The WM-initiated close (issue #281) --------------------------------------------------------
+
+/// A probe for [`NavState::request_window_close`], rendering the verdict it returned beside the usual
+/// marker block: `BLOCKED:true` means the caller must stop the native close, `false` that dioxus's own
+/// close may proceed.
+fn window_close_probe(nav: &NavState, blocked: Signal<bool>) -> Element {
+    rsx! {
+        div { "BLOCKED:{blocked}" }
+        {probe(nav)}
+    }
+}
+
+fn window_close_with_nothing_unsaved() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let mut blocked = use_signal(|| false);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        blocked.set(nav.request_window_close());
+    });
+    window_close_probe(&nav, blocked)
+}
+
+#[test]
+fn a_window_close_with_nothing_unsaved_is_let_through() {
+    // Nothing to lose, so the native close proceeds — and the quit ticket stays untouched, because it
+    // is dioxus's own `handle_close_requested` that closes the window, not `QuitManager`.
+    let html = render(window_close_with_nothing_unsaved);
+    assert!(html.contains("BLOCKED:false"), "the native close is allowed:\n{html}");
+    assert!(html.contains("PENDING:NONE"), "no confirm armed:\n{html}");
+    assert!(
+        html.contains("QUIT:0"),
+        "no quit ticket is spent on a close dioxus performs itself:\n{html}"
+    );
+}
+
+fn window_close_with_an_open_draft() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let mut blocked = use_signal(|| false);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        blocked.set(nav.request_window_close());
+    });
+    window_close_probe(&nav, blocked)
+}
+
+#[test]
+fn a_window_close_over_an_open_draft_is_blocked_and_confirms() {
+    let html = render(window_close_with_an_open_draft);
+    assert!(
+        html.contains("BLOCKED:true"),
+        "the caller must stop the native close:\n{html}"
+    );
+    assert!(html.contains("PENDING:SOME"), "the confirm dialog is armed:\n{html}");
+    assert!(
+        html.contains("QUIT:0"),
+        "nothing quits until the operator answers:\n{html}"
+    );
+    assert!(html.contains("TABS:1"), "the draft is untouched:\n{html}");
+}
+
+fn window_close_with_a_parked_edit() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let mut blocked = use_signal(|| false);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        blocked.set(nav.request_window_close());
+    });
+    window_close_probe(&nav, blocked)
+}
+
+#[test]
+fn a_window_close_over_a_parked_edit_is_blocked_and_confirms() {
+    let html = render(window_close_with_a_parked_edit);
+    assert!(
+        html.contains("BLOCKED:true"),
+        "an in-progress edit of a stored record blocks the close too:\n{html}"
+    );
+    assert!(html.contains("PENDING:SOME"), "the confirm dialog is armed:\n{html}");
+    assert!(
+        html.contains("DIRTY:[people/I0001]"),
+        "the edit is still parked, not discarded:\n{html}"
+    );
+}
+
+fn window_close_confirmed() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let mut blocked = use_signal(|| false);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        blocked.set(nav.request_window_close());
+        nav.confirm_close();
+    });
+    window_close_probe(&nav, blocked)
+}
+
+#[test]
+fn confirming_a_blocked_window_close_quits() {
+    // The window was only hidden, so it is `QuitManager` that has to finish the job.
+    let html = render(window_close_confirmed);
+    assert!(html.contains("QUIT:1"), "Discard all fires the quit:\n{html}");
+}
+
+fn window_close_cancelled() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let mut blocked = use_signal(|| false);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        blocked.set(nav.request_window_close());
+        nav.cancel_close();
+    });
+    window_close_probe(&nav, blocked)
+}
+
+#[test]
+fn cancelling_a_blocked_window_close_leaves_the_app_as_it_was() {
+    let html = render(window_close_cancelled);
+    assert!(html.contains("PENDING:NONE"), "the confirm clears:\n{html}");
+    assert!(html.contains("QUIT:0"), "and nothing quits:\n{html}");
+    assert!(html.contains("TABS:1"), "the tab stays open:\n{html}");
+    assert!(
+        html.contains("DIRTY:[people/I0001]"),
+        "with its unsaved edit intact:\n{html}"
     );
 }
 

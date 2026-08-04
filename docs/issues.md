@@ -189,13 +189,6 @@ long-standing "DNA match views in the UI" item is closed.
 Residuals from the shortcuts work (ADR 0030); see
 [`archive/completed-work.md`](archive/completed-work.md). Deliberate non-goals are under *Decided*.
 
-- **A titlebar/WM-initiated close bypasses the unsaved-work confirm entirely.** `⌘W`/`⌘Q` route through
-  `NavState::request_close`/`request_quit`, which raise the confirm; an OS/WM-initiated close (titlebar
-  ✕, session logout, `wmctrl -c`) reaches `WindowEvent::CloseRequested` directly in the tao event loop
-  instead, and nothing intercepts it there to raise the same dialog (`rg CloseRequested` matches only
-  `window_geometry.rs` and `recent_persistence.rs`, both persistence backstops, neither a confirm gate)
-  — so unsaved work is discarded silently. `cargo xtask gui-pass` cannot drive this to prove it either
-  way: its Xvfb display runs no window manager, so there is no titlebar to close. — #281
 - **Chord entry is a typed canonical string, not live key capture.** `keydown` is inert under SSR and
   `cargo xtask input-guard` forbids a raw form element outside the primitives, so the Preferences
   rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.

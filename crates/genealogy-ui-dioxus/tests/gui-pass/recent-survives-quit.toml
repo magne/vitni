@@ -6,11 +6,12 @@
 # `⌘Q` cannot exercise the backstop: it arrives as its own webview→Rust IPC round trip, so by the time
 # it is processed the effect from opening the record (a separate, earlier IPC round trip) has already
 # flushed — confirmed experimentally, including with the close-hook temporarily removed, and true no
-# matter how tight the timing between the two steps is made. Xvfb also runs no window manager
-# (`gui_pass.rs:49`), so there is no titlebar ✕ / session-logout / `wmctrl -c` here either — the actual
-# path the handler exists for, an OS/WM-initiated close that reaches `CloseRequested` outside that IPC
-# queue with an effect still pending. Neither this scenario nor this harness can drive that path; what
-# this scenario does prove is that the manager is mounted and reads the right signal — it would fail if
+# matter how tight the timing between the two steps is made. The path the backstop actually exists for is
+# an OS/WM-initiated close that reaches `CloseRequested` outside that IPC queue with an effect still
+# pending; the harness *can* drive that (the `wm-close` step sends the toplevel a `WM_DELETE_WINDOW`
+# ClientMessage, which GDK dispatches with no window manager on the display — see `wm-close-confirm.toml`),
+# but this scenario deliberately stays on `⌘Q`, because an ordinary quit is what it is here to cover. What
+# it proves is that the manager is mounted and reads the right signal — it would fail if
 # `RecentPersistenceManager` were left unmounted or wired to the wrong list.
 #
 # `ctrl+q` with nothing dirty runs `NavState::quit_now` immediately — no confirm dialog, see
