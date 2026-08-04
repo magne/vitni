@@ -769,7 +769,11 @@ fn shortcuts_card_renders_one_field_per_global_action_seeded_with_the_default_ch
         html.contains("Default: mod+q"),
         "the default-chord hint renders under the field:\n{html}"
     );
-    // Only the 11 Global actions get a field — a within-screen action (e.g. `move-up`) does not.
+    assert!(
+        html.contains(r#"name="shortcut-save-record""#),
+        "the save-record field renders (issue #206):\n{html}"
+    );
+    // Only the 12 Global actions get a field — a within-screen action (e.g. `move-up`) does not.
     assert!(
         !html.contains(r#"name="shortcut-move-up""#),
         "a within-screen action has no shortcut field:\n{html}"

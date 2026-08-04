@@ -105,6 +105,7 @@ palette-hint-anywhere = { $chord } fra hvor som helst
 # Keyboard notices (the shell toast bound to a shortcut outcome)
 kbd-nothing-to-undo = Ingenting å angre
 kbd-redo-unavailable = Gjenta er ikke tilgjengelig — loggen er kun tilføyelig; utfør endringen på nytt fra Historikk-fanen.
+kbd-nothing-to-save = Ingenting å lagre
 notice-dismiss = Lukk
 
 help-title = Hurtigtaster
@@ -115,6 +116,7 @@ help-col-within = I skjermbildet
 # Beskrivelser av hurtigtaster (radene i ?-overlegget)
 sc-command-palette = Kommandopalett
 sc-new-record = Ny (kontekstbasert)
+sc-save-record = Lagre post
 sc-find = Finn / filtrer
 sc-undo = Angre
 sc-redo = Gjør om

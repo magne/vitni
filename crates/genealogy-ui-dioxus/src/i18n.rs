@@ -480,6 +480,12 @@ impl Chrome {
         fl!(self.loader, "kbd-redo-unavailable")
     }
 
+    /// The `⌘S` "nothing to save" notice (neither the active record nor a docked one is savable).
+    #[must_use]
+    pub fn kbd_nothing_to_save(&self) -> String {
+        fl!(self.loader, "kbd-nothing-to-save")
+    }
+
     /// The accessible label for the shell notice's dismiss control.
     #[must_use]
     pub fn notice_dismiss(&self) -> String {
@@ -2063,6 +2069,7 @@ impl Chrome {
         match id {
             "sc-command-palette" => fl!(self.loader, "sc-command-palette"),
             "sc-new-record" => fl!(self.loader, "sc-new-record"),
+            "sc-save-record" => fl!(self.loader, "sc-save-record"),
             "sc-find" => fl!(self.loader, "sc-find"),
             "sc-undo" => fl!(self.loader, "sc-undo"),
             "sc-redo" => fl!(self.loader, "sc-redo"),

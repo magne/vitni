@@ -39,6 +39,8 @@ pub struct ShellNotices {
     pub nothing_to_undo: String,
     /// Shown by `⌘⇧Z` (redo is unavailable — the log is append-only).
     pub redo_unavailable: String,
+    /// Shown by `⌘S` when neither the active record nor a docked one has anything to save.
+    pub nothing_to_save: String,
 }
 
 /// A shell-global action a key chord maps to — the interpreted result of one keydown, independent of
@@ -70,6 +72,8 @@ pub enum ShellIntent {
     Quit,
     /// Close the active record tab (`⌘W`).
     CloseCurrentTab,
+    /// Save the record the operator is looking at (`⌘S`).
+    SaveRecord,
 }
 
 /// Installs the `g`-prefix state and returns its signal for the shell root to thread into
@@ -153,6 +157,7 @@ fn shell_intent_for_action(action: ShortcutAction) -> Option<ShellIntent> {
         ShortcutAction::Close => Some(ShellIntent::CloseOverlay),
         ShortcutAction::Quit => Some(ShellIntent::Quit),
         ShortcutAction::CloseCurrentTab => Some(ShellIntent::CloseCurrentTab),
+        ShortcutAction::SaveRecord => Some(ShellIntent::SaveRecord),
         ShortcutAction::SwitchRecordTab
         | ShortcutAction::DockRecordTab
         | ShortcutAction::MoveUp
@@ -249,6 +254,11 @@ pub fn dispatch(
             let active = *nav.active_record.peek();
             if let Some(index) = active {
                 nav.request_close_tab(index);
+            }
+        }
+        ShellIntent::SaveRecord => {
+            if !nav.request_save_active() {
+                nav.notify(notices.nothing_to_save.clone());
             }
         }
     }
@@ -539,5 +549,40 @@ mod tests {
     fn a_rebound_action_still_appears_in_the_action_set() {
         // Sanity: the rebind test above targets a real, currently-Global action.
         assert!(shortcuts().iter().any(|entry| entry.action == ShortcutAction::Quit));
+    }
+
+    #[test]
+    fn primary_s_saves_the_record() {
+        assert_eq!(
+            shell_intent(&character("s"), Modifiers::empty(), Code::KeyS, true, &defaults()),
+            Some(ShellIntent::SaveRecord)
+        );
+    }
+
+    #[test]
+    fn bare_s_is_ignored_so_it_still_types_and_stays_the_add_source_key() {
+        assert_eq!(
+            shell_intent(&character("s"), Modifiers::empty(), Code::KeyS, false, &defaults()),
+            None
+        );
+    }
+
+    #[test]
+    fn a_rebound_save_record_chord_changes_what_shell_intent_returns() {
+        // Rebind save-record from `mod+s` to `mod+shift+s`; `mod+s` must stop firing and the new chord
+        // must now fire.
+        let overrides = BTreeMap::from([("save-record".to_owned(), "mod+shift+s".to_owned())]);
+        let (resolved, errors) = resolved_shortcuts(&overrides);
+        assert!(errors.is_empty());
+        assert_eq!(
+            shell_intent(&character("s"), Modifiers::empty(), Code::KeyS, true, &resolved),
+            None,
+            "the old chord no longer fires once rebound"
+        );
+        assert_eq!(
+            shell_intent(&character("s"), Modifiers::SHIFT, Code::KeyS, true, &resolved),
+            Some(ShellIntent::SaveRecord),
+            "the new chord fires the same action"
+        );
     }
 }

@@ -78,6 +78,7 @@ pub fn Shell() -> Element {
     let notices = ShellNotices {
         nothing_to_undo: chrome.0.kbd_nothing_to_undo(),
         redo_unavailable: chrome.0.kbd_redo_unavailable(),
+        nothing_to_save: chrome.0.kbd_nothing_to_save(),
     };
     // Two shell shapes (see `entity_category`): an entity category shows `rail | Explorer | editor`
     // (the record tabstrip + editor host mount); a tool/Dashboard/Help destination shows

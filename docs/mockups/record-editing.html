@@ -99,7 +99,8 @@
       </div>
       <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">Save is <b>disabled</b> until
         something changes and every field is valid. <kbd>Tab</kbd> commits a field to the draft and moves
-        on; <kbd>Ctrl</kbd>/<kbd>⌘</kbd><kbd>S</kbd> saves.</div>
+        on; the Global, rebindable <kbd>Ctrl</kbd>/<kbd>⌘</kbd><kbd>S</kbd> (ADR 0030) saves the active
+        record, falling back to a docked one in a split.</div>
     </div>
   </div>
   <p class="muted"><b>Large-form variant.</b> For records with 50+ fields, entering edit mode leaves fields
@@ -415,7 +416,7 @@
       <tr><td><kbd>e</kbd> / <kbd>F2</kbd></td><td>View: edit the focused field (enters record edit mode).</td></tr>
       <tr><td><kbd>Enter</kbd></td><td>Edit: commit the current field to the draft.</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Cancel the current field edit; if no field is actively editing, cancel the record.</td></tr>
-      <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd><kbd>S</kbd></td><td>Save the record if it is dirty and valid.</td></tr>
+      <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd><kbd>S</kbd></td><td>Global, rebindable (ADR 0030) — not owned by this card. Saves the active record if it is dirty and valid, falling back to a docked one in a split.</td></tr>
       <tr><td><kbd>⌘</kbd><kbd>W</kbd> / <kbd>⌘</kbd><kbd>Q</kbd></td><td>Close the tab / quit — but with unsaved work open (a draft <i>or</i> an edit of a stored record) a confirm asks first, offering Save / Discard / Cancel (§5a).</td></tr>
     </tbody>
   </table>

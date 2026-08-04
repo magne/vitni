@@ -196,10 +196,6 @@ Residuals from the shortcuts work (ADR 0030); see
   `window_geometry.rs` and `recent_persistence.rs`, both persistence backstops, neither a confirm gate)
   — so unsaved work is discarded silently. `cargo xtask gui-pass` cannot drive this to prove it either
   way: its Xvfb display runs no window manager, so there is no titlebar to close. — #281
-- **`⌘S` lives outside the shortcut map.** Save is wired directly in `screens/record_form.rs` (with
-  its own `Esc` to cancel), and shown in `docs/mockups/shortcuts.html`, but is not a `ShortcutAction` —
-  so it is neither listed by the `?` overlay nor rebindable, and it does not go through
-  `NavState`/`resolved_shortcuts` at all. — #206
 - **Chord entry is a typed canonical string, not live key capture.** `keydown` is inert under SSR and
   `cargo xtask input-guard` forbids a raw form element outside the primitives, so the Preferences
   rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.
@@ -515,6 +511,9 @@ decision, not a gap.
   machine/user-local, not a dataset property.
 - **No VS Code-style *when* context.** No context predicates are defined; a design question if a real
   need surfaces, not a missing implementation.
+- **`⌘S` targets the active record, falling back to the docked one, never both.** With a split open,
+  `NavState::request_save_active` saves whichever of the two has something savable — the active pane
+  first, the docked pane only when the active one has nothing to save. It never saves both at once.
 
 ### Model & interchange
 

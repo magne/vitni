@@ -941,6 +941,43 @@ impl NavState {
         self.begin_save(first, then);
     }
 
+    /// Saves the record the operator is looking at (`⌘S`, `ShortcutAction::SaveRecord`): the active
+    /// tab's editor, or — with a split open and nothing savable there — the docked one. Reuses the
+    /// close/quit confirm's request path with the `SaveThen::StayOpen` terminus, so the pane runs its
+    /// own save (`use_save_on_request`) and nothing closes afterwards.
+    ///
+    /// The docked fallback exists because a split shows two panes at once: without it, `⌘S` would
+    /// report "nothing to save" while a visibly dirty docked pane sits right beside a clean active one
+    /// — the one outcome that must never happen (an operator watching their own unsaved edit and being
+    /// told there is nothing to save).
+    ///
+    /// Returns whether a save is under way (armed here, or a run already in flight), so the dispatcher
+    /// can say "nothing to save" instead of arming nothing silently.
+    pub fn request_save_active(&mut self) -> bool {
+        if self.save_request.peek().is_some() {
+            return true;
+        }
+        let active_index = *self.active_record.peek();
+        let docked_index = self.docked_record.peek().as_ref().and_then(|(category, human_id)| {
+            self.records
+                .peek()
+                .iter()
+                .position(|open| open.is_saved_key(*category, human_id))
+        });
+        let Some(index) = [active_index, docked_index]
+            .into_iter()
+            .flatten()
+            .find(|index| self.tab_is_savable(*index))
+        else {
+            return false;
+        };
+        let Some(tab) = self.records.peek().get(index).cloned() else {
+            return false;
+        };
+        self.begin_save(tab.edit_key(), SaveThen::StayOpen);
+        true
+    }
+
     /// Reports the outcome of the save the shell asked for: `(category, human_id)` names the editor
     /// that saved (`human_id` is `None` for a category's create draft), `ok` whether it succeeded. A
     /// no-op unless it names the armed request, so a Save the user clicked themselves never resolves a
