@@ -101,6 +101,70 @@
         docked tab's accent underline is the same convention.</div>
     </div>
 
+    <!-- Docked split: a full second editor, not a preview (#279) -->
+    <h2 style="border:0;margin:var(--sp-6) 0 12px;font-size:21px">Docking a record beside the active one</h2>
+    <p class="muted">Dragging a tab onto the detail pane (or <kbd>⌘⇧</kbd><kbd>1…9</kbd>) opens it
+      <b>docked</b>, side by side with the active record. The docked pane is a full second editor, not a
+      read-only preview: its own record heading (an <span class="mono">&lt;h2&gt;</span>, subordinate to
+      the active pane's single <span class="mono">&lt;h1&gt;</span>) and its own related-item tab strip,
+      independently operable — clicking a tab in either pane changes only that pane, exactly like two
+      separate screens. Each pane's tab/panel ids are scoped per pane (<span class="mono">docked-</span>
+      prefixed for the docked side) so the two strips never collide. Below <span class="mono">lg</span>
+      the split stacks into two rows rather than being dropped or clipping the second pane off-screen.</p>
+    <div class="specimen">
+      <div class="label">Master-detail, docked (<span class="mono">.master-detail.split-2</span>)</div>
+      <div class="master-detail split-2" style="height:420px;border:1px solid var(--line);border-radius:var(--r-md)">
+        <section class="detail">
+          <div class="detail-head">
+            <div class="avatar-lg" aria-hidden="true">📍</div>
+            <div>
+              <h1 class="detail-title">Kristiansand</h1>
+              <div class="wrap" style="margin-top:8px"><span class="badge">P0001</span></div>
+            </div>
+            <div class="head-actions"><button class="btn sm primary" type="button">Edit</button></div>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Kristiansand's related items">
+            <button class="tab active" role="tab" id="tab-overview" aria-selected="true" aria-controls="panel-overview">Overview</button>
+            <button class="tab" role="tab" id="tab-map" aria-selected="false" aria-controls="panel-map">Map</button>
+            <button class="tab" role="tab" id="tab-names" aria-selected="false" aria-controls="panel-names">Names<span class="tab-count">1</span></button>
+          </div>
+          <div class="tab-body" role="tabpanel" id="panel-overview">
+            <p class="muted">The active record's own tab strip works exactly as it does undocked.</p>
+          </div>
+        </section>
+        <section class="detail docked">
+          <div class="docked-head">
+            <span class="docked-title">Oslo</span>
+            <button class="icon-btn" type="button" aria-label="Undock record">✕</button>
+          </div>
+          <div class="detail-head">
+            <div class="avatar-lg" aria-hidden="true">📍</div>
+            <div>
+              <h2 class="detail-title">Oslo</h2>
+              <div class="wrap" style="margin-top:8px"><span class="badge">P0002</span></div>
+            </div>
+            <div class="head-actions"><button class="btn sm primary" type="button">Edit</button></div>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Oslo's related items">
+            <button class="tab" role="tab" id="tab-docked-overview" aria-selected="false" aria-controls="panel-docked-overview">Overview</button>
+            <button class="tab" role="tab" id="tab-docked-map" aria-selected="false" aria-controls="panel-docked-map">Map</button>
+            <button class="tab active" role="tab" id="tab-docked-names" aria-selected="true" aria-controls="panel-docked-names">Names<span class="tab-count">1</span></button>
+          </div>
+          <div class="tab-body" role="tabpanel" id="panel-docked-names">
+            <p class="muted">The docked pane's own strip is independent — it is on Names here while the
+              active pane (left) is on Overview, and clicking either changes only that pane.</p>
+          </div>
+        </section>
+      </div>
+      <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">Each open record
+        remembers its own last-active tab while its tab stays open — reopening a record (or bringing it
+        back from a remount, e.g. switching away and back) restores the tab it was left on rather than
+        flashing back to Overview. The memory is forgotten when the record's tab closes, and carried
+        along if the record is renamed; a create draft has no tab strip, so it never has one to
+        remember. <kbd>⌘</kbd><kbd>Z</kbd> stays scoped to the <b>active</b> record even with a split
+        open — the docked pane never answers for an undo it wasn't addressed.</div>
+    </div>
+
     <!-- Quitting with unsaved work: one dialog over the whole set -->
     <h2 style="border:0;margin:var(--sp-6) 0 12px;font-size:21px">Quitting with unsaved work</h2>
     <p class="muted"><kbd>⌘</kbd><kbd>Q</kbd> with anything unsaved raises one dialog for the whole set:

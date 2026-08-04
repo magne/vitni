@@ -1,0 +1,174 @@
+# #209 (remember a record's tab) and #279 (a docked pane's own tab strip is operable), driven end to
+# end in the real webview — an SSR test cannot reach either: #209 needs a real remount (`use_detail_tab`
+# seeding synchronously from the shell), and #279's root cause needs the actual `.master-detail.split-2`
+# grid, which no markup assertion can see.
+#
+# Measuring this scenario found a second defect behind #279, filed separately: once a dock is open, a
+# pane's tab-strip hit region sits ~9-14px ABOVE its painted row, in both panes. Measured here, at
+# 1800x1200 — the active pane's Names label paints centred on y≈249 and a click there does nothing
+# (RMSE 0.0007 over the pane region), while y=240 switches the tab; the docked pane's row paints at
+# y≈295 and only y=285 hits. So every post-dock click below is aimed deliberately above the visible
+# label. That is NOT the coordinate-carry-over trap `CLAUDE.md` warns about — each value was read off
+# this scenario's own post-dock shot and then bisected against a click that works. It reproduces on
+# `main` and above the 1280px breakpoint, so it is independent of the CSS fix in this change, and it
+# means the fix here does not fully close #279's "clicking a tab does nothing" symptom for a user
+# aiming at the label.
+#
+# The fixture seeds exactly one record (place Kristiansand); this scenario opens a second (Oslo) to
+# have two tabs to dock. The Place create form's first field is the ID (not autofocused for a name), so
+# the click into Name is required — there is no text step, one `key` per character (as
+# `create-appears-in-list.toml` does).
+#
+# Single-pane half (#209): Oslo opens on Overview; clicking its Names tab changes it; opening
+# Kristiansand as a second tab unmounts Oslo's pane (only the active tab's pane is mounted); switching
+# back to Oslo (`⌘1`) remounts it — `match` against the Names shot proves it comes back already on
+# Names, not a flash of Overview.
+#
+# Docked half (#279): `⌘⇧1` docks Oslo beside the now-active Kristiansand. Oslo is docked already
+# showing Names (its remembered tab from earlier), so proving its strip still switches means picking a
+# *different* tab: Overview. Clicking Kristiansand's own Names tab must change only its region; clicking
+# Oslo's (docked) Overview tab must change only its region — each pane's strip is independently
+# operable, and neither disturbs the other. A whole-window `differ`/`match` cannot isolate this (the
+# tabstrip and status bar repaint on any activation), which is what `region` is for. Regions were read
+# off this scenario's own `docked` shot — see `CLAUDE.md`'s "Writing one": never carry a coordinate from
+# the single-pane layout into a docked shot.
+description = "A record remembers its tab across a remount, and a docked pane's own tab strip is independently operable (#209, #279)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Place draft"
+
+[[step]]
+do = "click"
+at = [1150, 737]
+label = "field: Name"
+
+[[step]]
+do = "key"
+chord = "shift+o"
+label = "type: O"
+
+[[step]]
+do = "key"
+chord = "s"
+label = "type: s"
+
+[[step]]
+do = "key"
+chord = "l"
+label = "type: l"
+
+[[step]]
+do = "key"
+chord = "o"
+label = "type: o"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New place: Save"
+
+[[step]]
+do = "shot"
+name = "oslo-overview"
+
+[[step]]
+do = "click"
+at = [710, 249]
+label = "Oslo: Names tab"
+
+[[step]]
+do = "shot"
+name = "oslo-names"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand, in a second tab (unmounts Oslo's pane)"
+
+[[step]]
+do = "shot"
+name = "switched-away"
+
+[[step]]
+do = "key"
+chord = "ctrl+1"
+label = "⌘1: back to Oslo (remounts its pane)"
+
+[[step]]
+do = "shot"
+name = "oslo-remounted"
+
+[[step]]
+do = "key"
+chord = "ctrl+2"
+label = "⌘2: back to Kristiansand (now the active record)"
+
+[[step]]
+do = "key"
+chord = "ctrl+shift+1"
+label = "⌘⇧1: dock Oslo (tab 1) beside the active Kristiansand"
+
+[[step]]
+do = "shot"
+name = "docked"
+
+[[step]]
+do = "click"
+at = [710, 240]
+label = "active pane (Kristiansand): Names tab (aimed above the painted label — see header)"
+
+[[step]]
+do = "shot"
+name = "active-names-clicked"
+
+[[step]]
+do = "click"
+at = [1220, 285]
+label = "docked pane (Oslo): Overview tab (it starts on Names, its remembered tab)"
+
+[[step]]
+do = "shot"
+name = "docked-overview-clicked"
+
+[[assert]]
+kind = "differ"
+shots = ["oslo-overview", "oslo-names"]
+region = [508, 92, 1292, 1080]
+because = "clicking a single pane's own tab must change it"
+
+[[assert]]
+kind = "match"
+shots = ["oslo-names", "oslo-remounted"]
+region = [508, 92, 1292, 1080]
+because = "a remounted pane comes back on the tab it left, not a flash of Overview (#209)"
+
+[[assert]]
+kind = "differ"
+shots = ["docked", "active-names-clicked"]
+region = [508, 92, 646, 1080]
+because = "the active pane's own tab strip is operable with a split open (#279)"
+
+[[assert]]
+kind = "match"
+shots = ["docked", "active-names-clicked"]
+region = [1154, 92, 646, 1080]
+because = "clicking the active pane's tab must not disturb the docked pane"
+
+[[assert]]
+kind = "differ"
+shots = ["active-names-clicked", "docked-overview-clicked"]
+region = [1154, 92, 646, 1080]
+because = "the docked pane's own tab strip is independently operable — the #279 fix"
+
+[[assert]]
+kind = "match"
+shots = ["active-names-clicked", "docked-overview-clicked"]
+region = [508, 92, 646, 1080]
+because = "clicking the docked pane's tab must not disturb the active pane"

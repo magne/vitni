@@ -381,7 +381,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     let loading = chrome.loading();
     let nav = use_context::<NavState>();
     let mut label_nav = nav;
-    let active = use_signal(|| 0_usize);
+    let active = use_detail_tab(Category::Events, &human_id);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<EventEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
@@ -581,7 +581,15 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
             ProvenanceDraft::default(),
         ));
     });
-    use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
+    use_record_undo(
+        nav,
+        Category::Events,
+        &human_id,
+        undo_busy,
+        undo_history,
+        undo_notice,
+        on_undo,
+    );
 
     // The close/quit confirm's Save hands the record back to this pane (issue #240): it runs the same
     // whole-record commit the header's Save does, so ⌘W/⌘Q can keep the edit instead of discarding it.

@@ -4,6 +4,8 @@ use dioxus::html::ScrollBehavior;
 use dioxus::html::geometry::PixelsVector2D;
 use dioxus::prelude::*;
 
+use crate::shell::nav_state::PaneRole;
+
 /// One tab in a [`Tabs`] strip.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TabItem {
@@ -35,10 +37,14 @@ pub fn Tabs(
     children: Element,
 ) -> Element {
     let total = tabs.len();
+    // `PaneRole` is provided only by the docked pane (`DockedRecordDetail`); its absence — the
+    // undocked, single-pane case — reads the same as `PaneRole::Active` (no prefix), so today's
+    // markup is unchanged (#279).
+    let prefix = try_consume_context::<PaneRole>().map_or("", PaneRole::id_prefix);
     let panel_id = tabs
         .get(active)
-        .map_or_else(String::new, |tab| format!("panel-{}", tab.id));
-    let mut nodes = use_signal(|| vec![None::<MountedEvent>; total]);
+        .map_or_else(String::new, |tab| format!("panel-{prefix}{}", tab.id));
+    let mut nodes = use_signal(Vec::<Option<MountedEvent>>::new);
     let mut strip = use_signal(|| None::<MountedEvent>);
     rsx! {
         div {
@@ -52,14 +58,16 @@ pub fn Tabs(
                 button {
                     class: if index == active { "tab active" } else { "tab" },
                     role: "tab",
-                    id: "tab-{tab.id}",
+                    id: "tab-{prefix}{tab.id}",
                     tabindex: if index == active { "0" } else { "-1" },
                     aria_selected: if index == active { "true" } else { "false" },
-                    aria_controls: "panel-{tab.id}",
+                    aria_controls: "panel-{prefix}{tab.id}",
                     onmounted: move |event| {
-                        if let Some(slot) = nodes.write().get_mut(index) {
-                            *slot = Some(event);
+                        let mut nodes = nodes.write();
+                        if nodes.len() <= index {
+                            nodes.resize(index + 1, None);
                         }
+                        nodes[index] = Some(event);
                     },
                     onclick: move |_| onselect.call(index),
                     "{tab.label}"

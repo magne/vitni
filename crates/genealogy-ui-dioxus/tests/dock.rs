@@ -14,7 +14,7 @@ use genealogy_ui_dioxus::app::AppCtx;
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::master_detail::MasterDetail;
 use genealogy_ui_dioxus::shell::ChromeCtx;
-use genealogy_ui_dioxus::shell::nav_state::NavState;
+use genealogy_ui_dioxus::shell::nav_state::{EditKey, NavState};
 use genealogy_ui_dioxus::shell::tabstrip::RecordTabstrip;
 use unic_langid::LanguageIdentifier;
 
@@ -39,7 +39,8 @@ fn render(app: fn() -> Element) -> String {
     dioxus_ssr::render(&vdom)
 }
 
-/// The marker block reflecting the dock state after the driving hook ran.
+/// The marker block reflecting the dock state after the driving hook ran. `TAB:` is the active
+/// record's remembered tab (#209 x #279: docking must not disturb it).
 fn probe(nav: &NavState) -> Element {
     let reference = nav
         .docked_record_ref()
@@ -54,10 +55,12 @@ fn probe(nav: &NavState) -> Element {
     } else {
         "NONE"
     };
+    let active_tab = nav.active_tab().map_or(0, |tab| nav.remembered_tab(&tab.edit_key()));
     rsx! {
         div { "REF:{reference}" }
         div { "RAW:{raw}" }
         div { "DRAG:{drag}" }
+        div { "TAB:{active_tab}" }
     }
 }
 
@@ -374,5 +377,44 @@ fn no_navstate_renders_a_single_pane() {
     assert!(
         !html.contains("detail docked"),
         "no docked pane without a dock:\n{html}"
+    );
+}
+
+fn dock_does_not_disturb_remembered_tab() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav); // Bob (I0002) active.
+        nav.remember_tab(EditKey::saved(Category::People, "I0002"), 2);
+        nav.dock_record(Category::People, "I0001");
+    });
+    probe(&nav)
+}
+
+#[test]
+fn docking_a_record_does_not_disturb_the_active_records_remembered_tab() {
+    let html = render(dock_does_not_disturb_remembered_tab);
+    assert!(
+        html.contains("TAB:2"),
+        "the active record keeps its remembered tab across a dock:\n{html}"
+    );
+}
+
+fn undo_addressed_to_active_not_docked() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav); // Bob (I0002) active.
+        nav.dock_record(Category::People, "I0001");
+        nav.request_undo();
+    });
+    let addressed = *nav.pending_undo.read() == Some(EditKey::saved(Category::People, "I0002"));
+    rsx! { div { "ADDRESSED-BOB:{addressed}" } }
+}
+
+#[test]
+fn requesting_undo_with_a_dock_open_addresses_the_active_record_not_the_docked_one() {
+    let html = render(undo_addressed_to_active_not_docked);
+    assert!(
+        html.contains("ADDRESSED-BOB:true"),
+        "⌘Z targets the active record even with a split open, never the docked one:\n{html}"
     );
 }

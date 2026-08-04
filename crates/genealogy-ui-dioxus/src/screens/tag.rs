@@ -75,7 +75,7 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
     let chrome = state.chrome();
     let loading = chrome.loading();
     let mut nav = use_context::<NavState>();
-    let active = use_signal(|| 0_usize);
+    let active = use_detail_tab(Category::Tags, &id);
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
     let mut reload = use_signal(|| 0_u32);
@@ -140,7 +140,7 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
     let undo_busy = use_memo(move || *edit.editing.read());
     let undo_notice = chrome.kbd_nothing_to_undo();
     let on_undo = use_callback(|_assertion_id: String| {});
-    use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
+    use_record_undo(nav, Category::Tags, &id, undo_busy, undo_history, undo_notice, on_undo);
 
     // The close/quit confirm's Save hands the record back to this pane (issue #240): it runs the same
     // whole-record commit the header's Save does, so ⌘W/⌘Q can keep the edit instead of discarding it.

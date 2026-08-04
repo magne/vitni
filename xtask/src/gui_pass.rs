@@ -7,9 +7,12 @@
 //! `xdotool` is deterministic. `MapLibre` renders there over software GL.
 //!
 //! Scenarios are **data, not code**: each is a TOML file under
-//! `crates/genealogy-ui-dioxus/tests/gui-pass/`, so adding one needs no recompile. A file lists
-//! `[[step]]`s (a click, a chord, a drag, a wheel, a screenshot, or `await-exit` to wait for the GUI
-//! process itself to quit) and `[[assert]]`s over the shots it took — `differ` for "the UI reacted",
+//! `crates/genealogy-ui-dioxus/tests/gui-pass/`, so adding one needs no recompile. A top-level
+//! `window = [w, h]` sets the size the window is resized to before its steps run, defaulting to
+//! [`WINDOW`] when omitted — the narrow-window case (below `--bp-lg`) needs its own coordinates, never
+//! a single-pane layout's carried over (see `CLAUDE.md`'s "Writing one"). A file lists `[[step]]`s (a
+//! click, a chord, a drag, a wheel, a screenshot, or `await-exit` to wait for the GUI process itself to
+//! quit) and `[[assert]]`s over the shots it took — `differ` for "the UI reacted",
 //! `match` for "the UI returned to this state", `painted` for "this area is not a flat fill". The
 //! first two compare with an RMSE tolerance, so a caret blink is not a difference. Any assertion may
 //! add `region = [x, y, w, h]` to work on a single window sub-rectangle instead of the whole shot —
@@ -48,15 +51,17 @@ const SCRIPT_DIR: &str = "crates/genealogy-ui-dioxus/tests/gui-pass";
 const DEFAULT_DISPLAY: &str = ":99";
 /// The virtual screen Xvfb serves. Larger than the window so a resize never clips.
 const SCREEN: &str = "2560x1600x24";
-/// The window size every script's coordinates are written against. There is no window manager on the
-/// display, so the window keeps whatever size `xdotool windowsize` gives it.
+/// The window size a scenario's coordinates are written against, when it declares no `window` of its
+/// own. There is no window manager on the display, so the window keeps whatever size `xdotool
+/// windowsize` gives it.
 const WINDOW: (u32, u32) = (1800, 1200);
+/// The largest x a [`focus_click`] uses, matching today's value at the default [`WINDOW`] — see
+/// [`focus_click`].
+const MAX_FOCUS_X: i32 = 900;
 /// The fixture workspace name.
 const FIXTURE_WORKSPACE: &str = "gui-pass";
 /// The pristine copy of the seeded workspace, restored before every scenario.
 const SEED_DIR: &str = "workspace-seed";
-/// Empty top-bar space, clicked once at startup to hand the webview keyboard focus (see [`focus`]).
-const FOCUS_CLICK: (i32, i32) = (900, 60);
 /// How long to wait for the window to map before giving up.
 const WINDOW_TIMEOUT: Duration = Duration::from_secs(45);
 /// How long [`Step::AwaitExit`] waits for the GUI process to exit before failing.
@@ -69,17 +74,41 @@ const SAME_SCREEN_RMSE: f64 = 0.01;
 
 /// One scenario: what it proves, the steps to drive, and the assertions over the shots taken.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Script {
     /// What this scenario demonstrates, printed as the run header.
     description: String,
+    /// The window size this scenario's coordinates are written against; `None` defaults to
+    /// [`WINDOW`]. `deny_unknown_fields` on this struct is what makes a typo'd key (e.g. `windwo`)
+    /// fail to parse instead of silently running the scenario at the default window.
+    window: Option<[u32; 2]>,
     #[serde(default, rename = "step")]
     steps: Vec<Step>,
     #[serde(default, rename = "assert")]
     asserts: Vec<Assertion>,
 }
 
-/// One scripted action. Coordinates are window pixels at [`WINDOW`], read off an earlier screenshot —
-/// the window sits at the display origin, so they are display coordinates too.
+/// `script`'s window size: its own [`Script::window`], or [`WINDOW`] when it declares none.
+fn window_size(script: &Script) -> (u32, u32) {
+    match script.window {
+        Some([width, height]) => (width, height),
+        None => WINDOW,
+    }
+}
+
+/// Empty top-bar space for a `window`-sized run, clicked once at startup to hand the webview keyboard
+/// focus (see [`focus`]). `.search` is `margin-left: auto` (`components.css`), so the left half of the
+/// top bar is empty at every window width; clamping to half the width keeps the click there even at a
+/// narrow `window` while leaving every current (1800-wide) scenario's [`MAX_FOCUS_X`] unchanged.
+fn focus_click(window: (u32, u32)) -> (i32, i32) {
+    let half = window.0 / 2;
+    let half = i32::try_from(half).unwrap_or(MAX_FOCUS_X);
+    (half.min(MAX_FOCUS_X), 60)
+}
+
+/// One scripted action. Coordinates are window pixels at the scenario's `window` (defaulting to
+/// [`WINDOW`] — see [`window_size`]), read off an earlier screenshot — the window sits at the display
+/// origin, so they are display coordinates too.
 #[derive(Deserialize)]
 #[serde(tag = "do", rename_all = "kebab-case", deny_unknown_fields)]
 enum Step {
@@ -242,13 +271,14 @@ fn run_one(options: &Options, out: &Path, home: &Path, path: &Path) -> Result<()
         restore_workspace(out)?;
     }
 
+    let size = window_size(&script);
     let mut session = start_session(options, home)?;
     let window = wait_for_window(&options.display)?;
     xdotool(
         &options.display,
-        &["windowsize", &window, &WINDOW.0.to_string(), &WINDOW.1.to_string()],
+        &["windowsize", &window, &size.0.to_string(), &size.1.to_string()],
     )?;
-    focus(&options.display, &window)?;
+    focus(&options.display, &window, size)?;
     settle();
 
     let taken = drive(&options.display, &window, &script.steps, shots, &mut session)?;
@@ -548,14 +578,12 @@ fn wait_for_window(display: &str) -> Result<String> {
 /// Both halves are needed. There is no window manager on the display, so X input focus starts at
 /// `PointerRoot` and `windowfocus` is what points it at the window; but the webview only starts
 /// delivering key events to its document after the page has been clicked, so a chord sent before any
-/// click is silently dropped. [`FOCUS_CLICK`] is empty top-bar space, chosen so the click activates
-/// nothing.
-fn focus(display: &str, window: &str) -> Result<()> {
+/// click is silently dropped. [`focus_click`] is empty top-bar space at `size`, chosen so the click
+/// activates nothing.
+fn focus(display: &str, window: &str, size: (u32, u32)) -> Result<()> {
     xdotool(display, &["windowfocus", window])?;
-    xdotool(
-        display,
-        &["mousemove", &FOCUS_CLICK.0.to_string(), &FOCUS_CLICK.1.to_string()],
-    )?;
+    let (x, y) = focus_click(size);
+    xdotool(display, &["mousemove", &x.to_string(), &y.to_string()])?;
     xdotool(display, &["click", "1"])
 }
 
@@ -880,12 +908,58 @@ fn shot_path(taken: &[String], shots: &Path, name: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Assertion, MIN_STANDARD_DEVIATION, Script, describe_region, painted_failed, read_region};
+    use super::{
+        Assertion, MIN_STANDARD_DEVIATION, Script, WINDOW, describe_region, focus_click, painted_failed, read_region,
+        window_size,
+    };
     use std::path::Path;
 
     fn asserts(toml: &str) -> Vec<Assertion> {
         let script: Script = toml::from_str(toml).expect("the scenario parses");
         script.asserts
+    }
+
+    fn script(toml: &str) -> Script {
+        toml::from_str(toml).expect("the scenario parses")
+    }
+
+    #[test]
+    fn a_scenario_defaults_its_window_to_the_standard_size() {
+        let parsed = script(r#"description = "a scenario""#);
+        assert_eq!(window_size(&parsed), WINDOW);
+    }
+
+    #[test]
+    fn a_scenario_can_declare_its_own_window() {
+        let parsed = script(
+            r#"
+            description = "a scenario"
+            window = [1280, 840]
+            "#,
+        );
+        assert_eq!(window_size(&parsed), (1280, 840));
+    }
+
+    #[test]
+    fn an_unknown_top_level_key_is_rejected() {
+        // A typo'd key must fail to parse, not silently run the scenario at the default window.
+        let parsed: Result<Script, _> = toml::from_str(
+            r#"
+            description = "a scenario"
+            widnow = [1280, 840]
+            "#,
+        );
+        assert!(parsed.is_err(), "an unknown top-level key must not parse");
+    }
+
+    #[test]
+    fn the_focus_click_stays_in_empty_top_bar_space_at_both_sizes() {
+        assert_eq!(focus_click(WINDOW), (900, 60), "the default window keeps today's value");
+        assert_eq!(
+            focus_click((1280, 840)),
+            (640, 60),
+            "a narrower window clamps to half its width, still left of .search's margin-left:auto"
+        );
     }
 
     #[test]

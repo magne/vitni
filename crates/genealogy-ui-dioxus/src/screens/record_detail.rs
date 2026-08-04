@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 use genealogy_ui::Category;
 
 use crate::shell::ChromeCtx;
-use crate::shell::nav_state::{NavState, OpenTab};
+use crate::shell::nav_state::{NavState, OpenTab, PaneRole};
 
 use super::citation::{CitationCreateRecord, CitationDetailPane};
 use super::dna_match::{DnaMatchCreateRecord, DnaMatchDetailPane};
@@ -72,8 +72,14 @@ fn draft_pane(category: Category) -> Element {
 /// followed by that record's detail pane. Renders nothing when nothing is docked (the split is only
 /// mounted by [`MasterDetail`](crate::master_detail::MasterDetail) while a dock exists, but the guard
 /// keeps this component safe to render on its own).
+///
+/// Provides [`PaneRole::Docked`] as its very first hook, ahead of the early-return guard, so it is in
+/// context for every descendant regardless of that guard — the sole place this is provided (never in
+/// `MasterDetail`, which receives the primary pane as an `Element` prop built in `Workarea`'s own
+/// scope, not reliably an ancestor of `RecordDetail`'s subtree).
 #[component]
 pub fn DockedRecordDetail() -> Element {
+    use_context_provider(|| PaneRole::Docked);
     let mut nav = use_context::<NavState>();
     let chrome = use_context::<ChromeCtx>();
     let Some(record) = nav.docked_record_ref() else {

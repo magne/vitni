@@ -355,8 +355,8 @@
   <div class="specimen">
     <div class="label">Adaptive layout</div>
     <ul style="margin:0;padding-left:var(--sp-5)">
-      <li>&lt; <span class="mono">lg</span>: a side-by-side compare (<span class="mono">.split-2</span>) collapses to one list + one detail.</li>
-      <li>&lt; <span class="mono">md</span>: single column — the rail becomes a horizontal nav strip and master-detail stacks (list above detail).</li>
+      <li>&lt; <span class="mono">lg</span> (exclusive — 1280px, the app's own default window, keeps the two-column split): a docked pane (<span class="mono">.split-2</span>) stacks into two rows, each still its own full, operable editor, rather than losing or clipping the second pane.</li>
+      <li>&lt; <span class="mono">md</span>: single column — the rail becomes a horizontal nav strip, and the shell-level Explorer list stacks above the editor area (<span class="mono">.master-detail</span> itself carries no list column any more; that moved to the shell).</li>
       <li>Side panel, modal, and palette widths are <span class="mono">min(px, 92vw)</span> so they never overflow a narrow viewport; tables scroll horizontally inside their wrapper.</li>
       <li>Interactive controls keep a ≥24×24px hit area (WCAG 2.2 §2.5.8).</li>
     </ul>

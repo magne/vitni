@@ -722,14 +722,27 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
    Breakpoints mirror --bp-md (960px) and --bp-lg (1280px) in tokens.css.
    ==================================================================== */
 
-/* < lg: a side-by-side compare collapses to a single detail pane (the docked pane stacks/hides). */
-@media (max-width: 1280px) {
-  .master-detail.split-2 { grid-template-columns: 1fr; }
+/* < lg (exclusive: 1280 is *at* lg, and the app's own default window — see main.rs's
+   DEFAULT_WINDOW_SIZE — so it must keep the two-column split, not collapse it): a side-by-side split
+   stacks into two rows rather than losing a pane. The explicit rows are the load-bearing half: a
+   one-column `.split-2` with no `grid-template-rows` put both panes in content-sized implicit rows,
+   and `.workarea { overflow: hidden }` clipped the second one off-screen entirely (#279).
+   `minmax(0, 1fr)` twice bounds each pane so its own `.tab-body` scrolls internally instead of the
+   row growing to fit it. */
+@media (max-width: 1279.98px) {
+  .master-detail.split-2 {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .master-detail.split-2 .detail + .detail { border-left: none; border-top: 1px solid var(--line); }
+  .master-detail.split-2 .detail.docked { border-left: none; border-top: 2px solid var(--accent); }
 }
 
-/* < md: single-column. The rail becomes a horizontal nav strip (keeps nav
-   reachable without the PR2 off-canvas toggle); master-detail stacks. */
-@media (max-width: 960px) {
+/* < md (exclusive, mirroring < lg above): single-column. The rail becomes a horizontal nav strip
+   (keeps nav reachable without the PR2 off-canvas toggle). `.master-detail`'s own base rule is
+   already `grid-template-columns: 1fr`, and `.split-2` stacking is handled at < lg above, so neither
+   needs restating here. */
+@media (max-width: 959.98px) {
   .app, .app.has-explorer { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .rail {
     flex-direction: row; align-items: center; overflow-x: auto;
@@ -738,9 +751,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
   .rail nav { display: flex; align-items: center; gap: var(--sp-1); }
   .rail .nav-group-label, .rail .nav-sep, .rail .nav-item .count { display: none; }
   .rail .nav-item { white-space: nowrap; }
-
-  .master-detail, .master-detail.split-2 { grid-template-columns: 1fr; }
-  .detail + .detail { border-left: none; border-top: 1px solid var(--line); }
 
   .search { min-width: 0; }
 }
