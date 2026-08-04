@@ -106,6 +106,43 @@ async fn allocates_sequential_ids_and_survives_width_growth() {
 }
 
 #[tokio::test]
+async fn next_human_id_takes_the_numeric_max_across_mixed_widths_and_ignores_junk() {
+    let (store, _dir) = store().await;
+    // `I00000003` is both longer and numerically smaller than `I10001`; a naive
+    // length-descending, then lexical-descending scan would stop at the first (longest) group and
+    // hand back a number that is not the true max. `ZZZZ` matches the format at no position at
+    // all (wrong prefix), so it must be skipped entirely, not just fail to parse a number from it.
+    create(&store, 1, "I0001").await;
+    create(&store, 2, "I10001").await;
+    create(&store, 3, "I00000003").await;
+    create(&store, 4, "ZZZZ").await;
+    assert_eq!(store.next_person_human_id(&person_format()).await.unwrap(), "I10002");
+}
+
+#[tokio::test]
+async fn next_human_id_pages_past_a_run_of_unparseable_ids_longer_than_one_page() {
+    let (store, _dir) = store().await;
+    // Forty ids of the same length as the real one, lexically greater (so a descending scan
+    // visits them first) but not matching the `I%04d` format at all — more than the allocator's
+    // 32-row page, so finding the real max requires paging past an exhausted first page.
+    for n in 1..=40u128 {
+        create(&store, n, &format!("Z{n:04}")).await;
+    }
+    create(&store, 41, "I0005").await;
+    assert_eq!(store.next_person_human_id(&person_format()).await.unwrap(), "I0006");
+}
+
+#[tokio::test]
+async fn next_human_id_is_the_first_id_when_every_stored_id_is_junk_or_absent() {
+    let (store, _dir) = store().await;
+    assert_eq!(store.next_person_human_id(&person_format()).await.unwrap(), "I0001");
+
+    create(&store, 1, "not-an-id").await;
+    create(&store, 2, "also-not-one").await;
+    assert_eq!(store.next_person_human_id(&person_format()).await.unwrap(), "I0001");
+}
+
+#[tokio::test]
 async fn allocates_with_a_suffix_format() {
     let (store, _dir) = store().await;
     let format = IdFormat::parse("P-%03d").unwrap();

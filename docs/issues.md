@@ -162,9 +162,9 @@ long-standing "DNA match views in the UI" item is closed.
 - **`ListPane` DOM virtualization** — `master_detail.rs` mounts every row (and a `MountedEvent` per
   row). Render only a scrolled window with a `store.count`-sized spacer and make the roving-focus
   `nodes` bookkeeping window-aware. If server-side windowing is chosen instead, add
-  `list_view_page(table, offset, limit)` (+ a Postgres mirror) and a generated column + index on
-  `$.state.human_id` in `genealogy-db`. Overlaps the `list_*` pagination item under *Performance &
-  scale*.
+  `list_view_page(table, offset, limit)` (+ a Postgres mirror) — the `human_id` column and indexes
+  it would order/page by already exist (ADR 0032). Overlaps the `list_*` pagination item under
+  *Performance & scale*.
 - **Saved searches** — nothing in the palette, list toolbars, or app layer; the 100k-scale research
   workflow argues for it. Needs a design + use-case decision.
 - **Column chooser** — `list.rs` has no column state though PR3's text claims "columns". Decide
@@ -398,11 +398,6 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   `places_containing` query under *Places*, and once containment exists on both engines the two must
   agree at boundary-touching points and shared edges — so a shared conformance corpus, not two
   independently plausible implementations, or parish membership would change with the database engine.
-- **Index `$.state.human_id`** — `next_human_id` reads and JSON-extracts every row of a `*_view` table to
-  take the max, and every `human_id` lookup is a second full scan, so a bulk import is O(n²) twice over
-  before any domain work happens. A generated column plus index turns both into probes. Overlaps
-  **`ListPane` DOM virtualization** under *Lists, search & scale*, which names the same change as one of
-  its options; this is the standalone version, wanted independently of virtualization. — #233
 - **Viewport-scoped loading** — `show_geography` loads every place with a resolved geometry rather than
   calling `places_in_bbox` for the current viewport; wire the spatial query in when place counts grow
   (needs a Postgres fallback given the row above).

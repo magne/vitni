@@ -4,8 +4,12 @@
 //! reuses one container per process (`genealogy-pg`) and gives each test a fresh, randomly-named
 //! database (dropped when the `PostgresTestDb` guard falls out of scope), so tests stay isolated
 //! while sharing one container. A running Docker daemon is required; the tests compile only under
-//! `--features postgres`. They use only the public `Store` surface — no `sqlx`/`postgres-es`/
-//! `cqrs-es` types — proving the abstraction holds for Postgres exactly as for SQLite.
+//! `--features postgres`. Most tests use only the public `Store` surface — no `sqlx`/`postgres-es`/
+//! `cqrs-es` types — proving the abstraction holds for Postgres exactly as for SQLite. The
+//! `human_id` schema-shape tests at the bottom (ADR 0032) are the deliberate exception: proving a
+//! generated column, its indexes, and the drop-and-replay migration exist on disk has no
+//! `Store`-level surface to check, so those alone open a raw `sqlx::PgPool` against the same
+//! database the `Store` under test uses.
 
 #![cfg(feature = "postgres")]
 #![expect(clippy::unwrap_used, reason = "tests abort on setup/assertion failure")]
@@ -21,6 +25,7 @@ use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use genealogy_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
 use genealogy_db::{CommandError, PlaceSuccessionRecord, Store};
 use sqlx::migrate::Migrator;
+use sqlx::{PgPool, Row};
 use test_containers_util::sqlx_pg::PostgresTestDb;
 use time::macros::datetime;
 use uuid::Uuid;
@@ -142,6 +147,43 @@ async fn allocates_sequential_ids_and_survives_width_growth() {
     // Past the zero-pad width, numbering must keep counting numerically, not lexicographically.
     create(&store, 9999, "I9999").await;
     assert_eq!(store.next_person_human_id(&person_format()).await.unwrap(), "I10000");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn next_human_id_takes_the_numeric_max_across_mixed_widths_and_ignores_junk() {
+    let (store, _db) = store().await;
+    // `I00000003` is both longer and numerically smaller than `I10001`; a naive length-descending
+    // then lexical-descending scan would stop at the first (longest) group and hand back a number
+    // that is not the true max. `ZZZZ` matches the format at no position at all, so it must be
+    // skipped entirely, not just fail to parse a number from it.
+    create(&store, 1, "I0001").await;
+    create(&store, 2, "I10001").await;
+    create(&store, 3, "I00000003").await;
+    create(&store, 4, "ZZZZ").await;
+    assert_eq!(store.next_person_human_id(&person_format()).await.unwrap(), "I10002");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn next_human_id_pages_past_a_run_of_unparseable_ids_longer_than_one_page() {
+    let (store, _db) = store().await;
+    // Forty ids of the same length as the real one, lexically greater (so a descending scan
+    // visits them first) but not matching the `I%04d` format — more than the allocator's 32-row
+    // page, so finding the real max requires paging past an exhausted first page.
+    for n in 1..=40u128 {
+        create(&store, n, &format!("Z{n:04}")).await;
+    }
+    create(&store, 41, "I0005").await;
+    assert_eq!(store.next_person_human_id(&person_format()).await.unwrap(), "I0006");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn next_human_id_is_the_first_id_when_every_stored_id_is_junk_or_absent() {
+    let (store, _db) = store().await;
+    assert_eq!(store.next_person_human_id(&person_format()).await.unwrap(), "I0001");
+
+    create(&store, 1, "not-an-id").await;
+    create(&store, 2, "also-not-one").await;
+    assert_eq!(store.next_person_human_id(&person_format()).await.unwrap(), "I0001");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -515,4 +557,86 @@ async fn person_ids(store: &Store) -> Vec<String> {
         .iter()
         .filter_map(|v| v.human_id().map(|h| h.as_str().to_owned()))
         .collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_human_id_column_is_generated_and_indexed() {
+    let (store, db) = store().await;
+    create(&store, 1, "I0001").await;
+
+    let pool = PgPool::connect(db.dsn()).await.unwrap();
+    let is_generated: String = sqlx::query(
+        "SELECT is_generated FROM information_schema.columns \
+         WHERE table_name = 'person_view' AND column_name = 'human_id'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .get("is_generated");
+    assert_eq!(is_generated, "ALWAYS", "human_id must be a generated column (ADR 0032)");
+
+    let indexdefs: Vec<String> = sqlx::query("SELECT indexdef FROM pg_indexes WHERE tablename = 'person_view'")
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get("indexdef"))
+        .collect();
+    assert!(
+        indexdefs.iter().any(|def| def.contains("person_view_human_id_idx")),
+        "expected the equality index, got {indexdefs:?}"
+    );
+    assert!(
+        indexdefs.iter().any(|def| def.contains("person_view_human_id_len_idx")),
+        "expected the length index, got {indexdefs:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_legacy_view_table_is_dropped_and_rebuilt_from_the_log_on_reopen() {
+    let (store, db) = store().await;
+    create(&store, 1, "I0001").await;
+    drop(store);
+
+    // Downgrade `person_view` to the pre-ADR-0032, three-column shape — what a workspace created
+    // before the `human_id` column existed would still have on disk. The event log (untouched
+    // here) is what the reopen below must replay to repopulate it.
+    let pool = PgPool::connect(db.dsn()).await.unwrap();
+    sqlx::query("DROP TABLE person_view").execute(&pool).await.unwrap();
+    sqlx::query(
+        "CREATE TABLE person_view (\
+         view_id TEXT NOT NULL PRIMARY KEY, version BIGINT NOT NULL, payload JSON NOT NULL)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    pool.close().await;
+
+    // Reopening detects the stale shape, drops and recreates the table, and replays the (intact)
+    // event log to repopulate it.
+    let store = Store::open(db.dsn()).await.unwrap();
+    let found = store.find_person("I0001").await.unwrap().expect("rebuilt from the log");
+    assert_eq!(found.human_id().map(HumanId::as_str), Some("I0001"));
+
+    let pool = PgPool::connect(db.dsn()).await.unwrap();
+    let is_generated: String = sqlx::query(
+        "SELECT is_generated FROM information_schema.columns \
+         WHERE table_name = 'person_view' AND column_name = 'human_id'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .get("is_generated");
+    assert_eq!(is_generated, "ALWAYS");
+    pool.close().await;
+
+    // Reopening again is idempotent: the table is already current, so no further drop/rebuild
+    // happens, and the row is neither lost nor duplicated.
+    drop(store);
+    let store = Store::open(db.dsn()).await.unwrap();
+    assert_eq!(
+        person_ids(&store).await,
+        ["I0001"],
+        "a second reopen must not duplicate or drop the row"
+    );
 }
