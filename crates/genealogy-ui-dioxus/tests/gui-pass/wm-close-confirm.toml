@@ -1,0 +1,121 @@
+# Issue #281: the close the *app* never starts. `⌘W`/`⌘Q` arrive as webview→Rust IPC messages and route
+# through `NavState`, so their confirm was always in the way of losing work; the titlebar `✕`, a session
+# logout and `wmctrl -c` arrive as tao's `WindowEvent::CloseRequested` instead, and nothing intercepted
+# that — the one close path reached with the mouse discarded an in-progress edit silently.
+#
+# `wm-close` is that path, sent as the `WM_DELETE_WINDOW` ClientMessage the ICCCM defines (see
+# `gui_pass.rs`'s `wm_close` — `xdotool windowclose` is `XDestroyWindow` and never reaches the app).
+# Nothing here is reachable from SSR: whether the handler is registered at all, whether the window that
+# `WindowCloseBehaviour::WindowHides` hid comes back, and whether the reset to `WindowCloses` lets a
+# confirmed quit actually exit are all facts about a live tao event loop.
+#
+# The record is dirtied the same way `unsaved-quit-confirm.toml` dirties it — click into the ID field,
+# `Tab` onto the Type select, `Down` to change it — so the coordinates below are that scenario's, at the
+# same default 1800x1200 window. Parking the pointer on empty list space before the first shot keeps a
+# hover highlight out of the `match` that follows.
+#
+# The click on empty list space before the *second* `wm-close` is not cosmetic: dismissing a modal with
+# `Esc` leaves nothing in the webview focused, and the re-show after a blocked close is a window-level
+# focus, not a document one.
+#
+# Discard all is clicked at the end because it is the branch that has to exit: `window.close()` re-enters
+# the same dispatch that hid the window, so without resetting the behaviour first the app would hide
+# instead of quitting — `await-exit` is what proves it did not.
+#
+# What still needs a human: whether the hide-and-re-show flashes, and where focus lands afterwards.
+description = "A window-manager close raises the unsaved-work confirm, survives Cancel, and exits on Discard all (#281)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "click"
+at = [1740, 145]
+label = "detail head: Edit"
+
+[[step]]
+do = "click"
+at = [1150, 438]
+label = "field: ID input"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "Tab onto the Type select"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "Type: Municipality → Parish"
+
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "park the pointer on empty list space"
+
+[[step]]
+do = "shot"
+name = "dirty"
+
+[[step]]
+do = "wm-close"
+label = "WM_DELETE_WINDOW, as the titlebar ✕ sends it"
+
+[[step]]
+do = "shot"
+name = "wm-confirm"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "confirm: Esc, the Cancel path"
+
+[[step]]
+do = "shot"
+name = "after-esc"
+
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "empty list space: put keyboard focus back in the webview after Esc"
+
+[[step]]
+do = "wm-close"
+label = "WM_DELETE_WINDOW again, this time to answer it"
+
+[[step]]
+do = "shot"
+name = "wm-confirm-2"
+
+[[step]]
+do = "click"
+at = [961, 438]
+label = "confirm: Discard all — read off 02-wm-confirm.png"
+
+[[step]]
+do = "await-exit"
+label = "the confirmed quit must exit, not hide the window it re-showed"
+
+[[assert]]
+kind = "differ"
+shots = ["dirty", "wm-confirm"]
+because = "a window-manager close over an unsaved edit must raise the confirm, not discard it"
+
+[[assert]]
+kind = "match"
+shots = ["dirty", "after-esc"]
+tolerance = 0.001
+because = "Cancel must leave the app running with the tab open and the edit intact"
+
+[[assert]]
+kind = "match"
+shots = ["wm-confirm", "wm-confirm-2"]
+tolerance = 0.001
+because = "the second close must raise the same dialog, or the Discard all click lands on the pane behind it"

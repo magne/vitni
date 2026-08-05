@@ -121,6 +121,11 @@ nobody grooms weekly.
   graphical-capable machine, so it does not run in CI today. `manual-verify` means *that* residual, not
   "agents can't run the webview" — the reason this label used to give.
 
+  Even the **window-manager close** is scriptable without a window manager: the `wm-close` step sends the
+  toplevel a `WM_DELETE_WINDOW` ClientMessage, which GDK dispatches on its own, so the titlebar-✕ path
+  (#281) is asserted by `wm-close-confirm.toml` rather than left to a human. What is left there is again
+  feel — whether the hide-and-re-show flashes, and where focus lands after it.
+
 `docs` now has an H3 home of its own — *Docs & repo tooling* under *Platform & operations* — because
 `issue-sync` requires every bullet to sit under some `###` area to inherit a label from. `i18n` remains
 purely cross-cutting.
@@ -148,7 +153,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **the close/quit confirm cannot save** — the confirm landed (#200) and an in-progress edit now survives leaving its tab (#239), but keeping the edit still means cancelling, finding the record, saving, and closing again. Then the outstanding manual webview pass, the record-picker listener leak, the recent-list write racing a keyboard quit, and a WM-initiated close bypassing the confirm entirely. |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **the close/quit confirm cannot save** — the confirm landed (#200) and an in-progress edit now survives leaving its tab (#239), but keeping the edit still means cancelling, finding the record, saving, and closing again. Then the outstanding manual webview pass, the record-picker listener leak, and the recent-list write racing a keyboard quit. |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
@@ -164,7 +169,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (19 so far)
+### `0.9 — UI stabilization` (18 so far)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
 audit could find by reading code; the rest came from using the GUI in earnest, which is exactly how it
@@ -173,7 +178,6 @@ the list on its own. Treat the count as a floor.
 
 | Item | Why it gates a release |
 | --- | --- |
-| [A titlebar/WM-initiated close bypasses the unsaved-work confirm](https://github.com/magne/genealogy/issues/281) | The one close path reached with the mouse discards an in-progress edit silently — the outcome §3 names as unshippable |
 | [A docked pane's tab-strip hit region sits above its painted row](https://github.com/magne/genealogy/issues/285) | #279's residual: a click on the visible tab label still misses in a split, so docking stays awkward even with the layout fixed |
 | [The Geography draw-and-save path cannot commit a point, and never erases a draft](https://github.com/magne/genealogy/issues/282) | A visible tool that cannot save, plus a red ring neither Clear nor a save removes, so the map shows a shape the app does not hold |
 | [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
@@ -183,6 +187,11 @@ the list on its own. Treat the count as a floor.
 
 #256 and #260 came out of the 2026-07-31 manual pass — the map and the shell respectively; #281–#284
 came out of the 2026-08-04 sweep alongside the #279 trace; the rest came from reading the code.
+
+**#281 is closed and dropped from this table:** a `CloseRequested` handler in `QuitManager` now turns a
+window-manager close — the titlebar `✕`, a session logout, `wmctrl -c` — into the same quit confirm
+`⌘Q` raises, holding the native close back with `WindowCloseBehaviour::WindowHides` and re-showing the
+window in the same event-loop iteration; with nothing unsaved the close is let through untouched.
 
 **#206 is closed and dropped from this table:** `⌘S` is now `ShortcutAction::SaveRecord`, a `Global`,
 rebindable chord dispatched by the shell and routed to the mounted pane through the existing

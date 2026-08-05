@@ -1,7 +1,7 @@
 //! "Jump back in" recent-list persistence (#205): an eager `use_effect` writes the list on every
 //! change, plus a `CloseRequested`/`Destroyed` backstop that reads the signal directly rather than
-//! waiting on the effect queue — mirroring [`WindowGeometryManager`](super::window_geometry), the only
-//! other place in this crate that installs such a handler (`rg CloseRequested` turns up nothing else).
+//! waiting on the effect queue — mirroring [`WindowGeometryManager`](super::window_geometry) and
+//! [`QuitManager`](super::quit_manager), the other two places in this crate that install such a handler.
 //!
 //! `⌘Q` cannot lose the write: it reaches `NavState` as its own webview→Rust IPC message, so by the
 //! time it is processed, the effect from whatever mutated `recent` earlier (opening a record is its own,
@@ -9,9 +9,10 @@
 //! before the next is even looked at. The gap this backstop closes is an **OS/WM-initiated** close —
 //! the titlebar ✕, a session logout, `wmctrl -c` — which reaches `CloseRequested` directly from the tao
 //! event loop, never through that queue, and so can arrive with the effect still pending. `gui-pass`
-//! cannot drive that path: its Xvfb display runs no window manager (`gui_pass.rs:49`), so
-//! `recent-survives-quit.toml` proves the manager is mounted and reads the right signal, not that this
-//! specific backstop fires — see that scenario's header for the experiment that established this.
+//! *can* drive that path — its `wm-close` step sends the toplevel a `WM_DELETE_WINDOW` `ClientMessage`,
+//! which GDK dispatches with no window manager on the display — but `recent-survives-quit.toml` still
+//! drives `⌘Q`, because it is the recent list surviving an ordinary quit that it is there to prove;
+//! `wm-close-confirm.toml` is what covers the `CloseRequested` path itself.
 //!
 //! Mounted inside the [`Shell`](super::root::Shell) so the desktop window hook has context. The
 //! non-desktop build (the SSR interpreter test) compiles an inert no-op so the shell renders host-free.
