@@ -19,7 +19,7 @@ genealogy-plugin-host = { workspace = true }
 # `gui-pass`'s `wm-close` step: `xdotool windowclose` is `XDestroyWindow`, which never reaches the
 # app, so a window-manager close is scripted as a `WM_DELETE_WINDOW` ClientMessage instead. Not a new
 # crate in the graph — dioxus-desktop already pulls x11rb in through global-hotkey.
-x11rb = "0.13"
+x11rb = "0.14"
 
 # Duplicated (the `[lints]` table can't both inherit and override). xtask is a developer
 # task runner whose stdout/stderr is its interface, so the print lints are relaxed — same
