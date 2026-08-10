@@ -518,6 +518,13 @@ decision, not a gap.
   the #279 scenarios passed while the defect was live. `tab-strip-overflow.toml` is the regression
   test, and it needs no dock at all.
 
+  **The overflow is the precondition, which is why a casual check does not see this.** A manual pass on
+  a real GPU during the investigation found the tab hit box fine — expected: a wide single pane fits the
+  whole strip, so there is no scrollbar and no dead band. It is not evidence of an Xvfb artifact, and
+  the mechanism cannot be one — a paint/compositing misalignment cannot make the strip *scroll*, which
+  is what the failing clicks did. To see it by hand, put a Place in a pane narrow enough to clip the tab
+  row (dock a second record, or use the app's own 1280×840 default window) and click a label's centre.
+
 ### Geography map
 
 - **The map needs no explicit `map.resize()` call.** #252 read the blank canvas as a missing resize:
