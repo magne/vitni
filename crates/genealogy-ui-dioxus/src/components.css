@@ -198,8 +198,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
    rule: the `.rtab` row paints 34px tall, the scrollbar's ~20px hit rectangle covers the lower two
    thirds of every record tab — the label's own centre and its close `✕` — and six tabs overflow the
    strip at the app's own 1280x840 default window, which is one open record plus a draft per category.
-   `record-tabstrip-overflow.toml` clicks a tab's painted centre there; without these two lines the
-   pane does not change at all (RMSE 0.0000). */
+   `record-tabstrip-overflow.toml` clicks two tabs' painted centres and a tab's close `✕` there;
+   without these two lines all three leave the pane untouched (RMSE 0.0000). */
 .tabstrip .tabs-scroll {
   display: flex; align-items: center; gap: var(--sp-1);
   min-width: 0; overflow-x: auto;

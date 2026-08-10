@@ -517,7 +517,10 @@ decision, not a gap.
   and a whole-pane `differ` cannot tell a tab switch from a sideways scroll of the strip, which is how
   the #279 scenarios passed while the defect was live. `tab-strip-overflow.toml` is the regression
   test, and it needs no dock at all. The record tabstrip's `.tabs-scroll` had the same defect on a
-  34px row, measured rather than inferred from the shared rule — `record-tabstrip-overflow.toml`.
+  34px row, measured rather than inferred from the shared rule — `record-tabstrip-overflow.toml`,
+  where a tab's close `✕` was dead too. One trap worth carrying forward from writing it: a `✕` probe
+  aimed at a *draft* tab proves nothing, because the unsaved-draft confirm paints over the same region
+  the assertion measures, so it passes on the modal rather than on the close.
 
   **The overflow is the precondition, which is why a casual check does not see this.** A manual pass on
   a real GPU during the investigation found the tab hit box fine — expected: a wide single pane fits the

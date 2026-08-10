@@ -12,10 +12,19 @@
 # Measured on this scenario's own `filled` shot: the `.rtab` box paints y 86-119 with the label glyphs
 # on 99-107, and `.tabstrip`'s border-bottom on 121. Tab boxes are Kristiansand 582-698, New Places
 # 705-832, New People 839-970, New Families 977-1115, New Events 1122-1230 — the last one clipped by
-# the scroll box's right edge, which is the overflow this depends on. The click aims at New People's
-# painted centre, (904, 103).
+# the scroll box's right edge, which is the overflow this depends on. The clicks aim at New People's
+# painted centre (904, 103), then Kristiansand's (640, 103), then Kristiansand's close `✕` (690, 103) —
+# re-measured on `kristiansand-clicked`, because `.rtab.active` is `font-weight: 600` and the bolder
+# label pushes its own `✕` right. Without the fix all three sit in the dead band and every assertion
+# below fails at RMSE 0.0000.
 #
-# The assertion is over the editor pane only, below the tabstrip. A region containing the strip could
+# The `✕` probe closes **Kristiansand**, a saved record, and that choice is load-bearing. Aimed at a
+# draft's `✕` it proves nothing: the unsaved-draft "Close tab?" confirm paints over the same pane
+# region, so the assertion passes on the modal whether or not the tab ever closes. A saved record's tab
+# closes outright, and closing the *active* one moves the pane to another record — a consequence a
+# sideways scroll cannot fake.
+#
+# Every assertion is over the editor pane only, below the tabstrip. A region containing the strip could
 # not tell a record switch from the sideways scroll the defect produced instead.
 description = "A click at a record tab's painted centre switches records when the tabstrip overflows (#285)"
 window = [1280, 840]
@@ -88,9 +97,41 @@ label = "record tab: New People, at the painted label's centre"
 do = "shot"
 name = "people-clicked"
 
+[[step]]
+do = "click"
+at = [640, 103]
+label = "record tab: Kristiansand, at the painted label's centre"
+
+[[step]]
+do = "shot"
+name = "kristiansand-clicked"
+
+[[step]]
+do = "click"
+at = [690, 103]
+label = "record tab: Kristiansand's close ✕, at its painted centre"
+
+[[step]]
+do = "shot"
+name = "kristiansand-closed"
+
 [[assert]]
 kind = "differ"
 shots = ["filled", "people-clicked"]
 region = [508, 130, 772, 600]
 tolerance = 0.02
 because = "clicking a record tab's painted label must switch records, not scroll the tabstrip (#285)"
+
+[[assert]]
+kind = "differ"
+shots = ["people-clicked", "kristiansand-clicked"]
+region = [508, 130, 772, 600]
+tolerance = 0.02
+because = "a second tab's painted label, to prove the first hit was not a one-off"
+
+[[assert]]
+kind = "differ"
+shots = ["kristiansand-clicked", "kristiansand-closed"]
+region = [508, 130, 772, 600]
+tolerance = 0.02
+because = "the close ✕ sits in the same dead band as the label — closing the active record's tab must move the pane to another record (#285)"
