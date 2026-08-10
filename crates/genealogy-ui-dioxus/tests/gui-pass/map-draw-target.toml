@@ -9,11 +9,11 @@
 # read off that post-toast layout, not off `map-polygon.toml`'s (pre-toast) row.
 #
 # "The draft survives the refusal" is asserted by *finishing again* after picking a place, not by
-# clicking Clear and watching the ring vanish: Clear empties the draft state but never erases the ring
-# from the canvas (a pre-existing defect found while writing this scenario — see the Clear bullet in
-# `docs/issues.md`), so a canvas compare either side of Clear proves nothing. Re-finishing is also the
-# recovery path the refusal toast actually promises: the geometry panel can only open if the draft
-# still held its three vertices.
+# clicking Clear and watching the ring vanish: Clear does erase the ring (`map-clear-draft.toml` covers
+# it — the #282(b) report on this scenario turned out to be a compositor gap, not a state bug, fixed by
+# forcing a redraw after the draft push), but a Clear/no-Clear compare here would only prove that fix,
+# not this one. Re-finishing is the actual recovery path the refusal toast promises: the geometry panel
+# can only open if the draft still held its three vertices.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "Finishing a shape with no draw target is refused, and the draft survives the refusal (#255)"
