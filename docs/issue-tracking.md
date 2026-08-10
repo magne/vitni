@@ -77,8 +77,10 @@ became H3s to satisfy markdownlint MD036, not because they name areas: a naive "
 would invent `area/model-interchange` and `area/architecture` for two headings with no work behind them,
 and a second near-duplicate keyboard label. The rule is **one label per H3 under the four backlog H2s**
 (*Records & data model*, *Frontend & interaction*, *Import, export & plugins*, *Platform & operations*)
-— which is exactly the 21 above. Separately, **`## Bugs`** has no H3s by design: a bug takes its
-`area/*` from whichever area it affects, plus `type/bug`.
+— which is exactly the 21 above. Separately, **`## Bugs`** is a pointer section, not a place bullets
+live: an open bug sits under the `###` area it affects and takes that `area/*` label plus `type/bug`.
+`cargo xtask issue-sync` enforces that — a bullet directly under `## Bugs` is reported as misplaced,
+with the area H3 named as the fix.
 
 ### `type/*` — what kind of work
 

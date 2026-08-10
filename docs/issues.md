@@ -26,8 +26,7 @@ fixed and archived; the two of those fixes that ship without test coverage now h
 map*.
 
 Open bugs take their `area/*` from whichever area they affect, plus `type/bug`, and live under that
-area's `###` heading — see the [`issue-sync`](#docs--repo-tooling) item for the one place that rule and
-the tool disagree.
+area's `###` heading.
 
 ## Records & data model
 
@@ -460,16 +459,6 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 The `area/docs` label already existed with no `###` home; this is it.
 
-- **`issue-sync` rejects the bug bullets that `issue-tracking.md` says are correct.** `offline_problems`
-  in `xtask/src/issue_sync.rs` fails any bullet whose section has no `###` area — "is directly under
-  `## X` with no `###` area, so it has no area/\* label to inherit" — but
-  [`issue-tracking.md`](issue-tracking.md) §2 states "**`## Bugs`** has no H3s by design: a bug takes its
-  `area/*` from whichever area it affects, plus `type/bug`". So the documented shape for an open bug is
-  one the tool refuses. Latent today only because `## Bugs` currently holds prose, not bullets: the two
-  open defects were deliberately routed under their area H3s to avoid it. Whichever way it is resolved —
-  exempt `## Bugs` in the parser, or drop the by-design claim from the doc and require bugs to live under
-  an area H3 — the two must agree, because `cargo xtask check` is a prek hook and a docs-only commit gets
-  no CI (`paths-ignore` covers `docs/**`), so this is the only gate that would catch it. — #235
 - **`gui-pass` occasionally grabs a blank first shot.** Once in roughly a dozen runs the first `shot` of
   a scenario comes back uniform (`… is blank (standard deviation 0) — the webview painted nothing`) and
   the run aborts, passing on a re-run with nothing changed. The startup handshake in

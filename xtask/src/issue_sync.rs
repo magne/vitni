@@ -8,7 +8,8 @@
 //! - **Offline** (default; runs in `cargo xtask check`, so prek and CI cover it): validate the doc's
 //!   own invariants — every issue reference is well-formed, no number is claimed by two bullets, and
 //!   every bullet under a backlog H2 sits inside an `###` area so it has an `area/*` label to inherit.
-//!   No network, no token.
+//!   `## Bugs` is a pointer section rather than a backlog H2, so a bullet there is reported as
+//!   misplaced — it belongs under the `###` area it affects. No network, no token.
 //! - **Online** (`--online`): additionally reconcile against `gh issue list` and report drift in both
 //!   directions — a bullet pointing at a closed issue, an open issue whose bullet is gone, an open
 //!   issue with no bullet at all. Needs `gh` authenticated, so it is a scheduled/manual job rather
@@ -28,6 +29,8 @@ use anyhow::{Context, Result, bail};
 const ISSUES_DOC: &str = "docs/issues.md";
 /// H2 sections that hold decisions rather than work — bullets there are never filed.
 const NON_BACKLOG_H2: [&str; 1] = ["Decided — no action needed"];
+/// H2 sections that hold prose pointing elsewhere — a bullet there is misplaced, not arealess.
+const POINTER_H2: [&str; 1] = ["Bugs"];
 
 /// One backlog bullet: where it sits and which issue (if any) it claims.
 #[derive(Debug, PartialEq, Eq)]
@@ -180,15 +183,31 @@ pub fn offline_problems(bullets: &[Bullet]) -> Vec<String> {
             }
         }
 
-        if !decided && bullet.area.is_none() && !bullet.section.is_empty() {
-            problems.push(format!(
-                "{ISSUES_DOC}:{}: \"{}\" is directly under `## {}` with no `###` area, \
-                 so it has no area/* label to inherit",
-                bullet.line, bullet.title, bullet.section
-            ));
+        if let Some(problem) = placement_problem(bullet, decided) {
+            problems.push(problem);
         }
     }
     problems
+}
+
+/// Where a bullet sits: it belongs under an `###` area, and never under a pointer H2.
+fn placement_problem(bullet: &Bullet, decided: bool) -> Option<String> {
+    if decided || bullet.section.is_empty() || bullet.area.is_some() {
+        return None;
+    }
+    if POINTER_H2.contains(&bullet.section.as_str()) {
+        return Some(format!(
+            "{ISSUES_DOC}:{}: \"{}\" is under `## {}`, which is a pointer section: \
+             move it under the `###` area it affects, where it inherits that area/* label \
+             plus type/bug",
+            bullet.line, bullet.title, bullet.section
+        ));
+    }
+    Some(format!(
+        "{ISSUES_DOC}:{}: \"{}\" is directly under `## {}` with no `###` area, \
+         so it has no area/* label to inherit",
+        bullet.line, bullet.title, bullet.section
+    ))
 }
 
 /// Reconciles filed bullets against GitHub in both directions.
@@ -384,6 +403,35 @@ mod tests {
             offline_problems(&parse(doc)).is_empty(),
             "decisions are not filed, so they need no area"
         );
+    }
+
+    #[test]
+    fn a_bullet_under_bugs_is_told_to_move_to_its_area() {
+        let doc = "## Bugs\n- **Something is broken.** Details here.\n";
+        let problems = offline_problems(&parse(doc));
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("move it under the `###` area"), "{problems:?}");
+        assert!(
+            !problems[0].contains("label to inherit"),
+            "the generic arealess text is the confusing one this replaces: {problems:?}"
+        );
+    }
+
+    #[test]
+    fn a_bug_bullet_under_its_area_is_clean() {
+        let doc = "## Frontend & interaction\n### Geography & map\n- **Markers mislabel** — x — #232\n";
+        assert!(
+            offline_problems(&parse(doc)).is_empty(),
+            "an open bug lives under the `###` area it affects"
+        );
+    }
+
+    #[test]
+    fn a_filed_bullet_under_bugs_is_still_flagged_once() {
+        let doc = "## Bugs\n- **Something is broken** — detail — #7\n";
+        let problems = offline_problems(&parse(doc));
+        assert_eq!(problems.len(), 1, "the reference neither suppresses nor duplicates it");
+        assert!(problems[0].contains("move it under the `###` area"), "{problems:?}");
     }
 
     #[test]
