@@ -23,8 +23,9 @@ use genealogy_app::{ConfigStore, FileConfigStore, MapConfig, MapProvider, PlaceG
 use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
 
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapCredit, MapDraft, MapZoomReadout, events_geojson,
-    fit_bounds, geo_point, map_surface, markers_geojson, push_map_data, push_map_draft, rendered_credit, select_tool,
+    DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapCredit, MapDraft, MapZoomReadout,
+    draft_actions, draft_actions_row, draft_geometry, draw_tool_buttons, events_geojson, fit_bounds, geo_point,
+    map_surface, markers_geojson, push_map_data, rendered_credit, use_draft_push,
 };
 use super::prelude::*;
 use crate::i18n::Chrome;
@@ -137,7 +138,7 @@ pub fn GeographyScreen() -> Element {
         }
     });
     // Re-push the in-progress draft overlay whenever it changes.
-    use_effect(move || push_map_draft(MAP_CONTAINER_ID, &draft()));
+    use_draft_push(MAP_CONTAINER_ID, draft);
     // Recentre/zoom the map on the rail/picker's current selection, so picking a place gives visible
     // feedback that the selection took (before this, only the toolbar's own Fit button ever moved the
     // map — selecting a place otherwise had no on-map effect at all).
@@ -167,19 +168,12 @@ pub fn GeographyScreen() -> Element {
             .collect()
     });
 
-    let on_finish_polygon = move |_| {
-        let MapDraft::Polygon(vertices) = draft() else { return };
-        if vertices.len() < 3 {
-            nav.notify_error(coordinate_invalid.clone());
-            return;
-        }
-        let geometry = PlaceGeometry::Polygon {
-            exterior: vertices.iter().map(|&(lat, lon)| geo_point(lat, lon)).collect(),
-            holes: Vec::new(),
-        };
-        open_geometry_panel(selected, panel, nav, &no_draw_target, geometry);
-    };
-    let on_clear_draft = move |_| draft.set(MapDraft::Empty);
+    let on_commit_draft = EventHandler::new(move |()| match draft_geometry(tool(), &draft()) {
+        Ok(geometry) => open_geometry_panel(selected, panel, nav, &no_draw_target, geometry),
+        Err(DraftRefusal::TooFewVertices) => nav.notify_error(coordinate_invalid.clone()),
+        Err(DraftRefusal::Nothing) => {}
+    });
+    let on_clear_draft = EventHandler::new(move |()| draft.set(MapDraft::Empty));
 
     let saved_label = state.data_loc().action_label("saved");
     rsx! {
@@ -197,17 +191,12 @@ pub fn GeographyScreen() -> Element {
                     } else {
                         {geography_map_surface(&chrome.0, marker_count, event_count, tool, draft, zoom, rendered_credit(&provider()))}
                     }
-                    if matches!(tool(), DrawTool::Polygon) {
-                        div { class: "wrap", style: "gap:8px",
-                            Button { label: chrome.0.geography_finish_polygon(), small: true, variant: ButtonVariant::Primary, onclick: on_finish_polygon }
-                            Button { label: chrome.0.geography_clear_draft(), small: true, variant: ButtonVariant::Ghost, onclick: on_clear_draft }
-                        }
-                    }
+                    {draft_actions_row(&chrome.0, draft_actions(tool(), &draft()), on_commit_draft, on_clear_draft)}
                     {geography_time_slider(&chrome.0, year)}
                 }
             }
         }
-        {geo_edit_panel(&chrome.0, panel, reload, nav, &saved_label, year())}
+        {geo_edit_panel(&chrome.0, panel, reload, nav, &saved_label, year(), draft)}
     }
 }
 
@@ -228,11 +217,11 @@ fn geometry_panel_for(selected: Option<(String, String)>, geometry: PlaceGeometr
     })
 }
 
-/// Opens the geometry panel for the rail-selected place (the only caller today is the polygon
-/// finish; the `Point`/`CreateHere` branch is retained for that tool but currently unreachable, see
-/// the PR report). A polygon with no draw target is refused with a shell error notice; the draft is
-/// deliberately kept on the canvas, so picking a place and pressing Finish again commits the same
-/// geometry.
+/// Opens the geometry panel for a committed draft: `AssertOnSelected` for a rail-selected place, or
+/// (#282a) `CreateHere` for a dropped point with no selection — reachable from either draw tool now
+/// that [`draft_geometry`] drives both. A shape with no draw target and no `Point` to fall back on
+/// (a finished polygon) is refused with a shell error notice; the draft is deliberately kept on the
+/// canvas, so picking a place and committing again commits the same geometry.
 fn open_geometry_panel(
     selected: Signal<Option<(String, String)>>,
     mut panel: Signal<GeoPanel>,
@@ -266,17 +255,6 @@ fn geography_toolbar(
     fit_shapes: &[MarkerShapeVm],
     draw_target: Option<&(String, String)>,
 ) -> Element {
-    let tool_button = |this: DrawTool, label: String| {
-        let active = tool() == this;
-        rsx! {
-            Button {
-                label,
-                small: true,
-                variant: if active { ButtonVariant::Primary } else { ButtonVariant::Default },
-                onclick: move |_| select_tool(tool, this),
-            }
-        }
-    };
     let fit_shapes = fit_shapes.to_vec();
     rsx! {
         div { class: "geo-toolbar",
@@ -285,9 +263,7 @@ fn geography_toolbar(
             Chip { label: format!("{event_count}") }
             {geography_draw_target(chrome, draw_target)}
             span { class: "spacer" }
-            {tool_button(DrawTool::Pan, chrome.geography_tool_pan())}
-            {tool_button(DrawTool::Point, chrome.geography_tool_point())}
-            {tool_button(DrawTool::Polygon, chrome.geography_tool_polygon())}
+            {draw_tool_buttons(chrome, tool)}
             Button {
                 label: chrome.geography_tool_fit(),
                 small: true,
@@ -483,6 +459,11 @@ pub fn geography_time_slider(chrome: &Chrome, mut year: Signal<i32>) -> Element 
 /// The geometry side panel: either the quick-create form (a new place at the clicked point) or the
 /// assert-onto-selected form (the drafted geometry, plus the standard provenance block), both
 /// dispatching through the audited change-set/`PlaceEdit` path.
+///
+/// A successful save clears `draft` — the ring it produced now sits on the record just saved, and
+/// keeping it would leave a stale draft shape over the boundary that made it redundant. `onclose` and
+/// the #255 refusal path keep the draft: closing without saving, or picking a target and finishing
+/// again, both need the shape still on the canvas.
 fn geo_edit_panel(
     chrome: &Chrome,
     mut panel: Signal<GeoPanel>,
@@ -490,6 +471,7 @@ fn geo_edit_panel(
     mut nav: NavState,
     saved_label: &str,
     slider_year: i32,
+    mut draft: Signal<MapDraft>,
 ) -> Element {
     let current = panel();
     if current == GeoPanel::None {
@@ -516,7 +498,12 @@ fn geo_edit_panel(
                 GeoPanel::CreateHere { point } => rsx! {
                     GeographyCreateForm {
                         point,
-                        onsaved: move |()| { panel.set(GeoPanel::None); reload += 1; nav.notify(saved.clone()); },
+                        onsaved: move |()| {
+                            panel.set(GeoPanel::None);
+                            draft.set(MapDraft::Empty);
+                            reload += 1;
+                            nav.notify(saved.clone());
+                        },
                     }
                 },
                 GeoPanel::AssertOnSelected { human_id, geometry, .. } => rsx! {
@@ -524,7 +511,12 @@ fn geo_edit_panel(
                         human_id,
                         geometry,
                         slider_year,
-                        onsaved: move |()| { panel.set(GeoPanel::None); reload += 1; nav.notify(saved.clone()); },
+                        onsaved: move |()| {
+                            panel.set(GeoPanel::None);
+                            draft.set(MapDraft::Empty);
+                            reload += 1;
+                            nav.notify(saved.clone());
+                        },
                     }
                 },
                 GeoPanel::None => rsx! {},
@@ -778,5 +770,23 @@ mod tests {
             panic!("expected a CreateHere panel, got {panel:?}");
         };
         assert_eq!(point, (59.9, 10.7));
+    }
+
+    /// #282(a): the Point tool couldn't reach this pairing at all — `on_finish_polygon` was the only
+    /// caller of `open_geometry_panel`, and it only ever built a `Polygon`. Now that `draft_geometry`
+    /// drives both draw tools, a point dropped with a place already selected asserts onto it exactly
+    /// like a finished polygon does.
+    #[test]
+    fn a_point_asserts_onto_the_selected_place_same_as_a_polygon_does() {
+        let selected = Some(("P0001".to_owned(), "Oslo".to_owned()));
+        let geometry = PlaceGeometry::Point(geo_point(59.9, 10.7));
+        assert_eq!(
+            geometry_panel_for(selected, geometry.clone()),
+            Some(GeoPanel::AssertOnSelected {
+                human_id: "P0001".to_owned(),
+                name: "Oslo".to_owned(),
+                geometry,
+            })
+        );
     }
 }

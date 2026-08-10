@@ -6,9 +6,9 @@ use genealogy_ui::{
 
 use super::geography::geography_time_slider;
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapZoomReadout, events_geojson, fit_bounds,
-    geo_point, map_surface, markers_geojson, push_map_data, push_map_draft, rendered_credit, select_tool,
-    shape_to_draft,
+    DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapZoomReadout,
+    draft_actions, draft_actions_row, draft_geometry, draw_tool_buttons, events_geojson, fit_bounds, map_surface,
+    markers_geojson, push_map_data, rendered_credit, shape_to_draft, use_draft_push,
 };
 use super::prelude::*;
 use crate::services::map_config;
@@ -858,30 +858,22 @@ fn PlaceMapEditor(
         push_this_place(&push_detail, shape.as_ref());
     });
     // Re-push the in-progress draft overlay whenever it changes.
-    use_effect(move || push_map_draft(PLACE_MAP_CONTAINER_ID, &draft()));
+    use_draft_push(PLACE_MAP_CONTAINER_ID, draft);
 
     let resolved_shape = place_map_display_shape(&detail, year());
     let center = map_center(resolved_shape.as_ref());
 
     let coordinate_invalid = loc.place_coordinate_invalid();
-    let on_finish_polygon = move |_| {
-        let MapDraft::Polygon(vertices) = draft() else { return };
-        if vertices.len() < 3 {
-            nav.notify_error(coordinate_invalid.clone());
-            return;
-        }
-        pending.set(Some(PlaceGeometry::Polygon {
-            exterior: vertices.iter().map(|&(lat, lon)| geo_point(lat, lon)).collect(),
-            holes: Vec::new(),
-        }));
-        draft.set(MapDraft::Empty);
-    };
-    let on_confirm_point = move |_| {
-        let MapDraft::Point((lat, lon)) = draft() else { return };
-        pending.set(Some(PlaceGeometry::Point(geo_point(lat, lon))));
-        draft.set(MapDraft::Empty);
-    };
-    let on_clear_draft = move |_| draft.set(MapDraft::Empty);
+    // Unlike Geography's own commit, this deliberately does *not* clear `draft` — the ring stays on
+    // the canvas while `GeometrySaveForm` is open, so Cancel below keeps the drawing instead of
+    // discarding it. It clears only once `GeometrySaveForm`'s own `onsaved` fires (the shared
+    // clear-on-save rule, #282c).
+    let on_commit_draft = EventHandler::new(move |()| match draft_geometry(tool(), &draft()) {
+        Ok(geometry) => pending.set(Some(geometry)),
+        Err(DraftRefusal::TooFewVertices) => nav.notify_error(coordinate_invalid.clone()),
+        Err(DraftRefusal::Nothing) => {}
+    });
+    let on_clear_draft = EventHandler::new(move |()| draft.set(MapDraft::Empty));
 
     let aria = loc.place_map_aria(&detail.title);
     let human_id = detail.human_id.clone();
@@ -892,9 +884,7 @@ fn PlaceMapEditor(
         div { class: "map-pane",
             div { class: "section-note", "{loc.place_map_scope_note()}" }
             div { class: "geo-toolbar", style: "margin-bottom:10px",
-                {draw_tool_button(tool, DrawTool::Pan, chrome.geography_tool_pan())}
-                {draw_tool_button(tool, DrawTool::Point, chrome.geography_tool_point())}
-                {draw_tool_button(tool, DrawTool::Polygon, chrome.geography_tool_polygon())}
+                {draw_tool_buttons(chrome, tool)}
                 Button {
                     label: chrome.geography_tool_fit(),
                     small: true,
@@ -930,18 +920,7 @@ fn PlaceMapEditor(
                 )}
             }
             {place_map_as_of_note(loc, &detail.geometries, resolved_shape.as_ref(), year())}
-            if matches!(tool(), DrawTool::Point) && matches!(draft(), MapDraft::Point(_)) {
-                div { class: "wrap", style: "gap:8px",
-                    Button { label: chrome.place_map_confirm_point(), small: true, variant: ButtonVariant::Primary, onclick: on_confirm_point }
-                    Button { label: chrome.geography_clear_draft(), small: true, variant: ButtonVariant::Ghost, onclick: on_clear_draft }
-                }
-            }
-            if matches!(tool(), DrawTool::Polygon) {
-                div { class: "wrap", style: "gap:8px",
-                    Button { label: chrome.geography_finish_polygon(), small: true, variant: ButtonVariant::Primary, onclick: on_finish_polygon }
-                    Button { label: chrome.geography_clear_draft(), small: true, variant: ButtonVariant::Ghost, onclick: on_clear_draft }
-                }
-            }
+            {draft_actions_row(chrome, draft_actions(tool(), &draft()), on_commit_draft, on_clear_draft)}
             {geography_time_slider(chrome, year)}
             {place_geometry_table(loc, &detail.geometries, on_retract, on_edit_geometry)}
             if let Some(geometry) = pending() {
@@ -950,24 +929,15 @@ fn PlaceMapEditor(
                         human_id: human_id.clone(),
                         geometry,
                         slider_year: year(),
-                        onsaved: move |()| { pending.set(None); on_saved.call(()); },
+                        onsaved: move |()| {
+                            pending.set(None);
+                            draft.set(MapDraft::Empty);
+                            on_saved.call(());
+                        },
                     }
                     Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| pending.set(None) }
                 }
             }
-        }
-    }
-}
-
-/// One draw-tool toggle button (Pan/Point/Polygon), highlighted while active.
-fn draw_tool_button(tool: Signal<DrawTool>, this: DrawTool, label: String) -> Element {
-    let active = tool() == this;
-    rsx! {
-        Button {
-            label,
-            small: true,
-            variant: if active { ButtonVariant::Primary } else { ButtonVariant::Default },
-            onclick: move |_| select_tool(tool, this),
         }
     }
 }

@@ -1,0 +1,94 @@
+# #282(c) on the Place side. Committing a draft used to empty `MapDraft` immediately — the ring left
+# the canvas the moment "Use this point" opened the save card, so pressing Cancel there lost the
+# drawing and you had to drop the point again. Both screens now clear the draft only on a successful
+# save, so Cancel keeps it. Geography always behaved that way; this scenario is what proves the Place
+# Map tab now does too.
+#
+# First scenario in the corpus to reach a Place record's Map tab. The detail tab strip's Map label
+# paints centred on y≈249 in a single (undocked) pane and a click there hits — the ~9-14px offset
+# `docked-detail-tabs.toml` documents is a *post-dock* defect (#285), and nothing here docks.
+#
+# The save card renders below the geometry table, off the fold at every window height (the map card is
+# a flex child, so a taller window grows the map rather than revealing the card). Hence the wheel
+# steps: each shot pair is compared at its own scroll position, never across one. (1156, 1050) is
+# below the map card at scroll-top and over the table/card below it once scrolled, so no wheel notch
+# ever lands on the `MapLibre` canvas and zooms it. The scroll-up over-scrolls deliberately — it
+# clamps at the top, which is what makes `back-at-map` comparable to `point-dropped`.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "Cancelling the geometry save keeps the drawn point on the canvas (#282c)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "click"
+at = [650, 249]
+label = "detail tabs: Map"
+
+[[step]]
+do = "click"
+at = [648, 398]
+label = "toolbar: Drop / move a point"
+
+[[step]]
+do = "click"
+at = [1156, 610]
+label = "map: drop a point"
+
+[[step]]
+do = "shot"
+name = "point-dropped"
+
+[[step]]
+do = "click"
+at = [580, 834]
+label = "Use this point"
+
+[[step]]
+do = "wheel"
+at = [1156, 1050]
+clicks = -8
+label = "scroll down to the save card"
+
+[[step]]
+do = "shot"
+name = "card-open"
+
+[[step]]
+do = "click"
+at = [638, 1102]
+label = "save card: Cancel"
+
+[[step]]
+do = "shot"
+name = "cancelled"
+
+[[step]]
+do = "wheel"
+at = [1156, 1050]
+clicks = 12
+label = "scroll back to the top (clamps there)"
+
+[[step]]
+do = "shot"
+name = "back-at-map"
+
+[[assert]]
+kind = "differ"
+shots = ["card-open", "cancelled"]
+region = [540, 715, 1230, 410]
+because = "Cancel must dismiss the geometry save card"
+
+[[assert]]
+kind = "match"
+shots = ["point-dropped", "back-at-map"]
+region = [540, 450, 1230, 320]
+because = "cancelling the save must keep the dropped point on the canvas, not discard the drawing"

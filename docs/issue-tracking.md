@@ -171,7 +171,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (18 so far)
+### `0.9 — UI stabilization` (17 so far)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
 audit could find by reading code; the rest came from using the GUI in earnest, which is exactly how it
@@ -181,7 +181,6 @@ the list on its own. Treat the count as a floor.
 | Item | Why it gates a release |
 | --- | --- |
 | [A docked pane's tab-strip hit region sits above its painted row](https://github.com/magne/genealogy/issues/285) | #279's residual: a click on the visible tab label still misses in a split, so docking stays awkward even with the layout fixed |
-| [The Geography draw-and-save path cannot commit a point, and never erases a draft](https://github.com/magne/genealogy/issues/282) | A visible tool that cannot save, plus a red ring neither Clear nor a save removes, so the map shows a shape the app does not hold |
 | [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
 | [Only one unsaved new record per category](https://github.com/magne/genealogy/issues/260) | Two new people cannot be sketched side by side; the draft's identity is its category, all the way down to the stash key |
 | [Switching map provider repaints nothing](https://github.com/magne/genealogy/issues/283) | The select accepts and persists two providers the map then ignores, with nothing in the UI saying so |
@@ -189,6 +188,15 @@ the list on its own. Treat the count as a floor.
 
 #256 and #260 came out of the 2026-07-31 manual pass — the map and the shell respectively; #281–#284
 came out of the 2026-08-04 sweep alongside the #279 trace; the rest came from reading the code.
+
+**#282 is closed and dropped from this table:** the Point tool now commits through the same
+`draft_geometry` helper Finish polygon uses, reaching the previously-dead `GeoPanel::CreateHere` path;
+Clear was never a state bug (`MapDraft` and its `geo-draft` push were both correct) but a #252-shaped
+compositor gap — a draft push reaching the map from outside any canvas gesture never got its scheduled
+frame composited under `WebKitGTK`'s software-GL path, fixed with the same forced `redraw()` the #252
+resize observer already uses; and a successful save now clears the draft in both screens, unifying
+Geography (which never cleared it) and Place (which cleared it too early, at confirm, discarding the
+drawing if Cancel followed) on one rule.
 
 **#281 is closed and dropped from this table:** a `CloseRequested` handler in `QuitManager` now turns a
 window-manager close — the titlebar `✕`, a session logout, `wmctrl -c` — into the same quit confirm

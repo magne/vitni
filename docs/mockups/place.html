@@ -304,7 +304,12 @@
           <!-- Draft actions, one row at a time: the Point tool shows this pair once a point has been
                dropped, the Polygon tool shows Finish/Clear the moment it is armed. Either row sits
                between the map card and the time slider, so arming a tool shrinks the map surface —
-               which is why the map is repainted whenever its container resizes (#252). -->
+               which is why the map is repainted whenever its container resizes (#252). Clicking Clear
+               erases the draft from the canvas, not just the underlying state (#282b). Committing
+               (either row) opens the save card below but keeps the row and the ring on the canvas —
+               they only clear once that card's own Save fires; Cancel below keeps the drawing too,
+               matching the Geography tool's own refusal case (#282c) instead of silently discarding
+               it. -->
           <div class="wrap" style="gap:8px">
             <button class="btn sm primary">Use this point</button>
             <button class="btn sm ghost">Clear</button>

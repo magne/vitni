@@ -213,24 +213,6 @@ Residuals from the shortcuts work (ADR 0030); see
   the draft signal and the tile credit joined its container/aria/tool/center/zoom/labels arguments, and
   `mount_maplibre` is at 7 — over the 5-positional-parameter house limit but under clippy's threshold,
   so nothing flags it. All three want the same fix: one struct for the surface's mount parameters.
-- **The Geography draw-and-save path cannot commit a point, and never erases a draft.** Three defects
-  in one flow. (a) *The Point tool cannot save at all* — the Place Map editor has a "Use this point"
-  confirm; the Geography tool has no equivalent and does not commit on click either, it only paints a
-  red draft dot. `open_geometry_panel` (`screens/geography.rs`) is called from `on_finish_polygon`
-  alone, whose geometry is always a `Polygon`, so its `PlaceGeometry::Point` branch and the whole
-  `GeoPanel::CreateHere` variant are unreachable; either give the tool a confirm step that reaches that
-  branch, or delete the dead variant. (b) *"Clear" empties the draft state but never erases the ring* —
-  `on_clear_draft` sets `draft` to `MapDraft::Empty`, so a following "Finish polygon" is correctly a
-  no-op and the state *is* cleared, yet the red ring stays painted and the map keeps showing a shape the
-  app no longer holds. The cause is **not** diagnosed: this bullet used to blame `push_map_draft`'s
-  empty `FeatureCollection` never reaching `geo-draft`, but `push_draft_script` calls `draft.setData`
-  unconditionally, so the `use_effect` not re-firing for an empty draft is the likelier failure.
-  `screens/place.rs` has the identical `on_clear_draft` behind two Clear buttons, so the Place Map
-  editor has this half too. (c) *The draft is never cleared after a successful save either* —
-  `geo_edit_panel`'s `onsaved` sets `panel`/`reload`/the shell notice but not `draft`, so the ring sits on top of
-  the boundary just saved; keeping the draft is right for a *refusal* (#255) and wrong for a save, and
-  per (b) the manual escape hatch is broken. (b) is why the `map-draw-target` scenario proves "the draft
-  survived the refusal" by finishing again rather than by clicking Clear. — #282
 - **Two shipped map fixes have no test coverage.** The marker load-race stash (`__geoPending`,
   `screens/map_shared.rs`) and the zoom-interpolated `circle-radius` both live entirely inside
   `format!`-built JavaScript that no test inspects, so neither the SSR suite nor `gui-pass` would notice
