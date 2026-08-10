@@ -864,11 +864,12 @@ fn PlaceMapEditor(
     let center = map_center(resolved_shape.as_ref());
 
     let coordinate_invalid = loc.place_coordinate_invalid();
+    // Unlike Geography's own commit, this deliberately does *not* clear `draft` — the ring stays on
+    // the canvas while `GeometrySaveForm` is open, so Cancel below keeps the drawing instead of
+    // discarding it. It clears only once `GeometrySaveForm`'s own `onsaved` fires (the shared
+    // clear-on-save rule, #282c).
     let on_commit_draft = EventHandler::new(move |()| match draft_geometry(tool(), &draft()) {
-        Ok(geometry) => {
-            pending.set(Some(geometry));
-            draft.set(MapDraft::Empty);
-        }
+        Ok(geometry) => pending.set(Some(geometry)),
         Err(DraftRefusal::TooFewVertices) => nav.notify_error(coordinate_invalid.clone()),
         Err(DraftRefusal::Nothing) => {}
     });
@@ -928,7 +929,11 @@ fn PlaceMapEditor(
                         human_id: human_id.clone(),
                         geometry,
                         slider_year: year(),
-                        onsaved: move |()| { pending.set(None); on_saved.call(()); },
+                        onsaved: move |()| {
+                            pending.set(None);
+                            draft.set(MapDraft::Empty);
+                            on_saved.call(());
+                        },
                     }
                     Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| pending.set(None) }
                 }

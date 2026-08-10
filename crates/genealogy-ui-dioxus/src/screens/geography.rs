@@ -196,7 +196,7 @@ pub fn GeographyScreen() -> Element {
                 }
             }
         }
-        {geo_edit_panel(&chrome.0, panel, reload, nav, &saved_label, year())}
+        {geo_edit_panel(&chrome.0, panel, reload, nav, &saved_label, year(), draft)}
     }
 }
 
@@ -459,6 +459,11 @@ pub fn geography_time_slider(chrome: &Chrome, mut year: Signal<i32>) -> Element 
 /// The geometry side panel: either the quick-create form (a new place at the clicked point) or the
 /// assert-onto-selected form (the drafted geometry, plus the standard provenance block), both
 /// dispatching through the audited change-set/`PlaceEdit` path.
+///
+/// A successful save clears `draft` — the ring it produced now sits on the record just saved, and
+/// keeping it would leave a stale draft shape over the boundary that made it redundant. `onclose` and
+/// the #255 refusal path keep the draft: closing without saving, or picking a target and finishing
+/// again, both need the shape still on the canvas.
 fn geo_edit_panel(
     chrome: &Chrome,
     mut panel: Signal<GeoPanel>,
@@ -466,6 +471,7 @@ fn geo_edit_panel(
     mut nav: NavState,
     saved_label: &str,
     slider_year: i32,
+    mut draft: Signal<MapDraft>,
 ) -> Element {
     let current = panel();
     if current == GeoPanel::None {
@@ -492,7 +498,12 @@ fn geo_edit_panel(
                 GeoPanel::CreateHere { point } => rsx! {
                     GeographyCreateForm {
                         point,
-                        onsaved: move |()| { panel.set(GeoPanel::None); reload += 1; nav.notify(saved.clone()); },
+                        onsaved: move |()| {
+                            panel.set(GeoPanel::None);
+                            draft.set(MapDraft::Empty);
+                            reload += 1;
+                            nav.notify(saved.clone());
+                        },
                     }
                 },
                 GeoPanel::AssertOnSelected { human_id, geometry, .. } => rsx! {
@@ -500,7 +511,12 @@ fn geo_edit_panel(
                         human_id,
                         geometry,
                         slider_year,
-                        onsaved: move |()| { panel.set(GeoPanel::None); reload += 1; nav.notify(saved.clone()); },
+                        onsaved: move |()| {
+                            panel.set(GeoPanel::None);
+                            draft.set(MapDraft::Empty);
+                            reload += 1;
+                            nav.notify(saved.clone());
+                        },
                     }
                 },
                 GeoPanel::None => rsx! {},

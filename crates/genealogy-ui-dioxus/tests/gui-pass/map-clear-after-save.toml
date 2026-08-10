@@ -1,0 +1,68 @@
+# #282(c) — a successful save now clears the draft, so the ring does not sit on top of the boundary
+# just saved. The decisive assertion is **after** Save: a direct `ring-closed` vs `saved` compare
+# proves nothing (the saved boundary repaints that region either way); asserting `match` between
+# `saved` and a follow-up Clear click is what tells the two states apart — had the save left the draft
+# behind, Clear would still have a ring to erase and the shots would differ. This depends on (b) being
+# correct (`map-clear-draft.toml`), which is why that scenario exists separately.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "A successful geometry save clears the draft, so a follow-up Clear finds nothing left (#282c)"
+
+[[step]]
+do = "click"
+at = [85, 881]
+label = "rail: Geography"
+
+[[step]]
+do = "click"
+at = [300, 185]
+label = "place list: Kristiansand"
+
+[[step]]
+do = "click"
+at = [1480, 110]
+label = "toolbar: Draw polygon"
+
+[[step]]
+do = "click"
+at = [900, 400]
+label = "map: first vertex"
+
+[[step]]
+do = "click"
+at = [1200, 420]
+label = "map: second vertex"
+
+[[step]]
+do = "click"
+at = [1100, 700]
+label = "map: third vertex"
+
+[[step]]
+do = "click"
+at = [517, 1048]
+label = "Finish polygon"
+
+[[step]]
+do = "click"
+at = [1467, 674]
+label = "geometry panel: Save"
+
+[[step]]
+do = "shot"
+name = "saved"
+
+[[step]]
+do = "click"
+at = [612, 1048]
+label = "Clear"
+
+[[step]]
+do = "shot"
+name = "after-clear"
+
+[[assert]]
+kind = "match"
+shots = ["saved", "after-clear"]
+region = [500, 200, 1250, 700]
+because = "a successful save already cleared the draft, so Clear finds no ring left to erase"
