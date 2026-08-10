@@ -63,6 +63,72 @@ pub fn geo_point(lat: f64, lon: f64) -> GeoCoordinates {
     }
 }
 
+/// Which draft-action row a map screen offers for the armed tool and the current draft. Keyed off
+/// `tool`, not `draft`, for `Polygon` — the Finish/Clear row is the polygon tool's own affordance and
+/// stays offered even over an `Empty` draft (today's silent Finish no-op); only `Point` additionally
+/// needs a draft of the matching shape before it offers anything at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DraftActions {
+    /// No draft-action row: `Pan`, or `Point` with nothing (yet) dropped.
+    None,
+    /// `Point` armed, with a point on the canvas to confirm.
+    ConfirmPoint,
+    /// `Polygon` armed.
+    FinishPolygon,
+}
+
+/// Why [`draft_geometry`] refused to build a geometry. `Nothing` is the tool's own action row not
+/// being offered at all (or offered over a draft that cannot back it) — a silent no-op, matching
+/// today's behaviour. `TooFewVertices` is a polygon short of the 3 vertices a ring needs — this one
+/// earns the caller's toast.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DraftRefusal {
+    /// No committable draft under the armed tool; refuse silently.
+    Nothing,
+    /// A polygon draft with fewer than 3 vertices.
+    TooFewVertices,
+}
+
+/// Which draft-action row `tool` and `draft` together offer (`draft_actions_row`'s own input).
+#[must_use]
+pub fn draft_actions(tool: DrawTool, draft: &MapDraft) -> DraftActions {
+    match tool {
+        DrawTool::Pan => DraftActions::None,
+        DrawTool::Point => match draft {
+            MapDraft::Point(_) => DraftActions::ConfirmPoint,
+            MapDraft::Empty | MapDraft::Polygon(_) => DraftActions::None,
+        },
+        DrawTool::Polygon => DraftActions::FinishPolygon,
+    }
+}
+
+/// The geometry the armed tool's own action row would commit right now, or why it cannot. Keyed off
+/// the same `(tool, draft)` pair as [`draft_actions`], so a `Point` draft left over from switching
+/// tools can never be committed by "Finish polygon", and vice versa.
+///
+/// # Errors
+///
+/// Returns [`DraftRefusal::Nothing`] when the armed tool has no committable draft (`Pan`, or a tool
+/// paired with a draft of the wrong shape), and [`DraftRefusal::TooFewVertices`] for a polygon short of
+/// 3 vertices.
+pub fn draft_geometry(tool: DrawTool, draft: &MapDraft) -> Result<PlaceGeometry, DraftRefusal> {
+    match tool {
+        DrawTool::Pan => Err(DraftRefusal::Nothing),
+        DrawTool::Point => match draft {
+            MapDraft::Point((lat, lon)) => Ok(PlaceGeometry::Point(geo_point(*lat, *lon))),
+            MapDraft::Empty | MapDraft::Polygon(_) => Err(DraftRefusal::Nothing),
+        },
+        DrawTool::Polygon => match draft {
+            MapDraft::Polygon(vertices) if vertices.len() >= 3 => Ok(PlaceGeometry::Polygon {
+                exterior: vertices.iter().map(|&(lat, lon)| geo_point(lat, lon)).collect(),
+                holes: Vec::new(),
+            }),
+            MapDraft::Polygon(_) => Err(DraftRefusal::TooFewVertices),
+            MapDraft::Empty | MapDraft::Point(_) => Err(DraftRefusal::Nothing),
+        },
+    }
+}
+
 /// The tile source a mounted map fetches, and the credit shown over it. Resolved as a pair by
 /// [`rendered_credit`] so the two can never come from different providers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,6 +214,58 @@ pub fn map_surface(
             }
         }
     }
+}
+
+/// The Pan/Point/Polygon toggle row, identical on both map screens (the Geography toolbar and the
+/// Place Map tab's own toolbar).
+#[must_use = "renders the draw-tool buttons; drop it and the toolbar loses them"]
+pub fn draw_tool_buttons(chrome: &Chrome, tool: Signal<DrawTool>) -> Element {
+    let tool_button = |this: DrawTool, label: String| {
+        let active = tool() == this;
+        rsx! {
+            Button {
+                label,
+                small: true,
+                variant: if active { ButtonVariant::Primary } else { ButtonVariant::Default },
+                onclick: move |_| select_tool(tool, this),
+            }
+        }
+    };
+    rsx! {
+        {tool_button(DrawTool::Pan, chrome.geography_tool_pan())}
+        {tool_button(DrawTool::Point, chrome.geography_tool_point())}
+        {tool_button(DrawTool::Polygon, chrome.geography_tool_polygon())}
+    }
+}
+
+/// The draft-action row under the map surface: nothing for [`DraftActions::None`], else a primary
+/// button (labelled for the action) beside a ghost "Clear", shared by both map screens (the missing
+/// row for the Point tool was #282(a) — `GeoPanel::CreateHere` was dead code with no button to reach
+/// it).
+#[must_use = "renders the draft-action row; drop it and neither button shows"]
+pub fn draft_actions_row(
+    chrome: &Chrome,
+    actions: DraftActions,
+    on_commit: EventHandler<()>,
+    on_clear: EventHandler<()>,
+) -> Element {
+    let label = match actions {
+        DraftActions::None => return rsx! {},
+        DraftActions::ConfirmPoint => chrome.place_map_confirm_point(),
+        DraftActions::FinishPolygon => chrome.geography_finish_polygon(),
+    };
+    rsx! {
+        div { class: "wrap", style: "gap:8px",
+            Button { label, small: true, variant: ButtonVariant::Primary, onclick: move |_| on_commit.call(()) }
+            Button { label: chrome.geography_clear_draft(), small: true, variant: ButtonVariant::Ghost, onclick: move |_| on_clear.call(()) }
+        }
+    }
+}
+
+/// Re-pushes the in-progress draft overlay to `container_id`'s map whenever it changes — the
+/// `use_effect` both map screens ran as an identical copy.
+pub fn use_draft_push(container_id: &'static str, draft: Signal<MapDraft>) {
+    use_effect(move || push_map_draft(container_id, &draft()));
 }
 
 /// One message the mounted map sends back over its single `dioxus.send` channel. Both emitters live
@@ -951,12 +1069,13 @@ pub fn effective_date_choice(
 #[cfg(test)]
 mod tests {
     use super::{
-        FIT_MAX_ZOOM, MapControlLabels, MapDraft, MapMessage, closed_ring, combined_bounds, draft_geojson,
-        empty_feature_collection, events_geojson, fit_bounds_script, format_zoom, maplibre_init_script,
-        markers_geojson, move_vertex, parse_map_message, push_data_script, push_draft_script, rendered_credit,
-        save_year, shape_to_draft, zoom_changed,
+        DraftActions, DraftRefusal, DrawTool, FIT_MAX_ZOOM, MapControlLabels, MapDraft, MapMessage, closed_ring,
+        combined_bounds, draft_actions, draft_geojson, draft_geometry, empty_feature_collection, events_geojson,
+        fit_bounds_script, format_zoom, geo_point, maplibre_init_script, markers_geojson, move_vertex,
+        parse_map_message, push_data_script, push_draft_script, rendered_credit, save_year, shape_to_draft,
+        zoom_changed,
     };
-    use genealogy_app::MapProvider;
+    use genealogy_app::{MapProvider, PlaceGeometry};
     use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm, ZOOM_RANGE};
     use serde_json::{Value, json};
 
@@ -1740,6 +1859,80 @@ mod tests {
         assert_eq!(
             shape_to_draft(&shape),
             MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)])
+        );
+    }
+
+    /// Pan offers no draft-action row regardless of what is drawn — there is no tool to commit it.
+    #[test]
+    fn pan_offers_no_row_for_any_draft() {
+        for draft in [
+            MapDraft::Empty,
+            MapDraft::Point((59.9, 10.7)),
+            MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)]),
+        ] {
+            assert_eq!(draft_actions(DrawTool::Pan, &draft), DraftActions::None);
+            assert_eq!(draft_geometry(DrawTool::Pan, &draft), Err(DraftRefusal::Nothing));
+        }
+    }
+
+    #[test]
+    fn point_with_nothing_dropped_yet_offers_no_row() {
+        assert_eq!(draft_actions(DrawTool::Point, &MapDraft::Empty), DraftActions::None);
+    }
+
+    #[test]
+    fn point_with_a_dropped_point_offers_confirm_and_commits_it() {
+        let draft = MapDraft::Point((59.9, 10.7));
+        assert_eq!(draft_actions(DrawTool::Point, &draft), DraftActions::ConfirmPoint);
+        assert_eq!(
+            draft_geometry(DrawTool::Point, &draft),
+            Ok(PlaceGeometry::Point(geo_point(59.9, 10.7)))
+        );
+    }
+
+    /// A polygon left over from switching tools cannot be confirmed by the Point tool's own row — it
+    /// does not even offer one.
+    #[test]
+    fn point_over_a_stale_polygon_draft_offers_no_row() {
+        let draft = MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)]);
+        assert_eq!(draft_actions(DrawTool::Point, &draft), DraftActions::None);
+        assert_eq!(draft_geometry(DrawTool::Point, &draft), Err(DraftRefusal::Nothing));
+    }
+
+    /// The polygon tool's Finish/Clear row is offered unconditionally — even with nothing drawn yet,
+    /// matching today's silent no-op rather than a refusal toast.
+    #[test]
+    fn polygon_over_an_empty_draft_offers_the_row_but_refuses_silently() {
+        assert_eq!(
+            draft_actions(DrawTool::Polygon, &MapDraft::Empty),
+            DraftActions::FinishPolygon
+        );
+        assert_eq!(
+            draft_geometry(DrawTool::Polygon, &MapDraft::Empty),
+            Err(DraftRefusal::Nothing)
+        );
+    }
+
+    #[test]
+    fn polygon_with_fewer_than_three_vertices_earns_the_toast() {
+        let draft = MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0)]);
+        assert_eq!(draft_actions(DrawTool::Polygon, &draft), DraftActions::FinishPolygon);
+        assert_eq!(
+            draft_geometry(DrawTool::Polygon, &draft),
+            Err(DraftRefusal::TooFewVertices)
+        );
+    }
+
+    #[test]
+    fn polygon_with_three_or_more_vertices_commits_in_draft_order() {
+        let vertices = vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)];
+        let draft = MapDraft::Polygon(vertices.clone());
+        assert_eq!(
+            draft_geometry(DrawTool::Polygon, &draft),
+            Ok(PlaceGeometry::Polygon {
+                exterior: vertices.iter().map(|&(lat, lon)| geo_point(lat, lon)).collect(),
+                holes: Vec::new(),
+            })
         );
     }
 

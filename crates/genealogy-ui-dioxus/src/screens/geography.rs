@@ -23,8 +23,9 @@ use genealogy_app::{ConfigStore, FileConfigStore, MapConfig, MapProvider, PlaceG
 use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
 
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapCredit, MapDraft, MapZoomReadout, events_geojson,
-    fit_bounds, geo_point, map_surface, markers_geojson, push_map_data, push_map_draft, rendered_credit, select_tool,
+    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapCredit, MapDraft, MapZoomReadout, draft_actions,
+    draft_actions_row, draw_tool_buttons, events_geojson, fit_bounds, geo_point, map_surface, markers_geojson,
+    push_map_data, rendered_credit, use_draft_push,
 };
 use super::prelude::*;
 use crate::i18n::Chrome;
@@ -137,7 +138,7 @@ pub fn GeographyScreen() -> Element {
         }
     });
     // Re-push the in-progress draft overlay whenever it changes.
-    use_effect(move || push_map_draft(MAP_CONTAINER_ID, &draft()));
+    use_draft_push(MAP_CONTAINER_ID, draft);
     // Recentre/zoom the map on the rail/picker's current selection, so picking a place gives visible
     // feedback that the selection took (before this, only the toolbar's own Fit button ever moved the
     // map — selecting a place otherwise had no on-map effect at all).
@@ -167,7 +168,7 @@ pub fn GeographyScreen() -> Element {
             .collect()
     });
 
-    let on_finish_polygon = move |_| {
+    let on_commit_draft = EventHandler::new(move |()| {
         let MapDraft::Polygon(vertices) = draft() else { return };
         if vertices.len() < 3 {
             nav.notify_error(coordinate_invalid.clone());
@@ -178,8 +179,8 @@ pub fn GeographyScreen() -> Element {
             holes: Vec::new(),
         };
         open_geometry_panel(selected, panel, nav, &no_draw_target, geometry);
-    };
-    let on_clear_draft = move |_| draft.set(MapDraft::Empty);
+    });
+    let on_clear_draft = EventHandler::new(move |()| draft.set(MapDraft::Empty));
 
     let saved_label = state.data_loc().action_label("saved");
     rsx! {
@@ -197,12 +198,7 @@ pub fn GeographyScreen() -> Element {
                     } else {
                         {geography_map_surface(&chrome.0, marker_count, event_count, tool, draft, zoom, rendered_credit(&provider()))}
                     }
-                    if matches!(tool(), DrawTool::Polygon) {
-                        div { class: "wrap", style: "gap:8px",
-                            Button { label: chrome.0.geography_finish_polygon(), small: true, variant: ButtonVariant::Primary, onclick: on_finish_polygon }
-                            Button { label: chrome.0.geography_clear_draft(), small: true, variant: ButtonVariant::Ghost, onclick: on_clear_draft }
-                        }
-                    }
+                    {draft_actions_row(&chrome.0, draft_actions(tool(), &draft()), on_commit_draft, on_clear_draft)}
                     {geography_time_slider(&chrome.0, year)}
                 }
             }
@@ -266,17 +262,6 @@ fn geography_toolbar(
     fit_shapes: &[MarkerShapeVm],
     draw_target: Option<&(String, String)>,
 ) -> Element {
-    let tool_button = |this: DrawTool, label: String| {
-        let active = tool() == this;
-        rsx! {
-            Button {
-                label,
-                small: true,
-                variant: if active { ButtonVariant::Primary } else { ButtonVariant::Default },
-                onclick: move |_| select_tool(tool, this),
-            }
-        }
-    };
     let fit_shapes = fit_shapes.to_vec();
     rsx! {
         div { class: "geo-toolbar",
@@ -285,9 +270,7 @@ fn geography_toolbar(
             Chip { label: format!("{event_count}") }
             {geography_draw_target(chrome, draw_target)}
             span { class: "spacer" }
-            {tool_button(DrawTool::Pan, chrome.geography_tool_pan())}
-            {tool_button(DrawTool::Point, chrome.geography_tool_point())}
-            {tool_button(DrawTool::Polygon, chrome.geography_tool_polygon())}
+            {draw_tool_buttons(chrome, tool)}
             Button {
                 label: chrome.geography_tool_fit(),
                 small: true,
