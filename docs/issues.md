@@ -516,7 +516,8 @@ decision, not a gap.
   overflow. Two lessons: a dead click on a scrolling strip is a scrollbar before it is a hit-test bug,
   and a whole-pane `differ` cannot tell a tab switch from a sideways scroll of the strip, which is how
   the #279 scenarios passed while the defect was live. `tab-strip-overflow.toml` is the regression
-  test, and it needs no dock at all.
+  test, and it needs no dock at all. The record tabstrip's `.tabs-scroll` had the same defect on a
+  34px row, measured rather than inferred from the shared rule — `record-tabstrip-overflow.toml`.
 
   **The overflow is the precondition, which is why a casual check does not see this.** A manual pass on
   a real GPU during the investigation found the tab hit box fine — expected: a wide single pane fits the
