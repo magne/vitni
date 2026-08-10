@@ -606,6 +606,16 @@ pub fn push_map_draft(container_id: &str, draft: &MapDraft) {
 
 /// The draft push script, stashing before it consults the map for the same reason [`push_data_script`]
 /// does.
+///
+/// The trailing `redraw()` is a #252-shaped compositor bug, not a data bug (#282b): `setData` on a
+/// source schedules `MapLibre`'s own render, but that scheduling assumes something is already driving
+/// the browser's animation-frame loop. A canvas gesture (drag, wheel, a click `MapLibre` itself
+/// handles) keeps that loop alive incidentally; a draft push from an external button (Clear, Finish)
+/// reaches the map only through this `document::eval`, with no such gesture behind it, and under
+/// `WebKitGTK`'s software-GL path the scheduled frame then never reaches the compositor — the ring
+/// stayed on screen after Clear, indefinitely, not just for one frame. Forcing `redraw()` here, exactly
+/// as the resize observer already does for the #252 case, composites the just-applied `setData`
+/// immediately instead of waiting on a frame that never arrives on its own.
 fn push_draft_script(container_id: &str, geojson: &Value) -> String {
     format!(
         r"
@@ -616,6 +626,7 @@ fn push_draft_script(container_id: &str, geojson: &Value) -> String {
             if (map) {{
                 const draft = map.getSource('geo-draft');
                 if (draft) draft.setData({geojson});
+                map.redraw();
             }}
         }}
         ",
@@ -1473,6 +1484,21 @@ mod tests {
         );
         let map = script.find("el.__geoMap").expect("the push looks for a running map");
         assert!(stash < map, "the stash happens before the map is consulted:\n{script}");
+    }
+
+    /// #282(b): Clear correctly emptied `MapDraft` and pushed the empty `FeatureCollection` to the
+    /// `geo-draft` source, yet the ring stayed on screen — the same #252-shaped compositor gap, this
+    /// time hit by a draft push with no canvas gesture behind it to keep the render loop alive. Forcing
+    /// a `redraw()` right after `setData` is what makes the push actually reach the screen.
+    #[test]
+    fn a_draft_push_forces_a_redraw_so_the_canvas_repaints_with_no_gesture_behind_it() {
+        let geojson = draft_geojson(&MapDraft::Empty);
+        let script = push_draft_script("geo-map", &geojson);
+        let set_data = script.find("draft.setData(").expect("the source is still updated");
+        assert!(
+            script[set_data..].contains("map.redraw()"),
+            "setData is followed by a forced redraw, or the update never composites:\n{script}"
+        );
     }
 
     #[test]

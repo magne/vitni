@@ -1,0 +1,59 @@
+# #282(b) — does Clear actually erase the drawn ring from the canvas? `map-draw-target.toml`'s own
+# header used to assert it does not. It does now: the root cause was a #252-shaped compositor gap, not
+# a state bug — `MapDraft`/`geo-draft`'s `setData` were both correct, but a draft push reaching the map
+# from outside any canvas gesture (Clear's own button, not a `MapLibre` click) never got its scheduled
+# frame composited under `WebKitGTK`'s software-GL path, so the ring stayed on screen indefinitely. The
+# fix is one `map.redraw()` call in `push_draft_script` (`map_shared.rs`), the same forced-repaint
+# pattern the #252 resize observer already uses. See the #282 PR report for how this was diagnosed.
+#
+# No toast fires in this path (there is a draw target the whole time — nothing here ever finishes with
+# none selected), so the Finish/Clear row stays at the pre-toast `y = 1048` throughout
+# (`map-draw-target.toml`'s own header documents the post-toast shift to y=995). Clear sits right of
+# Finish; its x was read off this scenario's own `ring-closed` shot.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "Clicking Clear after drawing a polygon erases the ring from the canvas (#282b)"
+
+[[step]]
+do = "click"
+at = [85, 881]
+label = "rail: Geography"
+
+[[step]]
+do = "click"
+at = [1480, 110]
+label = "toolbar: Draw polygon"
+
+[[step]]
+do = "click"
+at = [900, 400]
+label = "map: first vertex"
+
+[[step]]
+do = "click"
+at = [1200, 420]
+label = "map: second vertex"
+
+[[step]]
+do = "click"
+at = [1100, 700]
+label = "map: third vertex"
+
+[[step]]
+do = "shot"
+name = "ring-closed"
+
+[[step]]
+do = "click"
+at = [612, 1048]
+label = "Clear"
+
+[[step]]
+do = "shot"
+name = "cleared"
+
+[[assert]]
+kind = "differ"
+shots = ["ring-closed", "cleared"]
+region = [500, 200, 1250, 700]
+because = "Clear must erase the drawn ring from the canvas, not just the draft state"
