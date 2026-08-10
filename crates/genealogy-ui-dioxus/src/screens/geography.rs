@@ -23,9 +23,9 @@ use genealogy_app::{ConfigStore, FileConfigStore, MapConfig, MapProvider, PlaceG
 use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
 
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapControlLabels, MapCredit, MapDraft, MapZoomReadout, draft_actions,
-    draft_actions_row, draw_tool_buttons, events_geojson, fit_bounds, geo_point, map_surface, markers_geojson,
-    push_map_data, rendered_credit, use_draft_push,
+    DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapCredit, MapDraft, MapZoomReadout,
+    draft_actions, draft_actions_row, draft_geometry, draw_tool_buttons, events_geojson, fit_bounds, geo_point,
+    map_surface, markers_geojson, push_map_data, rendered_credit, use_draft_push,
 };
 use super::prelude::*;
 use crate::i18n::Chrome;
@@ -168,17 +168,10 @@ pub fn GeographyScreen() -> Element {
             .collect()
     });
 
-    let on_commit_draft = EventHandler::new(move |()| {
-        let MapDraft::Polygon(vertices) = draft() else { return };
-        if vertices.len() < 3 {
-            nav.notify_error(coordinate_invalid.clone());
-            return;
-        }
-        let geometry = PlaceGeometry::Polygon {
-            exterior: vertices.iter().map(|&(lat, lon)| geo_point(lat, lon)).collect(),
-            holes: Vec::new(),
-        };
-        open_geometry_panel(selected, panel, nav, &no_draw_target, geometry);
+    let on_commit_draft = EventHandler::new(move |()| match draft_geometry(tool(), &draft()) {
+        Ok(geometry) => open_geometry_panel(selected, panel, nav, &no_draw_target, geometry),
+        Err(DraftRefusal::TooFewVertices) => nav.notify_error(coordinate_invalid.clone()),
+        Err(DraftRefusal::Nothing) => {}
     });
     let on_clear_draft = EventHandler::new(move |()| draft.set(MapDraft::Empty));
 
@@ -224,11 +217,11 @@ fn geometry_panel_for(selected: Option<(String, String)>, geometry: PlaceGeometr
     })
 }
 
-/// Opens the geometry panel for the rail-selected place (the only caller today is the polygon
-/// finish; the `Point`/`CreateHere` branch is retained for that tool but currently unreachable, see
-/// the PR report). A polygon with no draw target is refused with a shell error notice; the draft is
-/// deliberately kept on the canvas, so picking a place and pressing Finish again commits the same
-/// geometry.
+/// Opens the geometry panel for a committed draft: `AssertOnSelected` for a rail-selected place, or
+/// (#282a) `CreateHere` for a dropped point with no selection — reachable from either draw tool now
+/// that [`draft_geometry`] drives both. A shape with no draw target and no `Point` to fall back on
+/// (a finished polygon) is refused with a shell error notice; the draft is deliberately kept on the
+/// canvas, so picking a place and committing again commits the same geometry.
 fn open_geometry_panel(
     selected: Signal<Option<(String, String)>>,
     mut panel: Signal<GeoPanel>,
@@ -761,5 +754,23 @@ mod tests {
             panic!("expected a CreateHere panel, got {panel:?}");
         };
         assert_eq!(point, (59.9, 10.7));
+    }
+
+    /// #282(a): the Point tool couldn't reach this pairing at all — `on_finish_polygon` was the only
+    /// caller of `open_geometry_panel`, and it only ever built a `Polygon`. Now that `draft_geometry`
+    /// drives both draw tools, a point dropped with a place already selected asserts onto it exactly
+    /// like a finished polygon does.
+    #[test]
+    fn a_point_asserts_onto_the_selected_place_same_as_a_polygon_does() {
+        let selected = Some(("P0001".to_owned(), "Oslo".to_owned()));
+        let geometry = PlaceGeometry::Point(geo_point(59.9, 10.7));
+        assert_eq!(
+            geometry_panel_for(selected, geometry.clone()),
+            Some(GeoPanel::AssertOnSelected {
+                human_id: "P0001".to_owned(),
+                name: "Oslo".to_owned(),
+                geometry,
+            })
+        );
     }
 }

@@ -1,0 +1,72 @@
+# #282(a) — the Point tool couldn't commit at all: `open_geometry_panel`'s only caller built a
+# `Polygon`, so a dropped point never reached the geometry panel. `draft_geometry` (`map_shared.rs`)
+# now drives both tools, so "Use this point" opens the same panel Finish polygon does.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "The Point tool commits a dropped point to the geometry panel, same as Finish polygon (#282a)"
+
+[[step]]
+do = "click"
+at = [85, 881]
+label = "rail: Geography"
+
+[[step]]
+do = "click"
+at = [1348, 110]
+label = "toolbar: Drop / move a point"
+
+[[step]]
+do = "click"
+at = [900, 500]
+label = "map: drop a point"
+
+[[step]]
+do = "shot"
+name = "point-dropped"
+
+[[step]]
+do = "click"
+at = [528, 1048]
+label = "Use this point"
+
+[[step]]
+do = "shot"
+name = "create-here-panel"
+
+[[step]]
+do = "click"
+at = [1780, 60]
+label = "close the New place here panel"
+
+[[step]]
+do = "click"
+at = [300, 185]
+label = "place list: Kristiansand"
+
+[[step]]
+do = "click"
+at = [1000, 550]
+label = "map: drop a second point, with a draw target selected"
+
+[[step]]
+do = "shot"
+name = "point-dropped-targeted"
+
+[[step]]
+do = "click"
+at = [528, 1048]
+label = "Use this point (targeted)"
+
+[[step]]
+do = "shot"
+name = "assert-panel"
+
+[[assert]]
+kind = "differ"
+shots = ["point-dropped", "create-here-panel"]
+because = "committing a dropped point with no draw target must open the New place here panel"
+
+[[assert]]
+kind = "differ"
+shots = ["point-dropped-targeted", "assert-panel"]
+because = "committing a dropped point with a place selected must open the edit-geometry panel instead"
