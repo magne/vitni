@@ -155,12 +155,22 @@
           <div class="map-attr">© OpenStreetMap contributors</div>
         </div>
 
-        <!-- Polygon tool only: commit the drawn ring onto the rail-selected place, or start over. The
-             row appears between the map and the time slider, so arming the tool shrinks the map
-             surface — which is why the map is repainted whenever its container resizes (#252).
-             Finishing with no draw target selected is refused with a toast; the drafted ring is
-             deliberately kept on the canvas, so picking a place and pressing Finish again commits the
-             same geometry (#255). -->
+        <!-- Draft actions, one row at a time (both drawn here for documentation, matching
+             place.html's own convention): the Point tool shows "Use this point" once a point has
+             been dropped, the Polygon tool shows Finish/Clear the moment it is armed. Either row
+             appears between the map and the time slider, so arming a tool shrinks the map surface —
+             which is why the map is repainted whenever its container resizes (#252). Committing with
+             no draw target selected and no dropped point to fall back on (a finished polygon) is
+             refused with a toast; the draft is deliberately kept on the canvas, so picking a place
+             and committing again commits the same geometry (#255). A point with no draw target
+             instead opens "New place here" below — it never needed a target to begin with. Clicking
+             Clear erases the draft from the canvas, not just the underlying state (#282b); a
+             successful save clears it too, but a refusal or closing the panel without saving does
+             not (#282c). -->
+        <div class="wrap" style="gap:8px">
+          <button class="btn sm primary">Use this point</button>
+          <button class="btn sm ghost">Clear</button>
+        </div>
         <div class="wrap" style="gap:8px">
           <button class="btn sm primary">Finish polygon</button>
           <button class="btn sm ghost">Clear</button>
@@ -184,6 +194,27 @@
             Showing <b>Kristiania</b> (the name in 1900) with its 1900 boundary and its enclosing county as of 1900.
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- "New place here" (#282a): the Point tool's own quick-create panel, opened by "Use this
+         point" above when nothing is selected — a point never needed a draw target to begin with.
+         With a place selected instead, the same commit opens "Edit geometry — <name>" (the
+         edit-patterns.html sidepanel pattern, reused rather than redrawn here) exactly as Finish
+         polygon does. The panel slides in from the viewport edge (`viewport_anchored`), not from
+         `.workarea`, since this is a tool screen with no detail pane underneath it (#208). -->
+    <h3 style="margin-top:20px">Point tool, no draw target: "New place here"</h3>
+    <div class="specimen" style="display:grid;place-items:start">
+      <div class="sidepanel">
+        <div class="sp-head"><h3>New place here</h3><span class="spacer"></span><button class="btn sm ghost">✕</button></div>
+        <div class="sp-body stack">
+          <div class="field"><label>Name</label><input class="in" placeholder="Name this place…"></div>
+          <div class="field"><label>Type</label><select class="in"><option selected>Farm</option><option>Village</option><option>Town</option><option>City</option><option>Parish</option><option>Municipality</option><option>County</option><option>Country</option><option>Building</option></select></div>
+          <div class="field"><label>Reason for this change <span class="faint">(optional · shown in History)</span></label><input class="in" placeholder="Why this change is being made…"></div>
+          <div class="field"><label>Source</label><input class="in" placeholder="Attach a citation…"></div>
+          <div class="field"><label>Confidence</label><select class="in"><option>Very low</option><option>Low</option><option selected>Normal</option><option>High</option><option>Very high</option></select></div>
+        </div>
+        <div class="sp-foot"><button class="btn primary">Save</button></div>
       </div>
     </div>
 
