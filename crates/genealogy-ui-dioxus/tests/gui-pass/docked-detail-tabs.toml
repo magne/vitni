@@ -3,16 +3,12 @@
 # seeding synchronously from the shell), and #279's root cause needs the actual `.master-detail.split-2`
 # grid, which no markup assertion can see.
 #
-# Measuring this scenario found a second defect behind #279, filed separately: once a dock is open, a
-# pane's tab-strip hit region sits ~9-14px ABOVE its painted row, in both panes. Measured here, at
-# 1800x1200 — the active pane's Names label paints centred on y≈249 and a click there does nothing
-# (RMSE 0.0007 over the pane region), while y=240 switches the tab; the docked pane's row paints at
-# y≈295 and only y=285 hits. So every post-dock click below is aimed deliberately above the visible
-# label. That is NOT the coordinate-carry-over trap `CLAUDE.md` warns about — each value was read off
-# this scenario's own post-dock shot and then bisected against a click that works. It reproduces on
-# `main` and above the 1280px breakpoint, so it is independent of the CSS fix in this change, and it
-# means the fix here does not fully close #279's "clicking a tab does nothing" symptom for a user
-# aiming at the label.
+# Measuring this scenario found a second defect behind #279, filed as #285 and since fixed: `.tabs`'
+# own horizontal scrollbar was eating the clicks. Every post-dock click below now aims at the painted
+# label's centre, read off this scenario's own post-dock shot — the active pane's row paints y 231-266
+# with the Names label on 242-252, the docked pane's row 278-313 with Overview on 289-299. #285's
+# original diagnosis (a hit region ~9-14px ABOVE the painted row) was wrong; the corrected measurement
+# is in `docs/issues.md`'s *Decided* section. Never carry these coordinates to another window size.
 #
 # The fixture seeds exactly one record (place Kristiansand); this scenario opens a second (Oslo) to
 # have two tabs to dock. The Place create form's first field is the ID (not autofocused for a name), so
@@ -32,6 +28,11 @@
 # tabstrip and status bar repaint on any activation), which is what `region` is for. Regions were read
 # off this scenario's own `docked` shot — see `CLAUDE.md`'s "Writing one": never carry a coordinate from
 # the single-pane layout into a docked shot.
+#
+# The two per-pane `differ`s are scoped to the tab *body* (below each strip's border-bottom: y=267
+# active, y=314 docked), never the whole pane. A whole-pane region cannot tell a tab switch from a
+# sideways scroll of the strip, and that is exactly what the #285 defect produced — which is why these
+# two assertions passed while a click on the visible label did nothing.
 description = "A record remembers its tab across a remount, and a docked pane's own tab strip is independently operable (#209, #279)"
 
 [[step]]
@@ -121,8 +122,8 @@ name = "docked"
 
 [[step]]
 do = "click"
-at = [710, 240]
-label = "active pane (Kristiansand): Names tab (aimed above the painted label — see header)"
+at = [721, 249]
+label = "active pane (Kristiansand): Names tab, at the painted label's centre"
 
 [[step]]
 do = "shot"
@@ -130,8 +131,8 @@ name = "active-names-clicked"
 
 [[step]]
 do = "click"
-at = [1220, 285]
-label = "docked pane (Oslo): Overview tab (it starts on Names, its remembered tab)"
+at = [1220, 296]
+label = "docked pane (Oslo): Overview tab, at the painted label's centre (it starts on Names, its remembered tab)"
 
 [[step]]
 do = "shot"
@@ -152,8 +153,9 @@ because = "a remounted pane comes back on the tab it left, not a flash of Overvi
 [[assert]]
 kind = "differ"
 shots = ["docked", "active-names-clicked"]
-region = [508, 92, 646, 1080]
-because = "the active pane's own tab strip is operable with a split open (#279)"
+region = [508, 270, 646, 900]
+tolerance = 0.02
+because = "the active pane's own tab strip is operable with a split open (#279, #285)"
 
 [[assert]]
 kind = "match"
@@ -164,7 +166,8 @@ because = "clicking the active pane's tab must not disturb the docked pane"
 [[assert]]
 kind = "differ"
 shots = ["active-names-clicked", "docked-overview-clicked"]
-region = [1154, 92, 646, 1080]
+region = [1156, 320, 644, 840]
+tolerance = 0.02
 because = "the docked pane's own tab strip is independently operable — the #279 fix"
 
 [[assert]]
