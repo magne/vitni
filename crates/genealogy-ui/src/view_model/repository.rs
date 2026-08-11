@@ -1,6 +1,6 @@
 use super::{
     AddressVm, AttachedRefVm, DetailTab, HistoryEntryVm, Localizer, RecordDraft, RepositoryChangeSetRequest,
-    RepositoryEdit, RestrictionKind, RowVm, TagRef, non_blank,
+    RepositoryEdit, RestrictionKind, RowVm, TagRef, line_label, non_blank,
 };
 
 /// One URL recorded on a repository (Repository › URLs tab): the type · href · description plus the
@@ -259,6 +259,10 @@ impl RecordDraft for RepositoryDraft {
     fn is_valid(&self) -> bool {
         true
     }
+
+    fn display_label(&self) -> Option<String> {
+        line_label(&self.name)
+    }
 }
 
 #[cfg(test)]
@@ -335,5 +339,28 @@ mod repository_draft_tests {
         };
         let seed = RepositoryDraft::from_detail(&detail);
         assert!(seed.edits_against(&seed).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod repository_display_label_tests {
+    use super::{RecordDraft, RepositoryDraft};
+
+    #[test]
+    fn the_label_is_the_repository_name() {
+        let draft = RepositoryDraft {
+            name: "Public library".to_owned(),
+            ..RepositoryDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("Public library".to_owned()));
+    }
+
+    #[test]
+    fn a_draft_with_no_name_has_no_label() {
+        let draft = RepositoryDraft {
+            repository_type: Some(genealogy_app::RepositoryType::Library),
+            ..RepositoryDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }

@@ -237,6 +237,10 @@ impl RecordDraft for NoteDraft {
     fn is_valid(&self) -> bool {
         true
     }
+
+    fn display_label(&self) -> Option<String> {
+        line_label(&self.text)
+    }
 }
 
 #[cfg(test)]
@@ -300,5 +304,39 @@ mod note_draft_tests {
         assert_eq!(edits.len(), 2);
         assert!(matches!(&edits[0], NoteEdit::SetType { .. }));
         assert!(matches!(&edits[1], NoteEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod note_display_label_tests {
+    use super::{NoteDraft, RecordDraft};
+    use crate::view_model::LABEL_MAX_CHARS;
+
+    #[test]
+    fn the_label_is_the_texts_first_line() {
+        let draft = NoteDraft {
+            text: "# An estate inventory\n\nThe rest of the note.".to_owned(),
+            ..NoteDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("An estate inventory".to_owned()));
+    }
+
+    #[test]
+    fn a_long_note_is_capped_rather_than_naming_a_tab_after_a_paragraph() {
+        let draft = NoteDraft {
+            text: "x".repeat(LABEL_MAX_CHARS + 40),
+            ..NoteDraft::new()
+        };
+        let label = draft.display_label().expect("a label");
+        assert_eq!(label.chars().count(), LABEL_MAX_CHARS);
+    }
+
+    #[test]
+    fn a_draft_with_no_text_has_no_label() {
+        let draft = NoteDraft {
+            language: "en".to_owned(),
+            ..NoteDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }

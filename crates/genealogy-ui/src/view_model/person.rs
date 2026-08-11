@@ -3,7 +3,7 @@ use super::{
     DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactVm, FamilyVm,
     HistoryEntryVm, Localizer, MediaRefVm, NameSummary, NameType, NameVm, NewCitationFields, PersonChangeSetRequest,
     PersonName, PersonNameParts, PersonRow, PersonSummary, RecordDraft, RecordLink, RestrictionKind, RowVm, Sex,
-    TagRef, citation_ref_from_ref,
+    TagRef, citation_ref_from_ref, line_label,
 };
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
@@ -540,6 +540,15 @@ impl RecordDraft for PersonDraft {
     fn is_valid(&self) -> bool {
         true
     }
+
+    fn display_label(&self) -> Option<String> {
+        let name = [self.given.trim(), self.surname.trim()]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        line_label(&name)
+    }
 }
 
 /// Trims a field and returns `None` when it is blank, else the owned trimmed value.
@@ -620,5 +629,44 @@ mod tests {
     fn a_changed_human_id_is_carried_as_the_override() {
         let request = edit_draft("I0777").to_request();
         assert_eq!(request.human_id_override.as_deref(), Some("I0777"));
+    }
+}
+
+#[cfg(test)]
+mod person_display_label_tests {
+    use super::{PersonDraft, RecordDraft};
+
+    #[test]
+    fn the_label_is_the_given_and_surname_joined() {
+        let draft = PersonDraft {
+            given: "Ada".to_owned(),
+            surname: "Lovelace".to_owned(),
+            ..PersonDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("Ada Lovelace".to_owned()));
+    }
+
+    #[test]
+    fn half_a_name_is_still_a_label() {
+        let given_only = PersonDraft {
+            given: "Ada".to_owned(),
+            ..PersonDraft::new()
+        };
+        assert_eq!(given_only.display_label(), Some("Ada".to_owned()));
+        let surname_only = PersonDraft {
+            surname: "Lovelace".to_owned(),
+            ..PersonDraft::new()
+        };
+        assert_eq!(surname_only.display_label(), Some("Lovelace".to_owned()));
+    }
+
+    #[test]
+    fn a_draft_with_no_name_typed_has_no_label() {
+        // Other fields do not name a person, so a draft dirty only in its sex still has no label.
+        let draft = PersonDraft {
+            sex: genealogy_app::Sex::Female,
+            ..PersonDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }

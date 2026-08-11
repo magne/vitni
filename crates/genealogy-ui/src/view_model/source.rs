@@ -1,7 +1,7 @@
 use super::{
     AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EvidenceAxisVm, HistoryEntryVm, Localizer, MediaRefVm,
     RecordDraft, RestrictionKind, RowVm, SourceChangeSetRequest, SourceEdit, TagRef, citation_ref_from_ref,
-    evidence_axes, non_blank,
+    evidence_axes, line_label, non_blank,
 };
 
 /// One repository a source is held in (Source › Repositories tab): the repo, call number, medium,
@@ -353,6 +353,10 @@ impl RecordDraft for SourceDraft {
     fn is_valid(&self) -> bool {
         true
     }
+
+    fn display_label(&self) -> Option<String> {
+        line_label(&self.title)
+    }
 }
 
 #[cfg(test)]
@@ -412,5 +416,28 @@ mod source_draft_tests {
         let edits = draft.edits_against(&seed());
         assert_eq!(edits.len(), 1);
         assert!(matches!(&edits[0], SourceEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod source_display_label_tests {
+    use super::{RecordDraft, SourceDraft};
+
+    #[test]
+    fn the_label_is_the_title() {
+        let draft = SourceDraft {
+            title: "Trinity Church baptisms".to_owned(),
+            ..SourceDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("Trinity Church baptisms".to_owned()));
+    }
+
+    #[test]
+    fn a_draft_with_no_title_has_no_label() {
+        let draft = SourceDraft {
+            author: "Rev. Smith".to_owned(),
+            ..SourceDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }

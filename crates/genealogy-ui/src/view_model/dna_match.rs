@@ -378,6 +378,12 @@ impl RecordDraft for DnaMatchDraft {
     fn is_valid(&self) -> bool {
         Self::is_valid(self)
     }
+
+    /// Always `None`: a match is titled by the two people whose tests it joins, which the draft holds
+    /// only test `human_id`s for — see [`RecordDraft::display_label`].
+    fn display_label(&self) -> Option<String> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -484,5 +490,31 @@ mod dna_match_draft_tests {
             ..seed()
         };
         assert!(draft.to_request().is_none());
+    }
+}
+
+#[cfg(test)]
+mod dna_match_display_label_tests {
+    use super::{DnaMatchDraft, RecordDraft};
+    use genealogy_app::{DnaProvider, MatchStatus};
+
+    #[test]
+    fn a_fully_populated_dna_match_draft_still_has_no_label() {
+        // Deliberate: a match is titled by the two people whose tests it joins, and the draft holds only
+        // the two tests' `human_id`s — two lookups the trait cannot do.
+        let draft = DnaMatchDraft {
+            human_id: "M0001".to_owned(),
+            status: Some(MatchStatus::Confirmed),
+            test_a: "D0001".to_owned(),
+            test_b: "D0002".to_owned(),
+            provider: Some(DnaProvider::AncestryDna),
+            shared_cm: "1200.5".to_owned(),
+            percent_shared: "17.5".to_owned(),
+            largest_segment_cm: "90.2".to_owned(),
+            segment_count: "31".to_owned(),
+            predicted_relationship: "First cousin".to_owned(),
+            ..DnaMatchDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }

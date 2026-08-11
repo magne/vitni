@@ -261,6 +261,10 @@ impl RecordDraft for ResearchNoteDraft {
     fn is_valid(&self) -> bool {
         self.existing_human_id.is_some() || !self.subjects.is_empty()
     }
+
+    fn display_label(&self) -> Option<String> {
+        line_label(&self.title).or_else(|| line_label(&self.body))
+    }
 }
 
 #[cfg(test)]
@@ -482,5 +486,43 @@ mod research_note_tests {
             detail.subjects.iter().all(|subject| !subject.kind_label.is_empty()),
             "each subject carries a localized kind label"
         );
+    }
+}
+
+#[cfg(test)]
+mod research_note_display_label_tests {
+    use crate::view_model::{RecordDraft, ResearchNoteDraft};
+
+    #[test]
+    fn the_title_names_the_draft() {
+        let draft = ResearchNoteDraft {
+            title: "Same person as the 1865 census?".to_owned(),
+            body: "The parish register agrees.".to_owned(),
+            ..ResearchNoteDraft::new()
+        };
+        assert_eq!(
+            draft.display_label(),
+            Some("Same person as the 1865 census?".to_owned())
+        );
+    }
+
+    #[test]
+    fn the_body_names_a_draft_with_no_title_yet() {
+        // The list row already falls back to the argument's first line; a tab that did not would read
+        // "New Research notes" beside a form with a paragraph typed into it.
+        let draft = ResearchNoteDraft {
+            body: "## The parish register agrees\n\nMore.".to_owned(),
+            ..ResearchNoteDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("The parish register agrees".to_owned()));
+    }
+
+    #[test]
+    fn a_draft_with_neither_has_no_label() {
+        let draft = ResearchNoteDraft {
+            language: "en".to_owned(),
+            ..ResearchNoteDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }
