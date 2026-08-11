@@ -1,0 +1,202 @@
+# #260: several unsaved new records of one category, side by side. Three things here are invisible to
+# SSR, which renders markup and moves no focus.
+#
+# 1. **The remount.** `screens/record_detail.rs` keys the create pane on the draft's own `EditKey`, so a
+#    second `⌘N` builds a *fresh* form rather than reusing the first draft's component instance. SSR
+#    cannot see component reuse at all; here the second draft's empty form is the proof.
+# 2. **Where the caret goes.** The second `⌘N` destroys the input the caret was in. Before
+#    `CreateFormFocus` focus fell to `<body>`, and the next keystroke reached the *shell* dispatcher
+#    instead of the new form — which is why typing into draft 2 is asserted over the form region while
+#    the tabstrip is asserted *unchanged*: an overlay opening instead (`?` is one keystroke away there)
+#    would repaint both.
+# 3. **The live buffers.** Each tab must come back to its own text, from the shell's parked buffer, after
+#    its pane has been unmounted and rebuilt.
+#
+# People, not Tags: Tags' create form is the one that already autofocused its first field, so it could
+# not tell a working focus hand-off from the pre-existing one.
+#
+# The caret is a real pixel and its position is not, so every `match` reference is taken with the caret
+# parked in the **ID** field, empty — which is exactly where a remounted create form autofocuses it. A
+# reference taken with the caret in Given name would compare a ring in one field against a ring in
+# another. The `I` typed into draft 2's ID is backspaced away again for the same reason.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The two draft
+# tabs are **column-scanned**, not eyeballed, and re-scanned on the shot immediately before each click,
+# because a draft tab resizes as it is typed into: with both tabs still reading "New People" the boxes
+# are 588-730 and 736-901, but once they read "Ada" and "Bob" they are 588-677 and 683-772 — so the
+# x 659 that was tab 1's label before typing is its close ✕ after. The clicks below aim at the label
+# glyphs on row y 103 (`convert <shot> -crop 400x1+520+92 +repage txt:-` for the boxes,
+# `-crop 1x60+610+70` for the row).
+description = "A second ⌘N opens another draft of one category, with its own form, caret and buffer (#260)"
+
+[[step]]
+do = "click"
+at = [85, 175]
+label = "rail: People"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: the first Person draft"
+
+[[step]]
+do = "click"
+at = [1150, 564]
+label = "field: Given name"
+
+[[step]]
+do = "key"
+chord = "shift+a"
+label = "type: A"
+
+[[step]]
+do = "key"
+chord = "d"
+label = "type: d"
+
+[[step]]
+do = "key"
+chord = "a"
+label = "type: a — draft 1 names itself Ada"
+
+[[step]]
+do = "click"
+at = [1150, 336]
+label = "field: ID — park the caret where a remount would autofocus it"
+
+[[step]]
+do = "shot"
+name = "one-parked"
+
+[[step]]
+do = "click"
+at = [1150, 564]
+label = "field: Given name again — the caret is in a field the next ⌘N destroys"
+
+[[step]]
+do = "shot"
+name = "one-typed"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a second Person draft, from inside draft 1's Given name"
+
+[[step]]
+do = "shot"
+name = "two-fresh"
+
+[[step]]
+do = "key"
+chord = "shift+i"
+label = "type: I — into whatever the fresh form focused (its ID)"
+
+[[step]]
+do = "shot"
+name = "two-id"
+
+[[step]]
+do = "key"
+chord = "BackSpace"
+label = "clear it again, so the ID is empty for the reference frames below"
+
+[[step]]
+do = "click"
+at = [1150, 564]
+label = "field: Given name"
+
+[[step]]
+do = "key"
+chord = "shift+b"
+label = "type: B"
+
+[[step]]
+do = "key"
+chord = "o"
+label = "type: o"
+
+[[step]]
+do = "key"
+chord = "b"
+label = "type: b — draft 2 names itself Bob"
+
+[[step]]
+do = "shot"
+name = "two-typed"
+
+[[step]]
+do = "click"
+at = [1150, 336]
+label = "field: ID — park the caret for the reference frame"
+
+[[step]]
+do = "shot"
+name = "two-parked"
+
+[[step]]
+do = "click"
+at = [625, 103]
+label = "record tab: draft 1 (Ada), on its label — not the ✕ four glyphs to the right"
+
+[[step]]
+do = "shot"
+name = "back-to-one"
+
+[[step]]
+do = "click"
+at = [725, 103]
+label = "record tab: draft 2 (Bob), on its label"
+
+[[step]]
+do = "shot"
+name = "back-to-two"
+
+[[assert]]
+kind = "differ"
+shots = ["one-typed", "two-fresh"]
+region = [508, 130, 1292, 1040]
+because = "a second ⌘N must build a fresh, empty form — a reused component instance would still show draft 1's text (#260)"
+
+[[assert]]
+kind = "differ"
+shots = ["two-fresh", "two-id"]
+region = [508, 130, 1292, 1040]
+because = "the caret must be inside the new form, or the keystroke reaches the shell dispatcher instead"
+
+[[assert]]
+kind = "match"
+shots = ["two-fresh", "two-id"]
+region = [508, 80, 1292, 45]
+# Byte-identical when it works (RMSE 0.0000): a field took the keystroke, so nothing outside the form
+# repainted. An overlay opening instead — `?` is one keystroke away from an unfocused shell — paints over
+# the tabstrip as well, and the `differ` above alone could not tell the two apart.
+tolerance = 0.001
+because = "and it must be a *field* that took it, not the shell — an overlay would repaint the tabstrip too"
+
+[[assert]]
+kind = "differ"
+shots = ["two-id", "two-typed"]
+region = [508, 80, 1292, 45]
+because = "typing a name into a draft renames its own tab, live (#260)"
+
+[[assert]]
+kind = "match"
+shots = ["one-parked", "back-to-one"]
+region = [508, 130, 1292, 1040]
+# RMSE 0.0017 — the residue is the remount's own repaint (the per-field reset ↺ on the restored,
+# modified input), not the text: over the Given name field alone the two frames are identical.
+because = "returning to draft 1 must restore draft 1's own buffer, from the shell, after its pane was torn down"
+
+[[assert]]
+kind = "match"
+shots = ["two-parked", "back-to-two"]
+region = [508, 130, 1292, 1040]
+because = "and returning to draft 2 must restore draft 2's, not the one it was rebuilt beside"
+
+[[assert]]
+kind = "differ"
+shots = ["back-to-one", "back-to-two"]
+# The Given name input alone. Three glyphs are 0.0044 of the whole form pane — under any tolerance that
+# would still call the two restore frames above a match — and 0.0521 of the field they sit in.
+region = [546, 548, 300, 32]
+because = "the two restored forms must not be the same form — one buffer shared between the drafts is the defect (#260)"
