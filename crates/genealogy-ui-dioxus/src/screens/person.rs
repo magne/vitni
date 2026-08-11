@@ -106,7 +106,7 @@ pub fn PersonCreateRecord(draft_id: DraftId) -> Element {
             on_save.call((record.draft.read().to_request(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::People, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::People, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
         Button {
@@ -740,7 +740,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::People, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::People, &human_id), record, save_now);
 
     // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
     let media_viewing = use_signal(|| None::<MediaRefVm>);

@@ -88,7 +88,7 @@ fn SavePane(human_id: String) -> Element {
         nav.note_save_finished(&EditKey::saved(Category::Tags, &id), true);
         saves += 1;
     });
-    use_save_on_request(Category::Tags, Some(&human_id), state, on_save);
+    use_save_on_request(EditKey::saved(Category::Tags, &human_id), state, on_save);
     let editing = *state.editing.read();
     rsx! {
         div { "{human_id}:SAVES:{saves}" }

@@ -49,7 +49,7 @@ pub fn TagCreateRecord(draft_id: DraftId) -> Element {
             on_save.call((edit.draft.read().clone(), edit.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Tags, None, edit, save_now);
+    use_save_on_request(EditKey::draft(Category::Tags, draft_id), edit, save_now);
     let can_save = edit.can_save();
     let actions = rsx! {
         Button {
@@ -158,7 +158,7 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
             on_save.call((edit.draft.read().clone(), edit.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Tags, Some(&id), edit, save_now);
+    use_save_on_request(EditKey::saved(Category::Tags, &id), edit, save_now);
 
     match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },

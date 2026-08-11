@@ -59,7 +59,7 @@ pub fn CitationCreateRecord(draft_id: DraftId) -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Citations, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::Citations, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
         Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
@@ -606,7 +606,7 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Citations, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::Citations, &human_id), record, save_now);
 
     // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
     let media_viewing = use_signal(|| None::<MediaRefVm>);

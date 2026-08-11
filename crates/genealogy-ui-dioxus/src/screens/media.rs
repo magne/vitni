@@ -44,7 +44,7 @@ pub fn MediaCreateRecord(draft_id: DraftId) -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Media, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::Media, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
         Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
@@ -346,7 +346,7 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Media, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::Media, &human_id), record, save_now);
 
     match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },

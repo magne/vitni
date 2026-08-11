@@ -75,7 +75,7 @@ pub fn ResearchNoteCreateRecord(draft_id: DraftId) -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::ResearchNotes, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::ResearchNotes, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
         Button {
@@ -465,7 +465,7 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::ResearchNotes, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::ResearchNotes, &human_id), record, save_now);
 
     match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },

@@ -1287,7 +1287,7 @@ fn SavePane(human_id: String) -> Element {
     let state = use_record_edit::<TagDraft>(Category::Tags, &human_id, &TagDraft::new());
     let mut saves = use_signal(|| 0_u32);
     let on_save = use_callback(move |()| saves += 1);
-    use_save_on_request(Category::Tags, Some(&human_id), state, on_save);
+    use_save_on_request(EditKey::saved(Category::Tags, &human_id), state, on_save);
     rsx! {
         div { "SAVES:{saves}" }
     }

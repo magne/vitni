@@ -114,20 +114,6 @@ pub fn use_record_create<D: RecordDraft>(category: Category, draft: DraftId) -> 
     state
 }
 
-/// The [`DraftId`] of the **first** create draft open for `category` — what [`use_save_on_request`]
-/// still has to fall back to while it is told only "this is a draft of this category", rather than which
-/// draft. [`DraftId::UNOPENED`] when no draft tab is open at all.
-fn open_draft_id(nav: &NavState, category: Category) -> DraftId {
-    for tab in nav.records.peek().iter() {
-        if tab.category() == category
-            && let Some(draft) = tab.draft_id()
-        {
-            return draft;
-        }
-    }
-    DraftId::UNOPENED
-}
-
 /// The contents a record's edit buffer comes up with on mount (see [`use_stashed_edit`]).
 #[derive(Clone)]
 struct EditSeed<D> {
@@ -198,8 +184,9 @@ fn use_edit_write_through<D: RecordDraft>(key: EditKey, state: RecordEditState<D
 }
 
 /// Runs this pane's own Save when the shell asks for it — the close/quit confirm's **Save** /
-/// **Save all** (issue #240). `category` + `human_id` name the editor (`None` for a category's create
-/// draft), `save` is the screen's existing save closure, exactly as its Save button calls it.
+/// **Save all** (issue #240). `key` names the editor — [`EditKey::saved`] for a stored record,
+/// [`EditKey::draft`] for one of a category's create drafts — and `save` is the screen's existing save
+/// closure, exactly as its Save button calls it.
 ///
 /// The shell cannot save generically: save is per-screen and differently shaped per aggregate, so
 /// `NavState::save_then_close` / `save_all_then_quit` arm the request, activate the record's tab so
@@ -215,17 +202,8 @@ fn use_edit_write_through<D: RecordDraft>(key: EditKey, state: RecordEditState<D
 /// Save button (`record_head_actions`): without it a shell-driven save (the close/quit confirm's
 /// **Save**, or `⌘S`) leaves the pane in edit mode with a stale `seed`, so the record still reads as
 /// dirty, keeps its parked buffer, and keeps the tabstrip's unsaved marker lit.
-pub fn use_save_on_request<D: RecordDraft>(
-    category: Category,
-    human_id: Option<&str>,
-    mut state: RecordEditState<D>,
-    save: Callback<()>,
-) {
+pub fn use_save_on_request<D: RecordDraft>(key: EditKey, mut state: RecordEditState<D>, save: Callback<()>) {
     let mut nav = use_context::<NavState>();
-    let key = match human_id {
-        Some(human_id) => EditKey::saved(category, human_id),
-        None => EditKey::draft(category, open_draft_id(&nav, category)),
-    };
     let mut ran = use_signal(|| false);
     use_effect(move || {
         let armed = nav.save_request.read().as_ref().map(|request| request.key.clone());

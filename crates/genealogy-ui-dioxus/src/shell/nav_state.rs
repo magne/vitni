@@ -186,15 +186,6 @@ fn detect_os_theme() -> Theme {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DraftId(u32);
 
-impl DraftId {
-    /// The id no minted draft ever carries (minting starts at 1). Only [`use_record_create`] uses it,
-    /// while the create pane still resolves its draft from the strip instead of being told which one
-    /// it is; the pane cannot in fact be mounted without a draft tab.
-    ///
-    /// [`use_record_create`]: crate::screens::use_record_create
-    pub(crate) const UNOPENED: Self = Self(0);
-}
-
 impl fmt::Display for DraftId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "#{}", self.0)
