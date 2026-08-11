@@ -690,7 +690,7 @@ impl NavState {
     ///
     /// The buffer parked for the draft is dropped: it has just been stored, so leaving it would mark the
     /// new record's tab unsaved and refill its form on the next mount. A save run armed on the draft is
-    /// re-keyed to the stored record ([`Self::rekey_save_run`]) — committing *is* a change of the
+    /// re-keyed to the stored record — committing *is* a change of the
     /// editor's identity, the same as a rename, and the screen reports back under the new one.
     pub fn commit_draft(&mut self, draft: DraftId, record: RecordRef) {
         let key = EditKey::draft(record.category, draft);

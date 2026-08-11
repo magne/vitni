@@ -1,5 +1,6 @@
-//! The record-detail router (Phase 5 tabbed-navigation rework): renders the active open record's
-//! detail pane, keyed on its category, or a select-record prompt when nothing is open (or the active
+//! The record-detail router (Phase 5 tabbed-navigation rework): renders the active open tab's pane,
+//! keyed on that tab's own editor identity — a stored record's id, a draft's [`DraftId`] — or a
+//! select-record prompt when nothing is open (or the active
 //! destination — e.g. the Dashboard — has no detail pane at all). Every aggregate screen's
 //! `MasterDetail` renders this as its `detail` slot, so which pane shows follows the active record
 //! tab rather than which category screen is mounted (the "keep list, show detail only" navigation
@@ -9,7 +10,7 @@ use dioxus::prelude::*;
 use genealogy_ui::Category;
 
 use crate::shell::ChromeCtx;
-use crate::shell::nav_state::{DraftId, NavState, OpenTab, PaneRole};
+use crate::shell::nav_state::{DraftId, EditKey, NavState, OpenTab, PaneRole};
 
 use super::citation::{CitationCreateRecord, CitationDetailPane};
 use super::dna_match::{DnaMatchCreateRecord, DnaMatchDetailPane};
@@ -39,11 +40,19 @@ pub fn RecordDetail() -> Element {
     }
 }
 
-/// Routes a draft tab to its aggregate's `*CreateRecord` create form, keyed by category so switching
-/// draft categories remounts a fresh form. Each create form self-wires to [`NavState`]: Save commits
-/// the draft in place ([`NavState::commit_draft`]), Cancel closes it ([`NavState::cancel_draft`]).
+/// Routes a draft tab to its aggregate's `*CreateRecord` create form, keyed by the draft's own
+/// [`EditKey`] so switching to *any* other draft remounts a fresh form. The category alone is not enough:
+/// several drafts of one category can be open (#260), and a reused instance keeps the buffer signals
+/// `use_record_create` hydrated at its mount — so the second draft's form would come up holding the
+/// first's text and then write it back under the second's key.
+///
+/// The same "keyed pane must be a dynamic *child* of a stable root" note as [`detail_pane`] applies: the
+/// `div.detail-slot` is what makes the `key` count.
+///
+/// Each create form self-wires to [`NavState`]: Save commits the draft in place
+/// ([`NavState::commit_draft`]), Cancel closes it ([`NavState::cancel_draft`]).
 fn draft_pane(category: Category, draft: DraftId) -> Element {
-    let key = category.id();
+    let key = EditKey::draft(category, draft);
     rsx! {
         div { class: "detail-slot",
             {
