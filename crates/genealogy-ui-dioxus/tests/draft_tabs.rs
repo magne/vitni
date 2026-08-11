@@ -186,6 +186,44 @@ fn commit_draft_replaces_only_the_named_draft() {
     assert!(html.contains("REF:Ada"), "showing the stored record:\n{html}");
 }
 
+/// A research note opened from a person's "Research notes" tab, then a second research-note draft
+/// opened by hand beside it.
+fn research_note_seeded_about_a_person() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_research_note_about(Category::People, "I0001".to_owned());
+        nav.open_create(Category::ResearchNotes);
+    });
+    let seed = nav.research_note_subject.read().clone().map_or_else(
+        || "NONE".to_owned(),
+        |(draft, category, human_id)| format!("{draft} {} {human_id}", category.id()),
+    );
+    rsx! {
+        div { "SEED:{seed}" }
+        {probe(&nav)}
+    }
+}
+
+#[test]
+fn a_seeded_research_note_names_the_draft_it_opened() {
+    // The seed is consumed once, by a create pane's mount-time effect. With several research-note drafts
+    // open, the pane that consumes it has to be the one it was opened for — an unaddressed seed would be
+    // swallowed by whichever draft mounted next, silently giving it the wrong subject.
+    let html = render(research_note_seeded_about_a_person);
+    assert!(
+        html.contains("SEED:#1 people I0001"),
+        "the seed names the draft it opened, alongside the subject:\n{html}"
+    );
+    assert!(
+        html.contains("KEYS:[research-notes/#1,research-notes/#2]"),
+        "and the second ⌘N is a draft of its own, with no seed of its own:\n{html}"
+    );
+    assert!(
+        html.contains("DEST:research-notes"),
+        "the seeded draft's category is revealed so its tab is visible:\n{html}"
+    );
+}
+
 fn reveal_from_tool_switches_category() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {

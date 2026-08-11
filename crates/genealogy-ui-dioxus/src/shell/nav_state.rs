@@ -451,10 +451,12 @@ pub struct NavState {
     /// `GeographyScreen` consumes and clears it once, on mount.
     pub geography_focus: Signal<Option<(String, String)>>,
     /// The `(category, human_id)` a fresh research-note draft should be pre-seeded with as its subject
-    /// (the "Research notes" reverse tab's Add on a Person / Family / Event / Place), or `None`. Set by
-    /// [`Self::open_research_note_about`]; `ResearchNoteCreateRecord` consumes and clears it once, on
-    /// mount — the same one-shot handoff as [`Self::geography_focus`].
-    pub research_note_subject: Signal<Option<(Category, String)>>,
+    /// (the "Research notes" reverse tab's Add on a Person / Family / Event / Place), addressed at the
+    /// [`DraftId`] it was opened for — or `None`. Set by [`Self::open_research_note_about`];
+    /// `ResearchNoteCreateRecord` consumes and clears it once, on mount, **only when the id is its own** —
+    /// the same one-shot handoff as [`Self::geography_focus`], but addressed, because several
+    /// research-note drafts can be open and an unaddressed seed would be taken by whichever mounted next.
+    pub research_note_subject: Signal<Option<(DraftId, Category, String)>>,
     /// A close-tab/quit operation awaiting confirmation because it would discard unsaved work, or
     /// `None` when the confirm dialog is not showing. Set by [`Self::request_close_tab`] /
     /// [`Self::request_quit`]; resolved by [`Self::confirm_close`] / [`Self::cancel_close`].
@@ -668,9 +670,14 @@ impl NavState {
     /// Opens a research-note create draft pre-seeded with `(category, human_id)` as its subject — the
     /// Add on a record's "Research notes" tab. Reveals the `ResearchNotes` category so the draft's tab is
     /// visible next to its list, exactly as the rail's own New does.
+    ///
+    /// The seed is stored *after* the draft is opened, because it is addressed at that draft's id. Safe:
+    /// this runs inside one event handler, so nothing renders in between — the new pane mounts on the
+    /// next render and its effect looks for the seed after that.
     pub fn open_research_note_about(&mut self, category: Category, human_id: String) {
-        self.research_note_subject.set(Some((category, human_id)));
-        self.request_new_for(Category::ResearchNotes);
+        self.go_to(Destination::Category(Category::ResearchNotes));
+        let draft = self.open_create(Category::ResearchNotes);
+        self.research_note_subject.set(Some((draft, category, human_id)));
     }
 
     /// Commits the draft `draft` in place: replaces its own tab with the saved `record`, keeping its

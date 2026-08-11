@@ -20,8 +20,9 @@ fn subject_categories() -> [Category; 4] {
 /// rendered as the create form in the detail pane (`record-editing.html` §6). Save commits the whole
 /// note (subjects + title, then the body); Cancel discards.
 ///
-/// Consumes [`NavState::research_note_subject`] once, on mount: opening this form from a record's
-/// "Research notes" tab pre-seeds that record as the argument's first subject.
+/// Consumes [`NavState::research_note_subject`] once, on mount, and **only when the seed names this
+/// draft**: opening this form from a record's "Research notes" tab pre-seeds that record as the
+/// argument's first subject, and any other research-note draft must leave the seed for its owner.
 #[component]
 pub fn ResearchNoteCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
@@ -35,7 +36,16 @@ pub fn ResearchNoteCreateRecord(draft_id: DraftId) -> Element {
     let mut seeded = record.draft;
     let mut subject_seed = nav.research_note_subject;
     use_effect(move || {
-        let Some((category, human_id)) = subject_seed.write().take() else {
+        // Peek and compare *before* taking: a `take()` first would swallow a seed meant for another
+        // research-note draft, leaving that draft's subject silently unset.
+        let mine = subject_seed
+            .peek()
+            .as_ref()
+            .is_some_and(|(seeded_draft, _, _)| *seeded_draft == draft_id);
+        if !mine {
+            return;
+        }
+        let Some((_, category, human_id)) = subject_seed.write().take() else {
             return;
         };
         seeded.write().add_subject(SubjectVm {
