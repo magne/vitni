@@ -9,7 +9,7 @@ use genealogy_app::{MapBasemap, MapProvider, MapSource};
 use genealogy_ui::{EventPinVm, GeographyVm, MarkerShapeVm, PlaceMarkerVm};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
-    DrawTool, MapDraft, MovedCamera, geography_draw_target, geography_empty_state, geography_map_surface,
+    DrawTool, MapDraft, MapPane, MovedCamera, geography_draw_target, geography_empty_state, geography_map_surface,
     geography_provider_choices, geography_rail, geography_time_slider, geography_unplotted_note,
 };
 
@@ -36,6 +36,25 @@ fn source() -> MapSource {
 /// refresh.
 fn no_op_moved() -> EventHandler<MovedCamera> {
     EventHandler::new(|_: MovedCamera| {})
+}
+
+/// A pane with nothing plotted, for the renders that assert on the surface's chrome (the credit
+/// overlay, the crosshair cursor) rather than on its marker/event counts.
+fn empty_pane(
+    tool: Signal<DrawTool>,
+    draft: Signal<MapDraft>,
+    zoom: Signal<f64>,
+    attribution: Signal<String>,
+) -> MapPane {
+    MapPane {
+        marker_count: 0,
+        event_count: 0,
+        tool,
+        draft,
+        zoom,
+        attribution,
+        on_moved: no_op_moved(),
+    }
 }
 
 fn render(view: fn() -> Element) -> String {
@@ -67,7 +86,19 @@ fn MapSurfaceWithMarkers() -> Element {
     let zoom = use_signal(|| 4.0);
     let draft = use_signal(|| MapDraft::Empty);
     let attribution = use_signal(|| "© OpenStreetMap contributors".to_owned());
-    geography_map_surface(&chrome(), 3, 5, tool, draft, zoom, source(), attribution, no_op_moved())
+    geography_map_surface(
+        &chrome(),
+        source(),
+        MapPane {
+            marker_count: 3,
+            event_count: 5,
+            tool,
+            draft,
+            zoom,
+            attribution,
+            on_moved: no_op_moved(),
+        },
+    )
 }
 
 #[test]
@@ -116,7 +147,7 @@ fn MapSurfaceWithDivergedAttribution() -> Element {
     let zoom = use_signal(|| 4.0);
     let draft = use_signal(|| MapDraft::Empty);
     let attribution = use_signal(|| "© a live Google viewport refresh".to_owned());
-    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, source(), attribution, no_op_moved())
+    geography_map_surface(&chrome(), source(), empty_pane(tool, draft, zoom, attribution))
 }
 
 #[test]
@@ -140,7 +171,7 @@ fn MapSurfaceWithNoCredit() -> Element {
     let zoom = use_signal(|| 4.0);
     let draft = use_signal(|| MapDraft::Empty);
     let attribution = use_signal(String::new);
-    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, source(), attribution, no_op_moved())
+    geography_map_surface(&chrome(), source(), empty_pane(tool, draft, zoom, attribution))
 }
 
 /// `.map-attr` is a bordered panel in the stylesheet, so rendering it around nothing draws a small
@@ -162,7 +193,7 @@ fn MapSurfacePanHasNoCaptureOverlay() -> Element {
     let zoom = use_signal(|| 4.0);
     let draft = use_signal(|| MapDraft::Empty);
     let attribution = use_signal(|| "© OpenStreetMap contributors".to_owned());
-    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, source(), attribution, no_op_moved())
+    geography_map_surface(&chrome(), source(), empty_pane(tool, draft, zoom, attribution))
 }
 
 #[test]
@@ -182,7 +213,7 @@ fn MapSurfacePointModeHasCaptureOverlay() -> Element {
     let zoom = use_signal(|| 4.0);
     let draft = use_signal(|| MapDraft::Empty);
     let attribution = use_signal(|| "© OpenStreetMap contributors".to_owned());
-    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, source(), attribution, no_op_moved())
+    geography_map_surface(&chrome(), source(), empty_pane(tool, draft, zoom, attribution))
 }
 
 #[test]

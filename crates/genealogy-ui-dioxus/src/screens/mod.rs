@@ -61,8 +61,8 @@ pub use family::{
     family_events_table, family_overview, family_record_fields,
 };
 pub use geography::{
-    GeographyScreen, geography_draw_target, geography_empty_state, geography_map_surface, geography_provider_choices,
-    geography_rail, geography_time_slider, geography_unplotted_note,
+    GeographyScreen, MapPane, geography_draw_target, geography_empty_state, geography_map_surface,
+    geography_provider_choices, geography_rail, geography_time_slider, geography_unplotted_note,
 };
 pub use help::{HelpScreen, render_doc};
 pub use import::{

@@ -224,23 +224,40 @@ pub fn GeographyScreen() -> Element {
     let on_clear_draft = EventHandler::new(move |()| draft.set(MapDraft::Empty));
 
     let saved_label = state.data_loc().action_label("saved");
-    let main_content = geography_main_content(
-        &chrome.0,
-        &loading,
-        data.read_unchecked().is_some(),
+    let pane = MapPane {
         marker_count,
         event_count,
         tool,
         draft,
         zoom,
-        source_state,
         attribution,
         on_moved,
-    );
+    };
+    let main_content = geography_main_content(&chrome.0, &loading, data.read_unchecked().is_some(), source_state, pane);
     rsx! {
         div { style: "display:flex;flex-direction:column;height:100%;min-height:0;gap:var(--sp-3)",
             h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-geography\")}" }
-            {geography_toolbar(loc, &chrome.0, &picker, &services, provider, active_key, select_generation, attribution, &nav, tool, zoom, marker_count, event_count, &fit_shapes, draw_target.as_ref())}
+            {geography_toolbar(
+                loc,
+                &chrome.0,
+                &picker,
+                ProviderSwitch {
+                    services: services.clone(),
+                    provider,
+                    active_key,
+                    select_generation,
+                    attribution,
+                    nav,
+                },
+                ToolbarState {
+                    marker_count,
+                    event_count,
+                    fit_shapes: &fit_shapes,
+                    draw_target: draw_target.as_ref(),
+                    tool,
+                    zoom,
+                },
+            )}
             {geography_unplotted_note(&chrome.0, unplotted_count, year())}
             div { class: "geo", style: "flex:1;min-height:0",
                 {geography_rail(&chrome.0, vm.as_ref(), selected, &filter().query)}
@@ -255,46 +272,48 @@ pub fn GeographyScreen() -> Element {
     }
 }
 
+/// Everything the mounted map pane needs beyond the resolved [`MapSource`] itself: the counts its aria
+/// label reports, the caller's draw state and camera, the reactive credit, and the settled-camera
+/// callback. One struct rather than seven positional parameters, for the reason
+/// [`map_shared::MapSurface`](super::map_shared::MapSurface) carries the same shape.
+#[derive(Clone, Copy)]
+pub struct MapPane {
+    /// How many place markers are plotted, for the surface's aria label.
+    pub marker_count: usize,
+    /// How many event pins are plotted, for the same label.
+    pub event_count: usize,
+    /// The armed draw tool.
+    pub tool: Signal<DrawTool>,
+    /// The in-progress shape every canvas gesture resolves against.
+    pub draft: Signal<MapDraft>,
+    /// The live camera level, shown by the toolbar's [`MapZoomReadout`].
+    pub zoom: Signal<f64>,
+    /// The credit drawn over the map (#254), updated independently of the source (ADR 0033).
+    pub attribution: Signal<String>,
+    /// Called with every settled camera — the Google adapter's viewport-attribution refresh.
+    pub on_moved: EventHandler<MovedCamera>,
+}
+
 /// The Geography tool's main pane content: the loading placeholder until both the record data and the
 /// initial [`MapSource`] resolve, the empty state when nothing plots, the mounted map surface once
 /// something does, or — the one case a plain data load never hits — a resolve failure's own message
 /// (a missing API-key env var, an unreachable style/session endpoint) shown the same way the loading
 /// placeholder is, since there is no map to show either way.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the main pane's readiness depends on the data load, the resolved map source, and every piece geography_map_surface itself needs"
-)]
 fn geography_main_content(
     chrome: &Chrome,
     loading: &str,
     data_ready: bool,
-    marker_count: usize,
-    event_count: usize,
-    tool: Signal<DrawTool>,
-    draft: Signal<MapDraft>,
-    zoom: Signal<f64>,
     source_state: Option<Result<MapSource, String>>,
-    attribution: Signal<String>,
-    on_moved: EventHandler<MovedCamera>,
+    pane: MapPane,
 ) -> Element {
     if !data_ready || source_state.is_none() {
         return rsx! { p { class: "loading", "{loading}" } };
     }
-    if marker_count == 0 && event_count == 0 {
+    if pane.marker_count == 0 && pane.event_count == 0 {
         return geography_empty_state(chrome);
     }
     match source_state {
-        Some(Ok(resolved)) => geography_map_surface(
-            chrome,
-            marker_count,
-            event_count,
-            tool,
-            draft,
-            zoom,
-            resolved,
-            attribution,
-            on_moved,
-        ),
+        Some(Ok(resolved)) => geography_map_surface(chrome, resolved, pane),
         Some(Err(message)) => rsx! { p { class: "loading", "{message}" } },
         None => rsx! {},
     }
@@ -335,39 +354,65 @@ fn open_geometry_panel(
     }
 }
 
+/// The provider-switch state [`geography_provider_select`] needs (ADR 0033), bundled so
+/// [`geography_toolbar`] carries it as one parameter instead of six. `services` and `nav` ride here
+/// (owned — `Services` is cheaply `Clone`, `NavState` is `Copy`) because both are otherwise used only
+/// by the provider select itself, not by the rest of the toolbar.
+struct ProviderSwitch {
+    /// Resolves the active/named providers (`MapConfig::choices`) and persists a switch.
+    services: Services,
+    /// The active provider, moved only after a switch both resolves and persists.
+    provider: Signal<MapProvider>,
+    /// The select's own value — a `MapConfig::choices` key, not the resolved `MapProvider`.
+    active_key: Signal<String>,
+    /// Bumped to force the `Select` to remount and pull its displayed value back after a failed
+    /// switch (see [`geography_provider_select`]'s doc comment).
+    select_generation: Signal<u32>,
+    /// The map surface's reactive credit; updated on a successful switch.
+    attribution: Signal<String>,
+    /// Raises the localized toast on a resolve/store failure.
+    nav: NavState,
+}
+
+/// Everything [`geography_toolbar`]'s non-provider controls read, bundled the same way
+/// [`ProviderSwitch`] bundles the provider select's own state. `Copy` (every field already is) so the
+/// caller can build it inline without an extra clone.
+#[derive(Clone, Copy)]
+struct ToolbarState<'a> {
+    /// How many markers are currently plotted (the toolbar's marker-count chip).
+    marker_count: usize,
+    /// How many event pins are currently plotted (the toolbar's event-count chip).
+    event_count: usize,
+    /// Every currently filtered marker's shape — the "⤢ Fit" button's target.
+    fit_shapes: &'a [MarkerShapeVm],
+    /// Which place a finished point/polygon will attach to, if any.
+    draw_target: Option<&'a (String, String)>,
+    /// The armed draw tool, toggled by the Pan/Point/Polygon buttons.
+    tool: Signal<DrawTool>,
+    /// The live camera level, shown by [`MapZoomReadout`].
+    zoom: Signal<f64>,
+}
+
 /// The top toolbar: a Place picker (searches every place in the workspace, not just already-plotted
 /// markers — geocoding a real-world address is a separate, still-deferred follow-up, ADR 0025 §4),
 /// marker/event counts, the draw tools, the live zoom readout, and the provider select.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a toolbar threads the screen's picker + provider-switch state + draw-tool + zoom + draw-target state"
-)]
 fn geography_toolbar(
     loc: &Localizer,
     chrome: &Chrome,
     picker: &RecordPicker,
-    services: &Services,
-    provider: Signal<MapProvider>,
-    active_key: Signal<String>,
-    select_generation: Signal<u32>,
-    attribution: Signal<String>,
-    nav: &NavState,
-    tool: Signal<DrawTool>,
-    zoom: Signal<f64>,
-    marker_count: usize,
-    event_count: usize,
-    fit_shapes: &[MarkerShapeVm],
-    draw_target: Option<&(String, String)>,
+    switch: ProviderSwitch,
+    state: ToolbarState,
 ) -> Element {
-    let fit_shapes = fit_shapes.to_vec();
+    let fit_shapes = state.fit_shapes.to_vec();
+    let zoom = state.zoom;
     rsx! {
         div { class: "geo-toolbar",
             div { style: "width:240px", {record_picker(loc, picker)} }
-            Chip { label: format!("{marker_count}") }
-            Chip { label: format!("{event_count}") }
-            {geography_draw_target(chrome, draw_target)}
+            Chip { label: format!("{}", state.marker_count) }
+            Chip { label: format!("{}", state.event_count) }
+            {geography_draw_target(chrome, state.draw_target)}
             span { class: "spacer" }
-            {draw_tool_buttons(chrome, tool)}
+            {draw_tool_buttons(chrome, state.tool)}
             Button {
                 label: chrome.geography_tool_fit(),
                 small: true,
@@ -375,7 +420,7 @@ fn geography_toolbar(
                 onclick: move |_| fit_bounds(MAP_CONTAINER_ID, &fit_shapes),
             }
             MapZoomReadout { zoom }
-            {geography_provider_select(chrome, services, provider, active_key, select_generation, attribution, *nav)}
+            {geography_provider_select(chrome, switch)}
         }
     }
 }
@@ -410,16 +455,15 @@ pub fn geography_draw_target(chrome: &Chrome, target: Option<&(String, String)>)
 ///
 /// Entering a style URL / API-key env name has no toolbar sub-form (config-file-only, per the PR
 /// decision) — a provider is only ever chosen among what `[map.providers.*]` already declares.
-fn geography_provider_select(
-    chrome: &Chrome,
-    services: &Services,
-    mut provider: Signal<MapProvider>,
-    mut active_key: Signal<String>,
-    mut select_generation: Signal<u32>,
-    mut attribution: Signal<String>,
-    mut nav: NavState,
-) -> Element {
-    let services = services.clone();
+fn geography_provider_select(chrome: &Chrome, switch: ProviderSwitch) -> Element {
+    let ProviderSwitch {
+        services,
+        mut provider,
+        mut active_key,
+        mut select_generation,
+        mut attribution,
+        mut nav,
+    } = switch;
     let cfg = map_config(&services);
     let options = geography_provider_choices(chrome, &cfg);
     rsx! {
@@ -567,34 +611,20 @@ pub fn geography_empty_state(chrome: &Chrome) -> Element {
 /// itself. `draft` is the in-progress shape every canvas gesture resolves against — a click appends to
 /// it, a handle drag moves one of its vertices (#259). `on_moved` feeds that same refresh with every
 /// settled camera.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the map surface's own caller-supplied set (see map_surface's doc comment) plus the marker/event counts this screen's aria label needs"
-)]
-pub fn geography_map_surface(
-    chrome: &Chrome,
-    marker_count: usize,
-    event_count: usize,
-    tool: Signal<DrawTool>,
-    draft: Signal<MapDraft>,
-    zoom: Signal<f64>,
-    source: MapSource,
-    attribution: Signal<String>,
-    on_moved: EventHandler<MovedCamera>,
-) -> Element {
-    let aria = chrome.geography_map_aria(marker_count, event_count);
+pub fn geography_map_surface(chrome: &Chrome, source: MapSource, pane: MapPane) -> Element {
+    let aria = chrome.geography_map_aria(pane.marker_count, pane.event_count);
     let labels = MapControlLabels::from_chrome(chrome);
     map_surface(MapSurface {
         container_id: MAP_CONTAINER_ID,
         aria_label: aria,
-        tool,
-        draft,
+        tool: pane.tool,
+        draft: pane.draft,
         center: DEFAULT_CENTER,
-        zoom,
+        zoom: pane.zoom,
         source,
-        attribution,
+        attribution: pane.attribution,
         labels,
-        on_moved,
+        on_moved: pane.on_moved,
     })
 }
 

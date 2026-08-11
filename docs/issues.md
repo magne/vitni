@@ -196,12 +196,6 @@ Residuals from the shortcuts work (ADR 0030); see
 
 ### Geography & map
 
-- **`geography_toolbar` takes 15 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
-  fit + draw-target + zoom + provider-switch state (ADR 0033) were threaded in — bundle them into a
-  struct. Cosmetic cleanup. `map_surface`/`mount_maplibre` (`screens/map_shared.rs`) had the same
-  problem and are fixed: both now take one `MapSurface` struct (container/aria/tool/draft/center/
-  zoom/source/attribution/labels/on_moved), and neither needs the `#[expect]` any more.
-  `geography_toolbar` is the one left.
 - **Two shipped map fixes have no test coverage.** The marker load-race stash (`__geoPending`,
   `screens/map_shared.rs`) and the zoom-interpolated `circle-radius` both live entirely inside
   `format!`-built JavaScript that no test inspects, so neither the SSR suite nor `gui-pass` would notice
