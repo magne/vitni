@@ -17,14 +17,14 @@ fn dna_provider_choices() -> Vec<DnaProvider> {
 /// the detail pane (`record-editing.html` §6). The two tests, provider, and shared-cM are required; an
 /// unparseable numeric is rejected (never zero-filled — §7). Save commits the match; Cancel discards.
 #[component]
-pub fn DnaMatchCreateRecord() -> Element {
+pub fn DnaMatchCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::DnaMatchDraft>(Category::DnaMatches);
+    let record = use_record_create::<genealogy_ui::DnaMatchDraft>(Category::DnaMatches, draft);
     let mut draft = record.draft;
     // The two existing-test pickers: their options refetch after any mutation (#266); each excludes the
     // other's pick so a match is never asserted between a test and itself. Pick/clear drive the draft's

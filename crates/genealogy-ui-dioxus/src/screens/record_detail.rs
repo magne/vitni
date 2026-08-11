@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 use genealogy_ui::Category;
 
 use crate::shell::ChromeCtx;
-use crate::shell::nav_state::{NavState, OpenTab, PaneRole};
+use crate::shell::nav_state::{DraftId, NavState, OpenTab, PaneRole};
 
 use super::citation::{CitationCreateRecord, CitationDetailPane};
 use super::dna_match::{DnaMatchCreateRecord, DnaMatchDetailPane};
@@ -34,7 +34,7 @@ pub fn RecordDetail() -> Element {
     let chrome = use_context::<ChromeCtx>();
     match nav.active_tab() {
         None => rsx! { p { class: "empty", "{chrome.0.record_select_prompt()}" } },
-        Some(OpenTab::Draft(category, _)) => draft_pane(category),
+        Some(OpenTab::Draft(category, draft)) => draft_pane(category, draft),
         Some(OpenTab::Saved(record)) => detail_pane(record.category, record.human_id),
     }
 }
@@ -42,25 +42,25 @@ pub fn RecordDetail() -> Element {
 /// Routes a draft tab to its aggregate's `*CreateRecord` create form, keyed by category so switching
 /// draft categories remounts a fresh form. Each create form self-wires to [`NavState`]: Save commits
 /// the draft in place ([`NavState::commit_draft`]), Cancel closes it ([`NavState::cancel_draft`]).
-fn draft_pane(category: Category) -> Element {
+fn draft_pane(category: Category, draft: DraftId) -> Element {
     let key = category.id();
     rsx! {
         div { class: "detail-slot",
             {
                 match category {
-                    Category::People => rsx! { PersonCreateRecord { key: "{key}" } },
-                    Category::Families => rsx! { FamilyCreateRecord { key: "{key}" } },
-                    Category::Events => rsx! { EventCreateRecord { key: "{key}" } },
-                    Category::Places => rsx! { PlaceCreateRecord { key: "{key}" } },
-                    Category::Sources => rsx! { SourceCreateRecord { key: "{key}" } },
-                    Category::Citations => rsx! { CitationCreateRecord { key: "{key}" } },
-                    Category::Repositories => rsx! { RepositoryCreateRecord { key: "{key}" } },
-                    Category::Media => rsx! { MediaCreateRecord { key: "{key}" } },
-                    Category::Notes => rsx! { NoteCreateRecord { key: "{key}" } },
-                    Category::ResearchNotes => rsx! { ResearchNoteCreateRecord { key: "{key}" } },
-                    Category::Tags => rsx! { TagCreateRecord { key: "{key}" } },
-                    Category::DnaTests => rsx! { DnaTestCreateRecord { key: "{key}" } },
-                    Category::DnaMatches => rsx! { DnaMatchCreateRecord { key: "{key}" } },
+                    Category::People => rsx! { PersonCreateRecord { key: "{key}", draft } },
+                    Category::Families => rsx! { FamilyCreateRecord { key: "{key}", draft } },
+                    Category::Events => rsx! { EventCreateRecord { key: "{key}", draft } },
+                    Category::Places => rsx! { PlaceCreateRecord { key: "{key}", draft } },
+                    Category::Sources => rsx! { SourceCreateRecord { key: "{key}", draft } },
+                    Category::Citations => rsx! { CitationCreateRecord { key: "{key}", draft } },
+                    Category::Repositories => rsx! { RepositoryCreateRecord { key: "{key}", draft } },
+                    Category::Media => rsx! { MediaCreateRecord { key: "{key}", draft } },
+                    Category::Notes => rsx! { NoteCreateRecord { key: "{key}", draft } },
+                    Category::ResearchNotes => rsx! { ResearchNoteCreateRecord { key: "{key}", draft } },
+                    Category::Tags => rsx! { TagCreateRecord { key: "{key}", draft } },
+                    Category::DnaTests => rsx! { DnaTestCreateRecord { key: "{key}", draft } },
+                    Category::DnaMatches => rsx! { DnaMatchCreateRecord { key: "{key}", draft } },
                     Category::Dashboard => rsx! {},
                 }
             }

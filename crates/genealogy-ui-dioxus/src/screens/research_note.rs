@@ -23,14 +23,14 @@ fn subject_categories() -> [Category; 4] {
 /// Consumes [`NavState::research_note_subject`] once, on mount: opening this form from a record's
 /// "Research notes" tab pre-seeds that record as the argument's first subject.
 #[component]
-pub fn ResearchNoteCreateRecord() -> Element {
+pub fn ResearchNoteCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::ResearchNoteDraft>(Category::ResearchNotes);
+    let record = use_record_create::<genealogy_ui::ResearchNoteDraft>(Category::ResearchNotes, draft);
 
     let mut seeded = record.draft;
     let mut subject_seed = nav.research_note_subject;

@@ -21,14 +21,14 @@ fn relationship_choices() -> [ChildParentRelationship; 6] {
 /// (pick an existing partner, or "+ New person" to create one inline); Save commits the whole family
 /// (≥1 partner required); Cancel discards.
 #[component]
-pub fn FamilyCreateRecord() -> Element {
+pub fn FamilyCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::FamilyDraft>(Category::Families);
+    let record = use_record_create::<genealogy_ui::FamilyDraft>(Category::Families, draft);
     let mut draft = record.draft;
     // The People picker adds one partner at a time: a pick appends an existing-partner chip and resets
     // the search; "+ New person" opens the pending new-partner draft card. The options refetch after

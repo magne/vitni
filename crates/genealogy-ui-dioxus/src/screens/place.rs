@@ -17,14 +17,14 @@ use crate::services::{map_config, resolve_map_source};
 /// detail pane (`record-editing.html` §6). Save commits the whole place; Cancel discards. Save is
 /// blocked while the coordinate pair is half-filled or unparseable (§7).
 #[component]
-pub fn PlaceCreateRecord() -> Element {
+pub fn PlaceCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::PlaceDraft>(Category::Places);
+    let record = use_record_create::<genealogy_ui::PlaceDraft>(Category::Places, draft);
     let mut draft = record.draft;
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::PlaceDraft, ProvenanceDraft)| {

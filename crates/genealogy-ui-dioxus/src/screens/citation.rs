@@ -8,14 +8,14 @@ use genealogy_ui::{CitationAttributeVm, RecordLink};
 /// the detail pane (`record-editing.html` §6). The source is required (§7); a "new source" selection
 /// creates a source inline on Save (§6b). Save commits the whole citation; Cancel discards.
 #[component]
-pub fn CitationCreateRecord() -> Element {
+pub fn CitationCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::CitationDraft>(Category::Citations);
+    let record = use_record_create::<genealogy_ui::CitationDraft>(Category::Citations, draft);
     let mut draft = record.draft;
     // The find-or-create source picker: its options refetch after any mutation (#266); pick/clear/
     // "+ New" drive the draft's link.

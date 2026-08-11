@@ -6,7 +6,7 @@ use crate::components::{ColorPicker, IconButton};
 /// The create-mode tag record: an uncommitted [`TagDraft`] rendered as the editable record in the
 /// detail pane (Name focused). Save commits the whole tag; Cancel drops the draft.
 #[component]
-pub fn TagCreateRecord() -> Element {
+pub fn TagCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -18,7 +18,7 @@ pub fn TagCreateRecord() -> Element {
     let save_label = loc.action_label("save");
     let cancel_label = loc.action_label("cancel");
     let created_label = loc.action_label("created");
-    let edit = use_record_create::<TagDraft>(Category::Tags);
+    let edit = use_record_create::<TagDraft>(Category::Tags, draft);
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
     let on_save = use_callback(move |(draft, prov): (TagDraft, ProvenanceDraft)| {

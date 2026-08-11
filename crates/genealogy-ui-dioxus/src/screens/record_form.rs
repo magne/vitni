@@ -96,29 +96,27 @@ pub fn use_record_edit<D: RecordDraft>(category: Category, human_id: &str, seed:
     state
 }
 
-/// The edit state for a create pane: the category's create draft as parked in the shell if one is in
-/// progress, otherwise an empty draft — in edit mode from the start either way
+/// The edit state for the create pane of the draft `draft`: that draft's buffer as parked in the shell
+/// if it is in progress, otherwise an empty draft — in edit mode from the start either way
 /// (`record-editing.html` §6). Never reseeds; the draft is discarded on Cancel
 /// ([`NavState::cancel_draft`]) and spent by Save ([`NavState::commit_draft`]), both of which drop the
 /// parked entry.
+///
+/// Keyed by the draft's own [`DraftId`], never by its category alone: several drafts of one category can
+/// be open at once (#260), and a category-wide key would give them one shared buffer — where the second
+/// pane's write-through, clean on mount, drops the first draft's typed text.
 #[must_use]
-pub fn use_record_create<D: RecordDraft>(category: Category) -> RecordEditState<D> {
-    let nav = use_context::<NavState>();
-    let key = EditKey::draft(category, open_draft_id(&nav, category));
+pub fn use_record_create<D: RecordDraft>(category: Category, draft: DraftId) -> RecordEditState<D> {
+    let key = EditKey::draft(category, draft);
     // A create form has nothing to read, so a fresh buffer starts in edit mode.
     let state = use_stashed_edit(&key, true, &D::default());
     use_edit_write_through(key, state);
     state
 }
 
-/// The [`DraftId`] of the **first** create draft open for `category`, which a create pane still has to
-/// resolve for itself rather than being told which draft it is rendering. [`DraftId::UNOPENED`] when no
-/// draft tab is open at all, which the shipped shell cannot reach — a create pane exists only for a
-/// draft tab.
-///
-/// Now that [`NavState::open_create`] opens several drafts per category, two create panes resolve to
-/// the same key here and share one buffer; the `draft: DraftId` prop that replaces this lookup is what
-/// separates them.
+/// The [`DraftId`] of the **first** create draft open for `category` — what [`use_save_on_request`]
+/// still has to fall back to while it is told only "this is a draft of this category", rather than which
+/// draft. [`DraftId::UNOPENED`] when no draft tab is open at all.
 fn open_draft_id(nav: &NavState, category: Category) -> DraftId {
     for tab in nav.records.peek().iter() {
         if tab.category() == category

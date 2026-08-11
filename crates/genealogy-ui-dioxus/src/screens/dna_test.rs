@@ -7,14 +7,14 @@ use genealogy_ui::HaplogroupRowVm;
 /// the detail pane (`record-editing.html` §6). The person is required (§7); Save commits the whole
 /// test; Cancel discards.
 #[component]
-pub fn DnaTestCreateRecord() -> Element {
+pub fn DnaTestCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::DnaTestDraft>(Category::DnaTests);
+    let record = use_record_create::<genealogy_ui::DnaTestDraft>(Category::DnaTests, draft);
     let mut draft = record.draft;
     // The existing-person picker: its options refetch after any mutation (#266); pick/clear drive the
     // draft's (required) person id.

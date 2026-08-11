@@ -8,14 +8,14 @@ use super::prelude::*;
 /// Cancel drops the draft. The provenance block above Save carries the operator's why/confidence/
 /// citations onto every emitted assertion (§5b).
 #[component]
-pub fn SourceCreateRecord() -> Element {
+pub fn SourceCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::SourceDraft>(Category::Sources);
+    let record = use_record_create::<genealogy_ui::SourceDraft>(Category::Sources, draft);
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::SourceDraft, ProvenanceDraft)| {
         let request = draft.to_request();

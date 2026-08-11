@@ -5,14 +5,14 @@ use genealogy_ui::MediaAttributeVm;
 /// The create-mode media record: an uncommitted [`MediaDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). Save commits the whole media object; Cancel discards.
 #[component]
-pub fn MediaCreateRecord() -> Element {
+pub fn MediaCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::MediaDraft>(Category::Media);
+    let record = use_record_create::<genealogy_ui::MediaDraft>(Category::Media, draft);
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::MediaDraft, ProvenanceDraft)| {
         let request = draft.to_request();

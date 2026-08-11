@@ -9,14 +9,14 @@ use genealogy_ui::{ParticipantVm, RecordLink};
 /// detail pane (`record-editing.html` §6). The type is required; a "new place" selection creates a
 /// place inline on Save (§6b cascade). Save commits the whole event; Cancel discards.
 #[component]
-pub fn EventCreateRecord() -> Element {
+pub fn EventCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::EventDraft>(Category::Events);
+    let record = use_record_create::<genealogy_ui::EventDraft>(Category::Events, draft);
     let mut draft = record.draft;
     // The find-or-create place picker: its options refetch after any mutation (#266); pick/clear/
     // "+ New" drive the draft's link.

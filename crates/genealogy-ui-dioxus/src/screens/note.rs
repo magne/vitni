@@ -13,14 +13,14 @@ fn note_type_choices() -> [NoteType; 4] {
 /// The create-mode note record: an uncommitted [`NoteDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). Save commits the whole note; Cancel discards.
 #[component]
-pub fn NoteCreateRecord() -> Element {
+pub fn NoteCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::NoteDraft>(Category::Notes);
+    let record = use_record_create::<genealogy_ui::NoteDraft>(Category::Notes, draft);
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::NoteDraft, ProvenanceDraft)| {
         let request = draft.to_request();

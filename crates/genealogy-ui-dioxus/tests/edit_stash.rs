@@ -13,12 +13,14 @@
 use dioxus::prelude::*;
 use genealogy_ui::{Category, NoteDraft, ProvenanceDraft, RecordRef, TagDraft};
 use genealogy_ui_dioxus::screens::{use_record_create, use_record_edit};
-use genealogy_ui_dioxus::shell::nav_state::{EditKey, NavState, StashedEdit};
+use genealogy_ui_dioxus::shell::nav_state::{DraftId, EditKey, NavState, StashedEdit};
 
 /// The committed name of the record every probe edits.
 const COMMITTED: &str = "Ada";
 /// The name a probe types into the draft, making it dirty.
 const TYPED: &str = "Ada Lovelace";
+/// The name a *second* draft is typed with, so the two buffers can be told apart.
+const OTHER: &str = "Bess Hopper";
 
 fn record(human_id: &str, label: &str) -> RecordRef {
     RecordRef {
@@ -123,6 +125,13 @@ fn restored(nav: &NavState, key: &EditKey) -> Element {
             div { "RESTORED-VALID:{valid}" }
         },
     }
+}
+
+/// The name held in the draft parked under `key`, or `NONE` when nothing is parked there — how a probe
+/// shows *which* buffer a key holds, rather than only that it holds one.
+fn parked_name(nav: &NavState, key: &EditKey) -> String {
+    nav.stashed_edit::<TagDraft>(key)
+        .map_or_else(|| "NONE".to_owned(), |(draft, _, _)| draft.name)
 }
 
 // ---- The stash itself ----------------------------------------------------------------------------
@@ -383,14 +392,16 @@ fn SavedPane(human_id: String, action: PaneAction) -> Element {
     }
 }
 
-/// The same stand-in for a create form: the category's create buffer, keyed with no `human_id`.
+/// The same stand-in for a create form: one draft's create buffer, keyed by the draft's own
+/// [`DraftId`] rather than by its category, which is what keeps two drafts of one category apart.
+/// `name` is what [`PaneAction::Type`] types into it.
 #[component]
-fn CreatePane(action: PaneAction) -> Element {
-    let state = use_record_create::<TagDraft>(Category::Tags);
+fn CreatePane(draft: DraftId, action: PaneAction, name: String) -> Element {
+    let state = use_record_create::<TagDraft>(Category::Tags, draft);
     use_hook(move || {
         let mut state = state;
         if action == PaneAction::Type {
-            TYPED.clone_into(&mut state.draft.write().name);
+            state.draft.write().name = name;
         }
     });
     rsx! {
@@ -552,10 +563,10 @@ fn a_save_reseed_clears_the_parked_entry() {
 
 fn create_pane_writes_the_draft_through() -> Element {
     let mut nav = use_context_provider(NavState::new);
-    use_hook(move || nav.open_create(Category::Tags));
+    let draft = use_hook(move || nav.open_create(Category::Tags));
     rsx! {
         {probe(&nav)}
-        CreatePane { action: PaneAction::Type }
+        CreatePane { draft, action: PaneAction::Type, name: TYPED }
     }
 }
 
@@ -570,12 +581,13 @@ fn typing_in_a_create_form_parks_the_draft_under_its_draft_id() {
 
 fn create_pane_hydrates_from_the_stash() -> Element {
     let mut nav = use_context_provider(NavState::new);
-    use_hook(move || {
+    let draft = use_hook(move || {
         let draft = nav.open_create(Category::Tags);
         park(&mut nav, EditKey::draft(Category::Tags, draft));
+        draft
     });
     rsx! {
-        CreatePane { action: PaneAction::Report }
+        CreatePane { draft, action: PaneAction::Report, name: TYPED }
     }
 }
 
@@ -589,5 +601,65 @@ fn a_create_form_comes_back_up_holding_its_parked_draft() {
     assert!(
         html.contains("PANE-EDITING:true"),
         "a create form is in edit mode either way:\n{html}"
+    );
+}
+
+// ---- Several drafts of one category (issue #260) --------------------------------------------------
+
+/// Two drafts of one category, each with its own mounted create pane, typed apart.
+fn two_drafts_typed_apart() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let (first, second) = use_hook(move || (nav.open_create(Category::Tags), nav.open_create(Category::Tags)));
+    rsx! {
+        {probe(&nav)}
+        div { "PARKED-1:{parked_name(&nav, &EditKey::draft(Category::Tags, first))}" }
+        div { "PARKED-2:{parked_name(&nav, &EditKey::draft(Category::Tags, second))}" }
+        CreatePane { draft: first, action: PaneAction::Type, name: TYPED }
+        CreatePane { draft: second, action: PaneAction::Type, name: OTHER }
+    }
+}
+
+#[test]
+fn two_drafts_of_one_category_keep_separate_buffers() {
+    // The point of #260: sketching two new records side by side is worthless if they share one buffer.
+    let html = render_settled(two_drafts_typed_apart);
+    assert!(
+        html.contains("DIRTY:[tags/#1,tags/#2]"),
+        "each draft parks its own buffer, under its own id:\n{html}"
+    );
+    assert!(
+        html.contains("UNSAVED:YY"),
+        "both draft tabs report unsaved work:\n{html}"
+    );
+    assert!(
+        html.contains(&format!("PARKED-1:{TYPED}")) && html.contains(&format!("PARKED-2:{OTHER}")),
+        "and each buffer holds what was typed into that draft:\n{html}"
+    );
+}
+
+/// A typed draft's pane beside a second draft's freshly-mounted, still-empty one.
+fn a_typed_draft_beside_a_fresh_one() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let (first, second) = use_hook(move || (nav.open_create(Category::Tags), nav.open_create(Category::Tags)));
+    rsx! {
+        {probe(&nav)}
+        CreatePane { draft: first, action: PaneAction::Type, name: TYPED }
+        CreatePane { draft: second, action: PaneAction::Report, name: TYPED }
+    }
+}
+
+#[test]
+fn a_second_drafts_clean_pane_does_not_drop_the_firsts_buffer() {
+    // This is why only one draft per category used to be allowed: a clean pane's write-through calls
+    // `drop_edit` on its own key, and under a key that was the category alone that deleted the *other*
+    // draft's typed buffer — the second ⌘N silently wiping the first form.
+    let html = render_settled(a_typed_draft_beside_a_fresh_one);
+    assert!(
+        html.contains("DIRTY:[tags/#1]"),
+        "the fresh pane drops only its own (absent) entry:\n{html}"
+    );
+    assert!(
+        html.contains(&format!("PANE-NAME:{TYPED}")) && html.contains("PANE-NAME:</div>"),
+        "and the second draft comes up empty rather than showing the first's text:\n{html}"
     );
 }

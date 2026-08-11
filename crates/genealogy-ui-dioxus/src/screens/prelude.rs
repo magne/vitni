@@ -39,7 +39,7 @@ pub use crate::services::{
     submit_plugin_panel,
 };
 pub use crate::shell::ChromeCtx;
-pub use crate::shell::nav_state::{NavState, data_version_ticket};
+pub use crate::shell::nav_state::{DraftId, NavState, data_version_ticket};
 pub use crate::vocabulary_render::{PanelAction, PanelView};
 
 pub use super::record_form::{

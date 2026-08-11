@@ -6,14 +6,14 @@ use super::prelude::*;
 /// cascade (a Citations picker → an inline new-citation → a nested new-source) and the tag multi-select
 /// are buffered here. Save turns the draft into a [`PersonChangeSetRequest`]; Cancel drops it.
 #[component]
-pub fn PersonCreateRecord() -> Element {
+pub fn PersonCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<PersonDraft>(Category::People);
+    let record = use_record_create::<PersonDraft>(Category::People, draft);
     let mut draft = record.draft;
     let selected_tags = use_signal(Vec::<String>::new);
     let save_services = services.clone();

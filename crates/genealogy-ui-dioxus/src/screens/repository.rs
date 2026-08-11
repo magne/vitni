@@ -8,14 +8,14 @@ use genealogy_ui::RepositoryUrlVm;
 /// in edit mode on the shared record frame, with Cancel/Save in the sticky header. Save commits the
 /// whole repository; Cancel discards.
 #[component]
-pub fn RepositoryCreateRecord() -> Element {
+pub fn RepositoryCreateRecord(draft: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::RepositoryDraft>(Category::Repositories);
+    let record = use_record_create::<genealogy_ui::RepositoryDraft>(Category::Repositories, draft);
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::RepositoryDraft, ProvenanceDraft)| {
         let request = draft.to_request();
