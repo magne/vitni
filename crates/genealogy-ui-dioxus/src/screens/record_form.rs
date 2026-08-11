@@ -111,10 +111,14 @@ pub fn use_record_create<D: RecordDraft>(category: Category) -> RecordEditState<
     state
 }
 
-/// The [`DraftId`] of the create draft open for `category`, which a create pane still has to resolve
-/// for itself rather than being told: it is mounted for the active draft tab, and only one draft per
-/// category can be open ([`NavState::open_create`]). [`DraftId::UNOPENED`] when no draft tab is open at
-/// all, which the shipped shell cannot reach — a create pane exists only for a draft tab.
+/// The [`DraftId`] of the **first** create draft open for `category`, which a create pane still has to
+/// resolve for itself rather than being told which draft it is rendering. [`DraftId::UNOPENED`] when no
+/// draft tab is open at all, which the shipped shell cannot reach — a create pane exists only for a
+/// draft tab.
+///
+/// Now that [`NavState::open_create`] opens several drafts per category, two create panes resolve to
+/// the same key here and share one buffer; the `draft: DraftId` prop that replaces this lookup is what
+/// separates them.
 fn open_draft_id(nav: &NavState, category: Category) -> DraftId {
     for tab in nav.records.peek().iter() {
         if tab.category() == category

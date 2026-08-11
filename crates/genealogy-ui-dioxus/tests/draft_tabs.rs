@@ -152,9 +152,14 @@ fn open_create_opens_an_active_draft_tab() {
 }
 
 #[test]
-fn open_create_twice_focuses_the_existing_draft() {
+fn open_create_twice_opens_a_second_draft() {
+    // #260: two new people have to be sketchable side by side, so the second ⌘N starts another draft
+    // rather than re-focusing the first — no reuse, not even of an empty one.
     let html = render(open_draft_twice_same_category);
-    assert!(html.contains("TABS:1"), "at most one draft per category:\n{html}");
+    assert!(html.contains("TABS:2"), "the second ⌘N opens another draft:\n{html}");
+    assert!(html.contains("KINDS:DD"), "both tabs are drafts:\n{html}");
+    assert!(html.contains("ACTIVE:1"), "the new draft is the active tab:\n{html}");
+    assert!(html.contains("KIND:DRAFT"), "and it is a draft, not a record:\n{html}");
 }
 
 /// One draft per category in two categories, so the ids they were minted under can be compared.

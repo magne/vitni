@@ -653,18 +653,13 @@ impl NavState {
     }
 
     /// Opens a create-form draft tab for `category` and makes it active, returning the [`DraftId`] it
-    /// was minted under. At most one draft per category is open at a time: an existing draft is
-    /// re-focused rather than duplicated, and its own id is returned. Nothing is stored until the draft
-    /// commits ([`Self::commit_draft`]).
+    /// was minted under. Every call opens **another** draft (#260): several unsaved records of one
+    /// category can be sketched side by side, so nothing is re-focused or reused, not even an empty
+    /// draft. Nothing is stored until the draft commits ([`Self::commit_draft`]).
+    ///
+    /// The new tab must keep being **appended**: [`CloseRequest::Tab`] and [`SaveThen::CloseTab`] hold
+    /// raw strip indices, and an append is the one insertion that cannot invalidate an armed one.
     pub fn open_create(&mut self, category: Category) -> DraftId {
-        let existing = self.records.read().iter().enumerate().find_map(|(index, tab)| {
-            let draft = tab.draft_id()?;
-            (tab.category() == category).then_some((index, draft))
-        });
-        if let Some((index, draft)) = existing {
-            self.active_record.set(Some(index));
-            return draft;
-        }
         let draft = self.mint_draft();
         self.records.write().push(OpenTab::Draft(category, draft));
         let last = self.records.read().len().saturating_sub(1);
