@@ -6,9 +6,9 @@ use genealogy_ui::{
 
 use super::geography::geography_time_slider;
 use super::map_shared::{
-    DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapZoomReadout, MovedCamera,
-    draft_actions, draft_actions_row, draft_geometry, draw_tool_buttons, events_geojson, fit_bounds, map_surface,
-    markers_geojson, push_map_data, shape_to_draft, use_draft_push,
+    DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapSurface, MapZoomReadout,
+    MovedCamera, draft_actions, draft_actions_row, draft_geometry, draw_tool_buttons, events_geojson, fit_bounds,
+    map_surface, markers_geojson, push_map_data, shape_to_draft, use_draft_push,
 };
 use super::prelude::*;
 use crate::services::{map_config, resolve_map_source};
@@ -921,18 +921,18 @@ fn PlaceMapEditor(
             }
             div { class: "card map-card",
                 if let Some(Ok(resolved)) = &*source.read() {
-                    {map_surface(
-                        PLACE_MAP_CONTAINER_ID,
-                        aria,
+                    {map_surface(MapSurface {
+                        container_id: PLACE_MAP_CONTAINER_ID,
+                        aria_label: aria,
                         tool,
                         draft,
                         center,
                         zoom,
-                        resolved.clone(),
+                        source: resolved.clone(),
                         attribution,
-                        MapControlLabels::from_chrome(chrome),
-                        EventHandler::new(|_: MovedCamera| {}),
-                    )}
+                        labels: MapControlLabels::from_chrome(chrome),
+                        on_moved: EventHandler::new(|_: MovedCamera| {}),
+                    })}
                 } else {
                     p { class: "loading", "{chrome.loading()}" }
                 }

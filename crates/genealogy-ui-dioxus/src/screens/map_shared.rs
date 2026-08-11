@@ -146,50 +146,62 @@ pub struct MovedCamera {
     pub west: f64,
 }
 
+/// [`map_surface`]'s mount parameters, bundled so the function stays within the house limit of 5
+/// positional parameters instead of growing an `#[expect(clippy::too_many_arguments)]` every time the
+/// surface gains one more caller-supplied piece of state (`docs/issues.md`'s "one struct for the
+/// surface's mount parameters" bullet). [`mount_maplibre`] borrows the same struct — its own mount
+/// script only ever needs a subset of these fields.
+pub struct MapSurface {
+    /// The mount `div`'s DOM id; distinguishes the two possible mounts (Geography's whole-atlas view,
+    /// the Place screen's per-place Map tab) so both could coexist if ever shown together.
+    pub container_id: &'static str,
+    /// The surface's accessible label.
+    pub aria_label: String,
+    /// The active draw tool, shared with the caller's own toolbar.
+    pub tool: Signal<DrawTool>,
+    /// The in-progress drawn shape, shared with the caller's own toolbar/save form.
+    pub draft: Signal<MapDraft>,
+    /// The map's opening center, in decimal degrees.
+    pub center: (f64, f64),
+    /// Both the zoom level the map opens at and where the mounted map reports every settled camera
+    /// back to — the caller renders it with [`MapZoomReadout`]. Read only via [`Signal::peek`] at
+    /// mount, never `.read()`: a subscribed surface re-renders on a zoom gesture, and a re-rendered
+    /// surface remounts, which rebuilds the map.
+    pub zoom: Signal<f64>,
+    /// The tiles/style the map fetches at mount (ADR 0033); a later provider switch goes through
+    /// [`apply_map_source`] instead of a remount.
+    pub source: MapSource,
+    /// The reactive credit drawn over the map (#254) — seeded from `source.attribution`, but updated
+    /// independently of it afterwards (a provider switch, or the Google adapter's live per-viewport
+    /// refresh, ADR 0033). `MapLibre`'s own `AttributionControl` stays disabled and this static
+    /// overlay carries the text instead (`docs/research/geography-rendering.md`); omitted entirely
+    /// when empty — an empty bordered box is not a credit.
+    pub attribution: Signal<String>,
+    /// Every string a `MapLibre` control renders, localized by the caller (ADR 0003).
+    pub labels: MapControlLabels,
+    /// Called with every settled camera (ADR 0033) — the Geography toolbar's own Google
+    /// viewport-attribution refresh; the Place Map tab, which needs no such refresh, passes a no-op.
+    pub on_moved: EventHandler<MovedCamera>,
+}
+
 /// The generic `MapLibre` mount surface (draw-tool crosshair cursor + the tile source's credit), shared
-/// by the Geography tool (whole-atlas view) and the Place screen's per-place Map tab. `container_id`
-/// distinguishes the two DOM mounts (each is its own `MapLibre` instance) so both can coexist if ever
-/// shown together.
+/// by the Geography tool (whole-atlas view) and the Place screen's per-place Map tab — see
+/// [`MapSurface`]'s field docs for what each part of `surface` does.
 ///
-/// `zoom` is both the level the map opens at and where the mounted map reports every settled camera
-/// back to — the caller renders it with [`MapZoomReadout`]. It is read only via [`Signal::peek`] here,
-/// never `.read()`: a subscribed surface re-renders on a zoom gesture, and a re-rendered surface
-/// remounts, which rebuilds the map.
-///
-/// `source` supplies the tiles/style the map fetches at mount (ADR 0033); a later provider switch goes
-/// through [`apply_map_source`] instead of a remount. `attribution` is the caller's own reactive
-/// signal for the credit drawn over the map (#254) — seeded from `source.attribution`, but updated
-/// independently of it afterwards (a provider switch, or the Google adapter's live per-viewport
-/// refresh). `MapLibre`'s own `AttributionControl` stays disabled and this static overlay carries the
-/// text instead, so one treatment works for every provider kind
-/// (`docs/research/geography-rendering.md`). The overlay is omitted entirely when the credit is
-/// empty — an empty bordered box is not a credit.
-///
-/// `tool` and `draft` are the caller's own draw state, passed rather than a click callback: every
-/// gesture on the canvas (a click appending a vertex, a handle drag moving one) resolves against the
-/// same pair, so both screens get identical behaviour from one implementation instead of two copies of
-/// the same closure. `on_moved` is called with every settled camera (ADR 0033) — the Geography
-/// toolbar's own Google viewport-attribution refresh; the Place Map tab, which needs no such refresh,
-/// passes a no-op.
+/// `surface.tool` and `surface.draft` are the caller's own draw state, passed rather than a click
+/// callback: every gesture on the canvas (a click appending a vertex, a handle drag moving one)
+/// resolves against the same pair, so both screens get identical behaviour from one implementation
+/// instead of two copies of the same closure.
 #[must_use = "renders the map surface; drop it and nothing is shown"]
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a map surface is the mount id + label + the caller's draw state, camera, source/attribution, control labels and camera callback; the precedent is geography_toolbar"
-)]
-pub fn map_surface(
-    container_id: &'static str,
-    aria_label: String,
-    tool: Signal<DrawTool>,
-    draft: Signal<MapDraft>,
-    center: (f64, f64),
-    zoom: Signal<f64>,
-    source: MapSource,
-    attribution: Signal<String>,
-    labels: MapControlLabels,
-    on_moved: EventHandler<MovedCamera>,
-) -> Element {
+pub fn map_surface(surface: MapSurface) -> Element {
+    // Copied out before `surface` moves into `onmounted` below: the reactive handles (`Signal`,
+    // `EventHandler`) are `Copy`, so this is a second cheap handle onto the same slot, not a borrow
+    // that would conflict with the move.
+    let container_id = surface.container_id;
+    let tool = surface.tool;
+    let attribution = surface.attribution;
+    let aria_label = surface.aria_label.clone();
     let capturing = !matches!(tool(), DrawTool::Pan);
-    let basemap = source.basemap;
     rsx! {
         div {
             class: "map-surface",
@@ -201,7 +213,7 @@ pub fn map_surface(
                 style: "position:absolute;inset:0",
                 "data-armed": if capturing { "true" } else { "false" },
                 onmounted: move |_| {
-                    mount_maplibre(container_id, center, zoom, &labels, &basemap, tool, draft, on_moved);
+                    mount_maplibre(&surface);
                 },
             }
             if !attribution().is_empty() {
@@ -387,26 +399,26 @@ pub fn apply_vertex_move(mut draft: Signal<MapDraft>, index: usize, lat: f64, lo
     draft.set(move_vertex(&current, index, lat, lon));
 }
 
-/// Mounts `MapLibre` on `container_id` (a no-op under SSR, where there is no webview to run the
-/// script) and arms the persistent message listener, streaming every gesture as a tagged payload over
-/// `dioxus.send`, read in a loop for the surface's lifetime — not a one-shot eval per click, so the
-/// map stays interactive without a Rust round trip blocking each gesture. `on_moved` is called with
-/// every settled camera (`MapMessage::Moved`, ADR 0033); [`map_surface`]'s doc comment covers its use.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "mounts the map at its camera/basemap plus the caller's draw state and camera callback; mirrors map_surface, which threads the same set through"
-)]
-pub fn mount_maplibre(
-    container_id: &str,
-    center: (f64, f64),
-    zoom: Signal<f64>,
-    labels: &MapControlLabels,
-    basemap: &MapBasemap,
-    tool: Signal<DrawTool>,
-    draft: Signal<MapDraft>,
-    on_moved: EventHandler<MovedCamera>,
-) {
-    let script = maplibre_init_script(container_id, center, *zoom.peek(), labels, basemap);
+/// Mounts `MapLibre` on `surface.container_id` (a no-op under SSR, where there is no webview to run
+/// the script) and arms the persistent message listener, streaming every gesture as a tagged payload
+/// over `dioxus.send`, read in a loop for the surface's lifetime — not a one-shot eval per click, so
+/// the map stays interactive without a Rust round trip blocking each gesture. `surface.on_moved` is
+/// called with every settled camera (`MapMessage::Moved`, ADR 0033); [`MapSurface`]'s field docs cover
+/// its use. Borrows [`MapSurface`] rather than its own parameter list — only `container_id`/`center`/
+/// `zoom`/`labels`/`source.basemap`/`tool`/`draft`/`on_moved` are read; `aria_label` and `attribution`
+/// are this function's own no-ops.
+pub fn mount_maplibre(surface: &MapSurface) {
+    let script = maplibre_init_script(
+        surface.container_id,
+        surface.center,
+        *surface.zoom.peek(),
+        &surface.labels,
+        &surface.source.basemap,
+    );
+    let zoom = surface.zoom;
+    let tool = surface.tool;
+    let draft = surface.draft;
+    let on_moved = surface.on_moved;
     let mut listener = document::eval(&script);
     spawn(async move {
         while let Ok(payload) = listener.recv::<String>().await {

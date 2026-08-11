@@ -23,9 +23,9 @@ use genealogy_app::{BUILT_IN_MAP_PROVIDER, MapConfig, MapProvider, MapSource, Pl
 use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
 
 use super::map_shared::{
-    DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapZoomReadout, MovedCamera,
-    apply_map_source, draft_actions, draft_actions_row, draft_geometry, draw_tool_buttons, events_geojson, fit_bounds,
-    geo_point, map_surface, markers_geojson, push_map_data, use_draft_push,
+    DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapSurface, MapZoomReadout,
+    MovedCamera, apply_map_source, draft_actions, draft_actions_row, draft_geometry, draw_tool_buttons, events_geojson,
+    fit_bounds, geo_point, map_surface, markers_geojson, push_map_data, use_draft_push,
 };
 use super::prelude::*;
 use crate::i18n::Chrome;
@@ -584,18 +584,18 @@ pub fn geography_map_surface(
 ) -> Element {
     let aria = chrome.geography_map_aria(marker_count, event_count);
     let labels = MapControlLabels::from_chrome(chrome);
-    map_surface(
-        MAP_CONTAINER_ID,
-        aria,
+    map_surface(MapSurface {
+        container_id: MAP_CONTAINER_ID,
+        aria_label: aria,
         tool,
         draft,
-        DEFAULT_CENTER,
+        center: DEFAULT_CENTER,
         zoom,
         source,
         attribution,
         labels,
         on_moved,
-    )
+    })
 }
 
 /// The time slider: a year `<input type=range>` over [`TIME_SLIDER_RANGE`], captioned with the
