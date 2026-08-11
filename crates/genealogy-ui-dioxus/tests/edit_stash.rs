@@ -134,6 +134,12 @@ fn parked_name(nav: &NavState, key: &EditKey) -> String {
         .map_or_else(|| "NONE".to_owned(), |(draft, _, _)| draft.name)
 }
 
+/// The label the shell recorded for the editor at `key`, or `NONE` — what names that draft's tab,
+/// read the way the tab strip reads it (without knowing the draft's type).
+fn recorded_label(nav: &NavState, key: &EditKey) -> String {
+    nav.draft_label(key).unwrap_or_else(|| "NONE".to_owned())
+}
+
 // ---- The stash itself ----------------------------------------------------------------------------
 
 fn stash_round_trip() -> Element {
@@ -364,6 +370,12 @@ enum PaneAction {
     Cancel,
     /// Leave edit mode the way Save does, letting the reseed restore the committed values.
     LeaveEditMode,
+    /// Type a name and then clear it again, leaving the draft clean — what backspacing over everything
+    /// you just typed does.
+    TypeThenClear,
+    /// Change a field that is *not* the name (a tag's priority), so the draft is dirty but still has
+    /// nothing that names it.
+    TypeElsewhere,
 }
 
 /// A stand-in for an aggregate's detail pane: the shared edit buffer for a saved record, one mount-time
@@ -375,13 +387,15 @@ fn SavedPane(human_id: String, action: PaneAction) -> Element {
     use_hook(move || {
         let mut state = state;
         match action {
-            PaneAction::Report => {}
             PaneAction::Type => {
                 state.begin_edit();
                 TYPED.clone_into(&mut state.draft.write().name);
             }
             PaneAction::Cancel => state.cancel(),
             PaneAction::LeaveEditMode => state.editing.set(false),
+            // Report does nothing by definition; the two label actions belong to the create pane, since
+            // a saved record's tab is titled by its own stored label, not by its draft's.
+            PaneAction::Report | PaneAction::TypeThenClear | PaneAction::TypeElsewhere => {}
         }
     });
     rsx! {
@@ -400,8 +414,14 @@ fn CreatePane(draft: DraftId, action: PaneAction, name: String) -> Element {
     let state = use_record_create::<TagDraft>(Category::Tags, draft);
     use_hook(move || {
         let mut state = state;
-        if action == PaneAction::Type {
-            state.draft.write().name = name;
+        match action {
+            PaneAction::Type => state.draft.write().name = name,
+            PaneAction::TypeThenClear => {
+                state.draft.write().name = name;
+                state.draft.write().name = String::new();
+            }
+            PaneAction::TypeElsewhere => "7".clone_into(&mut state.draft.write().priority),
+            PaneAction::Report | PaneAction::Cancel | PaneAction::LeaveEditMode => {}
         }
     });
     rsx! {
@@ -662,4 +682,60 @@ fn a_second_drafts_clean_pane_does_not_drop_the_firsts_buffer() {
         html.contains(&format!("PANE-NAME:{TYPED}")) && html.contains("PANE-NAME:</div>"),
         "and the second draft comes up empty rather than showing the first's text:\n{html}"
     );
+}
+
+// ---- The label a draft names its tab with (issue #260) --------------------------------------------
+
+/// One create pane, driven by `action`, beside the label the shell recorded for its draft.
+fn create_pane_label(action: PaneAction) -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let draft = use_hook(move || nav.open_create(Category::Tags));
+    let key = EditKey::draft(Category::Tags, draft);
+    rsx! {
+        {probe(&nav)}
+        div { "LABEL:{recorded_label(&nav, &key)}" }
+        CreatePane { draft, action, name: TYPED }
+    }
+}
+
+fn create_pane_types_a_name() -> Element {
+    create_pane_label(PaneAction::Type)
+}
+
+#[test]
+fn a_typed_create_form_records_the_label_its_draft_names_itself_with() {
+    // The label rides along with the parked buffer, computed on the way in — the same trick `valid`
+    // uses, so the tab strip can name a draft without knowing which aggregate's draft it is.
+    let html = render_settled(create_pane_types_a_name);
+    assert!(
+        html.contains(&format!("LABEL:{TYPED}")),
+        "the write-through carries the draft's own label:\n{html}"
+    );
+    assert!(html.contains("DIRTY:[tags/#1]"), "alongside the buffer itself:\n{html}");
+}
+
+fn create_pane_types_then_clears() -> Element {
+    create_pane_label(PaneAction::TypeThenClear)
+}
+
+#[test]
+fn a_name_typed_and_cleared_again_leaves_no_label() {
+    // Backspacing over everything leaves the draft clean, and a clean draft parks nothing — so the tab
+    // goes back to "New Tags" rather than keeping the name that is no longer in the form.
+    let html = render_settled(create_pane_types_then_clears);
+    assert!(html.contains("LABEL:NONE"), "no label survives the clear:\n{html}");
+    assert!(html.contains("DIRTY:[]"), "because nothing stays parked:\n{html}");
+}
+
+fn create_pane_types_outside_the_name() -> Element {
+    create_pane_label(PaneAction::TypeElsewhere)
+}
+
+#[test]
+fn a_draft_dirty_outside_its_name_has_no_label_but_is_still_parked() {
+    // Dirtiness and having a name are separate questions: this draft has unsaved work (so its tab is
+    // marked and ⌘W confirms) but nothing that names it, so the tab keeps the localized fallback.
+    let html = render_settled(create_pane_types_outside_the_name);
+    assert!(html.contains("DIRTY:[tags/#1]"), "the buffer is parked:\n{html}");
+    assert!(html.contains("LABEL:NONE"), "with no label to show:\n{html}");
 }

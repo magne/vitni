@@ -361,19 +361,25 @@ pub struct StashedEdit {
     /// `RecordDraft::is_valid` for `draft`, recorded on the way in so the Save gate can be read
     /// without knowing the draft's type.
     pub valid: bool,
+    /// `RecordDraft::display_label` for `draft`, recorded on the way in for the same reason as `valid`:
+    /// the tab strip names a draft by what has been typed into it without knowing which aggregate's
+    /// draft this is. `None` while nothing typed names the record.
+    pub label: Option<String>,
 }
 
 impl StashedEdit {
     /// Parks `draft` — diffed against `seed`, with the `prov` collected so far — recording the draft's
-    /// own validity.
+    /// own validity and the label it names itself with.
     #[must_use]
     pub fn new<D: RecordDraft>(draft: D, seed: D, prov: ProvenanceDraft) -> Self {
         let valid = draft.is_valid();
+        let label = draft.display_label();
         Self {
             draft: Rc::new(draft),
             seed: Rc::new(seed),
             prov,
             valid,
+            label,
         }
     }
 }
@@ -869,6 +875,16 @@ impl NavState {
         let draft = edit.draft.downcast_ref::<D>()?;
         let seed = edit.seed.downcast_ref::<D>()?;
         Some((draft.clone(), seed.clone(), edit.prov.clone()))
+    }
+
+    /// The label the editor at `key` names itself with, or `None` when nothing is parked there or what
+    /// is parked has nothing that names it ([`StashedEdit::label`]) — what a draft tab is titled by.
+    ///
+    /// Reads reactively, like [`Self::has_unsaved`]: the tab strip already re-renders per keystroke for
+    /// the unsaved marker, so the label follows the typing without extra wiring.
+    #[must_use]
+    pub fn draft_label(&self, key: &EditKey) -> Option<String> {
+        self.edit_drafts.read().get(key).and_then(|edit| edit.label.clone())
     }
 
     /// Drops the edit parked under `key` — it was saved, cancelled, or its record closed, so no stale
