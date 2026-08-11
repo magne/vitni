@@ -80,19 +80,26 @@
       full-width and has none. A tab is a record you have open; drag one onto the detail pane (or press
       <kbd>⌘⇧</kbd><kbd>1…9</kbd>) to dock it side-by-side.</p>
     <div class="specimen">
-      <div class="label">Tabstrip — clean, unsaved, docked</div>
+      <div class="label">Tabstrip — clean, unsaved, two drafts, docked</div>
       <div class="tabstrip" role="tablist" aria-label="Open records">
         <div class="tabs-scroll">
           <div class="rtab active" role="tab" tabindex="0" aria-selected="true"><span>John Smith</span><span class="close" role="button" tabindex="0" aria-label="Close John Smith">✕</span></div>
           <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="Mary Doe — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>Mary Doe</span><span class="close" role="button" tabindex="0" aria-label="Close Mary Doe">✕</span></div>
-          <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="New person — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>New person</span><span class="close" role="button" tabindex="0" aria-label="Close New person">✕</span></div>
+          <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="Anna Berg — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>Anna Berg</span><span class="close" role="button" tabindex="0" aria-label="Close Anna Berg">✕</span></div>
+          <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="New People (2) — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>New People (2)</span><span class="close" role="button" tabindex="0" aria-label="Close New People (2)">✕</span></div>
           <div class="rtab docked" role="tab" tabindex="-1" aria-selected="false"><span>Trinity Church</span><span class="close" role="button" tabindex="0" aria-label="Close Trinity Church">✕</span></div>
         </div>
-        <div class="rtab add" role="button" tabindex="0" aria-label="Open another record">+</div>
+        <div class="rtab add" role="button" tabindex="0" aria-label="Create a new record">+</div>
       </div>
-      <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">The <b>●</b> marker means
+      <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">A <b>draft tab names
+        itself by what has been typed into it</b> — “Anna Berg” above — and that is <b>the same label the
+        record is stored with</b>, so a tab never renames itself on Save. A draft with nothing that names
+        it yet reads “New &lt;entity&gt;”, and from the <b>second</b> such draft of a category onwards it
+        carries an ordinal (“New People (2)”), so two new records of one kind never share a name or an
+        accessible name. <kbd>⌘</kbd><kbd>N</kbd> always starts <b>another</b> draft; several can be open
+        at once.<br><br>The <b>●</b> marker means
         the tab holds <b>unsaved work</b> — either an <b>unsaved draft</b> (nothing stored yet, as with
-        “New person”) or <b>unsaved edits</b> to an already-saved record (“Mary Doe”). Both make
+        the two above) or <b>unsaved edits</b> to an already-saved record (“Mary Doe”). Both make
         <kbd>⌘</kbd><kbd>W</kbd> and <kbd>⌘</kbd><kbd>Q</kbd> ask before discarding — see
         <a href="record-editing.html">Record editing</a>. <b>Every</b> tab holding unsaved work carries
         the marker, not just the active one: an in-progress edit is parked per record in shell state, so
@@ -168,8 +175,10 @@
     <!-- Quitting with unsaved work: one dialog over the whole set -->
     <h2 style="border:0;margin:var(--sp-6) 0 12px;font-size:21px">Quitting with unsaved work</h2>
     <p class="muted"><kbd>⌘</kbd><kbd>Q</kbd> with anything unsaved raises one dialog for the whole set:
-      it <b>lists every record at stake</b> by its tab name — a draft as “New &lt;entity&gt;”, a stored
-      record by its own label — so the choice is made over the actual list, not over “one or more”.
+      it <b>lists every record at stake</b> by its tab name — a stored record by its own label, a draft by
+      whatever has been typed into it, falling back to “New &lt;entity&gt;” with an ordinal from the second
+      empty draft of a category — so the choice is made over the actual list, not over “one or more”, and
+      two unnamed drafts are never one indistinguishable pair of entries.
       <b>Save all</b> walks the records it <i>can</i> save in strip order, activating each and running
       that record's own Save, and quits once the last one lands — but only when that was every record
       listed. A record it cannot save yet is marked in the list and simply <b>left open</b>, with the
@@ -180,11 +189,11 @@
       immediately. Per-tab closing is <a href="record-editing.html">Record editing</a> §5a.</p>
     <div class="specimen grid-2">
       <div class="card" style="margin-bottom:0">
-        <h3>Quit? — three records mid-edit</h3>
+        <h3>Quit? — four records mid-edit</h3>
         <p class="muted" style="margin-top:var(--sp-2)">One or more open tabs haven't been saved yet.
           Quitting discards them.</p>
         <p class="muted" style="margin-top:var(--sp-2)">Records with unsaved work:</p>
-        <ul class="stack" style="margin:0"><li>John Smith</li><li>Mary Doe</li><li>New person</li></ul>
+        <ul class="stack" style="margin:0"><li>John Smith</li><li>Mary Doe</li><li>Anna Berg</li><li>New People (2)</li></ul>
         <div class="inline" style="justify-content:flex-end"><button class="btn sm ghost">Cancel</button><button class="btn sm">Discard all</button><button class="btn sm primary">Save all</button></div>
       </div>
       <div class="card" style="margin-bottom:0">

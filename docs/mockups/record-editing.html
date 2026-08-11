@@ -238,7 +238,7 @@
   </div>
   <div class="card">
     <div class="stack">
-      <div class="fact-row"><span class="badge">keyed</span><span class="grow">Per editor: a stored record by its id, a create form (§6) by its category — so a half-filled create form survives a tab switch just as an edit does.</span></div>
+      <div class="fact-row"><span class="badge">keyed</span><span class="grow">Per editor: a stored record by its id, a create form (§6) by its <b>own draft number</b> — so a half-filled create form survives a tab switch just as an edit does, and two drafts of one category keep separate buffers. The parked draft is also <b>what names its tab</b> (see <a href="app-shell.html">App shell</a> § Record tabs).</span></div>
       <div class="fact-row"><span class="badge">restored</span><span class="grow">Returning to the tab shows the edit exactly as it was left. The record's stored values are not re-read over the top of it.</span></div>
       <div class="fact-row"><span class="badge">dropped</span><span class="grow">The parked edit goes the moment it stops being pending — <b>Save</b>, <b>Cancel</b> (§5), or closing the tab through the confirm above. A record whose draft matches what is stored is never marked.</span></div>
     </div>
@@ -289,10 +289,14 @@
   </div>
 
   <!-- 6 · Create -->
-  <h2>6 · Create = a throwaway draft</h2>
+  <h2>6 · Create = a throwaway draft, or several</h2>
   <p class="muted"><b>+ New</b> (<kbd>⌘</kbd><kbd>N</kbd>) opens the <b>same form</b> on an empty draft that
     is <b>never stored</b>. Same validation, dirty-tracking, and Save/Cancel as edit — the only difference
-    is create starts empty and Save <i>creates</i> the record instead of <i>updating</i> it. Cancel discards
+    is create starts empty and Save <i>creates</i> the record instead of <i>updating</i> it. Every
+    <kbd>⌘</kbd><kbd>N</kbd> starts <b>another</b> draft, of the same category or a different one: two new
+    people can be sketched side by side, each with its own form, its own caret and its own buffer, and each
+    tab <b>names itself by what has been typed into it</b>. Cancel and Save address the draft they belong
+    to. Cancel discards
     the draft; nothing is written. On Save the draft tab becomes the stored record in place, and the
     Explorer list beside it gains the new row and the rail's count badge updates — no manual refresh.
     The same holds for every <b>record picker</b> still open elsewhere (§6b, and the existing-only pickers

@@ -40,7 +40,7 @@
       <h3>Global</h3>
       <div class="shortcut-list">
         <div class="shortcut-row"><span>Command palette</span><span class="keys"><kbd>⌘</kbd><kbd>K</kbd></span></div>
-        <div class="shortcut-row"><span>New (context-aware)</span><span class="keys"><kbd>⌘</kbd><kbd>N</kbd></span></div>
+        <div class="shortcut-row"><span>New (context-aware) — always <i>another</i> draft</span><span class="keys"><kbd>⌘</kbd><kbd>N</kbd></span></div>
         <div class="shortcut-row"><span>Save record (if modified)</span><span class="keys"><kbd>⌘</kbd><kbd>S</kbd></span></div>
         <div class="shortcut-row"><span>Find / filter</span><span class="keys"><kbd>⌘</kbd><kbd>F</kbd></span></div>
         <div class="shortcut-row"><span>Undo / redo <span class="badge" title="Not wired in keyboard.rs yet — planned for PR33">planned — PR33</span></span><span class="keys"><kbd>⌘</kbd><kbd>Z</kbd> / <kbd>⌘⇧</kbd><kbd>Z</kbd></span></div>
@@ -121,7 +121,7 @@
       <tr><td>Modal</td><td><span class="mono">dialog</span> <span class="mono">aria-modal</span></td><td>focus trap + restore; Esc; click-away scrim</td></tr>
       <tr><td>Side panel</td><td><span class="mono">dialog</span> <span class="mono">aria-modal</span></td><td>focus trap + restore; Esc; click-away scrim</td></tr>
       <tr><td>Palette / help overlay</td><td><span class="mono">dialog</span> <span class="mono">aria-modal</span></td><td>single tab stop; Esc; click-away scrim</td></tr>
-      <tr><td>Record edit mode / unsaved work <span class="muted">(a draft <i>or</i> an edit of a stored record)</span></td><td>labelled fields; <span class="mono">group</span></td><td><span class="mono">aria-invalid</span> per field; modified announced; polite live region on Save; Reset has an accessible name; the record's tab is named “&lt;record&gt; — unsaved changes” beside its <b>●</b> marker, and ⌘W/⌘Q confirm before discarding, offering Save as the primary action</td></tr>
+      <tr><td>Record edit mode / unsaved work <span class="muted">(a draft <i>or</i> an edit of a stored record)</span></td><td>labelled fields; <span class="mono">group</span></td><td><span class="mono">aria-invalid</span> per field; modified announced; polite live region on Save; Reset has an accessible name; the record's tab is named “&lt;record&gt; — unsaved changes” beside its <b>●</b> marker, and ⌘W/⌘Q confirm before discarding, offering Save as the primary action; two new records of one category never share an accessible name — a draft is named by what has been typed into it, else “New &lt;entity&gt;” with an ordinal from the second empty one</td></tr>
       <tr><td>Search</td><td><span class="mono">search</span> landmark</td><td>labelled input; ⌘K focuses</td></tr>
       <tr><td>Status bar</td><td><span class="mono">contentinfo</span></td><td>active record announced</td></tr>
       <tr><td>Toasts / async load &amp; save</td><td><span class="mono">aria-live="polite"</span></td><td>announced without stealing focus</td></tr>
