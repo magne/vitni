@@ -19,17 +19,17 @@
 //! instead (`cargo xtask gui-pass`, the `map-*.toml` scenarios); pan/zoom smoothness and click latency
 //! are what remain human-only.
 
-use genealogy_app::{ConfigStore, FileConfigStore, MapConfig, MapProvider, PlaceGeometry, PlaceType};
+use genealogy_app::{BUILT_IN_MAP_PROVIDER, MapConfig, MapProvider, MapSource, PlaceGeometry, PlaceType};
 use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
 
 use super::map_shared::{
-    DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapCredit, MapDraft, MapZoomReadout,
-    draft_actions, draft_actions_row, draft_geometry, draw_tool_buttons, events_geojson, fit_bounds, geo_point,
-    map_surface, markers_geojson, push_map_data, rendered_credit, use_draft_push,
+    DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapSurface, MapZoomReadout,
+    MovedCamera, apply_map_source, draft_actions, draft_actions_row, draft_geometry, draw_tool_buttons, events_geojson,
+    fit_bounds, geo_point, map_surface, markers_geojson, push_map_data, use_draft_push,
 };
 use super::prelude::*;
 use crate::i18n::Chrome;
-use crate::services::{Services, map_config};
+use crate::services::{Services, map_config, refresh_map_attribution, resolve_map_source, store_map_config};
 
 /// The mount id of the map's container `div`, referenced by the init/update JS.
 const MAP_CONTAINER_ID: &str = "geography-map";
@@ -126,8 +126,56 @@ pub fn GeographyScreen() -> Element {
         async move { load_screen(services, Intent::ShowGeography { year: Some(year) }).await }
     });
 
-    let provider_dir = services.dir.clone();
-    let provider = use_memo(move || map_config(&provider_dir).resolved_provider());
+    // The active provider (ADR 0033): the config's stored choice, resolved once at mount. `active_key`
+    // is the select's own value — the `MapConfig::choices()` key, not the resolved `MapProvider` — so a
+    // switch and a revert-on-failure both have one unambiguous value to compare and restore.
+    // `select_generation` forces the `Select` to remount on a resolve failure: the browser has already
+    // shown the picked option, and nothing else in this render would otherwise change to push the
+    // reverted value back into the DOM (`geography_provider_select`'s doc comment).
+    let map_cfg = map_config(&services);
+    let active_key = use_signal({
+        let key = map_cfg.provider.clone().unwrap_or_default();
+        move || key.clone()
+    });
+    let provider = use_signal(move || map_cfg.resolve(None).unwrap_or_else(|_| MapProvider::default_osm()));
+    let select_generation = use_signal(|| 0_u32);
+
+    // Resolved once for the initial mount (ADR 0033) — a later switch goes through
+    // `geography_provider_select`'s own `apply_map_source`, not a fresh resource read, so this never
+    // re-mints a Google session just because the active provider changed.
+    let initial_provider = provider();
+    let source = use_resource(move || {
+        let provider = initial_provider.clone();
+        async move { resolve_map_source(provider).await }
+    });
+    let mut attribution = use_signal(String::new);
+    use_effect(move || {
+        if let Some(Ok(resolved)) = &*source.read() {
+            attribution.set(resolved.attribution.clone());
+        }
+    });
+    let source_state = match &*source.read_unchecked() {
+        Some(Ok(resolved)) => Some(Ok(resolved.clone())),
+        Some(Err(message)) => Some(Err(message.clone())),
+        None => None,
+    };
+
+    // Feeds the Google Map Tiles adapter's live per-viewport attribution refresh (ADR 0033) — a no-op
+    // for every other provider kind, per `refresh_map_attribution`'s own doc comment.
+    let on_moved = EventHandler::new(move |camera: MovedCamera| {
+        let active_provider = provider();
+        spawn(async move {
+            if let Ok(Some(text)) = refresh_map_attribution(
+                active_provider,
+                camera.zoom,
+                (camera.north, camera.south, camera.east, camera.west),
+            )
+            .await
+            {
+                attribution.set(text);
+            }
+        });
+    });
 
     // Re-push marker/event GeoJSON whenever the loaded data or the picker's live query changes (the
     // typed search hides non-matching markers on the map, not just the rail).
@@ -176,27 +224,98 @@ pub fn GeographyScreen() -> Element {
     let on_clear_draft = EventHandler::new(move |()| draft.set(MapDraft::Empty));
 
     let saved_label = state.data_loc().action_label("saved");
+    let pane = MapPane {
+        marker_count,
+        event_count,
+        tool,
+        draft,
+        zoom,
+        attribution,
+        on_moved,
+    };
+    let main_content = geography_main_content(&chrome.0, &loading, data.read_unchecked().is_some(), source_state, pane);
     rsx! {
         div { style: "display:flex;flex-direction:column;height:100%;min-height:0;gap:var(--sp-3)",
             h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-geography\")}" }
-            {geography_toolbar(loc, &chrome.0, &picker, &services, provider, tool, zoom, marker_count, event_count, &fit_shapes, draw_target.as_ref())}
+            {geography_toolbar(
+                loc,
+                &chrome.0,
+                &picker,
+                ProviderSwitch {
+                    services: services.clone(),
+                    provider,
+                    active_key,
+                    select_generation,
+                    attribution,
+                    nav,
+                },
+                ToolbarState {
+                    marker_count,
+                    event_count,
+                    fit_shapes: &fit_shapes,
+                    draw_target: draw_target.as_ref(),
+                    tool,
+                    zoom,
+                },
+            )}
             {geography_unplotted_note(&chrome.0, unplotted_count, year())}
             div { class: "geo", style: "flex:1;min-height:0",
                 {geography_rail(&chrome.0, vm.as_ref(), selected, &filter().query)}
                 div { class: "geo-main",
-                    if data.read_unchecked().is_none() {
-                        p { class: "loading", "{loading}" }
-                    } else if marker_count == 0 && event_count == 0 {
-                        {geography_empty_state(&chrome.0)}
-                    } else {
-                        {geography_map_surface(&chrome.0, marker_count, event_count, tool, draft, zoom, rendered_credit(&provider()))}
-                    }
+                    {main_content}
                     {draft_actions_row(&chrome.0, draft_actions(tool(), &draft()), on_commit_draft, on_clear_draft)}
                     {geography_time_slider(&chrome.0, year)}
                 }
             }
         }
         {geo_edit_panel(&chrome.0, panel, reload, nav, &saved_label, year(), draft)}
+    }
+}
+
+/// Everything the mounted map pane needs beyond the resolved [`MapSource`] itself: the counts its aria
+/// label reports, the caller's draw state and camera, the reactive credit, and the settled-camera
+/// callback. One struct rather than seven positional parameters, for the reason
+/// [`map_shared::MapSurface`](super::map_shared::MapSurface) carries the same shape.
+#[derive(Clone, Copy)]
+pub struct MapPane {
+    /// How many place markers are plotted, for the surface's aria label.
+    pub marker_count: usize,
+    /// How many event pins are plotted, for the same label.
+    pub event_count: usize,
+    /// The armed draw tool.
+    pub tool: Signal<DrawTool>,
+    /// The in-progress shape every canvas gesture resolves against.
+    pub draft: Signal<MapDraft>,
+    /// The live camera level, shown by the toolbar's [`MapZoomReadout`].
+    pub zoom: Signal<f64>,
+    /// The credit drawn over the map (#254), updated independently of the source (ADR 0033).
+    pub attribution: Signal<String>,
+    /// Called with every settled camera — the Google adapter's viewport-attribution refresh.
+    pub on_moved: EventHandler<MovedCamera>,
+}
+
+/// The Geography tool's main pane content: the loading placeholder until both the record data and the
+/// initial [`MapSource`] resolve, the empty state when nothing plots, the mounted map surface once
+/// something does, or — the one case a plain data load never hits — a resolve failure's own message
+/// (a missing API-key env var, an unreachable style/session endpoint) shown the same way the loading
+/// placeholder is, since there is no map to show either way.
+fn geography_main_content(
+    chrome: &Chrome,
+    loading: &str,
+    data_ready: bool,
+    source_state: Option<Result<MapSource, String>>,
+    pane: MapPane,
+) -> Element {
+    if !data_ready || source_state.is_none() {
+        return rsx! { p { class: "loading", "{loading}" } };
+    }
+    if pane.marker_count == 0 && pane.event_count == 0 {
+        return geography_empty_state(chrome);
+    }
+    match source_state {
+        Some(Ok(resolved)) => geography_map_surface(chrome, resolved, pane),
+        Some(Err(message)) => rsx! { p { class: "loading", "{message}" } },
+        None => rsx! {},
     }
 }
 
@@ -235,35 +354,65 @@ fn open_geometry_panel(
     }
 }
 
+/// The provider-switch state [`geography_provider_select`] needs (ADR 0033), bundled so
+/// [`geography_toolbar`] carries it as one parameter instead of six. `services` and `nav` ride here
+/// (owned — `Services` is cheaply `Clone`, `NavState` is `Copy`) because both are otherwise used only
+/// by the provider select itself, not by the rest of the toolbar.
+struct ProviderSwitch {
+    /// Resolves the active/named providers (`MapConfig::choices`) and persists a switch.
+    services: Services,
+    /// The active provider, moved only after a switch both resolves and persists.
+    provider: Signal<MapProvider>,
+    /// The select's own value — a `MapConfig::choices` key, not the resolved `MapProvider`.
+    active_key: Signal<String>,
+    /// Bumped to force the `Select` to remount and pull its displayed value back after a failed
+    /// switch (see [`geography_provider_select`]'s doc comment).
+    select_generation: Signal<u32>,
+    /// The map surface's reactive credit; updated on a successful switch.
+    attribution: Signal<String>,
+    /// Raises the localized toast on a resolve/store failure.
+    nav: NavState,
+}
+
+/// Everything [`geography_toolbar`]'s non-provider controls read, bundled the same way
+/// [`ProviderSwitch`] bundles the provider select's own state. `Copy` (every field already is) so the
+/// caller can build it inline without an extra clone.
+#[derive(Clone, Copy)]
+struct ToolbarState<'a> {
+    /// How many markers are currently plotted (the toolbar's marker-count chip).
+    marker_count: usize,
+    /// How many event pins are currently plotted (the toolbar's event-count chip).
+    event_count: usize,
+    /// Every currently filtered marker's shape — the "⤢ Fit" button's target.
+    fit_shapes: &'a [MarkerShapeVm],
+    /// Which place a finished point/polygon will attach to, if any.
+    draw_target: Option<&'a (String, String)>,
+    /// The armed draw tool, toggled by the Pan/Point/Polygon buttons.
+    tool: Signal<DrawTool>,
+    /// The live camera level, shown by [`MapZoomReadout`].
+    zoom: Signal<f64>,
+}
+
 /// The top toolbar: a Place picker (searches every place in the workspace, not just already-plotted
 /// markers — geocoding a real-world address is a separate, still-deferred follow-up, ADR 0025 §4),
 /// marker/event counts, the draw tools, the live zoom readout, and the provider select.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a toolbar threads the screen's picker + provider + draw-tool + zoom + draw-target state"
-)]
 fn geography_toolbar(
     loc: &Localizer,
     chrome: &Chrome,
     picker: &RecordPicker,
-    services: &Services,
-    provider: Memo<MapProvider>,
-    tool: Signal<DrawTool>,
-    zoom: Signal<f64>,
-    marker_count: usize,
-    event_count: usize,
-    fit_shapes: &[MarkerShapeVm],
-    draw_target: Option<&(String, String)>,
+    switch: ProviderSwitch,
+    state: ToolbarState,
 ) -> Element {
-    let fit_shapes = fit_shapes.to_vec();
+    let fit_shapes = state.fit_shapes.to_vec();
+    let zoom = state.zoom;
     rsx! {
         div { class: "geo-toolbar",
             div { style: "width:240px", {record_picker(loc, picker)} }
-            Chip { label: format!("{marker_count}") }
-            Chip { label: format!("{event_count}") }
-            {geography_draw_target(chrome, draw_target)}
+            Chip { label: format!("{}", state.marker_count) }
+            Chip { label: format!("{}", state.event_count) }
+            {geography_draw_target(chrome, state.draw_target)}
             span { class: "spacer" }
-            {draw_tool_buttons(chrome, tool)}
+            {draw_tool_buttons(chrome, state.tool)}
             Button {
                 label: chrome.geography_tool_fit(),
                 small: true,
@@ -271,7 +420,7 @@ fn geography_toolbar(
                 onclick: move |_| fit_bounds(MAP_CONTAINER_ID, &fit_shapes),
             }
             MapZoomReadout { zoom }
-            {geography_provider_select(chrome, services, provider)}
+            {geography_provider_select(chrome, switch)}
         }
     }
 }
@@ -294,43 +443,96 @@ pub fn geography_draw_target(chrome: &Chrome, target: Option<&(String, String)>)
     }
 }
 
-/// The provider select: a kind picker that immediately persists the built-in defaults for
-/// OSM/MapLibre-demo choices. Google and a custom `MapLibre` style need key/URL entry the mockup shows
-/// as a picker-only affordance; wiring that full sub-form is deferred (see the PR report) — selecting
-/// them here keeps the current provider and surfaces a toast explaining why.
-fn geography_provider_select(chrome: &Chrome, services: &Services, provider: Memo<MapProvider>) -> Element {
-    let dir = services.dir.clone();
-    let current = provider_kind(&provider());
-    let options = vec![
-        SelectChoice {
-            value: "osm-raster".to_owned(),
-            label: chrome.geography_provider_kind_label("osm-raster"),
-        },
-        SelectChoice {
-            value: "maplibre-style".to_owned(),
-            label: chrome.geography_provider_kind_label("maplibre-style"),
-        },
-        SelectChoice {
-            value: "google".to_owned(),
-            label: chrome.geography_provider_kind_label("google"),
-        },
-    ];
+/// The provider select: lists the built-in default plus every configured provider
+/// (`MapConfig::choices`, ADR 0033) — never an option that cannot be rendered, so nothing left in the
+/// control lies (the #283 defect this replaces: picking a value used to write nowhere and repaint
+/// nothing). Picking one resolves its `MapSource`, switches the running map without a remount
+/// (`apply_map_source`), and persists the choice; only then does the select's own value move. A resolve
+/// or store failure keeps the previous provider and surfaces a localized toast; `select_generation`
+/// forces the `Select` to remount so its displayed value is pulled back to that previous choice — the
+/// browser has already shown the picked option by the time the failure is known, and nothing else
+/// here would otherwise push a correction into the DOM.
+///
+/// Entering a style URL / API-key env name has no toolbar sub-form (config-file-only, per the PR
+/// decision) — a provider is only ever chosen among what `[map.providers.*]` already declares.
+fn geography_provider_select(chrome: &Chrome, switch: ProviderSwitch) -> Element {
+    let ProviderSwitch {
+        services,
+        mut provider,
+        mut active_key,
+        mut select_generation,
+        mut attribution,
+        mut nav,
+    } = switch;
+    let cfg = map_config(&services);
+    let options = geography_provider_choices(chrome, &cfg);
     rsx! {
         Select {
+            key: "{select_generation()}",
             label: chrome.geography_provider_label(),
             name: "geography-provider".to_owned(),
-            value: Some(current),
+            value: Some(active_key()),
             options,
             onchange: move |event: FormEvent| {
-                if event.value() == "osm-raster" {
-                    let store = FileConfigStore::for_workspace(dir.clone());
-                    let _ = store.store_map_config(&MapConfig { provider: Some(MapProvider::default_osm()), net_allowlist: Vec::new() });
-                }
-                // MapLibre-style / Google need a style URL or API key the compact toolbar select has
-                // no room to collect; picking them here is a no-op until that sub-form lands.
+                let key = event.value();
+                let cfg = map_config(&services);
+                let Ok(candidate) = cfg.resolve(Some(&key)) else {
+                    return;
+                };
+                let mut next_cfg = cfg;
+                let services = services.clone();
+                spawn(async move {
+                    let chrome = services.chrome();
+                    let resolved = match resolve_map_source(candidate.clone()).await {
+                        Ok(resolved) => resolved,
+                        Err(detail) => {
+                            select_generation += 1;
+                            nav.notify_error(chrome.geography_provider_switch_error(&detail));
+                            return;
+                        }
+                    };
+                    next_cfg.provider = (key != BUILT_IN_MAP_PROVIDER).then_some(key.clone());
+                    if let Err(detail) = store_map_config(next_cfg).await {
+                        select_generation += 1;
+                        nav.notify_error(chrome.geography_provider_switch_error(&detail));
+                        return;
+                    }
+                    apply_map_source(MAP_CONTAINER_ID, &resolved);
+                    attribution.set(resolved.attribution.clone());
+                    provider.set(candidate);
+                    active_key.set(key);
+                });
             },
         }
     }
+}
+
+/// The select's own composed label for one [`MapConfig::choices`] entry: the built-in default's own
+/// kind label alone, or `"{name} ({kind label})"` for a named provider — reusing
+/// [`Chrome::geography_provider_kind_label`], the same three kind strings the Place Map tab's
+/// read-only display uses.
+fn provider_choice_label(chrome: &Chrome, name: &str, provider: &MapProvider) -> String {
+    let kind_label = chrome.geography_provider_kind_label(&provider_kind(provider));
+    if name.is_empty() {
+        kind_label
+    } else {
+        format!("{name} ({kind_label})")
+    }
+}
+
+/// The provider select's own option list for `cfg` (ADR 0033): the built-in default first, then every
+/// configured `[map.providers.*]` entry, each composed-labelled by [`provider_choice_label`]. Split out
+/// of [`geography_provider_select`] (whose own logic needs `Services`) so this pure, data-only half is
+/// unit- and SSR-testable in isolation — mirroring [`geography_draw_target`]'s precedent.
+#[must_use]
+pub fn geography_provider_choices(chrome: &Chrome, cfg: &MapConfig) -> Vec<SelectChoice> {
+    cfg.choices()
+        .into_iter()
+        .map(|(name, provider)| SelectChoice {
+            label: provider_choice_label(chrome, &name, &provider),
+            value: name,
+        })
+        .collect()
 }
 
 /// The place rail: every marker matching the toolbar picker's live query, selectable as the in-map
@@ -403,30 +605,27 @@ pub fn geography_empty_state(chrome: &Chrome) -> Element {
 
 /// The map surface: the shared `MapLibre` mount (`screens::map_shared::map_surface`) at the
 /// Geography-tool's own container id, default center, and world/country-level zoom. `zoom` is the
-/// live camera level the toolbar's [`MapZoomReadout`] shows; `credit` names the tiles it fetches and
-/// the attribution drawn over them (#254). `draft` is the in-progress shape every canvas gesture
-/// resolves against — a click appends to it, a handle drag moves one of its vertices (#259).
-pub fn geography_map_surface(
-    chrome: &Chrome,
-    marker_count: usize,
-    event_count: usize,
-    tool: Signal<DrawTool>,
-    draft: Signal<MapDraft>,
-    zoom: Signal<f64>,
-    credit: MapCredit,
-) -> Element {
-    let aria = chrome.geography_map_aria(marker_count, event_count);
+/// live camera level the toolbar's [`MapZoomReadout`] shows; `source` is the resolved tile/style the
+/// map mounts with (ADR 0033), `attribution` the reactive credit drawn over it (#254) — updated by a
+/// provider switch and by the Google adapter's live per-viewport refresh, independently of `source`
+/// itself. `draft` is the in-progress shape every canvas gesture resolves against — a click appends to
+/// it, a handle drag moves one of its vertices (#259). `on_moved` feeds that same refresh with every
+/// settled camera.
+pub fn geography_map_surface(chrome: &Chrome, source: MapSource, pane: MapPane) -> Element {
+    let aria = chrome.geography_map_aria(pane.marker_count, pane.event_count);
     let labels = MapControlLabels::from_chrome(chrome);
-    map_surface(
-        MAP_CONTAINER_ID,
-        aria,
-        tool,
-        draft,
-        DEFAULT_CENTER,
-        zoom,
-        credit,
+    map_surface(MapSurface {
+        container_id: MAP_CONTAINER_ID,
+        aria_label: aria,
+        tool: pane.tool,
+        draft: pane.draft,
+        center: DEFAULT_CENTER,
+        zoom: pane.zoom,
+        source,
+        attribution: pane.attribution,
         labels,
-    )
+        on_moved: pane.on_moved,
+    })
 }
 
 /// The time slider: a year `<input type=range>` over [`TIME_SLIDER_RANGE`], captioned with the

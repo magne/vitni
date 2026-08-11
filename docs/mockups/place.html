@@ -238,12 +238,13 @@
             <b>This place on the map — and how you set its shape.</b> A place can be a <b>point</b> (a
             building or plot) or an <b>area</b> (a parish/city boundary), and boundaries <b>accumulate
             over time</b>. Use the draw tools to drop a point or trace a boundary; every edit is an
-            audited assertion. Provider is a <a href="preferences.html">presentation setting</a>. The
-            <a href="geography.html">Geography</a> tool shows this place among all others.
+            audited assertion. Provider is the <a href="geography.html">Geography</a> tool's own
+            setting (ADR 0033: `[map.providers.*]`, config-file only) — this tab only ever reuses
+            whatever is active, shown read-only below, not re-selectable here.
           </div>
 
-          <!-- Toolbar: draw tools + fit + the live zoom readout (#253) + provider. Scoped to THIS
-               place (no place search here — that lives in the Geography atlas). -->
+          <!-- Toolbar: draw tools + fit + the live zoom readout (#253) + a read-only provider label.
+               Scoped to THIS place (no place search here — that lives in the Geography atlas). -->
           <div class="geo-toolbar" style="margin-bottom:10px">
             <button class="btn sm primary" title="Pan / select">✋ Pan</button>
             <button class="btn sm" title="Drop or move this place's point">📍 Point</button>
@@ -252,11 +253,6 @@
             <span class="spacer"></span>
             <span class="map-zoom-readout" aria-label="Zoom level 13.0">z13.0</span>
             <label class="muted" style="font-size:var(--fs-xs)">Provider</label>
-            <select class="in" style="width:auto">
-              <option selected>OpenStreetMap</option>
-              <option>MapLibre style</option>
-              <option>Google (API key)</option>
-            </select>
             <a class="btn sm ghost" href="geography.html" title="Open this place in the Geography atlas">Open in Geography ↗</a>
           </div>
 

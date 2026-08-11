@@ -5,24 +5,55 @@
 //! this way; see the PR report for what needs manual GUI verification).
 
 use dioxus::prelude::*;
+use genealogy_app::{MapBasemap, MapProvider, MapSource};
 use genealogy_ui::{EventPinVm, GeographyVm, MarkerShapeVm, PlaceMarkerVm};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
-    DrawTool, MapCredit, MapDraft, geography_draw_target, geography_empty_state, geography_map_surface, geography_rail,
-    geography_time_slider, geography_unplotted_note,
+    DrawTool, MapDraft, MapPane, MovedCamera, geography_draw_target, geography_empty_state, geography_map_surface,
+    geography_provider_choices, geography_rail, geography_time_slider, geography_unplotted_note,
 };
 
 fn chrome() -> Chrome {
     Chrome::with_languages(None, &["en".parse().unwrap_or_default()])
 }
 
-/// The credit the surface is handed in these renders. Not a Fluent lookup: an attribution is the tile
-/// provider's own required wording (it arrives from `[map]` config), so it is shown verbatim in every
-/// locale — which is why the assertions below pin the supplied text rather than any translation.
-fn credit() -> MapCredit {
-    MapCredit {
-        tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
+/// The resolved source the surface is handed in these renders — the tiles it fetches on mount.
+/// `attribution` is a *separate*, reactive signal the surface actually renders (ADR 0033: a provider
+/// switch or the Google adapter's live refresh updates it independently of the source it was resolved
+/// from), so a render helper below seeds it from whatever string the test wants shown.
+fn source() -> MapSource {
+    MapSource {
+        basemap: MapBasemap::Raster {
+            tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
+            tile_size: 256,
+            max_zoom: 19,
+        },
         attribution: "© OpenStreetMap contributors".to_owned(),
+    }
+}
+
+/// A no-op camera-moved handler for renders that do not exercise the Google viewport-attribution
+/// refresh.
+fn no_op_moved() -> EventHandler<MovedCamera> {
+    EventHandler::new(|_: MovedCamera| {})
+}
+
+/// A pane with nothing plotted, for the renders that assert on the surface's chrome (the credit
+/// overlay, the crosshair cursor) rather than on its marker/event counts.
+fn empty_pane(
+    tool: Signal<DrawTool>,
+    draft: Signal<MapDraft>,
+    zoom: Signal<f64>,
+    attribution: Signal<String>,
+) -> MapPane {
+    MapPane {
+        marker_count: 0,
+        event_count: 0,
+        tool,
+        draft,
+        zoom,
+        attribution,
+        on_moved: no_op_moved(),
     }
 }
 
@@ -54,7 +85,20 @@ fn MapSurfaceWithMarkers() -> Element {
     let tool = use_signal(|| DrawTool::Pan);
     let zoom = use_signal(|| 4.0);
     let draft = use_signal(|| MapDraft::Empty);
-    geography_map_surface(&chrome(), 3, 5, tool, draft, zoom, credit())
+    let attribution = use_signal(|| "© OpenStreetMap contributors".to_owned());
+    geography_map_surface(
+        &chrome(),
+        source(),
+        MapPane {
+            marker_count: 3,
+            event_count: 5,
+            tool,
+            draft,
+            zoom,
+            attribution,
+            on_moved: no_op_moved(),
+        },
+    )
 }
 
 #[test]
@@ -94,16 +138,40 @@ fn the_map_surface_shows_the_tile_sources_required_credit() {
     );
 }
 
+/// The overlay renders whatever `attribution` currently holds, not `source.attribution` — the
+/// reactive signal is what a provider switch and the Google adapter's live per-viewport refresh
+/// update, independently of the source it was resolved from (ADR 0033).
+#[component]
+fn MapSurfaceWithDivergedAttribution() -> Element {
+    let tool = use_signal(|| DrawTool::Pan);
+    let zoom = use_signal(|| 4.0);
+    let draft = use_signal(|| MapDraft::Empty);
+    let attribution = use_signal(|| "© a live Google viewport refresh".to_owned());
+    geography_map_surface(&chrome(), source(), empty_pane(tool, draft, zoom, attribution))
+}
+
+#[test]
+fn the_overlay_shows_the_reactive_attribution_signal_not_the_sources_own_string() {
+    let mut vdom = VirtualDom::new(MapSurfaceWithDivergedAttribution);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains("© a live Google viewport refresh"),
+        "the signal's current text is shown:\n{html}"
+    );
+    assert!(
+        !html.contains("© OpenStreetMap contributors"),
+        "the source's own (stale) attribution is not what renders:\n{html}"
+    );
+}
+
 #[component]
 fn MapSurfaceWithNoCredit() -> Element {
     let tool = use_signal(|| DrawTool::Pan);
     let zoom = use_signal(|| 4.0);
-    let blank = MapCredit {
-        tile_url: String::new(),
-        attribution: String::new(),
-    };
     let draft = use_signal(|| MapDraft::Empty);
-    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, blank)
+    let attribution = use_signal(String::new);
+    geography_map_surface(&chrome(), source(), empty_pane(tool, draft, zoom, attribution))
 }
 
 /// `.map-attr` is a bordered panel in the stylesheet, so rendering it around nothing draws a small
@@ -124,7 +192,8 @@ fn MapSurfacePanHasNoCaptureOverlay() -> Element {
     let tool = use_signal(|| DrawTool::Pan);
     let zoom = use_signal(|| 4.0);
     let draft = use_signal(|| MapDraft::Empty);
-    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, credit())
+    let attribution = use_signal(|| "© OpenStreetMap contributors".to_owned());
+    geography_map_surface(&chrome(), source(), empty_pane(tool, draft, zoom, attribution))
 }
 
 #[test]
@@ -143,7 +212,8 @@ fn MapSurfacePointModeHasCaptureOverlay() -> Element {
     let tool = use_signal(|| DrawTool::Point);
     let zoom = use_signal(|| 4.0);
     let draft = use_signal(|| MapDraft::Empty);
-    geography_map_surface(&chrome(), 0, 0, tool, draft, zoom, credit())
+    let attribution = use_signal(|| "© OpenStreetMap contributors".to_owned());
+    geography_map_surface(&chrome(), source(), empty_pane(tool, draft, zoom, attribution))
 }
 
 #[test]
@@ -400,4 +470,47 @@ fn nothing_unplotted_renders_no_note_at_all() {
         !html.contains("section-note") && !html.contains("no geometry"),
         "a count of zero renders nothing — an empty note is noise:\n{html}"
     );
+}
+
+/// An unconfigured `[map]` offers exactly the built-in default (ADR 0033) — never an option the map
+/// cannot actually render, which is the #283 defect this whole change replaces.
+#[test]
+fn an_unconfigured_map_offers_only_the_built_in_default() {
+    let cfg = genealogy_app::MapConfig::default();
+    let choices = geography_provider_choices(&chrome(), &cfg);
+    assert_eq!(choices.len(), 1, "only the built-in default:\n{choices:?}");
+    assert_eq!(
+        choices[0].value, "",
+        "the built-in default's key is the reserved empty string"
+    );
+    assert_eq!(choices[0].label, "OpenStreetMap");
+}
+
+/// A configured provider's choice is labelled `"{name} ({kind label})"` — the composed label the
+/// toolbar select renders, so a workspace with several named providers can tell them apart.
+#[test]
+fn a_configured_providers_choice_composes_its_name_and_kind_label() {
+    let mut providers = std::collections::BTreeMap::new();
+    providers.insert(
+        "carto".to_owned(),
+        MapProvider::MaplibreStyle {
+            style_url: "https://example.test/style.json".to_owned(),
+            attribution: "© CARTO".to_owned(),
+            api_key_env: None,
+        },
+    );
+    let cfg = genealogy_app::MapConfig {
+        provider: Some("carto".to_owned()),
+        providers,
+        net_allowlist: Vec::new(),
+    };
+    let choices = geography_provider_choices(&chrome(), &cfg);
+    assert_eq!(
+        choices.len(),
+        2,
+        "the built-in default plus the one configured provider:\n{choices:?}"
+    );
+    assert_eq!(choices[0].value, "", "the built-in default is always offered first");
+    assert_eq!(choices[1].value, "carto");
+    assert_eq!(choices[1].label, "carto (MapLibre style)");
 }

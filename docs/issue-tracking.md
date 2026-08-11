@@ -182,11 +182,19 @@ the list on its own. Treat the count as a floor.
 | --- | --- |
 | [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
 | [Only one unsaved new record per category](https://github.com/magne/genealogy/issues/260) | Two new people cannot be sketched side by side; the draft's identity is its category, all the way down to the stash key |
-| [Switching map provider repaints nothing](https://github.com/magne/genealogy/issues/283) | The select accepts and persists two providers the map then ignores, with nothing in the UI saying so |
 | [A docked split mounts two detail panes, breaking `NavState`'s single-mount assumptions](https://github.com/magne/genealogy/issues/284) | One `⌘Z` retracts an assertion in **both** panes' records; fixed with #279, filed so the invariant has a home |
 
 #256 and #260 came out of the 2026-07-31 manual pass — the map and the shell respectively; #281–#284
 came out of the 2026-08-04 sweep alongside the #279 trace; the rest came from reading the code.
+
+**#283 is closed and dropped from this table:** `[map]` config is now named providers
+(`[map.providers.*]`, mirroring `[ai.providers]`, ADR 0033) resolved to a `MapSource` in
+`genealogy-app`; the toolbar select offers exactly the built-in default plus what is configured, and
+picking one persists it, resolves it, and calls `MapLibre`'s `setStyle` on the running map — no
+remount — instead of writing config nothing ever read back. A second, unreported defect surfaced
+while fixing this: both screens read/wrote `[map]` through `FileConfigStore::for_workspace`, whose
+`config_path` is `None`, so the write had always landed nowhere; `map_config` now reads the
+already-loaded global config directly.
 
 **#282 is closed and dropped from this table:** the Point tool now commits through the same
 `draft_geometry` helper Finish polygon uses, reaching the previously-dead `GeoPanel::CreateHere` path;

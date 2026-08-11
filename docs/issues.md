@@ -196,12 +196,6 @@ Residuals from the shortcuts work (ADR 0030); see
 
 ### Geography & map
 
-- **`geography_toolbar` takes 11 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
-  fit + draw-target + zoom state were threaded in — bundle them into a struct. Cosmetic cleanup.
-  `map_surface` (`screens/map_shared.rs`) now carries the same `#[expect]` for the same reason, after
-  the draft signal and the tile credit joined its container/aria/tool/center/zoom/labels arguments, and
-  `mount_maplibre` is at 7 — over the 5-positional-parameter house limit but under clippy's threshold,
-  so nothing flags it. All three want the same fix: one struct for the surface's mount parameters.
 - **Two shipped map fixes have no test coverage.** The marker load-race stash (`__geoPending`,
   `screens/map_shared.rs`) and the zoom-interpolated `circle-radius` both live entirely inside
   `format!`-built JavaScript that no test inspects, so neither the SSR suite nor `gui-pass` would notice
@@ -215,20 +209,32 @@ Residuals from the shortcuts work (ADR 0030); see
   unreachable as a draw target), and the list silently shrinks as the year moves. It carries no label
   saying any of that. Either list every place and mark the plotted ones, or label the list and offer
   the unplotted ones as draw targets. — #256
-- **Switching provider repaints nothing.** The toolbar's provider select writes `[map]` config for
-  `osm-raster` and is an explicit no-op for the other two options. The raster tile URL now follows that
-  config (`rendered_credit`, `screens/map_shared.rs` — the credit and the URL are resolved together so
-  the map cannot credit a source it does not fetch), but nothing calls `setStyle`, the provider is read
-  once when the screen mounts, and neither vector kind has an adapter — so no choice made in the
-  toolbar changes the map you are looking at. Pairs with the *Provider sub-forms* item below — the
-  sub-forms are pointless while the map ignores the setting. — #283
 - **In-map editing depth** — mid-ring vertex insertion (today: a vertex can be dragged to a new
   position, but not inserted between two others), pin-click selection on the canvas (today: select via
   the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is wired;
   polygon draws onto an existing place).
-- **Provider sub-forms** — `osm-raster` is switchable from the toolbar; `maplibre-style` / `google` are
-  declared in `[map]` config and round-trip but have no toolbar sub-form to collect a style URL /
-  API-key-env yet.
+- **Provider sub-forms** — the toolbar select switches among every provider `[map.providers.*]`
+  declares (ADR 0033), live and persisted; there is still no in-app form to *enter* a style URL or
+  API-key env name — a provider has to already exist in the config file before the select can choose
+  it.
+- **`ai_config`'s `for_workspace` config-store path is dead, like #283's root cause was.**
+  `services::ai_config` (`services.rs`) reads through `FileConfigStore::for_workspace(dir)`, whose
+  `config_path` is `None` — the same defect `map_config` had — but it survives unnoticed because its
+  `Err` falls back to `services.config.ai` (the already-loaded global config), which happens to be
+  correct. `set_plugin_grants`/`store_plugin_enabled` use the same store for genuinely
+  workspace-scoped writes and are fine; only the client-scope reads/writes routed through it are
+  affected. Found while fixing #283 (ADR 0033); not fixed here since nothing currently observes the
+  bug.
+- **The Google Map Tiles adapter (ADR 0033) is untested against the live service.** `resolve_map_source`'s
+  session mint, tile-URL template, and `refresh_map_attribution`'s viewport-copyright fetch are unit-
+  tested on their pure seams (URL builders, `{key}` substitution, response deserialization) but never
+  against `tile.googleapis.com` itself — that needs a billed Google Maps API key nobody has wired into
+  CI. Exercise it manually with a real key before shipping the Google kind as supported, or add a
+  feature-gated integration test once a key is available. Note that Google's **Maps Demo Key**
+  (`developers.google.com/maps/demo-key`) is not such a key: it covers the Maps JavaScript API and a
+  handful of web services, not the Map Tiles API, so `createSession` answers it with `403 Forbidden`
+  (confirmed 2026-08-11). The failure is now legible — the error carries Google's own message, not just
+  the status — but the adapter still has no end-to-end proof.
 - **Tile caching** — tiles are fetched by the webview, and `main.rs` never gives dioxus-desktop a data
   directory, so they land in WebKit's default unmanaged cache at a path the app neither controls nor
   can bound. A viewport-only, size- and TTL-bounded disk cache is possible without leaving Rust: serve
@@ -385,6 +391,17 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 - **Cross-platform packaging** — 1.0 is Linux-first (tarball + `.deb` + AppImage). macOS/Windows
   bundles and **OS-level code-signing / notarization** (Gatekeeper, Authenticode) are a later cycle
   (ADR 0014 §Out of scope). — #215
+- **An API key can only reach the app through the launching shell.** Both places that take a key name
+  one as an *environment variable* and read it with plain `std::env::var` at use time — `[map]`'s
+  `api-key-env` (`map_source.rs`, ADR 0033) and `[ai]`'s `api_key_env` (`plugin_host/src/ai.rs`, ADR
+  0017 §4) — and nothing in the workspace loads a `.env` file (no `dotenvy`/`dotenv` dependency
+  exists). `VAR=… cargo run` works; a desktop launcher (`.desktop`, AppImage, `.deb`) starts the GUI
+  with no shell profile, so a keyed MapLibre style, the Google provider, and every `vision-api` AI
+  provider are unreachable from an installed build with no way to say so in config. Proposed shape:
+  load `<workspace>/.env` then `~/.config/genealogy/.env` at startup in `genealogy-app`, never
+  overriding an already-set variable, both gitignored — the key stays out of config files, logs and
+  the event log either way, which is the whole point of naming a variable rather than storing a
+  secret. — #296
 - **`.deb` needs `GENEALOGY_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
   distro-installed binary needs `GENEALOGY_PLUGIN_DIR=/usr/lib/genealogy/plugins` (the AppImage sets it
   via `AppRun`; the tarball resolves the fleet beside the binary). Teaching the embedded layer a default

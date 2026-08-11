@@ -601,6 +601,8 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Ease of use</td><td>ADR 0008, 0015</td></tr>
     <tr><td><b><a href="adr/0032-projection-schema-evolution-by-replay.md">ADR 0032</a></b> &mdash; accepted</td><td>Projection schema evolution by replay: a <code>human_id</code> generated column + indexes on every view table, migrated by drop-and-replay rather than in-place <code>ALTER TABLE</code></td>
       <td>0.9 &mdash; UI stabilization</td><td>ADR 0009, 0010</td></tr>
+    <tr><td><b><a href="adr/0033-named-map-providers-and-live-switching.md">ADR 0033</a></b> &mdash; accepted</td><td>Named <code>[map.providers.*]</code> config (mirroring <code>[ai.providers]</code>), a <code>MapSource</code> resolved in <code>genealogy-app</code> (incl. a Google Map Tiles session adapter), and live <code>setStyle</code> provider switching with no remount</td>
+      <td>0.9 &mdash; UI stabilization</td><td>ADR 0025, 0017, 0008</td></tr>
     <tr><td><b>ADR 0031</b></td><td>Place model for real-world administrative geography: reopen the <code>Multi*</code> geometry variant, add a civil/ecclesiastical/judicial <code>relation</code> to <code>PlaceRef</code>, and carry positional accuracy separately from <code>Confidence</code></td>
       <td>Phase 9 residual closure</td><td>ADR 0024, 0026, 0027</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>

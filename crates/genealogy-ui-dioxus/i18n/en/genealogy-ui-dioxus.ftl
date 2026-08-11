@@ -205,6 +205,7 @@ geography-provider-label = Provider
 geography-provider-osm = OpenStreetMap
 geography-provider-maplibre = MapLibre style
 geography-provider-google = Google (API key)
+geography-provider-switch-error = Could not switch the map provider: { $detail }
 geography-tool-pan = Pan
 geography-tool-point = Drop / move a point
 geography-tool-polygon = Draw polygon

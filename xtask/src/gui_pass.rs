@@ -73,6 +73,19 @@ const MAX_FOCUS_X: i32 = 900;
 const FIXTURE_WORKSPACE: &str = "gui-pass";
 /// The pristine copy of the seeded workspace, restored before every scenario.
 const SEED_DIR: &str = "workspace-seed";
+/// The pristine copy of the seeded global config, restored before every scenario — the
+/// `map-provider-switch` scenario writes to it (ADR 0033), and scenario order must stay irrelevant
+/// exactly like the workspace's own [`SEED_DIR`].
+const CONFIG_SEED_FILE: &str = "config-seed.toml";
+/// A `MapLibre` style that looks nothing like OSM raster tiles (`MapLibre`'s own free demo style), seeded
+/// as a second, inactive `[map.providers.*]` choice so `map-provider-switch.toml` can prove a switch
+/// repaints the canvas — a same-looking basemap would let a stuck repaint pass by accident.
+const DEMO_MAP_PROVIDER: &str = "
+[map.providers.demo]
+kind = \"maplibre-style\"
+style-url = \"https://demotiles.maplibre.org/style.json\"
+attribution = \"© MapLibre demo tiles\"
+";
 /// How long to wait for the window to map before giving up.
 const WINDOW_TIMEOUT: Duration = Duration::from_secs(45);
 /// How long [`Step::AwaitExit`] waits for the GUI process to exit before failing.
@@ -287,6 +300,7 @@ fn run_one(options: &Options, out: &Path, home: &Path, path: &Path) -> Result<()
     let shots = shots.as_path();
     if !options.real_config {
         restore_workspace(out)?;
+        restore_config(out, home)?;
     }
 
     let size = window_size(&script);
@@ -416,7 +430,7 @@ fn preflight() -> Result<()> {
     Ok(())
 }
 
-/// Deletes the isolated home, the fixture workspace and the shots.
+/// Deletes the isolated home, the fixture workspace, the seeded global config and the shots.
 fn reset(out: &Path) -> Result<()> {
     for dir in ["home", "workspace", SEED_DIR, "shots"] {
         let path = out.join(dir);
@@ -424,11 +438,16 @@ fn reset(out: &Path) -> Result<()> {
             fs::remove_dir_all(&path).with_context(|| format!("removing {}", path.display()))?;
         }
     }
+    let config_seed = out.join(CONFIG_SEED_FILE);
+    if config_seed.exists() {
+        fs::remove_file(&config_seed).with_context(|| format!("removing {}", config_seed.display()))?;
+    }
     Ok(())
 }
 
 /// Creates the fixture workspace on first run: one place with coordinates, so the map has something
-/// to plot. Idempotent — an existing workspace directory is reused.
+/// to plot, plus an inactive `[map.providers.demo]` `MapLibre` style (ADR 0033) the
+/// `map-provider-switch` scenario switches to. Idempotent — an existing workspace directory is reused.
 fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
     let workspace = out.join("workspace");
     if workspace.exists() {
@@ -466,6 +485,10 @@ fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
             "7.9956",
         ],
     )?;
+    let mut text = fs::read_to_string(&config).with_context(|| format!("reading {}", config.display()))?;
+    text.push_str(DEMO_MAP_PROVIDER);
+    fs::write(&config, text).with_context(|| format!("writing {}", config.display()))?;
+    fs::copy(&config, out.join(CONFIG_SEED_FILE)).with_context(|| format!("seeding {CONFIG_SEED_FILE}"))?;
     copy_dir(&out.join("workspace"), &out.join(SEED_DIR))?;
     println!("gui-pass: seeded workspace {FIXTURE_WORKSPACE} at {workspace} with place {place}");
     Ok(())
@@ -486,6 +509,22 @@ fn restore_workspace(out: &Path) -> Result<()> {
         fs::remove_dir_all(&workspace).with_context(|| format!("removing {}", workspace.display()))?;
     }
     copy_dir(&seed, &workspace)
+}
+
+/// Replaces the isolated global config with a fresh copy of the seed (ADR 0033's `map-provider-switch`
+/// scenario writes to it, next to [`restore_workspace`]'s own reasoning) — nothing is running against
+/// it yet, called before the GUI launches.
+fn restore_config(out: &Path, home: &Path) -> Result<()> {
+    let seed = out.join(CONFIG_SEED_FILE);
+    if !seed.is_file() {
+        bail!(
+            "gui-pass: no seeded config at {} — re-run with --reset to reseed the fixture",
+            seed.display()
+        );
+    }
+    let config = home.join(".config/genealogy/config.toml");
+    fs::copy(&seed, &config).with_context(|| format!("restoring {}", config.display()))?;
+    Ok(())
 }
 
 /// Runs the CLI against the isolated home, returning its stdout.

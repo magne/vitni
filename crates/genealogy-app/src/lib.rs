@@ -35,6 +35,7 @@ pub mod family_change_set;
 pub mod geography;
 pub mod history;
 pub mod import;
+pub mod map_source;
 pub mod media;
 pub mod media_change_set;
 mod media_usage;
@@ -72,11 +73,12 @@ pub use citation::{
 };
 pub use citation_change_set::{CitationChangeSet, commit_citation_change_set};
 pub use config::{
-    AiConfig, AiProvider, AppDefaults, Config, DateFormat, Engine, IdFormats, LocaleDefaults, MapConfig, MapProvider,
-    NumberFormat, OperatorConfig, PluginTrustConfig, ShortcutConfig, SuretyLabelOverride, SuretyLabelOverrides,
-    ThemeMode, UiDefaults, WorkspaceDefaults, WorkspaceEntry, add_trusted_publisher, remove_trusted_publisher,
-    resolve_trust_pins, set_ai, set_default_workspace, set_map, set_operator_identity, set_plugin_trust, set_shortcuts,
-    set_workspace_default_id_formats, set_workspace_default_locale, set_workspace_default_surety,
+    AiConfig, AiProvider, AppDefaults, BUILT_IN_MAP_PROVIDER, Config, DateFormat, Engine, IdFormats, LocaleDefaults,
+    MapConfig, MapProvider, NumberFormat, OperatorConfig, PluginTrustConfig, ShortcutConfig, SuretyLabelOverride,
+    SuretyLabelOverrides, ThemeMode, UiDefaults, WorkspaceDefaults, WorkspaceEntry, add_trusted_publisher,
+    remove_trusted_publisher, resolve_trust_pins, set_ai, set_default_workspace, set_map, set_operator_identity,
+    set_plugin_trust, set_shortcuts, set_workspace_default_id_formats, set_workspace_default_locale,
+    set_workspace_default_surety,
 };
 pub use config_store::{
     ConfigStore, FileConfigStore, Presentation, WorkspaceFunctionality, genealogy_language_env,
@@ -164,6 +166,7 @@ pub use history::{
     undo_research_note_assertion, undo_source_assertion, workspace_counts,
 };
 pub use import::{import_add_child, import_add_partner, import_assert_sex, import_family, import_person};
+pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
 pub use media::{
     MediaAttributeRef, MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date,
     assert_media_date_value, attach_media_note, create_media, import_attach_media_note, list_media, set_media_checksum,

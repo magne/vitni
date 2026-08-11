@@ -2,9 +2,9 @@
 # are live-webview behaviour — Fit animates a `fitBounds` on the MapLibre camera, and the slider is a
 # native range input whose value drives a re-query of the map data.
 #
-# The provider select next to them is deliberately not scripted: its option list is a GTK popup outside
-# the grabbed window, and picking any option repaints nothing (the tile URL is hardcoded), so a
-# screenshot cannot tell a working switch from a broken one.
+# The provider select next to them has its own scenario, `map-provider-switch.toml` — picking an
+# option now persists it and repaints the canvas live (#283, ADR 0033), which needs its own seeded
+# second provider and its own before/after shots, so it doesn't share this file's.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "Fit frames the plotted places and the time slider re-dates the map (#203)"
