@@ -229,8 +229,12 @@ Residuals from the shortcuts work (ADR 0030); see
   session mint, tile-URL template, and `refresh_map_attribution`'s viewport-copyright fetch are unit-
   tested on their pure seams (URL builders, `{key}` substitution, response deserialization) but never
   against `tile.googleapis.com` itself — that needs a billed Google Maps API key nobody has wired into
-  CI or a local `.env`. Exercise it manually with a real key before shipping the Google kind as
-  supported, or add a feature-gated integration test once a key is available.
+  CI. Exercise it manually with a real key before shipping the Google kind as supported, or add a
+  feature-gated integration test once a key is available. Note that Google's **Maps Demo Key**
+  (`developers.google.com/maps/demo-key`) is not such a key: it covers the Maps JavaScript API and a
+  handful of web services, not the Map Tiles API, so `createSession` answers it with `403 Forbidden`
+  (confirmed 2026-08-11). The failure is now legible — the error carries Google's own message, not just
+  the status — but the adapter still has no end-to-end proof.
 - **Tile caching** — tiles are fetched by the webview, and `main.rs` never gives dioxus-desktop a data
   directory, so they land in WebKit's default unmanaged cache at a path the app neither controls nor
   can bound. A viewport-only, size- and TTL-bounded disk cache is possible without leaving Rust: serve

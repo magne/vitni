@@ -243,6 +243,56 @@ fn cached_session(api_key: &str) -> Option<GoogleSession> {
     (cached.api_key == api_key && cached.minted_at.elapsed() < GOOGLE_SESSION_TTL).then(|| cached.session.clone())
 }
 
+/// How much of a failed response's body is kept in the error message.
+const MAX_ERROR_BODY_CHARS: usize = 400;
+
+/// Google's standard error envelope, the body every Map Tiles 4xx/5xx carries.
+#[derive(Debug, Deserialize)]
+struct GoogleErrorEnvelope {
+    error: GoogleErrorBody,
+}
+
+/// The envelope's inner error; only its human-readable `message` is surfaced.
+#[derive(Debug, Deserialize)]
+struct GoogleErrorBody {
+    message: String,
+}
+
+/// The error message for a failed Google Map Tiles request: the status plus **Google's own message**,
+/// which is the only part that names the cause. A bare status cannot distinguish the three ways a 403
+/// happens here — the Map Tiles API not enabled on the project, no billing account, or an
+/// HTTP-referrer-restricted key rejecting this server-side call — and the first report of exactly that
+/// left a user with nothing to act on. The API key travels in the request URL and is never echoed in a
+/// response body, so nothing secret reaches this string.
+fn google_failure_message(what: &str, status: reqwest::StatusCode, body: &str) -> String {
+    match google_error_detail(body) {
+        Some(detail) => format!("the Google Maps {what} request failed with {status}: {detail}"),
+        None => format!("the Google Maps {what} request failed with {status}"),
+    }
+}
+
+/// The reportable detail in a failed response's `body`: Google's `error.message` when the body is its
+/// standard envelope, else the raw text — either way truncated to [`MAX_ERROR_BODY_CHARS`] characters
+/// (not bytes, so a multi-byte character is never split). `None` for an empty body.
+fn google_error_detail(body: &str) -> Option<String> {
+    let body = body.trim();
+    if body.is_empty() {
+        return None;
+    }
+    let detail = serde_json::from_str::<GoogleErrorEnvelope>(body)
+        .map_or_else(|_| body.to_owned(), |envelope| envelope.error.message);
+    let truncated: String = detail.chars().take(MAX_ERROR_BODY_CHARS).collect();
+    Some(truncated)
+}
+
+/// The [`AppError`] for a non-success Map Tiles response, consuming it to read the body
+/// [`google_failure_message`] reports.
+async fn google_request_error(what: &str, response: reqwest::Response) -> AppError {
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    AppError::Config(google_failure_message(what, status, &body))
+}
+
 /// Mints a fresh Google Map Tiles session.
 ///
 /// # Errors
@@ -257,10 +307,7 @@ async fn google_create_session(api_key: &str) -> Result<GoogleSession, AppError>
         .await
         .map_err(|error| AppError::Config(format!("requesting a Google Maps session: {error}")))?;
     if !response.status().is_success() {
-        return Err(AppError::Config(format!(
-            "the Google Maps session request failed with {}",
-            response.status()
-        )));
+        return Err(google_request_error("session", response).await);
     }
     response
         .json()
@@ -296,10 +343,7 @@ pub async fn google_viewport_copyright(
         .await
         .map_err(|error| AppError::Config(format!("requesting the Google Maps viewport copyright: {error}")))?;
     if !response.status().is_success() {
-        return Err(AppError::Config(format!(
-            "the Google Maps viewport copyright request failed with {}",
-            response.status()
-        )));
+        return Err(google_request_error("viewport copyright", response).await);
     }
     let parsed: GoogleViewportResponse = response
         .json()
@@ -335,9 +379,12 @@ pub async fn refresh_map_attribution(
 
 #[cfg(test)]
 mod tests {
+    use reqwest::StatusCode;
+
     use super::{
-        DEFAULT_RASTER_MAX_ZOOM, DEFAULT_RASTER_TILE_SIZE, GOOGLE_MAX_ZOOM, MapBasemap, google_create_session_url,
-        google_tile_url, google_viewport_url, refresh_map_attribution, resolve_map_source, resolve_style_url,
+        DEFAULT_RASTER_MAX_ZOOM, DEFAULT_RASTER_TILE_SIZE, GOOGLE_MAX_ZOOM, MAX_ERROR_BODY_CHARS, MapBasemap,
+        google_create_session_url, google_error_detail, google_failure_message, google_tile_url, google_viewport_url,
+        refresh_map_attribution, resolve_map_source, resolve_style_url,
     };
     use crate::config::MapProvider;
     use crate::error::AppError;
@@ -479,6 +526,44 @@ mod tests {
         let json = r#"{"copyright":"© 2026 Google","maxZoom":22}"#;
         let parsed: super::GoogleViewportResponse = serde_json::from_str(json).expect("parses");
         assert_eq!(parsed.copyright, "© 2026 Google");
+    }
+
+    /// The failure a 403 actually is: the status alone cannot tell an unenabled Map Tiles API from an
+    /// unbilled project from a referrer-restricted key, and Google names which one in the body.
+    #[test]
+    fn a_failed_request_reports_googles_own_error_message() {
+        let body = r#"{"error":{"code":403,"message":"Map Tiles API has not been used in project 42 before or it is disabled.","status":"PERMISSION_DENIED"}}"#;
+        let message = google_failure_message("session", StatusCode::FORBIDDEN, body);
+        assert!(message.contains("403"), "keeps the status: {message}");
+        assert!(
+            message.contains("Map Tiles API has not been used in project 42"),
+            "names Google's own cause: {message}"
+        );
+        assert!(
+            !message.contains("PERMISSION_DENIED"),
+            "reports the human-readable message, not the whole envelope: {message}"
+        );
+    }
+
+    #[test]
+    fn a_body_that_is_not_googles_envelope_is_reported_verbatim() {
+        let message = google_failure_message("viewport copyright", StatusCode::BAD_GATEWAY, "upstream is down");
+        assert!(message.contains("upstream is down"), "{message}");
+    }
+
+    #[test]
+    fn an_empty_body_leaves_the_status_to_speak_for_itself() {
+        let message = google_failure_message("session", StatusCode::FORBIDDEN, "   ");
+        assert_eq!(message, "the Google Maps session request failed with 403 Forbidden");
+    }
+
+    /// Truncation counts characters, not bytes — a body of multi-byte characters must not be cut
+    /// mid-character (which would panic on a byte slice).
+    #[test]
+    fn a_long_body_is_truncated_on_a_character_boundary() {
+        let body = "©".repeat(MAX_ERROR_BODY_CHARS * 2);
+        let detail = google_error_detail(&body).expect("a non-empty body has a detail");
+        assert_eq!(detail.chars().count(), MAX_ERROR_BODY_CHARS);
     }
 
     #[tokio::test]
