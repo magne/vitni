@@ -12,6 +12,27 @@ pub(crate) fn non_blank(value: &str) -> Option<String> {
     }
 }
 
+/// How long a label derived from free text may get before it is cut short. Long enough for a real
+/// note heading, short enough that a record tab or a confirm's at-stake list stays readable — the tab
+/// strip does not ellipsize, so the length is bounded here at the source.
+pub(crate) const LABEL_MAX_CHARS: usize = 60;
+
+/// A one-line label for a block of free text: its first non-empty line, with any Markdown heading
+/// `#` markers stripped, capped at [`LABEL_MAX_CHARS`] characters. `None` when the text has no
+/// non-empty line, or nothing but `#`s.
+///
+/// The cap counts **characters**, not bytes, so it can never split a multi-byte character.
+///
+/// The one rule for turning prose into a label: a note's list title, a research note's fallback title,
+/// and every create draft's `display_label` all read through it, so a record is named the same way
+/// wherever it is shown.
+pub(crate) fn line_label(text: &str) -> Option<String> {
+    let line = text.lines().map(str::trim).find(|line| !line.is_empty())?;
+    let line = line.trim_start_matches('#').trim();
+    let label: String = line.chars().take(LABEL_MAX_CHARS).collect();
+    (!label.is_empty()).then_some(label)
+}
+
 /// One asserted name variant, for the Names tab — carrying its evidence cues (surety + source count).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NameVm {
@@ -333,4 +354,46 @@ pub fn evidence_axes(analysis: Option<&EvidenceAnalysis>, loc: &Localizer) -> Ve
             label: loc.evidence_kind_label(analysis.evidence),
         },
     ]
+}
+
+#[cfg(test)]
+mod line_label_tests {
+    use super::{LABEL_MAX_CHARS, line_label};
+
+    #[test]
+    fn the_first_non_empty_line_becomes_the_label() {
+        assert_eq!(
+            line_label("\n   \nAda's baptism\nmore prose\n"),
+            Some("Ada's baptism".to_owned()),
+            "leading blank lines are skipped and the line is trimmed"
+        );
+    }
+
+    #[test]
+    fn a_markdown_heading_loses_its_hashes() {
+        assert_eq!(line_label("## Ada's baptism"), Some("Ada's baptism".to_owned()));
+    }
+
+    #[test]
+    fn text_with_no_content_has_no_label() {
+        assert_eq!(line_label(""), None, "no line at all");
+        assert_eq!(line_label("\n  \n\t\n"), None, "only blank lines");
+        assert_eq!(line_label("###"), None, "a heading marker with no heading");
+    }
+
+    #[test]
+    fn a_long_line_is_capped_without_splitting_a_character() {
+        // A cap taken in bytes would panic (or produce invalid UTF-8) mid-character; taken in `chars`
+        // it cannot. Each `æ` is two bytes, so the byte length exceeds the char cap.
+        let long = "æ".repeat(LABEL_MAX_CHARS + 10);
+        let label = line_label(&long).expect("a label");
+        assert_eq!(label.chars().count(), LABEL_MAX_CHARS, "capped by characters");
+        assert_eq!(label, "æ".repeat(LABEL_MAX_CHARS));
+    }
+
+    #[test]
+    fn a_line_at_the_cap_is_kept_whole() {
+        let exact = "a".repeat(LABEL_MAX_CHARS);
+        assert_eq!(line_label(&exact), Some(exact));
+    }
 }

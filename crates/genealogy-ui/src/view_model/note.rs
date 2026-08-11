@@ -1,6 +1,6 @@
 use super::{
     DetailTab, HistoryEntryVm, Localizer, NoteChangeSetRequest, NoteEdit, RecordDraft, RestrictionKind, RowVm, TagRef,
-    UsingRecordVm, non_blank, using_record_vm,
+    UsingRecordVm, line_label, non_blank, using_record_vm,
 };
 
 /// One translation of a note's content (Note Language tab): language, text, and translator.
@@ -80,12 +80,9 @@ impl NoteDetail {
 }
 
 /// A note's title: the first non-empty line of its text, with a leading Markdown heading marker
-/// stripped, truncated for the list/header. `None` when the note has no text.
+/// stripped, truncated for the list/header ([`line_label`]). `None` when the note has no text.
 fn note_title(text: Option<&str>) -> Option<String> {
-    let line = text?.lines().map(str::trim).find(|line| !line.is_empty())?;
-    let line = line.trim_start_matches('#').trim();
-    let title: String = line.chars().take(60).collect();
-    (!title.is_empty()).then_some(title)
+    line_label(text?)
 }
 
 /// Builds a generic list row from a [`NoteSummary`](genealogy_app::NoteSummary): a title from the

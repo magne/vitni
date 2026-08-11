@@ -10,7 +10,7 @@ use genealogy_app::{ResearchNoteSubjectRef, ResearchNoteSummary};
 
 use super::{
     DetailTab, HistoryEntryVm, Localizer, RecordDraft, ResearchNoteChangeSetRequest, ResearchNoteEdit, RestrictionKind,
-    RowVm, SubjectRequest, TagRef, non_blank,
+    RowVm, SubjectRequest, TagRef, line_label, non_blank,
 };
 use crate::navigation::Category;
 
@@ -109,13 +109,7 @@ fn research_note_title(summary: &ResearchNoteSummary) -> String {
     if let Some(title) = summary.title.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
         return title.to_owned();
     }
-    let first_line = summary
-        .body
-        .as_deref()
-        .and_then(|body| body.lines().map(str::trim).find(|line| !line.is_empty()))
-        .map(|line| line.trim_start_matches('#').trim())
-        .map(|line| line.chars().take(60).collect::<String>())
-        .filter(|line| !line.is_empty());
+    let first_line = summary.body.as_deref().and_then(line_label);
     first_line.unwrap_or_else(|| summary.human_id.clone())
 }
 
