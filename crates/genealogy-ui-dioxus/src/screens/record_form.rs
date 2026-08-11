@@ -243,7 +243,7 @@ pub fn use_save_on_request<D: RecordDraft>(
             save.call(());
             state.editing.set(false);
         } else {
-            nav.note_save_finished(key.category, key.human_id(), false);
+            nav.note_save_finished(&key, false);
         }
     });
 }
@@ -402,11 +402,11 @@ pub fn finish_record_save(
                 nav.rename_record(category, current, effective.clone());
             }
             nav.notify(saved.to_owned());
-            nav.note_save_finished(category, Some(&effective), true);
+            nav.note_save_finished(&EditKey::saved(category, &effective), true);
         }
         Err(message) => {
             nav.notify_error(message);
-            nav.note_save_finished(category, Some(current), false);
+            nav.note_save_finished(&EditKey::saved(category, current), false);
         }
     }
 }
@@ -445,6 +445,11 @@ pub fn finish_draft_commit(committed: Result<String, String>, commit: DraftCommi
     match committed {
         Ok(human_id) => {
             nav.mark_changed();
+            // The outcome is reported under the *stored record's* key, because `commit_draft` has just
+            // re-keyed any save run from the draft onto it. The failure arm below reports the **draft**
+            // key instead — nothing was stored, so there is no record id to name and the run is still
+            // armed on the draft. The asymmetry is the point; collapsing the two hangs one of them.
+            let saved = EditKey::saved(category, &human_id);
             let label = label
                 .filter(|label| !label.is_empty())
                 .unwrap_or_else(|| human_id.clone());
@@ -457,11 +462,11 @@ pub fn finish_draft_commit(committed: Result<String, String>, commit: DraftCommi
                 },
             );
             nav.notify(created);
-            nav.note_save_finished(category, None, true);
+            nav.note_save_finished(&saved, true);
         }
         Err(message) => {
             nav.notify_error(message);
-            nav.note_save_finished(category, None, false);
+            nav.note_save_finished(&EditKey::draft(category, draft_id), false);
         }
     }
 }

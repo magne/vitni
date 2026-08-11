@@ -691,9 +691,13 @@ impl NavState {
     /// category's draft" would commit into whichever tab came first (#260).
     ///
     /// The buffer parked for the draft is dropped: it has just been stored, so leaving it would mark the
-    /// new record's tab unsaved and refill its form on the next mount.
+    /// new record's tab unsaved and refill its form on the next mount. A save run armed on the draft is
+    /// re-keyed to the stored record ([`Self::rekey_save_run`]) — committing *is* a change of the
+    /// editor's identity, the same as a rename, and the screen reports back under the new one.
     pub fn commit_draft(&mut self, draft: DraftId, record: RecordRef) {
-        self.drop_edit(&EditKey::draft(record.category, draft));
+        let key = EditKey::draft(record.category, draft);
+        self.drop_edit(&key);
+        self.rekey_save_run(&key, &EditKey::saved(record.category, &record.human_id));
         if let Some(kind) = record.category.aggregate_kind() {
             push_recent(
                 &mut self.recent.write(),
@@ -1086,25 +1090,22 @@ impl NavState {
         true
     }
 
-    /// Reports the outcome of the save the shell asked for: `(category, human_id)` names the editor
-    /// that saved (`human_id` is `None` for a category's create draft), `ok` whether it succeeded. A
-    /// no-op unless it names the armed request, so a Save the user clicked themselves never resolves a
-    /// run.
+    /// Reports the outcome of the save the shell asked for: `reported` names the editor that saved, `ok`
+    /// whether it succeeded. A no-op unless it names the armed request exactly, so neither a Save the
+    /// user clicked themselves nor a sibling draft of the same category ever resolves a run.
+    ///
+    /// A *committed* draft reports under the key of the record it stored, not the draft key the run was
+    /// armed with — [`Self::commit_draft`] re-keys the run to match on its way through. A **failed**
+    /// commit stored nothing and so has no record id to name; it reports the draft key.
     ///
     /// On success the record's parked edit is dropped and the next queued record is armed; once the
     /// queue empties the run's [`SaveThen`] terminus is applied. On failure the whole run is abandoned
     /// with every tab left open — the screen has already reported the error.
-    pub fn note_save_finished(&mut self, category: Category, human_id: Option<&str>, ok: bool) {
+    pub fn note_save_finished(&mut self, reported: &EditKey, ok: bool) {
         let Some(request) = self.save_request.peek().clone() else {
             return;
         };
-        let reported = match human_id {
-            Some(human_id) => request.key == EditKey::saved(category, human_id),
-            // A create draft still reports by category alone, so the armed draft of that category *is*
-            // the one reporting.
-            None => request.key.category == category && request.key.draft_id().is_some(),
-        };
-        if !reported {
+        if request.key != *reported {
             return;
         }
         if !ok {
@@ -1170,25 +1171,15 @@ impl NavState {
     /// names the editor that saved, otherwise wherever that editor sits now (the strip may have moved
     /// under the save). `None` when the tab has since been closed, so there is nothing left to close.
     ///
-    /// A committed create draft is the one case where no tab carries `key` any more: [`Self::commit_draft`]
-    /// swapped the stored record into the draft's slot and made it active, so the active tab is the tab
-    /// that was saved.
+    /// A committed create draft needs no special case: [`Self::commit_draft`] re-keys the run to the
+    /// record it stored, and that record's tab is the draft's old slot — so `key` is a key some tab
+    /// carries, and the search below finds it rather than guessing at the active tab.
     fn save_close_index(&self, index: usize, key: &EditKey) -> Option<usize> {
         let records = self.records.peek();
         if records.get(index).is_some_and(|tab| tab.edit_key() == *key) {
             return Some(index);
         }
-        if let Some(found) = records.iter().position(|tab| tab.edit_key() == *key) {
-            return Some(found);
-        }
-        if key.human_id().is_some() {
-            return None;
-        }
-        let active = (*self.active_record.peek())?;
-        let committed = records
-            .get(active)
-            .is_some_and(|tab| !tab.is_draft() && tab.category() == key.category);
-        committed.then_some(active)
+        records.iter().position(|tab| tab.edit_key() == *key)
     }
 
     /// Applies the pending close/quit, discarding the unsaved work (the confirm dialog's Discard) and
@@ -1373,7 +1364,10 @@ impl NavState {
         }
         Self::rekey_by_id(&mut self.edit_drafts, category, old_human_id, &new_human_id);
         Self::rekey_by_id(&mut self.detail_tabs, category, old_human_id, &new_human_id);
-        self.rekey_save_run(category, old_human_id, &new_human_id);
+        self.rekey_save_run(
+            &EditKey::saved(category, old_human_id),
+            &EditKey::saved(category, &new_human_id),
+        );
         let mut records = self.records.write();
         let Some(OpenTab::Saved(record)) = records
             .iter_mut()
@@ -1406,24 +1400,23 @@ impl NavState {
         }
     }
 
-    /// Moves an armed/queued save from `old_human_id` to `new_human_id` (a rename), so a save that
-    /// renamed its own record still reports back under a key the run recognises — otherwise the run
-    /// would hang with the tab never closing. A no-op when no run names the old id.
-    fn rekey_save_run(&mut self, category: Category, old_human_id: &str, new_human_id: &str) {
-        let old = EditKey::saved(category, old_human_id);
-        let new = EditKey::saved(category, new_human_id);
+    /// Moves an armed/queued save from `old` to `new`, so an editor whose *identity* changed under the
+    /// save still reports back under a key the run recognises — otherwise the run would hang with the tab
+    /// never closing. Both changes of identity go through here: a rename ([`Self::rename_record`]) and a
+    /// draft becoming the record it stored ([`Self::commit_draft`]). A no-op when no run names `old`.
+    fn rekey_save_run(&mut self, old: &EditKey, new: &EditKey) {
         if self
             .save_request
             .peek()
             .as_ref()
-            .is_some_and(|request| request.key == old)
+            .is_some_and(|request| request.key == *old)
             && let Some(request) = self.save_request.write().as_mut()
         {
             request.key = new.clone();
         }
-        let queued = self.save_queue.peek().iter().position(|key| *key == old);
+        let queued = self.save_queue.peek().iter().position(|key| key == old);
         if let Some(index) = queued {
-            self.save_queue.write()[index] = new;
+            self.save_queue.write()[index] = new.clone();
         }
     }
 

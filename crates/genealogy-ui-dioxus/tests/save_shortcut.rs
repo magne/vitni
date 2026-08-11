@@ -85,7 +85,7 @@ fn SavePane(human_id: String) -> Element {
     let id = human_id.clone();
     let on_save = use_callback(move |()| {
         state.seed.set(state.draft.read().clone());
-        nav.note_save_finished(Category::Tags, Some(&id), true);
+        nav.note_save_finished(&EditKey::saved(Category::Tags, &id), true);
         saves += 1;
     });
     use_save_on_request(Category::Tags, Some(&human_id), state, on_save);
