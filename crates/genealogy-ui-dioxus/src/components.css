@@ -193,10 +193,19 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
      window overflowing. The strip keeps `overflow: visible` so the new-record menu can hang below. */
   min-width: 0;
 }
+/* The `‹ ›` buttons beside it are this strip's scroll affordance, so its scrollbar is suppressed for
+   the same reason `.tabs`' is (#285), and measured the same way rather than assumed from the shared
+   rule: the `.rtab` row paints 34px tall, the scrollbar's ~20px hit rectangle covers the lower two
+   thirds of every record tab — the label's own centre and its close `✕` — and six tabs overflow the
+   strip at the app's own 1280x840 default window, which is one open record plus a draft per category.
+   `record-tabstrip-overflow.toml` clicks two tabs' painted centres and a tab's close `✕` there;
+   without these two lines all three leave the pane untouched (RMSE 0.0000). */
 .tabstrip .tabs-scroll {
   display: flex; align-items: center; gap: var(--sp-1);
   min-width: 0; overflow-x: auto;
+  scrollbar-width: none;
 }
+.tabstrip .tabs-scroll::-webkit-scrollbar { display: none; }
 .rtab {
   display: flex; align-items: center; gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
@@ -364,15 +373,29 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 
 /* ---- Detail tabs (related items) ---- */
 /* A record can have more tabs than fit (a person: Overview…Notes); the strip scrolls, and a
-   right-edge fade signals the overflow so it reads as scrollable rather than clipped. */
+   right-edge fade signals the overflow so it reads as scrollable rather than clipped.
+   The scrollbar itself is suppressed, and that is load-bearing rather than cosmetic (#285): the
+   strip is one 36px-tall row, and `WebKitGTK` gives a scrolling box a horizontal scrollbar whose hit
+   rectangle is ~20px tall — over half the row. Measured at 1800x1200 with the row painting y 231-266,
+   a click landed on the tab up to y=245 and on the scrollbar from y=247 down, so aiming at the
+   label's own painted centre (y≈249) scrolled the strip instead of switching the tab, without even
+   repainting `:hover`. The hit rectangle is there whenever the strip overflows — a docked pane, or a
+   single pane at the app's own 1280px default window — and it is there even when the indicator is
+   not painted. Wheel, trackpad and keyboard focus still scroll the strip.
+   This is not a cosmetic rule: what it has to remove is the scrollbar's **hit rectangle**, not its
+   indicator, since the rectangle is live with nothing drawn. It does — after it, the same click
+   ladder lands on the tab at every y from 236 to 262, and the strip no longer scrolls. Do not
+   "simplify" it to a paint-only rule. */
 .tabs {
   flex: none;
   display: flex; gap: var(--sp-1); padding: 0 var(--sp-5);
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
+  scrollbar-width: none;
   -webkit-mask-image: linear-gradient(to right, var(--mask-solid) calc(100% - 28px), transparent);
   mask-image: linear-gradient(to right, var(--mask-solid) calc(100% - 28px), transparent);
 }
+.tabs::-webkit-scrollbar { display: none; }
 .tab {
   padding: var(--sp-3) var(--sp-3);
   font-size: var(--fs-md); color: var(--muted);

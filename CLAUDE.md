@@ -147,7 +147,10 @@ shots by name: `differ` for "the UI reacted",
 checks `target/gui-pass/workspace/workspace.toml` on disk for a substring instead, proving a write
 reached disk rather than only an in-memory signal (unavailable under `--real-config`, whose workspace
 path is the caller's own). Read the PNGs under `target/gui-pass/shots/<scenario>/`; crop with
-`convert <in> -crop WxH+X+Y +repage <out>`.
+`convert <in> -crop WxH+X+Y +repage <out>`, and **column-scan rather than eyeball** when a coordinate
+is in question — `convert <shot> -crop 1xH+X+Y +repage txt:-` prints exact pixel rows, which is what
+#285 needed to falsify a band read off a screenshot by eye. The GUI child's own stdout/stderr land in
+`gui.log` in the same directory, at `RUST_LOG=info`.
 
 Writing one:
 

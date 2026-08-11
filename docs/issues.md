@@ -146,17 +146,6 @@ long-standing "DNA match views in the UI" item is closed.
   `commit_draft`/`cancel_draft`/`note_save_finished` find their target — two drafts would share one
   parked buffer and one component instance. Lifting the limit means threading a draft id through all of
   those; the tabstrip only needs its label disambiguated. — #260
-- **A docked pane's tab-strip hit region sits above its painted row.** The residual of #279's
-  user-visible symptom: with a split open, a tab strip's clickable region is ~9–14px above the row as
-  painted, in *both* panes, so a click aimed at the visible label misses. Measured at 1800×1200 — the
-  active pane's label paints centred on y≈249 and a click there does nothing (RMSE 0.0007 over the pane
-  region) while y=240 switches; the docked pane paints at y≈295 and only y=285 hits. At 1280×840 the row
-  paints at y≈273 and lands at y=260, so it does not scale with the window. Reproduces on `main` and
-  above the 1280px breakpoint, so it is independent of the `.split-2` collapse fixed with #279. Not
-  duplicate ids (see *Decided*), not a stale VDOM subtree (forcing a rebuild and a remount each changed
-  nothing), not `.tabs`'s `mask-image`. Probably a WebKitGTK software-GL paint/hit-test misalignment
-  inside a multi-track CSS grid — **check a real GPU first**: if it is Xvfb-only it is a harness caveat,
-  not a shipped defect. The two `docked-*` gui-pass scenarios aim above each label and say so. — #285
 - **A docked split mounts two detail panes, breaking `NavState`'s single-mount assumptions.**
   `edit_drafts`, `save_request`/`save_queue` and `pending_step` each document their design as safe
   *because* "only the active tab's pane is mounted" (`shell/nav_state.rs`), which a dock makes false.
@@ -513,6 +502,32 @@ decision, not a gap.
   when a pane halves. The ids **were** scoped per pane anyway — two elements claiming one id is a real
   ARIA defect — but scoping them fixes accessibility, not the clicks. Do not reach for id collisions to
   explain a dead Dioxus handler.
+- **The tab strip's hit region never sat above its painted row.** #285 read the dead clicks as a
+  ~9–14px vertical offset between paint and hit test, and the two `docked-*` gui-pass scenarios were
+  written aiming above each label because of it. Column-scanning the shots (`convert <shot> -crop
+  1xH+X+Y +repage txt:-`) falsified that: the "works" coordinate and the "does nothing" coordinate were
+  **inside the same painted button** — at 1800×1200 the row paints y 231–266 and both 240 and 249 are in
+  it — and the strip paints at identical y single-pane, where a click at 249 works. A click ladder
+  across the row then put the boundary between y=245 (lands on the tab) and y=247 (does not), with
+  y=262 visibly *scrolling the strip sideways*. The mechanism was `.tabs`' own horizontal scrollbar:
+  `WebKitGTK` hit-tests one over the bottom ~20px of a 36px row, and it is there whenever the strip
+  overflows — a docked pane, or a single pane at the app's own 1280px default window — even when its
+  indicator is not painted. Fixed by suppressing the scrollbar; the right-edge fade already signals the
+  overflow. Two lessons: a dead click on a scrolling strip is a scrollbar before it is a hit-test bug,
+  and a whole-pane `differ` cannot tell a tab switch from a sideways scroll of the strip, which is how
+  the #279 scenarios passed while the defect was live. `tab-strip-overflow.toml` is the regression
+  test, and it needs no dock at all. The record tabstrip's `.tabs-scroll` had the same defect on a
+  34px row, measured rather than inferred from the shared rule — `record-tabstrip-overflow.toml`,
+  where a tab's close `✕` was dead too. One trap worth carrying forward from writing it: a `✕` probe
+  aimed at a *draft* tab proves nothing, because the unsaved-draft confirm paints over the same region
+  the assertion measures, so it passes on the modal rather than on the close.
+
+  **The overflow is the precondition, which is why a casual check does not see this.** A manual pass on
+  a real GPU during the investigation found the tab hit box fine — expected: a wide single pane fits the
+  whole strip, so there is no scrollbar and no dead band. It is not evidence of an Xvfb artifact, and
+  the mechanism cannot be one — a paint/compositing misalignment cannot make the strip *scroll*, which
+  is what the failing clicks did. To see it by hand, put a Place in a pane narrow enough to clip the tab
+  row (dock a second record, or use the app's own 1280×840 default window) and click a label's centre.
 
 ### Geography map
 

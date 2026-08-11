@@ -18,10 +18,14 @@
 #
 # The fixture seeds exactly one record (place Kristiansand); this scenario opens a second (Oslo) to
 # have two tabs to dock, following the same steps `docked-detail-tabs.toml` measured (its own header
-# comment covers the create-form field order, and the hit-region offset every post-dock click here is
-# also aimed above — the same separately-filed defect, which shows up at this window size too). At 386px
-# the header's badge row wraps, so this pane's tab row paints ~24px lower than at 1800 wide: y≈273 here
-# against y≈249 there, and the click that lands is y=260.
+# comment covers the create-form field order). At 386px the header's badge row wraps, so this pane's
+# tab row paints ~24px lower than at 1800 wide: the `.tabs` box is y 257-291 here against 231-266
+# there, and the click aims at the painted label's centre, y=273.
+#
+# The `differ` is scoped to the tab *body* (below the strip's border-bottom at y=292), never the whole
+# pane. Before the #285 fix this click landed on `.tabs`' horizontal scrollbar and scrolled the strip
+# sideways without switching the tab — and a whole-pane region cannot tell those two apart, so the
+# assertion passed on the scroll alone.
 #
 # Regions and coordinates were read off this scenario's own `docked-narrow` shot, never carried over from
 # `docked-detail-tabs.toml`'s 1800x1200 ones — a narrower window is a different layout, not a crop.
@@ -84,8 +88,8 @@ name = "docked-narrow"
 
 [[step]]
 do = "click"
-at = [706, 260]
-label = "active pane (Kristiansand): Names tab (aimed above the painted label — see header)"
+at = [706, 273]
+label = "active pane (Kristiansand): Names tab, at the painted label's centre"
 
 [[step]]
 do = "shot"
@@ -100,8 +104,9 @@ because = "the docked pane is on screen at the app's own default window, not cli
 [[assert]]
 kind = "differ"
 shots = ["docked-narrow", "active-clicked"]
-region = [508, 92, 386, 720]
-because = "the active pane's own tab strip is operable at the default window (#279)"
+region = [508, 295, 386, 500]
+tolerance = 0.02
+because = "the active pane's own tab strip is operable at the default window (#279, #285)"
 
 [[assert]]
 kind = "match"

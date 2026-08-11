@@ -26,6 +26,10 @@
 //! rather than only an in-memory signal — unavailable under `--real-config`, where that path is the
 //! caller's own workspace.
 //!
+//! Each scenario's shot directory also holds a `gui.log` — the GUI child's own stdout and stderr, run
+//! at `RUST_LOG=info`, so a `tracing` line or a webview diagnostic is readable beside the shots it
+//! belongs to instead of being discarded.
+//!
 //! The run is isolated by default: a throwaway `XDG_CONFIG_HOME`/`XDG_DATA_HOME` under
 //! `target/gui-pass/home` and a seeded fixture workspace, so a scripted click run can never append
 //! assertions to real genealogy data. `--real-config` (optionally with `--workspace <name>`) points
@@ -286,7 +290,7 @@ fn run_one(options: &Options, out: &Path, home: &Path, path: &Path) -> Result<()
     }
 
     let size = window_size(&script);
-    let mut session = start_session(options, home)?;
+    let mut session = start_session(options, home, shots)?;
     let window = wait_for_window(&options.display)?;
     xdotool(
         &options.display,
@@ -532,7 +536,12 @@ fn absolute(path: &Path) -> Result<PathBuf> {
 }
 
 /// Starts Xvfb, then the GUI on it.
-fn start_session(options: &Options, home: &Path) -> Result<Session> {
+///
+/// The GUI's own stdout/stderr go to `gui.log` in the scenario's shot directory rather than to
+/// `/dev/null`: `tracing_subscriber::fmt::init()` and any webview or GTK diagnostic write there, and a
+/// discarded stream makes a failing scenario undiagnosable. `RUST_LOG=info` because the default filter
+/// is `ERROR` only, which hides every `info!` the app emits.
+fn start_session(options: &Options, home: &Path, shots: &Path) -> Result<Session> {
     let xvfb = Command::new("Xvfb")
         .args([&options.display, "-screen", "0", SCREEN, "-nolisten", "tcp"])
         .stdout(Stdio::null())
@@ -546,6 +555,11 @@ fn start_session(options: &Options, home: &Path) -> Result<Session> {
     };
     sleep(Duration::from_secs(2));
 
+    let log_path = shots.join("gui.log");
+    let log = fs::File::create(&log_path).with_context(|| format!("creating {}", log_path.display()))?;
+    let errors = log
+        .try_clone()
+        .with_context(|| format!("sharing {}", log_path.display()))?;
     let mut gui = Command::new("target/debug/genealogy-gui");
     gui.env("DISPLAY", &options.display)
         // GTK prefers Wayland when the session advertises it, which would put the window on the
@@ -553,8 +567,9 @@ fn start_session(options: &Options, home: &Path) -> Result<Session> {
         .env("GDK_BACKEND", "x11")
         .env_remove("WAYLAND_DISPLAY")
         .env_remove("XDG_SESSION_TYPE")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .env("RUST_LOG", "info")
+        .stdout(Stdio::from(log))
+        .stderr(Stdio::from(errors));
     if !options.real_config {
         gui.envs(isolated_home(home));
     }

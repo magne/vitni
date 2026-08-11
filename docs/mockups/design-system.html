@@ -204,6 +204,13 @@
       <div class="tab-pane" data-pane="c">History pane.</div>
     </div>
   </div>
+  <p class="muted">A record can have more tabs than fit, so the strip scrolls horizontally. Its
+    scrollbar is suppressed and the right-edge fade is the overflow signal; wheel, trackpad and
+    keyboard focus do the scrolling. That is a hit-target decision, not a cosmetic one — the row is
+    one 36px line, and a scrollbar's hit rectangle would claim its lower half, so a click on the
+    label's own centre would scroll the strip instead of switching the tab. The record tabstrip's
+    <span class="mono">.tabs-scroll</span> follows the same rule, with its
+    <kbd>‹</kbd>&#8202;<kbd>›</kbd> buttons as the affordance.</p>
 
   <h2>History timeline &amp; provenance</h2>
   <div class="specimen grid-2">

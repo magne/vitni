@@ -1,0 +1,48 @@
+# #285 — a click at a tab label's painted centre switches the tab when the strip overflows.
+#
+# This is the minimal reproduction, and it needs no dock: at the app's own default 1280x840 window the
+# single detail pane is 772px wide and a Place's tab strip needs ~1000px, so `.tabs` already scrolls.
+# A scrolling `.tabs` is what breaks the click, not the split — #285 was filed against a docked pane
+# only because docking is what makes the strip overflow at 1800x1200.
+#
+# `WebKitGTK` hands a scrolling box a horizontal scrollbar whose hit rectangle is ~20px tall, and the
+# tab row is 35px. Measured on this scenario's own shot: `.detail-head`'s border-bottom paints at
+# y=229, the `.tabs` box is 230-264 and its border-bottom 265, the Names label 242-250. Before the fix
+# a click at y=249 — the label's own painted centre — landed on the scrollbar: the strip scrolled
+# sideways and the tab did not change, without even repainting `:hover`.
+#
+# The assertion is over the tab *body* only, never the whole pane. A whole-pane region cannot tell a
+# tab switch from a sideways scroll of the strip, and pre-fix the click produced exactly that scroll —
+# which is how #279's scenarios passed while the defect was live.
+description = "A click at a tab label's painted centre switches the tab when the strip overflows (#285)"
+window = [1280, 840]
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "shot"
+name = "overview"
+
+[[step]]
+do = "click"
+at = [712, 249]
+label = "Names tab, at the painted label's centre"
+
+[[step]]
+do = "shot"
+name = "names"
+
+[[assert]]
+kind = "differ"
+shots = ["overview", "names"]
+region = [508, 268, 772, 480]
+tolerance = 0.02
+because = "clicking the painted label must switch the tab, not scroll the strip (#285)"

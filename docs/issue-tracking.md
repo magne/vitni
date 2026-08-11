@@ -180,7 +180,6 @@ the list on its own. Treat the count as a floor.
 
 | Item | Why it gates a release |
 | --- | --- |
-| [A docked pane's tab-strip hit region sits above its painted row](https://github.com/magne/genealogy/issues/285) | #279's residual: a click on the visible tab label still misses in a split, so docking stays awkward even with the layout fixed |
 | [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
 | [Only one unsaved new record per category](https://github.com/magne/genealogy/issues/260) | Two new people cannot be sketched side by side; the draft's identity is its category, all the way down to the stash key |
 | [Switching map provider repaints nothing](https://github.com/magne/genealogy/issues/283) | The select accepts and persists two providers the map then ignores, with nothing in the UI saying so |
@@ -221,11 +220,16 @@ exactly the app's default window width, plus a tab strip that moves when a pane 
 made the fixed-coordinate repro look like a dead click. The ruled-out hypothesis is now a *Decided*
 entry in [`issues.md`](issues.md) so it is not reached for again.
 
-**#279 closes with a named residual, not a clean sweep**, which is why #285 is in the table above: the
-layout is fixed, but writing the gui-pass scenarios turned up a second mechanism — a tab strip's hit
-region sitting above its painted row whenever a split is open — that also makes a click on the visible
-label do nothing. Closing #279 without that row would have recorded the symptom as gone when a user can
-still hit it.
+**#285, #279's named residual, is closed and dropped from this table.** Writing the #279 scenarios
+turned up a second mechanism that also made a click on the visible tab label do nothing, and it was
+filed as a hit region sitting ~9–14px above the painted row. That diagnosis was wrong: column-scanning
+the shots (`convert <shot> -crop 1xH+X+Y +repage txt:-`, not reading them by eye) showed both the
+"works" and the "does nothing" coordinates were inside the *same* painted button, and a click ladder
+found the boundary at y=245/247 with the lower band visibly scrolling the strip sideways. The cause was
+`.tabs`' own horizontal scrollbar, whose `WebKitGTK` hit rectangle is ~20px of a 36px row; it is there
+whenever the strip overflows, so the minimal reproduction needs no dock at all — a single pane at the
+app's default 1280px window already does it, which `tab-strip-overflow.toml` now locks in. The
+corrected measurement is a *Decided* entry in [`issues.md`](issues.md).
 
 ### Not in either milestone
 
