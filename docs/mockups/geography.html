@@ -79,7 +79,11 @@
          when it doesn't; finishing a shape with no target is refused with a toast, #255), the draw
          tools (Pan/Point/Polygon — in the toolbar, not floating over the map), the live zoom readout
          (#253 — one decimal, fixed width so the buttons beside it never shift mid-gesture), and the
-         provider select. -->
+         provider select. Providers are declared in the global config's `[map.providers.*]` (ADR 0033)
+         — named entries mirroring `[ai.providers]`, e.g. `[map.providers.carto]` — never entered here;
+         the select's own options are exactly the built-in default plus those names, each labelled
+         "name (kind)". Picking one switches the live map immediately: it persists the choice, resolves
+         its tile/style source, and repaints the canvas without reloading the screen. -->
     <div class="geo-toolbar" style="margin-bottom:10px">
       <input class="filter" style="width:220px" placeholder="🔍 Search or geocode a place…">
       <span class="chip">Places 5,128</span>
@@ -94,8 +98,8 @@
       <label class="muted" style="font-size:var(--fs-xs)">Provider</label>
       <select class="in" style="width:auto">
         <option selected>OpenStreetMap</option>
-        <option>MapLibre style</option>
-        <option>Google (API key)</option>
+        <option>carto (MapLibre style)</option>
+        <option>my-google (Google)</option>
       </select>
     </div>
 
