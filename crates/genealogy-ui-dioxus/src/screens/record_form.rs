@@ -404,6 +404,24 @@ pub struct DraftCommit {
     pub created: String,
 }
 
+impl DraftCommit {
+    /// The commit of `draft` into `draft_id`'s tab in `category`, announced with `created`.
+    ///
+    /// The stored record takes the label the draft already names itself with
+    /// ([`RecordDraft::display_label`]), so a tab does not rename itself the moment it is saved — and no
+    /// screen gets to invent its own rule for it, which is how a note's *whole text* and a media
+    /// object's *whole path* used to end up as tab labels.
+    #[must_use]
+    pub fn new<D: RecordDraft>(category: Category, draft_id: DraftId, draft: &D, created: String) -> Self {
+        Self {
+            category,
+            draft_id,
+            label: draft.display_label(),
+            created,
+        }
+    }
+}
+
 /// Finishes a create form's commit: on success marks the workspace changed (so the Explorer list and
 /// rail counts refetch, same as an edit save), `commit.draft`'s tab becomes the stored record in place
 /// ([`NavState::commit_draft`]) labelled `commit.label` — or the record's own id when that is empty or

@@ -42,12 +42,7 @@ pub fn CitationCreateRecord(draft_id: DraftId) -> Element {
             let committed = commit_citation_change_set(services, request, prov).await;
             finish_draft_commit(
                 committed,
-                DraftCommit {
-                    category: Category::Citations,
-                    draft_id,
-                    label: None,
-                    created,
-                },
+                DraftCommit::new(Category::Citations, draft_id, &draft, created),
                 nav,
             );
         });

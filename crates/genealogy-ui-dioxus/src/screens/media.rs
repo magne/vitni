@@ -16,23 +16,13 @@ pub fn MediaCreateRecord(draft_id: DraftId) -> Element {
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::MediaDraft, ProvenanceDraft)| {
         let request = draft.to_request();
-        let label = request
-            .file_path
-            .clone()
-            .or_else(|| request.web_path.clone())
-            .unwrap_or_default();
         let services = services.clone();
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_media_change_set(services, request, prov).await;
             finish_draft_commit(
                 committed,
-                DraftCommit {
-                    category: Category::Media,
-                    draft_id,
-                    label: Some(label),
-                    created,
-                },
+                DraftCommit::new(Category::Media, draft_id, &draft, created),
                 nav,
             );
         });

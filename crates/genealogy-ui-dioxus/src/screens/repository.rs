@@ -19,19 +19,13 @@ pub fn RepositoryCreateRecord(draft_id: DraftId) -> Element {
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::RepositoryDraft, ProvenanceDraft)| {
         let request = draft.to_request();
-        let label = request.name.clone().unwrap_or_default();
         let services = services.clone();
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_repository_change_set(services, request, prov).await;
             finish_draft_commit(
                 committed,
-                DraftCommit {
-                    category: Category::Repositories,
-                    draft_id,
-                    label: Some(label),
-                    created,
-                },
+                DraftCommit::new(Category::Repositories, draft_id, &draft, created),
                 nav,
             );
         });

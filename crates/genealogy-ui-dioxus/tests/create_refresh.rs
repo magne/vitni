@@ -7,7 +7,7 @@
 //! directly from a mount-time hook over a bare [`NavState`], with the version rendered as a marker.
 
 use dioxus::prelude::*;
-use genealogy_ui::Category;
+use genealogy_ui::{Category, NoteDraft};
 use genealogy_ui_dioxus::screens::{DraftCommit, finish_draft_commit};
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -96,5 +96,43 @@ fn a_failed_create_does_not_bump_the_data_version_but_still_notifies() {
     assert!(
         html.contains("NOTICE:could not save"),
         "the failure is still surfaced as a shell notice:\n{html}"
+    );
+}
+
+fn commit_labels_a_note_by_its_first_line() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let label = use_hook(move || {
+        let draft_id = nav.open_create(Category::Notes);
+        let draft = NoteDraft {
+            text: format!("# Estate inventory\n\n{}", "x".repeat(200)),
+            ..NoteDraft::new()
+        };
+        let commit = DraftCommit::new(Category::Notes, draft_id, &draft, "Created".to_owned());
+        finish_draft_commit(Ok("N0001".to_owned()), commit, nav);
+        nav.records
+            .read()
+            .first()
+            .and_then(|tab| tab.as_saved().map(|record| record.label.clone()))
+            .unwrap_or_default()
+    });
+    rsx! {
+        div { "TAB-LABEL:{label}" }
+        {probe(&nav)}
+    }
+}
+
+#[test]
+fn a_committed_record_takes_the_label_its_draft_showed() {
+    // A tab must not rename itself the moment it is saved: the stored record carries the same string the
+    // draft tab already showed, which is `display_label` — never the whole note text, which is what the
+    // note screen used to hand over.
+    let html = render(commit_labels_a_note_by_its_first_line);
+    assert!(
+        html.contains("TAB-LABEL:Estate inventory"),
+        "the committed tab keeps the draft's own label:\n{html}"
+    );
+    assert!(
+        !html.contains("xxxxx"),
+        "and the body never becomes a tab label:\n{html}"
     );
 }

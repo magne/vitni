@@ -59,12 +59,7 @@ pub fn DnaMatchCreateRecord(draft_id: DraftId) -> Element {
             let committed = commit_dna_match_change_set(services, request, prov).await;
             finish_draft_commit(
                 committed,
-                DraftCommit {
-                    category: Category::DnaMatches,
-                    draft_id,
-                    label: None,
-                    created,
-                },
+                DraftCommit::new(Category::DnaMatches, draft_id, &draft, created),
                 nav,
             );
         });

@@ -31,19 +31,13 @@ pub fn PlaceCreateRecord(draft_id: DraftId) -> Element {
         let Some(request) = draft.to_request() else {
             return;
         };
-        let label = request.name.clone().unwrap_or_default();
         let services = services.clone();
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_place_change_set(services, request, prov).await;
             finish_draft_commit(
                 committed,
-                DraftCommit {
-                    category: Category::Places,
-                    draft_id,
-                    label: Some(label),
-                    created,
-                },
+                DraftCommit::new(Category::Places, draft_id, &draft, created),
                 nav,
             );
         });

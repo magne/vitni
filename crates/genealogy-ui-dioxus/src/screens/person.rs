@@ -18,30 +18,17 @@ pub fn PersonCreateRecord(draft_id: DraftId) -> Element {
     let selected_tags = use_signal(Vec::<String>::new);
     let save_services = services.clone();
     let created_label = loc.action_label("created");
-    let on_save = use_callback(move |(request, prov): (PersonChangeSetRequest, ProvenanceDraft)| {
+    // Takes the draft, like the other twelve create screens, so the commit can read the label the draft
+    // names itself with rather than re-deriving it from the request.
+    let on_save = use_callback(move |(draft, prov): (PersonDraft, ProvenanceDraft)| {
+        let request = draft.to_request();
         let services = save_services.clone();
-        let label = request
-            .name
-            .as_ref()
-            .map(|parts| {
-                [parts.given.as_deref(), parts.surname.as_deref()]
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            })
-            .filter(|joined| !joined.is_empty());
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_person_change_set(services, request, prov).await;
             finish_draft_commit(
                 committed,
-                DraftCommit {
-                    category: Category::People,
-                    draft_id,
-                    label,
-                    created,
-                },
+                DraftCommit::new(Category::People, draft_id, &draft, created),
                 nav,
             );
         });
@@ -103,7 +90,7 @@ pub fn PersonCreateRecord(draft_id: DraftId) -> Element {
     // create form can keep the draft instead of losing it.
     let save_now = use_callback(move |()| {
         if record.can_save() {
-            on_save.call((record.draft.read().to_request(), record.prov.read().clone()));
+            on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
     use_save_on_request(EditKey::draft(Category::People, draft_id), record, save_now);

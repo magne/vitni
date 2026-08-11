@@ -41,12 +41,7 @@ pub fn EventCreateRecord(draft_id: DraftId) -> Element {
             let committed = commit_event_change_set(services, request, prov).await;
             finish_draft_commit(
                 committed,
-                DraftCommit {
-                    category: Category::Events,
-                    draft_id,
-                    label: None,
-                    created,
-                },
+                DraftCommit::new(Category::Events, draft_id, &draft, created),
                 nav,
             );
         });

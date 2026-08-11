@@ -26,18 +26,12 @@ pub fn TagCreateRecord(draft_id: DraftId) -> Element {
             return;
         };
         let services = services.clone();
-        let name = request.name.clone();
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_tag_change_set(services, request, prov).await;
             finish_draft_commit(
                 committed,
-                DraftCommit {
-                    category: Category::Tags,
-                    draft_id,
-                    label: Some(name),
-                    created,
-                },
+                DraftCommit::new(Category::Tags, draft_id, &draft, created),
                 nav,
             );
         });

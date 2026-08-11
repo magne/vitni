@@ -60,19 +60,13 @@ pub fn ResearchNoteCreateRecord(draft_id: DraftId) -> Element {
     let on_save = use_callback(
         move |(draft, prov): (genealogy_ui::ResearchNoteDraft, ProvenanceDraft)| {
             let request = draft.to_request();
-            let label = request.title.clone().unwrap_or_default();
             let services = services.clone();
             let created = created_label.clone();
             spawn(async move {
                 let committed = commit_research_note_change_set(services, request, prov).await;
                 finish_draft_commit(
                     committed,
-                    DraftCommit {
-                        category: Category::ResearchNotes,
-                        draft_id,
-                        label: Some(label),
-                        created,
-                    },
+                    DraftCommit::new(Category::ResearchNotes, draft_id, &draft, created),
                     nav,
                 );
             });
