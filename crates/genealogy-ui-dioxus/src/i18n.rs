@@ -346,6 +346,15 @@ impl Chrome {
         fl!(self.loader, "draft-tab-label", entity = entity)
     }
 
+    /// The label of an unsaved draft record tab that has to be told apart from an earlier draft of the
+    /// same category (e.g. "New People (2)"): `entity` is the already-localized category name, `ordinal`
+    /// the draft's 1-based position among that category's open drafts. Only a draft with nothing typed
+    /// into it is numbered — one that names itself uses that name instead.
+    #[must_use]
+    pub fn draft_tab_label_nth(&self, entity: &str, ordinal: usize) -> String {
+        fl!(self.loader, "draft-tab-label-nth", entity = entity, ordinal = ordinal)
+    }
+
     /// The accessible name of a record tab that holds unsaved work — the tab label plus an "unsaved
     /// changes" suffix, so the dot marker's meaning is announced rather than conveyed by colour alone.
     #[must_use]
@@ -2344,5 +2353,17 @@ mod tests {
             no.theme_mode_status(genealogy_app::ThemeMode::System, false),
             "system (lyst)"
         );
+    }
+
+    #[test]
+    fn a_numbered_draft_tab_is_localized_in_both_languages() {
+        // The ordinal only ever appears beside the unnumbered form, so the two have to read as a pair —
+        // and in `no` as well, where the whole label differs.
+        let en = Chrome::with_languages(None, &["en".parse().expect("tag")]);
+        assert_eq!(en.draft_tab_label("People"), "New People");
+        assert_eq!(en.draft_tab_label_nth("People", 2), "New People (2)");
+        let no = Chrome::with_languages(None, &["no".parse().expect("tag")]);
+        assert_eq!(no.draft_tab_label("Personer"), "Ny Personer");
+        assert_eq!(no.draft_tab_label_nth("Personer", 2), "Ny Personer (2)");
     }
 }
