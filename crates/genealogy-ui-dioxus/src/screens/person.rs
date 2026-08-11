@@ -6,35 +6,31 @@ use super::prelude::*;
 /// cascade (a Citations picker → an inline new-citation → a nested new-source) and the tag multi-select
 /// are buffered here. Save turns the draft into a [`PersonChangeSetRequest`]; Cancel drops it.
 #[component]
-pub fn PersonCreateRecord() -> Element {
+pub fn PersonCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<PersonDraft>(Category::People);
+    let record = use_record_create::<PersonDraft>(Category::People, draft_id);
     let mut draft = record.draft;
     let selected_tags = use_signal(Vec::<String>::new);
     let save_services = services.clone();
     let created_label = loc.action_label("created");
-    let on_save = use_callback(move |(request, prov): (PersonChangeSetRequest, ProvenanceDraft)| {
+    // Takes the draft, like the other twelve create screens, so the commit can read the label the draft
+    // names itself with rather than re-deriving it from the request.
+    let on_save = use_callback(move |(draft, prov): (PersonDraft, ProvenanceDraft)| {
+        let request = draft.to_request();
         let services = save_services.clone();
-        let label = request
-            .name
-            .as_ref()
-            .map(|parts| {
-                [parts.given.as_deref(), parts.surname.as_deref()]
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            })
-            .filter(|joined| !joined.is_empty());
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_person_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::People, label, created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit::new(Category::People, draft_id, &draft, created),
+                nav,
+            );
         });
     });
 
@@ -94,17 +90,17 @@ pub fn PersonCreateRecord() -> Element {
     // create form can keep the draft instead of losing it.
     let save_now = use_callback(move |()| {
         if record.can_save() {
-            on_save.call((record.draft.read().to_request(), record.prov.read().clone()));
+            on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::People, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::People, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
         Button {
             label: cancel_label,
             variant: ButtonVariant::Ghost,
             small: true,
-            onclick: move |_| nav.cancel_draft(Category::People),
+            onclick: move |_| nav.cancel_draft(draft_id),
         }
         Button {
             label: save_label,
@@ -731,7 +727,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::People, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::People, &human_id), record, save_now);
 
     // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
     let media_viewing = use_signal(|| None::<MediaRefVm>);

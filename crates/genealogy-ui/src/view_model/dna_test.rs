@@ -315,6 +315,12 @@ impl RecordDraft for DnaTestDraft {
     fn is_valid(&self) -> bool {
         Self::is_valid(self)
     }
+
+    /// Always `None`: a DNA test is titled by the person it anchors, which the draft holds only a
+    /// `human_id` for — see [`RecordDraft::display_label`].
+    fn display_label(&self) -> Option<String> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -390,5 +396,27 @@ mod dna_test_draft_tests {
         assert_eq!(edits.len(), 2);
         assert!(matches!(&edits[0], DnaTestEdit::SetProvider { .. }));
         assert!(matches!(&edits[1], DnaTestEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod dna_test_display_label_tests {
+    use super::{DnaTestDraft, RecordDraft};
+    use genealogy_app::{DnaGenomeBuild, DnaProvider, DnaTestType};
+
+    #[test]
+    fn a_fully_populated_dna_test_draft_still_has_no_label() {
+        // Deliberate: a DNA test is titled by the person it anchors, and the draft holds only that
+        // person's `human_id` — resolving it to a name is a lookup the trait cannot do.
+        let draft = DnaTestDraft {
+            human_id: "D0001".to_owned(),
+            person: "I0001".to_owned(),
+            provider: Some(DnaProvider::AncestryDna),
+            test_type: Some(DnaTestType::Autosomal),
+            genome_build: Some(DnaGenomeBuild::GRCh37),
+            kit_id: "KIT-9".to_owned(),
+            ..DnaTestDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }

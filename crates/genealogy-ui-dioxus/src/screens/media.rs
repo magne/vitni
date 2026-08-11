@@ -5,27 +5,26 @@ use genealogy_ui::MediaAttributeVm;
 /// The create-mode media record: an uncommitted [`MediaDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). Save commits the whole media object; Cancel discards.
 #[component]
-pub fn MediaCreateRecord() -> Element {
+pub fn MediaCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::MediaDraft>(Category::Media);
+    let record = use_record_create::<genealogy_ui::MediaDraft>(Category::Media, draft_id);
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::MediaDraft, ProvenanceDraft)| {
         let request = draft.to_request();
-        let label = request
-            .file_path
-            .clone()
-            .or_else(|| request.web_path.clone())
-            .unwrap_or_default();
         let services = services.clone();
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_media_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Media, Some(label), created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit::new(Category::Media, draft_id, &draft, created),
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -35,10 +34,10 @@ pub fn MediaCreateRecord() -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Media, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::Media, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Media) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,
@@ -337,7 +336,7 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Media, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::Media, &human_id), record, save_now);
 
     match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },

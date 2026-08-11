@@ -21,14 +21,14 @@ fn relationship_choices() -> [ChildParentRelationship; 6] {
 /// (pick an existing partner, or "+ New person" to create one inline); Save commits the whole family
 /// (≥1 partner required); Cancel discards.
 #[component]
-pub fn FamilyCreateRecord() -> Element {
+pub fn FamilyCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::FamilyDraft>(Category::Families);
+    let record = use_record_create::<genealogy_ui::FamilyDraft>(Category::Families, draft_id);
     let mut draft = record.draft;
     // The People picker adds one partner at a time: a pick appends an existing-partner chip and resets
     // the search; "+ New person" opens the pending new-partner draft card. The options refetch after
@@ -56,7 +56,11 @@ pub fn FamilyCreateRecord() -> Element {
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_family_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Families, None, created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit::new(Category::Families, draft_id, &draft, created),
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -66,10 +70,10 @@ pub fn FamilyCreateRecord() -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Families, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::Families, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Families) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,
@@ -594,7 +598,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Families, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::Families, &human_id), record, save_now);
 
     // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
     let media_viewing = use_signal(|| None::<MediaRefVm>);

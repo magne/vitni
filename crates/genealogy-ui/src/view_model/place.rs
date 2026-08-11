@@ -1,7 +1,7 @@
 use super::{
     AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EventPinVm, HistoryEntryVm, Localizer, MarkerShapeVm,
     MediaRefVm, PlaceChangeSetRequest, PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref,
-    event_pin_vm, marker_shape, non_blank, year_of,
+    event_pin_vm, line_label, marker_shape, non_blank, year_of,
 };
 
 /// The succession kinds the Succession panel's Kind select offers, in display order — the closed
@@ -641,6 +641,10 @@ impl RecordDraft for PlaceDraft {
 
     fn is_valid(&self) -> bool {
         Self::is_valid(self)
+    }
+
+    fn display_label(&self) -> Option<String> {
+        line_label(&self.name)
     }
 }
 
@@ -1296,5 +1300,29 @@ mod place_detail_events_tests {
         };
         let detail = PlaceDetail::from_summary(&summary, &loc());
         assert!(detail.events.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod place_display_label_tests {
+    use super::{PlaceDraft, RecordDraft};
+
+    #[test]
+    fn the_label_is_the_place_name() {
+        let draft = PlaceDraft {
+            name: "  Kristiania  ".to_owned(),
+            ..PlaceDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("Kristiania".to_owned()));
+    }
+
+    #[test]
+    fn a_draft_with_no_name_has_no_label() {
+        let draft = PlaceDraft {
+            latitude: "59.9".to_owned(),
+            longitude: "10.7".to_owned(),
+            ..PlaceDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }

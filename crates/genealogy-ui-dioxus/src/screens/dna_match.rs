@@ -17,14 +17,14 @@ fn dna_provider_choices() -> Vec<DnaProvider> {
 /// the detail pane (`record-editing.html` §6). The two tests, provider, and shared-cM are required; an
 /// unparseable numeric is rejected (never zero-filled — §7). Save commits the match; Cancel discards.
 #[component]
-pub fn DnaMatchCreateRecord() -> Element {
+pub fn DnaMatchCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::DnaMatchDraft>(Category::DnaMatches);
+    let record = use_record_create::<genealogy_ui::DnaMatchDraft>(Category::DnaMatches, draft_id);
     let mut draft = record.draft;
     // The two existing-test pickers: their options refetch after any mutation (#266); each excludes the
     // other's pick so a match is never asserted between a test and itself. Pick/clear drive the draft's
@@ -57,7 +57,11 @@ pub fn DnaMatchCreateRecord() -> Element {
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_dna_match_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::DnaMatches, None, created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit::new(Category::DnaMatches, draft_id, &draft, created),
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -67,10 +71,10 @@ pub fn DnaMatchCreateRecord() -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::DnaMatches, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::DnaMatches, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::DnaMatches) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,
@@ -471,7 +475,7 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::DnaMatches, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::DnaMatches, &human_id), record, save_now);
 
     match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },

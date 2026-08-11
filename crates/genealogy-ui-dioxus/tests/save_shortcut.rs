@@ -54,10 +54,9 @@ fn render_settled(app: fn() -> Element) -> String {
     dioxus_ssr::render(&vdom)
 }
 
-/// One editor key rendered as `category/human_id`.
+/// One editor key in [`EditKey`]'s own `category/id` form.
 fn key_id(key: &EditKey) -> String {
-    let id = key.human_id.clone().unwrap_or_else(|| "*".to_owned());
-    format!("{}/{id}", key.category.id())
+    key.to_string()
 }
 
 /// The marker block: whether `request_save_active` armed a save, and which editor's save is armed.
@@ -86,10 +85,10 @@ fn SavePane(human_id: String) -> Element {
     let id = human_id.clone();
     let on_save = use_callback(move |()| {
         state.seed.set(state.draft.read().clone());
-        nav.note_save_finished(Category::Tags, Some(&id), true);
+        nav.note_save_finished(&EditKey::saved(Category::Tags, &id), true);
         saves += 1;
     });
-    use_save_on_request(Category::Tags, Some(&human_id), state, on_save);
+    use_save_on_request(EditKey::saved(Category::Tags, &human_id), state, on_save);
     let editing = *state.editing.read();
     rsx! {
         div { "{human_id}:SAVES:{saves}" }

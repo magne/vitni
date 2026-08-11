@@ -7,14 +7,14 @@ use genealogy_ui::HaplogroupRowVm;
 /// the detail pane (`record-editing.html` §6). The person is required (§7); Save commits the whole
 /// test; Cancel discards.
 #[component]
-pub fn DnaTestCreateRecord() -> Element {
+pub fn DnaTestCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::DnaTestDraft>(Category::DnaTests);
+    let record = use_record_create::<genealogy_ui::DnaTestDraft>(Category::DnaTests, draft_id);
     let mut draft = record.draft;
     // The existing-person picker: its options refetch after any mutation (#266); pick/clear drive the
     // draft's (required) person id.
@@ -37,7 +37,11 @@ pub fn DnaTestCreateRecord() -> Element {
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_dna_test_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::DnaTests, None, created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit::new(Category::DnaTests, draft_id, &draft, created),
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -47,10 +51,10 @@ pub fn DnaTestCreateRecord() -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::DnaTests, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::DnaTests, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::DnaTests) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,
@@ -498,7 +502,7 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::DnaTests, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::DnaTests, &human_id), record, save_now);
 
     match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },

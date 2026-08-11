@@ -8,23 +8,26 @@ use super::prelude::*;
 /// Cancel drops the draft. The provenance block above Save carries the operator's why/confidence/
 /// citations onto every emitted assertion (§5b).
 #[component]
-pub fn SourceCreateRecord() -> Element {
+pub fn SourceCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::SourceDraft>(Category::Sources);
+    let record = use_record_create::<genealogy_ui::SourceDraft>(Category::Sources, draft_id);
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::SourceDraft, ProvenanceDraft)| {
         let request = draft.to_request();
-        let label = request.title.clone().unwrap_or_default();
         let services = services.clone();
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_source_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Sources, Some(label), created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit::new(Category::Sources, draft_id, &draft, created),
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -34,10 +37,10 @@ pub fn SourceCreateRecord() -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Sources, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::Sources, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Sources) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,
@@ -299,7 +302,7 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Sources, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::Sources, &human_id), record, save_now);
 
     // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
     let media_viewing = use_signal(|| None::<MediaRefVm>);

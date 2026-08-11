@@ -1,5 +1,6 @@
-//! The record-detail router (Phase 5 tabbed-navigation rework): renders the active open record's
-//! detail pane, keyed on its category, or a select-record prompt when nothing is open (or the active
+//! The record-detail router (Phase 5 tabbed-navigation rework): renders the active open tab's pane,
+//! keyed on that tab's own editor identity — a stored record's id, a draft's [`DraftId`] — or a
+//! select-record prompt when nothing is open (or the active
 //! destination — e.g. the Dashboard — has no detail pane at all). Every aggregate screen's
 //! `MasterDetail` renders this as its `detail` slot, so which pane shows follows the active record
 //! tab rather than which category screen is mounted (the "keep list, show detail only" navigation
@@ -9,7 +10,7 @@ use dioxus::prelude::*;
 use genealogy_ui::Category;
 
 use crate::shell::ChromeCtx;
-use crate::shell::nav_state::{NavState, OpenTab, PaneRole};
+use crate::shell::nav_state::{DraftId, EditKey, NavState, OpenTab, PaneRole};
 
 use super::citation::{CitationCreateRecord, CitationDetailPane};
 use super::dna_match::{DnaMatchCreateRecord, DnaMatchDetailPane};
@@ -34,33 +35,41 @@ pub fn RecordDetail() -> Element {
     let chrome = use_context::<ChromeCtx>();
     match nav.active_tab() {
         None => rsx! { p { class: "empty", "{chrome.0.record_select_prompt()}" } },
-        Some(OpenTab::Draft(category)) => draft_pane(category),
+        Some(OpenTab::Draft(category, draft)) => draft_pane(category, draft),
         Some(OpenTab::Saved(record)) => detail_pane(record.category, record.human_id),
     }
 }
 
-/// Routes a draft tab to its aggregate's `*CreateRecord` create form, keyed by category so switching
-/// draft categories remounts a fresh form. Each create form self-wires to [`NavState`]: Save commits
-/// the draft in place ([`NavState::commit_draft`]), Cancel closes it ([`NavState::cancel_draft`]).
-fn draft_pane(category: Category) -> Element {
-    let key = category.id();
+/// Routes a draft tab to its aggregate's `*CreateRecord` create form, keyed by the draft's own
+/// [`EditKey`] so switching to *any* other draft remounts a fresh form. The category alone is not enough:
+/// several drafts of one category can be open (#260), and a reused instance keeps the buffer signals
+/// `use_record_create` hydrated at its mount — so the second draft's form would come up holding the
+/// first's text and then write it back under the second's key.
+///
+/// The same "keyed pane must be a dynamic *child* of a stable root" note as [`detail_pane`] applies: the
+/// `div.detail-slot` is what makes the `key` count.
+///
+/// Each create form self-wires to [`NavState`]: Save commits the draft in place
+/// ([`NavState::commit_draft`]), Cancel closes it ([`NavState::cancel_draft`]).
+fn draft_pane(category: Category, draft: DraftId) -> Element {
+    let key = EditKey::draft(category, draft);
     rsx! {
         div { class: "detail-slot",
             {
                 match category {
-                    Category::People => rsx! { PersonCreateRecord { key: "{key}" } },
-                    Category::Families => rsx! { FamilyCreateRecord { key: "{key}" } },
-                    Category::Events => rsx! { EventCreateRecord { key: "{key}" } },
-                    Category::Places => rsx! { PlaceCreateRecord { key: "{key}" } },
-                    Category::Sources => rsx! { SourceCreateRecord { key: "{key}" } },
-                    Category::Citations => rsx! { CitationCreateRecord { key: "{key}" } },
-                    Category::Repositories => rsx! { RepositoryCreateRecord { key: "{key}" } },
-                    Category::Media => rsx! { MediaCreateRecord { key: "{key}" } },
-                    Category::Notes => rsx! { NoteCreateRecord { key: "{key}" } },
-                    Category::ResearchNotes => rsx! { ResearchNoteCreateRecord { key: "{key}" } },
-                    Category::Tags => rsx! { TagCreateRecord { key: "{key}" } },
-                    Category::DnaTests => rsx! { DnaTestCreateRecord { key: "{key}" } },
-                    Category::DnaMatches => rsx! { DnaMatchCreateRecord { key: "{key}" } },
+                    Category::People => rsx! { PersonCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::Families => rsx! { FamilyCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::Events => rsx! { EventCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::Places => rsx! { PlaceCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::Sources => rsx! { SourceCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::Citations => rsx! { CitationCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::Repositories => rsx! { RepositoryCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::Media => rsx! { MediaCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::Notes => rsx! { NoteCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::ResearchNotes => rsx! { ResearchNoteCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::Tags => rsx! { TagCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::DnaTests => rsx! { DnaTestCreateRecord { key: "{key}", draft_id: draft } },
+                    Category::DnaMatches => rsx! { DnaMatchCreateRecord { key: "{key}", draft_id: draft } },
                     Category::Dashboard => rsx! {},
                 }
             }

@@ -1,6 +1,6 @@
 use super::{
     DetailTab, HistoryEntryVm, Localizer, RecordDraft, RestrictionKind, RowVm, TagChangeSetRequest, UsingRecordVm,
-    using_record_vm,
+    line_label, using_record_vm,
 };
 
 /// One object-type group on the Tag Usage tab: the localized kind, the count, and a few examples.
@@ -204,6 +204,10 @@ impl RecordDraft for TagDraft {
     fn is_valid(&self) -> bool {
         Self::is_valid(self)
     }
+
+    fn display_label(&self) -> Option<String> {
+        line_label(&self.name)
+    }
 }
 
 /// Builds a list row from a [`TagSummary`](genealogy_app::TagSummary): the name, a `priority N · X
@@ -297,5 +301,28 @@ mod tag_draft_tests {
         let draft = seed();
         let toggled = draft.toggle_restriction(RestrictionKind::Confidential);
         assert!(toggled.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tag_display_label_tests {
+    use super::{RecordDraft, TagDraft};
+
+    #[test]
+    fn the_label_is_the_tag_name() {
+        let draft = TagDraft {
+            name: "Direct ancestor".to_owned(),
+            ..TagDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("Direct ancestor".to_owned()));
+    }
+
+    #[test]
+    fn a_draft_with_no_name_has_no_label() {
+        let draft = TagDraft {
+            priority: "7".to_owned(),
+            ..TagDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }

@@ -10,7 +10,7 @@ use genealogy_app::{ResearchNoteSubjectRef, ResearchNoteSummary};
 
 use super::{
     DetailTab, HistoryEntryVm, Localizer, RecordDraft, ResearchNoteChangeSetRequest, ResearchNoteEdit, RestrictionKind,
-    RowVm, SubjectRequest, TagRef, non_blank,
+    RowVm, SubjectRequest, TagRef, line_label, non_blank,
 };
 use crate::navigation::Category;
 
@@ -109,13 +109,7 @@ fn research_note_title(summary: &ResearchNoteSummary) -> String {
     if let Some(title) = summary.title.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
         return title.to_owned();
     }
-    let first_line = summary
-        .body
-        .as_deref()
-        .and_then(|body| body.lines().map(str::trim).find(|line| !line.is_empty()))
-        .map(|line| line.trim_start_matches('#').trim())
-        .map(|line| line.chars().take(60).collect::<String>())
-        .filter(|line| !line.is_empty());
+    let first_line = summary.body.as_deref().and_then(line_label);
     first_line.unwrap_or_else(|| summary.human_id.clone())
 }
 
@@ -266,6 +260,10 @@ impl RecordDraft for ResearchNoteDraft {
     /// edit draft's subjects live in the Subjects tab, so it is always valid.
     fn is_valid(&self) -> bool {
         self.existing_human_id.is_some() || !self.subjects.is_empty()
+    }
+
+    fn display_label(&self) -> Option<String> {
+        line_label(&self.title).or_else(|| line_label(&self.body))
     }
 }
 
@@ -488,5 +486,43 @@ mod research_note_tests {
             detail.subjects.iter().all(|subject| !subject.kind_label.is_empty()),
             "each subject carries a localized kind label"
         );
+    }
+}
+
+#[cfg(test)]
+mod research_note_display_label_tests {
+    use crate::view_model::{RecordDraft, ResearchNoteDraft};
+
+    #[test]
+    fn the_title_names_the_draft() {
+        let draft = ResearchNoteDraft {
+            title: "Same person as the 1865 census?".to_owned(),
+            body: "The parish register agrees.".to_owned(),
+            ..ResearchNoteDraft::new()
+        };
+        assert_eq!(
+            draft.display_label(),
+            Some("Same person as the 1865 census?".to_owned())
+        );
+    }
+
+    #[test]
+    fn the_body_names_a_draft_with_no_title_yet() {
+        // The list row already falls back to the argument's first line; a tab that did not would read
+        // "New Research notes" beside a form with a paragraph typed into it.
+        let draft = ResearchNoteDraft {
+            body: "## The parish register agrees\n\nMore.".to_owned(),
+            ..ResearchNoteDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("The parish register agrees".to_owned()));
+    }
+
+    #[test]
+    fn a_draft_with_neither_has_no_label() {
+        let draft = ResearchNoteDraft {
+            language: "en".to_owned(),
+            ..ResearchNoteDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }

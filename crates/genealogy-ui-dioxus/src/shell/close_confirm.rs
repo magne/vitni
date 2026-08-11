@@ -27,6 +27,7 @@ use crate::components::{Button, ButtonVariant, Modal};
 use crate::i18n::Chrome;
 use crate::shell::ChromeCtx;
 use crate::shell::nav_state::{CloseRequest, NavState, OpenTab};
+use crate::shell::tab_label::tab_label;
 
 /// The resolved copy of one confirm: the heading, the body, the records at stake (the quit confirm
 /// lists them; a single-tab close names its one record in the body instead), the three action labels,
@@ -210,15 +211,4 @@ fn save_blocked(nav: &NavState, chrome: &Chrome, index: usize, label: &str) -> O
         return Some(chrome.close_confirm_cannot_save(label));
     }
     Some(chrome.close_confirm_nothing_to_save(label))
-}
-
-/// The tab at `index` named as the tabstrip names it: a saved record's own label, a draft's localized
-/// "New <entity>". An already-closed index falls back to an empty label.
-fn tab_label(nav: &NavState, chrome: &Chrome, index: usize) -> String {
-    let tab = nav.records.read().get(index).cloned();
-    match tab {
-        Some(OpenTab::Saved(record)) => record.label,
-        Some(OpenTab::Draft(category)) => chrome.draft_tab_label(&chrome.rail_label(category.label_id())),
-        None => String::new(),
-    }
 }

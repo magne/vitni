@@ -295,6 +295,12 @@ impl RecordDraft for CitationDraft {
     fn is_valid(&self) -> bool {
         Self::is_valid(self)
     }
+
+    /// Always `None`: a citation is titled by the source it cites, which a draft holds only a picker
+    /// selection or inline fields for — see [`RecordDraft::display_label`].
+    fn display_label(&self) -> Option<String> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -462,5 +468,44 @@ mod citation_draft_tests {
             ..CitationDraft::new()
         };
         assert!(draft.to_request().expect("valid").date.is_none());
+    }
+}
+
+#[cfg(test)]
+mod citation_display_label_tests {
+    use super::{CitationDraft, DateDraft, NewSourceFields, RecordDraft, RecordLink};
+    use crate::picker::PickerSelection;
+    use crate::view_model::{ConfidenceLevel, EvidenceKind, InformationKind, SourceQuality};
+
+    #[test]
+    fn a_fully_populated_citation_draft_still_has_no_label() {
+        // Deliberate: a citation is titled by the source it cites plus its page, which the list row
+        // composes from the *stored* record. A draft holds only a picker selection or inline source
+        // fields, so naming the tab from it would disagree with the row it becomes.
+        let draft = CitationDraft {
+            human_id: "C0001".to_owned(),
+            source: RecordLink::Existing(PickerSelection {
+                human_id: "S0001".to_owned(),
+                title: "Trinity Church baptisms".to_owned(),
+            }),
+            date: DateDraft {
+                start: "1815".to_owned(),
+                ..DateDraft::default()
+            },
+            page: "p. 42".to_owned(),
+            confidence: Some(ConfidenceLevel::High),
+            source_quality: Some(SourceQuality::Original),
+            information: Some(InformationKind::Primary),
+            evidence_kind: Some(EvidenceKind::Direct),
+            ..CitationDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
+        let inline_source = CitationDraft {
+            source: RecordLink::New(NewSourceFields {
+                title: "Trinity Church baptisms".to_owned(),
+            }),
+            ..draft
+        };
+        assert_eq!(inline_source.display_label(), None, "nor does an inline new source");
     }
 }

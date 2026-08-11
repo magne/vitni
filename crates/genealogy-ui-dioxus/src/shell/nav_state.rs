@@ -7,6 +7,7 @@
 
 use std::any::Any;
 use std::collections::BTreeMap;
+use std::fmt;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
@@ -176,18 +177,35 @@ fn detect_os_theme() -> Theme {
     Theme::Dark
 }
 
+/// One create draft's own identity, minted by [`NavState::open_create`] from a per-[`NavState`]
+/// counter. It is what distinguishes two unsaved drafts of the same category — their parked buffers,
+/// their tabs, and their panes (#260). Displays as `#1`.
+///
+/// No public constructor on purpose: an id names a draft the shell actually opened, so the only ways
+/// to obtain one are [`NavState::open_create`]'s return value and [`OpenTab::draft_id`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DraftId(u32);
+
+impl fmt::Display for DraftId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#{}", self.0)
+    }
+}
+
 /// One open tab in the record strip: a saved record or an unsaved draft (a create form).
 ///
 /// "Create is a tab": [`NavState::open_create`] appends a [`Self::Draft`]; committing it
 /// ([`NavState::commit_draft`]) replaces it in place with the saved [`Self::Saved`], and cancelling
 /// ([`NavState::cancel_draft`]) closes it. A draft has no `human_id` yet, so it never docks and is
-/// never recorded in the "Jump back in" list; at most one draft per category is open at a time.
+/// never recorded in the "Jump back in" list; several drafts of one category can be open at once, each
+/// under its own [`DraftId`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OpenTab {
     /// A saved record backed by a stored aggregate.
     Saved(RecordRef),
-    /// An unsaved draft create form for a category (nothing is stored until it commits).
-    Draft(Category),
+    /// An unsaved draft create form for a category (nothing is stored until it commits), under the
+    /// [`DraftId`] that tells it apart from that category's other drafts.
+    Draft(Category, DraftId),
 }
 
 impl OpenTab {
@@ -196,7 +214,7 @@ impl OpenTab {
     pub fn category(&self) -> Category {
         match self {
             Self::Saved(record) => record.category,
-            Self::Draft(category) => *category,
+            Self::Draft(category, _) => *category,
         }
     }
 
@@ -205,7 +223,16 @@ impl OpenTab {
     pub fn human_id(&self) -> Option<&str> {
         match self {
             Self::Saved(record) => Some(&record.human_id),
-            Self::Draft(_) => None,
+            Self::Draft(_, _) => None,
+        }
+    }
+
+    /// The draft this tab holds, or `None` when it is a saved record.
+    #[must_use]
+    pub fn draft_id(&self) -> Option<DraftId> {
+        match self {
+            Self::Saved(_) => None,
+            Self::Draft(_, draft) => Some(*draft),
         }
     }
 
@@ -214,14 +241,14 @@ impl OpenTab {
     pub fn as_saved(&self) -> Option<&RecordRef> {
         match self {
             Self::Saved(record) => Some(record),
-            Self::Draft(_) => None,
+            Self::Draft(_, _) => None,
         }
     }
 
     /// Whether this tab is an unsaved draft.
     #[must_use]
     pub fn is_draft(&self) -> bool {
-        matches!(self, Self::Draft(_))
+        self.draft_id().is_some()
     }
 
     /// Whether this tab is the saved record keyed by `(category, human_id)`.
@@ -235,23 +262,36 @@ impl OpenTab {
     pub fn edit_key(&self) -> EditKey {
         match self {
             Self::Saved(record) => EditKey::saved(record.category, &record.human_id),
-            Self::Draft(category) => EditKey::draft(*category),
+            Self::Draft(category, draft) => EditKey::draft(*category, *draft),
         }
     }
 }
 
-/// Which editor a [`StashedEdit`] belongs to: a saved record (`human_id` is `Some`) or a category's
-/// create draft (`human_id` is `None` — at most one draft per category is open, see
-/// [`NavState::open_create`]).
+/// Which editor an [`EditKey`] addresses: one of a category's open create drafts, or a saved record.
 ///
-/// `Ord` follows `Category`'s declared rail order, then the id, so the map iterates in a stable,
+/// [`Self::Draft`] is declared **first** so the derived `Ord` sorts a category's drafts ahead of its
+/// saved records, exactly as the `Option<String>` id this replaces did (`None < Some`) — the
+/// `BTreeMap` iteration order of [`NavState::edit_drafts`] and [`NavState::detail_tabs`] is therefore
+/// unchanged.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum EditTarget {
+    /// One open create draft, by its own [`DraftId`].
+    Draft(DraftId),
+    /// A saved record, by its stable `human_id`.
+    Saved(String),
+}
+
+/// Which editor a [`StashedEdit`] belongs to: a saved record, or one of a category's open create
+/// drafts.
+///
+/// `Ord` follows `Category`'s declared rail order, then the target, so the map iterates in a stable,
 /// user-meaningful sequence.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EditKey {
     /// The aggregate category the editor belongs to.
     pub category: Category,
-    /// The saved record's stable id, or `None` for the category's create draft.
-    pub human_id: Option<String>,
+    /// Which of that category's editors: a draft, or a saved record.
+    pub target: EditTarget,
 }
 
 impl EditKey {
@@ -260,16 +300,45 @@ impl EditKey {
     pub fn saved(category: Category, human_id: &str) -> Self {
         Self {
             category,
-            human_id: Some(human_id.to_owned()),
+            target: EditTarget::Saved(human_id.to_owned()),
         }
     }
 
-    /// The key of `category`'s create draft.
+    /// The key of `category`'s create draft `draft`.
     #[must_use]
-    pub fn draft(category: Category) -> Self {
+    pub fn draft(category: Category, draft: DraftId) -> Self {
         Self {
             category,
-            human_id: None,
+            target: EditTarget::Draft(draft),
+        }
+    }
+
+    /// The saved record's stable id, or `None` when this key names a create draft.
+    #[must_use]
+    pub fn human_id(&self) -> Option<&str> {
+        match &self.target {
+            EditTarget::Draft(_) => None,
+            EditTarget::Saved(human_id) => Some(human_id),
+        }
+    }
+
+    /// The create draft this key names, or `None` when it names a saved record.
+    #[must_use]
+    pub fn draft_id(&self) -> Option<DraftId> {
+        match &self.target {
+            EditTarget::Draft(draft) => Some(*draft),
+            EditTarget::Saved(_) => None,
+        }
+    }
+}
+
+/// `people/I0001` for a saved record, `people/#1` for a create draft — the create pane's Dioxus key,
+/// and the form every test marker renders an editor key in.
+impl fmt::Display for EditKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.target {
+            EditTarget::Draft(draft) => write!(f, "{}/{draft}", self.category.id()),
+            EditTarget::Saved(human_id) => write!(f, "{}/{human_id}", self.category.id()),
         }
     }
 }
@@ -292,19 +361,25 @@ pub struct StashedEdit {
     /// `RecordDraft::is_valid` for `draft`, recorded on the way in so the Save gate can be read
     /// without knowing the draft's type.
     pub valid: bool,
+    /// `RecordDraft::display_label` for `draft`, recorded on the way in for the same reason as `valid`:
+    /// the tab strip names a draft by what has been typed into it without knowing which aggregate's
+    /// draft this is. `None` while nothing typed names the record.
+    pub label: Option<String>,
 }
 
 impl StashedEdit {
     /// Parks `draft` — diffed against `seed`, with the `prov` collected so far — recording the draft's
-    /// own validity.
+    /// own validity and the label it names itself with.
     #[must_use]
     pub fn new<D: RecordDraft>(draft: D, seed: D, prov: ProvenanceDraft) -> Self {
         let valid = draft.is_valid();
+        let label = draft.display_label();
         Self {
             draft: Rc::new(draft),
             seed: Rc::new(seed),
             prov,
             valid,
+            label,
         }
     }
 }
@@ -382,10 +457,12 @@ pub struct NavState {
     /// `GeographyScreen` consumes and clears it once, on mount.
     pub geography_focus: Signal<Option<(String, String)>>,
     /// The `(category, human_id)` a fresh research-note draft should be pre-seeded with as its subject
-    /// (the "Research notes" reverse tab's Add on a Person / Family / Event / Place), or `None`. Set by
-    /// [`Self::open_research_note_about`]; `ResearchNoteCreateRecord` consumes and clears it once, on
-    /// mount — the same one-shot handoff as [`Self::geography_focus`].
-    pub research_note_subject: Signal<Option<(Category, String)>>,
+    /// (the "Research notes" reverse tab's Add on a Person / Family / Event / Place), addressed at the
+    /// [`DraftId`] it was opened for — or `None`. Set by [`Self::open_research_note_about`];
+    /// `ResearchNoteCreateRecord` consumes and clears it once, on mount, **only when the id is its own** —
+    /// the same one-shot handoff as [`Self::geography_focus`], but addressed, because several
+    /// research-note drafts can be open and an unaddressed seed would be taken by whichever mounted next.
+    pub research_note_subject: Signal<Option<(DraftId, Category, String)>>,
     /// A close-tab/quit operation awaiting confirmation because it would discard unsaved work, or
     /// `None` when the confirm dialog is not showing. Set by [`Self::request_close_tab`] /
     /// [`Self::request_quit`]; resolved by [`Self::confirm_close`] / [`Self::cancel_close`].
@@ -412,6 +489,10 @@ pub struct NavState {
     /// The records still to save in the current run, in strip order: Save all walks them one at a time,
     /// arming [`Self::save_request`] for each in turn, activating it first so its pane is mounted.
     pub save_queue: Signal<Vec<EditKey>>,
+    /// The [`DraftId`] the next [`Self::open_create`] hands out, counting up from 1. Per-`NavState`
+    /// rather than a process-wide counter: `cargo test` runs every test in one process, so a global
+    /// counter would make one test's draft numbers depend on which others ran first.
+    pub next_draft: Signal<u32>,
     /// A monotonically-increasing "quit the application" ticket, bumped once a quit is confirmed (or
     /// requested with nothing unsaved). The desktop-only `QuitManager` observes it and closes the
     /// native window; it is a no-op under SSR, which mounts no window.
@@ -466,6 +547,7 @@ impl NavState {
             detail_tabs: Signal::new(BTreeMap::new()),
             save_request: Signal::new(None),
             save_queue: Signal::new(Vec::new()),
+            next_draft: Signal::new(1),
             quit_requested: Signal::new(0),
         }
     }
@@ -569,41 +651,57 @@ impl NavState {
         self.open_create(category);
     }
 
-    /// Opens a create-form draft tab for `category` and makes it active. At most one draft per
-    /// category is open at a time: an existing draft is re-focused rather than duplicated. Nothing is
-    /// stored until the draft commits ([`Self::commit_draft`]).
-    pub fn open_create(&mut self, category: Category) {
-        let existing = self
-            .records
-            .read()
-            .iter()
-            .position(|tab| tab.is_draft() && tab.category() == category);
-        if let Some(index) = existing {
-            self.active_record.set(Some(index));
-            return;
-        }
-        self.records.write().push(OpenTab::Draft(category));
+    /// Opens a create-form draft tab for `category` and makes it active, returning the [`DraftId`] it
+    /// was minted under. Every call opens **another** draft (#260): several unsaved records of one
+    /// category can be sketched side by side, so nothing is re-focused or reused, not even an empty
+    /// draft. Nothing is stored until the draft commits ([`Self::commit_draft`]).
+    ///
+    /// The new tab must keep being **appended**: [`CloseRequest::Tab`] and [`SaveThen::CloseTab`] hold
+    /// raw strip indices, and an append is the one insertion that cannot invalidate an armed one.
+    pub fn open_create(&mut self, category: Category) -> DraftId {
+        let draft = self.mint_draft();
+        self.records.write().push(OpenTab::Draft(category, draft));
         let last = self.records.read().len().saturating_sub(1);
         self.active_record.set(Some(last));
+        draft
+    }
+
+    /// Mints the next [`DraftId`] and advances the counter ([`Self::next_draft`]).
+    fn mint_draft(&mut self) -> DraftId {
+        let id = *self.next_draft.peek();
+        self.next_draft.set(id.wrapping_add(1));
+        DraftId(id)
     }
 
     /// Opens a research-note create draft pre-seeded with `(category, human_id)` as its subject — the
     /// Add on a record's "Research notes" tab. Reveals the `ResearchNotes` category so the draft's tab is
     /// visible next to its list, exactly as the rail's own New does.
+    ///
+    /// The seed is stored *after* the draft is opened, because it is addressed at that draft's id. Safe:
+    /// this runs inside one event handler, so nothing renders in between — the new pane mounts on the
+    /// next render and its effect looks for the seed after that.
     pub fn open_research_note_about(&mut self, category: Category, human_id: String) {
-        self.research_note_subject.set(Some((category, human_id)));
-        self.request_new_for(Category::ResearchNotes);
+        self.go_to(Destination::Category(Category::ResearchNotes));
+        let draft = self.open_create(Category::ResearchNotes);
+        self.research_note_subject.set(Some((draft, category, human_id)));
     }
 
-    /// Commits a draft in place: replaces the open draft tab for `record.category` with the saved
-    /// `record`, keeping its position in the strip and making it active, and records it in the "Jump
-    /// back in" list. Falls back to opening `record` as a fresh tab if no draft is open (e.g. the
-    /// draft was closed mid-commit).
+    /// Commits the draft `draft` in place: replaces its own tab with the saved `record`, keeping its
+    /// position in the strip and making it active, and records it in the "Jump back in" list. Falls back
+    /// to opening `record` as a fresh tab if that draft is no longer open (e.g. it was closed
+    /// mid-commit).
     ///
-    /// The create buffer parked for the category is dropped: it has just been stored, so leaving it
-    /// would mark the new record's tab unsaved and refill its form on the next mount.
-    pub fn commit_draft(&mut self, record: RecordRef) {
-        self.drop_edit(&EditKey::draft(record.category));
+    /// Addressed by [`DraftId`], not by category: with several drafts of one category open, "the
+    /// category's draft" would commit into whichever tab came first (#260).
+    ///
+    /// The buffer parked for the draft is dropped: it has just been stored, so leaving it would mark the
+    /// new record's tab unsaved and refill its form on the next mount. A save run armed on the draft is
+    /// re-keyed to the stored record — committing *is* a change of the
+    /// editor's identity, the same as a rename, and the screen reports back under the new one.
+    pub fn commit_draft(&mut self, draft: DraftId, record: RecordRef) {
+        let key = EditKey::draft(record.category, draft);
+        self.drop_edit(&key);
+        self.rekey_save_run(&key, &EditKey::saved(record.category, &record.human_id));
         if let Some(kind) = record.category.aggregate_kind() {
             push_recent(
                 &mut self.recent.write(),
@@ -614,12 +712,7 @@ impl NavState {
                 },
             );
         }
-        let draft = self
-            .records
-            .read()
-            .iter()
-            .position(|tab| tab.is_draft() && tab.category() == record.category);
-        let Some(index) = draft else {
+        let Some(index) = self.draft_index(draft) else {
             self.open_record(record);
             return;
         };
@@ -629,17 +722,18 @@ impl NavState {
         self.history.write().push(location);
     }
 
-    /// Cancels the open draft tab for `category`, closing it (Cancel on a create form) — which drops
-    /// the create buffer parked for it ([`Self::close_record`]).
-    pub fn cancel_draft(&mut self, category: Category) {
-        let draft = self
-            .records
-            .read()
-            .iter()
-            .position(|tab| tab.is_draft() && tab.category() == category);
-        if let Some(index) = draft {
+    /// Cancels the draft `draft`, closing its tab (Cancel on a create form) — which drops the create
+    /// buffer parked for it ([`Self::close_record`]). A no-op when that draft is no longer open.
+    pub fn cancel_draft(&mut self, draft: DraftId) {
+        if let Some(index) = self.draft_index(draft) {
             self.close_record(index);
         }
+    }
+
+    /// The strip index of the draft `draft`, or `None` when its tab is no longer open. No category is
+    /// needed: a [`DraftId`] is unique across the whole strip.
+    fn draft_index(&self, draft: DraftId) -> Option<usize> {
+        self.records.peek().iter().position(|tab| tab.draft_id() == Some(draft))
     }
 
     /// Marks the workspace data as changed so shell-wide derived views (the rail count badges)
@@ -783,6 +877,16 @@ impl NavState {
         Some((draft.clone(), seed.clone(), edit.prov.clone()))
     }
 
+    /// The label the editor at `key` names itself with, or `None` when nothing is parked there or what
+    /// is parked has nothing that names it ([`StashedEdit::label`]) — what a draft tab is titled by.
+    ///
+    /// Reads reactively, like [`Self::has_unsaved`]: the tab strip already re-renders per keystroke for
+    /// the unsaved marker, so the label follows the typing without extra wiring.
+    #[must_use]
+    pub fn draft_label(&self, key: &EditKey) -> Option<String> {
+        self.edit_drafts.read().get(key).and_then(|edit| edit.label.clone())
+    }
+
     /// Drops the edit parked under `key` — it was saved, cancelled, or its record closed, so no stale
     /// entry is left to mark the tab unsaved or block a later close. Writes only when there is
     /// something to drop, so the clean re-runs of the write-through effect do not churn the tabstrip.
@@ -846,7 +950,7 @@ impl NavState {
             return false;
         };
         match tab {
-            OpenTab::Draft(_) => true,
+            OpenTab::Draft(_, _) => true,
             OpenTab::Saved(_) => self.has_unsaved(&tab.edit_key()),
         }
     }
@@ -1000,23 +1104,22 @@ impl NavState {
         true
     }
 
-    /// Reports the outcome of the save the shell asked for: `(category, human_id)` names the editor
-    /// that saved (`human_id` is `None` for a category's create draft), `ok` whether it succeeded. A
-    /// no-op unless it names the armed request, so a Save the user clicked themselves never resolves a
-    /// run.
+    /// Reports the outcome of the save the shell asked for: `reported` names the editor that saved, `ok`
+    /// whether it succeeded. A no-op unless it names the armed request exactly, so neither a Save the
+    /// user clicked themselves nor a sibling draft of the same category ever resolves a run.
+    ///
+    /// A *committed* draft reports under the key of the record it stored, not the draft key the run was
+    /// armed with — [`Self::commit_draft`] re-keys the run to match on its way through. A **failed**
+    /// commit stored nothing and so has no record id to name; it reports the draft key.
     ///
     /// On success the record's parked edit is dropped and the next queued record is armed; once the
     /// queue empties the run's [`SaveThen`] terminus is applied. On failure the whole run is abandoned
     /// with every tab left open — the screen has already reported the error.
-    pub fn note_save_finished(&mut self, category: Category, human_id: Option<&str>, ok: bool) {
+    pub fn note_save_finished(&mut self, reported: &EditKey, ok: bool) {
         let Some(request) = self.save_request.peek().clone() else {
             return;
         };
-        let reported = match human_id {
-            Some(human_id) => EditKey::saved(category, human_id),
-            None => EditKey::draft(category),
-        };
-        if request.key != reported {
+        if request.key != *reported {
             return;
         }
         if !ok {
@@ -1082,25 +1185,15 @@ impl NavState {
     /// names the editor that saved, otherwise wherever that editor sits now (the strip may have moved
     /// under the save). `None` when the tab has since been closed, so there is nothing left to close.
     ///
-    /// A committed create draft is the one case where no tab carries `key` any more: [`Self::commit_draft`]
-    /// swapped the stored record into the draft's slot and made it active, so the active tab is the tab
-    /// that was saved.
+    /// A committed create draft needs no special case: [`Self::commit_draft`] re-keys the run to the
+    /// record it stored, and that record's tab is the draft's old slot — so `key` is a key some tab
+    /// carries, and the search below finds it rather than guessing at the active tab.
     fn save_close_index(&self, index: usize, key: &EditKey) -> Option<usize> {
         let records = self.records.peek();
         if records.get(index).is_some_and(|tab| tab.edit_key() == *key) {
             return Some(index);
         }
-        if let Some(found) = records.iter().position(|tab| tab.edit_key() == *key) {
-            return Some(found);
-        }
-        if key.human_id.is_some() {
-            return None;
-        }
-        let active = (*self.active_record.peek())?;
-        let committed = records
-            .get(active)
-            .is_some_and(|tab| !tab.is_draft() && tab.category() == key.category);
-        committed.then_some(active)
+        records.iter().position(|tab| tab.edit_key() == *key)
     }
 
     /// Applies the pending close/quit, discarding the unsaved work (the confirm dialog's Discard) and
@@ -1285,7 +1378,10 @@ impl NavState {
         }
         Self::rekey_by_id(&mut self.edit_drafts, category, old_human_id, &new_human_id);
         Self::rekey_by_id(&mut self.detail_tabs, category, old_human_id, &new_human_id);
-        self.rekey_save_run(category, old_human_id, &new_human_id);
+        self.rekey_save_run(
+            &EditKey::saved(category, old_human_id),
+            &EditKey::saved(category, &new_human_id),
+        );
         let mut records = self.records.write();
         let Some(OpenTab::Saved(record)) = records
             .iter_mut()
@@ -1318,24 +1414,23 @@ impl NavState {
         }
     }
 
-    /// Moves an armed/queued save from `old_human_id` to `new_human_id` (a rename), so a save that
-    /// renamed its own record still reports back under a key the run recognises — otherwise the run
-    /// would hang with the tab never closing. A no-op when no run names the old id.
-    fn rekey_save_run(&mut self, category: Category, old_human_id: &str, new_human_id: &str) {
-        let old = EditKey::saved(category, old_human_id);
-        let new = EditKey::saved(category, new_human_id);
+    /// Moves an armed/queued save from `old` to `new`, so an editor whose *identity* changed under the
+    /// save still reports back under a key the run recognises — otherwise the run would hang with the tab
+    /// never closing. Both changes of identity go through here: a rename ([`Self::rename_record`]) and a
+    /// draft becoming the record it stored ([`Self::commit_draft`]). A no-op when no run names `old`.
+    fn rekey_save_run(&mut self, old: &EditKey, new: &EditKey) {
         if self
             .save_request
             .peek()
             .as_ref()
-            .is_some_and(|request| request.key == old)
+            .is_some_and(|request| request.key == *old)
             && let Some(request) = self.save_request.write().as_mut()
         {
             request.key = new.clone();
         }
-        let queued = self.save_queue.peek().iter().position(|key| *key == old);
+        let queued = self.save_queue.peek().iter().position(|key| key == old);
         if let Some(index) = queued {
-            self.save_queue.write()[index] = new;
+            self.save_queue.write()[index] = new.clone();
         }
     }
 

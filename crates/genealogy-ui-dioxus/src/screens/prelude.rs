@@ -13,11 +13,11 @@ pub use genealogy_ui::{
     EventEdit, EventRefVm, FactVm, FamilyDetail, FamilyEdit, FamilyEventVm, FamilyVm, Intent, IntentOutcome, JumpVm,
     Localizer, MediaDetail, MediaEdit, MediaRefVm, MergeBlockedVm, MergeCompareVm, MergeFailure, MergeFieldRowVm,
     MergePersons, NameVm, NewCitationFields, NewPlaceFields, NewSourceFields, NoteDetail, NoteEdit, Panel,
-    PersonChangeSetRequest, PersonDetail, PersonDraft, PersonEdit, PickerSelection, PlaceDetail, PlaceEdit,
-    ProvenanceDraft, RecordDraft, RecordRef, RepositoryDetail, RepositoryEdit, RestrictionKind, RowVm,
-    SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, SubmitResult, TagDetail, TagDraft, TagUsageGroupVm,
-    TimelineRowVm, Tool, TranslationVm, UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs,
-    family_tabs, media_tabs, note_tabs, person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
+    PersonDetail, PersonDraft, PersonEdit, PickerSelection, PlaceDetail, PlaceEdit, ProvenanceDraft, RecordDraft,
+    RecordRef, RepositoryDetail, RepositoryEdit, RestrictionKind, RowVm, SharedAncestorVm, SourceCitationVm,
+    SourceDetail, SourceEdit, SubmitResult, TagDetail, TagDraft, TagUsageGroupVm, TimelineRowVm, Tool, TranslationVm,
+    UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs, family_tabs, media_tabs, note_tabs,
+    person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
 };
 
 pub use crate::app::{AppCtx, AppState};
@@ -39,11 +39,11 @@ pub use crate::services::{
     submit_plugin_panel,
 };
 pub use crate::shell::ChromeCtx;
-pub use crate::shell::nav_state::{NavState, data_version_ticket};
+pub use crate::shell::nav_state::{DraftId, EditKey, NavState, data_version_ticket};
 pub use crate::vocabulary_render::{PanelAction, PanelView};
 
 pub use super::record_form::{
-    RecordActionLabels, RecordEditState, apply_record_edits, finish_draft_commit, finish_record_save,
+    DraftCommit, RecordActionLabels, RecordEditState, apply_record_edits, finish_draft_commit, finish_record_save,
     record_edit_provenance, record_head_actions, record_keydown, use_record_create, use_record_edit,
     use_save_on_request,
 };

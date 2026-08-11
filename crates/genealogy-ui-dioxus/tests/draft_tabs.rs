@@ -3,17 +3,18 @@
 //!
 //! Like `dock.rs`, each probe provides a `NavState`, drives its methods in `use_hook`, and renders a
 //! marker block the test inspects: `TABS:` is the open-tab count, `ACTIVE:` the active index (or
-//! `NONE`), `KIND:` the active tab's kind (`DRAFT`/`SAVED`/`NONE`), `REF:` the active *saved* record
-//! label (or `NONE`, so a draft reads `NONE`), and `DEST:` the active destination id. The marker
-//! probes render the real [`RecordTabstrip`], so they need a `ChromeCtx` too.
+//! `NONE`), `KIND:` the active tab's kind (`DRAFT`/`SAVED`/`NONE`), `KINDS:` every tab's kind in strip
+//! order (`D`/`S` per index), `REF:` the active *saved* record label (or `NONE`, so a draft reads
+//! `NONE`), `KEYS:` every tab's editor key in strip order, and `DEST:` the active destination id. The
+//! marker probes render the real [`RecordTabstrip`], so they need a `ChromeCtx` too.
 
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use genealogy_ui::{Category, Destination, ProvenanceDraft, RecordRef, TagDraft, Tool};
+use genealogy_ui::{Category, Destination, NoteDraft, ProvenanceDraft, RecordRef, TagDraft, Tool};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::shell::ChromeCtx;
-use genealogy_ui_dioxus::shell::nav_state::{EditKey, NavState, OpenTab, StashedEdit};
+use genealogy_ui_dioxus::shell::nav_state::{DraftId, EditKey, NavState, OpenTab, StashedEdit};
 use genealogy_ui_dioxus::shell::tabstrip::RecordTabstrip;
 use unic_langid::LanguageIdentifier;
 
@@ -65,19 +66,34 @@ fn probe(nav: &NavState) -> Element {
         .read()
         .map_or_else(|| "NONE".to_owned(), |index| index.to_string());
     let kind = match nav.active_tab() {
-        Some(OpenTab::Draft(_)) => "DRAFT",
+        Some(OpenTab::Draft(_, _)) => "DRAFT",
         Some(OpenTab::Saved(_)) => "SAVED",
         None => "NONE",
     };
+    let kinds = nav
+        .records
+        .read()
+        .iter()
+        .map(|tab| if tab.is_draft() { "D" } else { "S" })
+        .collect::<String>();
     let reference = nav
         .active_record_ref()
         .map_or_else(|| "NONE".to_owned(), |record| record.label);
+    let keys = nav
+        .records
+        .read()
+        .iter()
+        .map(|tab| tab.edit_key().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
     let dest = dest_id(*nav.active.read());
     rsx! {
         div { "TABS:{tabs}" }
         div { "ACTIVE:{active}" }
         div { "KIND:{kind}" }
+        div { "KINDS:{kinds}" }
         div { "REF:{reference}" }
+        div { "KEYS:[{keys}]" }
         div { "DEST:{dest}" }
     }
 }
@@ -101,8 +117,8 @@ fn commit_replaces_draft_in_place() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record(Category::People, "I0001", "Ada"));
-        nav.open_create(Category::Families);
-        nav.commit_draft(record(Category::Families, "F0001", "Bell family"));
+        let draft = nav.open_create(Category::Families);
+        nav.commit_draft(draft, record(Category::Families, "F0001", "Bell family"));
     });
     probe(&nav)
 }
@@ -111,10 +127,101 @@ fn cancel_closes_the_draft() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record(Category::People, "I0001", "Ada"));
-        nav.open_create(Category::Families);
-        nav.cancel_draft(Category::Families);
+        let draft = nav.open_create(Category::Families);
+        nav.cancel_draft(draft);
     });
     probe(&nav)
+}
+
+/// Two drafts of one category, the *first* of which is then cancelled.
+fn cancel_the_first_of_two_drafts() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let first = nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        nav.cancel_draft(first);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn cancel_draft_closes_only_the_named_draft() {
+    // Cancel is addressed by draft, not by category: with two drafts open, "the category's draft" would
+    // close whichever came first regardless of which form the operator clicked Cancel on.
+    let html = render(cancel_the_first_of_two_drafts);
+    assert!(html.contains("TABS:1"), "one draft closed:\n{html}");
+    assert!(
+        html.contains("KEYS:[people/#2]"),
+        "and it is the cancelled one that went, not its sibling:\n{html}"
+    );
+}
+
+/// Two drafts of one category, the *first* of which is then committed.
+fn commit_the_first_of_two_drafts() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let first = nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        nav.commit_draft(first, record(Category::People, "I0001", "Ada"));
+    });
+    probe(&nav)
+}
+
+#[test]
+fn commit_draft_replaces_only_the_named_draft() {
+    let html = render(commit_the_first_of_two_drafts);
+    assert!(
+        html.contains("TABS:2"),
+        "the commit replaced a tab, it did not add one:\n{html}"
+    );
+    assert!(
+        html.contains("KEYS:[people/I0001,people/#2]"),
+        "the saved record took the committed draft's slot, and its sibling is untouched:\n{html}"
+    );
+    assert!(
+        html.contains("KINDS:SD"),
+        "only the committed tab became a record:\n{html}"
+    );
+    assert!(html.contains("ACTIVE:0"), "and it is the active tab:\n{html}");
+    assert!(html.contains("REF:Ada"), "showing the stored record:\n{html}");
+}
+
+/// A research note opened from a person's "Research notes" tab, then a second research-note draft
+/// opened by hand beside it.
+fn research_note_seeded_about_a_person() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_research_note_about(Category::People, "I0001".to_owned());
+        nav.open_create(Category::ResearchNotes);
+    });
+    let seed = nav.research_note_subject.read().clone().map_or_else(
+        || "NONE".to_owned(),
+        |(draft, category, human_id)| format!("{draft} {} {human_id}", category.id()),
+    );
+    rsx! {
+        div { "SEED:{seed}" }
+        {probe(&nav)}
+    }
+}
+
+#[test]
+fn a_seeded_research_note_names_the_draft_it_opened() {
+    // The seed is consumed once, by a create pane's mount-time effect. With several research-note drafts
+    // open, the pane that consumes it has to be the one it was opened for — an unaddressed seed would be
+    // swallowed by whichever draft mounted next, silently giving it the wrong subject.
+    let html = render(research_note_seeded_about_a_person);
+    assert!(
+        html.contains("SEED:#1 people I0001"),
+        "the seed names the draft it opened, alongside the subject:\n{html}"
+    );
+    assert!(
+        html.contains("KEYS:[research-notes/#1,research-notes/#2]"),
+        "and the second ⌘N is a draft of its own, with no seed of its own:\n{html}"
+    );
+    assert!(
+        html.contains("DEST:research-notes"),
+        "the seeded draft's category is revealed so its tab is visible:\n{html}"
+    );
 }
 
 fn reveal_from_tool_switches_category() -> Element {
@@ -144,9 +251,36 @@ fn open_create_opens_an_active_draft_tab() {
 }
 
 #[test]
-fn open_create_twice_focuses_the_existing_draft() {
+fn open_create_twice_opens_a_second_draft() {
+    // #260: two new people have to be sketchable side by side, so the second ⌘N starts another draft
+    // rather than re-focusing the first — no reuse, not even of an empty one.
     let html = render(open_draft_twice_same_category);
-    assert!(html.contains("TABS:1"), "at most one draft per category:\n{html}");
+    assert!(html.contains("TABS:2"), "the second ⌘N opens another draft:\n{html}");
+    assert!(html.contains("KINDS:DD"), "both tabs are drafts:\n{html}");
+    assert!(html.contains("ACTIVE:1"), "the new draft is the active tab:\n{html}");
+    assert!(html.contains("KIND:DRAFT"), "and it is a draft, not a record:\n{html}");
+}
+
+/// One draft per category in two categories, so the ids they were minted under can be compared.
+fn open_drafts_in_two_categories() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::Tags);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn each_draft_is_minted_under_its_own_id() {
+    // The id is what tells two drafts apart everywhere downstream — the parked buffer, the tab, the
+    // pane — so the minting itself is worth pinning: per `NavState`, counting up from 1.
+    let html = render(open_drafts_in_two_categories);
+    assert!(
+        html.contains("KEYS:[people/#1,tags/#2]"),
+        "each draft is keyed by its own minted id:\n{html}"
+    );
+    assert!(html.contains("KINDS:DD"), "both tabs are drafts:\n{html}");
 }
 
 #[test]
@@ -292,4 +426,204 @@ fn reveal_within_a_category_leaves_the_list() {
         html.contains("REF:Birth"),
         "the linked record still opens as the active tab:\n{html}"
     );
+}
+
+// ---- How a draft tab names itself (issue #260) -----------------------------------------------------
+
+/// Parks a create buffer for `draft` holding `name` as the tag's name — what typing into a Tags create
+/// form writes through, and what the tab is then titled by.
+fn name_draft(nav: &mut NavState, category: Category, draft: DraftId, name: &str) {
+    let typed = TagDraft {
+        name: name.to_owned(),
+        ..TagDraft::new()
+    };
+    nav.stash_edit(
+        EditKey::draft(category, draft),
+        StashedEdit::new(typed, TagDraft::new(), ProvenanceDraft::default()),
+    );
+}
+
+/// Parks a create buffer that is dirty but names nothing (a tag's priority changed, its name still
+/// blank) — a draft with unsaved work and no title.
+fn unnamed_dirty_draft(nav: &mut NavState, category: Category, draft: DraftId) {
+    let typed = TagDraft {
+        priority: "7".to_owned(),
+        ..TagDraft::new()
+    };
+    nav.stash_edit(
+        EditKey::draft(category, draft),
+        StashedEdit::new(typed, TagDraft::new(), ProvenanceDraft::default()),
+    );
+}
+
+/// One People draft with a name typed into it.
+fn tabstrip_with_a_named_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        name_draft(&mut nav, Category::People, draft, "Ada Lovelace");
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn a_draft_tab_shows_the_name_typed_into_it() {
+    let html = render(tabstrip_with_a_named_draft);
+    assert!(
+        html.contains(">Ada Lovelace<"),
+        "the tab is titled by what was typed, not by its category:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Ada Lovelace — unsaved changes""#),
+        "the unsaved accessible name uses the same label:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Close Ada Lovelace""#),
+        "and so does the close control's:\n{html}"
+    );
+    assert!(
+        !html.contains("New People"),
+        "a named draft never also reads as the generic new record:\n{html}"
+    );
+}
+
+/// A People draft that is dirty but has nothing that names it.
+fn tabstrip_with_a_dirty_unnamed_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        unnamed_dirty_draft(&mut nav, Category::People, draft);
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn a_draft_dirty_outside_its_name_keeps_the_localized_fallback() {
+    // Dirtiness is not a name: this draft has unsaved work but nothing to be titled by, so the tab reads
+    // as a new record rather than as an empty string.
+    let html = render(tabstrip_with_a_dirty_unnamed_draft);
+    assert!(html.contains(">New People<"), "the fallback label shows:\n{html}");
+    assert!(html.contains("unsaved-dot"), "and it is still marked unsaved:\n{html}");
+}
+
+/// Two People drafts, neither typed into.
+fn tabstrip_with_two_empty_drafts() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::People);
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn two_empty_drafts_of_one_category_are_named_apart() {
+    // Two tabs with one accessible name is the a11y defect the ordinal exists for. The count has to be
+    // exact: `"New People (2)"` *contains* `"New People"`, so a bare `contains` proves nothing.
+    let html = render(tabstrip_with_two_empty_drafts);
+    assert_eq!(
+        html.matches(r#"aria-label="Close New People""#).count(),
+        1,
+        "exactly one tab is the unnumbered New People:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"aria-label="Close New People (2)""#).count(),
+        1,
+        "and the second carries its ordinal:\n{html}"
+    );
+}
+
+/// A named People draft, then an empty one.
+fn tabstrip_with_a_named_then_an_empty_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let first = nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        name_draft(&mut nav, Category::People, first, "Ada Lovelace");
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn typing_into_one_draft_does_not_renumber_its_neighbour() {
+    // The ordinal is the draft's position among its category's drafts, not its position among the
+    // *unnamed* ones — otherwise naming draft 1 would silently renumber draft 2 to (1) while the operator
+    // watched.
+    let html = render(tabstrip_with_a_named_then_an_empty_draft);
+    assert!(
+        html.contains(">Ada Lovelace<"),
+        "draft 1 is titled by its name:\n{html}"
+    );
+    assert!(
+        html.contains(">New People (2)<"),
+        "and draft 2 keeps the ordinal it had:\n{html}"
+    );
+}
+
+/// One draft in each of two categories, neither typed into.
+fn tabstrip_with_a_draft_in_two_categories() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::Tags);
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn categories_do_not_share_an_ordinal() {
+    // The ordinal counts within a category: a lone draft in each of two categories is already named
+    // apart by the entity, so numbering either would be noise.
+    let html = render(tabstrip_with_a_draft_in_two_categories);
+    assert!(html.contains(">New People<"), "the People draft is unnumbered:\n{html}");
+    assert!(html.contains(">New Tags<"), "and so is the Tags draft:\n{html}");
+    assert!(
+        !html.contains("(2)"),
+        "no ordinal is spent on drafts of different categories:\n{html}"
+    );
+}
+
+/// A Notes draft holding a long body, so the label has to be cut down to a tab.
+fn tabstrip_with_a_long_note_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::Notes);
+        let typed = NoteDraft {
+            text: format!("# Estate inventory\n\n{}", "x".repeat(200)),
+            ..NoteDraft::new()
+        };
+        nav.stash_edit(
+            EditKey::draft(Category::Notes, draft),
+            StashedEdit::new(typed, NoteDraft::new(), ProvenanceDraft::default()),
+        );
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn a_note_drafts_tab_is_its_first_line_not_its_whole_text() {
+    let html = render(tabstrip_with_a_long_note_draft);
+    assert!(
+        html.contains(">Estate inventory<"),
+        "the heading names the tab, with its # stripped:\n{html}"
+    );
+    assert!(!html.contains("xxxxx"), "and the body never reaches the strip:\n{html}");
 }

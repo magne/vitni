@@ -6,8 +6,10 @@
 # with it.
 #
 # Six tabs overflow the strip at the app's own default 1280x840 window, which is a realistic count:
-# one open record plus a create draft per category. `⌘N` adds an `OpenTab::Draft(Category)` tab
-# without a save, so the tabs cost two steps each instead of a whole create form.
+# one open record plus a create draft per category. `⌘N` adds an `OpenTab::Draft(Category, DraftId)` tab
+# without a save, so the tabs cost two steps each instead of a whole create form. One `⌘N` per
+# *distinct* category, so every draft here is the first of its own and reads "New <entity>" with no
+# ordinal (#260) — which is what keeps the measured tab boxes below valid.
 #
 # Measured on this scenario's own `filled` shot: the `.rtab` box paints y 86-119 with the label glyphs
 # on 99-107, and `.tabstrip`'s border-bottom on 121. Tab boxes are Kristiansand 582-698, New Places

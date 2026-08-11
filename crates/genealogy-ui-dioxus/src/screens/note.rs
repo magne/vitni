@@ -13,23 +13,26 @@ fn note_type_choices() -> [NoteType; 4] {
 /// The create-mode note record: an uncommitted [`NoteDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). Save commits the whole note; Cancel discards.
 #[component]
-pub fn NoteCreateRecord() -> Element {
+pub fn NoteCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::NoteDraft>(Category::Notes);
+    let record = use_record_create::<genealogy_ui::NoteDraft>(Category::Notes, draft_id);
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::NoteDraft, ProvenanceDraft)| {
         let request = draft.to_request();
-        let label = request.text.clone().unwrap_or_default();
         let services = services.clone();
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_note_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Notes, Some(label), created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit::new(Category::Notes, draft_id, &draft, created),
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -39,10 +42,10 @@ pub fn NoteCreateRecord() -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Notes, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::Notes, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Notes) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,
@@ -305,7 +308,7 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Notes, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::Notes, &human_id), record, save_now);
 
     match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },

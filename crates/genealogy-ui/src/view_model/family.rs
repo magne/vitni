@@ -2,7 +2,7 @@ use super::{
     AttachedRefVm, ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType,
     FamilyChangeSetRequest, FamilyEdit, FamilyForPerson, FamilyRow, FamilySummary, GenealogicalDate, HistoryEntryVm,
     Localizer, MediaRefVm, NewPersonFields, PartnerRequest, PersonFamilyRole, RecordDraft, RestrictionKind, RowVm,
-    TagRef, citation_ref_from_ref, non_blank,
+    TagRef, citation_ref_from_ref, line_label, non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -507,6 +507,24 @@ impl RecordDraft for FamilyDraft {
     fn is_valid(&self) -> bool {
         self.existing_human_id.is_some() || !self.partners.is_empty()
     }
+
+    fn display_label(&self) -> Option<String> {
+        let mut names = Vec::new();
+        for partner in &self.partners {
+            let name = match partner {
+                PartnerInput::Existing(selection) => selection.title.trim().to_owned(),
+                PartnerInput::New(fields) => [fields.given.trim(), fields.surname.trim()]
+                    .into_iter()
+                    .filter(|part| !part.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            };
+            if !name.is_empty() {
+                names.push(name);
+            }
+        }
+        line_label(&names.join(" & "))
+    }
 }
 
 #[cfg(test)]
@@ -654,5 +672,42 @@ mod family_draft_tests {
         let edits = draft.edits_against(&seed());
         assert_eq!(edits.len(), 1);
         assert!(matches!(&edits[0], FamilyEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod family_display_label_tests {
+    use super::{FamilyDraft, NewPersonFields, PartnerInput, RecordDraft};
+    use crate::picker::PickerSelection;
+
+    #[test]
+    fn the_label_joins_the_partners_with_an_ampersand() {
+        let mut draft = FamilyDraft::new();
+        draft.add_partner(PickerSelection {
+            human_id: "I0001".to_owned(),
+            title: "Ada Lovelace".to_owned(),
+        });
+        draft.add_new_partner(NewPersonFields {
+            given: "Bob".to_owned(),
+            surname: "Byron".to_owned(),
+        });
+        assert_eq!(draft.display_label(), Some("Ada Lovelace & Bob Byron".to_owned()));
+    }
+
+    #[test]
+    fn one_partner_names_the_family_alone() {
+        let draft = FamilyDraft {
+            partners: vec![PartnerInput::New(NewPersonFields {
+                given: String::new(),
+                surname: "Byron".to_owned(),
+            })],
+            ..FamilyDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("Byron".to_owned()));
+    }
+
+    #[test]
+    fn a_draft_with_no_partners_has_no_label() {
+        assert_eq!(FamilyDraft::new().display_label(), None);
     }
 }

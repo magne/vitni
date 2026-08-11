@@ -572,11 +572,46 @@ pub fn create_record_header(title: &str, draft_badge: &str, actions: Element) ->
 /// The create pane's whole frame (`record-editing.html` §6): the draft header plus the body inside
 /// the same `.tab-body` container edit mode renders into, so create and edit share one geometry —
 /// the fields card and the provenance block sit at the same inset in both modes.
+///
+/// Carries [`CreateFormFocus`], so opening a create form puts the caret in it.
 pub fn create_record_frame(title: &str, draft_badge: &str, actions: Element, body: Element) -> Element {
     rsx! {
         {create_record_header(title, draft_badge, actions)}
-        div { class: "tab-body", {body} }
+        div { class: "tab-body", "data-create-form": "true", {body} }
+        CreateFormFocus {}
     }
+}
+
+/// The script that puts the caret in the mounted create form's first enabled field, if it has one.
+const FOCUS_CREATE_FORM: &str = r"
+const form = document.querySelector('[data-create-form]');
+if (form !== null) {
+  const first = form.querySelector(
+    'input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])',
+  );
+  if (first instanceof HTMLElement) first.focus();
+}
+";
+
+/// Puts the caret in a freshly mounted create form's first field — markup-free, mounted by
+/// [`create_record_frame`], so it arms exactly once per create pane and needs no flag of its own.
+///
+/// Without it a second `⌘N` is a focus cliff: the create pane is keyed per draft
+/// (`screens/record_detail.rs`), so opening another draft of the same category **destroys** the input
+/// the caret was in, and focus falls to `<body>` — where the next keystroke reaches the shell's own
+/// dispatcher instead of the new form (`?` opens the help sheet, `g` arms the g-prefix). Before several
+/// drafts per category (#260) the second `⌘N` was a no-op and the cliff could not be reached.
+///
+/// Same shape as [`DialogFocus`](crate::shell::focus_trap::DialogFocus): the script runs from an effect,
+/// because it reads the mounted DOM, and `document::eval` is a no-op under SSR, which has no document.
+#[component]
+pub fn CreateFormFocus() -> Element {
+    use_effect(|| {
+        spawn(async move {
+            let _ = document::eval(FOCUS_CREATE_FORM).await;
+        });
+    });
+    rsx! {}
 }
 
 /// The evidence-first source cue: a source-count link, or a no-source flag when unsourced.

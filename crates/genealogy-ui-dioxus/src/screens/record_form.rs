@@ -15,7 +15,7 @@ use genealogy_ui::{Category, Localizer, ProvenanceDraft, RecordDraft, RecordRef}
 use crate::components::{Button, ButtonVariant};
 use crate::screens::provenance_block;
 use crate::services::Services;
-use crate::shell::nav_state::{EditKey, NavState, StashedEdit};
+use crate::shell::nav_state::{DraftId, EditKey, NavState, StashedEdit};
 
 /// The buffered edit state of one record: whether it is being edited, the committed `seed`, the live
 /// `draft`, and the provenance collected once per save (`record-editing.html` §5b).
@@ -96,14 +96,18 @@ pub fn use_record_edit<D: RecordDraft>(category: Category, human_id: &str, seed:
     state
 }
 
-/// The edit state for a create pane: the category's create draft as parked in the shell if one is in
-/// progress, otherwise an empty draft — in edit mode from the start either way
+/// The edit state for the create pane of the draft `draft`: that draft's buffer as parked in the shell
+/// if it is in progress, otherwise an empty draft — in edit mode from the start either way
 /// (`record-editing.html` §6). Never reseeds; the draft is discarded on Cancel
 /// ([`NavState::cancel_draft`]) and spent by Save ([`NavState::commit_draft`]), both of which drop the
 /// parked entry.
+///
+/// Keyed by the draft's own [`DraftId`], never by its category alone: several drafts of one category can
+/// be open at once (#260), and a category-wide key would give them one shared buffer — where the second
+/// pane's write-through, clean on mount, drops the first draft's typed text.
 #[must_use]
-pub fn use_record_create<D: RecordDraft>(category: Category) -> RecordEditState<D> {
-    let key = EditKey::draft(category);
+pub fn use_record_create<D: RecordDraft>(category: Category, draft: DraftId) -> RecordEditState<D> {
+    let key = EditKey::draft(category, draft);
     // A create form has nothing to read, so a fresh buffer starts in edit mode.
     let state = use_stashed_edit(&key, true, &D::default());
     use_edit_write_through(key, state);
@@ -180,8 +184,9 @@ fn use_edit_write_through<D: RecordDraft>(key: EditKey, state: RecordEditState<D
 }
 
 /// Runs this pane's own Save when the shell asks for it — the close/quit confirm's **Save** /
-/// **Save all** (issue #240). `category` + `human_id` name the editor (`None` for a category's create
-/// draft), `save` is the screen's existing save closure, exactly as its Save button calls it.
+/// **Save all** (issue #240). `key` names the editor — [`EditKey::saved`] for a stored record,
+/// [`EditKey::draft`] for one of a category's create drafts — and `save` is the screen's existing save
+/// closure, exactly as its Save button calls it.
 ///
 /// The shell cannot save generically: save is per-screen and differently shaped per aggregate, so
 /// `NavState::save_then_close` / `save_all_then_quit` arm the request, activate the record's tab so
@@ -197,17 +202,8 @@ fn use_edit_write_through<D: RecordDraft>(key: EditKey, state: RecordEditState<D
 /// Save button (`record_head_actions`): without it a shell-driven save (the close/quit confirm's
 /// **Save**, or `⌘S`) leaves the pane in edit mode with a stale `seed`, so the record still reads as
 /// dirty, keeps its parked buffer, and keeps the tabstrip's unsaved marker lit.
-pub fn use_save_on_request<D: RecordDraft>(
-    category: Category,
-    human_id: Option<&str>,
-    mut state: RecordEditState<D>,
-    save: Callback<()>,
-) {
+pub fn use_save_on_request<D: RecordDraft>(key: EditKey, mut state: RecordEditState<D>, save: Callback<()>) {
     let mut nav = use_context::<NavState>();
-    let key = match human_id {
-        Some(human_id) => EditKey::saved(category, human_id),
-        None => EditKey::draft(category),
-    };
     let mut ran = use_signal(|| false);
     use_effect(move || {
         let armed = nav.save_request.read().as_ref().map(|request| request.key.clone());
@@ -225,7 +221,7 @@ pub fn use_save_on_request<D: RecordDraft>(
             save.call(());
             state.editing.set(false);
         } else {
-            nav.note_save_finished(key.category, key.human_id.as_deref(), false);
+            nav.note_save_finished(&key, false);
         }
     });
 }
@@ -384,47 +380,89 @@ pub fn finish_record_save(
                 nav.rename_record(category, current, effective.clone());
             }
             nav.notify(saved.to_owned());
-            nav.note_save_finished(category, Some(&effective), true);
+            nav.note_save_finished(&EditKey::saved(category, &effective), true);
         }
         Err(message) => {
             nav.notify_error(message);
-            nav.note_save_finished(category, Some(current), false);
+            nav.note_save_finished(&EditKey::saved(category, current), false);
+        }
+    }
+}
+
+/// Which draft a create form's commit lands in, and the already-localized strings the stored record is
+/// announced with — [`finish_draft_commit`]'s subject, bundled so the call stays inside the positional
+/// parameter budget.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DraftCommit {
+    /// The aggregate category the draft belongs to.
+    pub category: Category,
+    /// The draft being committed — which of that category's open drafts this is.
+    pub draft_id: DraftId,
+    /// The label the stored record's tab takes, or `None`/empty to fall back to the record's own id.
+    pub label: Option<String>,
+    /// The "created" confirmation notice.
+    pub created: String,
+}
+
+impl DraftCommit {
+    /// The commit of `draft` into `draft_id`'s tab in `category`, announced with `created`.
+    ///
+    /// The stored record takes the label the draft already names itself with
+    /// ([`RecordDraft::display_label`]), so a tab does not rename itself the moment it is saved — and no
+    /// screen gets to invent its own rule for it, which is how a note's *whole text* and a media
+    /// object's *whole path* used to end up as tab labels.
+    #[must_use]
+    pub fn new<D: RecordDraft>(category: Category, draft_id: DraftId, draft: &D, created: String) -> Self {
+        Self {
+            category,
+            draft_id,
+            label: draft.display_label(),
+            created,
         }
     }
 }
 
 /// Finishes a create form's commit: on success marks the workspace changed (so the Explorer list and
-/// rail counts refetch, same as an edit save), the draft tab becomes the stored record in place
-/// ([`NavState::commit_draft`]) labelled `label` — or the record's own id when that is empty or absent
-/// — and shows `created` as the shell's confirmation notice (create had no completion feedback at all
-/// before #208); on failure the error is shown as a sticky shell notice and the draft is left as it was.
+/// rail counts refetch, same as an edit save), `commit.draft`'s tab becomes the stored record in place
+/// ([`NavState::commit_draft`]) labelled `commit.label` — or the record's own id when that is empty or
+/// absent — and shows `commit.created` as the shell's confirmation notice (create had no completion
+/// feedback at all before #208); on failure the error is shown as a sticky shell notice and the draft is
+/// left as it was.
 ///
 /// Every `*CreateRecord` screen ends its save here, so the close/quit confirm's Save can drive a create
 /// draft through the same path a saved record takes ([`use_save_on_request`]).
-pub fn finish_draft_commit(
-    committed: Result<String, String>,
-    category: Category,
-    label: Option<String>,
-    created: String,
-    mut nav: NavState,
-) {
+pub fn finish_draft_commit(committed: Result<String, String>, commit: DraftCommit, mut nav: NavState) {
+    let DraftCommit {
+        category,
+        draft_id,
+        label,
+        created,
+    } = commit;
     match committed {
         Ok(human_id) => {
             nav.mark_changed();
+            // The outcome is reported under the *stored record's* key, because `commit_draft` has just
+            // re-keyed any save run from the draft onto it. The failure arm below reports the **draft**
+            // key instead — nothing was stored, so there is no record id to name and the run is still
+            // armed on the draft. The asymmetry is the point; collapsing the two hangs one of them.
+            let saved = EditKey::saved(category, &human_id);
             let label = label
                 .filter(|label| !label.is_empty())
                 .unwrap_or_else(|| human_id.clone());
-            nav.commit_draft(RecordRef {
-                category,
-                human_id,
-                label,
-            });
+            nav.commit_draft(
+                draft_id,
+                RecordRef {
+                    category,
+                    human_id,
+                    label,
+                },
+            );
             nav.notify(created);
-            nav.note_save_finished(category, None, true);
+            nav.note_save_finished(&saved, true);
         }
         Err(message) => {
             nav.notify_error(message);
-            nav.note_save_finished(category, None, false);
+            nav.note_save_finished(&EditKey::draft(category, draft_id), false);
         }
     }
 }

@@ -17,26 +17,29 @@ use crate::services::{map_config, resolve_map_source};
 /// detail pane (`record-editing.html` §6). Save commits the whole place; Cancel discards. Save is
 /// blocked while the coordinate pair is half-filled or unparseable (§7).
 #[component]
-pub fn PlaceCreateRecord() -> Element {
+pub fn PlaceCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::PlaceDraft>(Category::Places);
+    let record = use_record_create::<genealogy_ui::PlaceDraft>(Category::Places, draft_id);
     let mut draft = record.draft;
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::PlaceDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
         };
-        let label = request.name.clone().unwrap_or_default();
         let services = services.clone();
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_place_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Places, Some(label), created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit::new(Category::Places, draft_id, &draft, created),
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -46,10 +49,10 @@ pub fn PlaceCreateRecord() -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Places, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::Places, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Places) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,
@@ -456,7 +459,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Places, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::Places, &human_id), record, save_now);
 
     // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
     let media_viewing = use_signal(|| None::<MediaRefVm>);

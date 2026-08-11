@@ -22,6 +22,18 @@ pub trait RecordDraft: Clone + PartialEq + Default + 'static {
     /// Whether every field is present and valid — the Save gate (together with dirtiness).
     fn is_valid(&self) -> bool;
 
+    /// How the record names itself from what has been typed so far, or `None` while nothing typed
+    /// names it — the label an unsaved draft's tab shows, and **the same string the stored record is
+    /// labelled with on commit**, so a tab does not rename itself the moment it is saved.
+    ///
+    /// Free-text fields go through `line_label`, so a whole note or path can never become a tab label.
+    ///
+    /// `None` is a decision, not an omission: four aggregates are titled by something a draft cannot
+    /// know — an Event by its *localized* type (this trait takes no `Localizer`), a Citation by the
+    /// source it cites, and a `DnaTest` / `DnaMatch` by person names the draft holds only ids for. Those
+    /// return `None` and their tabs keep the localized "New <entity>".
+    fn display_label(&self) -> Option<String>;
+
     /// Whether the draft differs from its committed `seed` (an unsaved change).
     fn is_dirty_against(&self, seed: &Self) -> bool {
         self != seed

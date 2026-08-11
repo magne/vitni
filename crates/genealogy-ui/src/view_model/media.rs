@@ -1,6 +1,6 @@
 use super::{
     AttachedRefVm, CitationRefVm, DateDraft, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest, MediaEdit,
-    RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, line_label, non_blank,
 };
 
 /// A record that references a media object or note (Media "Used by" / Note "References"): its kind
@@ -311,6 +311,10 @@ impl RecordDraft for MediaDraft {
     fn is_valid(&self) -> bool {
         !self.date.is_invalid()
     }
+
+    fn display_label(&self) -> Option<String> {
+        line_label(&file_basename(self.file_path.trim())).or_else(|| line_label(&self.web_path))
+    }
 }
 
 #[cfg(test)]
@@ -419,5 +423,37 @@ mod media_draft_tests {
     #[test]
     fn a_blank_create_date_maps_to_none() {
         assert!(MediaDraft::new().to_request().date.is_none());
+    }
+}
+
+#[cfg(test)]
+mod media_display_label_tests {
+    use super::{MediaDraft, RecordDraft};
+
+    #[test]
+    fn the_label_is_the_files_basename_not_its_whole_path() {
+        let draft = MediaDraft {
+            file_path: "/home/ada/photos/ada.jpg".to_owned(),
+            ..MediaDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("ada.jpg".to_owned()));
+    }
+
+    #[test]
+    fn a_web_reference_names_a_draft_with_no_local_file() {
+        let draft = MediaDraft {
+            web_path: "https://example.org/ada.jpg".to_owned(),
+            ..MediaDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("https://example.org/ada.jpg".to_owned()));
+    }
+
+    #[test]
+    fn a_draft_with_no_location_has_no_label() {
+        let draft = MediaDraft {
+            mime: "image/jpeg".to_owned(),
+            ..MediaDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }

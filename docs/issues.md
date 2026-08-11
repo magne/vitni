@@ -138,14 +138,25 @@ long-standing "DNA match views in the UI" item is closed.
   `SidePanel` renders *inside* `.app`, so inerting the shell would inert the panel with it. The fix is
   a layer the panel can render into as a sibling of `.app` (what the overlays already use), not
   another `inert` clause.
-- **Only one unsaved new record per category can exist.** A second `⌘N` (or tabstrip `+`) for the same
-  category re-focuses the open draft instead of starting another (`NavState::open_create`), so two new
-  people cannot be sketched side by side. Deliberate today and test-locked, because the identity is the
-  category: `OpenTab::Draft(Category)` carries no draft id and `edit_key()` maps it to
-  `EditKey::draft(category)`, which is also the stash key, the create pane's component key, and how
-  `commit_draft`/`cancel_draft`/`note_save_finished` find their target — two drafts would share one
-  parked buffer and one component instance. Lifting the limit means threading a draft id through all of
-  those; the tabstrip only needs its label disambiguated. — #260
+- **Back/forward cannot return to a draft tab.** `NavLocation.record` is `(Category, String)`, a saved
+  record's key, so a draft is never recorded in the history and `⌘←`/`⌘→` step past it to the last saved
+  record instead. True before several drafts per category (#260) and unchanged by it, but a strip that
+  can now hold four drafts makes it easier to notice. `NavLocation` lives in `genealogy-ui`
+  (framework-neutral, ADR 0008) and a history entry naming a draft goes dead when the draft is cancelled
+  *or* committed, so the variant needs a rule for that first.
+- **A save run whose target leaves the strip hangs.** `advance_save_run` arms the next queued `EditKey`
+  and waits for `note_save_finished` to report it; nothing reports if that tab was closed or cancelled
+  while armed, or if the record was saved by hand and then failed its own `can_save()` gate, so
+  `save_request` stays set and the run's quit/close never fires. Pre-existing — a rename and a committed
+  draft are both re-keyed (`rekey_save_run`), which covers the two identity changes, not disappearance.
+  Several drafts per category (#260) make a long queue, and so a lost target, more reachable.
+- **A draft tab reads "New People" while its pane heading reads "New person".** The tab takes the *rail*
+  label (`nav-people`, plural, shared with the rail and the Explorer) and the create pane takes
+  `person-new-title` (singular), so one screen shows both forms of the same thing. Needs 13 singular
+  entity keys — the tab is the one that should change, since the pane heading reads correctly.
+- **`draft-tab-label = Ny { $entity }` is grammatically wrong in `no` for every category.** The rail
+  labels are plural ("Personer", "Steder"), so the draft tab reads "Ny Personer" instead of "Ny person".
+  Pre-existing, and the singular entity keys above are the same fix seen from the other side.
 - **A docked split mounts two detail panes, breaking `NavState`'s single-mount assumptions.**
   `edit_drafts`, `save_request`/`save_queue` and `pending_step` each document their design as safe
   *because* "only the active tab's pane is mounted" (`shell/nav_state.rs`), which a dock makes false.

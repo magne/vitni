@@ -13,12 +13,14 @@
 use dioxus::prelude::*;
 use genealogy_ui::{Category, NoteDraft, ProvenanceDraft, RecordRef, TagDraft};
 use genealogy_ui_dioxus::screens::{use_record_create, use_record_edit};
-use genealogy_ui_dioxus::shell::nav_state::{EditKey, NavState, StashedEdit};
+use genealogy_ui_dioxus::shell::nav_state::{DraftId, EditKey, NavState, StashedEdit};
 
 /// The committed name of the record every probe edits.
 const COMMITTED: &str = "Ada";
 /// The name a probe types into the draft, making it dirty.
 const TYPED: &str = "Ada Lovelace";
+/// The name a *second* draft is typed with, so the two buffers can be told apart.
+const OTHER: &str = "Bess Hopper";
 
 fn record(human_id: &str, label: &str) -> RecordRef {
     RecordRef {
@@ -77,16 +79,13 @@ fn render_settled(app: fn() -> Element) -> String {
     dioxus_ssr::render(&vdom)
 }
 
-/// The keys currently holding a parked edit, rendered as `category/human_id` (a create draft, which has
-/// no id, reads `category/*`) — the shell's dirty set.
+/// The keys currently holding a parked edit, in [`EditKey`]'s own `category/id` form (a create draft
+/// reads `category/#n`) — the shell's dirty set.
 fn keys(nav: &NavState) -> String {
     nav.edit_drafts
         .read()
         .keys()
-        .map(|key| {
-            let id = key.human_id.clone().unwrap_or_else(|| "*".to_owned());
-            format!("{}/{id}", key.category.id())
-        })
+        .map(EditKey::to_string)
         .collect::<Vec<_>>()
         .join(",")
 }
@@ -126,6 +125,19 @@ fn restored(nav: &NavState, key: &EditKey) -> Element {
             div { "RESTORED-VALID:{valid}" }
         },
     }
+}
+
+/// The name held in the draft parked under `key`, or `NONE` when nothing is parked there — how a probe
+/// shows *which* buffer a key holds, rather than only that it holds one.
+fn parked_name(nav: &NavState, key: &EditKey) -> String {
+    nav.stashed_edit::<TagDraft>(key)
+        .map_or_else(|| "NONE".to_owned(), |(draft, _, _)| draft.name)
+}
+
+/// The label the shell recorded for the editor at `key`, or `NONE` — what names that draft's tab,
+/// read the way the tab strip reads it (without knowing the draft's type).
+fn recorded_label(nav: &NavState, key: &EditKey) -> String {
+    nav.draft_label(key).unwrap_or_else(|| "NONE".to_owned())
 }
 
 // ---- The stash itself ----------------------------------------------------------------------------
@@ -286,9 +298,9 @@ fn renaming_a_record_moves_its_parked_edit_to_the_new_id() {
 fn commit_draft_drops_the_create_entry() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::Tags);
-        park(&mut nav, EditKey::draft(Category::Tags));
-        nav.commit_draft(record("T0001", "Ada"));
+        let draft = nav.open_create(Category::Tags);
+        park(&mut nav, EditKey::draft(Category::Tags, draft));
+        nav.commit_draft(draft, record("T0001", "Ada"));
     });
     probe(&nav)
 }
@@ -309,9 +321,9 @@ fn committing_a_draft_drops_its_parked_create_edit() {
 fn cancel_draft_drops_the_create_entry() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::Tags);
-        park(&mut nav, EditKey::draft(Category::Tags));
-        nav.cancel_draft(Category::Tags);
+        let draft = nav.open_create(Category::Tags);
+        park(&mut nav, EditKey::draft(Category::Tags, draft));
+        nav.cancel_draft(draft);
     });
     probe(&nav)
 }
@@ -326,19 +338,19 @@ fn cancelling_a_draft_drops_its_parked_create_edit() {
 fn create_draft_survives_a_switch_to_a_saved_tab() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::Tags);
-        park(&mut nav, EditKey::draft(Category::Tags));
+        let draft = nav.open_create(Category::Tags);
+        park(&mut nav, EditKey::draft(Category::Tags, draft));
         nav.open_record(record("T0001", "Ada"));
     });
     probe(&nav)
 }
 
 #[test]
-fn a_create_drafts_buffer_is_keyed_without_an_id_and_survives_a_tab_switch() {
+fn a_create_drafts_buffer_is_keyed_by_its_draft_id_and_survives_a_tab_switch() {
     let html = render(create_draft_survives_a_switch_to_a_saved_tab);
     assert!(
-        html.contains("DIRTY:[tags/*]"),
-        "a create draft is keyed by category with no human_id:\n{html}"
+        html.contains("DIRTY:[tags/#1]"),
+        "a create draft is keyed by its own draft id, not a human_id:\n{html}"
     );
     assert!(html.contains("TABS:2"), "the draft tab is still open:\n{html}");
 }
@@ -358,6 +370,12 @@ enum PaneAction {
     Cancel,
     /// Leave edit mode the way Save does, letting the reseed restore the committed values.
     LeaveEditMode,
+    /// Type a name and then clear it again, leaving the draft clean — what backspacing over everything
+    /// you just typed does.
+    TypeThenClear,
+    /// Change a field that is *not* the name (a tag's priority), so the draft is dirty but still has
+    /// nothing that names it.
+    TypeElsewhere,
 }
 
 /// A stand-in for an aggregate's detail pane: the shared edit buffer for a saved record, one mount-time
@@ -369,13 +387,15 @@ fn SavedPane(human_id: String, action: PaneAction) -> Element {
     use_hook(move || {
         let mut state = state;
         match action {
-            PaneAction::Report => {}
             PaneAction::Type => {
                 state.begin_edit();
                 TYPED.clone_into(&mut state.draft.write().name);
             }
             PaneAction::Cancel => state.cancel(),
             PaneAction::LeaveEditMode => state.editing.set(false),
+            // Report does nothing by definition; the two label actions belong to the create pane, since
+            // a saved record's tab is titled by its own stored label, not by its draft's.
+            PaneAction::Report | PaneAction::TypeThenClear | PaneAction::TypeElsewhere => {}
         }
     });
     rsx! {
@@ -386,14 +406,22 @@ fn SavedPane(human_id: String, action: PaneAction) -> Element {
     }
 }
 
-/// The same stand-in for a create form: the category's create buffer, keyed with no `human_id`.
+/// The same stand-in for a create form: one draft's create buffer, keyed by the draft's own
+/// [`DraftId`] rather than by its category, which is what keeps two drafts of one category apart.
+/// `name` is what [`PaneAction::Type`] types into it.
 #[component]
-fn CreatePane(action: PaneAction) -> Element {
-    let state = use_record_create::<TagDraft>(Category::Tags);
+fn CreatePane(draft: DraftId, action: PaneAction, name: String) -> Element {
+    let state = use_record_create::<TagDraft>(Category::Tags, draft);
     use_hook(move || {
         let mut state = state;
-        if action == PaneAction::Type {
-            TYPED.clone_into(&mut state.draft.write().name);
+        match action {
+            PaneAction::Type => state.draft.write().name = name,
+            PaneAction::TypeThenClear => {
+                state.draft.write().name = name;
+                state.draft.write().name = String::new();
+            }
+            PaneAction::TypeElsewhere => "7".clone_into(&mut state.draft.write().priority),
+            PaneAction::Report | PaneAction::Cancel | PaneAction::LeaveEditMode => {}
         }
     });
     rsx! {
@@ -555,30 +583,31 @@ fn a_save_reseed_clears_the_parked_entry() {
 
 fn create_pane_writes_the_draft_through() -> Element {
     let mut nav = use_context_provider(NavState::new);
-    use_hook(move || nav.open_create(Category::Tags));
+    let draft = use_hook(move || nav.open_create(Category::Tags));
     rsx! {
         {probe(&nav)}
-        CreatePane { action: PaneAction::Type }
+        CreatePane { draft, action: PaneAction::Type, name: TYPED }
     }
 }
 
 #[test]
-fn typing_in_a_create_form_parks_the_draft_under_the_category() {
+fn typing_in_a_create_form_parks_the_draft_under_its_draft_id() {
     let html = render_settled(create_pane_writes_the_draft_through);
     assert!(
-        html.contains("DIRTY:[tags/*]"),
-        "a create form parks its buffer with no human_id:\n{html}"
+        html.contains("DIRTY:[tags/#1]"),
+        "a create form parks its buffer under its own draft id:\n{html}"
     );
 }
 
 fn create_pane_hydrates_from_the_stash() -> Element {
     let mut nav = use_context_provider(NavState::new);
-    use_hook(move || {
-        nav.open_create(Category::Tags);
-        park(&mut nav, EditKey::draft(Category::Tags));
+    let draft = use_hook(move || {
+        let draft = nav.open_create(Category::Tags);
+        park(&mut nav, EditKey::draft(Category::Tags, draft));
+        draft
     });
     rsx! {
-        CreatePane { action: PaneAction::Report }
+        CreatePane { draft, action: PaneAction::Report, name: TYPED }
     }
 }
 
@@ -593,4 +622,120 @@ fn a_create_form_comes_back_up_holding_its_parked_draft() {
         html.contains("PANE-EDITING:true"),
         "a create form is in edit mode either way:\n{html}"
     );
+}
+
+// ---- Several drafts of one category (issue #260) --------------------------------------------------
+
+/// Two drafts of one category, each with its own mounted create pane, typed apart.
+fn two_drafts_typed_apart() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let (first, second) = use_hook(move || (nav.open_create(Category::Tags), nav.open_create(Category::Tags)));
+    rsx! {
+        {probe(&nav)}
+        div { "PARKED-1:{parked_name(&nav, &EditKey::draft(Category::Tags, first))}" }
+        div { "PARKED-2:{parked_name(&nav, &EditKey::draft(Category::Tags, second))}" }
+        CreatePane { draft: first, action: PaneAction::Type, name: TYPED }
+        CreatePane { draft: second, action: PaneAction::Type, name: OTHER }
+    }
+}
+
+#[test]
+fn two_drafts_of_one_category_keep_separate_buffers() {
+    // The point of #260: sketching two new records side by side is worthless if they share one buffer.
+    let html = render_settled(two_drafts_typed_apart);
+    assert!(
+        html.contains("DIRTY:[tags/#1,tags/#2]"),
+        "each draft parks its own buffer, under its own id:\n{html}"
+    );
+    assert!(
+        html.contains("UNSAVED:YY"),
+        "both draft tabs report unsaved work:\n{html}"
+    );
+    assert!(
+        html.contains(&format!("PARKED-1:{TYPED}")) && html.contains(&format!("PARKED-2:{OTHER}")),
+        "and each buffer holds what was typed into that draft:\n{html}"
+    );
+}
+
+/// A typed draft's pane beside a second draft's freshly-mounted, still-empty one.
+fn a_typed_draft_beside_a_fresh_one() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let (first, second) = use_hook(move || (nav.open_create(Category::Tags), nav.open_create(Category::Tags)));
+    rsx! {
+        {probe(&nav)}
+        CreatePane { draft: first, action: PaneAction::Type, name: TYPED }
+        CreatePane { draft: second, action: PaneAction::Report, name: TYPED }
+    }
+}
+
+#[test]
+fn a_second_drafts_clean_pane_does_not_drop_the_firsts_buffer() {
+    // This is why only one draft per category used to be allowed: a clean pane's write-through calls
+    // `drop_edit` on its own key, and under a key that was the category alone that deleted the *other*
+    // draft's typed buffer — the second ⌘N silently wiping the first form.
+    let html = render_settled(a_typed_draft_beside_a_fresh_one);
+    assert!(
+        html.contains("DIRTY:[tags/#1]"),
+        "the fresh pane drops only its own (absent) entry:\n{html}"
+    );
+    assert!(
+        html.contains(&format!("PANE-NAME:{TYPED}")) && html.contains("PANE-NAME:</div>"),
+        "and the second draft comes up empty rather than showing the first's text:\n{html}"
+    );
+}
+
+// ---- The label a draft names its tab with (issue #260) --------------------------------------------
+
+/// One create pane, driven by `action`, beside the label the shell recorded for its draft.
+fn create_pane_label(action: PaneAction) -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let draft = use_hook(move || nav.open_create(Category::Tags));
+    let key = EditKey::draft(Category::Tags, draft);
+    rsx! {
+        {probe(&nav)}
+        div { "LABEL:{recorded_label(&nav, &key)}" }
+        CreatePane { draft, action, name: TYPED }
+    }
+}
+
+fn create_pane_types_a_name() -> Element {
+    create_pane_label(PaneAction::Type)
+}
+
+#[test]
+fn a_typed_create_form_records_the_label_its_draft_names_itself_with() {
+    // The label rides along with the parked buffer, computed on the way in — the same trick `valid`
+    // uses, so the tab strip can name a draft without knowing which aggregate's draft it is.
+    let html = render_settled(create_pane_types_a_name);
+    assert!(
+        html.contains(&format!("LABEL:{TYPED}")),
+        "the write-through carries the draft's own label:\n{html}"
+    );
+    assert!(html.contains("DIRTY:[tags/#1]"), "alongside the buffer itself:\n{html}");
+}
+
+fn create_pane_types_then_clears() -> Element {
+    create_pane_label(PaneAction::TypeThenClear)
+}
+
+#[test]
+fn a_name_typed_and_cleared_again_leaves_no_label() {
+    // Backspacing over everything leaves the draft clean, and a clean draft parks nothing — so the tab
+    // goes back to "New Tags" rather than keeping the name that is no longer in the form.
+    let html = render_settled(create_pane_types_then_clears);
+    assert!(html.contains("LABEL:NONE"), "no label survives the clear:\n{html}");
+    assert!(html.contains("DIRTY:[]"), "because nothing stays parked:\n{html}");
+}
+
+fn create_pane_types_outside_the_name() -> Element {
+    create_pane_label(PaneAction::TypeElsewhere)
+}
+
+#[test]
+fn a_draft_dirty_outside_its_name_has_no_label_but_is_still_parked() {
+    // Dirtiness and having a name are separate questions: this draft has unsaved work (so its tab is
+    // marked and ⌘W confirms) but nothing that names it, so the tab keeps the localized fallback.
+    let html = render_settled(create_pane_types_outside_the_name);
+    assert!(html.contains("DIRTY:[tags/#1]"), "the buffer is parked:\n{html}");
+    assert!(html.contains("LABEL:NONE"), "with no label to show:\n{html}");
 }

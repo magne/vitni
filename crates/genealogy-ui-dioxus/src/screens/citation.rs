@@ -8,14 +8,14 @@ use genealogy_ui::{CitationAttributeVm, RecordLink};
 /// the detail pane (`record-editing.html` §6). The source is required (§7); a "new source" selection
 /// creates a source inline on Save (§6b). Save commits the whole citation; Cancel discards.
 #[component]
-pub fn CitationCreateRecord() -> Element {
+pub fn CitationCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::CitationDraft>(Category::Citations);
+    let record = use_record_create::<genealogy_ui::CitationDraft>(Category::Citations, draft_id);
     let mut draft = record.draft;
     // The find-or-create source picker: its options refetch after any mutation (#266); pick/clear/
     // "+ New" drive the draft's link.
@@ -40,7 +40,11 @@ pub fn CitationCreateRecord() -> Element {
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_citation_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Citations, None, created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit::new(Category::Citations, draft_id, &draft, created),
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -50,10 +54,10 @@ pub fn CitationCreateRecord() -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Citations, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::Citations, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Citations) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,
@@ -597,7 +601,7 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Citations, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::Citations, &human_id), record, save_now);
 
     // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
     let media_viewing = use_signal(|| None::<MediaRefVm>);

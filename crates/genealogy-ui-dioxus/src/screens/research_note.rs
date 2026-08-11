@@ -20,22 +20,32 @@ fn subject_categories() -> [Category; 4] {
 /// rendered as the create form in the detail pane (`record-editing.html` §6). Save commits the whole
 /// note (subjects + title, then the body); Cancel discards.
 ///
-/// Consumes [`NavState::research_note_subject`] once, on mount: opening this form from a record's
-/// "Research notes" tab pre-seeds that record as the argument's first subject.
+/// Consumes [`NavState::research_note_subject`] once, on mount, and **only when the seed names this
+/// draft**: opening this form from a record's "Research notes" tab pre-seeds that record as the
+/// argument's first subject, and any other research-note draft must leave the seed for its owner.
 #[component]
-pub fn ResearchNoteCreateRecord() -> Element {
+pub fn ResearchNoteCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::ResearchNoteDraft>(Category::ResearchNotes);
+    let record = use_record_create::<genealogy_ui::ResearchNoteDraft>(Category::ResearchNotes, draft_id);
 
     let mut seeded = record.draft;
     let mut subject_seed = nav.research_note_subject;
     use_effect(move || {
-        let Some((category, human_id)) = subject_seed.write().take() else {
+        // Peek and compare *before* taking: a `take()` first would swallow a seed meant for another
+        // research-note draft, leaving that draft's subject silently unset.
+        let mine = subject_seed
+            .peek()
+            .as_ref()
+            .is_some_and(|(seeded_draft, _, _)| *seeded_draft == draft_id);
+        if !mine {
+            return;
+        }
+        let Some((_, category, human_id)) = subject_seed.write().take() else {
             return;
         };
         seeded.write().add_subject(SubjectVm {
@@ -50,12 +60,15 @@ pub fn ResearchNoteCreateRecord() -> Element {
     let on_save = use_callback(
         move |(draft, prov): (genealogy_ui::ResearchNoteDraft, ProvenanceDraft)| {
             let request = draft.to_request();
-            let label = request.title.clone().unwrap_or_default();
             let services = services.clone();
             let created = created_label.clone();
             spawn(async move {
                 let committed = commit_research_note_change_set(services, request, prov).await;
-                finish_draft_commit(committed, Category::ResearchNotes, Some(label), created, nav);
+                finish_draft_commit(
+                    committed,
+                    DraftCommit::new(Category::ResearchNotes, draft_id, &draft, created),
+                    nav,
+                );
             });
         },
     );
@@ -66,14 +79,14 @@ pub fn ResearchNoteCreateRecord() -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::ResearchNotes, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::ResearchNotes, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
         Button {
             label: loc.action_label("cancel"),
             variant: ButtonVariant::Ghost,
             small: true,
-            onclick: move |_| nav.cancel_draft(Category::ResearchNotes),
+            onclick: move |_| nav.cancel_draft(draft_id),
         }
         Button {
             label: loc.action_label("save"),
@@ -456,7 +469,7 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::ResearchNotes, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::ResearchNotes, &human_id), record, save_now);
 
     match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },

@@ -14,7 +14,8 @@ use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{use_record_edit, use_save_on_request};
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::close_confirm::CloseConfirmDialog;
-use genealogy_ui_dioxus::shell::nav_state::{EditKey, NavState, Overlay, SaveRequest, SaveThen, StashedEdit};
+use genealogy_ui_dioxus::shell::nav_state::{DraftId, EditKey, NavState, Overlay, SaveRequest, SaveThen, StashedEdit};
+use genealogy_ui_dioxus::shell::tabstrip::RecordTabstrip;
 use unic_langid::LanguageIdentifier;
 
 /// A chrome localizer for a single explicit language (deterministic for tests).
@@ -54,6 +55,35 @@ fn mark_dirty_invalid(nav: &mut NavState, category: Category, human_id: &str) {
     );
 }
 
+/// Parks a dirty, valid buffer for the create draft `draft` — what a half-filled create form holds.
+fn mark_draft_dirty(nav: &mut NavState, draft: DraftId) {
+    nav.stash_edit(
+        EditKey::draft(Category::People, draft),
+        StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
+    );
+}
+
+/// What a create screen does on a successful commit ([`finish_draft_commit`](genealogy_ui_dioxus::screens::finish_draft_commit)):
+/// the draft becomes a stored record in its own slot, and the save reports back under the key that
+/// record now has.
+fn commit_and_report(nav: &mut NavState, draft: DraftId, human_id: &str, label: &str) {
+    nav.commit_draft(draft, record(human_id, label));
+    nav.note_save_finished(&EditKey::saved(Category::People, human_id), true);
+}
+
+/// Parks a create buffer for `draft` that names itself `name` — what typing into a create form writes
+/// through, and what its tab (and this dialog) is then titled by.
+fn name_draft(nav: &mut NavState, draft: DraftId, name: &str) {
+    let typed = TagDraft {
+        name: name.to_owned(),
+        ..TagDraft::new()
+    };
+    nav.stash_edit(
+        EditKey::draft(Category::People, draft),
+        StashedEdit::new(typed, TagDraft::new(), ProvenanceDraft::default()),
+    );
+}
+
 /// A dirty, valid draft — the buffer a mid-edit pane holds.
 fn edited() -> TagDraft {
     TagDraft {
@@ -80,10 +110,9 @@ fn render_settled(app: fn() -> Element) -> String {
     dioxus_ssr::render(&vdom)
 }
 
-/// One editor key rendered as `category/human_id`, a create draft (which has no id) as `category/*`.
+/// One editor key in [`EditKey`]'s own `category/id` form, a create draft as `category/#n`.
 fn key_id(key: &EditKey) -> String {
-    let id = key.human_id.clone().unwrap_or_else(|| "*".to_owned());
-    format!("{}/{id}", key.category.id())
+    key.to_string()
 }
 
 /// The marker block: open-tab count, whether the confirm is armed, the quit ticket value, the keys
@@ -138,7 +167,7 @@ fn finish_armed(nav: &mut NavState, ok: bool) {
     let Some(key) = nav.save_request.peek().as_ref().map(|request| request.key.clone()) else {
         return;
     };
-    nav.note_save_finished(key.category, key.human_id.as_deref(), ok);
+    nav.note_save_finished(&key, ok);
 }
 
 fn close_saved_tab_is_immediate() -> Element {
@@ -755,9 +784,9 @@ fn cancelling_clears_the_armed_save_and_its_queue() {
 fn save_then_close_a_create_draft() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
         nav.stash_edit(
-            EditKey::draft(Category::People),
+            EditKey::draft(Category::People, draft),
             StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
         );
         nav.request_close_tab(0);
@@ -778,11 +807,11 @@ fn key_id_of_armed(nav: &NavState) -> String {
 }
 
 #[test]
-fn a_create_draft_is_queued_under_its_category_with_no_id() {
+fn a_create_draft_is_queued_under_its_own_draft_id() {
     let html = render(save_then_close_a_create_draft);
     assert!(
-        html.contains("ARMED:people/*"),
-        "a create draft is armed by category alone:\n{html}"
+        html.contains("ARMED:people/#1"),
+        "a create draft is armed under its own draft id:\n{html}"
     );
     assert!(html.contains("TABS:1"), "the draft tab is still open:\n{html}");
 }
@@ -790,17 +819,17 @@ fn a_create_draft_is_queued_under_its_category_with_no_id() {
 fn create_draft_saved_then_closed() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
         nav.stash_edit(
-            EditKey::draft(Category::People),
+            EditKey::draft(Category::People, draft),
             StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
         );
         nav.request_close_tab(0);
         nav.save_then_close(0);
         // What the create screen does on a successful commit: the draft becomes a stored record in the
         // same slot, and the save reports back under the draft's key.
-        nav.commit_draft(record("I0001", "Ada"));
-        nav.note_save_finished(Category::People, None, true);
+        nav.commit_draft(draft, record("I0001", "Ada"));
+        nav.note_save_finished(&EditKey::saved(Category::People, "I0001"), true);
     });
     probe(&nav)
 }
@@ -825,7 +854,7 @@ fn renamed_record_finishes_its_save() -> Element {
         // A whole-record save that changed the human id re-keys the tab; the screen reports back under
         // the id the record now has.
         nav.rename_record(Category::People, "I0001", "I0099".to_owned());
-        nav.note_save_finished(Category::People, Some("I0099"), true);
+        nav.note_save_finished(&EditKey::saved(Category::People, "I0099"), true);
     });
     probe(&nav)
 }
@@ -1062,11 +1091,11 @@ fn quit_dialog_over_three_dirty_records() -> Element {
         nav.open_record(record("I0001", "Ada"));
         nav.open_record(record("I0002", "Bob"));
         nav.open_record(record("I0003", "Cy"));
-        nav.open_create(Category::Tags);
+        let draft = nav.open_create(Category::Tags);
         mark_dirty(&mut nav, Category::People, "I0001");
         mark_dirty(&mut nav, Category::People, "I0003");
         nav.stash_edit(
-            EditKey::draft(Category::Tags),
+            EditKey::draft(Category::Tags, draft),
             StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
         );
         nav.request_quit();
@@ -1082,8 +1111,8 @@ fn the_quit_dialog_lists_every_record_with_unsaved_work() {
     assert!(html.contains("Ada"), "the first dirty record is named:\n{html}");
     assert!(html.contains("Cy"), "and so is the third:\n{html}");
     assert!(
-        html.contains("New Tags"),
-        "the draft is named as the tabstrip names it:\n{html}"
+        html.contains("<li>edited</li>"),
+        "the draft is named as the tabstrip names it — by what was typed into it:\n{html}"
     );
     assert!(
         !html.contains("Bob"),
@@ -1231,10 +1260,10 @@ fn partial_save_all_run() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
-        nav.open_create(Category::Tags);
+        let draft = nav.open_create(Category::Tags);
         mark_dirty(&mut nav, Category::People, "I0001");
         nav.stash_edit(
-            EditKey::draft(Category::Tags),
+            EditKey::draft(Category::Tags, draft),
             StashedEdit::new(TagDraft::new(), TagDraft::new(), ProvenanceDraft::default()),
         );
         nav.request_quit();
@@ -1258,7 +1287,7 @@ fn a_partial_save_all_leaves_the_unsavable_tab_open_without_quitting() {
         "the unsavable record's tab stays open:\n{html}"
     );
     assert!(
-        html.contains("DIRTY:[tags/*]"),
+        html.contains("DIRTY:[tags/#1]"),
         "its work is still parked, and only Ada's was spent:\n{html}"
     );
     assert!(html.contains("SAVING:NONE"), "the run is over:\n{html}");
@@ -1272,7 +1301,7 @@ fn SavePane(human_id: String) -> Element {
     let state = use_record_edit::<TagDraft>(Category::Tags, &human_id, &TagDraft::new());
     let mut saves = use_signal(|| 0_u32);
     let on_save = use_callback(move |()| saves += 1);
-    use_save_on_request(Category::Tags, Some(&human_id), state, on_save);
+    use_save_on_request(EditKey::saved(Category::Tags, &human_id), state, on_save);
     rsx! {
         div { "SAVES:{saves}" }
     }
@@ -1524,4 +1553,311 @@ fn dialog_closed() -> Element {
 fn dialog_renders_nothing_when_not_pending() {
     let html = render(dialog_closed);
     assert!(html.trim().is_empty(), "no pending close renders nothing:\n{html}");
+}
+
+// ---- A save run over several drafts of one category (issue #260) ----------------------------------
+
+fn save_all_over_two_drafts_of_one_category() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let first = nav.open_create(Category::People);
+        let second = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, first);
+        mark_draft_dirty(&mut nav, second);
+        nav.request_quit();
+        nav.save_all_then_quit();
+        commit_and_report(&mut nav, first, "I0001", "Ada");
+        commit_and_report(&mut nav, second, "I0002", "Bess");
+    });
+    probe(&nav)
+}
+
+#[test]
+fn save_all_walks_two_drafts_of_one_category() {
+    // A committed draft reports back under the id the record it just stored now has, not under the draft
+    // key the run armed — so the run only advances if `commit_draft` re-keyed it. Without that the run
+    // hangs on the first draft and the quit never fires.
+    let html = render(save_all_over_two_drafts_of_one_category);
+    assert!(
+        html.contains("QUIT:1"),
+        "the quit fires once both drafts are stored:\n{html}"
+    );
+    assert!(html.contains("DIRTY:[]"), "both create buffers are spent:\n{html}");
+    assert!(html.contains("QUEUE:[]"), "the queue is drained:\n{html}");
+    assert!(html.contains("SAVING:NONE"), "and nothing is left armed:\n{html}");
+    assert!(html.contains("TABS:2"), "a quit closes no tabs itself:\n{html}");
+}
+
+fn save_then_close_the_second_of_two_drafts() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let first = nav.open_create(Category::People);
+        let second = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, first);
+        mark_draft_dirty(&mut nav, second);
+        nav.activate_record(0);
+        nav.request_close_tab(1);
+        nav.save_then_close(1);
+    });
+    rsx! {
+        div { "ARMED:{key_id_of_armed(&nav)}" }
+        {probe(&nav)}
+    }
+}
+
+#[test]
+fn save_then_close_arms_the_named_draft_not_the_first() {
+    let html = render(save_then_close_the_second_of_two_drafts);
+    assert!(
+        html.contains("ARMED:people/#2"),
+        "the confirm's Save arms the tab it was raised for:\n{html}"
+    );
+    assert!(
+        html.contains("ACTIVE:1"),
+        "and reveals that draft's own pane, not its sibling's:\n{html}"
+    );
+}
+
+fn a_report_from_the_other_draft() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let first = nav.open_create(Category::People);
+        let second = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, first);
+        mark_draft_dirty(&mut nav, second);
+        nav.request_quit();
+        nav.save_all_then_quit();
+        // The draft the run is *not* waiting on reports in.
+        nav.note_save_finished(&EditKey::draft(Category::People, second), true);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_report_from_another_draft_does_not_advance_the_run() {
+    // Two drafts of one category are two editors, so "a draft of People finished" is not an answer to
+    // "did *this* draft finish" — a Save the operator clicked on the other form must not step the run.
+    let html = render(a_report_from_the_other_draft);
+    assert!(
+        html.contains("SAVING:people/#1"),
+        "the run stays armed on the draft it asked:\n{html}"
+    );
+    assert!(
+        html.contains("QUEUE:[people/#2]"),
+        "with the other still queued behind it:\n{html}"
+    );
+    assert!(html.contains("QUIT:0"), "and nothing quits:\n{html}");
+    assert!(
+        html.contains("DIRTY:[people/#1,people/#2]"),
+        "neither buffer is spent:\n{html}"
+    );
+}
+
+fn a_committed_draft_while_another_dirty_tab_is_active() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        nav.open_record(record("I0009", "Cy"));
+        mark_draft_dirty(&mut nav, draft);
+        mark_dirty(&mut nav, Category::People, "I0009");
+        nav.request_close_tab(0);
+        nav.save_then_close(0);
+        nav.commit_draft(draft, record("I0001", "Ada"));
+        // The commit is asynchronous, so the operator can bring another tab forward before it lands.
+        nav.activate_record(1);
+        nav.note_save_finished(&EditKey::saved(Category::People, "I0001"), true);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_committed_draft_closes_the_tab_it_saved_not_whichever_is_active() {
+    // The close has to follow the record the run saved. Guessing "the active tab, if it is a saved record
+    // of this category" instead closes Cy's tab here — silently, with his unsaved edit in it.
+    let html = render(a_committed_draft_while_another_dirty_tab_is_active);
+    assert!(html.contains("TABS:1"), "one tab closed:\n{html}");
+    assert!(
+        html.contains("DIRTY:[people/I0009]"),
+        "and it is the stored draft's tab that went — Cy keeps his tab and his edit:\n{html}"
+    );
+    assert!(html.contains("SAVING:NONE"), "the run is over:\n{html}");
+}
+
+fn a_failed_commit_of_the_first_draft() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let first = nav.open_create(Category::People);
+        let second = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, first);
+        mark_draft_dirty(&mut nav, second);
+        nav.request_quit();
+        nav.save_all_then_quit();
+        // A commit that failed stored nothing, so the report names the *draft* — there is no record id to
+        // name. This is the asymmetry with the success above (`commit_and_report`), and it is what lets a
+        // failed run be recognised at all.
+        nav.note_save_finished(&EditKey::draft(Category::People, first), false);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_failed_draft_commit_abandons_the_run_and_keeps_both_drafts() {
+    let html = render(a_failed_commit_of_the_first_draft);
+    assert!(html.contains("QUIT:0"), "a failed run does not quit:\n{html}");
+    assert!(html.contains("TABS:2"), "and closes nothing:\n{html}");
+    assert!(
+        html.contains("DIRTY:[people/#1,people/#2]"),
+        "both drafts keep their work:\n{html}"
+    );
+    assert!(html.contains("SAVING:NONE"), "the armed save is cleared:\n{html}");
+    assert!(html.contains("QUEUE:[]"), "and so is the rest of the queue:\n{html}");
+}
+
+// ---- The confirm names a tab exactly as the strip does (issue #260) -------------------------------
+
+/// The quit confirm over two People drafts, neither typed into.
+fn quit_dialog_over_two_empty_drafts() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        nav.request_quit();
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_quit_dialog_names_two_empty_drafts_apart() {
+    // The at-stake list is the operator's only view of what Discard all destroys, so two entries reading
+    // the same thing would make the choice unanswerable.
+    let html = render(quit_dialog_over_two_empty_drafts);
+    assert_eq!(
+        html.matches("<li>New People</li>").count(),
+        1,
+        "one entry is the unnumbered draft:\n{html}"
+    );
+    assert_eq!(
+        html.matches("<li>New People (2)</li>").count(),
+        1,
+        "and the other carries its ordinal:\n{html}"
+    );
+}
+
+/// The quit confirm over a draft with a name typed into it.
+fn quit_dialog_over_a_named_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        name_draft(&mut nav, draft, "Ada Lovelace");
+        nav.request_quit();
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_quit_dialog_names_a_typed_draft_by_its_name() {
+    let html = render(quit_dialog_over_a_named_draft);
+    assert!(
+        html.contains("<li>Ada Lovelace</li>"),
+        "the draft is listed by what was typed into it:\n{html}"
+    );
+    assert!(
+        !html.contains("New People"),
+        "and not also by the generic new-record label:\n{html}"
+    );
+}
+
+/// The close confirm for a named draft's own tab.
+fn close_dialog_over_a_named_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        name_draft(&mut nav, draft, "Ada Lovelace");
+        nav.request_close_tab(0);
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_close_confirm_names_a_typed_draft_by_its_name() {
+    let html = render(close_dialog_over_a_named_draft);
+    assert!(
+        html.contains("Ada Lovelace"),
+        "the body names the record the operator is about to lose:\n{html}"
+    );
+    assert!(html.contains("Discard draft"), "and it is still a draft:\n{html}");
+}
+
+/// The close confirm for the *second* of two untyped drafts.
+fn close_dialog_over_the_second_empty_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        nav.request_close_tab(1);
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_close_confirm_names_the_second_empty_draft_by_its_ordinal() {
+    let html = render(close_dialog_over_the_second_empty_draft);
+    assert!(
+        html.contains("New People (2)"),
+        "the confirm says which of the two drafts it is about:\n{html}"
+    );
+}
+
+/// Both the record strip and the confirm, over one strip of two untyped drafts.
+fn tabstrip_and_dialog_over_two_empty_drafts() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        nav.request_quit();
+    });
+    rsx! {
+        RecordTabstrip {}
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_strip_and_the_confirm_name_a_tab_identically() {
+    // The test that fails if a second tab-naming function ever reappears: the strip and the dialog are
+    // rendered over one `NavState`, and each tab has to read the same in both.
+    let html = render(tabstrip_and_dialog_over_two_empty_drafts);
+    assert_eq!(
+        html.matches(r#"aria-label="Close New People""#).count(),
+        1,
+        "the strip has exactly one unnumbered New People tab:\n{html}"
+    );
+    assert_eq!(
+        html.matches("<li>New People</li>").count(),
+        1,
+        "and the dialog lists it under the same name:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"aria-label="Close New People (2)""#).count(),
+        1,
+        "the numbered tab likewise:\n{html}"
+    );
+    assert_eq!(
+        html.matches("<li>New People (2)</li>").count(),
+        1,
+        "and the dialog agrees on its number:\n{html}"
+    );
 }

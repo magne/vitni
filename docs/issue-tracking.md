@@ -181,11 +181,22 @@ the list on its own. Treat the count as a floor.
 | Item | Why it gates a release |
 | --- | --- |
 | [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
-| [Only one unsaved new record per category](https://github.com/magne/genealogy/issues/260) | Two new people cannot be sketched side by side; the draft's identity is its category, all the way down to the stash key |
 | [A docked split mounts two detail panes, breaking `NavState`'s single-mount assumptions](https://github.com/magne/genealogy/issues/284) | One `⌘Z` retracts an assertion in **both** panes' records; fixed with #279, filed so the invariant has a home |
 
-#256 and #260 came out of the 2026-07-31 manual pass — the map and the shell respectively; #281–#284
-came out of the 2026-08-04 sweep alongside the #279 trace; the rest came from reading the code.
+#256 came out of the 2026-07-31 manual pass on the map, as did #260 on the shell; #281–#284 came out of
+the 2026-08-04 sweep alongside the #279 trace; the rest came from reading the code.
+
+**#260 is closed and dropped from this table:** a create draft now carries its own `DraftId`, threaded
+through tab identity (`OpenTab::Draft(Category, DraftId)`), the parked buffer's `EditKey`, the create
+pane's Dioxus key, and `cancel_draft`/`commit_draft`/`note_save_finished` — so every `⌘N` opens *another*
+draft with its own form, caret and buffer, and a committed draft is re-keyed onto the record it stored
+rather than guessed at. A draft tab is named by `RecordDraft::display_label`, the same string the record
+commits with, with an ordinal from the second still-unnamed draft of a category so two never share an
+accessible name. Two things surfaced while fixing it: `save_close_index` had been guessing at the active
+tab for a committed draft, which closed the *wrong* dirty tab when another was brought forward
+mid-commit; and the second `⌘N` was a focus cliff — it destroys the input the caret is in, and focus fell
+to `<body>` where the next keystroke reached the shell dispatcher, now fixed by `CreateFormFocus` on
+every create frame (`two-drafts-one-category.toml`).
 
 **#283 is closed and dropped from this table:** `[map]` config is now named providers
 (`[map.providers.*]`, mirroring `[ai.providers]`, ADR 0033) resolved to a `MapSource` in

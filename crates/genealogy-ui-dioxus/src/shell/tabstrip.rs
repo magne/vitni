@@ -16,6 +16,7 @@ use genealogy_ui::Category;
 
 use crate::shell::ChromeCtx;
 use crate::shell::nav_state::NavState;
+use crate::shell::tab_label::tab_labels;
 
 /// The open-records tab strip.
 #[component]
@@ -24,6 +25,9 @@ pub fn RecordTabstrip() -> Element {
     let mut nav = use_context::<NavState>();
     let records = nav.records.read().clone();
     let active = *nav.active_record.read();
+    // One pass for the whole strip, hoisted above the loop: a draft's ordinal is its position among its
+    // category's drafts, which no single tab knows.
+    let labels = tab_labels(&nav, &chrome.0);
     let mut menu_open = use_signal(|| false);
     rsx! {
         div { class: "tabstrip", role: "tablist", aria_label: "{chrome.0.aria_open_records()}",
@@ -75,10 +79,7 @@ pub fn RecordTabstrip() -> Element {
                         if is_unsaved {
                             class.push_str(" unsaved");
                         }
-                        let label = match tab.as_saved() {
-                            Some(record) => record.label.clone(),
-                            None => chrome.0.draft_tab_label(&chrome.0.rail_label(category.label_id())),
-                        };
+                        let label = labels.get(index).cloned().unwrap_or_default();
                         let human_id = tab.human_id().map(str::to_owned);
                         let close_label = chrome.0.close_tab_named(&label);
                         // Only an unsaved tab overrides its accessible name; a clean tab is named by

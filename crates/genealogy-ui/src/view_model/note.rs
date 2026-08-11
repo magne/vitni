@@ -1,6 +1,6 @@
 use super::{
     DetailTab, HistoryEntryVm, Localizer, NoteChangeSetRequest, NoteEdit, RecordDraft, RestrictionKind, RowVm, TagRef,
-    UsingRecordVm, non_blank, using_record_vm,
+    UsingRecordVm, line_label, non_blank, using_record_vm,
 };
 
 /// One translation of a note's content (Note Language tab): language, text, and translator.
@@ -80,12 +80,9 @@ impl NoteDetail {
 }
 
 /// A note's title: the first non-empty line of its text, with a leading Markdown heading marker
-/// stripped, truncated for the list/header. `None` when the note has no text.
+/// stripped, truncated for the list/header ([`line_label`]). `None` when the note has no text.
 fn note_title(text: Option<&str>) -> Option<String> {
-    let line = text?.lines().map(str::trim).find(|line| !line.is_empty())?;
-    let line = line.trim_start_matches('#').trim();
-    let title: String = line.chars().take(60).collect();
-    (!title.is_empty()).then_some(title)
+    line_label(text?)
 }
 
 /// Builds a generic list row from a [`NoteSummary`](genealogy_app::NoteSummary): a title from the
@@ -240,6 +237,10 @@ impl RecordDraft for NoteDraft {
     fn is_valid(&self) -> bool {
         true
     }
+
+    fn display_label(&self) -> Option<String> {
+        line_label(&self.text)
+    }
 }
 
 #[cfg(test)]
@@ -303,5 +304,39 @@ mod note_draft_tests {
         assert_eq!(edits.len(), 2);
         assert!(matches!(&edits[0], NoteEdit::SetType { .. }));
         assert!(matches!(&edits[1], NoteEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod note_display_label_tests {
+    use super::{NoteDraft, RecordDraft};
+    use crate::view_model::LABEL_MAX_CHARS;
+
+    #[test]
+    fn the_label_is_the_texts_first_line() {
+        let draft = NoteDraft {
+            text: "# An estate inventory\n\nThe rest of the note.".to_owned(),
+            ..NoteDraft::new()
+        };
+        assert_eq!(draft.display_label(), Some("An estate inventory".to_owned()));
+    }
+
+    #[test]
+    fn a_long_note_is_capped_rather_than_naming_a_tab_after_a_paragraph() {
+        let draft = NoteDraft {
+            text: "x".repeat(LABEL_MAX_CHARS + 40),
+            ..NoteDraft::new()
+        };
+        let label = draft.display_label().expect("a label");
+        assert_eq!(label.chars().count(), LABEL_MAX_CHARS);
+    }
+
+    #[test]
+    fn a_draft_with_no_text_has_no_label() {
+        let draft = NoteDraft {
+            language: "en".to_owned(),
+            ..NoteDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
     }
 }

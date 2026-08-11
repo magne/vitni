@@ -6,7 +6,7 @@ use crate::components::{ColorPicker, IconButton};
 /// The create-mode tag record: an uncommitted [`TagDraft`] rendered as the editable record in the
 /// detail pane (Name focused). Save commits the whole tag; Cancel drops the draft.
 #[component]
-pub fn TagCreateRecord() -> Element {
+pub fn TagCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -18,7 +18,7 @@ pub fn TagCreateRecord() -> Element {
     let save_label = loc.action_label("save");
     let cancel_label = loc.action_label("cancel");
     let created_label = loc.action_label("created");
-    let edit = use_record_create::<TagDraft>(Category::Tags);
+    let edit = use_record_create::<TagDraft>(Category::Tags, draft_id);
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
     let on_save = use_callback(move |(draft, prov): (TagDraft, ProvenanceDraft)| {
@@ -26,11 +26,14 @@ pub fn TagCreateRecord() -> Element {
             return;
         };
         let services = services.clone();
-        let name = request.name.clone();
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_tag_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Tags, Some(name), created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit::new(Category::Tags, draft_id, &draft, created),
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -40,14 +43,14 @@ pub fn TagCreateRecord() -> Element {
             on_save.call((edit.draft.read().clone(), edit.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Tags, None, edit, save_now);
+    use_save_on_request(EditKey::draft(Category::Tags, draft_id), edit, save_now);
     let can_save = edit.can_save();
     let actions = rsx! {
         Button {
             label: cancel_label,
             variant: ButtonVariant::Ghost,
             small: true,
-            onclick: move |_| nav.cancel_draft(Category::Tags),
+            onclick: move |_| nav.cancel_draft(draft_id),
         }
         Button {
             label: save_label,
@@ -149,7 +152,7 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
             on_save.call((edit.draft.read().clone(), edit.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Tags, Some(&id), edit, save_now);
+    use_save_on_request(EditKey::saved(Category::Tags, &id), edit, save_now);
 
     match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },

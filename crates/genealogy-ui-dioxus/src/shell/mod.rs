@@ -26,6 +26,7 @@ pub mod recent_persistence;
 pub mod root;
 pub mod roving;
 pub mod statusbar;
+pub mod tab_label;
 pub mod tabstrip;
 pub mod toast;
 pub mod topbar;

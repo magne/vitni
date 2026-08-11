@@ -9,14 +9,14 @@ use genealogy_ui::{ParticipantVm, RecordLink};
 /// detail pane (`record-editing.html` §6). The type is required; a "new place" selection creates a
 /// place inline on Save (§6b cascade). Save commits the whole event; Cancel discards.
 #[component]
-pub fn EventCreateRecord() -> Element {
+pub fn EventCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::EventDraft>(Category::Events);
+    let record = use_record_create::<genealogy_ui::EventDraft>(Category::Events, draft_id);
     let mut draft = record.draft;
     // The find-or-create place picker: its options refetch after any mutation (#266); pick/clear/
     // "+ New" drive the draft's link.
@@ -39,7 +39,11 @@ pub fn EventCreateRecord() -> Element {
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_event_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Events, None, created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit::new(Category::Events, draft_id, &draft, created),
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -49,10 +53,10 @@ pub fn EventCreateRecord() -> Element {
             on_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Events, None, record, save_now);
+    use_save_on_request(EditKey::draft(Category::Events, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Events) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,
@@ -600,7 +604,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
             on_record_save.call((record.draft.read().clone(), record.prov.read().clone()));
         }
     });
-    use_save_on_request(Category::Events, Some(&human_id), record, save_now);
+    use_save_on_request(EditKey::saved(Category::Events, &human_id), record, save_now);
 
     // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
     let media_viewing = use_signal(|| None::<MediaRefVm>);

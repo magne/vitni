@@ -419,6 +419,12 @@ impl RecordDraft for EventDraft {
     fn is_valid(&self) -> bool {
         !self.date.is_invalid()
     }
+
+    /// Always `None`: an event is titled by its *localized* type, which this trait has no `Localizer`
+    /// for — see [`RecordDraft::display_label`].
+    fn display_label(&self) -> Option<String> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -659,5 +665,42 @@ mod event_draft_tests {
     #[test]
     fn a_blank_create_date_maps_to_none() {
         assert!(EventDraft::new().to_request().date.is_none());
+    }
+}
+
+#[cfg(test)]
+mod event_display_label_tests {
+    use super::{DateDraft, EventDraft, NewPlaceFields, RecordDraft, RecordLink};
+    use crate::picker::PickerSelection;
+    use genealogy_app::{EventType, PlaceType};
+
+    #[test]
+    fn a_fully_populated_event_draft_still_has_no_label() {
+        // Deliberate: an event is titled by its *localized* type ("Birth", "Fødsel"), and the trait takes
+        // no `Localizer`. The description is not a title — it is the free-text detail. So the tab falls
+        // back to "New Events" and the ordinal, rather than to a half-right name.
+        let draft = EventDraft {
+            human_id: "E0001".to_owned(),
+            event_type: EventType::Baptism,
+            date: DateDraft {
+                start: "1815-12-10".to_owned(),
+                ..DateDraft::default()
+            },
+            description: "In the parish church".to_owned(),
+            place: RecordLink::Existing(PickerSelection {
+                human_id: "P0001".to_owned(),
+                title: "Kristiania".to_owned(),
+            }),
+            ..EventDraft::new()
+        };
+        assert_eq!(draft.display_label(), None);
+        let inline_place = EventDraft {
+            place: RecordLink::New(NewPlaceFields {
+                place_type: PlaceType::City,
+                name: "Kristiania".to_owned(),
+            }),
+            ..draft
+        };
+        assert_eq!(inline_place.display_label(), None, "nor does the place name it");
     }
 }
