@@ -24,6 +24,9 @@ whoami = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 unic-langid = { workspace = true, features = ["serde"] }
+# The Google Map Tiles adapter (ADR 0033): session/tile/viewport-copyright requests. Map network I/O
+# stays in the app layer (ADR 0008) — the renderer never fetches.
+reqwest = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

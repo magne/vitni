@@ -204,6 +204,7 @@ geography-provider-label = Leverandør
 geography-provider-osm = OpenStreetMap
 geography-provider-maplibre = MapLibre-stil
 geography-provider-google = Google (API-nøkkel)
+geography-provider-switch-error = Kunne ikke bytte kartleverandør: { $detail }
 geography-tool-pan = Panorer
 geography-tool-point = Slipp / flytt et punkt
 geography-tool-polygon = Tegn polygon

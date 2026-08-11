@@ -6,7 +6,7 @@
 //! [`PlaceEdit::AssertGeometry`] path; only the container id/center/zoom and the caller's own
 //! toolbar/rail differ.
 
-use genealogy_app::{GeoCoordinates, MapProvider, Microdegrees, PlaceGeometry};
+use genealogy_app::{GeoCoordinates, MapBasemap, MapSource, Microdegrees, PlaceGeometry};
 use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm, ZOOM_RANGE, clamp_zoom};
 use serde_json::{Value, json};
 use std::str::FromStr;
@@ -129,34 +129,21 @@ pub fn draft_geometry(tool: DrawTool, draft: &MapDraft) -> Result<PlaceGeometry,
     }
 }
 
-/// The tile source a mounted map fetches, and the credit shown over it. Resolved as a pair by
-/// [`rendered_credit`] so the two can never come from different providers.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MapCredit {
-    /// The `{z}/{x}/{y}` template the raster source fetches.
-    pub tile_url: String,
-    /// The attribution to display, per the tile source's own terms.
-    pub attribution: String,
-}
-
-/// The tile URL and credit for `provider` — **as the map will actually render it**, which is not the
-/// same thing as the configured `kind`. This map has one raster source and nothing calls `setStyle`,
-/// so a configured vector style or Google provider still paints OpenStreetMap tiles; crediting the
-/// configured provider there would put someone else's terms over OSM's pixels. A provider that serves
-/// raster tiles supplies both halves itself; anything else falls back to the built-in default, which
-/// is where the URL literal lives (once, in `genealogy-app`).
-#[must_use]
-pub fn rendered_credit(provider: &MapProvider) -> MapCredit {
-    let fallback = MapProvider::default_osm();
-    let rendered = if provider.raster_tile_url().is_some() {
-        provider
-    } else {
-        &fallback
-    };
-    MapCredit {
-        tile_url: rendered.raster_tile_url().unwrap_or_default().to_owned(),
-        attribution: rendered.attribution().to_owned(),
-    }
+/// The settled camera a `moveend` reports (ADR 0033): the zoom plus the visible bounds, in decimal
+/// degrees. The Google Map Tiles adapter's per-viewport attribution refresh is the one consumer today
+/// (`geography.rs`'s `on_moved`); every other provider kind simply ignores it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MovedCamera {
+    /// The settled zoom level.
+    pub zoom: f64,
+    /// The visible viewport's northern edge, in decimal degrees.
+    pub north: f64,
+    /// The visible viewport's southern edge, in decimal degrees.
+    pub south: f64,
+    /// The visible viewport's eastern edge, in decimal degrees.
+    pub east: f64,
+    /// The visible viewport's western edge, in decimal degrees.
+    pub west: f64,
 }
 
 /// The generic `MapLibre` mount surface (draw-tool crosshair cursor + the tile source's credit), shared
@@ -169,19 +156,25 @@ pub fn rendered_credit(provider: &MapProvider) -> MapCredit {
 /// never `.read()`: a subscribed surface re-renders on a zoom gesture, and a re-rendered surface
 /// remounts, which rebuilds the map.
 ///
-/// `credit` supplies both the tiles the map fetches and the attribution drawn over them (#254).
-/// `MapLibre`'s own `AttributionControl` stays disabled and this static overlay carries the text
-/// instead, so one treatment works for every provider kind (`docs/research/geography-rendering.md`).
-/// The overlay is omitted entirely when the credit is empty — an empty bordered box is not a credit.
+/// `source` supplies the tiles/style the map fetches at mount (ADR 0033); a later provider switch goes
+/// through [`apply_map_source`] instead of a remount. `attribution` is the caller's own reactive
+/// signal for the credit drawn over the map (#254) — seeded from `source.attribution`, but updated
+/// independently of it afterwards (a provider switch, or the Google adapter's live per-viewport
+/// refresh). `MapLibre`'s own `AttributionControl` stays disabled and this static overlay carries the
+/// text instead, so one treatment works for every provider kind
+/// (`docs/research/geography-rendering.md`). The overlay is omitted entirely when the credit is
+/// empty — an empty bordered box is not a credit.
 ///
 /// `tool` and `draft` are the caller's own draw state, passed rather than a click callback: every
 /// gesture on the canvas (a click appending a vertex, a handle drag moving one) resolves against the
 /// same pair, so both screens get identical behaviour from one implementation instead of two copies of
-/// the same closure.
+/// the same closure. `on_moved` is called with every settled camera (ADR 0033) — the Geography
+/// toolbar's own Google viewport-attribution refresh; the Place Map tab, which needs no such refresh,
+/// passes a no-op.
 #[must_use = "renders the map surface; drop it and nothing is shown"]
 #[expect(
     clippy::too_many_arguments,
-    reason = "a map surface is the mount id + label + the caller's draw state, camera, credit and control labels; the precedent is geography_toolbar"
+    reason = "a map surface is the mount id + label + the caller's draw state, camera, source/attribution, control labels and camera callback; the precedent is geography_toolbar"
 )]
 pub fn map_surface(
     container_id: &'static str,
@@ -190,11 +183,13 @@ pub fn map_surface(
     draft: Signal<MapDraft>,
     center: (f64, f64),
     zoom: Signal<f64>,
-    credit: MapCredit,
+    source: MapSource,
+    attribution: Signal<String>,
     labels: MapControlLabels,
+    on_moved: EventHandler<MovedCamera>,
 ) -> Element {
     let capturing = !matches!(tool(), DrawTool::Pan);
-    let attribution = credit.attribution.clone();
+    let basemap = source.basemap;
     rsx! {
         div {
             class: "map-surface",
@@ -206,10 +201,10 @@ pub fn map_surface(
                 style: "position:absolute;inset:0",
                 "data-armed": if capturing { "true" } else { "false" },
                 onmounted: move |_| {
-                    mount_maplibre(container_id, center, zoom, &labels, &credit.tile_url, tool, draft);
+                    mount_maplibre(container_id, center, zoom, &labels, &basemap, tool, draft, on_moved);
                 },
             }
-            if !attribution.is_empty() {
+            if !attribution().is_empty() {
                 div { class: "map-attr", "{attribution}" }
             }
         }
@@ -296,6 +291,9 @@ pub enum MapMessage {
         /// The vertex's new longitude in decimal degrees.
         lon: f64,
     },
+    /// The camera settled (`moveend`, ADR 0033) — the zoom plus the visible bounds. The Google
+    /// viewport-attribution refresh is the one consumer; every other provider kind ignores it.
+    Moved(MovedCamera),
 }
 
 /// Parses one `dioxus.send` payload into a [`MapMessage`], or `None` for anything this build does not
@@ -325,6 +323,15 @@ pub fn parse_map_message(payload: &str) -> Option<MapMessage> {
     }
     if let Some(zoom) = value.get("zoom") {
         return Some(MapMessage::Zoom(zoom.as_f64()?));
+    }
+    if let Some(moved) = value.get("moved") {
+        return Some(MapMessage::Moved(MovedCamera {
+            zoom: moved.get("zoom")?.as_f64()?,
+            north: moved.get("north")?.as_f64()?,
+            south: moved.get("south")?.as_f64()?,
+            east: moved.get("east")?.as_f64()?,
+            west: moved.get("west")?.as_f64()?,
+        }));
     }
     None
 }
@@ -383,17 +390,23 @@ pub fn apply_vertex_move(mut draft: Signal<MapDraft>, index: usize, lat: f64, lo
 /// Mounts `MapLibre` on `container_id` (a no-op under SSR, where there is no webview to run the
 /// script) and arms the persistent message listener, streaming every gesture as a tagged payload over
 /// `dioxus.send`, read in a loop for the surface's lifetime — not a one-shot eval per click, so the
-/// map stays interactive without a Rust round trip blocking each gesture.
+/// map stays interactive without a Rust round trip blocking each gesture. `on_moved` is called with
+/// every settled camera (`MapMessage::Moved`, ADR 0033); [`map_surface`]'s doc comment covers its use.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "mounts the map at its camera/basemap plus the caller's draw state and camera callback; mirrors map_surface, which threads the same set through"
+)]
 pub fn mount_maplibre(
     container_id: &str,
     center: (f64, f64),
     zoom: Signal<f64>,
     labels: &MapControlLabels,
-    tile_url: &str,
+    basemap: &MapBasemap,
     tool: Signal<DrawTool>,
     draft: Signal<MapDraft>,
+    on_moved: EventHandler<MovedCamera>,
 ) {
-    let script = maplibre_init_script(container_id, center, *zoom.peek(), labels, tile_url);
+    let script = maplibre_init_script(container_id, center, *zoom.peek(), labels, basemap);
     let mut listener = document::eval(&script);
     spawn(async move {
         while let Ok(payload) = listener.recv::<String>().await {
@@ -401,6 +414,7 @@ pub fn mount_maplibre(
                 Some(MapMessage::Click { lat, lon }) => apply_map_click(tool, draft, lat, lon),
                 Some(MapMessage::Zoom(level)) => set_zoom(zoom, level),
                 Some(MapMessage::VertexMoved { index, lat, lon }) => apply_vertex_move(draft, index, lat, lon),
+                Some(MapMessage::Moved(camera)) => on_moved.call(camera),
                 None => {}
             }
         }
@@ -605,12 +619,39 @@ fn circle_paint(color: &str, radius_stops: [(u32, u32); 4], stroke_width: u32) -
     })
 }
 
+/// The `el.__geoBasemap` descriptor the init script and [`apply_map_source_script`] both hand to
+/// `__geoInstall`: a raster source's URL/tile size/overzoom ceiling, or just its kind tag for a style
+/// (a whole style document declares its own basemap layers — `__geoInstall` adds nothing for it).
+fn basemap_descriptor(basemap: &MapBasemap) -> Value {
+    match basemap {
+        MapBasemap::Raster {
+            tile_url,
+            tile_size,
+            max_zoom,
+        } => json!({ "kind": "raster", "tileUrl": tile_url, "tileSize": tile_size, "maxZoom": max_zoom }),
+        MapBasemap::Style { .. } => json!({ "kind": "style" }),
+    }
+}
+
+/// The map constructor's/`setStyle`'s own `style` value for `basemap`: a blank style-8 document for a
+/// raster basemap (`__geoInstall` adds its raster source once the map has loaded), or the style URL
+/// itself for a `MapLibre` style.
+fn initial_style_value(basemap: &MapBasemap) -> Value {
+    match basemap {
+        MapBasemap::Raster { .. } => json!({ "version": 8, "sources": {}, "layers": [] }),
+        MapBasemap::Style { style_url } => json!(style_url),
+    }
+}
+
 /// The `MapLibre` bootstrap script for one container: creates the map (guarded against a re-render
-/// remount), adds the marker/event/draft `GeoJSON` sources + layers once loaded, applies any data
-/// already stashed by [`push_map_data`]/[`push_map_draft`] before the sources existed (`el.__geoPending`
-/// — otherwise a push that races this async `load` event is silently dropped, and nothing ever
-/// re-applies it, per the "Place map shows no marker" bug), and arms the click listener. Source/layer
-/// ids are scoped to each map instance, so two containers on the page never collide.
+/// remount), defines `el.__geoInstall` — the marker/event/draft `GeoJSON` sources + layers, plus the
+/// current basemap's own source when it is a raster one — and calls it once the map has loaded.
+/// [`apply_map_source_script`] later re-runs the same `__geoInstall` after a provider switch, so the
+/// overlay layers are defined exactly once regardless of how many times the basemap changes.
+/// `__geoInstall` also applies any data already stashed by [`push_map_data`]/[`push_map_draft`] before
+/// the sources existed (`el.__geoPending` — otherwise a push that races this async `load` event is
+/// silently dropped, and nothing ever re-applies it, per the "Place map shows no marker" bug). Source/
+/// layer ids are scoped to each map instance, so two containers on the page never collide.
 ///
 /// It also arms a repaint observer, which is what keeps the canvas visible across a layout change
 /// (#252). Arming a draw tool inserts a Finish/Clear row under the map, shrinking `.map-surface`;
@@ -623,15 +664,16 @@ fn maplibre_init_script(
     center: (f64, f64),
     zoom: f64,
     labels: &MapControlLabels,
-    tile_url: &str,
+    basemap: &MapBasemap,
 ) -> String {
     format!(
         r"
         const el = document.getElementById('{container_id}');
         if (el && !el.__geoMap && window.maplibregl) {{
+            el.__geoBasemap = {basemap_json};
             const map = new maplibregl.Map({{
                 container: el,
-                style: {{ version: 8, sources: {{}}, layers: [] }},
+                style: {initial_style},
                 center: [{lon}, {lat}],
                 zoom: {zoom},
                 minZoom: {min_zoom},
@@ -641,8 +683,14 @@ fn maplibre_init_script(
             }});
             el.__geoMap = map;
             map.on('load', () => {{
-                map.addSource('geo-tiles', {{ type: 'raster', tiles: ['{tile_url}'], tileSize: 256, maxzoom: {max_zoom} }});
-                map.addLayer({{ id: 'geo-tile-layer', type: 'raster', source: 'geo-tiles' }});
+                el.__geoInstall(map);{controls}
+            }});
+            el.__geoInstall = function(map) {{
+                const basemap = el.__geoBasemap;
+                if (basemap && basemap.kind === 'raster') {{
+                    map.addSource('geo-tiles', {{ type: 'raster', tiles: [basemap.tileUrl], tileSize: basemap.tileSize, maxzoom: basemap.maxZoom }});
+                    map.addLayer({{ id: 'geo-tile-layer', type: 'raster', source: 'geo-tiles' }});
+                }}
                 map.addSource('geo-markers', {{ type: 'geojson', data: {{ type: 'FeatureCollection', features: [] }} }});
                 map.addLayer({{ id: 'geo-marker-fill', type: 'fill', source: 'geo-markers', filter: ['==', ['geometry-type'], 'Polygon'], paint: {{ 'fill-color': '#5db3ff', 'fill-opacity': 0.25 }} }});
                 map.addLayer({{ id: 'geo-marker-line', type: 'line', source: 'geo-markers', filter: ['==', ['geometry-type'], 'Polygon'], paint: {{ 'line-color': '#5db3ff', 'line-width': 2 }} }});
@@ -667,10 +715,14 @@ fn maplibre_init_script(
                     if (pending.markers) map.getSource('geo-markers').setData(pending.markers);
                     if (pending.events) map.getSource('geo-events').setData(pending.events);
                     if (pending.draft) map.getSource('geo-draft').setData(pending.draft);
-                }}{controls}
-            }});{vertex_drag}
+                }}
+            }};{vertex_drag}
             map.on('click', (e) => {{ if (!handleAt(e.point)) dioxus.send(JSON.stringify({{ click: [e.lngLat.lng, e.lngLat.lat] }})); }});
             map.on('zoomend', () => {{ dioxus.send(JSON.stringify({{ zoom: map.getZoom() }})); }});
+            map.on('moveend', () => {{
+                const b = map.getBounds();
+                dioxus.send(JSON.stringify({{ moved: {{ zoom: map.getZoom(), north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() }} }}));
+            }});
             new ResizeObserver(() => {{ requestAnimationFrame(() => el.__geoMap && el.__geoMap.redraw()); }}).observe(el);
         }}
         ",
@@ -679,11 +731,43 @@ fn maplibre_init_script(
         min_zoom = ZOOM_RANGE.0,
         max_zoom = ZOOM_RANGE.1,
         locale = control_locale(labels),
+        basemap_json = basemap_descriptor(basemap),
+        initial_style = initial_style_value(basemap),
         marker_paint = circle_paint("#5db3ff", POINT_RADIUS_STOPS, 2),
         event_paint = circle_paint("#ffb020", EVENT_RADIUS_STOPS, 1),
         draft_paint = circle_paint("#ff5d5d", POINT_RADIUS_STOPS, 2),
         controls = MAP_CONTROLS_SCRIPT,
         vertex_drag = MAP_VERTEX_DRAG_SCRIPT,
+    )
+}
+
+/// Switches the running map at `container_id` to `source`'s basemap (ADR 0033) without a remount:
+/// re-points `el.__geoBasemap`, then `setStyle`s (`diff: false`, so the reload is unconditional and
+/// `style.load` always fires) and re-runs `__geoInstall` once the new style has loaded, followed by a
+/// forced `redraw()` — the same `WebKitGTK` compositor reason [`push_draft_script`]'s doc comment
+/// documents. A no-op under SSR, or if the map has not mounted yet.
+pub fn apply_map_source(container_id: &str, source: &MapSource) {
+    run_map_script(&apply_map_source_script(container_id, &source.basemap));
+}
+
+/// The provider-switch script: re-point `el.__geoBasemap` at the new basemap, `setStyle` to match, and
+/// re-run the one `__geoInstall` the init script defined.
+fn apply_map_source_script(container_id: &str, basemap: &MapBasemap) -> String {
+    format!(
+        r"
+        const el = document.getElementById('{container_id}');
+        const map = el && el.__geoMap;
+        if (map) {{
+            el.__geoBasemap = {basemap_json};
+            map.setStyle({initial_style}, {{ diff: false }});
+            map.once('style.load', () => {{
+                el.__geoInstall(map);
+                map.redraw();
+            }});
+        }}
+        ",
+        basemap_json = basemap_descriptor(basemap),
+        initial_style = initial_style_value(basemap),
     )
 }
 
@@ -1069,13 +1153,13 @@ pub fn effective_date_choice(
 #[cfg(test)]
 mod tests {
     use super::{
-        DraftActions, DraftRefusal, DrawTool, FIT_MAX_ZOOM, MapControlLabels, MapDraft, MapMessage, closed_ring,
-        combined_bounds, draft_actions, draft_geojson, draft_geometry, empty_feature_collection, events_geojson,
-        fit_bounds_script, format_zoom, geo_point, maplibre_init_script, markers_geojson, move_vertex,
-        parse_map_message, push_data_script, push_draft_script, rendered_credit, save_year, shape_to_draft,
-        zoom_changed,
+        DraftActions, DraftRefusal, DrawTool, FIT_MAX_ZOOM, MapControlLabels, MapDraft, MapMessage, MovedCamera,
+        apply_map_source_script, basemap_descriptor, closed_ring, combined_bounds, draft_actions, draft_geojson,
+        draft_geometry, empty_feature_collection, events_geojson, fit_bounds_script, format_zoom, geo_point,
+        initial_style_value, maplibre_init_script, markers_geojson, move_vertex, parse_map_message, push_data_script,
+        push_draft_script, save_year, shape_to_draft, zoom_changed,
     };
-    use genealogy_app::{MapProvider, PlaceGeometry};
+    use genealogy_app::{MapBasemap, PlaceGeometry};
     use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm, ZOOM_RANGE};
     use serde_json::{Value, json};
 
@@ -1091,51 +1175,146 @@ mod tests {
     }
 
     /// A tile URL that is deliberately *not* the built-in OSM one, so an assertion can tell "the
-    /// configured URL reached the script" apart from "the old hardcoded literal is still there".
+    /// resolved basemap reached the script" apart from "the old hardcoded literal is still there".
     const OTHER_TILE_URL: &str = "https://tiles.example/{z}/{x}/{y}.png";
 
-    fn init_script() -> String {
-        maplibre_init_script("geo-map", (59.9, 10.7), 5.0, &labels(), OTHER_TILE_URL)
-    }
-
-    /// The raster URL is hardcoded in the init script and nothing calls `setStyle`, so a configured
-    /// vector/Google provider still paints OSM tiles. Printing its own `attribution()` would then
-    /// credit a source the operator never sees — the credit has to follow the pixels.
-    #[test]
-    fn a_non_raster_provider_credits_the_tiles_that_are_actually_rendered() {
-        let credit = rendered_credit(&MapProvider::Google {
-            api_key_env: "GOOGLE_MAPS_KEY".to_owned(),
-            attribution: "© Google".to_owned(),
-        });
-        assert_eq!(credit.attribution, "© OpenStreetMap contributors");
-        assert_eq!(credit.tile_url, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
-    }
-
-    /// The pair is resolved together on purpose: a raster provider's URL and its credit must never be
-    /// taken from different providers, or the map shows one source's terms over another's tiles.
-    #[test]
-    fn a_configured_raster_provider_supplies_both_its_url_and_its_own_credit() {
-        let credit = rendered_credit(&MapProvider::OsmRaster {
+    /// A raster basemap over [`OTHER_TILE_URL`], for tests that need one resolved descriptor.
+    fn raster_basemap() -> MapBasemap {
+        MapBasemap::Raster {
             tile_url: OTHER_TILE_URL.to_owned(),
-            attribution: "© Example tiles".to_owned(),
-        });
-        assert_eq!(credit.tile_url, OTHER_TILE_URL);
-        assert_eq!(credit.attribution, "© Example tiles");
+            tile_size: 256,
+            max_zoom: 19,
+        }
     }
 
-    /// And the resolved URL is what the map fetches — before this the template was a literal inside
-    /// the script, so config and pixels could disagree with nothing to catch it.
+    /// A vector style basemap, for the tests distinguishing it from a raster one.
+    fn style_basemap() -> MapBasemap {
+        MapBasemap::Style {
+            style_url: "https://tiles.example/style.json".to_owned(),
+        }
+    }
+
+    fn init_script() -> String {
+        maplibre_init_script("geo-map", (59.9, 10.7), 5.0, &labels(), &raster_basemap())
+    }
+
+    /// The resolved raster URL/size/ceiling reach the script two ways: stashed on `el.__geoBasemap`
+    /// (so a later switch can re-point it), and read back off it by the `addSource` call — never
+    /// baked in as separate literals that could drift apart from each other.
     #[test]
-    fn the_tile_source_fetches_the_resolved_url_rather_than_a_hardcoded_one() {
+    fn a_raster_basemap_reaches_the_tile_source_with_its_resolved_url_size_and_ceiling() {
         let script = init_script();
+        assert!(
+            script.contains(&format!("el.__geoBasemap = {};", basemap_descriptor(&raster_basemap()))),
+            "the resolved descriptor is stashed verbatim:\n{script}"
+        );
         let source = script
             .find("map.addSource('geo-tiles'")
             .expect("the tile source is added");
         let end = script[source..].find(");").expect("the addSource call ends") + source;
+        for fragment in [
+            "tiles: [basemap.tileUrl]",
+            "tileSize: basemap.tileSize",
+            "maxzoom: basemap.maxZoom",
+        ] {
+            assert!(
+                script[source..end].contains(fragment),
+                "the raster source reads {fragment} off the resolved descriptor, not a literal:\n{}",
+                &script[source..end]
+            );
+        }
+    }
+
+    /// A `MapLibre` style is a whole document that already declares its own basemap layers.
+    /// `__geoInstall`'s raster branch is shared, JS-text-identical code re-run after every basemap
+    /// switch (not a per-kind script), so it stays in the text regardless of which basemap built the
+    /// script — what must hold is that it is runtime-gated by `el.__geoBasemap.kind`, so a style
+    /// basemap's own descriptor (`kind: 'style'`) never lets it run and paint a second, unrelated
+    /// basemap over the style's own.
+    #[test]
+    fn a_style_basemap_sets_the_style_url_and_guards_the_raster_source_behind_its_own_kind_check() {
+        let script = maplibre_init_script("geo-map", (59.9, 10.7), 5.0, &labels(), &style_basemap());
         assert!(
-            script[source..end].contains(&format!("tiles: ['{OTHER_TILE_URL}']")),
-            "the raster source fetches the URL it was handed:\n{}",
-            &script[source..end]
+            script.contains("style: \"https://tiles.example/style.json\""),
+            "the constructor's style is set to the resolved style URL:\n{script}"
+        );
+        assert!(
+            script.contains(&format!("el.__geoBasemap = {};", basemap_descriptor(&style_basemap()))),
+            "the style's own descriptor (kind: 'style', no tile fields) is what __geoInstall reads at runtime:\n{script}"
+        );
+        let guard = script
+            .find("if (basemap && basemap.kind === 'raster')")
+            .expect("the raster source is runtime-gated by kind");
+        let raster_source = script
+            .find("map.addSource('geo-tiles'")
+            .expect("__geoInstall's raster branch is still defined — it is reused by every basemap kind");
+        assert!(
+            guard < raster_source,
+            "the raster addSource sits behind the kind guard:\n{script}"
+        );
+    }
+
+    /// A raster basemap's constructor style is the blank style-8 document `__geoInstall` builds on —
+    /// its own raster source is added once the map has loaded, not baked into the initial style.
+    #[test]
+    fn a_raster_basemap_starts_from_a_blank_style() {
+        let script = init_script();
+        let map = script.find("new maplibregl.Map(").expect("the map is constructed");
+        assert!(
+            script[map..].contains(r#"style: {"layers":[],"sources":{},"version":8}"#),
+            "a raster basemap opens on a blank style-8 document:\n{script}"
+        );
+    }
+
+    /// [`apply_map_source_script`] is the provider-switch path (ADR 0033): it must re-point
+    /// `el.__geoBasemap`, call `setStyle` unconditionally (`diff: false`, or a switch back to an
+    /// identical-looking style could no-op), and re-run the one `__geoInstall` the init script defined
+    /// — never a second copy of the overlay-layer logic.
+    #[test]
+    fn the_switch_script_repoints_the_basemap_and_reinstalls_the_overlay_layers() {
+        let script = apply_map_source_script("geo-map", &raster_basemap());
+        assert!(
+            script.contains(&format!("el.__geoBasemap = {};", basemap_descriptor(&raster_basemap()))),
+            "the basemap descriptor is re-pointed at the new provider:\n{script}"
+        );
+        assert!(
+            script.contains(&format!(
+                "map.setStyle({}, {{ diff: false }});",
+                initial_style_value(&raster_basemap())
+            )),
+            "setStyle reloads unconditionally so style.load always fires:\n{script}"
+        );
+        let set_style = script.find("map.setStyle(").expect("setStyle is called");
+        let reinstall = script
+            .find("el.__geoInstall(map);")
+            .expect("the overlay layers are re-installed");
+        assert!(
+            set_style < reinstall,
+            "the re-install runs after the style swap:\n{script}"
+        );
+        assert!(
+            script.contains("map.redraw();"),
+            "a forced redraw composites the swap under WebKitGTK's software-GL path:\n{script}"
+        );
+        assert!(
+            !script.contains("addLayer"),
+            "the switch script has no overlay-layer logic of its own — it only re-runs __geoInstall:\n{script}"
+        );
+    }
+
+    /// The camera-settled message a Google viewport-attribution refresh needs (ADR 0033) — ignored by
+    /// every other provider kind, but still parsed the same way regardless of which is active.
+    #[test]
+    fn a_moved_payload_carries_the_settled_camera() {
+        assert_eq!(
+            parse_map_message(r#"{"moved":{"zoom":6.5,"north":61.0,"south":58.0,"east":12.0,"west":9.0}}"#),
+            Some(MapMessage::Moved(MovedCamera {
+                zoom: 6.5,
+                north: 61.0,
+                south: 58.0,
+                east: 12.0,
+                west: 9.0,
+            }))
         );
     }
 
@@ -1415,22 +1594,6 @@ mod tests {
                 "the constructor carries `{bound}`:\n{script}"
             );
         }
-    }
-
-    /// A raster source with no `maxzoom` makes `MapLibre` request tiles that 404 above the source's
-    /// last level; declaring it makes `MapLibre` overzoom the z19 tile instead.
-    #[test]
-    fn the_raster_source_declares_the_last_zoom_it_serves_so_maplibre_overzooms() {
-        let script = init_script();
-        let source = script
-            .find("map.addSource('geo-tiles'")
-            .expect("the tile source is added");
-        let end = script[source..].find(");").expect("the addSource call ends") + source;
-        assert!(
-            script[source..end].contains(&format!("maxzoom: {}", ZOOM_RANGE.1)),
-            "the raster source names the last zoom it serves:\n{}",
-            &script[source..end]
-        );
     }
 
     #[test]

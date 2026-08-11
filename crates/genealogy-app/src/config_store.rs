@@ -740,19 +740,32 @@ mod tests {
         // No `[map]` section yet: an empty config resolves to the built-in OSM default.
         let empty = store.load_map_config().expect("load empty");
         assert!(empty.provider.is_none());
-        assert_eq!(empty.resolved_provider(), MapProvider::default_osm());
+        assert_eq!(empty.resolve(None).expect("resolve"), MapProvider::default_osm());
 
-        let map = crate::config::MapConfig {
-            provider: Some(MapProvider::MaplibreStyle {
+        let mut providers = std::collections::BTreeMap::new();
+        providers.insert(
+            "carto".to_owned(),
+            MapProvider::MaplibreStyle {
                 style_url: "https://example.test/style.json".to_owned(),
                 attribution: "© Example".to_owned(),
                 api_key_env: Some("EXAMPLE_MAP_KEY".to_owned()),
-            }),
+            },
+        );
+        let map = crate::config::MapConfig {
+            provider: Some("carto".to_owned()),
+            providers,
             net_allowlist: vec!["example.test".to_owned()],
         };
         store.store_map_config(&map).expect("store map");
 
         assert_eq!(store.load_map_config().expect("reload"), map);
+        // The named provider survives being read back as the active choice, and stays available even
+        // if a later write switches `provider` away from it (the "config file only" decision needs the
+        // inactive provider's parameters preserved).
+        assert_eq!(
+            store.load_map_config().expect("reload").resolve(None).expect("resolve"),
+            map.providers["carto"]
+        );
         // The operator scope is untouched by the client-scope write.
         assert!(store.load_operator().is_ok());
     }

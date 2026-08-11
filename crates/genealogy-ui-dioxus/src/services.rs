@@ -15,10 +15,11 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use genealogy_app::{
-    AiConfig, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, MapConfig, PluginTrust,
-    PluginTrustConfig, PreferenceLayers, ResolvedLocale, Session, ShortcutConfig, SuretyLabelOverrides, TagSummary,
-    Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers,
-    read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides, workspace_counts,
+    AiConfig, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, MapConfig, MapProvider,
+    MapSource, PluginTrust, PluginTrustConfig, PreferenceLayers, ResolvedLocale, Session, ShortcutConfig,
+    SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
+    read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides,
+    workspace_counts,
 };
 use genealogy_plugin_host::{
     Capability, ExportTarget, Grants, HostPattern, Invocation, NetPolicy, PluginHost, PluginRole, PresentError,
@@ -108,7 +109,12 @@ impl Services {
     }
 
     /// The chrome localizer for the open workspace, honouring the configured UI language.
-    fn chrome(&self) -> Chrome {
+    ///
+    /// `pub(crate)`, not private: `screens::geography`'s provider-switch handler needs one inside its
+    /// own `spawn`ed async block (to localize a resolve/store failure with
+    /// `Chrome::geography_provider_switch_error`) after `resolve_map_source`/`store_map_config`
+    /// stopped building one themselves — see those functions' doc comments for why.
+    pub(crate) fn chrome(&self) -> Chrome {
         Chrome::for_workspace(&self.dir, self.config_ui_language().as_ref())
     }
 
@@ -1009,17 +1015,65 @@ fn ai_config(services: &Services) -> AiConfig {
     }
 }
 
-/// Reads the client-scope `[map]` config for the workspace at `dir`, falling back to the built-in
-/// default (OSM raster) on any read error — the same fallback shape as [`ai_config`], which its doc
-/// comment already claimed to mirror while living in `screens::geography`.
-pub(crate) fn map_config(dir: &Path) -> MapConfig {
-    match FileConfigStore::for_workspace(dir.to_path_buf()).load_map_config() {
-        Ok(config) => config,
-        Err(error) => {
-            tracing::warn!(%error, "could not read the map config; using the built-in default");
-            MapConfig::default()
-        }
-    }
+/// Reads the client-scope `[map]` config (ADR 0025 §3 / ADR 0033) from the already-loaded global
+/// config. Unlike [`ai_config`], this has only the one path: the workspace-scoped
+/// `FileConfigStore::for_workspace` has no `config_path` set (`config_store.rs`), so `[map]` — which
+/// lives in the *global* config, not the workspace manifest — could never round-trip through it. That
+/// was #283's root cause: every switch persisted nowhere and every read silently fell back to the
+/// built-in default, so the toolbar select always looked reset.
+pub(crate) fn map_config(services: &Services) -> MapConfig {
+    services.config.map.clone()
+}
+
+/// Persists `map` as the client-scope `[map]` config (ADR 0025 §3 / ADR 0033) — the global config,
+/// the only file [`map_config`] can ever read it back from. Needs no `Services` — the global config
+/// path is not workspace-scoped.
+///
+/// # Errors
+///
+/// The technical cause (a config path/read/write failure) as plain text — the caller wraps it in its
+/// own localized template (`Chrome::geography_provider_switch_error`), since a generic
+/// [`Chrome::plugin_error`] would misname this a plugin failure.
+pub async fn store_map_config(map: MapConfig) -> Result<(), String> {
+    let path = config::config_path().map_err(|error| error.to_string())?;
+    FileConfigStore::new(path, None)
+        .store_map_config(&map)
+        .map_err(|error| error.to_string())
+}
+
+/// Resolves `provider` into the [`MapSource`] a renderer mounts (ADR 0033): env substitution for a
+/// `MapLibre` style, or a minted Google session for the Google adapter. The tile source a renderer
+/// paints, never the configured `kind` — see `genealogy_app::resolve_map_source`'s doc comment. Needs
+/// no `Services` — the whole resolution is env vars and outbound HTTP, nothing workspace-scoped.
+///
+/// # Errors
+///
+/// The technical cause (a missing API-key env var, or an unreachable style/session endpoint) as plain
+/// text — see [`store_map_config`]'s doc comment for why this is not already localized.
+pub async fn resolve_map_source(provider: MapProvider) -> Result<MapSource, String> {
+    genealogy_app::resolve_map_source(&provider)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+/// Refreshes the live per-viewport attribution Google's Map Tiles terms require, for the camera at
+/// `zoom`/`bounds` (`north, south, east, west`) — a no-op (`Ok(None)`) for every provider but
+/// [`genealogy_app::MapProvider::Google`], whose terms are the only ones requiring a dynamic credit.
+/// Needs no `Services`, for the same reason [`resolve_map_source`] does not.
+///
+/// # Errors
+///
+/// The technical cause as plain text — see [`store_map_config`]'s doc comment for why this is not
+/// already localized (the caller's own refresh silently drops this one rather than toasting it, since
+/// a failed background refresh is not worth interrupting the operator over).
+pub async fn refresh_map_attribution(
+    provider: MapProvider,
+    zoom: f64,
+    bounds: (f64, f64, f64, f64),
+) -> Result<Option<String>, String> {
+    genealogy_app::refresh_map_attribution(&provider, zoom, bounds)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 /// How many progress reports a bulk-export or bulk-import channel buffers. The guest reports far

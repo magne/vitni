@@ -393,14 +393,25 @@ impl MapProvider {
     }
 }
 
-/// The `[map]` configuration section (ADR 0025 §3): the geography view's tile/style provider and its
-/// outbound-host allowlist (the `net` capability boundary, ADR 0007 §2 / 0011 §3). Client/presentation
-/// scope (ADR 0015 §1) — machine/user-local, not shipped with data.
+/// The reserved [`MapConfig::choices`]/[`MapConfig::resolve`] key naming the built-in OSM default — no
+/// configured provider may use it as a name (the toolbar select's value for that choice is this empty
+/// string).
+pub const BUILT_IN_MAP_PROVIDER: &str = "";
+
+/// The `[map]` configuration section (ADR 0025 §3 / ADR 0033): the named map provider inventory, the
+/// active choice, and the outbound-host allowlist (the `net` capability boundary, ADR 0007 §2 /
+/// 0011 §3). Client/presentation scope (ADR 0015 §1) — machine/user-local, not shipped with data.
+/// Named providers mirror [`AiConfig`]'s shape so a provider's parameters survive even while it is not
+/// the active one (switching away and back must not lose a style URL).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MapConfig {
-    /// The configured provider; `None` resolves to [`MapProvider::default_osm`].
+    /// The active provider's name, a key in [`Self::providers`]; `None` resolves to the built-in OSM
+    /// default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider: Option<MapProvider>,
+    pub provider: Option<String>,
+    /// The configured providers, keyed by name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub providers: BTreeMap<String, MapProvider>,
     /// Outbound hosts the map is allowed to fetch tiles/styles from; empty defers entirely to the
     /// provider's own host (no additional allowlisting needed for the built-in OSM default).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -408,17 +419,44 @@ pub struct MapConfig {
 }
 
 impl MapConfig {
-    /// Whether this section carries nothing (no provider override, no allowlist) — lets an empty
-    /// `[map]` table be omitted when serializing.
+    /// Whether this section carries nothing (no active provider, no configured providers, no
+    /// allowlist) — lets an empty `[map]` table be omitted when serializing.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.provider.is_none() && self.net_allowlist.is_empty()
+        self.provider.is_none() && self.providers.is_empty() && self.net_allowlist.is_empty()
     }
 
-    /// The effective provider: the configured one, or the built-in OSM default.
+    /// Resolves the provider a caller asked for: `name` when given, else [`Self::provider`] (the
+    /// active choice), else the built-in default. [`BUILT_IN_MAP_PROVIDER`] (the empty string) always
+    /// resolves to [`MapProvider::default_osm`], whether it arrives as `name` or as `Self::provider`.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the resolved key is non-empty and not in [`Self::providers`]. The
+    /// message names the requested provider.
+    pub fn resolve(&self, name: Option<&str>) -> Result<MapProvider, AppError> {
+        let key = name.or(self.provider.as_deref()).unwrap_or(BUILT_IN_MAP_PROVIDER);
+        if key == BUILT_IN_MAP_PROVIDER {
+            return Ok(MapProvider::default_osm());
+        }
+        self.providers
+            .get(key)
+            .cloned()
+            .ok_or_else(|| AppError::Config(format!("unknown map provider {key:?} (not in [map.providers])")))
+    }
+
+    /// Every provider a caller can pick from: the built-in default first (keyed
+    /// [`BUILT_IN_MAP_PROVIDER`]), then the configured providers in name order — exactly what the
+    /// toolbar select renders, so it can never offer a choice [`Self::resolve`] would reject.
     #[must_use]
-    pub fn resolved_provider(&self) -> MapProvider {
-        self.provider.clone().unwrap_or_else(MapProvider::default_osm)
+    pub fn choices(&self) -> Vec<(String, MapProvider)> {
+        let mut choices = vec![(BUILT_IN_MAP_PROVIDER.to_owned(), MapProvider::default_osm())];
+        choices.extend(
+            self.providers
+                .iter()
+                .map(|(name, provider)| (name.clone(), provider.clone())),
+        );
+        choices
     }
 }
 
@@ -869,12 +907,14 @@ pub fn set_default_workspace(path: &Path, name: &str) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Config, DateFormat, Engine, IdFormats, LocaleDefaults, MapProvider, NumberFormat, SuretyLabelOverride,
-        SuretyLabelOverrides, ThemeMode, add_trusted_publisher, load, load_or_bootstrap, remove_trusted_publisher,
-        save, set_default_workspace, set_operator_identity, set_workspace_default_id_formats,
+        Config, DateFormat, Engine, IdFormats, LocaleDefaults, MapConfig, MapProvider, NumberFormat,
+        SuretyLabelOverride, SuretyLabelOverrides, ThemeMode, add_trusted_publisher, load, load_or_bootstrap,
+        remove_trusted_publisher, save, set_default_workspace, set_operator_identity, set_workspace_default_id_formats,
         set_workspace_default_locale, set_workspace_default_surety,
     };
+    use crate::error::AppError;
     use genealogy_core::provenance::Confidence;
+    use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};
 
     fn config_at(path: &Path) -> Config {
@@ -920,6 +960,75 @@ mod tests {
         );
         assert_eq!(maplibre_style().raster_tile_url(), None);
         assert_eq!(google().raster_tile_url(), None);
+    }
+
+    #[test]
+    fn an_unconfigured_map_resolves_none_and_the_built_in_key_to_the_osm_default() {
+        let map = MapConfig::default();
+        assert_eq!(map.resolve(None).expect("resolve"), MapProvider::default_osm());
+        assert_eq!(map.resolve(Some("")).expect("resolve"), MapProvider::default_osm());
+    }
+
+    #[test]
+    fn resolving_an_unknown_provider_name_is_a_named_config_error() {
+        let map = MapConfig::default();
+        let error = map.resolve(Some("bogus")).expect_err("bogus is not configured");
+        let AppError::Config(message) = error else {
+            panic!("expected AppError::Config, got {error:?}");
+        };
+        assert!(
+            message.contains("bogus"),
+            "the error names the requested provider: {message}"
+        );
+    }
+
+    #[test]
+    fn none_resolves_the_active_configured_provider() {
+        let mut providers = BTreeMap::new();
+        providers.insert("carto".to_owned(), maplibre_style());
+        let map = MapConfig {
+            provider: Some("carto".to_owned()),
+            providers,
+            net_allowlist: Vec::new(),
+        };
+        assert_eq!(map.resolve(None).expect("resolve"), maplibre_style());
+        // Naming a provider explicitly still overrides the active one.
+        assert_eq!(map.resolve(Some("")).expect("resolve"), MapProvider::default_osm());
+    }
+
+    #[test]
+    fn choices_always_offers_the_built_in_default_first_then_configured_providers_in_order() {
+        let mut providers = BTreeMap::new();
+        providers.insert("zzz-custom".to_owned(), google());
+        providers.insert("carto".to_owned(), maplibre_style());
+        let map = MapConfig {
+            provider: None,
+            providers,
+            net_allowlist: Vec::new(),
+        };
+        assert_eq!(
+            map.choices(),
+            vec![
+                (String::new(), MapProvider::default_osm()),
+                ("carto".to_owned(), maplibre_style()),
+                ("zzz-custom".to_owned(), google()),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_empty_map_config_has_no_provider_and_no_providers() {
+        assert!(MapConfig::default().is_empty());
+        let mut providers = BTreeMap::new();
+        providers.insert("carto".to_owned(), maplibre_style());
+        assert!(
+            !MapConfig {
+                provider: None,
+                providers,
+                net_allowlist: Vec::new(),
+            }
+            .is_empty()
+        );
     }
 
     #[test]

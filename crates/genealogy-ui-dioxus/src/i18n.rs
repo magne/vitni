@@ -633,6 +633,14 @@ impl Chrome {
         }
     }
 
+    /// A map provider switch could not be resolved (ADR 0033) — a missing `api-key-env` environment
+    /// variable, a style with no `{key}` placeholder for it, or an unreachable style/session endpoint.
+    /// `detail` is the technical cause, passed through (mirrors [`Self::plugin_error`]).
+    #[must_use]
+    pub fn geography_provider_switch_error(&self, detail: &str) -> String {
+        fl!(self.loader, "geography-provider-switch-error", detail = detail)
+    }
+
     /// The Pan draw-tool button's accessible title.
     #[must_use]
     pub fn geography_tool_pan(&self) -> String {

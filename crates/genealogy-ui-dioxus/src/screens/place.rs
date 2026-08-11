@@ -1,4 +1,4 @@
-use genealogy_app::{PlaceGeometry, PlaceType};
+use genealogy_app::{MapProvider, PlaceGeometry, PlaceType};
 // The place row view-models the prelude doesn't re-export; they seed the per-row Name / enclosing edits.
 use genealogy_ui::{
     DateDraft, MarkerShapeVm, PickerState, PlaceGeometryVm, PlaceHierarchyVm, PlaceNameVm, place_map_display_shape,
@@ -6,12 +6,12 @@ use genealogy_ui::{
 
 use super::geography::geography_time_slider;
 use super::map_shared::{
-    DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapZoomReadout,
+    DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapZoomReadout, MovedCamera,
     draft_actions, draft_actions_row, draft_geometry, draw_tool_buttons, events_geojson, fit_bounds, map_surface,
-    markers_geojson, push_map_data, rendered_credit, shape_to_draft, use_draft_push,
+    markers_geojson, push_map_data, shape_to_draft, use_draft_push,
 };
 use super::prelude::*;
-use crate::services::map_config;
+use crate::services::{map_config, resolve_map_source};
 
 /// The create-mode place record: an uncommitted [`PlaceDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). Save commits the whole place; Cancel discards. Save is
@@ -822,12 +822,24 @@ fn PlaceMapEditor(
     let chrome = state.chrome();
     let mut nav = use_context::<NavState>();
 
-    // The configured tile provider, so this surface credits the source it renders (#254). A read-once
-    // cache with no reactive dependency, exactly like the Geography tool's own memo: switching provider
-    // in the Geography toolbar does not repaint either surface until the screen is rebuilt — the
-    // existing "Switching provider repaints nothing" behaviour, not something this memo introduces.
-    let provider_dir = state.services().dir.clone();
-    let provider = use_memo(move || map_config(&provider_dir).resolved_provider());
+    // The configured tile/style source, so this surface credits the source it renders (#254). Resolved
+    // once, with no reactive dependency on the provider — switching provider is the Geography toolbar's
+    // own affordance (ADR 0033); this tab only ever reuses whatever is active. Async because resolving
+    // a Google provider mints a session over the network; `attribution` seeds from the resolved source
+    // once it lands, below.
+    let map_provider = map_config(state.services())
+        .resolve(None)
+        .unwrap_or_else(|_| MapProvider::default_osm());
+    let source = use_resource(move || {
+        let provider = map_provider.clone();
+        async move { resolve_map_source(provider).await }
+    });
+    let mut attribution = use_signal(String::new);
+    use_effect(move || {
+        if let Some(Ok(resolved)) = &*source.read() {
+            attribution.set(resolved.attribution.clone());
+        }
+    });
 
     let year = use_signal(|| PLACE_MAP_DEFAULT_YEAR);
     let zoom = use_signal(|| PLACE_MAP_DEFAULT_ZOOM);
@@ -908,16 +920,22 @@ fn PlaceMapEditor(
                 }
             }
             div { class: "card map-card",
-                {map_surface(
-                    PLACE_MAP_CONTAINER_ID,
-                    aria,
-                    tool,
-                    draft,
-                    center,
-                    zoom,
-                    rendered_credit(&provider()),
-                    MapControlLabels::from_chrome(chrome),
-                )}
+                if let Some(Ok(resolved)) = &*source.read() {
+                    {map_surface(
+                        PLACE_MAP_CONTAINER_ID,
+                        aria,
+                        tool,
+                        draft,
+                        center,
+                        zoom,
+                        resolved.clone(),
+                        attribution,
+                        MapControlLabels::from_chrome(chrome),
+                        EventHandler::new(|_: MovedCamera| {}),
+                    )}
+                } else {
+                    p { class: "loading", "{chrome.loading()}" }
+                }
             }
             {place_map_as_of_note(loc, &detail.geometries, resolved_shape.as_ref(), year())}
             {draft_actions_row(chrome, draft_actions(tool(), &draft()), on_commit_draft, on_clear_draft)}
