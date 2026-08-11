@@ -21,6 +21,11 @@ genealogy.db-wal
 # Design-discussion notes — kept locally, never committed.
 ChatGPT.md
 
+# API keys named by [map]'s api-key-env / [ai]'s api_key_env are read from the environment; a local
+# .env holding them must never be committed (#296).
+.env
+.env.*
+
 
 # VS Code
 .vscode/*

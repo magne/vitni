@@ -391,6 +391,17 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 - **Cross-platform packaging** — 1.0 is Linux-first (tarball + `.deb` + AppImage). macOS/Windows
   bundles and **OS-level code-signing / notarization** (Gatekeeper, Authenticode) are a later cycle
   (ADR 0014 §Out of scope). — #215
+- **An API key can only reach the app through the launching shell.** Both places that take a key name
+  one as an *environment variable* and read it with plain `std::env::var` at use time — `[map]`'s
+  `api-key-env` (`map_source.rs`, ADR 0033) and `[ai]`'s `api_key_env` (`plugin_host/src/ai.rs`, ADR
+  0017 §4) — and nothing in the workspace loads a `.env` file (no `dotenvy`/`dotenv` dependency
+  exists). `VAR=… cargo run` works; a desktop launcher (`.desktop`, AppImage, `.deb`) starts the GUI
+  with no shell profile, so a keyed MapLibre style, the Google provider, and every `vision-api` AI
+  provider are unreachable from an installed build with no way to say so in config. Proposed shape:
+  load `<workspace>/.env` then `~/.config/genealogy/.env` at startup in `genealogy-app`, never
+  overriding an already-set variable, both gitignored — the key stays out of config files, logs and
+  the event log either way, which is the whole point of naming a variable rather than storing a
+  secret. — #296
 - **`.deb` needs `GENEALOGY_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
   distro-installed binary needs `GENEALOGY_PLUGIN_DIR=/usr/lib/genealogy/plugins` (the AppImage sets it
   via `AppRun`; the tarball resolves the fleet beside the binary). Teaching the embedded layer a default
