@@ -15,6 +15,7 @@ use genealogy_ui_dioxus::screens::{use_record_edit, use_save_on_request};
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::close_confirm::CloseConfirmDialog;
 use genealogy_ui_dioxus::shell::nav_state::{DraftId, EditKey, NavState, Overlay, SaveRequest, SaveThen, StashedEdit};
+use genealogy_ui_dioxus::shell::tabstrip::RecordTabstrip;
 use unic_langid::LanguageIdentifier;
 
 /// A chrome localizer for a single explicit language (deterministic for tests).
@@ -68,6 +69,19 @@ fn mark_draft_dirty(nav: &mut NavState, draft: DraftId) {
 fn commit_and_report(nav: &mut NavState, draft: DraftId, human_id: &str, label: &str) {
     nav.commit_draft(draft, record(human_id, label));
     nav.note_save_finished(&EditKey::saved(Category::People, human_id), true);
+}
+
+/// Parks a create buffer for `draft` that names itself `name` — what typing into a create form writes
+/// through, and what its tab (and this dialog) is then titled by.
+fn name_draft(nav: &mut NavState, draft: DraftId, name: &str) {
+    let typed = TagDraft {
+        name: name.to_owned(),
+        ..TagDraft::new()
+    };
+    nav.stash_edit(
+        EditKey::draft(Category::People, draft),
+        StashedEdit::new(typed, TagDraft::new(), ProvenanceDraft::default()),
+    );
 }
 
 /// A dirty, valid draft — the buffer a mid-edit pane holds.
@@ -1097,8 +1111,8 @@ fn the_quit_dialog_lists_every_record_with_unsaved_work() {
     assert!(html.contains("Ada"), "the first dirty record is named:\n{html}");
     assert!(html.contains("Cy"), "and so is the third:\n{html}");
     assert!(
-        html.contains("New Tags"),
-        "the draft is named as the tabstrip names it:\n{html}"
+        html.contains("<li>edited</li>"),
+        "the draft is named as the tabstrip names it — by what was typed into it:\n{html}"
     );
     assert!(
         !html.contains("Bob"),
@@ -1697,4 +1711,153 @@ fn a_failed_draft_commit_abandons_the_run_and_keeps_both_drafts() {
     );
     assert!(html.contains("SAVING:NONE"), "the armed save is cleared:\n{html}");
     assert!(html.contains("QUEUE:[]"), "and so is the rest of the queue:\n{html}");
+}
+
+// ---- The confirm names a tab exactly as the strip does (issue #260) -------------------------------
+
+/// The quit confirm over two People drafts, neither typed into.
+fn quit_dialog_over_two_empty_drafts() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        nav.request_quit();
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_quit_dialog_names_two_empty_drafts_apart() {
+    // The at-stake list is the operator's only view of what Discard all destroys, so two entries reading
+    // the same thing would make the choice unanswerable.
+    let html = render(quit_dialog_over_two_empty_drafts);
+    assert_eq!(
+        html.matches("<li>New People</li>").count(),
+        1,
+        "one entry is the unnumbered draft:\n{html}"
+    );
+    assert_eq!(
+        html.matches("<li>New People (2)</li>").count(),
+        1,
+        "and the other carries its ordinal:\n{html}"
+    );
+}
+
+/// The quit confirm over a draft with a name typed into it.
+fn quit_dialog_over_a_named_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        name_draft(&mut nav, draft, "Ada Lovelace");
+        nav.request_quit();
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_quit_dialog_names_a_typed_draft_by_its_name() {
+    let html = render(quit_dialog_over_a_named_draft);
+    assert!(
+        html.contains("<li>Ada Lovelace</li>"),
+        "the draft is listed by what was typed into it:\n{html}"
+    );
+    assert!(
+        !html.contains("New People"),
+        "and not also by the generic new-record label:\n{html}"
+    );
+}
+
+/// The close confirm for a named draft's own tab.
+fn close_dialog_over_a_named_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        name_draft(&mut nav, draft, "Ada Lovelace");
+        nav.request_close_tab(0);
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_close_confirm_names_a_typed_draft_by_its_name() {
+    let html = render(close_dialog_over_a_named_draft);
+    assert!(
+        html.contains("Ada Lovelace"),
+        "the body names the record the operator is about to lose:\n{html}"
+    );
+    assert!(html.contains("Discard draft"), "and it is still a draft:\n{html}");
+}
+
+/// The close confirm for the *second* of two untyped drafts.
+fn close_dialog_over_the_second_empty_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        nav.request_close_tab(1);
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_close_confirm_names_the_second_empty_draft_by_its_ordinal() {
+    let html = render(close_dialog_over_the_second_empty_draft);
+    assert!(
+        html.contains("New People (2)"),
+        "the confirm says which of the two drafts it is about:\n{html}"
+    );
+}
+
+/// Both the record strip and the confirm, over one strip of two untyped drafts.
+fn tabstrip_and_dialog_over_two_empty_drafts() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        nav.request_quit();
+    });
+    rsx! {
+        RecordTabstrip {}
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn the_strip_and_the_confirm_name_a_tab_identically() {
+    // The test that fails if a second tab-naming function ever reappears: the strip and the dialog are
+    // rendered over one `NavState`, and each tab has to read the same in both.
+    let html = render(tabstrip_and_dialog_over_two_empty_drafts);
+    assert_eq!(
+        html.matches(r#"aria-label="Close New People""#).count(),
+        1,
+        "the strip has exactly one unnumbered New People tab:\n{html}"
+    );
+    assert_eq!(
+        html.matches("<li>New People</li>").count(),
+        1,
+        "and the dialog lists it under the same name:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"aria-label="Close New People (2)""#).count(),
+        1,
+        "the numbered tab likewise:\n{html}"
+    );
+    assert_eq!(
+        html.matches("<li>New People (2)</li>").count(),
+        1,
+        "and the dialog agrees on its number:\n{html}"
+    );
 }

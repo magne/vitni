@@ -11,10 +11,10 @@
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use genealogy_ui::{Category, Destination, ProvenanceDraft, RecordRef, TagDraft, Tool};
+use genealogy_ui::{Category, Destination, NoteDraft, ProvenanceDraft, RecordRef, TagDraft, Tool};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::shell::ChromeCtx;
-use genealogy_ui_dioxus::shell::nav_state::{EditKey, NavState, OpenTab, StashedEdit};
+use genealogy_ui_dioxus::shell::nav_state::{DraftId, EditKey, NavState, OpenTab, StashedEdit};
 use genealogy_ui_dioxus::shell::tabstrip::RecordTabstrip;
 use unic_langid::LanguageIdentifier;
 
@@ -426,4 +426,204 @@ fn reveal_within_a_category_leaves_the_list() {
         html.contains("REF:Birth"),
         "the linked record still opens as the active tab:\n{html}"
     );
+}
+
+// ---- How a draft tab names itself (issue #260) -----------------------------------------------------
+
+/// Parks a create buffer for `draft` holding `name` as the tag's name — what typing into a Tags create
+/// form writes through, and what the tab is then titled by.
+fn name_draft(nav: &mut NavState, category: Category, draft: DraftId, name: &str) {
+    let typed = TagDraft {
+        name: name.to_owned(),
+        ..TagDraft::new()
+    };
+    nav.stash_edit(
+        EditKey::draft(category, draft),
+        StashedEdit::new(typed, TagDraft::new(), ProvenanceDraft::default()),
+    );
+}
+
+/// Parks a create buffer that is dirty but names nothing (a tag's priority changed, its name still
+/// blank) — a draft with unsaved work and no title.
+fn unnamed_dirty_draft(nav: &mut NavState, category: Category, draft: DraftId) {
+    let typed = TagDraft {
+        priority: "7".to_owned(),
+        ..TagDraft::new()
+    };
+    nav.stash_edit(
+        EditKey::draft(category, draft),
+        StashedEdit::new(typed, TagDraft::new(), ProvenanceDraft::default()),
+    );
+}
+
+/// One People draft with a name typed into it.
+fn tabstrip_with_a_named_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        name_draft(&mut nav, Category::People, draft, "Ada Lovelace");
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn a_draft_tab_shows_the_name_typed_into_it() {
+    let html = render(tabstrip_with_a_named_draft);
+    assert!(
+        html.contains(">Ada Lovelace<"),
+        "the tab is titled by what was typed, not by its category:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Ada Lovelace — unsaved changes""#),
+        "the unsaved accessible name uses the same label:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Close Ada Lovelace""#),
+        "and so does the close control's:\n{html}"
+    );
+    assert!(
+        !html.contains("New People"),
+        "a named draft never also reads as the generic new record:\n{html}"
+    );
+}
+
+/// A People draft that is dirty but has nothing that names it.
+fn tabstrip_with_a_dirty_unnamed_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        unnamed_dirty_draft(&mut nav, Category::People, draft);
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn a_draft_dirty_outside_its_name_keeps_the_localized_fallback() {
+    // Dirtiness is not a name: this draft has unsaved work but nothing to be titled by, so the tab reads
+    // as a new record rather than as an empty string.
+    let html = render(tabstrip_with_a_dirty_unnamed_draft);
+    assert!(html.contains(">New People<"), "the fallback label shows:\n{html}");
+    assert!(html.contains("unsaved-dot"), "and it is still marked unsaved:\n{html}");
+}
+
+/// Two People drafts, neither typed into.
+fn tabstrip_with_two_empty_drafts() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::People);
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn two_empty_drafts_of_one_category_are_named_apart() {
+    // Two tabs with one accessible name is the a11y defect the ordinal exists for. The count has to be
+    // exact: `"New People (2)"` *contains* `"New People"`, so a bare `contains` proves nothing.
+    let html = render(tabstrip_with_two_empty_drafts);
+    assert_eq!(
+        html.matches(r#"aria-label="Close New People""#).count(),
+        1,
+        "exactly one tab is the unnumbered New People:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"aria-label="Close New People (2)""#).count(),
+        1,
+        "and the second carries its ordinal:\n{html}"
+    );
+}
+
+/// A named People draft, then an empty one.
+fn tabstrip_with_a_named_then_an_empty_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let first = nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        name_draft(&mut nav, Category::People, first, "Ada Lovelace");
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn typing_into_one_draft_does_not_renumber_its_neighbour() {
+    // The ordinal is the draft's position among its category's drafts, not its position among the
+    // *unnamed* ones — otherwise naming draft 1 would silently renumber draft 2 to (1) while the operator
+    // watched.
+    let html = render(tabstrip_with_a_named_then_an_empty_draft);
+    assert!(
+        html.contains(">Ada Lovelace<"),
+        "draft 1 is titled by its name:\n{html}"
+    );
+    assert!(
+        html.contains(">New People (2)<"),
+        "and draft 2 keeps the ordinal it had:\n{html}"
+    );
+}
+
+/// One draft in each of two categories, neither typed into.
+fn tabstrip_with_a_draft_in_two_categories() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::Tags);
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn categories_do_not_share_an_ordinal() {
+    // The ordinal counts within a category: a lone draft in each of two categories is already named
+    // apart by the entity, so numbering either would be noise.
+    let html = render(tabstrip_with_a_draft_in_two_categories);
+    assert!(html.contains(">New People<"), "the People draft is unnumbered:\n{html}");
+    assert!(html.contains(">New Tags<"), "and so is the Tags draft:\n{html}");
+    assert!(
+        !html.contains("(2)"),
+        "no ordinal is spent on drafts of different categories:\n{html}"
+    );
+}
+
+/// A Notes draft holding a long body, so the label has to be cut down to a tab.
+fn tabstrip_with_a_long_note_draft() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::Notes);
+        let typed = NoteDraft {
+            text: format!("# Estate inventory\n\n{}", "x".repeat(200)),
+            ..NoteDraft::new()
+        };
+        nav.stash_edit(
+            EditKey::draft(Category::Notes, draft),
+            StashedEdit::new(typed, NoteDraft::new(), ProvenanceDraft::default()),
+        );
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn a_note_drafts_tab_is_its_first_line_not_its_whole_text() {
+    let html = render(tabstrip_with_a_long_note_draft);
+    assert!(
+        html.contains(">Estate inventory<"),
+        "the heading names the tab, with its # stripped:\n{html}"
+    );
+    assert!(!html.contains("xxxxx"), "and the body never reaches the strip:\n{html}");
 }
