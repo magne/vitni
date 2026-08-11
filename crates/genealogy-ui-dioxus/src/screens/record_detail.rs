@@ -34,7 +34,7 @@ pub fn RecordDetail() -> Element {
     let chrome = use_context::<ChromeCtx>();
     match nav.active_tab() {
         None => rsx! { p { class: "empty", "{chrome.0.record_select_prompt()}" } },
-        Some(OpenTab::Draft(category)) => draft_pane(category),
+        Some(OpenTab::Draft(category, _)) => draft_pane(category),
         Some(OpenTab::Saved(record)) => detail_pane(record.category, record.human_id),
     }
 }

@@ -54,10 +54,9 @@ fn render_settled(app: fn() -> Element) -> String {
     dioxus_ssr::render(&vdom)
 }
 
-/// One editor key rendered as `category/human_id`.
+/// One editor key in [`EditKey`]'s own `category/id` form.
 fn key_id(key: &EditKey) -> String {
-    let id = key.human_id.clone().unwrap_or_else(|| "*".to_owned());
-    format!("{}/{id}", key.category.id())
+    key.to_string()
 }
 
 /// The marker block: whether `request_save_active` armed a save, and which editor's save is armed.

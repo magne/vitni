@@ -15,7 +15,7 @@ use genealogy_ui::{Category, Localizer, ProvenanceDraft, RecordDraft, RecordRef}
 use crate::components::{Button, ButtonVariant};
 use crate::screens::provenance_block;
 use crate::services::Services;
-use crate::shell::nav_state::{EditKey, NavState, StashedEdit};
+use crate::shell::nav_state::{DraftId, EditKey, NavState, StashedEdit};
 
 /// The buffered edit state of one record: whether it is being edited, the committed `seed`, the live
 /// `draft`, and the provenance collected once per save (`record-editing.html` §5b).
@@ -103,11 +103,27 @@ pub fn use_record_edit<D: RecordDraft>(category: Category, human_id: &str, seed:
 /// parked entry.
 #[must_use]
 pub fn use_record_create<D: RecordDraft>(category: Category) -> RecordEditState<D> {
-    let key = EditKey::draft(category);
+    let nav = use_context::<NavState>();
+    let key = EditKey::draft(category, open_draft_id(&nav, category));
     // A create form has nothing to read, so a fresh buffer starts in edit mode.
     let state = use_stashed_edit(&key, true, &D::default());
     use_edit_write_through(key, state);
     state
+}
+
+/// The [`DraftId`] of the create draft open for `category`, which a create pane still has to resolve
+/// for itself rather than being told: it is mounted for the active draft tab, and only one draft per
+/// category can be open ([`NavState::open_create`]). [`DraftId::UNOPENED`] when no draft tab is open at
+/// all, which the shipped shell cannot reach — a create pane exists only for a draft tab.
+fn open_draft_id(nav: &NavState, category: Category) -> DraftId {
+    for tab in nav.records.peek().iter() {
+        if tab.category() == category
+            && let Some(draft) = tab.draft_id()
+        {
+            return draft;
+        }
+    }
+    DraftId::UNOPENED
 }
 
 /// The contents a record's edit buffer comes up with on mount (see [`use_stashed_edit`]).
@@ -206,7 +222,7 @@ pub fn use_save_on_request<D: RecordDraft>(
     let mut nav = use_context::<NavState>();
     let key = match human_id {
         Some(human_id) => EditKey::saved(category, human_id),
-        None => EditKey::draft(category),
+        None => EditKey::draft(category, open_draft_id(&nav, category)),
     };
     let mut ran = use_signal(|| false);
     use_effect(move || {
@@ -225,7 +241,7 @@ pub fn use_save_on_request<D: RecordDraft>(
             save.call(());
             state.editing.set(false);
         } else {
-            nav.note_save_finished(key.category, key.human_id.as_deref(), false);
+            nav.note_save_finished(key.category, key.human_id(), false);
         }
     });
 }

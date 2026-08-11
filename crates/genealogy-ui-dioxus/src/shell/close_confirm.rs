@@ -218,7 +218,7 @@ fn tab_label(nav: &NavState, chrome: &Chrome, index: usize) -> String {
     let tab = nav.records.read().get(index).cloned();
     match tab {
         Some(OpenTab::Saved(record)) => record.label,
-        Some(OpenTab::Draft(category)) => chrome.draft_tab_label(&chrome.rail_label(category.label_id())),
+        Some(OpenTab::Draft(category, _)) => chrome.draft_tab_label(&chrome.rail_label(category.label_id())),
         None => String::new(),
     }
 }

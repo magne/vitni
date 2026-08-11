@@ -3,9 +3,10 @@
 //!
 //! Like `dock.rs`, each probe provides a `NavState`, drives its methods in `use_hook`, and renders a
 //! marker block the test inspects: `TABS:` is the open-tab count, `ACTIVE:` the active index (or
-//! `NONE`), `KIND:` the active tab's kind (`DRAFT`/`SAVED`/`NONE`), `REF:` the active *saved* record
-//! label (or `NONE`, so a draft reads `NONE`), and `DEST:` the active destination id. The marker
-//! probes render the real [`RecordTabstrip`], so they need a `ChromeCtx` too.
+//! `NONE`), `KIND:` the active tab's kind (`DRAFT`/`SAVED`/`NONE`), `KINDS:` every tab's kind in strip
+//! order (`D`/`S` per index), `REF:` the active *saved* record label (or `NONE`, so a draft reads
+//! `NONE`), and `DEST:` the active destination id. The marker probes render the real
+//! [`RecordTabstrip`], so they need a `ChromeCtx` too.
 
 use std::rc::Rc;
 
@@ -65,10 +66,16 @@ fn probe(nav: &NavState) -> Element {
         .read()
         .map_or_else(|| "NONE".to_owned(), |index| index.to_string());
     let kind = match nav.active_tab() {
-        Some(OpenTab::Draft(_)) => "DRAFT",
+        Some(OpenTab::Draft(_, _)) => "DRAFT",
         Some(OpenTab::Saved(_)) => "SAVED",
         None => "NONE",
     };
+    let kinds = nav
+        .records
+        .read()
+        .iter()
+        .map(|tab| if tab.is_draft() { "D" } else { "S" })
+        .collect::<String>();
     let reference = nav
         .active_record_ref()
         .map_or_else(|| "NONE".to_owned(), |record| record.label);
@@ -77,6 +84,7 @@ fn probe(nav: &NavState) -> Element {
         div { "TABS:{tabs}" }
         div { "ACTIVE:{active}" }
         div { "KIND:{kind}" }
+        div { "KINDS:{kinds}" }
         div { "REF:{reference}" }
         div { "DEST:{dest}" }
     }
@@ -147,6 +155,38 @@ fn open_create_opens_an_active_draft_tab() {
 fn open_create_twice_focuses_the_existing_draft() {
     let html = render(open_draft_twice_same_category);
     assert!(html.contains("TABS:1"), "at most one draft per category:\n{html}");
+}
+
+/// One draft per category in two categories, so the ids they were minted under can be compared.
+fn open_drafts_in_two_categories() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::Tags);
+    });
+    let keys = nav
+        .records
+        .read()
+        .iter()
+        .map(|tab| tab.edit_key().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    rsx! {
+        div { "KEYS:[{keys}]" }
+        {probe(&nav)}
+    }
+}
+
+#[test]
+fn each_draft_is_minted_under_its_own_id() {
+    // The id is what tells two drafts apart everywhere downstream — the parked buffer, the tab, the
+    // pane — so the minting itself is worth pinning: per `NavState`, counting up from 1.
+    let html = render(open_drafts_in_two_categories);
+    assert!(
+        html.contains("KEYS:[people/#1,tags/#2]"),
+        "each draft is keyed by its own minted id:\n{html}"
+    );
+    assert!(html.contains("KINDS:DD"), "both tabs are drafts:\n{html}");
 }
 
 #[test]

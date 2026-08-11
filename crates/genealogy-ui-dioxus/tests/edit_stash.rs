@@ -77,16 +77,13 @@ fn render_settled(app: fn() -> Element) -> String {
     dioxus_ssr::render(&vdom)
 }
 
-/// The keys currently holding a parked edit, rendered as `category/human_id` (a create draft, which has
-/// no id, reads `category/*`) — the shell's dirty set.
+/// The keys currently holding a parked edit, in [`EditKey`]'s own `category/id` form (a create draft
+/// reads `category/#n`) — the shell's dirty set.
 fn keys(nav: &NavState) -> String {
     nav.edit_drafts
         .read()
         .keys()
-        .map(|key| {
-            let id = key.human_id.clone().unwrap_or_else(|| "*".to_owned());
-            format!("{}/{id}", key.category.id())
-        })
+        .map(EditKey::to_string)
         .collect::<Vec<_>>()
         .join(",")
 }
@@ -286,8 +283,8 @@ fn renaming_a_record_moves_its_parked_edit_to_the_new_id() {
 fn commit_draft_drops_the_create_entry() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::Tags);
-        park(&mut nav, EditKey::draft(Category::Tags));
+        let draft = nav.open_create(Category::Tags);
+        park(&mut nav, EditKey::draft(Category::Tags, draft));
         nav.commit_draft(record("T0001", "Ada"));
     });
     probe(&nav)
@@ -309,8 +306,8 @@ fn committing_a_draft_drops_its_parked_create_edit() {
 fn cancel_draft_drops_the_create_entry() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::Tags);
-        park(&mut nav, EditKey::draft(Category::Tags));
+        let draft = nav.open_create(Category::Tags);
+        park(&mut nav, EditKey::draft(Category::Tags, draft));
         nav.cancel_draft(Category::Tags);
     });
     probe(&nav)
@@ -326,19 +323,19 @@ fn cancelling_a_draft_drops_its_parked_create_edit() {
 fn create_draft_survives_a_switch_to_a_saved_tab() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::Tags);
-        park(&mut nav, EditKey::draft(Category::Tags));
+        let draft = nav.open_create(Category::Tags);
+        park(&mut nav, EditKey::draft(Category::Tags, draft));
         nav.open_record(record("T0001", "Ada"));
     });
     probe(&nav)
 }
 
 #[test]
-fn a_create_drafts_buffer_is_keyed_without_an_id_and_survives_a_tab_switch() {
+fn a_create_drafts_buffer_is_keyed_by_its_draft_id_and_survives_a_tab_switch() {
     let html = render(create_draft_survives_a_switch_to_a_saved_tab);
     assert!(
-        html.contains("DIRTY:[tags/*]"),
-        "a create draft is keyed by category with no human_id:\n{html}"
+        html.contains("DIRTY:[tags/#1]"),
+        "a create draft is keyed by its own draft id, not a human_id:\n{html}"
     );
     assert!(html.contains("TABS:2"), "the draft tab is still open:\n{html}");
 }
@@ -563,19 +560,19 @@ fn create_pane_writes_the_draft_through() -> Element {
 }
 
 #[test]
-fn typing_in_a_create_form_parks_the_draft_under_the_category() {
+fn typing_in_a_create_form_parks_the_draft_under_its_draft_id() {
     let html = render_settled(create_pane_writes_the_draft_through);
     assert!(
-        html.contains("DIRTY:[tags/*]"),
-        "a create form parks its buffer with no human_id:\n{html}"
+        html.contains("DIRTY:[tags/#1]"),
+        "a create form parks its buffer under its own draft id:\n{html}"
     );
 }
 
 fn create_pane_hydrates_from_the_stash() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::Tags);
-        park(&mut nav, EditKey::draft(Category::Tags));
+        let draft = nav.open_create(Category::Tags);
+        park(&mut nav, EditKey::draft(Category::Tags, draft));
     });
     rsx! {
         CreatePane { action: PaneAction::Report }

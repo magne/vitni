@@ -80,10 +80,9 @@ fn render_settled(app: fn() -> Element) -> String {
     dioxus_ssr::render(&vdom)
 }
 
-/// One editor key rendered as `category/human_id`, a create draft (which has no id) as `category/*`.
+/// One editor key in [`EditKey`]'s own `category/id` form, a create draft as `category/#n`.
 fn key_id(key: &EditKey) -> String {
-    let id = key.human_id.clone().unwrap_or_else(|| "*".to_owned());
-    format!("{}/{id}", key.category.id())
+    key.to_string()
 }
 
 /// The marker block: open-tab count, whether the confirm is armed, the quit ticket value, the keys
@@ -138,7 +137,7 @@ fn finish_armed(nav: &mut NavState, ok: bool) {
     let Some(key) = nav.save_request.peek().as_ref().map(|request| request.key.clone()) else {
         return;
     };
-    nav.note_save_finished(key.category, key.human_id.as_deref(), ok);
+    nav.note_save_finished(key.category, key.human_id(), ok);
 }
 
 fn close_saved_tab_is_immediate() -> Element {
@@ -755,9 +754,9 @@ fn cancelling_clears_the_armed_save_and_its_queue() {
 fn save_then_close_a_create_draft() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
         nav.stash_edit(
-            EditKey::draft(Category::People),
+            EditKey::draft(Category::People, draft),
             StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
         );
         nav.request_close_tab(0);
@@ -778,11 +777,11 @@ fn key_id_of_armed(nav: &NavState) -> String {
 }
 
 #[test]
-fn a_create_draft_is_queued_under_its_category_with_no_id() {
+fn a_create_draft_is_queued_under_its_own_draft_id() {
     let html = render(save_then_close_a_create_draft);
     assert!(
-        html.contains("ARMED:people/*"),
-        "a create draft is armed by category alone:\n{html}"
+        html.contains("ARMED:people/#1"),
+        "a create draft is armed under its own draft id:\n{html}"
     );
     assert!(html.contains("TABS:1"), "the draft tab is still open:\n{html}");
 }
@@ -790,9 +789,9 @@ fn a_create_draft_is_queued_under_its_category_with_no_id() {
 fn create_draft_saved_then_closed() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
         nav.stash_edit(
-            EditKey::draft(Category::People),
+            EditKey::draft(Category::People, draft),
             StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
         );
         nav.request_close_tab(0);
@@ -1062,11 +1061,11 @@ fn quit_dialog_over_three_dirty_records() -> Element {
         nav.open_record(record("I0001", "Ada"));
         nav.open_record(record("I0002", "Bob"));
         nav.open_record(record("I0003", "Cy"));
-        nav.open_create(Category::Tags);
+        let draft = nav.open_create(Category::Tags);
         mark_dirty(&mut nav, Category::People, "I0001");
         mark_dirty(&mut nav, Category::People, "I0003");
         nav.stash_edit(
-            EditKey::draft(Category::Tags),
+            EditKey::draft(Category::Tags, draft),
             StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
         );
         nav.request_quit();
@@ -1231,10 +1230,10 @@ fn partial_save_all_run() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
-        nav.open_create(Category::Tags);
+        let draft = nav.open_create(Category::Tags);
         mark_dirty(&mut nav, Category::People, "I0001");
         nav.stash_edit(
-            EditKey::draft(Category::Tags),
+            EditKey::draft(Category::Tags, draft),
             StashedEdit::new(TagDraft::new(), TagDraft::new(), ProvenanceDraft::default()),
         );
         nav.request_quit();
@@ -1258,7 +1257,7 @@ fn a_partial_save_all_leaves_the_unsavable_tab_open_without_quitting() {
         "the unsavable record's tab stays open:\n{html}"
     );
     assert!(
-        html.contains("DIRTY:[tags/*]"),
+        html.contains("DIRTY:[tags/#1]"),
         "its work is still parked, and only Ada's was spent:\n{html}"
     );
     assert!(html.contains("SAVING:NONE"), "the run is over:\n{html}");
