@@ -411,32 +411,51 @@ pub fn finish_record_save(
     }
 }
 
+/// Which draft a create form's commit lands in, and the already-localized strings the stored record is
+/// announced with — [`finish_draft_commit`]'s subject, bundled so the call stays inside the positional
+/// parameter budget.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DraftCommit {
+    /// The aggregate category the draft belongs to.
+    pub category: Category,
+    /// The draft being committed — which of that category's open drafts this is.
+    pub draft_id: DraftId,
+    /// The label the stored record's tab takes, or `None`/empty to fall back to the record's own id.
+    pub label: Option<String>,
+    /// The "created" confirmation notice.
+    pub created: String,
+}
+
 /// Finishes a create form's commit: on success marks the workspace changed (so the Explorer list and
-/// rail counts refetch, same as an edit save), the draft tab becomes the stored record in place
-/// ([`NavState::commit_draft`]) labelled `label` — or the record's own id when that is empty or absent
-/// — and shows `created` as the shell's confirmation notice (create had no completion feedback at all
-/// before #208); on failure the error is shown as a sticky shell notice and the draft is left as it was.
+/// rail counts refetch, same as an edit save), `commit.draft`'s tab becomes the stored record in place
+/// ([`NavState::commit_draft`]) labelled `commit.label` — or the record's own id when that is empty or
+/// absent — and shows `commit.created` as the shell's confirmation notice (create had no completion
+/// feedback at all before #208); on failure the error is shown as a sticky shell notice and the draft is
+/// left as it was.
 ///
 /// Every `*CreateRecord` screen ends its save here, so the close/quit confirm's Save can drive a create
 /// draft through the same path a saved record takes ([`use_save_on_request`]).
-pub fn finish_draft_commit(
-    committed: Result<String, String>,
-    category: Category,
-    label: Option<String>,
-    created: String,
-    mut nav: NavState,
-) {
+pub fn finish_draft_commit(committed: Result<String, String>, commit: DraftCommit, mut nav: NavState) {
+    let DraftCommit {
+        category,
+        draft_id,
+        label,
+        created,
+    } = commit;
     match committed {
         Ok(human_id) => {
             nav.mark_changed();
             let label = label
                 .filter(|label| !label.is_empty())
                 .unwrap_or_else(|| human_id.clone());
-            nav.commit_draft(RecordRef {
-                category,
-                human_id,
-                label,
-            });
+            nav.commit_draft(
+                draft_id,
+                RecordRef {
+                    category,
+                    human_id,
+                    label,
+                },
+            );
             nav.notify(created);
             nav.note_save_finished(category, None, true);
         }

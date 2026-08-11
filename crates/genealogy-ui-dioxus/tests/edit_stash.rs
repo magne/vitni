@@ -294,7 +294,7 @@ fn commit_draft_drops_the_create_entry() -> Element {
     use_hook(move || {
         let draft = nav.open_create(Category::Tags);
         park(&mut nav, EditKey::draft(Category::Tags, draft));
-        nav.commit_draft(record("T0001", "Ada"));
+        nav.commit_draft(draft, record("T0001", "Ada"));
     });
     probe(&nav)
 }
@@ -317,7 +317,7 @@ fn cancel_draft_drops_the_create_entry() -> Element {
     use_hook(move || {
         let draft = nav.open_create(Category::Tags);
         park(&mut nav, EditKey::draft(Category::Tags, draft));
-        nav.cancel_draft(Category::Tags);
+        nav.cancel_draft(draft);
     });
     probe(&nav)
 }

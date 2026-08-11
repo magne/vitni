@@ -9,14 +9,14 @@ use genealogy_ui::{ParticipantVm, RecordLink};
 /// detail pane (`record-editing.html` §6). The type is required; a "new place" selection creates a
 /// place inline on Save (§6b cascade). Save commits the whole event; Cancel discards.
 #[component]
-pub fn EventCreateRecord(draft: DraftId) -> Element {
+pub fn EventCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::EventDraft>(Category::Events, draft);
+    let record = use_record_create::<genealogy_ui::EventDraft>(Category::Events, draft_id);
     let mut draft = record.draft;
     // The find-or-create place picker: its options refetch after any mutation (#266); pick/clear/
     // "+ New" drive the draft's link.
@@ -39,7 +39,16 @@ pub fn EventCreateRecord(draft: DraftId) -> Element {
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_event_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Events, None, created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit {
+                    category: Category::Events,
+                    draft_id,
+                    label: None,
+                    created,
+                },
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -52,7 +61,7 @@ pub fn EventCreateRecord(draft: DraftId) -> Element {
     use_save_on_request(Category::Events, None, record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Events) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,

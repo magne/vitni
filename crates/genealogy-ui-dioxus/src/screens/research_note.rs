@@ -23,14 +23,14 @@ fn subject_categories() -> [Category; 4] {
 /// Consumes [`NavState::research_note_subject`] once, on mount: opening this form from a record's
 /// "Research notes" tab pre-seeds that record as the argument's first subject.
 #[component]
-pub fn ResearchNoteCreateRecord(draft: DraftId) -> Element {
+pub fn ResearchNoteCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::ResearchNoteDraft>(Category::ResearchNotes, draft);
+    let record = use_record_create::<genealogy_ui::ResearchNoteDraft>(Category::ResearchNotes, draft_id);
 
     let mut seeded = record.draft;
     let mut subject_seed = nav.research_note_subject;
@@ -55,7 +55,16 @@ pub fn ResearchNoteCreateRecord(draft: DraftId) -> Element {
             let created = created_label.clone();
             spawn(async move {
                 let committed = commit_research_note_change_set(services, request, prov).await;
-                finish_draft_commit(committed, Category::ResearchNotes, Some(label), created, nav);
+                finish_draft_commit(
+                    committed,
+                    DraftCommit {
+                        category: Category::ResearchNotes,
+                        draft_id,
+                        label: Some(label),
+                        created,
+                    },
+                    nav,
+                );
             });
         },
     );
@@ -73,7 +82,7 @@ pub fn ResearchNoteCreateRecord(draft: DraftId) -> Element {
             label: loc.action_label("cancel"),
             variant: ButtonVariant::Ghost,
             small: true,
-            onclick: move |_| nav.cancel_draft(Category::ResearchNotes),
+            onclick: move |_| nav.cancel_draft(draft_id),
         }
         Button {
             label: loc.action_label("save"),

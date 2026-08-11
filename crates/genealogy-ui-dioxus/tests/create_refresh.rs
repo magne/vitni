@@ -8,7 +8,7 @@
 
 use dioxus::prelude::*;
 use genealogy_ui::Category;
-use genealogy_ui_dioxus::screens::finish_draft_commit;
+use genealogy_ui_dioxus::screens::{DraftCommit, finish_draft_commit};
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
 /// The shell-level marker block: the data-change ticket and the shell notice, if any.
@@ -32,13 +32,17 @@ fn render(app: fn() -> Element) -> String {
 }
 
 fn create_ok() -> Element {
-    let nav = use_context_provider(NavState::new);
+    let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
+        let draft_id = nav.open_create(Category::People);
         finish_draft_commit(
             Ok("P0001".to_owned()),
-            Category::People,
-            None,
-            "Created".to_owned(),
+            DraftCommit {
+                category: Category::People,
+                draft_id,
+                label: None,
+                created: "Created".to_owned(),
+            },
             nav,
         );
     });
@@ -65,13 +69,17 @@ fn a_successful_create_leaves_the_created_notice() {
 }
 
 fn create_err() -> Element {
-    let nav = use_context_provider(NavState::new);
+    let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
+        let draft_id = nav.open_create(Category::People);
         finish_draft_commit(
             Err("could not save".to_owned()),
-            Category::People,
-            None,
-            "Created".to_owned(),
+            DraftCommit {
+                category: Category::People,
+                draft_id,
+                label: None,
+                created: "Created".to_owned(),
+            },
             nav,
         );
     });

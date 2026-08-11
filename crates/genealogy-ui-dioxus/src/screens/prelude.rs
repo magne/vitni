@@ -43,7 +43,7 @@ pub use crate::shell::nav_state::{DraftId, NavState, data_version_ticket};
 pub use crate::vocabulary_render::{PanelAction, PanelView};
 
 pub use super::record_form::{
-    RecordActionLabels, RecordEditState, apply_record_edits, finish_draft_commit, finish_record_save,
+    DraftCommit, RecordActionLabels, RecordEditState, apply_record_edits, finish_draft_commit, finish_record_save,
     record_edit_provenance, record_head_actions, record_keydown, use_record_create, use_record_edit,
     use_save_on_request,
 };

@@ -5,8 +5,8 @@
 //! marker block the test inspects: `TABS:` is the open-tab count, `ACTIVE:` the active index (or
 //! `NONE`), `KIND:` the active tab's kind (`DRAFT`/`SAVED`/`NONE`), `KINDS:` every tab's kind in strip
 //! order (`D`/`S` per index), `REF:` the active *saved* record label (or `NONE`, so a draft reads
-//! `NONE`), and `DEST:` the active destination id. The marker probes render the real
-//! [`RecordTabstrip`], so they need a `ChromeCtx` too.
+//! `NONE`), `KEYS:` every tab's editor key in strip order, and `DEST:` the active destination id. The
+//! marker probes render the real [`RecordTabstrip`], so they need a `ChromeCtx` too.
 
 use std::rc::Rc;
 
@@ -79,6 +79,13 @@ fn probe(nav: &NavState) -> Element {
     let reference = nav
         .active_record_ref()
         .map_or_else(|| "NONE".to_owned(), |record| record.label);
+    let keys = nav
+        .records
+        .read()
+        .iter()
+        .map(|tab| tab.edit_key().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
     let dest = dest_id(*nav.active.read());
     rsx! {
         div { "TABS:{tabs}" }
@@ -86,6 +93,7 @@ fn probe(nav: &NavState) -> Element {
         div { "KIND:{kind}" }
         div { "KINDS:{kinds}" }
         div { "REF:{reference}" }
+        div { "KEYS:[{keys}]" }
         div { "DEST:{dest}" }
     }
 }
@@ -109,8 +117,8 @@ fn commit_replaces_draft_in_place() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record(Category::People, "I0001", "Ada"));
-        nav.open_create(Category::Families);
-        nav.commit_draft(record(Category::Families, "F0001", "Bell family"));
+        let draft = nav.open_create(Category::Families);
+        nav.commit_draft(draft, record(Category::Families, "F0001", "Bell family"));
     });
     probe(&nav)
 }
@@ -119,10 +127,63 @@ fn cancel_closes_the_draft() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record(Category::People, "I0001", "Ada"));
-        nav.open_create(Category::Families);
-        nav.cancel_draft(Category::Families);
+        let draft = nav.open_create(Category::Families);
+        nav.cancel_draft(draft);
     });
     probe(&nav)
+}
+
+/// Two drafts of one category, the *first* of which is then cancelled.
+fn cancel_the_first_of_two_drafts() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let first = nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        nav.cancel_draft(first);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn cancel_draft_closes_only_the_named_draft() {
+    // Cancel is addressed by draft, not by category: with two drafts open, "the category's draft" would
+    // close whichever came first regardless of which form the operator clicked Cancel on.
+    let html = render(cancel_the_first_of_two_drafts);
+    assert!(html.contains("TABS:1"), "one draft closed:\n{html}");
+    assert!(
+        html.contains("KEYS:[people/#2]"),
+        "and it is the cancelled one that went, not its sibling:\n{html}"
+    );
+}
+
+/// Two drafts of one category, the *first* of which is then committed.
+fn commit_the_first_of_two_drafts() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let first = nav.open_create(Category::People);
+        nav.open_create(Category::People);
+        nav.commit_draft(first, record(Category::People, "I0001", "Ada"));
+    });
+    probe(&nav)
+}
+
+#[test]
+fn commit_draft_replaces_only_the_named_draft() {
+    let html = render(commit_the_first_of_two_drafts);
+    assert!(
+        html.contains("TABS:2"),
+        "the commit replaced a tab, it did not add one:\n{html}"
+    );
+    assert!(
+        html.contains("KEYS:[people/I0001,people/#2]"),
+        "the saved record took the committed draft's slot, and its sibling is untouched:\n{html}"
+    );
+    assert!(
+        html.contains("KINDS:SD"),
+        "only the committed tab became a record:\n{html}"
+    );
+    assert!(html.contains("ACTIVE:0"), "and it is the active tab:\n{html}");
+    assert!(html.contains("REF:Ada"), "showing the stored record:\n{html}");
 }
 
 fn reveal_from_tool_switches_category() -> Element {
@@ -169,17 +230,7 @@ fn open_drafts_in_two_categories() -> Element {
         nav.open_create(Category::People);
         nav.open_create(Category::Tags);
     });
-    let keys = nav
-        .records
-        .read()
-        .iter()
-        .map(|tab| tab.edit_key().to_string())
-        .collect::<Vec<_>>()
-        .join(",");
-    rsx! {
-        div { "KEYS:[{keys}]" }
-        {probe(&nav)}
-    }
+    probe(&nav)
 }
 
 #[test]

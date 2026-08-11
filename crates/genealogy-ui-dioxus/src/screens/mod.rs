@@ -89,7 +89,7 @@ pub use preferences::{
 };
 pub use record_detail::{DockedRecordDetail, RecordDetail};
 pub use record_form::{
-    RecordActionLabels, RecordEditState, apply_record_edits, finish_draft_commit, finish_record_save,
+    DraftCommit, RecordActionLabels, RecordEditState, apply_record_edits, finish_draft_commit, finish_record_save,
     record_edit_provenance, record_head_actions, record_keydown, use_record_create, use_record_edit,
     use_save_on_request,
 };

@@ -8,14 +8,14 @@ use super::prelude::*;
 /// Cancel drops the draft. The provenance block above Save carries the operator's why/confidence/
 /// citations onto every emitted assertion (§5b).
 #[component]
-pub fn SourceCreateRecord(draft: DraftId) -> Element {
+pub fn SourceCreateRecord(draft_id: DraftId) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
-    let record = use_record_create::<genealogy_ui::SourceDraft>(Category::Sources, draft);
+    let record = use_record_create::<genealogy_ui::SourceDraft>(Category::Sources, draft_id);
     let created_label = loc.action_label("created");
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::SourceDraft, ProvenanceDraft)| {
         let request = draft.to_request();
@@ -24,7 +24,16 @@ pub fn SourceCreateRecord(draft: DraftId) -> Element {
         let created = created_label.clone();
         spawn(async move {
             let committed = commit_source_change_set(services, request, prov).await;
-            finish_draft_commit(committed, Category::Sources, Some(label), created, nav);
+            finish_draft_commit(
+                committed,
+                DraftCommit {
+                    category: Category::Sources,
+                    draft_id,
+                    label: Some(label),
+                    created,
+                },
+                nav,
+            );
         });
     });
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
@@ -37,7 +46,7 @@ pub fn SourceCreateRecord(draft: DraftId) -> Element {
     use_save_on_request(Category::Sources, None, record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Sources) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,

@@ -682,18 +682,18 @@ impl NavState {
         self.request_new_for(Category::ResearchNotes);
     }
 
-    /// Commits a draft in place: replaces the open draft tab for `record.category` with the saved
-    /// `record`, keeping its position in the strip and making it active, and records it in the "Jump
-    /// back in" list. Falls back to opening `record` as a fresh tab if no draft is open (e.g. the
-    /// draft was closed mid-commit).
+    /// Commits the draft `draft` in place: replaces its own tab with the saved `record`, keeping its
+    /// position in the strip and making it active, and records it in the "Jump back in" list. Falls back
+    /// to opening `record` as a fresh tab if that draft is no longer open (e.g. it was closed
+    /// mid-commit).
     ///
-    /// The create buffer parked for the category is dropped: it has just been stored, so leaving it
-    /// would mark the new record's tab unsaved and refill its form on the next mount.
-    pub fn commit_draft(&mut self, record: RecordRef) {
-        let draft = self.draft_tab(record.category);
-        if let Some((_, key)) = &draft {
-            self.drop_edit(key);
-        }
+    /// Addressed by [`DraftId`], not by category: with several drafts of one category open, "the
+    /// category's draft" would commit into whichever tab came first (#260).
+    ///
+    /// The buffer parked for the draft is dropped: it has just been stored, so leaving it would mark the
+    /// new record's tab unsaved and refill its form on the next mount.
+    pub fn commit_draft(&mut self, draft: DraftId, record: RecordRef) {
+        self.drop_edit(&EditKey::draft(record.category, draft));
         if let Some(kind) = record.category.aggregate_kind() {
             push_recent(
                 &mut self.recent.write(),
@@ -704,7 +704,7 @@ impl NavState {
                 },
             );
         }
-        let Some((index, _)) = draft else {
+        let Some(index) = self.draft_index(draft) else {
             self.open_record(record);
             return;
         };
@@ -714,21 +714,18 @@ impl NavState {
         self.history.write().push(location);
     }
 
-    /// Cancels the open draft tab for `category`, closing it (Cancel on a create form) — which drops
-    /// the create buffer parked for it ([`Self::close_record`]).
-    pub fn cancel_draft(&mut self, category: Category) {
-        if let Some((index, _)) = self.draft_tab(category) {
+    /// Cancels the draft `draft`, closing its tab (Cancel on a create form) — which drops the create
+    /// buffer parked for it ([`Self::close_record`]). A no-op when that draft is no longer open.
+    pub fn cancel_draft(&mut self, draft: DraftId) {
+        if let Some(index) = self.draft_index(draft) {
             self.close_record(index);
         }
     }
 
-    /// The strip index and [`EditKey`] of the create draft open for `category`, or `None` when none is.
-    fn draft_tab(&self, category: Category) -> Option<(usize, EditKey)> {
-        self.records
-            .peek()
-            .iter()
-            .enumerate()
-            .find_map(|(index, tab)| (tab.is_draft() && tab.category() == category).then(|| (index, tab.edit_key())))
+    /// The strip index of the draft `draft`, or `None` when its tab is no longer open. No category is
+    /// needed: a [`DraftId`] is unique across the whole strip.
+    fn draft_index(&self, draft: DraftId) -> Option<usize> {
+        self.records.peek().iter().position(|tab| tab.draft_id() == Some(draft))
     }
 
     /// Marks the workspace data as changed so shell-wide derived views (the rail count badges)

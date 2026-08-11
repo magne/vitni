@@ -798,7 +798,7 @@ fn create_draft_saved_then_closed() -> Element {
         nav.save_then_close(0);
         // What the create screen does on a successful commit: the draft becomes a stored record in the
         // same slot, and the save reports back under the draft's key.
-        nav.commit_draft(record("I0001", "Ada"));
+        nav.commit_draft(draft, record("I0001", "Ada"));
         nav.note_save_finished(Category::People, None, true);
     });
     probe(&nav)
