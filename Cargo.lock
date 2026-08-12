@@ -3637,6 +3637,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "cqrs-es",
+ "mime_guess",
  "serde",
  "serde_json",
  "thiserror 2.0.19",

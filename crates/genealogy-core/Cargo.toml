@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 cqrs-es = { workspace = true }
 async-trait = { workspace = true }
+mime_guess = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
