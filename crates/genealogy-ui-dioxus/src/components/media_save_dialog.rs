@@ -61,6 +61,9 @@ pub fn MediaSaveDialog(
     let mut draft = draft;
     let preview = draft().target_rel_path();
     let save_disabled = preview.is_empty();
+    // The stored path the media-store will write, built by the one owner of the `media/` prefix
+    // (`genealogy_core::media_path`) so the preview cannot drift from what lands in the record.
+    let stored_path = genealogy_app::workspace_media_path(&preview);
 
     let mut options = vec![SelectChoice {
         value: String::new(),
@@ -138,7 +141,7 @@ pub fn MediaSaveDialog(
             }
             div { class: "media-save-preview",
                 span { class: "field-label", "{labels.path_preview}" }
-                span { class: "mono", "media/{preview}" }
+                span { class: "mono", "{stored_path}" }
             }
         }
     }

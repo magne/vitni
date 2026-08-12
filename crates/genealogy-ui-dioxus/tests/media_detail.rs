@@ -153,6 +153,68 @@ fn media_edit() -> Element {
     }
 }
 
+/// The Overview of a record with no recorded MIME — the state every record the CLI creates is in, since
+/// `genealogy media` has no way to set one (#301 cause 1).
+fn media_view_without_mime() -> Element {
+    let loc = loc();
+    let record = state(false);
+    let detail = MediaDetail { mime: None, ..sample() };
+    rsx! {
+        {media_overview(&loc, &detail, record)}
+    }
+}
+
+/// The Overview of a record whose file lives outside the workspace, stored absolute — legitimate, but
+/// not something the media-root asset handler will serve.
+fn media_view_outside_the_workspace() -> Element {
+    let loc = loc();
+    let record = state(false);
+    let detail = MediaDetail {
+        file_path: Some("/home/ada/photos/john-smith-portrait.jpg".to_owned()),
+        ..sample()
+    };
+    rsx! {
+        {media_overview(&loc, &detail, record)}
+    }
+}
+
+#[test]
+fn the_preview_serves_the_stored_path_with_exactly_one_media_prefix() {
+    // #301 cause 2: the stored `file_path` already carries `media/`, and the URL builder prepended it
+    // again, so the webview asked for `/media/media/…` and the asset handler resolved nothing.
+    let html = render(media_view);
+    assert!(
+        html.contains(r#"src="/media/portraits/john-smith-portrait.jpg""#),
+        "the preview img is served from the media root, once:\n{html}"
+    );
+    assert!(
+        !html.contains("/media/media/"),
+        "the prefix is added exactly once:\n{html}"
+    );
+}
+
+#[test]
+fn a_record_with_no_recorded_mime_still_previews_its_image() {
+    // #301 cause 1: the image gate read only the recorded MIME, so a record created without one
+    // rendered the 📷 placeholder forever.
+    let html = render(media_view_without_mime);
+    assert!(
+        html.contains(r#"src="/media/portraits/john-smith-portrait.jpg""#),
+        "the extension classifies the file when no MIME is recorded:\n{html}"
+    );
+    assert!(!html.contains("📷"), "no glyph placeholder for an image:\n{html}");
+}
+
+#[test]
+fn a_file_outside_the_workspace_previews_the_placeholder_not_a_broken_image() {
+    let html = render(media_view_outside_the_workspace);
+    assert!(html.contains("📷"), "the glyph placeholder is honest:\n{html}");
+    assert!(
+        !html.contains("<img"),
+        "an unservable location renders no img at all:\n{html}"
+    );
+}
+
 #[test]
 fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
     let html = render(media_view);

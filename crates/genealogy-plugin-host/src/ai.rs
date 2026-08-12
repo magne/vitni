@@ -159,8 +159,9 @@ async fn run_vision_api(
     let bytes = tokio::fs::read(media_abs)
         .await
         .map_err(|error| AiError::Backend(format!("reading media {}: {error}", media_abs.display())))?;
-    let mime = mime_guess::from_path(media_abs)
-        .first_raw()
+    let mime = media_abs
+        .to_str()
+        .and_then(genealogy_core::media_path::mime_for_path)
         .unwrap_or("application/octet-stream");
     let data_uri = format!(
         "data:{mime};base64,{}",

@@ -196,8 +196,8 @@ fn resolve_target(media_root: &Path, rel: &Path, checksum: &str) -> Result<(Path
     }
 }
 
-/// The MIME type: the response `Content-Type` when meaningful, else the path extension, else
-/// `application/octet-stream`.
+/// The MIME type: the response `Content-Type` when meaningful, else the path extension
+/// ([`mime_for_path`](genealogy_core::media_path::mime_for_path)), else `application/octet-stream`.
 fn mime_of(content_type: Option<&str>, rel: &Path) -> String {
     if let Some(header) = content_type {
         let value = header.split(';').next().unwrap_or(header).trim();
@@ -205,22 +205,27 @@ fn mime_of(content_type: Option<&str>, rel: &Path) -> String {
             return value.to_owned();
         }
     }
-    mime_guess::from_path(rel)
-        .first_raw()
+    rel.to_str()
+        .and_then(genealogy_core::media_path::mime_for_path)
         .unwrap_or("application/octet-stream")
         .to_owned()
 }
 
-/// The workspace-relative path string (`media/…`, forward slashes) for a resolved target.
+/// The workspace-relative path string (`media/…`, forward slashes) for a resolved target — the stored
+/// form of a [`MediaPath::File`](genealogy_core::media_path::MediaPath::File), built by the one owner of
+/// the prefix so a stored path and the URL a frontend renders it from cannot disagree.
 fn workspace_relative(media_root: &Path, target: &Path) -> String {
     let sub = target.strip_prefix(media_root).unwrap_or(target);
-    let mut parts = vec!["media".to_owned()];
+    let mut parts = Vec::new();
     for component in sub.components() {
         if let Component::Normal(raw) = component {
             parts.push(raw.to_string_lossy().into_owned());
         }
     }
-    parts.join("/")
+    if parts.is_empty() {
+        return genealogy_core::media_path::MEDIA_DIR.to_owned();
+    }
+    genealogy_core::media_path::workspace_media_path(&parts.join("/"))
 }
 
 /// Writes `bytes` to `target` atomically: a uniquely-named temp file in the target's directory,

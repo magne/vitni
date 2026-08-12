@@ -267,24 +267,17 @@ impl MediaRefVm {
         }
     }
 
-    /// Whether the object is an image (its MIME starts with `image/`) — a gallery renders an `<img>`
-    /// thumbnail for an image and a glyph placeholder otherwise.
+    /// Whether the object is an image ([`media_is_image`]) — a gallery renders an `<img>` thumbnail
+    /// for an image and a glyph placeholder otherwise.
     #[must_use]
     pub fn is_image(&self) -> bool {
-        self.mime.as_deref().is_some_and(|mime| mime.starts_with("image/"))
+        media_is_image(self.mime.as_deref(), self.path.as_deref())
     }
 
-    /// The source a renderer loads the image from: a web reference is used verbatim, while a local
-    /// file path is served by the desktop asset handler under `/media/<rel>`. `None` when the object
-    /// has no recorded location.
+    /// The source a renderer loads the image from ([`media_asset_src`]).
     #[must_use]
     pub fn src(&self) -> Option<String> {
-        let path = self.path.as_deref()?;
-        if path.starts_with("http://") || path.starts_with("https://") {
-            Some(path.to_owned())
-        } else {
-            Some(format!("/media/{path}"))
-        }
+        media_asset_src(self.path.as_deref())
     }
 
     /// The gallery card caption: the per-use caption, falling back to the object's `human_id`.
@@ -292,6 +285,42 @@ impl MediaRefVm {
     pub fn caption_or_id(&self) -> String {
         self.caption.clone().unwrap_or_else(|| self.human_id.clone())
     }
+}
+
+/// The URL a renderer loads a media object's bytes from, or `None` when there is nothing it can load.
+///
+/// A web reference is used verbatim. A local file is served by the desktop asset handler at
+/// `/media/<path below the workspace media root>` — the prefix is added exactly once, by
+/// [`media_root_relative`](genealogy_app::media_root_relative), whether or not the stored path already
+/// carries it. `None` for a location the media root cannot serve (an absolute path outside the
+/// workspace, or one that traverses out of it): the caller then shows its glyph placeholder, which is
+/// honest, rather than a broken `<img>`.
+#[must_use]
+pub fn media_asset_src(location: Option<&str>) -> Option<String> {
+    let location = location?;
+    if location.starts_with("http://") || location.starts_with("https://") {
+        return Some(location.to_owned());
+    }
+    let rel = genealogy_app::media_root_relative(location)?;
+    Some(format!("/{}/{rel}", genealogy_app::MEDIA_DIR))
+}
+
+/// Whether a media object should render as an image rather than a document glyph.
+///
+/// A recorded MIME is an operator's assertion and wins outright, so `application/pdf` on a `.jpg`
+/// stays a document. Only when no MIME is recorded does the location's extension decide
+/// ([`mime_for_path`](genealogy_app::mime_for_path)) — nothing writes an inferred MIME back into the
+/// record, so this is a display rule, not a stored one.
+#[must_use]
+pub fn media_is_image(mime: Option<&str>, location: Option<&str>) -> bool {
+    let mime = match mime {
+        Some(mime) => mime,
+        None => match location.and_then(genealogy_app::mime_for_path) {
+            Some(guessed) => guessed,
+            None => return false,
+        },
+    };
+    mime.starts_with("image/")
 }
 
 /// Builds a [`CitationRefVm`] from an app [`CitationRef`](genealogy_app::CitationRef) — the joined
@@ -395,5 +424,97 @@ mod line_label_tests {
     fn a_line_at_the_cap_is_kept_whole() {
         let exact = "a".repeat(LABEL_MAX_CHARS);
         assert_eq!(line_label(&exact), Some(exact));
+    }
+}
+
+#[cfg(test)]
+mod media_asset_tests {
+    use super::{MediaRefVm, media_asset_src, media_is_image};
+
+    fn media_ref(path: Option<&str>, mime: Option<&str>) -> MediaRefVm {
+        MediaRefVm {
+            human_id: "O0001".to_owned(),
+            assertion_id: "0190-attach-id".to_owned(),
+            caption: None,
+            crop: None,
+            path: path.map(str::to_owned),
+            mime: mime.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn a_stored_path_keeps_exactly_one_media_prefix() {
+        // #301 cause 2: the stored form already carries `media/`, so prepending it unconditionally
+        // asked the asset handler for `/media/media/…`, which resolves to nothing.
+        assert_eq!(
+            media_asset_src(Some("media/portraits/ada.jpg")).as_deref(),
+            Some("/media/portraits/ada.jpg")
+        );
+    }
+
+    #[test]
+    fn a_bare_root_relative_path_gets_the_prefix() {
+        assert_eq!(
+            media_asset_src(Some("portraits/ada.jpg")).as_deref(),
+            Some("/media/portraits/ada.jpg")
+        );
+    }
+
+    #[test]
+    fn a_web_reference_is_used_verbatim() {
+        assert_eq!(
+            media_asset_src(Some("https://example.org/img.png")).as_deref(),
+            Some("https://example.org/img.png")
+        );
+        assert_eq!(
+            media_asset_src(Some("http://example.org/img.png")).as_deref(),
+            Some("http://example.org/img.png")
+        );
+    }
+
+    #[test]
+    fn a_location_the_media_root_cannot_serve_has_no_source() {
+        assert_eq!(media_asset_src(None), None, "no location at all");
+        assert_eq!(
+            media_asset_src(Some("/home/ada/photos/ada.jpg")),
+            None,
+            "a file outside the workspace is not served — the glyph placeholder is honest"
+        );
+        assert_eq!(media_asset_src(Some("media/../secret.txt")), None, "traversal");
+        assert_eq!(media_asset_src(Some("")), None, "an empty location");
+    }
+
+    #[test]
+    fn a_recorded_image_mime_wins() {
+        assert!(media_is_image(Some("image/jpeg"), Some("media/portraits/ada.jpg")));
+        assert!(
+            media_is_image(Some("image/png"), None),
+            "no location needed to classify"
+        );
+    }
+
+    #[test]
+    fn a_recorded_non_image_mime_beats_the_extension() {
+        assert!(
+            !media_is_image(Some("application/pdf"), Some("media/scans/deed.jpg")),
+            "an operator's recorded MIME is the assertion; the extension only fills a gap"
+        );
+    }
+
+    #[test]
+    fn an_absent_mime_falls_back_to_the_extension() {
+        // #301 cause 1: nothing in the workspace infers a MIME and the CLI cannot set one, so every
+        // record created without one rendered the glyph forever.
+        assert!(media_is_image(None, Some("media/portraits/ada.jpg")));
+        assert!(!media_is_image(None, Some("media/deeds/deed.pdf")));
+        assert!(!media_is_image(None, Some("media/misc/noext")));
+        assert!(!media_is_image(None, None));
+    }
+
+    #[test]
+    fn a_media_ref_delegates_to_the_shared_rules() {
+        let item = media_ref(Some("media/portraits/ada.jpg"), None);
+        assert_eq!(item.src().as_deref(), Some("/media/portraits/ada.jpg"));
+        assert!(item.is_image());
     }
 }
