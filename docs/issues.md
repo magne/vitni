@@ -107,6 +107,18 @@ The `area/records/tags` label has existed since the taxonomy was applied; this i
 
 ### Media
 
+- **A media preview whose filename is not ASCII never loaded** — the `<img src>` carried raw UTF-8, the
+  webview percent-encoded it in the request, and nothing decoded it, so `resolve_media_path` looked for a
+  file whose name contains a literal `%C3%B8` and 404'd. Spaces failed the same way (`%20`); `#`, `?` and
+  `%` failed before the request, taking on their URL meanings. Systemic, not exotic: `slugify`
+  (`media_save.rs`) and the plugin host's `sanitize_component` both deliberately keep `æøå`, so the app's
+  own naming conventions produced paths it could never serve. #301 shipped without catching it because
+  `media-preview`'s fixture was `portraits/portrait.png` — ASCII, no spaces — and because the two causes
+  that PR fixed (no inferred MIME, the doubled `media/` prefix) genuinely fire on that fixture, while the
+  operator's own records have a recorded MIME and an unprefixed path, so neither explained the symptom
+  that was reported. Fixed by making the `/media/<rel>` URL space encoded end to end
+  (`media_url_path`/`media_url_decode` in `genealogy_core::media_path`), with the gui-pass fixture gaining
+  a second record named in the real data's alphabet.
 - **"Add file to media library" action.** The media-save dialog and the pure naming logic
   (`suggest_filename`/`slugify`) ship and are SSR-tested; the app-layer copy use-case that writes an
   external file into `media/<target>` and creates the Media record is deferred.
