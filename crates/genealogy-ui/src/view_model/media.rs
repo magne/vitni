@@ -1,6 +1,7 @@
 use super::{
     AttachedRefVm, CitationRefVm, DateDraft, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest, MediaEdit,
-    RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, line_label, non_blank,
+    RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, line_label, media_asset_src, media_is_image,
+    non_blank,
 };
 
 /// A record that references a media object or note (Media "Used by" / Note "References"): its kind
@@ -128,21 +129,28 @@ impl MediaDetail {
         }
     }
 
-    /// Whether the object is an image (its MIME starts with `image/`) — the Overview shows a real
-    /// preview for an image and a glyph placeholder otherwise.
+    /// Whether the object is an image ([`media_is_image`]) — the Overview shows a real preview for an
+    /// image and a glyph placeholder otherwise.
     #[must_use]
     pub fn is_image(&self) -> bool {
-        self.mime.as_deref().is_some_and(|mime| mime.starts_with("image/"))
+        media_is_image(self.mime.as_deref(), self.location())
     }
 
-    /// The source the Overview preview loads: a web reference verbatim, else a local file served by
-    /// the desktop asset handler under `/media/<rel>`. `None` when the object has no location.
+    /// The source the Overview preview loads: a web reference verbatim, else the local file served by
+    /// the desktop asset handler ([`media_asset_src`]). `None` when the object has no location, or one
+    /// the media root cannot serve.
     #[must_use]
     pub fn preview_src(&self) -> Option<String> {
         if let Some(web) = &self.web_path {
             return Some(web.clone());
         }
-        self.file_path.as_ref().map(|file| format!("/media/{file}"))
+        media_asset_src(self.file_path.as_deref())
+    }
+
+    /// The object's location, whichever kind it has — the path a MIME is inferred from when the record
+    /// carries none.
+    fn location(&self) -> Option<&str> {
+        self.file_path.as_deref().or(self.web_path.as_deref())
     }
 }
 
@@ -423,6 +431,83 @@ mod media_draft_tests {
     #[test]
     fn a_blank_create_date_maps_to_none() {
         assert!(MediaDraft::new().to_request().date.is_none());
+    }
+}
+
+#[cfg(test)]
+mod media_preview_tests {
+    use super::MediaDetail;
+
+    /// A detail with only the fields the preview reads populated.
+    fn detail(file_path: Option<&str>, web_path: Option<&str>, mime: Option<&str>) -> MediaDetail {
+        MediaDetail {
+            human_id: "O0001".to_owned(),
+            id: "0190-media-id".to_owned(),
+            title: "ada.jpg".to_owned(),
+            path: file_path.or(web_path).map(str::to_owned),
+            file_path: file_path.map(str::to_owned),
+            web_path: web_path.map(str::to_owned),
+            mime: mime.map(str::to_owned),
+            checksum: None,
+            date: None,
+            date_value: None,
+            attributes: Vec::new(),
+            citations: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            used_by: Vec::new(),
+            restrictions: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_stored_path_is_served_with_exactly_one_media_prefix() {
+        // #301 cause 2: the stored form carries `media/`, so prepending it again asked for
+        // `/media/media/…` and the asset handler resolved nothing.
+        let detail = detail(Some("media/portraits/ada.jpg"), None, Some("image/jpeg"));
+        assert_eq!(detail.preview_src().as_deref(), Some("/media/portraits/ada.jpg"));
+    }
+
+    #[test]
+    fn a_bare_root_relative_path_is_served_from_the_same_url() {
+        let detail = detail(Some("portraits/ada.jpg"), None, Some("image/jpeg"));
+        assert_eq!(detail.preview_src().as_deref(), Some("/media/portraits/ada.jpg"));
+    }
+
+    #[test]
+    fn a_file_outside_the_workspace_has_no_preview_source() {
+        let detail = detail(Some("/home/ada/photos/ada.jpg"), None, Some("image/jpeg"));
+        assert_eq!(
+            detail.preview_src(),
+            None,
+            "the asset handler serves only the media root; the glyph is honest"
+        );
+    }
+
+    #[test]
+    fn a_web_reference_is_previewed_verbatim() {
+        let detail = detail(None, Some("https://example.org/ada.jpg"), Some("image/jpeg"));
+        assert_eq!(detail.preview_src().as_deref(), Some("https://example.org/ada.jpg"));
+    }
+
+    #[test]
+    fn a_record_with_no_location_has_no_preview_source() {
+        assert_eq!(detail(None, None, Some("image/jpeg")).preview_src(), None);
+    }
+
+    #[test]
+    fn an_absent_mime_falls_back_to_the_extension() {
+        // #301 cause 1: nothing infers a MIME and the CLI cannot set one, so an image created without
+        // one rendered the glyph forever.
+        assert!(detail(Some("media/portraits/ada.jpg"), None, None).is_image());
+        assert!(!detail(Some("media/deeds/deed.pdf"), None, None).is_image());
+        assert!(detail(None, Some("https://example.org/ada.png"), None).is_image());
+    }
+
+    #[test]
+    fn a_recorded_non_image_mime_beats_the_extension() {
+        assert!(!detail(Some("media/scans/deed.jpg"), None, Some("application/pdf")).is_image());
     }
 }
 

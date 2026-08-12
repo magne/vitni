@@ -48,12 +48,50 @@ fn document_ref() -> MediaRefVm {
     }
 }
 
+/// An attached image as the store actually records one: the stored path carries the `media/` prefix and
+/// no MIME was ever recorded (the CLI cannot set one) — both of #301's live causes at once.
+fn stored_image_ref() -> MediaRefVm {
+    MediaRefVm {
+        human_id: "O0052".to_owned(),
+        assertion_id: "attach-3".to_owned(),
+        caption: Some("Ada · portrait".to_owned()),
+        crop: None,
+        path: Some("media/portraits/ada.jpg".to_owned()),
+        mime: None,
+    }
+}
+
 fn gallery_view() -> Element {
     let loc = loc();
     let media = vec![image_ref(), document_ref()];
     rsx! {
         {media_gallery(&loc, &media, None, None)}
     }
+}
+
+fn stored_gallery_view() -> Element {
+    let loc = loc();
+    let media = vec![stored_image_ref()];
+    rsx! {
+        {media_gallery(&loc, &media, None, None)}
+    }
+}
+
+#[test]
+fn a_gallery_thumbnail_of_a_stored_image_needs_no_recorded_mime_and_gets_one_prefix() {
+    let html = render(stored_gallery_view);
+    assert!(
+        html.contains("src=\"/media/portraits/ada.jpg\""),
+        "the stored `media/` prefix is not doubled (#301 cause 2): {html}"
+    );
+    assert!(
+        !html.contains("/media/media/"),
+        "the prefix is added exactly once: {html}"
+    );
+    assert!(
+        !html.contains("🗎"),
+        "the extension classifies the image with no recorded MIME (#301 cause 1): {html}"
+    );
 }
 
 #[test]
