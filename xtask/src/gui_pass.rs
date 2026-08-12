@@ -90,6 +90,11 @@ attribution = \"© MapLibre demo tiles\"
 /// The seeded media image's path below the fixture workspace's media root. `media-preview.toml` opens
 /// the Media record that points at it (#301).
 const SEED_MEDIA_REL: &str = "portraits/portrait.png";
+/// A second seeded image, named in the alphabet the real data uses: `slugify` and the plugin host's
+/// `sanitize_component` both keep `æøå`, and an operator's own directories carry spaces. An ASCII-only
+/// fixture is structurally incapable of catching a percent-encoding defect in the served URL, which is
+/// how #301 shipped with the preview still blank for every Nordic filename.
+const SEED_MEDIA_NORDIC_REL: &str = "02_folketelling/1920 greipstad_bergstøl-asbjørn.png";
 /// The seeded media image's side in pixels — big enough that the preview frame scales it down rather
 /// than up, so the `painted` region measures real image pixels.
 const SEED_MEDIA_SIZE: u32 = 480;
@@ -454,20 +459,23 @@ fn reset(out: &Path) -> Result<()> {
 }
 
 /// Creates the fixture workspace on first run: one place with coordinates, so the map has something
-/// to plot, one media object pointing at a seeded image (see [`seed_media`]), plus an inactive
+/// to plot, two media objects pointing at seeded images (see [`seed_media`]), plus an inactive
 /// `[map.providers.demo]` `MapLibre` style (ADR 0033) the `map-provider-switch` scenario switches to.
 /// Idempotent — an existing workspace directory is reused.
 fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
     let workspace = out.join("workspace");
     if workspace.exists() {
-        // A workspace seeded before the media image was added would fail `media-preview` with an empty
-        // Media list rather than a blank preview, which reads like the defect it is meant to catch.
-        let seeded = out.join(SEED_DIR).join(MEDIA_DIR).join(SEED_MEDIA_REL);
-        if !seeded.is_file() {
-            bail!(
-                "gui-pass: the fixture predates the seeded media image ({} is missing) — re-run with `--reset`",
-                seeded.display()
-            );
+        // A workspace seeded before either media image was added would fail `media-preview` with a
+        // missing Media row rather than a blank preview, which reads like the defect it is meant to
+        // catch.
+        for rel in [SEED_MEDIA_REL, SEED_MEDIA_NORDIC_REL] {
+            let seeded = out.join(SEED_DIR).join(MEDIA_DIR).join(rel);
+            if !seeded.is_file() {
+                bail!(
+                    "gui-pass: the fixture predates a seeded media image ({} is missing) — re-run with `--reset`",
+                    seeded.display()
+                );
+            }
         }
         return Ok(());
     }
@@ -513,43 +521,47 @@ fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Writes an image into the fixture workspace's media library and records one Media object pointing at
-/// it, so `media-preview.toml` has something whose preview can be blank (#301).
+/// Writes two images into the fixture workspace's media library and records a Media object pointing at
+/// each, so `media-preview.toml` has something whose preview can be blank (#301) in both the ASCII and
+/// the Nordic/spaced spelling ([`SEED_MEDIA_NORDIC_REL`]) — a regression in either is then witnessed.
 ///
-/// The image is *generated* with `ImageMagick` (already a hard requirement, see [`preflight`]) rather
+/// The images are *generated* with `ImageMagick` (already a hard requirement, see [`preflight`]) rather
 /// than committed: a deterministic gradient with a filled circle, textured enough that a `painted`
 /// assertion over the preview frame measures the image and not its background. The repo's own
 /// `assets/genealogy.png` will not do — it is a 64×64 fully transparent placeholder, so it would fail
-/// `painted` even when the preview loads perfectly.
+/// `painted` even when the preview loads perfectly. Both are the same image, so one `painted`
+/// calibration covers both rows.
 ///
-/// The record deliberately carries **no MIME**: `genealogy media` has no `set-mime`, so this is the
+/// The records deliberately carry **no MIME**: `genealogy media` has no `set-mime`, so this is the
 /// state every record the CLI creates is in, and #301's two live causes (no inferred MIME, and the
 /// stored `media/` prefix added twice) both fire on it.
 fn seed_media(home: &Path, workspace: &Path) -> Result<()> {
-    let target = workspace.join(MEDIA_DIR).join(SEED_MEDIA_REL);
-    let parent = target
-        .parent()
-        .with_context(|| format!("{} has no parent directory", target.display()))?;
-    fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
-    let side = SEED_MEDIA_SIZE;
-    let centre = side / 2;
-    let status = Command::new("convert")
-        .args(["-size", &format!("{side}x{side}"), "gradient:#1f6feb-#f0b72f"])
-        .args([
-            "-fill",
-            "#d2352c",
-            "-draw",
-            &format!("circle {centre},{centre} {centre},20"),
-        ])
-        .arg(&target)
-        .status()
-        .with_context(|| format!("generating {}", target.display()))?;
-    if !status.success() {
-        bail!("convert failed with {status} generating {}", target.display());
+    for rel in [SEED_MEDIA_REL, SEED_MEDIA_NORDIC_REL] {
+        let target = workspace.join(MEDIA_DIR).join(rel);
+        let parent = target
+            .parent()
+            .with_context(|| format!("{} has no parent directory", target.display()))?;
+        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+        let side = SEED_MEDIA_SIZE;
+        let centre = side / 2;
+        let status = Command::new("convert")
+            .args(["-size", &format!("{side}x{side}"), "gradient:#1f6feb-#f0b72f"])
+            .args([
+                "-fill",
+                "#d2352c",
+                "-draw",
+                &format!("circle {centre},{centre} {centre},20"),
+            ])
+            .arg(&target)
+            .status()
+            .with_context(|| format!("generating {}", target.display()))?;
+        if !status.success() {
+            bail!("convert failed with {status} generating {}", target.display());
+        }
+        let stored = workspace_media_path(rel);
+        cli(home, &["media", "create", "--path", &stored])?;
+        println!("gui-pass: seeded media {stored}");
     }
-    let stored = workspace_media_path(SEED_MEDIA_REL);
-    cli(home, &["media", "create", "--path", &stored])?;
-    println!("gui-pass: seeded media {stored}");
     Ok(())
 }
 
