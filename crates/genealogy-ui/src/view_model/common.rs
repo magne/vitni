@@ -289,12 +289,15 @@ impl MediaRefVm {
 
 /// The URL a renderer loads a media object's bytes from, or `None` when there is nothing it can load.
 ///
-/// A web reference is used verbatim. A local file is served by the desktop asset handler at
+/// A web reference is used verbatim — it is already a URL, so encoding it again would corrupt its own
+/// syntax. A local file is served by the desktop asset handler at
 /// `/media/<path below the workspace media root>` — the prefix is added exactly once, by
 /// [`media_root_relative`](genealogy_app::media_root_relative), whether or not the stored path already
-/// carries it. `None` for a location the media root cannot serve (an absolute path outside the
-/// workspace, or one that traverses out of it): the caller then shows its glyph placeholder, which is
-/// honest, rather than a broken `<img>`.
+/// carries it, and the remainder is percent-encoded per segment by
+/// [`media_url_path`](genealogy_app::media_url_path) so a stored `æøå`, a space or a `#` still names its
+/// file. `None` for a location the media root cannot serve (an absolute path outside the workspace, or
+/// one that traverses out of it): the caller then shows its glyph placeholder, which is honest, rather
+/// than a broken `<img>`.
 #[must_use]
 pub fn media_asset_src(location: Option<&str>) -> Option<String> {
     let location = location?;
@@ -302,7 +305,11 @@ pub fn media_asset_src(location: Option<&str>) -> Option<String> {
         return Some(location.to_owned());
     }
     let rel = genealogy_app::media_root_relative(location)?;
-    Some(format!("/{}/{rel}", genealogy_app::MEDIA_DIR))
+    Some(format!(
+        "/{}/{}",
+        genealogy_app::MEDIA_DIR,
+        genealogy_app::media_url_path(rel)
+    ))
 }
 
 /// Whether a media object should render as an image rather than a document glyph.
@@ -461,6 +468,31 @@ mod media_asset_tests {
     }
 
     #[test]
+    fn a_non_ascii_filename_is_percent_encoded_per_segment() {
+        // The live #301 symptom: the operator's own records carry `ø`, and the raw `<img src>` made the
+        // webview ask the asset handler for the encoded form, which nothing decoded.
+        let src = media_asset_src(Some(
+            "02_folketelling/1920/1920_greipstad_folketelling_asbjørn-andreassen-bergstøl.jpg",
+        ))
+        .expect("servable");
+        assert_eq!(
+            src,
+            "/media/02_folketelling/1920/1920_greipstad_folketelling_asbj%C3%B8rn-andreassen-bergst%C3%B8l.jpg"
+        );
+        assert!(!src.contains('ø'), "no raw non-ASCII byte reaches the URL: {src}");
+        assert!(src.starts_with("/media/"), "one prefix, encoded body: {src}");
+    }
+
+    #[test]
+    fn a_space_and_a_url_special_character_are_escaped() {
+        assert_eq!(
+            media_asset_src(Some("media/scans/deed #4.pdf")).as_deref(),
+            Some("/media/scans/deed%20%234.pdf"),
+            "a `#` left raw would truncate the request at the fragment"
+        );
+    }
+
+    #[test]
     fn a_web_reference_is_used_verbatim() {
         assert_eq!(
             media_asset_src(Some("https://example.org/img.png")).as_deref(),
@@ -469,6 +501,11 @@ mod media_asset_tests {
         assert_eq!(
             media_asset_src(Some("http://example.org/img.png")).as_deref(),
             Some("http://example.org/img.png")
+        );
+        assert_eq!(
+            media_asset_src(Some("https://example.org/arkiv/bergstøl.jpg?size=full")).as_deref(),
+            Some("https://example.org/arkiv/bergstøl.jpg?size=full"),
+            "a web reference is already a URL — encoding it again would corrupt its own syntax"
         );
     }
 

@@ -178,6 +178,36 @@ fn media_view_outside_the_workspace() -> Element {
     }
 }
 
+/// The Overview of a record named the way the app's own conventions name one: `slugify` keeps `æøå`
+/// (`media_save.rs`) and an operator's own file may carry a space, so the stored path is not ASCII.
+fn media_view_with_a_nordic_filename() -> Element {
+    let loc = loc();
+    let record = state(false);
+    let detail = MediaDetail {
+        file_path: Some("media/02_folketelling/1920 greipstad_bergstøl-asbjørn.jpg".to_owned()),
+        ..sample()
+    };
+    rsx! {
+        {media_overview(&loc, &detail, record)}
+    }
+}
+
+#[test]
+fn the_preview_of_a_nordic_or_spaced_filename_is_served_percent_encoded() {
+    // The webview encodes whatever `src` it is handed, so a raw `ø` reached the asset handler as
+    // `%C3%B8` and resolved to no file. Encoding here makes the request the handler can decode.
+    let html = render(media_view_with_a_nordic_filename);
+    assert!(
+        html.contains(r#"src="/media/02_folketelling/1920%20greipstad_bergst%C3%B8l-asbj%C3%B8rn.jpg""#),
+        "the preview img src is percent-encoded per segment:\n{html}"
+    );
+    assert!(
+        !html.contains("src=\"/media/02_folketelling/1920 greipstad"),
+        "no raw space or non-ASCII byte reaches the src:\n{html}"
+    );
+    assert!(!html.contains("📷"), "the image still previews, not the glyph:\n{html}");
+}
+
 #[test]
 fn the_preview_serves_the_stored_path_with_exactly_one_media_prefix() {
     // #301 cause 2: the stored `file_path` already carries `media/`, and the URL builder prepended it

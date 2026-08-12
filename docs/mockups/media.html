@@ -103,7 +103,11 @@
               disagree): the stored path is workspace-relative and carries the media directory
               (<span class="mono">media/portraits/…</span>); the served URL is
               <span class="mono">/media/</span> plus the path <em>below</em> the media root, so the prefix
-              appears exactly once. An object shows this real preview when its recorded MIME is an
+              appears exactly once. That path is percent-encoded per segment and decoded again by the asset
+              handler, so a Nordic or spaced filename
+              (<span class="mono">1920 greipstad_bergstøl-asbjørn.jpg</span> →
+              <span class="mono">/media/02_folketelling/1920%20greipstad_bergst%C3%B8l-asbj%C3%B8rn.jpg</span>)
+              resolves to its file instead of 404-ing. An object shows this real preview when its recorded MIME is an
               <span class="mono">image/*</span> one <em>or</em>, when no MIME is recorded, its extension is an
               image's — the extension never overrides a recorded MIME, so
               <span class="mono">application/pdf</span> on a <span class="mono">.jpg</span> stays a document.

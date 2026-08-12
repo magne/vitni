@@ -61,6 +61,55 @@ fn stored_image_ref() -> MediaRefVm {
     }
 }
 
+/// An attached image whose stored name carries `æøå` and a space — what `slugify` and the plugin host's
+/// `sanitize_component` actually produce, and what the operator's own library is full of.
+fn nordic_image_ref() -> MediaRefVm {
+    MediaRefVm {
+        human_id: "O0053".to_owned(),
+        assertion_id: "attach-4".to_owned(),
+        caption: Some("Asbjørn · folketelling".to_owned()),
+        crop: None,
+        path: Some("media/02_folketelling/1920 greipstad_bergstøl-asbjørn.jpg".to_owned()),
+        mime: None,
+    }
+}
+
+fn nordic_gallery_view() -> Element {
+    let loc = loc();
+    let media = vec![nordic_image_ref()];
+    rsx! {
+        {media_gallery(&loc, &media, None, None)}
+    }
+}
+
+fn nordic_viewer_view() -> Element {
+    let loc = loc();
+    rsx! {
+        MediaViewer {
+            item: nordic_image_ref(),
+            labels: media_viewer_labels(&loc),
+            onset: |_: Rect| {},
+            onclear: |()| {},
+            onclose: |()| {},
+        }
+    }
+}
+
+#[test]
+fn a_nordic_or_spaced_filename_is_served_percent_encoded_in_the_gallery_and_the_viewer() {
+    let expected = "src=\"/media/02_folketelling/1920%20greipstad_bergst%C3%B8l-asbj%C3%B8rn.jpg\"";
+    for (name, html) in [
+        ("gallery", render(nordic_gallery_view)),
+        ("viewer", render(nordic_viewer_view)),
+    ] {
+        assert!(html.contains(expected), "{name} img src is percent-encoded: {html}");
+        assert!(
+            !html.contains("bergstøl"),
+            "{name} sends no raw non-ASCII byte to the asset handler: {html}"
+        );
+    }
+}
+
 fn gallery_view() -> Element {
     let loc = loc();
     let media = vec![image_ref(), document_ref()];
