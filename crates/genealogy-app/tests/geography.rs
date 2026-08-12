@@ -17,8 +17,9 @@
 
 use genealogy_app::{
     AppDefaults, EventType, GeoCoordinates, Microdegrees, MutationMeta, NewEvent, NewPlace, OperatorConfig,
-    PlaceGeometry, PlaceType, Provenance, Session, Workspace, WorkspaceDefaults, assert_place_coordinates,
-    assert_place_geometry, create_event, create_place, link_place, show_geography, show_place, year_only_date,
+    PlaceGeometry, PlaceType, Provenance, Session, UnplottedReason, Workspace, WorkspaceDefaults,
+    assert_place_coordinates, assert_place_geometry, create_event, create_place, link_place, show_geography,
+    show_place, year_only_date,
 };
 use genealogy_core::date::GenealogicalDate;
 use genealogy_core::ids::AgentId;
@@ -235,6 +236,7 @@ async fn a_place_whose_only_geometry_postdates_the_feed_is_reported_unplotted() 
         .find(|place| place.human_id == human_id)
         .expect("the place is reported, not silently dropped");
     assert_eq!(unplotted.name, "Vågå");
+    assert_eq!(unplotted.reason, UnplottedReason::DatedLater);
 }
 
 #[tokio::test]
@@ -299,7 +301,7 @@ async fn a_scalar_coordinate_place_is_a_marker_at_every_year_and_never_unplotted
 }
 
 #[tokio::test]
-async fn a_place_with_no_geometry_and_no_coordinate_is_in_neither_list() {
+async fn a_place_with_no_geometry_and_no_coordinate_is_reported_unplotted_with_no_geometry() {
     let (ws, _dir) = workspace().await;
     let session = session();
     let human_id = create_place(
@@ -318,10 +320,13 @@ async fn a_place_with_no_geometry_and_no_coordinate_is_in_neither_list() {
 
     let summary = show_geography(&ws, Some(1850)).await.expect("show_geography");
     assert!(!summary.markers.iter().any(|marker| marker.human_id == human_id));
-    assert!(
-        !summary.unplotted.iter().any(|place| place.human_id == human_id),
-        "a place nobody ever located is #256's scope, not an unplotted-as-of report"
-    );
+    let unplotted = summary
+        .unplotted
+        .iter()
+        .find(|place| place.human_id == human_id)
+        .expect("a place nobody ever located is reported unplotted (#256)");
+    assert_eq!(unplotted.reason, UnplottedReason::NoGeometry);
+    assert_eq!(unplotted.place_type, Some(PlaceType::County));
 }
 
 #[tokio::test]

@@ -28,7 +28,7 @@ name = "map"
 
 [[step]]
 do = "click"
-at = [300, 185]
+at = [300, 220]
 label = "place list: Kristiansand"
 
 [[step]]
@@ -88,7 +88,7 @@ because = "picking a place must recentre and zoom the map onto it"
 [[assert]]
 kind = "differ"
 shots = ["map", "selected"]
-region = [208, 155, 240, 60]
+region = [208, 190, 240, 60]
 because = "the rail must highlight the row a drawn shape will attach to (#255)"
 
 [[assert]]

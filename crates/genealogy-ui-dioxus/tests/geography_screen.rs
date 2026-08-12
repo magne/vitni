@@ -6,7 +6,7 @@
 
 use dioxus::prelude::*;
 use genealogy_app::{MapBasemap, MapProvider, MapSource};
-use genealogy_ui::{EventPinVm, GeographyVm, MarkerShapeVm, PlaceMarkerVm};
+use genealogy_ui::{EventPinVm, GeographyVm, MarkerShapeVm, PlaceMarkerVm, PlaceRowStatus, PlaceRowVm};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
     DrawTool, MapDraft, MapPane, MovedCamera, geography_draw_target, geography_empty_state, geography_map_surface,
@@ -261,6 +261,26 @@ fn marker() -> PlaceMarkerVm {
     }
 }
 
+fn plotted_row() -> PlaceRowVm {
+    PlaceRowVm {
+        human_id: "P0001".to_owned(),
+        id: "place-1".to_owned(),
+        name: "Oslo".to_owned(),
+        type_label: Some("City".to_owned()),
+        status: PlaceRowStatus::Plotted,
+    }
+}
+
+fn unplotted_row(human_id: &str, name: &str, status: PlaceRowStatus) -> PlaceRowVm {
+    PlaceRowVm {
+        human_id: human_id.to_owned(),
+        id: format!("place-{human_id}"),
+        name: name.to_owned(),
+        type_label: Some("County".to_owned()),
+        status,
+    }
+}
+
 fn geography_vm() -> GeographyVm {
     GeographyVm {
         markers: vec![marker()],
@@ -273,7 +293,7 @@ fn geography_vm() -> GeographyVm {
             lat: 59.9,
             lon: 10.7,
         }],
-        unplotted_count: 0,
+        places: vec![plotted_row()],
         resolved_year: Some(1900),
     }
 }
@@ -282,7 +302,7 @@ fn geography_vm() -> GeographyVm {
 fn RailWithOneMarker() -> Element {
     let selected = use_signal(|| None::<(String, String)>);
     let vm = geography_vm();
-    geography_rail(&chrome(), Some(&vm), selected, "")
+    geography_rail(&chrome(), Some(&vm), selected, "", 1900)
 }
 
 #[test]
@@ -301,7 +321,7 @@ fn the_rail_lists_every_marker_by_name_and_type() {
 #[component]
 fn EmptyRail() -> Element {
     let selected = use_signal(|| None::<(String, String)>);
-    geography_rail(&chrome(), None, selected, "")
+    geography_rail(&chrome(), None, selected, "", 1900)
 }
 
 #[test]
@@ -325,7 +345,16 @@ fn two_marker_geography_vm() -> GeographyVm {
             },
         ],
         events: Vec::new(),
-        unplotted_count: 0,
+        places: vec![
+            plotted_row(),
+            PlaceRowVm {
+                human_id: "P0002".to_owned(),
+                id: "place-2".to_owned(),
+                name: "Nordland".to_owned(),
+                type_label: Some("County".to_owned()),
+                status: PlaceRowStatus::Plotted,
+            },
+        ],
         resolved_year: None,
     }
 }
@@ -334,7 +363,7 @@ fn two_marker_geography_vm() -> GeographyVm {
 fn RailFilteredToOslo() -> Element {
     let selected = use_signal(|| None::<(String, String)>);
     let vm = two_marker_geography_vm();
-    geography_rail(&chrome(), Some(&vm), selected, "osl")
+    geography_rail(&chrome(), Some(&vm), selected, "osl", 1900)
 }
 
 #[test]
@@ -350,7 +379,7 @@ fn the_typed_filter_hides_non_matching_markers_from_the_rail() {
 fn RailWithBlankFilter() -> Element {
     let selected = use_signal(|| None::<(String, String)>);
     let vm = two_marker_geography_vm();
-    geography_rail(&chrome(), Some(&vm), selected, "")
+    geography_rail(&chrome(), Some(&vm), selected, "", 1900)
 }
 
 #[test]
@@ -361,6 +390,117 @@ fn a_blank_filter_lists_every_marker() {
     assert!(
         html.contains("Oslo") && html.contains("Nordland"),
         "both markers listed:\n{html}"
+    );
+}
+
+fn vm_with_unplotted_rows() -> GeographyVm {
+    GeographyVm {
+        markers: vec![marker()],
+        events: Vec::new(),
+        places: vec![
+            plotted_row(),
+            unplotted_row("P0002", "Vågå", PlaceRowStatus::NoGeometryAsOf),
+            unplotted_row("P0003", "Nordland", PlaceRowStatus::NoGeometry),
+        ],
+        resolved_year: Some(1850),
+    }
+}
+
+#[component]
+fn RailWithUnplottedRows() -> Element {
+    let selected = use_signal(|| None::<(String, String)>);
+    let vm = vm_with_unplotted_rows();
+    geography_rail(&chrome(), Some(&vm), selected, "", 1850)
+}
+
+#[test]
+fn an_unplotted_row_is_listed_with_the_hollow_avatar() {
+    let mut vdom = VirtualDom::new(RailWithUnplottedRows);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(html.contains("Vågå"), "the unplotted place is listed:\n{html}");
+    assert!(html.contains("Nordland"), "the never-located place is listed:\n{html}");
+    assert!(
+        html.matches("◌").count() == 2,
+        "both unplotted rows use the hollow avatar, the plotted row does not:\n{html}"
+    );
+    assert!(html.contains("📍"), "the plotted row keeps the pin avatar:\n{html}");
+}
+
+#[test]
+fn each_unplotted_reason_renders_its_own_wording() {
+    let mut vdom = VirtualDom::new(RailWithUnplottedRows);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains("no geometry as of 1850"),
+        "the dated-later row names its reason:\n{html}"
+    );
+    let without_dated_later = html.replace("no geometry as of 1850", "");
+    assert!(
+        without_dated_later.contains("no geometry"),
+        "the never-located row names its own, distinct (undated) reason:\n{without_dated_later}"
+    );
+}
+
+#[test]
+fn the_rail_caption_names_the_year() {
+    let mut vdom = VirtualDom::new(RailWithUnplottedRows);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"class="geo-rail-head""#),
+        "the caption row is rendered:\n{html}"
+    );
+    assert!(html.contains("1850"), "the caption names the slider year:\n{html}");
+}
+
+#[component]
+fn RailUnplottedFilteredToVaga() -> Element {
+    let selected = use_signal(|| None::<(String, String)>);
+    let vm = vm_with_unplotted_rows();
+    geography_rail(&chrome(), Some(&vm), selected, "våg", 1850)
+}
+
+#[test]
+fn the_typed_filter_hides_a_non_matching_unplotted_row_and_keeps_a_matching_one() {
+    let mut vdom = VirtualDom::new(RailUnplottedFilteredToVaga);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains("Vågå"),
+        "the matching unplotted row stays listed:\n{html}"
+    );
+    assert!(!html.contains("Nordland"), "the non-matching row is hidden:\n{html}");
+    assert!(
+        !html.contains("Oslo"),
+        "the non-matching plotted row is hidden too:\n{html}"
+    );
+}
+
+#[component]
+fn RailWithSelectedUnplottedRow() -> Element {
+    let selected = use_signal(|| Some(("P0002".to_owned(), "Vågå".to_owned())));
+    let vm = vm_with_unplotted_rows();
+    geography_rail(&chrome(), Some(&vm), selected, "", 1850)
+}
+
+#[test]
+fn an_unplotted_row_is_selectable_and_highlighted_when_selected() {
+    let mut vdom = VirtualDom::new(RailWithSelectedUnplottedRow);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"class="row sel""#),
+        "the selected unplotted row carries the sel modifier class:\n{html}"
+    );
+    assert!(
+        html.matches(r#"role="option""#).count() == 3,
+        "every row, plotted or not, is a selectable option:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-selected="true""#),
+        "the selected unplotted row is announced to assistive tech:\n{html}"
     );
 }
 
@@ -395,7 +535,7 @@ fn the_toolbar_says_when_there_is_no_draw_target() {
 fn RailWithSelectedMarker() -> Element {
     let selected = use_signal(|| Some(("P0001".to_owned(), "Oslo".to_owned())));
     let vm = two_marker_geography_vm();
-    geography_rail(&chrome(), Some(&vm), selected, "")
+    geography_rail(&chrome(), Some(&vm), selected, "", 1900)
 }
 
 #[test]

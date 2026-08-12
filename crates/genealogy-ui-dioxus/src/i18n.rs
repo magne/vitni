@@ -787,6 +787,26 @@ impl Chrome {
         fl!(self.loader, "geography-rail-label")
     }
 
+    /// The rail's own caption (#256): every place is listed, only the plotted ones get the 📍
+    /// avatar — said once above the list so the rule is explained rather than merely implied by
+    /// two avatar glyphs.
+    #[must_use]
+    pub fn geography_rail_note(&self, year: i32) -> String {
+        fl!(self.loader, "geography-rail-note", year = year)
+    }
+
+    /// An unplotted row's reason when the place holds geometry dated later than the slider year.
+    #[must_use]
+    pub fn geography_row_no_geometry_as_of(&self, year: i32) -> String {
+        fl!(self.loader, "geography-row-no-geometry-as-of", year = year)
+    }
+
+    /// An unplotted row's reason when the place has never been located at all.
+    #[must_use]
+    pub fn geography_row_no_geometry(&self) -> String {
+        fl!(self.loader, "geography-row-no-geometry")
+    }
+
     /// The accessible name for the Geography tool overall.
     #[must_use]
     pub fn geography_screen_label(&self) -> String {

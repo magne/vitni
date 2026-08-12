@@ -14,6 +14,10 @@
        via the rail (left), not a canvas-layer click. */
     .geo { display: grid; grid-template-columns: 240px 1fr; gap: 12px; }
     .geo-rail { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+    .geo-rail-head {
+      font-size: var(--fs-xs); color: var(--muted);
+      padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line);
+    }
     .geo-main { display: flex; flex-direction: column; gap: 10px; }
     .geo-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .geo-toolbar .spacer { flex: 1; }
@@ -62,7 +66,7 @@
       <div class="avatar-lg">🗺</div>
       <div>
         <h1 class="detail-title">Geography</h1>
-        <div class="detail-sub">All places with a location · pins by type · event pins · boundaries as-of a year</div>
+        <div class="detail-sub">Every place · pins by type · event pins · boundaries as-of a year</div>
       </div>
     </div>
 
@@ -105,18 +109,26 @@
 
     <!-- Places holding geometry that does not resolve as of the slider year: every assertion is
          dated later and none is undated, so the map cannot plot them. Shown only when the count is
-         above zero. A place nobody ever located has no geometry at all and is not counted here. -->
-    <div class="section-note">1 place has no geometry as of 1850.</div>
+         above zero. A place nobody has ever located is counted here too (#256) — the rail's own
+         caption is what tells the two apart, row by row. -->
+    <div class="section-note">2 places have no geometry as of 1850.</div>
 
     <div class="geo">
-      <!-- Rail: place list. A row's title is the place's name in effect for the slider year (ADR
-           0026 §1), matching the caption below and the map pin — not always the first-asserted name. -->
+      <!-- Rail: every place in the workspace, not just the plotted ones (#256) — so a place with no
+           geometry can still be picked as the in-map editor's draw target, and the list no longer
+           shrinks as the slider moves. A row's title is the place's name in effect for the slider
+           year (ADR 0026 §1), matching the caption below and the map pin — not always the
+           first-asserted name. The 📍/◌ avatar marks plotted vs. not; the caption above the list
+           says what the rule is instead of leaving it to the glyph alone. -->
       <aside class="geo-rail">
+        <div class="geo-rail-head">Every place · 📍 plotted as of 1850</div>
         <div class="list-rows">
           <div class="row sel"><div class="avatar">📍</div><div class="row-main"><div class="row-title">Kristiania</div><div class="row-sub">city · Norway</div></div></div>
           <div class="row"><div class="avatar">📍</div><div class="row-main"><div class="row-title">Aker</div><div class="row-sub muted">merged into Oslo 1948</div></div></div>
           <div class="row"><div class="avatar">📍</div><div class="row-main"><div class="row-title">Nordland</div><div class="row-sub">county · Norway</div></div></div>
           <div class="row"><div class="avatar">⛪</div><div class="row-main"><div class="row-title">Gamle Aker</div><div class="row-sub">parish · Oslo</div></div></div>
+          <div class="row"><div class="avatar">◌</div><div class="row-main"><div class="row-title">Bergenhus</div><div class="row-sub">county · no geometry as of 1850</div></div></div>
+          <div class="row"><div class="avatar">◌</div><div class="row-main"><div class="row-title">Finnmark</div><div class="row-sub">county · no geometry</div></div></div>
         </div>
       </aside>
 
@@ -322,10 +334,8 @@
 
 <script>
 window.MOCK = {
-  active: "places",
-  crumb: ["Places", "Geography"],
-  record: "Geography",
-  tabstrip: [{ label: "Geography", active: true }]
+  active: "geography",
+  crumb: ["Geography"]
 };
 </script>
 <script src="assets/shell.js"></script>
