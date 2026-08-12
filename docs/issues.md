@@ -17,16 +17,14 @@ Two conventions:
 
 ## Bugs
 
-No open defects here. The two this preamble used to name are fixed and their bullets deleted per §6 of
-[`issue-tracking.md`](issue-tracking.md) — *Postgres place-detail reads fail outright* with #231 and
-*map markers label with the first-asserted name* with #232 — but the preamble was not updated with
-them, so it went on advertising bullets the file no longer held. The five Phase 9 map/geometry bugs are
-fixed and archived; the two of those fixes that ship without test coverage now have the bullet
-[`archive/completed-work.md`](archive/completed-work.md) always claimed they had, under *Geography &
-map*.
+This is a pointer, not a place bullets live: an open bug takes its `area/*` from whichever area it
+affects, plus `type/bug`, and sits under that area's `###` heading. `cargo xtask issue-sync` reports a
+bullet placed directly here as misplaced.
 
-Open bugs take their `area/*` from whichever area they affect, plus `type/bug`, and live under that
-area's `###` heading.
+The **2026-08-12 GUI walkthrough** is where most of the currently-open defects came from, and it filled
+several areas at once — *Record detail & shared tabs* (new, and the largest), *Media*, *Tags*, *Shell,
+tabs & notifications*, *Keyboard & shortcuts* and *Docs & repo tooling*. Walking the real GUI is still
+the only thing that finds this class: every one of them passed the SSR suite.
 
 ## Records & data model
 
@@ -91,11 +89,55 @@ none needs an event rewrite — and the first three are gated by an unwritten **
 - **`remove_translation` core verb** — note-translation retract is Edit-only; there is no verb to
   remove a single translation.
 
+### Tags
+
+The `area/records/tags` label has existed since the taxonomy was applied; this is its first `###` home.
+
+- **The Tag screen diverges from `mockups/tag.html` in four places** — the header's colour badge is
+  text-only (`screens/tag.rs:222`; `Badge` carries no dot, `components/data.rs:125-132`) where the
+  mockup shows the swatch inside the badge (`tag.html:64`); the read-only overview stacks label above
+  value (`tag.rs:312-337`, `.field label`/`.field .val` are `display:block`, `components.css:461-470`)
+  where the mockup puts them on one line (`.fact-row`, `tag.html:93-95`); and the read-only colour
+  section renders the hex string with neither swatch nor preview chip (`tag.rs:330-335` vs
+  `tag.html:108-112`), though edit mode has both (`tag_edit_colour_card`, `tag.rs:467-508`). Edit mode
+  should also put label and input on one line while **keeping** the Tag/Colour card split the mockup
+  does not draw — so `tag.html`'s edit state is updated in the same change, per the mockup rule in
+  [`CLAUDE.md`](../CLAUDE.md). The same stacked-`.field` divergence is on the Media record, under
+  *Media*; fixing it once in `components/draft_field.rs` covers both. — #310
+
 ### Media
 
 - **"Add file to media library" action.** The media-save dialog and the pure naming logic
   (`suggest_filename`/`slugify`) ship and are SSR-tested; the app-layer copy use-case that writes an
   external file into `media/<target>` and creates the Media record is deferred.
+- **A media image never appears — not on the record, not in the tab gallery, not in the viewer.** The
+  `<img>` is rendered (`screens/media.rs:616-626`, `screens/shared.rs:383`), so this is a resolution
+  failure, and three independent causes are live at once. **MIME:** `is_image()` is
+  `mime.starts_with("image/")` (`view_model/media.rs:131-136`) and `mime` is only ever what the
+  operator typed, so an untyped JPEG shows the 📷 glyph forever. **Double prefix:** the media store
+  returns workspace-relative paths that already start with `media/`
+  (`genealogy-plugin-host/src/media.rs:26-27,85-87`, and `mockups/media.html:107` shows that form)
+  while `preview_src()` prepends `/media/` unconditionally (`view_model/media.rs:141-146`), so the
+  asset handler resolves `<workspace>/media/media/…`; nothing normalizes either way, and the gallery
+  tests assume the unprefixed form (`tests/media_gui.rs:34,64`). **Root capture:** `use_asset_handler`
+  takes the root once at shell mount (`shell/root.rs:51-57`) and falls back to `unwrap_or_default()`
+  (`media_asset.rs:87`), which makes every read relative to the process CWD. Fix the prefix in one
+  place, infer the MIME (see below), and make an unresolved root an error rather than an empty string;
+  the fix must say which cause it was. — #301
+- **The Media record diverges from `mockups/media.html`** — the File card repeats the human id the
+  header already shows (`media.rs:71-87` vs `:471`, and the mockup's File card starts at *File path*,
+  `media.html:105-111`); `DraftText` stacks label above value where the mockup uses same-line
+  `.fact-row` rows; the header passes no subtitle and no MIME badge (`media.rs:469-477` vs
+  `media.html:61,64`); and the "Used by" rows are `.fact-row` divs whose columns do not line up
+  (`media.rs:637-652`). Shares its label/value half with the Tag bullet under *Tags*. — #309
+- **Media edit mode cannot check, fetch, or type a file** — *File path* is a plain `DraftText`
+  (`media.rs:88-101`) with no existence check, and any check added must **flag, never block**: a
+  record for a file that is not on this machine is legitimate. There is no download when *Web path*
+  changes with a file path set (the mockup already draws `⤓ Download`, `media.html:73`), which needs an
+  overwrite prompt on checksum mismatch. And nothing infers `mime` — the only extension table in the
+  workspace is `content_type` (`media_asset.rs:48-70`), which serves response headers and is never
+  consulted for the record. All three are what make the preview bullet above reachable in the first
+  place.
 
 ### DNA
 
@@ -127,6 +169,14 @@ long-standing "DNA match views in the UI" item is closed.
   `PossibleDuplicates`. Widening checks to the other twelve aggregates is its own item.
 - **Repository media refs (U31)** — should Repository carry media refs (e.g. archive photos)? A
   data-model question.
+- **A citation has no evidence text, so the tab column labelled *Evidence* can only ever be chips** —
+  reported from the GUI as "*Evidence* is never displayed", but it is a model gap, not a render one:
+  `CitationRefVm` (`view_model/common.rs:175-199`) and `CitationDetail` (`view_model/citation.rs:56-63`)
+  carry only the three Evidence-Explained axes, which `citations_table` renders as chips
+  (`screens/tabs.rs:62-66`), and `genealogy-core` has no transcription/evidence-text field either. The
+  decision is whether the transcribed words of a source belong on `Citation` as a `RichText`, or stay
+  an attached note of `NoteType::Transcript` (`core/src/enums.rs:368`) — which already exists and is
+  the cheaper answer. Either way the column needs a name that matches what it shows. — #316
 
 ## Frontend & interaction
 
@@ -137,36 +187,114 @@ long-standing "DNA match views in the UI" item is closed.
   can: `shell/root.rs` inerts `.app` for the overlays and the close/quit confirm, and every
   `SidePanel` renders *inside* `.app`, so inerting the shell would inert the panel with it. The fix is
   a layer the panel can render into as a sibling of `.app` (what the overlays already use), not
-  another `inert` clause.
+  another `inert` clause. — #312
 - **Back/forward cannot return to a draft tab.** `NavLocation.record` is `(Category, String)`, a saved
   record's key, so a draft is never recorded in the history and `⌘←`/`⌘→` step past it to the last saved
   record instead. True before several drafts per category (#260) and unchanged by it, but a strip that
   can now hold four drafts makes it easier to notice. `NavLocation` lives in `genealogy-ui`
   (framework-neutral, ADR 0008) and a history entry naming a draft goes dead when the draft is cancelled
-  *or* committed, so the variant needs a rule for that first.
+  *or* committed, so the variant needs a rule for that first. — #313
 - **A save run whose target leaves the strip hangs.** `advance_save_run` arms the next queued `EditKey`
   and waits for `note_save_finished` to report it; nothing reports if that tab was closed or cancelled
   while armed, or if the record was saved by hand and then failed its own `can_save()` gate, so
   `save_request` stays set and the run's quit/close never fires. Pre-existing — a rename and a committed
   draft are both re-keyed (`rekey_save_run`), which covers the two identity changes, not disappearance.
-  Several drafts per category (#260) make a long queue, and so a lost target, more reachable.
-- **A draft tab reads "New People" while its pane heading reads "New person".** The tab takes the *rail*
-  label (`nav-people`, plural, shared with the rail and the Explorer) and the create pane takes
-  `person-new-title` (singular), so one screen shows both forms of the same thing. Needs 13 singular
-  entity keys — the tab is the one that should change, since the pane heading reads correctly.
-- **`draft-tab-label = Ny { $entity }` is grammatically wrong in `no` for every category.** The rail
-  labels are plural ("Personer", "Steder"), so the draft tab reads "Ny Personer" instead of "Ny person".
-  Pre-existing, and the singular entity keys above are the same fix seen from the other side.
-- **A docked split mounts two detail panes, breaking `NavState`'s single-mount assumptions.**
-  `edit_drafts`, `save_request`/`save_queue` and `pending_step` each document their design as safe
-  *because* "only the active tab's pane is mounted" (`shell/nav_state.rs`), which a dock makes false.
-  Audited one by one, only `pending_undo` is actually broken: `use_record_undo` (`screens/shared.rs`) is
-  called by all 13 detail panes and latches a *per-pane* `seen` against a *shell-wide* counter, so one
-  `⌘Z` retracts the newest undoable assertion of **both** records and two "Nothing to undo" notices race
-  for `nav.notice`. `use_save_on_request` already compares an `EditKey`, and `use_record_step` has a
-  single caller in `shell/explorer.rs`, so save and `[`/`]` stepping are correct — their stated reasons
-  are not. The class is what matters: a shell-wide ticket a *detail pane* consumes must be addressed,
-  not bumped. — #284
+  Several drafts per category (#260) make a long queue, and so a lost target, more reachable. — #302
+- **A draft tab and the `+` menu read "New People" while the pane heading reads "New person".** The
+  tab label (`shell/tab_label.rs:66`) and every item of the `+` `NewRecordMenu` (`shell/tabstrip.rs:190`)
+  feed the *rail* label — `nav-people`, plural, shared with the rail and the Explorer — into
+  `draft-tab-label = New { $entity }`, while the create pane takes `person-new-title` (singular), so one
+  screen shows both forms of the same thing. The same substitution makes the Norwegian read "Ny
+  Personer" instead of "Ny person", which is not merely inconsistent but ungrammatical for every
+  category. One fix from three sides: 13 singular entity keys, used by the tab and the menu; the pane
+  heading already reads correctly. — #308
+- **Closing a pristine draft tab still raises the unsaved-work confirm.** `tab_has_unsaved`
+  (`shell/nav_state.rs:948-956`) answers `true` for `OpenTab::Draft(_, _)` unconditionally — documented
+  at `:944-946` as "nothing about it is stored yet, whether or not anything has been typed" — so `⌘W`
+  or the tab `✕` on a `⌘N` nobody typed into asks whether to discard nothing. The same predicate drives
+  the strip's `●` dot and `has_unsaved_work()`, so an untouched draft also makes `⌘Q` claim unsaved
+  work. Dirtiness is already knowable: `draft_label(&tab.edit_key())` (`tab_label.rs:63`) is `Some`
+  only once something naming the record has been typed, and `edit_drafts` is keyed per `EditKey`. — #307
+
+### Record detail & shared tabs
+
+The 13 detail screens share their tab **bodies** — `screens/tabs.rs` (citations, tags, addresses,
+history) and `screens/shared.rs` (notes, media, the retract and attach side panels) — and re-implement
+only the Overview and their entity-specific tables. So each item here lands on every aggregate at once,
+which is what makes them worth fixing in the shared code rather than per screen. All came out of the
+2026-08-12 GUI walkthrough.
+
+- **The provenance "Reason for this change" field discards every keystroke.** Typing into it leaves it
+  empty, so no add or attach in the app can record *why*. One cause, one line: the `TextInput` at
+  `components/provenance.rs:78-82` is the only one in the app with no `value:` prop. `value` is a
+  *volatile* attribute in Dioxus, re-written on every diff of the element even when unchanged, and
+  `AttributeValue::None` is written as `remove_attribute`, whose `value` branch runs `node.value = ""`.
+  Each keystroke calls `draft.write()`, which dirties `ProvenanceBlock` (it reads the whole draft),
+  which re-renders the input, which wipes it — synchronously, within the same keystroke. Every attach
+  and add side panel routes through here (`screens/shared.rs:838`); the retract reason two hundred
+  lines away is correct precisely because it binds `value: "{rationale}"` (`shared.rs:894-900`). Guard
+  the fix with an SSR assertion that the rendered input carries a `value` attribute, since the failure
+  is the attribute's *absence*. — #299
+- **The shared tabs have no common layout contract.** `tab_with_add` (`screens/tabs.rs:140-151`) emits
+  the action bar *before* the body, so the button precedes the explanation it should follow; the
+  explanatory `div.section-note` exists on History (`tabs.rs:526`) and nowhere else among the shared
+  tabs; each body early-returns its `EmptyState` *before* its own note (`tabs.rs:24`, `shared.rs:295`,
+  `shared.rs:360`), so the explanation vanishes exactly when a new operator has nothing to infer from;
+  `.tab-actions` has **no rule at all** in either stylesheet, making the add bar an unstyled block; and
+  the action labels mix a literal `+` (`action-add-segment = + Add segment`) with none
+  (`action-add-tag`). Wanted shape, once, in the shared frame: explanation first, then a right-aligned
+  action bar whose every label carries a `+` icon, then the content or the empty state, on one padding
+  scale — with `.tab-actions` added to `mockups/assets/components.css` in the same change so the app
+  sheet stays a subset. The Tags tab's chips should read a size larger while that frame is being
+  built. — #303
+- **Attached records have four different presentations across the tabs.** Notes are a bare `ul.id-list`
+  of raw `human_id` strings with no `RecordLink` and no note text at all (`shared.rs:293-305`);
+  research-note subjects are a full table with a link, a kind chip and row actions
+  (`screens/research_note.rs:676-710`); citations are a richer table again (`tabs.rs:33-77`); media are
+  a card grid (`shared.rs:374`). Converge on the citations shape — link, kind, mono id, row actions —
+  and let the media grid stay the deliberate exception. Notes is the one that is actually broken: an
+  attached note can be neither read nor opened from the record that references it. — #304
+- **A ghost row action disappears on the row the pointer is on.** `.btn.ghost:hover` and
+  `table.tbl tr:hover td` both resolve to `--panel-2` (`components.css:439-440,572`) and ghost paints a
+  transparent border, so Detach/Remove — `row_actions_cell` (`shared.rs:984`) on every tab table — has
+  no boundary and no hover feedback at exactly the moment it is being aimed at. Text contrast is fine;
+  the button is invisible *as a button*. The mockup sheet carries the identical pair of rules, so both
+  change together. — #305
+- **A record tab cannot create the record it wants to attach.** The labels already split by capability
+  — `action-attach-citation/-media/-note` versus `action-add-*` — and there is no split-button or
+  menu-button primitive in `components/` to offer both. The cheaper answer than a split button is that
+  the *picker* creates: the design system already specifies that affordance (`+ New person "ann"…`,
+  `mockups/design-system.html:327-332`), so the tab button stays a single "Attach …" and the search
+  field grows the create path. Confirm whether `RecordPicker` already wires it before designing
+  anything new. — #314
+- **Restriction toggles write an empty provenance and cannot be explained.** The three header toggles
+  submit `ProvenanceDraft::default()` on click (`screens/source.rs:499` and the same line in 11 other
+  screens), so *Confidential* / *Locked* / *Private* is the one class of change an operator can never
+  give a reason for, in a system whose whole point is that every assertion carries one; the untag chip
+  `×` (`person.rs:654-662`) has the identical gap. They are also hard to read as controls: they sit 8px
+  after the badges in the same `.wrap` (`components/master_detail.rs:277-286`) and share the base chip
+  rule with them. Wanted shape: the header keeps the read-only display, toggling moves into edit mode
+  on the model the Tag screen already uses (`screens/tag.rs:325`) so the change rides the record's own
+  save and its provenance block, and the badge group gains real separation from whatever controls
+  remain beside it. — #315
+- **A record's History tab describes an import in the Dashboard's words.** The collapsed
+  software-agent run renders `dashboard-import-batch` — "{ $count } records imported"
+  (`view_model/history.rs:47-69`, `i18n.rs:1883-1887`) — but on a record's own History tab the count is
+  of *assertions on that one record*, so a single person claims several records were imported;
+  `view_model/tests.rs:119-135` pins that wording today. It needs its own key naming the run's origin
+  ("Imported from Digitalarkivet"), which means the origin has to reach the view-model. Two things to
+  fix alongside: the collapse is implemented twice, once in `genealogy-app/src/history.rs:247-302` and
+  once in the view-model, and the collapsed row is stripped of its `assertion_id` so `⌘Z` silently
+  skips the whole run. — #306
+- **Collection history nodes cannot be expanded and show no count.** `collapse_runs`
+  (`genealogy-app/src/history.rs:247-302`) folds a software run into one synthetic
+  `ActivityDetail::ImportBatch { count }` row and **discards the children**, and `ActivityVm`
+  (`view_model/history.rs:99-122`) has no count field either — the number survives only baked into the
+  localized sentence. Wanted: keep the children, show the count muted beside the node, and make the
+  node disclose — two levels on the Dashboard's Recent Activity (collection → record → that record's
+  entries), one on a record's History tab. There is no disclosure primitive to build on: no
+  `Disclosure` component and no `<details>` anywhere in `components/`, only ad-hoc `aria-expanded` on
+  four unrelated widgets.
 
 ### Lists, search & scale
 
@@ -188,6 +316,18 @@ long-standing "DNA match views in the UI" item is closed.
 Residuals from the shortcuts work (ADR 0030); see
 [`archive/completed-work.md`](archive/completed-work.md). Deliberate non-goals are under *Decided*.
 
+- **`⌘N` is silent on half the app.** Its help text says "New (context-aware)", but
+  `NavState::request_new` (`shell/nav_state.rs:637-645`) early-returns with no toast and no dialog
+  whenever the active destination is not `Destination::Category(_)` or is the Dashboard — so on the
+  Dashboard, Help, and every `Destination::Tool` (Import, Export, Merge, Pedigree, Geography,
+  Preferences) the chord does nothing at all, while the sibling arms beside it in the same dispatch
+  `match` do notify (`shell/keyboard.rs:245,261`). There is no record-selection dialog to fall back to:
+  the only category picker is `NewRecordMenu`, whose open state is local to `RecordTabstrip`
+  (`shell/tabstrip.rs:31`), and the tabstrip mounts only for entity destinations. `⌘N` is dead under
+  any overlay too, since `.app` is `inert` while one is up (`shell/root.rs:97-108`). Shape: raise a
+  category picker from anywhere — the palette already has that path (`PaletteCommand::Create`,
+  `shell/palette.rs:288`) — or at minimum say why nothing happened. Typing focus is *not* involved: a
+  primary-modifier chord bubbles out of a focused field by design, which is a *Decided* entry below. — #300
 - **Chord entry is a typed canonical string, not live key capture.** `keydown` is inert under SSR and
   `cargo xtask input-guard` forbids a raw form element outside the primitives, so the Preferences
   rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.
@@ -207,13 +347,15 @@ Residuals from the shortcuts work (ADR 0030); see
 
 ### Geography & map
 
-- **Two shipped map fixes have no test coverage.** The marker load-race stash (`__geoPending`,
-  `screens/map_shared.rs`) and the zoom-interpolated `circle-radius` both live entirely inside
-  `format!`-built JavaScript that no test inspects, so neither the SSR suite nor `gui-pass` would notice
-  a regression in either. Recorded by the 2026-07-27 verification note in
-  [`archive/completed-work.md`](archive/completed-work.md), which says the gap "is now tracked under
-  *Geography & map*" — it was not, until this bullet. It is also the only cited evidence for the
-  `type/test-gap` label in [`issue-tracking.md`](issue-tracking.md) §2.
+- **The zoom-interpolated marker radius is still unasserted.** The other half of this bullet is closed:
+  the marker load-race stash (`__geoPending`, `screens/map_shared.rs`) is now exercised by the
+  `gui-pass` map scenarios, because a shot in which markers are painted at all can only have reached
+  them through the stash. The zoom-interpolated `circle-radius` has no such witness — `map-zoom.toml`
+  asserts that the camera moved, which tiles alone satisfy — so a regression that pins the radius would
+  pass every scenario. Both live inside `format!`-built JavaScript no test inspects, which is why the
+  proof has to be a shot rather than an assertion over markup. Cheapest closure: a `region` compare
+  over a marker between two zoom levels. This bullet is the cited evidence for the `type/test-gap`
+  label in [`issue-tracking.md`](issue-tracking.md) §2.
 - **In-map editing depth** — mid-ring vertex insertion (today: a vertex can be dragged to a new
   position, but not inserted between two others), pin-click selection on the canvas (today: select via
   the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is wired;
@@ -452,6 +594,16 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 The `area/docs` label already existed with no `###` home; this is it.
 
+- **The mockups' record-picker specimen pins itself to the viewport's top-left.** Every mockup that
+  includes a `.picker-results` list — `design-system.html:327-332`, `family.html:178`,
+  `citation.html:193` — renders it as a floating box over the top-left corner of the page, which is
+  where the walkthrough found an unexplained "Berg, Anna / Lovelace, Anna / + New person" dropdown.
+  `mockups/assets/components.css:832-840` gives the class `position: fixed` at `--pk-top`/`--pk-left`,
+  custom properties **only the renderer sets** (from `getBoundingClientRect`), so in a static page they
+  default to 0. Introduced by `9e9c983`, which made the app's picker a floating dropdown and updated
+  the shared sheet without the pages that use it; the specimen's own prose still promises "an in-flow
+  result list (never a floater…)" (`design-system.html:319-322`), so the mockup now contradicts both
+  the app and itself. The app rule at `components.css:997-1006` is correct and unaffected. — #311
 - **`gui-pass` occasionally grabs a blank first shot.** Once in roughly a dozen runs the first `shot` of
   a scenario comes back uniform (`… is blank (standard deviation 0) — the webview painted nothing`) and
   the run aborts, passing on a re-run with nothing changed. The startup handshake in
@@ -512,6 +664,14 @@ decision, not a gap.
   External ids are importer bookkeeping, not user-editable data.
 
 ### Shell & panes
+
+- **A shell-wide ticket a detail pane consumes must be addressed, not bumped.** #284 filed the class:
+  `pending_undo` was a counter every mounted pane latched a per-pane `seen` against, so with a record
+  docked one `⌘Z` retracted the newest assertion of **both** panes' records. Fixed with #279 by making
+  the ticket carry the `EditKey` it is aimed at — the address *is* the latch. `save_request`/`save_queue`
+  and `edit_drafts` were already keyed and were never broken, only mis-documented as safe "because only
+  the active tab's pane is mounted". Undo stays **active-record-scoped** with a split open, which is the
+  locked decision; the rule to carry forward is that a second mounted pane makes any bare counter wrong.
 
 - **Duplicate `id`/`aria-controls` cannot make a handler inert.** #279 read a docked split's dead tab
   clicks as the duplicate element ids two mounted `Tabs` strips emit. Measured against the interpreter:

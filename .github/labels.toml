@@ -57,6 +57,11 @@ color = "0e8a16"
 description = "Shell, tabs, overlays, notifications"
 
 [[label]]
+name = "area/frontend/records"
+color = "0e8a16"
+description = "Record detail screens and their shared tabs"
+
+[[label]]
 name = "area/frontend/lists"
 color = "0e8a16"
 description = "Lists, search, palette, scale"

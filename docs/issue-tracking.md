@@ -1,6 +1,6 @@
 # Issue tracking on GitHub
 
-- **Status:** **Applied 2026-07-27.** 39 labels and the issue-template forms exist, alongside
+- **Status:** **Applied 2026-07-27.** 40 labels and the issue-template forms exist, alongside
   `.github/labels.toml` and `cargo xtask issue-sync`. `0.8 — UI parity` shipped and is closed; the two
   remaining gates are `0.9` and `1.0`.
 - **Date:** 2026-07-27
@@ -20,7 +20,7 @@ zizmor-clean and YAML-valid, no more. Until billing clears, reconcile labels loc
 `cargo xtask labels --apply`. This is also why the doc↔tracker drift check is an **xtask** rather than
 a scheduled workflow: it has to work without Actions.
 
-[`issues.md`](issues.md) currently holds **91 bullets: 78 actionable and 13 that are not tasks at
+[`issues.md`](issues.md) currently holds **111 bullets: 92 actionable and 19 that are not tasks at
 all** — the latter live under *Decided — no action needed* and record deliberate choices ("by design",
 "a deliberate simplification", "permanently non-round-trippable", "recorded so it is not re-raised").
 Filing those as issues would create a tracker that can never reach zero, so the split below matters
@@ -62,10 +62,16 @@ deliberately among those extras.
 ### `area/*` — one per backlog H3 in `issues.md`
 
 `records/person-family`, `records/places`, `records/notes`, `records/tags`, `records/media`,
-`records/dna`, `records/cross-aggregate`, `frontend/shell`, `frontend/lists`, `frontend/keyboard`,
-`frontend/pedigree`, `frontend/geography`, `frontend/gui-cli-parity`, `import/bulk`,
-`import/assisted`, `import/round-trip`, `plugins/ui-vocabulary`, `plugins/trust`, `platform/perf`,
-`platform/packaging`, `platform/deps`.
+`records/dna`, `records/cross-aggregate`, `frontend/shell`, `frontend/records`, `frontend/lists`,
+`frontend/keyboard`, `frontend/pedigree`, `frontend/geography`, `frontend/gui-cli-parity`,
+`import/bulk`, `import/assisted`, `import/round-trip`, `plugins/ui-vocabulary`, `plugins/trust`,
+`platform/perf`, `platform/packaging`, `platform/deps`.
+
+`frontend/records` and its H3 (*Record detail & shared tabs*) were added on 2026-08-12: the 13 detail
+screens share their tab bodies, so a defect in one lands on every aggregate at once, and folding those
+into `frontend/shell` would have put the app tabstrip and the in-record tabs — two unrelated surfaces —
+behind one label. `records/tags` gained its first H3 in the same pass, having been declared with no
+home since the taxonomy was applied.
 
 The area reorganization is what makes this mapping 1:1 and mechanical — an item's label follows from
 where it already sits in the doc. Add `docs` and `i18n` as cross-cutting extras.
@@ -77,7 +83,7 @@ became H3s to satisfy markdownlint MD036, not because they name areas: a naive "
 would invent `area/model-interchange` and `area/architecture` for two headings with no work behind them,
 and a second near-duplicate keyboard label. The rule is **one label per H3 under the four backlog H2s**
 (*Records & data model*, *Frontend & interaction*, *Import, export & plugins*, *Platform & operations*)
-— which is exactly the 21 above. Separately, **`## Bugs`** is a pointer section, not a place bullets
+— which is exactly the 22 above. Separately, **`## Bugs`** is a pointer section, not a place bullets
 live: an open bug sits under the `###` area it affects and takes that `area/*` label plus `type/bug`.
 `cargo xtask issue-sync` enforces that — a bullet directly under `## Bugs` is reported as misplaced,
 with the area H3 named as the fix.
@@ -86,10 +92,11 @@ with the area H3 named as the fix.
 
 `bug`, `feature`, `chore`, `refactor`, `test-gap`, `design-question`, `research`.
 
-Two earn their place from the current backlog: **`test-gap`** (two shipped map fixes have no test
-coverage — a real class this repo produces, since agents cannot drive the webview) and
-**`design-question`** for the items the doc already marks as needing a design or product call (saved
-searches, Repository media refs, column chooser).
+Two earn their place from the current backlog: **`test-gap`** (the zoom-interpolated marker radius has
+no witness in any test — a real class this repo produces, since the behaviour exists only inside
+`format!`-built JavaScript in a live webview) and **`design-question`** for the items the doc marks as
+needing a design or product call (the Attach-versus-Add model #314, the restriction-toggle model #315,
+the citation evidence field #316, saved searches, Repository media refs, column chooser).
 
 ### `priority/*` — when
 
@@ -155,7 +162,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. Highest first: **the close/quit confirm cannot save** — the confirm landed (#200) and an in-progress edit now survives leaving its tab (#239), but keeping the edit still means cancelling, finding the record, saving, and closing again. Then the outstanding manual webview pass, the record-picker listener leak, and the recent-list write racing a keyboard quit. |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: **no add or attach can record a reason**, because the provenance field erases what is typed into it (#299); then `⌘N` silently doing nothing on half the destinations (#300), a media image never rendering anywhere (#301), and a save run that hangs when its target leaves the strip (#302). |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
@@ -171,102 +178,64 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (17 so far)
+### `0.9 — UI stabilization` (15 open)
 
-Ordered by severity, not area. **This milestone is deliberately open-ended.** Ten issues is what the
-audit could find by reading code; the rest came from using the GUI in earnest, which is exactly how it
-was supposed to go — the 2026-07-31 manual pass on the map and the unsaved-work confirm nearly doubled
-the list on its own. Treat the count as a floor.
+Ordered by severity, not area. **This milestone is deliberately open-ended, and the 2026-08-12
+walkthrough is the proof.** Every issue in the previous round closed, leaving the milestone empty — and
+one pass through the real GUI, looking at nothing but what a user sees, refilled it with 15. Ten of
+those are defects no SSR test could have caught, because they are about what reaches the DOM, the
+stylesheet or the webview rather than what the view logic decided. Treat the count as a floor again.
 
 | Item | Why it gates a release |
 | --- | --- |
-| [The Geography place list is undocumented and geometry-only](https://github.com/magne/genealogy/issues/256) | A place without geometry can never be selected, so it cannot be a draw target, and the list shrinks with the year with no label saying why |
-| [A docked split mounts two detail panes, breaking `NavState`'s single-mount assumptions](https://github.com/magne/genealogy/issues/284) | One `⌘Z` retracts an assertion in **both** panes' records; fixed with #279, filed so the invariant has a home |
+| [The provenance reason field discards every keystroke](https://github.com/magne/genealogy/issues/299) | No add or attach in the app can record *why* — in a system whose premise is that every assertion carries its operator's reason |
+| [`⌘N` is silent on half the app](https://github.com/magne/genealogy/issues/300) | A `Global` chord advertised as "context-aware" no-ops with no notice on the Dashboard and every tool destination |
+| [A media image never appears anywhere in the GUI](https://github.com/magne/genealogy/issues/301) | Three independent path/MIME faults, so the media feature ships showing nothing but a glyph |
+| [A save run whose target leaves the strip hangs](https://github.com/magne/genealogy/issues/302) | Save all can wedge the quit/close path with no way out and no message |
+| [The shared record tabs have no common layout contract](https://github.com/magne/genealogy/issues/303) | Explanations below buttons, gone entirely when empty, and an add bar with no CSS rule at all — on all 13 screens |
+| [Attached records have four different presentations](https://github.com/magne/genealogy/issues/304) | An attached note can be neither read nor opened from the record that references it |
+| [A ghost row action disappears on the hovered row](https://github.com/magne/genealogy/issues/305) | Detach/Remove lose every visual affordance at the moment they are being aimed at |
+| [A record's History tab describes an import in the Dashboard's words](https://github.com/magne/genealogy/issues/306) | One person's history claims several *records* were imported; the audit trail must not misreport its own scope |
+| [Closing a pristine draft tab still raises the unsaved-work confirm](https://github.com/magne/genealogy/issues/307) | Discarding nothing needs a decision, and an untouched draft makes `⌘Q` claim unsaved work |
+| [A draft tab and the `+` menu read "New People"](https://github.com/magne/genealogy/issues/308) | Plural rail labels in a singular slot; ungrammatical in `no` for every category |
+| [The Media record diverges from its mockup](https://github.com/magne/genealogy/issues/309) | The mockups are the design source of truth, so a shipped screen that contradicts them is unfinished |
+| [The Tag screen diverges from its mockup](https://github.com/magne/genealogy/issues/310) | Same rule; no colour swatch anywhere in the read-only view of a record whose content *is* a colour |
+| [The mockups' record-picker specimen pins itself to the viewport's top-left](https://github.com/magne/genealogy/issues/311) | Three mockup pages render a stray floating dropdown, and the specimen's prose contradicts it |
+| [A `SidePanel`'s background is not `inert`](https://github.com/magne/genealogy/issues/312) | Assistive tech still reaches the shell behind an open panel |
+| [Back/forward cannot return to a draft tab](https://github.com/magne/genealogy/issues/313) | `⌘←`/`⌘→` step past an open draft to the last saved record |
 
-#256 came out of the 2026-07-31 manual pass on the map, as did #260 on the shell; #281–#284 came out of
-the 2026-08-04 sweep alongside the #279 trace; the rest came from reading the code.
+Three of these — #302, #312, #313 — were already in `issues.md` from earlier code reading and were
+promoted here by the same triage; the other twelve are new. Three **design questions** came out of the
+walkthrough too and are filed *without* a milestone, because each needs a call before it needs code: the
+Attach-versus-Add model (#314), the restriction-toggle model (#315), and whether a citation should carry
+evidence text at all (#316).
 
-**#260 is closed and dropped from this table:** a create draft now carries its own `DraftId`, threaded
-through tab identity (`OpenTab::Draft(Category, DraftId)`), the parked buffer's `EditKey`, the create
-pane's Dioxus key, and `cancel_draft`/`commit_draft`/`note_save_finished` — so every `⌘N` opens *another*
-draft with its own form, caret and buffer, and a committed draft is re-keyed onto the record it stored
-rather than guessed at. A draft tab is named by `RecordDraft::display_label`, the same string the record
-commits with, with an ordinal from the second still-unnamed draft of a category so two never share an
-accessible name. Two things surfaced while fixing it: `save_close_index` had been guessing at the active
-tab for a committed draft, which closed the *wrong* dirty tab when another was brought forward
-mid-commit; and the second `⌘N` was a focus cliff — it destroys the input the caret is in, and focus fell
-to `<body>` where the next keystroke reached the shell dispatcher, now fixed by `CreateFormFocus` on
-every create frame (`two-drafts-one-category.toml`).
-
-**#283 is closed and dropped from this table:** `[map]` config is now named providers
-(`[map.providers.*]`, mirroring `[ai.providers]`, ADR 0033) resolved to a `MapSource` in
-`genealogy-app`; the toolbar select offers exactly the built-in default plus what is configured, and
-picking one persists it, resolves it, and calls `MapLibre`'s `setStyle` on the running map — no
-remount — instead of writing config nothing ever read back. A second, unreported defect surfaced
-while fixing this: both screens read/wrote `[map]` through `FileConfigStore::for_workspace`, whose
-`config_path` is `None`, so the write had always landed nowhere; `map_config` now reads the
-already-loaded global config directly.
-
-**#282 is closed and dropped from this table:** the Point tool now commits through the same
-`draft_geometry` helper Finish polygon uses, reaching the previously-dead `GeoPanel::CreateHere` path;
-Clear was never a state bug (`MapDraft` and its `geo-draft` push were both correct) but a #252-shaped
-compositor gap — a draft push reaching the map from outside any canvas gesture never got its scheduled
-frame composited under `WebKitGTK`'s software-GL path, fixed with the same forced `redraw()` the #252
-resize observer already uses; and a successful save now clears the draft in both screens, unifying
-Geography (which never cleared it) and Place (which cleared it too early, at confirm, discarding the
-drawing if Cancel followed) on one rule.
-
-**#281 is closed and dropped from this table:** a `CloseRequested` handler in `QuitManager` now turns a
-window-manager close — the titlebar `✕`, a session logout, `wmctrl -c` — into the same quit confirm
-`⌘Q` raises, holding the native close back with `WindowCloseBehaviour::WindowHides` and re-showing the
-window in the same event-loop iteration; with nothing unsaved the close is let through untouched.
-
-**#206 is closed and dropped from this table:** `⌘S` is now `ShortcutAction::SaveRecord`, a `Global`,
-rebindable chord dispatched by the shell and routed to the mounted pane through the existing
-save-request machinery — listed by `?`, editable in Preferences, and working uniformly across every
-aggregate screen and create draft instead of only the 5 that wired it by hand.
-
-**#208 is closed and dropped from this table:** the 19 screen-local toasts (each with its own
-`use_signal`, disappearing silently on a tab switch and shifting the layout it reported on) are unified
-into one shell-owned notice channel, rendered by one positioned `.toast-layer` pinned to the bottom of
-the work area — confirmations auto-dismiss after 6 s, errors stay until dismissed.
-
-**#279 and #209 are closed by the docking PR** and dropped from this table: the detail-tab clicks and
-the remembered tab were one missing piece of state between them. Worth recording what the trace
-established, because #279's own diagnosis was wrong — duplicate element ids cannot make a Dioxus
-handler inert (events route by `data-dioxus-id`); the cause was `.master-detail.split-2` collapsing at
-exactly the app's default window width, plus a tab strip that moves when a pane halves, which is what
-made the fixed-coordinate repro look like a dead click. The ruled-out hypothesis is now a *Decided*
-entry in [`issues.md`](issues.md) so it is not reached for again.
-
-**#285, #279's named residual, is closed and dropped from this table.** Writing the #279 scenarios
-turned up a second mechanism that also made a click on the visible tab label do nothing, and it was
-filed as a hit region sitting ~9–14px above the painted row. That diagnosis was wrong: column-scanning
-the shots (`convert <shot> -crop 1xH+X+Y +repage txt:-`, not reading them by eye) showed both the
-"works" and the "does nothing" coordinates were inside the *same* painted button, and a click ladder
-found the boundary at y=245/247 with the lower band visibly scrolling the strip sideways. The cause was
-`.tabs`' own horizontal scrollbar, whose `WebKitGTK` hit rectangle is ~20px of a 36px row; it is there
-whenever the strip overflows, so the minimal reproduction needs no dock at all — a single pane at the
-app's default 1280px window already does it, which `tab-strip-overflow.toml` now locks in. The
-corrected measurement is a *Decided* entry in [`issues.md`](issues.md).
+**The previous round closed in full** — #200, #201, #203–#209, #231–#233, #239, #240, #244, #247,
+#252–#261, #266, #279, #281–#285 — and their bullets left `issues.md` per §6. What those closures
+*taught*, as opposed to what they changed, is in `issues.md`'s *Decided* section: duplicate element ids
+cannot make a Dioxus handler inert (#279), a dead click on a scrolling strip is a scrollbar before it is
+a hit-test bug (#285), the map needs a repaint rather than a resize (#252), and only a layout change
+ever blanked the canvas. The code changes themselves are in the PRs and the commit log, which is where
+§6 says they belong.
 
 ### Not in either milestone
 
 DNA depth, round-trip gaps, performance/scale, the ADR 0014 plugin-trust out-of-scope list, the
 plugin-UI vocabulary tail, upstream-blocked dependencies, assisted-import residuals, saved searches /
-column chooser / list virtualization, geocoding, the `place_parent` index, and the
-`geography_toolbar` argument cleanup. All `priority/low` or `priority/medium`, no milestone.
+column chooser / list virtualization, geocoding, and the `place_parent` index. All `priority/low` or
+`priority/medium`, no milestone.
+
+Three items from the 2026-08-12 walkthrough stay here too, and are not filed at all: expandable
+collection nodes with counts on the Dashboard and the History tab (a feature needing a disclosure
+primitive that does not exist yet), media edit-mode file handling (existence flagging, download from a
+changed web path, MIME inference), and the unasserted zoom-interpolated marker radius. Each is real and
+each is depth, not correctness — none of them makes the GUI report something false, which is the line
+this milestone draws.
 
 The **Norwegian-geography import** belongs here too, and deliberately so. Its model changes are gated by
 an unwritten ADR 0031 and it is scoped in `roadmap.md` as closing Phase 9's declared residuals, not as a
 shipping gate — putting a feature body with an unaccepted gating ADR ahead of UI correctness would
-invert the ordering rule in §3. Only its three by-products above are milestoned.
-
-**One item to close, not file:** *DNA match views in the UI* is **stale**. The screens exist
-(`screens/dna_match.rs` has Segments and Ancestors tabs with per-row edit/retract, plus
-`tests/dna_match_detail.rs`). Delete the bullet rather than filing it. The other five DNA bullets are
-accurate and about *depth*, not views — `DnaTestState` really does lack `account`/`date_tested`/
-`snp_count`, and `citations: Vec::new()` really is hardcoded in three places.
+invert the ordering rule in §3.
 
 ## 5. Keeping the doc and the tracker in sync
 
