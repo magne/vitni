@@ -396,6 +396,17 @@ Residuals from the shortcuts work (ADR 0030); see
   real-world address to a coordinate stays deferred. A WASM `map-provider` world supplying geocoding
   \+ custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
   never pixels).
+- **The map view opens pre-fitted, and three `gui-pass` scenarios have failed since 2026-08-11.**
+  `map-view`, `map-zoom` and `map-repaint` fail identically on `main` against the same fixture
+  (re-confirmed 2026-08-12 while closing #301): `map-view` at RMSE 0.0032 for `01-map.png` vs
+  `02-fitted.png`, `map-repaint` at 0.0268 twice, `map-zoom` at 0.0000 over the readout region — so the
+  suite cannot be green, and every unrelated change has to re-establish that these three are not its
+  fault. Not a tile failure: `map-view`'s first shot shows a fully painted OSM basemap already framed on
+  the fixture's one place at z4.0, so **Fit has nothing left to change**, and neither `workspace.toml`
+  nor the seeded config carries a camera — this is the map view's initial camera, not fixture state.
+  The other two are separate symptoms on the same screen: the zoom readout does not follow the camera
+  after a `NavigationControl` `+`, and clicking the already-active tool repaints the window when
+  `map-repaint` asserts it changes nothing.
 
 ### GUI ⇄ CLI parity
 
@@ -549,6 +560,13 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   overriding an already-set variable, both gitignored — the key stays out of config files, logs and
   the event log either way, which is the whole point of naming a variable rather than storing a
   secret. — #296
+- **The shipped app icon is a corrupt PNG.** `crates/genealogy-ui-dioxus/assets/genealogy.png` is a
+  144-byte 64×64 stub whose IDAT stream does not decode — `identify` refuses it with `IDAT: invalid
+  distance too far back`. It is what installs as the icon: `package.rs`'s `ICON_SRC` copies it into the
+  release stage (`xtask/src/package.rs:40,168`) and the `[package.metadata.deb]` assets put it in
+  `usr/share/pixmaps/` (`genealogy-ui-dioxus/Cargo.toml:67`), so a `.deb` or AppImage install has no
+  working icon. Needs a real one. Found while closing #301, whose `gui-pass` scenario had to *generate*
+  its fixture image with `convert` because this file cannot be decoded.
 - **`.deb` needs `GENEALOGY_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
   distro-installed binary needs `GENEALOGY_PLUGIN_DIR=/usr/lib/genealogy/plugins` (the AppImage sets it
   via `AppRun`; the tarball resolves the fleet beside the binary). Teaching the embedded layer a default
