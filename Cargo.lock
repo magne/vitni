@@ -3638,6 +3638,8 @@ dependencies = [
  "async-trait",
  "cqrs-es",
  "mime_guess",
+ "percent-encoding",
+ "proptest",
  "serde",
  "serde_json",
  "thiserror 2.0.19",

@@ -143,6 +143,8 @@ pub use genealogy_core::ids::AgentId;
 pub use genealogy_core::media::MediaError;
 pub use genealogy_core::media_path::MEDIA_DIR;
 pub use genealogy_core::media_path::media_root_relative;
+pub use genealogy_core::media_path::media_url_decode;
+pub use genealogy_core::media_path::media_url_path;
 pub use genealogy_core::media_path::mime_for_path;
 pub use genealogy_core::media_path::workspace_media_path;
 pub use genealogy_core::name::{NameType, PersonName, Surname};
