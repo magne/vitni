@@ -110,20 +110,12 @@ The `area/records/tags` label has existed since the taxonomy was applied; this i
 - **"Add file to media library" action.** The media-save dialog and the pure naming logic
   (`suggest_filename`/`slugify`) ship and are SSR-tested; the app-layer copy use-case that writes an
   external file into `media/<target>` and creates the Media record is deferred.
-- **A media image never appears — not on the record, not in the tab gallery, not in the viewer.** The
-  `<img>` is rendered (`screens/media.rs:616-626`, `screens/shared.rs:383`), so this is a resolution
-  failure, and three independent causes are live at once. **MIME:** `is_image()` is
-  `mime.starts_with("image/")` (`view_model/media.rs:131-136`) and `mime` is only ever what the
-  operator typed, so an untyped JPEG shows the 📷 glyph forever. **Double prefix:** the media store
-  returns workspace-relative paths that already start with `media/`
-  (`genealogy-plugin-host/src/media.rs:26-27,85-87`, and `mockups/media.html:107` shows that form)
-  while `preview_src()` prepends `/media/` unconditionally (`view_model/media.rs:141-146`), so the
-  asset handler resolves `<workspace>/media/media/…`; nothing normalizes either way, and the gallery
-  tests assume the unprefixed form (`tests/media_gui.rs:34,64`). **Root capture:** `use_asset_handler`
-  takes the root once at shell mount (`shell/root.rs:51-57`) and falls back to `unwrap_or_default()`
-  (`media_asset.rs:87`), which makes every read relative to the process CWD. Fix the prefix in one
-  place, infer the MIME (see below), and make an unresolved root an error rather than an empty string;
-  the fix must say which cause it was. — #301
+- **A file stored outside the workspace media root has no preview** — an absolute `MediaPath::File` is
+  legitimate (see the *Media edit mode* bullet: a record for a file that is not on this machine is
+  legitimate too), but `media_asset_src` serves only the media root, so such a record shows the 📷
+  placeholder. Honest, not useful: previewing it needs either a second asset-handler route scoped to a
+  configured set of readable roots, or an explicit "copy into the workspace" action reusing the media
+  save dialog. Neither is designed.
 - **The Media record diverges from `mockups/media.html`** — the File card repeats the human id the
   header already shows (`media.rs:71-87` vs `:471`, and the mockup's File card starts at *File path*,
   `media.html:105-111`); `DraftText` stacks label above value where the mockup uses same-line
@@ -134,10 +126,12 @@ The `area/records/tags` label has existed since the taxonomy was applied; this i
   (`media.rs:88-101`) with no existence check, and any check added must **flag, never block**: a
   record for a file that is not on this machine is legitimate. There is no download when *Web path*
   changes with a file path set (the mockup already draws `⤓ Download`, `media.html:73`), which needs an
-  overwrite prompt on checksum mismatch. And nothing infers `mime` — the only extension table in the
-  workspace is `content_type` (`media_asset.rs:48-70`), which serves response headers and is never
-  consulted for the record. All three are what make the preview bullet above reachable in the first
-  place.
+  overwrite prompt on checksum mismatch. And nothing *records* a `mime`: the extension→MIME mapping now
+  lives in `genealogy_core::media_path::mime_for_path` and drives the display gate (an image with no
+  recorded MIME still previews, #301), but no command writes an inferred value into the record, and the
+  editor's MIME box stays blank. Writing one on save is the work left — deliberately not done as part of
+  #301, because `MediaDraft::from_detail` seeds the editor from `mime` and `edits_against` diffs it, so
+  an inferred value there would emit a spurious `SetMime` on every save.
 
 ### DNA
 

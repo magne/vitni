@@ -162,7 +162,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: **no add or attach can record a reason**, because the provenance field erases what is typed into it (#299); then `⌘N` silently doing nothing on half the destinations (#300), a media image never rendering anywhere (#301), and a save run that hangs when its target leaves the strip (#302). |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: **no add or attach can record a reason**, because the provenance field erases what is typed into it (#299); then `⌘N` silently doing nothing on half the destinations (#300) and a save run that hangs when its target leaves the strip (#302). |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
@@ -178,7 +178,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (15 open)
+### `0.9 — UI stabilization` (14 open)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended, and the 2026-08-12
 walkthrough is the proof.** Every issue in the previous round closed, leaving the milestone empty — and
@@ -190,7 +190,6 @@ stylesheet or the webview rather than what the view logic decided. Treat the cou
 | --- | --- |
 | [The provenance reason field discards every keystroke](https://github.com/magne/genealogy/issues/299) | No add or attach in the app can record *why* — in a system whose premise is that every assertion carries its operator's reason |
 | [`⌘N` is silent on half the app](https://github.com/magne/genealogy/issues/300) | A `Global` chord advertised as "context-aware" no-ops with no notice on the Dashboard and every tool destination |
-| [A media image never appears anywhere in the GUI](https://github.com/magne/genealogy/issues/301) | Three independent path/MIME faults, so the media feature ships showing nothing but a glyph |
 | [A save run whose target leaves the strip hangs](https://github.com/magne/genealogy/issues/302) | Save all can wedge the quit/close path with no way out and no message |
 | [The shared record tabs have no common layout contract](https://github.com/magne/genealogy/issues/303) | Explanations below buttons, gone entirely when empty, and an add bar with no CSS rule at all — on all 13 screens |
 | [Attached records have four different presentations](https://github.com/magne/genealogy/issues/304) | An attached note can be neither read nor opened from the record that references it |
