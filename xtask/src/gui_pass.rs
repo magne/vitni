@@ -50,6 +50,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use genealogy_core::media_path::{MEDIA_DIR, workspace_media_path};
 use serde::Deserialize;
 
 use crate::util::{copy_dir, run_cargo};
@@ -86,6 +87,12 @@ kind = \"maplibre-style\"
 style-url = \"https://demotiles.maplibre.org/style.json\"
 attribution = \"© MapLibre demo tiles\"
 ";
+/// The seeded media image's path below the fixture workspace's media root. `media-preview.toml` opens
+/// the Media record that points at it (#301).
+const SEED_MEDIA_REL: &str = "portraits/portrait.png";
+/// The seeded media image's side in pixels — big enough that the preview frame scales it down rather
+/// than up, so the `painted` region measures real image pixels.
+const SEED_MEDIA_SIZE: u32 = 480;
 /// How long to wait for the window to map before giving up.
 const WINDOW_TIMEOUT: Duration = Duration::from_secs(45);
 /// How long [`Step::AwaitExit`] waits for the GUI process to exit before failing.
@@ -412,6 +419,7 @@ fn preflight() -> Result<()> {
         ("import", "imagemagick"),
         ("identify", "imagemagick"),
         ("compare", "imagemagick"),
+        ("convert", "imagemagick"),
     ];
     let mut missing = Vec::new();
     for (tool, package) in tools {
@@ -446,11 +454,21 @@ fn reset(out: &Path) -> Result<()> {
 }
 
 /// Creates the fixture workspace on first run: one place with coordinates, so the map has something
-/// to plot, plus an inactive `[map.providers.demo]` `MapLibre` style (ADR 0033) the
-/// `map-provider-switch` scenario switches to. Idempotent — an existing workspace directory is reused.
+/// to plot, one media object pointing at a seeded image (see [`seed_media`]), plus an inactive
+/// `[map.providers.demo]` `MapLibre` style (ADR 0033) the `map-provider-switch` scenario switches to.
+/// Idempotent — an existing workspace directory is reused.
 fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
     let workspace = out.join("workspace");
     if workspace.exists() {
+        // A workspace seeded before the media image was added would fail `media-preview` with an empty
+        // Media list rather than a blank preview, which reads like the defect it is meant to catch.
+        let seeded = out.join(SEED_DIR).join(MEDIA_DIR).join(SEED_MEDIA_REL);
+        if !seeded.is_file() {
+            bail!(
+                "gui-pass: the fixture predates the seeded media image ({} is missing) — re-run with `--reset`",
+                seeded.display()
+            );
+        }
         return Ok(());
     }
     fs::create_dir_all(out).with_context(|| format!("creating {}", out.display()))?;
@@ -485,12 +503,53 @@ fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
             "7.9956",
         ],
     )?;
+    seed_media(home, Path::new(&workspace))?;
     let mut text = fs::read_to_string(&config).with_context(|| format!("reading {}", config.display()))?;
     text.push_str(DEMO_MAP_PROVIDER);
     fs::write(&config, text).with_context(|| format!("writing {}", config.display()))?;
     fs::copy(&config, out.join(CONFIG_SEED_FILE)).with_context(|| format!("seeding {CONFIG_SEED_FILE}"))?;
     copy_dir(&out.join("workspace"), &out.join(SEED_DIR))?;
     println!("gui-pass: seeded workspace {FIXTURE_WORKSPACE} at {workspace} with place {place}");
+    Ok(())
+}
+
+/// Writes an image into the fixture workspace's media library and records one Media object pointing at
+/// it, so `media-preview.toml` has something whose preview can be blank (#301).
+///
+/// The image is *generated* with `ImageMagick` (already a hard requirement, see [`preflight`]) rather
+/// than committed: a deterministic gradient with a filled circle, textured enough that a `painted`
+/// assertion over the preview frame measures the image and not its background. The repo's own
+/// `assets/genealogy.png` will not do — it is a 64×64 fully transparent placeholder, so it would fail
+/// `painted` even when the preview loads perfectly.
+///
+/// The record deliberately carries **no MIME**: `genealogy media` has no `set-mime`, so this is the
+/// state every record the CLI creates is in, and #301's two live causes (no inferred MIME, and the
+/// stored `media/` prefix added twice) both fire on it.
+fn seed_media(home: &Path, workspace: &Path) -> Result<()> {
+    let target = workspace.join(MEDIA_DIR).join(SEED_MEDIA_REL);
+    let parent = target
+        .parent()
+        .with_context(|| format!("{} has no parent directory", target.display()))?;
+    fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    let side = SEED_MEDIA_SIZE;
+    let centre = side / 2;
+    let status = Command::new("convert")
+        .args(["-size", &format!("{side}x{side}"), "gradient:#1f6feb-#f0b72f"])
+        .args([
+            "-fill",
+            "#d2352c",
+            "-draw",
+            &format!("circle {centre},{centre} {centre},20"),
+        ])
+        .arg(&target)
+        .status()
+        .with_context(|| format!("generating {}", target.display()))?;
+    if !status.success() {
+        bail!("convert failed with {status} generating {}", target.display());
+    }
+    let stored = workspace_media_path(SEED_MEDIA_REL);
+    cli(home, &["media", "create", "--path", &stored])?;
+    println!("gui-pass: seeded media {stored}");
     Ok(())
 }
 

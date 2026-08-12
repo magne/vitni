@@ -1,0 +1,48 @@
+# #301: a media image never appeared anywhere in the GUI. The view code always rendered the `<img>`, so
+# every SSR test passed — the failure was in resolving its `src` and in the image gate ahead of it, and
+# only a real webview loading real bytes off disk can tell a served image from a 404.
+#
+# The fixture's one Media record points at `media/portraits/portrait.png`, seeded by `seed_fixture`
+# with **no MIME**: `genealogy media` has no `set-mime`, so this is the state every record the CLI
+# creates is in, and both of #301's live causes fire on it — nothing inferred a MIME from the
+# extension (so no `<img>` was rendered at all), and the stored `media/` prefix was added a second time
+# when building the URL (so the one that was rendered 404'd).
+#
+# The `painted` region is a 200x100 rectangle wholly inside the preview frame, read off this scenario's
+# own shot: the seeded image paints x 995-1312, y 340-656, and its red circle's top arc crosses the
+# region, so a loaded image measures a deviation of ~0.20 there. Two things the region deliberately
+# avoids, because each would let a broken build pass:
+#
+#   * the frame's **centre**, where both the 📷 placeholder glyph and WebKit's broken-image marker
+#     paint — their own texture would answer for the image;
+#   * a region large enough to be dominated by the `.img-photo` frame's decorative background gradient,
+#     which measures ~0.035 over the frame's middle and is what a first, larger region here passed on
+#     while the image was still 404-ing.
+#
+# Measured on this fixture: 0 with the placeholder (no `<img>` rendered), 0.0035 with a broken `<img>`,
+# 0.20 with the image loaded. `min_deviation` sits 14x above the broken case and 4x below the loaded
+# one.
+#
+# Coordinates are window pixels at 1800x1200, read off this scenario's own shots.
+description = "A seeded image's Media preview actually paints the image, not a placeholder (#301)"
+
+[[step]]
+do = "click"
+at = [85, 431]
+label = "rail: Media"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: the seeded portrait.png row"
+
+[[step]]
+do = "shot"
+name = "media-detail"
+
+[[assert]]
+kind = "painted"
+shot = "media-detail"
+region = [1000, 360, 200, 100]
+min_deviation = 0.05
+because = "the Media preview must load the seeded image's bytes, not a placeholder or a broken img (#301)"
