@@ -238,7 +238,10 @@ geography-empty-help = Steder trenger en koordinat eller grense før de vises he
 geography-create-here = Nytt sted her
 geography-edit-geometry = Rediger geometri
 geography-map-aria = Kart med { $markers } stedsmarkører og { $events } hendelsesmarkører
-geography-rail-label = Steder med en plassering
+geography-rail-label = Steder
+geography-rail-note = Alle steder · 📍 avmerket per { $year }
+geography-row-no-geometry-as-of = ingen geometri per { $year }
+geography-row-no-geometry = ingen geometri
 geography-screen-label = Geografi
 
 # Innstillinger-verktøy – rammestrenger (PR 20). Alternativ-etiketter for rene

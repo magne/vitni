@@ -239,7 +239,10 @@ geography-empty-help = Places need a coordinate or boundary before they show up 
 geography-create-here = New place here
 geography-edit-geometry = Edit geometry
 geography-map-aria = Map with { $markers } place markers and { $events } event pins
-geography-rail-label = Places with a location
+geography-rail-label = Places
+geography-rail-note = Every place · 📍 plotted as of { $year }
+geography-row-no-geometry-as-of = no geometry as of { $year }
+geography-row-no-geometry = no geometry
 geography-screen-label = Geography
 
 # Preferences tool chrome (PR 20). Option labels for config-only enums (theme already has its own

@@ -20,7 +20,10 @@
 //! are what remain human-only.
 
 use genealogy_app::{BUILT_IN_MAP_PROVIDER, MapConfig, MapProvider, MapSource, PlaceGeometry, PlaceType};
-use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
+use genealogy_ui::{
+    GeographyVm, MarkerShapeVm, PlaceMarkerVm, PlaceRowStatus, PlaceRowVm, TIME_SLIDER_RANGE, clamp_slider_year,
+    name_matches,
+};
 
 use super::map_shared::{
     DEFAULT_CENTER, DraftRefusal, DrawTool, GeometrySaveForm, MapControlLabels, MapDraft, MapSurface, MapZoomReadout,
@@ -205,7 +208,7 @@ pub fn GeographyScreen() -> Element {
     };
     let marker_count = vm.as_ref().map_or(0, |vm| vm.markers.len());
     let event_count = vm.as_ref().map_or(0, |vm| vm.events.len());
-    let unplotted_count = vm.as_ref().map_or(0, |vm| vm.unplotted_count);
+    let unplotted_count = vm.as_ref().map_or(0, GeographyVm::unplotted_count);
     let draw_target = selected();
     // The "⤢ Fit" toolbar button's target: every currently filtered marker's shape (mirrors what
     // `update_geography_data` pushes to the map, so Fit frames exactly what is shown).
@@ -260,7 +263,7 @@ pub fn GeographyScreen() -> Element {
             )}
             {geography_unplotted_note(&chrome.0, unplotted_count, year())}
             div { class: "geo", style: "flex:1;min-height:0",
-                {geography_rail(&chrome.0, vm.as_ref(), selected, &filter().query)}
+                {geography_rail(&chrome.0, vm.as_ref(), selected, &filter().query, year())}
                 div { class: "geo-main",
                     {main_content}
                     {draft_actions_row(&chrome.0, draft_actions(tool(), &draft()), on_commit_draft, on_clear_draft)}
@@ -535,36 +538,42 @@ pub fn geography_provider_choices(chrome: &Chrome, cfg: &MapConfig) -> Vec<Selec
         .collect()
 }
 
-/// The place rail: every marker matching the toolbar picker's live query, selectable as the in-map
-/// editor's target (`record-editing.html`'s row-select precedent, simplified to a plain list since
-/// Geography is not a record master-detail). An empty/whitespace-only query shows every marker.
+/// The place rail (#256): every place in the workspace matching the toolbar picker's live query, not
+/// just the plotted ones — so a place with no resolved geometry is still a selectable draw target,
+/// and the list no longer silently shrinks as the time slider moves. An empty/whitespace-only query
+/// shows every place. The caption above the list ([`Chrome::geography_rail_note`]) says the rule so
+/// the 📍/◌ avatar split does not have to speak for itself.
 pub fn geography_rail(
     chrome: &Chrome,
     vm: Option<&GeographyVm>,
     mut selected: Signal<Option<(String, String)>>,
     query: &str,
+    year: i32,
 ) -> Element {
-    let markers: Vec<PlaceMarkerVm> = vm
-        .map(|vm| filtered_markers(&vm.markers, query).into_iter().cloned().collect())
+    let rows: Vec<PlaceRowVm> = vm
+        .map(|vm| vm.filtered_places(query).into_iter().cloned().collect())
         .unwrap_or_default();
     rsx! {
         aside { class: "geo-rail", role: "listbox", aria_label: chrome.geography_rail_label(),
+            div { class: "geo-rail-head", "{chrome.geography_rail_note(year)}" }
             div { class: "list-rows",
-                for marker in markers {
+                for row in rows {
                     {
-                        let is_selected = selected.read().as_ref().is_some_and(|(id, _)| *id == marker.human_id);
-                        let target = (marker.human_id.clone(), marker.name.clone());
+                        let is_selected = selected.read().as_ref().is_some_and(|(id, _)| *id == row.human_id);
+                        let target = (row.human_id.clone(), row.name.clone());
+                        let avatar = if row.status == PlaceRowStatus::Plotted { "📍" } else { "◌" };
+                        let sub = geography_row_sub(chrome, &row, year);
                         rsx! {
                             div {
                                 class: if is_selected { "row sel" } else { "row" },
                                 role: "option",
                                 aria_selected: if is_selected { "true" } else { "false" },
                                 onclick: move |_| selected.set(Some(target.clone())),
-                                div { class: "avatar", "📍" }
+                                div { class: "avatar", "{avatar}" }
                                 div { class: "row-main",
-                                    div { class: "row-title", "{marker.name}" }
-                                    if let Some(type_label) = &marker.type_label {
-                                        div { class: "row-sub", "{type_label}" }
+                                    div { class: "row-title", "{row.name}" }
+                                    if let Some(sub) = sub {
+                                        div { class: "row-sub", "{sub}" }
                                     }
                                 }
                             }
@@ -576,9 +585,26 @@ pub fn geography_rail(
     }
 }
 
-/// The note counting the places whose geometry does not resolve as of the slider year (ADR 0026 §1):
-/// they hold geometry, all of it dated later, so the map cannot plot them. Without this they were
-/// simply absent — no marker, no rail row, no message (#257). Renders nothing at a count of zero.
+/// One rail row's `row-sub` text: its type label and, for an unplotted row, why it has no marker —
+/// joined with ` · ` when both are present. `None` (no `row-sub` at all) when the row has neither.
+fn geography_row_sub(chrome: &Chrome, row: &PlaceRowVm, year: i32) -> Option<String> {
+    let reason = match row.status {
+        PlaceRowStatus::Plotted => None,
+        PlaceRowStatus::NoGeometryAsOf => Some(chrome.geography_row_no_geometry_as_of(year)),
+        PlaceRowStatus::NoGeometry => Some(chrome.geography_row_no_geometry()),
+    };
+    match (&row.type_label, reason) {
+        (Some(type_label), Some(reason)) => Some(format!("{type_label} · {reason}")),
+        (Some(type_label), None) => Some(type_label.clone()),
+        (None, Some(reason)) => Some(reason),
+        (None, None) => None,
+    }
+}
+
+/// The note counting the places the map cannot plot as of the slider year (ADR 0026 §1): geometry
+/// dated later than the year, or no geometry at all (#256). Without this they were simply absent —
+/// no marker, no rail row, no message (#257). Renders nothing at a count of zero. The rail lists
+/// those same places row by row, each captioned with which of the two it is.
 pub fn geography_unplotted_note(chrome: &Chrome, count: usize, year: i32) -> Element {
     if count == 0 {
         return rsx! {};
@@ -806,14 +832,14 @@ fn provider_kind(provider: &MapProvider) -> String {
     .to_owned()
 }
 
-/// The markers matching a name filter (case-insensitive substring; an empty/whitespace-only query
-/// matches everything) — shared by the rail listbox and the map's pushed marker `GeoJSON` so a typed
-/// search hides the same places in both (the Geography toolbar's search box).
+/// The markers matching a name filter ([`name_matches`]) — feeds the map's pushed marker `GeoJSON`
+/// and the "⤢ Fit" toolbar button, so a typed search hides the same places there as in the rail
+/// (whose own filtering goes through [`GeographyVm::filtered_places`] instead, since the rail lists
+/// every place, not just plotted markers, #256).
 fn filtered_markers<'a>(markers: &'a [PlaceMarkerVm], query: &str) -> Vec<&'a PlaceMarkerVm> {
-    let query = query.trim().to_lowercase();
     markers
         .iter()
-        .filter(|marker| query.is_empty() || marker.name.to_lowercase().contains(&query))
+        .filter(|marker| name_matches(&marker.name, query))
         .collect()
 }
 
@@ -911,7 +937,7 @@ mod tests {
                 lat: 59.9,
                 lon: 10.7,
             }],
-            unplotted_count: 0,
+            places: Vec::new(),
             resolved_year: None,
         }
     }

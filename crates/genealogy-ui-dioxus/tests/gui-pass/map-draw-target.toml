@@ -62,7 +62,7 @@ name = "refused"
 
 [[step]]
 do = "click"
-at = [300, 185]
+at = [300, 220]
 label = "place list: Kristiansand"
 
 [[step]]
@@ -88,7 +88,7 @@ kind = "differ"
 shots = ["refused", "targeted"]
 # The rail's Kristiansand row only. A whole-window compare here is answered by the recentre the
 # selection triggers, which says nothing about the highlight this issue is about.
-region = [208, 155, 240, 60]
+region = [208, 190, 240, 60]
 because = "picking a place must highlight it as the draw target"
 
 [[assert]]

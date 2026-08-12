@@ -40,7 +40,7 @@ label = "close the New place here panel"
 
 [[step]]
 do = "click"
-at = [300, 185]
+at = [300, 220]
 label = "place list: Kristiansand"
 
 [[step]]

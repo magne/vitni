@@ -36,6 +36,7 @@
       { id: "import", icon: "📥", label: "Import", href: "import.html" },
       { id: "export", icon: "📤", label: "Export", href: "export.html" },
       { id: "merge", icon: "⇄", label: "Compare / merge", href: "merge.html" },
+      { id: "geography", icon: "🗺", label: "Geography", href: "geography.html" },
       { id: "strengths", icon: "★", label: "Why this app", href: "strengths.html" },
       { id: "shortcuts", icon: "⌨", label: "Shortcuts", href: "shortcuts.html" },
       { id: "plugins", icon: "🧩", label: "Plugins", href: "plugin-manager.html" },

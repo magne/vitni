@@ -891,6 +891,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
    nothing captures pointer events, every click still reaches MapLibre's own click listener. */
 .geo { display: grid; grid-template-columns: 240px 1fr; gap: 12px; }
 .geo-rail { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.geo-rail-head {
+  font-size: var(--fs-xs); color: var(--muted);
+  padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line);
+}
 .geo-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .geo-toolbar .spacer { flex: 1; }
 .geo-main { display: flex; flex-direction: column; gap: 10px; min-height: 0; }

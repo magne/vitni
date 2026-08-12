@@ -214,12 +214,6 @@ Residuals from the shortcuts work (ADR 0030); see
   [`archive/completed-work.md`](archive/completed-work.md), which says the gap "is now tracked under
   *Geography & map*" — it was not, until this bullet. It is also the only cited evidence for the
   `type/test-gap` label in [`issue-tracking.md`](issue-tracking.md) §2.
-- **The Geography place list is undocumented and geometry-only.** The rail lists places that resolved
-  a geometry *as of the slider year*, narrowed by the toolbar picker's live query
-  (`screens/geography.rs`) — so a place without geometry can never be selected there (making it
-  unreachable as a draw target), and the list silently shrinks as the year moves. It carries no label
-  saying any of that. Either list every place and mark the plotted ones, or label the list and offer
-  the unplotted ones as draw targets. — #256
 - **In-map editing depth** — mid-ring vertex insertion (today: a vertex can be dragged to a new
   position, but not inserted between two others), pin-click selection on the canvas (today: select via
   the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is wired;

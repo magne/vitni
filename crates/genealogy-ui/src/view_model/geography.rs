@@ -5,7 +5,7 @@
 //! Coordinates are decimal degrees (`f64`), mirroring the Phase-6 [`crate::MapPointVm`] convention —
 //! the same reason [`GeographyVm`] is `PartialEq` but not `Eq`.
 
-use genealogy_app::{GeographySummary, PlaceGeometry};
+use genealogy_app::{GeographySummary, PlaceGeometry, UnplottedReason};
 
 use crate::i18n::Localizer;
 
@@ -76,6 +76,37 @@ pub struct PlaceMarkerVm {
     pub shape: MarkerShapeVm,
 }
 
+/// Whether a [`PlaceRowVm`] is currently plotted on the map, holds geometry that just does not
+/// resolve as of the feed's year, or has never been located at all (#256). Carries no localized
+/// text itself — the `geography-row-*`/`geography-rail-note` chrome keys live in the Dioxus bundle,
+/// which is the only layer that owns Fluent strings (ADR 0003).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaceRowStatus {
+    /// The place resolved a geometry as of this feed's year and is plotted on the map.
+    Plotted,
+    /// The place holds geometry, but none of it resolves as of this feed's year.
+    NoGeometryAsOf,
+    /// The place has never been located: no geometry assertion, no scalar coordinate either.
+    NoGeometry,
+}
+
+/// One row of the Geography rail (#256): every place in the workspace, not just the plotted ones —
+/// so a place with no geometry is still a selectable draw target, and the list no longer silently
+/// shrinks as the time slider moves.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlaceRowVm {
+    /// The place's user-facing id (e.g. `P0001`).
+    pub human_id: String,
+    /// The place's stable id (a UUID string) — the selection/navigation key.
+    pub id: String,
+    /// The place's display name.
+    pub name: String,
+    /// The localized place-type label, if set.
+    pub type_label: Option<String>,
+    /// Whether this place is currently plotted, and if not, why.
+    pub status: PlaceRowStatus,
+}
+
 /// One event pinned at its place (ADR 0025 §1 "event-at-place pins", Gramps `GeoView` parity).
 #[derive(Debug, Clone, PartialEq)]
 pub struct EventPinVm {
@@ -95,24 +126,26 @@ pub struct EventPinVm {
     pub lon: f64,
 }
 
-/// The Geography tool's full view: every resolved place marker and event pin, the year they were
-/// resolved as of (`None` for the current/primary resolution), and the map's provider descriptor.
+/// The Geography tool's full view: every resolved place marker and event pin, every place as a rail
+/// row (plotted or not, #256), the year they were resolved as of (`None` for the current/primary
+/// resolution), and the map's provider descriptor.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeographyVm {
-    /// Every place with a resolved geometry, ready to plot.
+    /// Every place with a resolved geometry, ready to plot. The map, the pushed `GeoJSON`, and the
+    /// "⤢ Fit" toolbar button all still work from this list alone — [`Self::places`] is for the rail.
     pub markers: Vec<PlaceMarkerVm>,
     /// Every event whose place resolved a geometry, ready to pin.
     pub events: Vec<EventPinVm>,
-    /// How many places hold geometry that does not resolve as of this view's year — the count the
-    /// screen's note renders so those places are reported, not silently absent. A count is all the
-    /// note needs; the places themselves stay in [`GeographySummary::unplotted`].
-    pub unplotted_count: usize,
+    /// Every place in the workspace, sorted by `human_id` (stable regardless of the slider year),
+    /// merged from [`Self::markers`] and the app's `GeographySummary::unplotted` — the rail's rows.
+    pub places: Vec<PlaceRowVm>,
     /// The time-slider year this view is resolved as of; `None` for the current/primary resolution.
     pub resolved_year: Option<i32>,
 }
 
 impl GeographyVm {
-    /// Builds the view from the app's [`GeographySummary`] feed, localizing every marker/pin label.
+    /// Builds the view from the app's [`GeographySummary`] feed, localizing every marker/pin/row
+    /// label.
     #[must_use]
     pub fn from_summary(summary: &GeographySummary, loc: &Localizer) -> Self {
         let markers = summary
@@ -121,14 +154,64 @@ impl GeographyVm {
             .map(|marker| place_marker_vm(marker, loc))
             .collect();
         let events = summary.events.iter().map(|pin| event_pin_vm(pin, loc)).collect();
+        let mut places: Vec<PlaceRowVm> = summary
+            .markers
+            .iter()
+            .map(|marker| PlaceRowVm {
+                human_id: marker.human_id.clone(),
+                id: marker.id.clone(),
+                name: marker.name.clone(),
+                type_label: marker.place_type.as_ref().map(|t| loc.place_type_label(t)),
+                status: PlaceRowStatus::Plotted,
+            })
+            .chain(summary.unplotted.iter().map(|place| PlaceRowVm {
+                human_id: place.human_id.clone(),
+                id: place.id.clone(),
+                name: place.name.clone(),
+                type_label: place.place_type.as_ref().map(|t| loc.place_type_label(t)),
+                status: match place.reason {
+                    UnplottedReason::DatedLater => PlaceRowStatus::NoGeometryAsOf,
+                    UnplottedReason::NoGeometry => PlaceRowStatus::NoGeometry,
+                },
+            }))
+            .collect();
+        places.sort_by(|left, right| left.human_id.cmp(&right.human_id));
         let resolved_year = summary.resolved_as_of.as_ref().map(year_of);
         Self {
             markers,
             events,
-            unplotted_count: summary.unplotted.len(),
+            places,
             resolved_year,
         }
     }
+
+    /// How many rail rows are not plotted — the screen's note renders this count so those places are
+    /// reported, not silently absent.
+    #[must_use]
+    pub fn unplotted_count(&self) -> usize {
+        self.places
+            .iter()
+            .filter(|row| row.status != PlaceRowStatus::Plotted)
+            .count()
+    }
+
+    /// Every rail row matching `query` ([`name_matches`]) — plotted and unplotted alike, so the
+    /// toolbar search filters the whole rail, not just plotted markers.
+    #[must_use]
+    pub fn filtered_places(&self, query: &str) -> Vec<&PlaceRowVm> {
+        self.places
+            .iter()
+            .filter(|row| name_matches(&row.name, query))
+            .collect()
+    }
+}
+
+/// Case-insensitive substring match on a trimmed `query`; a blank query matches everything — the
+/// exact rule the Geography rail/map filter has always used, now shared rather than duplicated.
+#[must_use]
+pub fn name_matches(name: &str, query: &str) -> bool {
+    let query = query.trim().to_lowercase();
+    query.is_empty() || name.to_lowercase().contains(&query)
 }
 
 /// The representative year of a resolved date's sort key (mirrors `genealogy_app::dto`'s private
@@ -193,11 +276,11 @@ pub(crate) fn event_pin_vm(pin: &genealogy_app::EventPin, loc: &Localizer) -> Ev
 
 #[cfg(test)]
 mod tests {
-    use super::{GeographyVm, MarkerShapeVm, ZOOM_RANGE, clamp_slider_year, clamp_zoom};
+    use super::{GeographyVm, MarkerShapeVm, PlaceRowStatus, ZOOM_RANGE, clamp_slider_year, clamp_zoom, name_matches};
     use crate::i18n::Localizer;
     use genealogy_app::{
         Calendar, DateModifier, DatePoint, DateQuality, EventPin, EventType, GenealogicalDate, GenealogicalDateBody,
-        GeoCoordinates, Microdegrees, PlaceGeometry, PlaceMarker, PlaceType,
+        GeoCoordinates, Microdegrees, PlaceGeometry, PlaceMarker, PlaceType, UnplottedPlace, UnplottedReason,
     };
     use std::str::FromStr;
 
@@ -323,33 +406,137 @@ mod tests {
         assert_eq!(vm.resolved_year, None);
     }
 
+    fn unplotted(human_id: &str, name: &str, reason: UnplottedReason) -> UnplottedPlace {
+        UnplottedPlace {
+            human_id: human_id.to_owned(),
+            id: format!("place-{human_id}"),
+            name: name.to_owned(),
+            place_type: Some(PlaceType::Parish),
+            reason,
+        }
+    }
+
     #[test]
     fn the_places_that_did_not_resolve_are_counted_for_the_note() {
         let summary = genealogy_app::GeographySummary {
             markers: Vec::new(),
             events: Vec::new(),
             unplotted: vec![
-                genealogy_app::UnplottedPlace {
-                    human_id: "P0001".to_owned(),
-                    id: "place-1".to_owned(),
-                    name: "Vågå".to_owned(),
-                },
-                genealogy_app::UnplottedPlace {
-                    human_id: "P0002".to_owned(),
-                    id: "place-2".to_owned(),
-                    name: "Lom".to_owned(),
-                },
+                unplotted("P0001", "Vågå", UnplottedReason::DatedLater),
+                unplotted("P0002", "Lom", UnplottedReason::NoGeometry),
             ],
             resolved_as_of: Some(year_date(1850)),
         };
         let vm = GeographyVm::from_summary(&summary, &loc());
-        assert_eq!(vm.unplotted_count, 2);
+        assert_eq!(vm.unplotted_count(), 2);
     }
 
     #[test]
     fn nothing_unplotted_counts_zero_so_the_note_stays_hidden() {
         let vm = GeographyVm::from_summary(&genealogy_app::GeographySummary::default(), &loc());
-        assert_eq!(vm.unplotted_count, 0);
+        assert_eq!(vm.unplotted_count(), 0);
+    }
+
+    #[test]
+    fn places_are_merged_from_markers_and_unplotted_sorted_by_human_id() {
+        let summary = genealogy_app::GeographySummary {
+            markers: vec![PlaceMarker {
+                human_id: "P0002".to_owned(),
+                id: "place-2".to_owned(),
+                name: "Lom".to_owned(),
+                place_type: Some(PlaceType::Parish),
+                geometry: PlaceGeometry::Point(coord("61.8", "8.5")),
+            }],
+            events: Vec::new(),
+            unplotted: vec![
+                unplotted("P0003", "Nordland", UnplottedReason::NoGeometry),
+                unplotted("P0001", "Vågå", UnplottedReason::DatedLater),
+            ],
+            resolved_as_of: None,
+        };
+        let vm = GeographyVm::from_summary(&summary, &loc());
+        let ids: Vec<&str> = vm.places.iter().map(|row| row.human_id.as_str()).collect();
+        assert_eq!(ids, ["P0001", "P0002", "P0003"]);
+    }
+
+    #[test]
+    fn a_marker_row_is_plotted() {
+        let summary = genealogy_app::GeographySummary {
+            markers: vec![PlaceMarker {
+                human_id: "P0001".to_owned(),
+                id: "place-1".to_owned(),
+                name: "Oslo".to_owned(),
+                place_type: Some(PlaceType::City),
+                geometry: PlaceGeometry::Point(coord("59.9", "10.7")),
+            }],
+            events: Vec::new(),
+            unplotted: Vec::new(),
+            resolved_as_of: None,
+        };
+        let vm = GeographyVm::from_summary(&summary, &loc());
+        assert_eq!(vm.places[0].status, PlaceRowStatus::Plotted);
+    }
+
+    #[test]
+    fn a_dated_later_row_carries_its_status_and_type_label() {
+        let summary = genealogy_app::GeographySummary {
+            markers: Vec::new(),
+            events: Vec::new(),
+            unplotted: vec![unplotted("P0001", "Vågå", UnplottedReason::DatedLater)],
+            resolved_as_of: None,
+        };
+        let vm = GeographyVm::from_summary(&summary, &loc());
+        assert_eq!(vm.places[0].status, PlaceRowStatus::NoGeometryAsOf);
+        assert!(vm.places[0].type_label.is_some());
+    }
+
+    #[test]
+    fn a_no_geometry_row_carries_its_status_and_type_label() {
+        let summary = genealogy_app::GeographySummary {
+            markers: Vec::new(),
+            events: Vec::new(),
+            unplotted: vec![unplotted("P0001", "Nordland", UnplottedReason::NoGeometry)],
+            resolved_as_of: None,
+        };
+        let vm = GeographyVm::from_summary(&summary, &loc());
+        assert_eq!(vm.places[0].status, PlaceRowStatus::NoGeometry);
+        assert!(vm.places[0].type_label.is_some());
+    }
+
+    #[test]
+    fn filtered_places_matches_both_plotted_and_unplotted_rows() {
+        let summary = genealogy_app::GeographySummary {
+            markers: vec![PlaceMarker {
+                human_id: "P0001".to_owned(),
+                id: "place-1".to_owned(),
+                name: "Oslo".to_owned(),
+                place_type: Some(PlaceType::City),
+                geometry: PlaceGeometry::Point(coord("59.9", "10.7")),
+            }],
+            events: Vec::new(),
+            unplotted: vec![unplotted("P0002", "Oslofjord", UnplottedReason::NoGeometry)],
+            resolved_as_of: None,
+        };
+        let vm = GeographyVm::from_summary(&summary, &loc());
+        let matches = vm.filtered_places("osl");
+        assert_eq!(matches.len(), 2);
+    }
+
+    #[test]
+    fn a_blank_query_matches_everything() {
+        assert!(name_matches("Oslo", ""));
+        assert!(name_matches("Oslo", "   "));
+    }
+
+    #[test]
+    fn a_query_matches_a_case_insensitive_substring() {
+        assert!(name_matches("Oslo", "osl"));
+        assert!(name_matches("Oslo", "OSLO"));
+    }
+
+    #[test]
+    fn a_non_matching_query_does_not_match() {
+        assert!(!name_matches("Oslo", "Bergen"));
     }
 
     #[test]
