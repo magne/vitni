@@ -11,16 +11,18 @@ use std::path::{Component, Path, PathBuf};
 /// Resolves a `/media/<rel>` asset request to an absolute path under `media_root`, or `None` when the
 /// request is unsafe or malformed.
 ///
-/// The `media` asset-handler prefix (`/media/`) is stripped, then the remainder must be a relative
-/// path built only of normal components: an absolute path, a `..` parent component (literal or
-/// percent-encoded), a backslash, a percent-encoded separator, or an empty path is rejected, so a
-/// request can never escape `media_root`.
+/// The `media` asset-handler prefix (`/media/`) is **required** and stripped exactly once, then the
+/// remainder must be a relative path built only of normal components: an absolute path, a `..` parent
+/// component (literal or percent-encoded), a backslash, a percent-encoded separator, or an empty path
+/// is rejected, so a request can never escape `media_root`.
+///
+/// Every URL reaching here is built by one owner
+/// ([`media_root_relative`](genealogy_app::media_root_relative)), so the mapping is literal: a request
+/// missing the prefix is a bug, not a shape to accommodate. Accommodating it is what let a
+/// double-prefixed `/media/media/…` half-resolve instead of failing loudly (#301).
 #[must_use]
 pub fn resolve_media_path(media_root: &Path, request_path: &str) -> Option<PathBuf> {
-    let rel = request_path
-        .strip_prefix("/media/")
-        .or_else(|| request_path.strip_prefix("media/"))
-        .unwrap_or(request_path);
+    let rel = request_path.strip_prefix("/media/")?;
 
     if rel.is_empty() || rel.contains('\\') {
         return None;
@@ -45,32 +47,19 @@ pub fn resolve_media_path(media_root: &Path, request_path: &str) -> Option<PathB
     resolved.starts_with(media_root).then_some(resolved)
 }
 
-/// The `Content-Type` for a served file, guessed from its extension. A small table covering the image
-/// and document types the media library holds; unknown extensions fall back to `application/octet-stream`.
+/// The `Content-Type` for a served file, from the extension→MIME mapping in
+/// [`mime_for_path`](genealogy_app::mime_for_path) — the same one that decides whether a record with no
+/// recorded MIME displays as an image, so the two can never disagree. An unknown or absent extension
+/// (or a path that is not valid UTF-8) falls back to `application/octet-stream`.
 #[must_use]
 pub fn content_type(path: &Path) -> &'static str {
-    match path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(str::to_ascii_lowercase)
-    {
-        Some(ext) => match ext.as_str() {
-            "jpg" | "jpeg" => "image/jpeg",
-            "png" => "image/png",
-            "gif" => "image/gif",
-            "webp" => "image/webp",
-            "tif" | "tiff" => "image/tiff",
-            "bmp" => "image/bmp",
-            "svg" => "image/svg+xml",
-            "pdf" => "application/pdf",
-            _ => "application/octet-stream",
-        },
-        None => "application/octet-stream",
-    }
+    path.to_str()
+        .and_then(genealogy_app::mime_for_path)
+        .unwrap_or("application/octet-stream")
 }
 
 /// Registers the desktop `/media/<rel>` asset handler, serving files from `media_root` (the workspace's
-/// media library). A no-op when the root is absent (e.g. an SSR test with no ready workspace).
+/// media library). Registers nothing when the root is absent — see the `error!` below.
 #[cfg(feature = "desktop")]
 pub fn use_media_asset_handler(media_root: Option<PathBuf>) {
     use dioxus::desktop::use_asset_handler;
@@ -84,20 +73,38 @@ pub fn use_media_asset_handler(media_root: Option<PathBuf>) {
     if try_consume_context::<dioxus::desktop::DesktopContext>().is_none() {
         return;
     }
-    let root = media_root.unwrap_or_default();
+    // An absent root is a wiring bug, not a servable state: the shell is only mounted under a ready
+    // workspace. Defaulting it (as this once did) would resolve every request against the process's
+    // working directory. Registering nothing is the honest failure — the preview shows its placeholder
+    // and the log says why. Fixed per mount like the context above, so the hook order stays consistent.
+    let Some(root) = media_root else {
+        tracing::error!("no workspace media root — the /media asset handler is not registered");
+        return;
+    };
     use_asset_handler("media", move |request, responder: RequestAsyncResponder| {
-        let body = resolve_media_path(&root, request.uri().path()).and_then(|path| {
+        let request_path = request.uri().path().to_owned();
+        let body = resolve_media_path(&root, &request_path).and_then(|path| {
             let bytes = std::fs::read(&path).ok()?;
             Some((content_type(&path), bytes))
         });
-        let response = match body {
-            Some((mime, bytes)) => Response::builder()
+        let respond = |response: Result<Response<Vec<u8>>, _>| {
+            responder.respond(response.unwrap_or_else(|_| Response::new(Vec::new())));
+        };
+        let Some((mime, bytes)) = body else {
+            tracing::warn!(
+                request = %request_path,
+                media_root = %root.display(),
+                "media asset request resolved to no readable file — serving 404"
+            );
+            respond(Response::builder().status(404).body(Vec::new()));
+            return;
+        };
+        respond(
+            Response::builder()
                 .header("Content-Type", mime)
                 .header("Access-Control-Allow-Origin", "*")
                 .body(bytes),
-            None => Response::builder().status(404).body(Vec::new()),
-        };
-        responder.respond(response.unwrap_or_else(|_| Response::new(Vec::new())));
+        );
     });
 }
 
@@ -121,9 +128,21 @@ mod tests {
     }
 
     #[test]
-    fn a_request_without_the_prefix_still_resolves() {
-        let resolved = resolve_media_path(root(), "photos/group.jpg").expect("resolves");
-        assert_eq!(resolved, Path::new("/workspace/media/photos/group.jpg"));
+    fn a_request_without_the_prefix_is_rejected() {
+        // The prefix is the asset-handler scheme, not an optional decoration: one owner
+        // (`genealogy_core::media_path`) builds every URL, so the handler can be literal. The old
+        // `or_else`/`unwrap_or` fallbacks are what let a double-prefixed request half-resolve (#301).
+        assert_eq!(resolve_media_path(root(), "photos/group.jpg"), None);
+        assert_eq!(resolve_media_path(root(), "media/photos/group.jpg"), None);
+    }
+
+    #[test]
+    fn a_double_prefixed_request_is_no_longer_papered_over() {
+        // `/media/media/x.jpg` now resolves literally — to a `media` directory *below* the root, which
+        // is not where the file is. #301's URL builder is what must not produce this shape; the
+        // handler no longer hides it.
+        let resolved = resolve_media_path(root(), "/media/media/x.jpg").expect("resolves literally");
+        assert_eq!(resolved, Path::new("/workspace/media/media/x.jpg"));
     }
 
     #[test]
