@@ -722,6 +722,46 @@ The `area/docs` label already existed with no `###` home; this is it.
   during a full-suite run and passed on an immediate re-run of the same scenario — a draw that had not
   reached the canvas within the 4 s settle. Both classes are the same missing capability: the harness
   waits a fixed time instead of waiting for the paint it is about to assert on.
+- **The public release has no licence decision applied, and no licence files at all.** The workspace
+  `Cargo.toml` declares `MIT OR Apache-2.0`, but the tree contains no `LICENSE-MIT`, no
+  `LICENSE-APACHE`, no `NOTICE` and no `CONTRIBUTING.md`, and the repository is still private — so
+  nothing has been granted to anyone yet and every option is still open.
+  [`research/licensing-and-monetization.md`](research/licensing-and-monetization.md) holds the
+  analysis. **The decision itself is open**, and it is a choice between two partial answers rather
+  than a search for the right one: the goal as stated — anyone may use the app, nobody may make
+  money reselling binaries or hosting it, paid plugins stay possible — cannot be expressed in an
+  OSI-approved licence at all (OSD #1 and #6; GPL §4 permits charging for copies). AGPL-3.0-or-later
+  blocks the realistic threat (a vendor embedding `genealogy-core` closed) permanently but permits
+  resale and verbatim paid hosting; FSL-1.1-Apache-2.0 forbids both but only until each release turns
+  two, and forfeits the distro repositories. Tightening later is the expensive direction
+  (HashiCorp/Redis/Elastic each grew a surviving fork), loosening is cheap, and permissive
+  publication is the only irreversible move. The report recommends a per-crate split
+  (`MIT OR Apache-2.0` on the commodity interop crates,
+  `AGPL-3.0-or-later` plus a WIT plugin exception on the application and on
+  `genealogy-digitalarkivet`), a DCO+CLA, and open core over the plugin boundary for anything paid.
+  The work it implies, each item deliberately unfiled until the decision lands: **ADR 0034**
+  recording the split (0016 and 0031 are unwritten, so 0034 is the next free number); the licence
+  files plus per-crate `license =` overrides and the §7 exception in each AGPL crate's `lib.rs`
+  header; per-crate `[[licenses.exceptions]]` in `deny.toml` rather than a wider `licenses.allow`,
+  so an AGPL *dependency* still fails; `CONTRIBUTING.md` with a CLA drafted against åndsverkloven
+  §67(2) and §5; a `COMMERCIAL.md`; and updating the two places that assert today's position
+  (`README.md`'s License section, `CLAUDE.md`'s "keep it that way").
+- **The product has no distinctive name, so there is no trademark to defend it with.** Copyleft
+  permits selling copies (GPL §4), so the only lever against rebranded resale is a mark — the one
+  Krita uses ("change the icon and the application name and rebuild Krita yourself"). "genealogy" is
+  generic and unregistrable, which leaves that lever unavailable. Naming is therefore a pre-publish
+  decision, not branding polish;
+  [`research/licensing-and-monetization.md`](research/licensing-and-monetization.md) §4 has the
+  reasoning.
+- **Paid-plugin distribution is unshaped.** The plugin boundary is the only genuinely exclusive
+  revenue line (a signed bundle whose source stays private, under its own EULA — selling licence
+  keys over an OSI-licensed source does not hold), and it needs decisions before the first one
+  exists: which ADR 0014 trust tier a paid first-party bundle gets, how a purchase becomes a
+  downloadable signed bundle through a merchant of record, and how the free build stays
+  unmonetised so it remains outside the CRA (Commission guidance C(2026) 5252 ¶52 — reporting
+  duties arrive 11 September 2026, main obligations 11 December 2027). Also unresolved for
+  `genealogy-digitalarkivet` specifically: the National Archives' service name in a paid product's
+  title, and the redistribution terms of the verbatim fixtures under its `tests/fixtures/`.
 
 ## Decided — no action needed
 
