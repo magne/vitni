@@ -292,6 +292,73 @@ which is what makes them worth fixing in the shared code rather than per screen.
   fix alongside: the collapse is implemented twice, once in `genealogy-app/src/history.rs:247-302` and
   once in the view-model, and the collapsed row is stripped of its `assertion_id` so `⌘Z` silently
   skips the whole run. — #306
+- **The 13 detail screens re-implement the shared tab arms instead of calling one shared frame.**
+  `screens/tabs.rs` and `screens/shared.rs` hold the tab *bodies*, but each screen still spells out the
+  arm that reaches them: `"history" =>` in 13 screens, `"tags" =>` in 12, `"notes" =>` in 10, `"media"
+  =>` and `"citations" =>` in 6 each, `"research-notes" =>` in 4. The `tab_with_add` arms are
+  character-identical across screens apart from the screen's own edit-form variant — `place.rs:703-729`
+  against `event.rs:882-908` is 27 lines the same but for `PlaceEditForm::`/`EventEditForm::` — and the
+  `DetailTab` → `TabItem` mapping above them is repeated verbatim in all 13 `*_detail` fns
+  (`source.rs:446-453`). So a change to the shared frame's *shape* rather than its body is 13 edits:
+  #303's wanted shape needs an explanation string per shared tab, which today has to be threaded
+  through ~45 call sites, and #304's convergence has to be repeated per screen to come out consistent.
+  Wanted: `shared_tab<E>(loc, tab_id, &SharedTabCtx<E>) -> Option<Element>` in `tabs.rs` — the
+  collection slices, the four `E` form variants, the `on_retract`/`on_tag_remove`/`on_undo` callbacks
+  and the `MediaTabState` in one struct — returning `None` for a tab the screen owns itself, so each
+  `*_tab_content` keeps only its entity-specific arms; plus `impl From<&DetailTab> for TabItem`. — #322
+- **The per-aggregate save path is written out 25 times in `services.rs` and again in every detail
+  pane.** `services.rs:261-608` holds 12 `save_*_edit` and 13 `commit_*_change_set` wrappers whose
+  bodies are the same four statements — `localizer()`, `open()`,
+  `Session::new(config.operator_agent())`, `genealogy_ui::dispatch_*(…).map_err(|e| loc.error(&e))` —
+  differing only in the dispatch fn and its request type. The `genealogy-ui` dispatchers they call do
+  genuinely differ per aggregate (each maps its own fields), so the duplication is confined to this
+  wrapper layer. Above them the detail panes repeat the same closures: `on_retract_confirm` in 10
+  screens is 23 lines byte-identical apart from `XEdit::UndoAssertion`/`save_x_edit`
+  (`place.rs:390-412` against `media.rs:267-289`), `on_tag_remove` in 12 (`place.rs:376-385` against
+  `media.rs:253-262`), `on_undo` in 13, `on_submit` in 12. That is also where #315 has to land —
+  `ProvenanceDraft::default()` is hardcoded in all 12 `on_tag_remove` copies and all 10 retract
+  confirms. Wanted: one `DetailAggregate` trait (associated `Edit` type, the `Category`, `tag`/`undo`
+  constructors, `save`) implemented once per aggregate, behind a `use_detail_commits::<A>()` hook
+  returning the four callbacks; the `services.rs` wrappers collapse into that `save` or into the
+  x-macro idiom the app layer and the CLI already use (`for_each_aggregate!` in
+  `genealogy-app/src/aggregates.rs`, `for_each_cli_command!` in `genealogy-cli/src/main.rs`). One
+  wrinkle to settle first: `save_edit` (person) returns `Result<(), String>` where the other twelve
+  return `Result<String, String>`.
+- **Every detail pane spells out the 19 `IntentOutcome` variants it does not handle.** The terminal
+  `match` of each pane ends in a catch-all arm naming every other variant so no wildcard is used — 21
+  lines apiece at `note.rs:337-358`, `person.rs:781-802`, `tag.rs:165-186` and 11 more, 14 sites in
+  all, every one of them `=> rsx! {}`. `IntentOutcome` has 22 variants
+  (`genealogy-ui/src/intent.rs:101-153`), so adding a 23rd is 14 mechanical edits producing 14 compile
+  errors that carry no information: no pane has ever handled another aggregate's outcome. Wanted: a
+  `detail_state<'a, T>(&'a Option<ScreenData>, pick: impl Fn(&'a IntentOutcome) -> Option<&'a T>)`
+  helper in `screens/shared.rs` returning `Loading | Error | NotFound | Ready(&T) | Other`, each screen
+  supplying a one-line `if let` for its own variant — the exhaustive listing then survives in exactly
+  one place, which is what the no-wildcard rule is for.
+- **The record editors' side-panel host is written 13 times, and its `footer` prop has no user.** Each
+  `*_edit_panel` (`source.rs:763-798`, `note.rs:601-630`, `repository.rs:693-736` and 10 more) opens
+  with the same `let loc` / `let Some(form) = editing() else { return }` and closes over the same six
+  `SidePanel` props; only the two `match`es — the title and the body — are the screen's own. All 15
+  `SidePanel` call sites in the crate pass `footer: rsx! {}`, every panel's Save sitting in the body
+  instead, so `components/layout.rs:71-72`'s footer slot is dead weight at every one of them. Wanted:
+  `edit_side_panel<E>(loc, title, editing, body)` in `screens/shared.rs` beside the
+  `retract_side_panel` it mirrors, and `footer` given `#[props(default)]` or dropped. Worth doing
+  before #312, whose fix is to render the panel into a sibling layer of `.app` the way
+  `shell/root.rs:132-135` mounts the overlays — a change that reaches every construction site, since
+  the overlay layer is a root-mounted component reading a signal rather than a portal.
+- **A dead second citations table.** `shared.rs:627-670`'s `citation_table` is a 44-line copy of
+  `tabs.rs:18-80`'s `citations_table` minus the Backs column and the row-actions cell, and nothing
+  calls it — not a screen, not a test; only the `pub use` at `screens/mod.rs:104` keeps it compiling.
+  Delete it as part of #304's convergence on the citations shape rather than leave a second answer to
+  the question that item is settling.
+- **There is no label/value row primitive, so `.fact-row` is hand-rolled 39 times.** Every read-mode
+  row is written out as `div.fact-row` + `span.field-label` carrying an inline
+  `style: "width:NNpx;margin:0"` + a `span.grow` — 39 sites across 11 files, 8 of them in
+  `tabs.rs:198-233` alone — with the `unwrap_or_else(|| "—".to_owned())` empty-value fallback repeated
+  36 times beside them. The per-site width is *not* the defect: `docs/mockups` uses nine different
+  label widths across 169 specimens, so the width is a call-site decision by design. The gap is that
+  there is no `FactRow { label, label_width, children }` component to make that decision *in*, which is
+  also why #309/#310 have nowhere to land their shared half — the `components/draft_field.rs` change
+  from stacked `.field` to same-line `.fact-row`.
 - **Collection history nodes cannot be expanded and show no count.** `collapse_runs`
   (`genealogy-app/src/history.rs:247-302`) folds a software run into one synthetic
   `ActivityDetail::ImportBatch { count }` row and **discards the children**, and `ActivityVm`
@@ -362,6 +429,23 @@ Residuals from the shortcuts work (ADR 0030); see
   proof has to be a shot rather than an assertion over markup. Cheapest closure: a `region` compare
   over a marker between two zoom levels. This bullet is the cited evidence for the `type/test-gap`
   label in [`issue-tracking.md`](issue-tracking.md) §2.
+- **The map's draw-tool state machine sits above the ADR 0008 line.** `DrawTool`
+  (`screens/map_shared.rs:27`), `MapDraft` (`:47`), `draft_actions` (`:94`), `draft_geometry` (`:114`,
+  which encodes the ≥3-vertices-for-a-ring rule and the refusal of a tool/draft mismatch), `geo_point`
+  (`:59`, the decimal-degree → `Microdegrees` rounding), `move_vertex` (`:355`), `parse_map_message`
+  (`:315`), `shape_to_draft` (`:902`), `combined_bounds` (`:933`), `closed_ring` (`:1008`),
+  `format_zoom` (`:477`) and `save_year` (`:1078`) name no framework type and are already unit-tested
+  as pure functions (`map_shared.rs:1165`), while their siblings `clamp_zoom`, `clamp_slider_year`,
+  `display_coordinates` and `MarkerShapeVm` live one layer down in
+  `genealogy-ui/src/view_model/geography.rs`. A second renderer would re-implement the editing rules
+  rather than reuse them, against ADR 0008 §7 and
+  [`second-renderer-checklist.md`](second-renderer-checklist.md) §2 ("the renderer holds no domain
+  rules or coordination"). The cut is the state machine only — the GeoJSON builders, the `*_script`
+  consts and everything taking a `Signal` are MapLibre/Dioxus-specific and stay — so this is a lift of
+  roughly 200 lines out of 2155, not a split of the file. Counter-case on the record: ADR 0008 does
+  put app screens in the renderer as per-framework view code, and no second renderer exists; what
+  makes this more than size is that `draft_geometry` returns a domain `PlaceGeometry` and decides
+  whether one is valid.
 - **In-map editing depth** — mid-ring vertex insertion (today: a vertex can be dragged to a new
   position, but not inserted between two others), pin-click selection on the canvas (today: select via
   the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is wired;

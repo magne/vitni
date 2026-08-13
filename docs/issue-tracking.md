@@ -178,7 +178,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (14 open)
+### `0.9 — UI stabilization` (15 open)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended, and the 2026-08-12
 walkthrough is the proof.** Every issue in the previous round closed, leaving the milestone empty — and
@@ -202,9 +202,15 @@ stylesheet or the webview rather than what the view logic decided. Treat the cou
 | [The mockups' record-picker specimen pins itself to the viewport's top-left](https://github.com/magne/genealogy/issues/311) | Three mockup pages render a stray floating dropdown, and the specimen's prose contradicts it |
 | [A `SidePanel`'s background is not `inert`](https://github.com/magne/genealogy/issues/312) | Assistive tech still reaches the shell behind an open panel |
 | [Back/forward cannot return to a draft tab](https://github.com/magne/genealogy/issues/313) | `⌘←`/`⌘→` step past an open draft to the last saved record |
+| [The shared record-tab arms are re-implemented on 13 screens](https://github.com/magne/genealogy/issues/322) | The vehicle for #303 and #304: changing the shared frame's shape is 13 edits, so a per-tab explanation lands on ~45 call sites |
 
-Three of these — #302, #312, #313 — were already in `issues.md` from earlier code reading and were
-promoted here by the same triage; the other twelve are new. Three **design questions** came out of the
+Fourteen of these came out of that walkthrough: three — #302, #312, #313 — were already in `issues.md`
+from earlier code reading and were promoted here by the same triage, and the other eleven are new.
+The fifteenth, #322, is the one **refactor** in the gate, and it is here on the vehicle rule rather
+than on its own user-visible consequence: #303 and #304 both change the shared tab frame's shape, and
+with the arms written out on all 13 screens each of those lands as ~45 call-site edits instead of one.
+The other simplification findings from the same 2026-08-13 code read carry no milestone — they are
+cleanups whose absence changes nothing a user sees. Three **design questions** came out of the
 walkthrough too and are filed *without* a milestone, because each needs a call before it needs code: the
 Attach-versus-Add model (#314), the restriction-toggle model (#315), and whether a citation should carry
 evidence text at all (#316).
