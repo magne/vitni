@@ -1,128 +1,140 @@
-# genealogy
+# Vitni
 
-An event-sourced genealogy program in Rust, inspired by and based on the data model of
-[Gramps](https://github.com/gramps-project/gramps) (targeting Gramps **v6**).
+**An evidence-first genealogy program.** Every fact is a recorded claim — who asserted it, when,
+from which source, and with what confidence. The family tree you read is a *conclusion* derived from
+those claims, not a database edited in place. Nothing is ever silently overwritten: a correction is a
+new assertion that supersedes an old one, and both stay in the record.
 
-Differentiators from Gramps:
+*Vitni* is Old Norse for **witness**.
 
-- **Event-sourced core.** State is derived by replaying a log of events, not mutated in
-  place. Each event carries an **event context** recording the **operator** who caused it —
-  the system is auditable by construction (who changed what, when, and why).
-- **CLI first.** The shippable interface today is the `genealogy` binary; a Dioxus desktop
-  GUI (`genealogy-gui`) and a web app are planned. Domain logic lives in `genealogy-core`,
-  free of any CLI/UI concern.
-- **Plugins are WebAssembly components.** Import/export (GEDCOM today) and plugin-contributed
-  UI run as sandboxed `wasm32-wasip2` components with deny-by-default capabilities.
+## What makes it different
 
-The architecture and decisions are documented under [`docs/`](docs/): the domain model
-([`data-model.md`](docs/data-model.md)), the architecture decision records
-([`docs/adr/`](docs/adr/)), and the [`roadmap`](docs/roadmap.md).
+- **Evidence and conclusions are separate layers.** The event log is the evidence: each entry is an
+  assertion by a named operator, carrying its date, reason, confidence and citations. The entities
+  you browse — persons, families, places, sources — are projections rebuilt from that log at any
+  time. Two researchers can disagree in the record without one of them losing.
+- **Corrections keep the trail intact.** Retracting or superseding an assertion references it by
+  identity and appends a new entry. There is no destructive edit and no "who changed this?" that the
+  program cannot answer.
+- **Plugins are sandboxed WebAssembly components.** Import, export and plugin-contributed UI run as
+  `wasm32-wasip2` components with deny-by-default capabilities — a plugin reaches the network, the
+  media library or the command surface only where it was granted that capability, and signed
+  first-party bundles are distinguished from untrusted ones.
+- **Localized down to the message.** Interface text resolves through Fluent, including labels a
+  plugin contributes, so a plugin's form is translated like the rest of the app. English and
+  Norwegian ship today.
 
-## Workspace layout
+## Status
 
-A Cargo workspace; member crates live in `crates/*`. The WASM plugin components under
-`plugins/*` are **excluded** from the workspace (they build only for `wasm32-wasip2`).
+Pre-1.0 and usable. The domain model, persistence, import/export, the desktop GUI, the geography and
+map views, and the plugin trust model are implemented; DNA breadth and a server-backed web frontend
+are the remaining work. Release artifacts are **Linux-first** — a tarball, a `.deb` and an AppImage
+(see [`docs/release.md`](docs/release.md)). The CLI and the desktop GUI are both thin frontends over
+the same application layer, so they stay in step by construction; two known gaps in either direction
+are tracked in [`docs/issues.md`](docs/issues.md) rather than papered over.
 
-| Crate | Role |
-| --- | --- |
-| `genealogy-core` | Domain model + event-sourcing engine. Pure logic, no I/O, no user-facing strings. |
-| `genealogy-db` | Persistence: event store + projections (SQLite default; Postgres feature-gated). |
-| `genealogy-app` | Application coordination: config, workspace lifecycle, the impure inputs (clock, ids, operator), and the use-cases that return DTOs. |
-| `genealogy-cli` | The `genealogy` binary — interactive terminal frontend. |
-| `genealogy-ui` | Framework-agnostic presentation layer: view-models, intents, Fluent resolution, the plugin-UI vocabulary. No framework types. |
-| `genealogy-ui-dioxus` | The `genealogy-gui` binary — a thin Dioxus renderer over `genealogy-ui`. |
-| `genealogy-plugin-host` | WASM component plugin host (Wasmtime): loads plugins, wires capabilities, applies fuel/memory limits. |
-| `genealogy-gedcom` | Pure GEDCOM parse/emit used by the GEDCOM plugins. |
-| `xtask` | Repository task runner (`cargo xtask …`). |
+## Quickstart
 
-## Prerequisites
-
-- **Rust** — latest stable via [`rustup`](https://rustup.rs). The `wasm32-wasip2` target is
-  declared in `rust-toolchain.toml` and installed automatically.
-- **Desktop GUI only** — a system **webview** (see below). The CLI needs no extra system
-  libraries.
-
-### Desktop GUI system dependencies
-
-`genealogy-ui-dioxus` renders through a system webview (Dioxus desktop → `wry`/`tao`). The
-webview is behind a non-default **`desktop`** feature, so building the rest of the
-workspace, the plugin host, and all tests needs none of these — only running the GUI does.
-
-**Linux** — install the WebKitGTK and GTK development packages:
+Needs a current stable Rust toolchain via [`rustup`](https://rustup.rs); the `wasm32-wasip2` target
+installs itself from `rust-toolchain.toml`.
 
 ```bash
-# Debian / Ubuntu (24.04+)
-sudo apt-get install -y \
-  libwebkit2gtk-4.1-dev libgtk-3-dev libxdo-dev \
-  libayatana-appindicator3-dev librsvg2-dev
-
-# Fedora
-sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libxdo-devel \
-  libappindicator-gtk3-devel librsvg2-devel
-
-# Arch
-sudo pacman -S --needed webkit2gtk-4.1 gtk3 xdotool libayatana-appindicator librsvg
-```
-
-**Windows** — the GUI uses **WebView2**. The runtime ships with Windows 11 and current
-Windows 10; on older systems install the
-[Evergreen WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). No
-extra steps to build (it links the system WebView2 loader).
-
-**macOS** — uses the built-in WebKit; no extra system dependencies.
-
-## Build and run
-
-```bash
-# Build everything (CLI, app, host, ui — desktop GUI excluded unless its feature is on)
-cargo build --workspace
-
-# Run the CLI: create a workspace, add a person, list
+# Create a workspace, add a person, list what is there
 cargo run -p genealogy-cli -- init demo /path/to/demo-ws
 cargo run -p genealogy-cli -- --workspace demo person create --given Ada --surname Lovelace
 cargo run -p genealogy-cli -- --workspace demo person list
 
-# Build the plugin components (GEDCOM import/export, the ui-panel demo) → target/plugins/
+# Build the import/export and UI plugins into target/plugins/
 cargo xtask build-plugins
 
-# Run the desktop GUI against a workspace (needs the webview deps above)
+# Run the desktop GUI against that workspace
 GENEALOGY_WORKSPACE=demo cargo run -p genealogy-ui-dioxus --features desktop
 ```
 
-The GUI lists the workspace's persons in a sidebar, opens a person's detail on the right,
-and — under **Plugin form** — runs the `ui-panel` WASM plugin and renders the form it emits
-through the plugin-UI vocabulary interpreter.
+A workspace is a directory with a `workspace.toml` manifest, referred to by name; global settings
+live in `~/.config/genealogy/config.toml`. The CLI has one subcommand-bearing verb per record type
+(`person`, `family`, `place`, `source`, `citation`, `event`, `note`, `media`, `tag`, `repository`,
+`dna-test`, `dna-match`, `research-note`) plus `init`, `rebuild`, `import`, `export` and `plugin`.
 
-### Localization
+The GUI renders through a **system webview** and therefore needs WebKitGTK on Linux; the CLI needs no
+extra system libraries. Platform-by-platform setup is in
+[`docs/development.md`](docs/development.md).
 
-The UI is localized with Fluent (ADR 0003). The interface language follows the system
-locale; override it per run, e.g. Norwegian:
+Interface language follows the system locale, or set it explicitly:
 
 ```bash
 LANGUAGE=no cargo run -p genealogy-ui-dioxus --features desktop
 ```
 
-App chrome, data labels, and plugin form labels all resolve through Fluent — plugins ship
-their own catalogues and return message IDs, so a plugin form is localized too.
+## Data model
+
+The entity vocabulary — persons, families, events, places, sources, citations, repositories, media,
+notes, tags, plus DNA tests, DNA matches and research notes — is informed by **[Gramps][gramps] v6**
+and by other tools and standards in this space, including [webtrees][webtrees], Gramps Web, GEDCOM
+and GEDCOM-X. Interchange today is GEDCOM and Gramps XML, both as plugins. The model is a clean-room
+reimplementation: no Gramps source is copied.
+
+[`docs/data-model.md`](docs/data-model.md) is the reference for the entities, the command and event
+catalog, and the provenance envelope; [`docs/adr/`](docs/adr/) records the architecture decisions and
+[`docs/roadmap.md`](docs/roadmap.md) the plan.
+
+## Architecture
+
+A Cargo workspace. Domain logic never depends on a frontend, and no UI framework type appears above
+the renderer crate, so a second frontend is additive rather than a rewrite. The WASM plugin
+components under `plugins/*` are excluded from the workspace — they build only for `wasm32-wasip2`,
+via `cargo xtask build-plugins`.
+
+| Crate | Role |
+| --- | --- |
+| `genealogy-core` | Domain model and event-sourcing engine. Pure: no I/O, no clock, no user-facing strings. |
+| `genealogy-db` | Persistence: event store, projections, migrations. SQLite by default, Postgres feature-gated. |
+| `genealogy-app` | Coordination: config, workspace lifecycle, the impure inputs (clock, ids, operator) and the use-cases returning frontend-neutral DTOs. |
+| `genealogy-cli` | The `genealogy` binary. |
+| `genealogy-ui` | Framework-agnostic presentation: view-models, navigation intents, Fluent resolution, the plugin-UI vocabulary. |
+| `genealogy-ui-dioxus` | The `genealogy-gui` binary — a Dioxus renderer over `genealogy-ui`. |
+| `genealogy-plugin-host` | Wasmtime component host: capability grants, fuel and memory limits, bundle signature verification. |
+| `genealogy-i18n` | Fluent plumbing: the workspace → shared → embedded override chain and locale fallback. |
+| `genealogy-interchange` | The format-neutral leaf value vocabulary shared by the interchange formats. |
+| `genealogy-gedcom`, `genealogy-gramps-xml`, `genealogy-digitalarkivet` | Pure parse/emit crates behind the corresponding plugins. |
+| `xtask` | Repository task runner (`cargo xtask …`), not shipped. |
 
 ## Development
 
 ```bash
-cargo nextest run --workspace --all-features --all-targets   # tests (nextest locally)
+cargo build --workspace
+cargo nextest run --workspace --all-features --lib --bins --tests
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
-cargo deny check                                             # advisories, licenses, bans
-cargo xtask i18n-check                                       # locale catalogues complete vs `en`
-cargo xtask build-plugins                                    # build plugins → target/plugins
+cargo deny --all-features check          # advisories, licences, bans
+cargo xtask check                        # i18n completeness, CSS tokens, input-handling guard
+cargo xtask build-plugins
+cargo xtask gui-pass                     # drive the real GUI headless and assert over screenshots
 ```
 
-> Always pass `--workspace` (or `-p <crate>`): `default-members` is the CLI only, so a bare
-> `cargo test`/`clippy` skips most crates. Building or testing with `--all-features` enables
-> the GUI's `desktop` feature and therefore needs the webview system libraries above.
+> Pass `--workspace` (or `-p <crate>`): `default-members` is the CLI alone, so a bare `cargo test`
+> skips most of the repo.
 
-## License
+The workspace denies `unwrap_used`, `panic`, `todo` and friends at deny level, and silencing them
+with `#[allow(…)]` is itself denied — warnings get fixed, not suppressed. Every user-facing string
+goes through Fluent, and every UI change updates [`docs/mockups/`](docs/mockups/) in the same commit.
+Platform setup, the two GUI test layers and the rest of the conventions are in
+[`docs/development.md`](docs/development.md).
 
-`MIT OR Apache-2.0` at your option (the `license` field in the workspace `Cargo.toml`). The
-workspace is kept permissive; new dependencies must be permissive-compatible (`cargo deny
-check` enforces this). No Gramps (GPLv2+) source is copied — the Gramps-derived model is a
-clean-room reimplementation.
+## Licence
+
+Split by layer:
+
+- The **interchange crates** — `genealogy-interchange`, `genealogy-gedcom`,
+  `genealogy-gramps-xml`, `genealogy-i18n` and the bundled plugin sources — are
+  **`MIT OR Apache-2.0`**, so anything can reuse them, including a GPLv2-only project.
+- The **application** is **`AGPL-3.0-or-later`**, with an additional permission under section 7: a
+  WebAssembly component that talks to the host only through the versioned plugin interface is not
+  required to be AGPL. Third-party plugins, including proprietary ones, are welcome.
+
+A **commercial licence** is available for anyone who needs to embed the application layer in a closed
+product; ask. The reasoning behind this arrangement, including what it does and does not protect, is
+written up in [`docs/research/licensing-and-monetization.md`](docs/research/licensing-and-monetization.md).
+
+[gramps]: https://github.com/gramps-project/gramps
+[webtrees]: https://webtrees.net/

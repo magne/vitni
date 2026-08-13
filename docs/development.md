@@ -1,0 +1,143 @@
+# Development
+
+Platform setup, the test layers, and the repository's own tooling. [`README.md`](../README.md) has
+the quickstart; this is the detail it links out to.
+
+## Prerequisites
+
+- **Rust** — latest stable via [`rustup`](https://rustup.rs). The `wasm32-wasip2` target is declared
+  in `rust-toolchain.toml` and installs automatically.
+- **Desktop GUI only** — a system webview, below. The CLI, the plugin host and the whole test suite
+  need none of it.
+
+### Desktop GUI system dependencies
+
+`genealogy-ui-dioxus` renders through a system webview (Dioxus desktop → `wry`/`tao`). The webview
+sits behind a non-default **`desktop`** feature, so building the rest of the workspace and running
+the tests needs no system libraries — only running the GUI does.
+
+**Linux** — WebKitGTK and GTK development packages:
+
+```bash
+# Debian / Ubuntu (24.04+)
+sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev libgtk-3-dev libxdo-dev \
+  libayatana-appindicator3-dev librsvg2-dev
+
+# Fedora
+sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libxdo-devel \
+  libappindicator-gtk3-devel librsvg2-devel
+
+# Arch
+sudo pacman -S --needed webkit2gtk-4.1 gtk3 xdotool libayatana-appindicator librsvg
+```
+
+**Windows** — WebView2. The runtime ships with Windows 11 and current Windows 10; on older systems
+install the
+[Evergreen WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). Building
+needs no extra step (it links the system WebView2 loader).
+
+**macOS** — the built-in WebKit; nothing to install.
+
+## Everyday commands
+
+```bash
+cargo build --workspace                                              # every crate
+cargo run -p genealogy-cli                                           # the `genealogy` binary
+cargo run -p genealogy-ui-dioxus --features desktop                  # the GUI
+cargo nextest run --workspace --all-features --lib --bins --tests    # tests
+cargo test -p genealogy-core <name>                                  # one test in one crate
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo fmt --all
+cargo deny --all-features check                                      # advisories, licences, bans
+cargo xtask check                                                    # i18n-check + css-check + input-guard
+cargo xtask build-plugins                                            # plugins/* → target/plugins
+prek run                                                             # the git hooks, by hand
+```
+
+**Always pass `--workspace`** (or `-p`, or `--all` for `fmt`). `default-members` is
+`crates/genealogy-cli`, so a bare `cargo test` or `cargo clippy` silently covers that one crate and
+skips everything else, including `xtask`.
+
+`--lib --bins --tests` deliberately excludes `benches/`: the `genealogy-db` benchmarks take about
+140 s each. Clippy still lints them through `--all-targets`. Run them deliberately:
+
+```bash
+cargo bench -p genealogy-db --features sqlite
+```
+
+`cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`) plus
+`issue-sync`, `labels` and `package` (the Linux release tarball).
+
+## Testing the GUI
+
+Two layers, and they catch different things.
+
+**SSR tests** (`crates/genealogy-ui-dioxus/tests/*.rs`) render components to markup and assert over
+it. Fast, and they cover view logic. They cannot see anything that only exists in a live webview:
+`document::eval`, CSS, the map canvas, *which element a handler is attached to*, or *where focus
+actually lands*.
+
+**`cargo xtask gui-pass`** covers that layer. It runs the real GUI on its own **Xvfb** display,
+drives it with `xdotool`, and asserts over screenshots — so it needs `xvfb`, `xdotool` and
+`imagemagick`, but no desktop session. It is also *more* reliable than driving the GUI on a real
+desktop, where the compositor hands synthetic input to whatever it thinks is focused rather than to
+the window you aimed at.
+
+```bash
+cargo xtask gui-pass                     # every scenario
+cargo xtask gui-pass map-canvas          # one, by name
+cargo xtask gui-pass --reset             # wipe the fixture workspace, isolated home and old shots
+cargo xtask gui-pass --keep              # leave it running; attach with `x11vnc -display :99`
+```
+
+Scenarios are **TOML, not Rust** — `crates/genealogy-ui-dioxus/tests/gui-pass/*.toml` — so adding one
+needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `drag`, `wheel`, `wait`,
+`await-exit`) and `[[assert]]`s over the shots by name. Runs are isolated by default: a throwaway
+`XDG_CONFIG_HOME`/`XDG_DATA_HOME` and a freshly seeded fixture workspace under `target/gui-pass/`,
+because a scripted click run writes real events. Shots land in
+`target/gui-pass/shots/<scenario>/` and the GUI's own log in `gui.log` beside them.
+
+When a screenshot disagrees with your reading of it, column-scan instead of squinting:
+
+```bash
+convert <shot> -crop 1xH+X+Y +repage txt:-     # exact pixel rows
+convert <in> -crop WxH+X+Y +repage <out>       # crop a region to inspect
+```
+
+Some things remain human-only, and the `manual-verify` label in
+[`issue-tracking.md`](issue-tracking.md) reserves them: pan and zoom smoothness, click latency,
+motion. Software GL is not a GPU, and a still image has no frame rate.
+
+## Repository conventions
+
+The ones that will fail a review if missed:
+
+- **Lints are guardrails, not suggestions.** `unwrap_used`, `panic`, `todo`, `unimplemented`,
+  `exit`, `dbg_macro` and others are denied workspace-wide, and `allow_attributes` is denied too —
+  so an `#[allow(…)]` is not the way out. Fix the code. `expect_used` warns; justify it if you use
+  it. `print_stdout`/`print_stderr` are denied everywhere except `genealogy-cli`, whose stdout *is*
+  the interface.
+- **Events are append-only.** Never edit projected state directly; emit an event, so the audit trail
+  keeps its operator and reason. Event payloads are self-contained and versioned, and changes are
+  additive, so every historical event stays decodable.
+- **Every user-facing string is localized** through Fluent — no hardcoded literals, no framework
+  i18n. `genealogy-core` emits no user-facing strings at all: typed errors, and English `tracing`
+  for developers. The CLI's per-language catalogue is *generated* from tracked fragments by
+  `build.rs`; edit a fragment, never the concatenated file.
+- **Every UI change updates [`mockups/`](mockups/) in the same change.** The mockups are the design
+  source of truth and describe shipped behaviour, so a change the mockups still contradict is
+  incomplete. `mockups/assets/components.css` is the superset — the app sheet must not introduce a
+  rule the mockups lack.
+- **Never commit to `main`.** Feature branches and pull requests, merged `--no-ff`. Install the hooks
+  with `prek install`.
+
+[`docs/issues.md`](issues.md) is the backlog of record; its *Decided — no action needed* section
+records deliberate non-tasks, so check there before "fixing" something.
+[`issue-tracking.md`](issue-tracking.md) explains the labels, milestones and the doc ↔ tracker
+linkage that `cargo xtask issue-sync` enforces.
+
+> **Note on CI.** The workflows under `.github/workflows/` are committed and lint-clean but do not
+> currently run: Actions billing is disabled for this repository. Run the checks locally — `prek run`
+> plus the commands above — and reconcile labels with `cargo xtask labels --apply` rather than
+> through `labels.yml`.
