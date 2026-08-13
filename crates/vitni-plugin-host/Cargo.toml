@@ -1,0 +1,48 @@
+[package]
+name = "vitni-plugin-host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vitni-core = { workspace = true }
+vitni-app = { workspace = true }
+uuid = { workspace = true }
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+# `process`/`fs` back the `ai` command runner and vision-api file read (ADR 0017 §4); `time` backs the
+# net/ai host-side request timeouts.
+tokio = { workspace = true, features = ["process", "fs", "time"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true }
+sha2 = { workspace = true }
+# Plugin bundle signing/verification (ADR 0014 §1): ed25519 detached signatures over a sha2 digest.
+ed25519-dalek = { workspace = true }
+base64 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Parses the `plugin.toml` bundle manifest during discovery, and serializes a sample manifest in the
+# signing round-trip tests (ADR 0014 §2).
+toml = { workspace = true }
+# The `present` capability suspends on a boxed async `Presenter` trait (ADR 0017 §5); `async-trait`
+# makes the trait object-safe for `Box<dyn Presenter>`.
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+uuid = { workspace = true }
+# The net/media-store/ai capability tests drive the host fetch against a local mock HTTP server
+# (redirect chains, size caps, timeouts, content-type sniffing, the vision-api request) — ADR 0017.
+wiremock = { workspace = true }
+# Scopes the vision-api API-key env var for the duration of one async test (ADR 0017 §4).
+temp-env = { workspace = true }
+# The round-trip test reads the events table directly to assert Software-agent provenance was
+# recorded (ADR 0011 §5) — no use-case exposes the operator kind. The provenance-confidence test
+# (ADR 0017 §7) reads the events table the same way to confirm `Confidence::Low` was stamped.
+sqlx = { workspace = true }
+
+[lints]
+workspace = true

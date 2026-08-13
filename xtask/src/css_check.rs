@@ -1,6 +1,6 @@
 //! `css-check` — guards the design-token convention (`docs/research/tailwind-css.md`): the shipped
 //! component CSS must not hardcode colour literals; every colour comes from a `var(--token)` defined
-//! in `tokens.css`. Scans `crates/genealogy-ui-dioxus/src/*.css` (except `tokens.css`, the token
+//! in `tokens.css`. Scans `crates/vitni-ui-dioxus/src/*.css` (except `tokens.css`, the token
 //! file itself) and flags any hex colour literal, reporting `file` + line. Diagnostics are collected
 //! per file and the command only exits non-zero after scanning everything.
 //!
@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 
 /// Directory holding the shipped bundled CSS.
-const CSS_DIR: &str = "crates/genealogy-ui-dioxus/src";
+const CSS_DIR: &str = "crates/vitni-ui-dioxus/src";
 /// The design-token file — the one allowed home for raw colour literals.
 const TOKEN_FILE: &str = "tokens.css";
 

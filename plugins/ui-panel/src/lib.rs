@@ -1,15 +1,15 @@
 //! Plugin-UI demo component (ADR 0012): returns a form description as a JSON string matching the
-//! `genealogy-ui` vocabulary schema. The labels are **Fluent message IDs**, not display text — the
+//! `vitni-ui` vocabulary schema. The labels are **Fluent message IDs**, not display text — the
 //! frontend resolves them against this plugin's own catalogue (`i18n/<locale>/ui-panel.ftl`, ADR
 //! 0003). The plugin emits the JSON directly rather than linking the host's Rust types, so a non-Rust
 //! plugin contributes UI the same way. The host carries the payload opaquely.
 
 wit_bindgen::generate!({
     world: "ui-panel",
-    path: "../../crates/genealogy-plugin-host/wit",
+    path: "../../crates/vitni-plugin-host/wit",
 });
 
-use crate::genealogy::host_api::{commands, log};
+use crate::vitni::host_api::{commands, log};
 use serde_json::Value;
 
 /// The panel this plugin contributes (ADR 0022): a form of typed fields and two action buttons.

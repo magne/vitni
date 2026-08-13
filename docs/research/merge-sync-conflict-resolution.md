@@ -75,7 +75,7 @@ the researcher the way ad hoc vendor sync does.
 Every single-valued claim in this workspace already carries an `EventContext.occurred_at` (data-model
 §8) — the moment a human or a prior import *asserted* it — and is correctable via the universal
 `AssertionSuperseded` event (data-model §10) referencing the claim's `AssertionId` (ADR 0004 §2). A
-GEDCOM file's `HEAD.1 DATE` (already parsed by `genealogy-gedcom`, currently discarded) is the moment
+GEDCOM file's `HEAD.1 DATE` (already parsed by `vitni-gedcom`, currently discarded) is the moment
 the *file's* claim was asserted as of. Comparing the two timestamps gives an auditable, mechanical
 answer to "which is more current" without a UI decision per field:
 

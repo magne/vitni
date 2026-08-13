@@ -2,10 +2,10 @@
 
 wit_bindgen::generate!({
     world: "fixture",
-    path: "../../crates/genealogy-plugin-host/wit",
+    path: "../../crates/vitni-plugin-host/wit",
 });
 
-use crate::genealogy::host_api::{ai, commands, log, media_store, net, present, types};
+use crate::vitni::host_api::{ai, commands, log, media_store, net, present, types};
 
 struct Fixture;
 

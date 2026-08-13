@@ -1,6 +1,6 @@
 //! Gramps XML export plugin (ADR 0013, ADR 0018): read persons, families, events, and the owned
 //! records (places, sources, citations, media, notes, repositories) through the host `query`
-//! capability, serialize them to Gramps XML with `genealogy-gramps-xml`, and write the document to
+//! capability, serialize them to Gramps XML with `vitni-gramps-xml`, and write the document to
 //! the host-resolved export sink.
 //!
 //! Human ids become Gramps handles and `gramps_id`s. Events are distributed onto the record they
@@ -10,24 +10,24 @@
 
 wit_bindgen::generate!({
     world: "bulk-export",
-    path: "../../crates/genealogy-plugin-host/wit",
+    path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.21.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.21.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.21.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.21.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.21.0": genealogy_plugin_api::export_sink,
+        "vitni:host-api/types@0.22.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.22.0": vitni_plugin_api::log,
+        "vitni:host-api/query@0.22.0": vitni_plugin_api::query,
+        "vitni:host-api/progress@0.22.0": vitni_plugin_api::progress,
+        "vitni:host-api/export-sink@0.22.0": vitni_plugin_api::export_sink,
     },
 });
 
 use std::collections::{BTreeSet, HashMap};
 
-use genealogy_gramps_xml::{
+use vitni_gramps_xml::{
     ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, Header, MediaObject, MediaRef,
     Note, Person, PersonRef, Place, Region, RepoRef, Repository, Source, Tag,
 };
-use genealogy_interchange::{EventKind, age_value};
-use genealogy_plugin_api::{convert, query, types};
+use vitni_interchange::{EventKind, age_value};
+use vitni_plugin_api::{convert, query, types};
 
 struct Exporter;
 
@@ -92,7 +92,7 @@ impl Guest for Exporter {
         let places = query::list_places().map_err(|e| format!("list-places failed: {e:?}"))?;
         let tags = query::list_tags().map_err(|e| format!("list-tags failed: {e:?}"))?;
         let total = (persons.len() + families.len()) as u32;
-        genealogy_plugin_api::log_info(&format!("exporting {} people and {} families", persons.len(), families.len()));
+        vitni_plugin_api::log_info(&format!("exporting {} people and {} families", persons.len(), families.len()));
 
         // event human-id -> participants (role + age + attributes + notes), from each person's
         // participations.
@@ -143,11 +143,11 @@ impl Guest for Exporter {
             tags: tags.into_iter().map(tag).collect(),
         };
 
-        if !genealogy_plugin_api::report("serialize", 0, Some(total))? {
+        if !vitni_plugin_api::report("serialize", 0, Some(total))? {
             return Ok(0);
         }
-        genealogy_plugin_api::write_export("export.gramps", &genealogy_gramps_xml::emit(&db))?;
-        genealogy_plugin_api::report("written", total, Some(total))?;
+        vitni_plugin_api::write_export("export.gramps", &vitni_gramps_xml::emit(&db))?;
+        vitni_plugin_api::report("written", total, Some(total))?;
         Ok(total)
     }
 }
@@ -402,12 +402,12 @@ fn tag(dto: types::TagDto) -> Tag {
 }
 
 /// Maps the host `sex` (already converted to interchange) onto a Gramps gender.
-fn gender_of(sex: genealogy_interchange::Sex) -> Gender {
+fn gender_of(sex: vitni_interchange::Sex) -> Gender {
     match sex {
-        genealogy_interchange::Sex::Male => Gender::Male,
-        genealogy_interchange::Sex::Female => Gender::Female,
-        genealogy_interchange::Sex::Intersex => Gender::Intersex,
-        genealogy_interchange::Sex::Unknown => Gender::Unknown,
+        vitni_interchange::Sex::Male => Gender::Male,
+        vitni_interchange::Sex::Female => Gender::Female,
+        vitni_interchange::Sex::Intersex => Gender::Intersex,
+        vitni_interchange::Sex::Unknown => Gender::Unknown,
     }
 }
 

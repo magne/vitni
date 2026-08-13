@@ -12,12 +12,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use genealogy_plugin_host::signing::{self, PluginManifest};
+use vitni_plugin_host::signing::{self, PluginManifest};
 
 use crate::util::{self, CargoManifest, I18nConfig, copy_dir, run_cargo};
 
 /// The publisher attributed to a first-party plugin whose manifest declares none.
-const DEFAULT_PUBLISHER: &str = "genealogy-project";
+const DEFAULT_PUBLISHER: &str = "vitni-project";
 
 /// The target every plugin component is built for (ADR 0007 §1).
 const PLUGIN_TARGET: &str = "wasm32-wasip2";
@@ -218,17 +218,17 @@ fn emit_bundle(plugin: &Plugin, out_dir: &Path, wasm_dest: &Path) -> Result<(Plu
 
 /// Builds the bundle manifest (ADR 0014 §2) from the plugin's `Cargo.toml`: id from the plugin id,
 /// version from `[package] version`, and role/host-API/capabilities/publisher from the
-/// `[package.metadata.genealogy-plugin]` table.
+/// `[package.metadata.vitni-plugin]` table.
 fn plugin_manifest(plugin: &Plugin) -> Result<PluginManifest> {
     let metadata = plugin
         .manifest
         .package
         .metadata
         .as_ref()
-        .and_then(|metadata| metadata.genealogy_plugin.as_ref())
+        .and_then(|metadata| metadata.vitni_plugin.as_ref())
         .with_context(|| {
             format!(
-                "plugin {} is missing the [package.metadata.genealogy-plugin] table (ADR 0014 §2)",
+                "plugin {} is missing the [package.metadata.vitni-plugin] table (ADR 0014 §2)",
                 plugin.id
             )
         })?;

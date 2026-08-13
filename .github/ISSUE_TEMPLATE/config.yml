@@ -3,8 +3,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: The backlog
-    url: https://github.com/magne/genealogy/blob/main/docs/issues.md
+    url: https://github.com/magne/vitni/blob/main/docs/issues.md
     about: Outstanding work grouped by area. Check here — and its "Decided — no action needed" section — before filing.
   - name: How this tracker works
-    url: https://github.com/magne/genealogy/blob/main/docs/issue-tracking.md
+    url: https://github.com/magne/vitni/blob/main/docs/issue-tracking.md
     about: Labels, milestones, triage, and what happens to an item when the work completes.

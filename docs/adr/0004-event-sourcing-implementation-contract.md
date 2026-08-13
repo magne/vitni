@@ -10,7 +10,7 @@ a framework-agnostic decision core, and plain JSON plus explicit event versionin
 `docs/data-model.md` then specified the domain: entities, value objects, aggregates, the
 event catalog, and the `EventContext` provenance envelope.
 
-A readiness review for the first `genealogy-core` code found that the *domain vocabulary* is
+A readiness review for the first `vitni-core` code found that the *domain vocabulary* is
 complete but the *implementation contract* wiring it onto `cqrs-es` is not. Five questions
 must be answered before the first aggregate is written, because each shapes every event:
 

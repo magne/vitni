@@ -40,8 +40,8 @@ not change per engine.
    `EventCreated` is `2.0` while every unevolved Event variant stays `1.0`. This keeps versions
    honest and scopes each upcaster to exactly the variant it migrates.
 
-3. **The upcaster set is owned by `genealogy-core`, next to the events.** Each aggregate that has
-   evolved a variant exposes an ordered `upcasters()` function (e.g. `genealogy_core::event::upcasters`)
+3. **The upcaster set is owned by `vitni-core`, next to the events.** Each aggregate that has
+   evolved a variant exposes an ordered `upcasters()` function (e.g. `vitni_core::event::upcasters`)
    returning `Vec<Box<dyn EventUpcaster>>`. The event schema is a core concern, so its migrations
    live with it, independent of any backend. Aggregates whose schema has not changed contribute no
    upcasters. Upcasters are ordered oldest-first so a payload is migrated through each step in turn
@@ -59,7 +59,7 @@ not change per engine.
    Because each replay binds its aggregate type, an aggregate sees only its own events. Rebuild is a
    **maintenance operation**: the caller ensures no commands run concurrently. It is engine-neutral —
    every backend behind `PersistedEventRepository` rebuilds the same way; SQLite is the first
-   implementation (`genealogy-db`). No CLI surface is added here; promoting rebuild to a maintenance
+   implementation (`vitni-db`). No CLI surface is added here; promoting rebuild to a maintenance
    command is roadmap Phase 3.
 
 ## Rationale
@@ -71,8 +71,8 @@ not change per engine.
   whenever any one payload changes, and would make an upcaster's version comparison ambiguous. Tying
   the version to the variant keeps each bump and each upcaster local to the payload that actually
   changed, which is exactly the additive-only rule ADR 0004 §4 set.
-- **Upcasters in core (3).** The payload schema is owned by `genealogy-core`; its migrations are part
-  of that contract and must not depend on a storage backend. `genealogy-db` only *wires* the
+- **Upcasters in core (3).** The payload schema is owned by `vitni-core`; its migrations are part
+  of that contract and must not depend on a storage backend. `vitni-db` only *wires* the
   registry into the store and the rebuild.
 - **Read-time, not rewrite (4).** Rewriting stored events to the new shape would violate the
   append-only, immutable log (ADR 0001) and destroy the guarantee that the log is the authoritative
@@ -103,7 +103,7 @@ not change per engine.
 ## Out of scope
 
 - **Snapshotting** — still deferred (ADR 0002, 0004).
-- **A user-facing rebuild/maintenance command** — roadmap Phase 3 promotes the `genealogy-db` routine
+- **A user-facing rebuild/maintenance command** — roadmap Phase 3 promotes the `vitni-db` routine
   into an application use-case and CLI command.
 - **The Postgres rebuild implementation** — this ADR fixes the engine-neutral contract; the concrete
   Postgres wiring lands with the Postgres backend (ADR 0002, roadmap Phase 3). The contract does not

@@ -1,0 +1,1062 @@
+// The versioned host-API contract every plugin compiles against (ADR 0007 §2, ADR 0011 §1).
+//
+// Capabilities are separate interfaces (`log`, `query`, `commands`, `progress`, `import-source`,
+// `export-sink`); each plugin role is a world that imports only the capabilities it needs and
+// exports one entry point. Records mirror the `vitni-app` DTOs (ADR 0006) — no storage or
+// framework type crosses this boundary.
+//
+// Version 0.3.0 generalizes the two GEDCOM worlds into format-neutral `bulk-import` / `bulk-export`
+// worlds and adds the `progress`, `import-source`, and `export-sink` capabilities that back them
+// (ADR 0013). The streaming source/sink let a plugin read/write an arbitrarily large document a
+// chunk at a time while the host owns the actual file path; `progress` lets a bulk operation report
+// how far it has advanced. The two GEDCOM-specific worlds are removed (they were spike-only and have
+// no external plugins), so this is the first world removal — a deliberate, documented break.
+//
+// Version 0.4.0 adds the `external-id` record and makes `commands.create-person` /
+// `commands.create-family` resolve-or-create against it: an incoming record carrying an external id
+// is matched to its existing aggregate (data-model §11) instead of creating a duplicate, so a
+// re-import of an unchanged document produces no changes. `add-partner` / `add-child` are now
+// idempotent (an already-present member is a no-op). A breaking signature change to `commands`.
+//
+// Version 0.5.0 grows `commands` toward GEDCOM 7 breadth: `assert-sex` plus the create/link verbs
+// for Event, Place, Source, Citation, Media, and Note, so a richer import maps every record to its
+// aggregate rather than dropping all but Person/Family. Additive to the interface.
+//
+// Version 0.6.0 fills the GEDCOM 7 round-trip (data-model F′): `create-person` now carries a
+// structured `person-name` (GEDCOM `NAME` sub-records — given/surname/prefix/suffix/nickname/type)
+// instead of bare given+surname, and `set-event-date` carries a full `genealogical-date` (calendar,
+// quality, modifier — replacing year/month/day). New verbs `assert-fact` (INDI attributes →
+// `FactAsserted`), `assert-association` (`ASSO`/`ROLE` → person↔person), and `set-event-address`
+// (`ADDR` → an Event address). `event-type` and `participant-role` grow to the full first-class
+// enum sets. `person-dto` gains the structured name parts an exporter reconstructs a `NAME` from.
+// A breaking signature change to `commands` and `query`.
+//
+// Version 0.7.0 completes the GEDCOM round-trip on the read side (data-model F′ export): `query`
+// gains `list-events` and `list-sources`, and `person-dto` gains `sex`, `facts`, `associations`,
+// and `participations` so an exporter reconstructs sex, INDI attributes, `ASSO`, and which events a
+// person took part in. New read records `fact`, `association-ref`, `participation`, `event-dto`, and
+// `source-dto` carry the event/fact/address data the exporter serializes. The `sex` enum gains
+// `intersex` (GEDCOM 7 `X`) so it round-trips. A breaking change to `query` and `types`.
+//
+// Version 0.8.0 closes the remaining round-trip gaps so citations, media, notes, repositories, tags,
+// place hierarchy, citation confidence, and source author/publication round-trip *out* (ADR 0018).
+// `commands` gains owner-link attach verbs (`attach-{person,family,event}-{citation,media,note}` and
+// `apply-{person,family,event}-tag`), repository/tag creation (`create-repository`, `create-tag`),
+// source enrichment (`set-source-author`, `set-source-pub-info`, `link-source-repository`),
+// `set-citation-confidence`, and place structure (`set-place-type`, `set-place-enclosed-by`).
+// `query` gains `list-citations`, `list-media`, `list-notes`, `list-repositories`, `list-tags`, and
+// `list-places`; `person-dto`/`family-dto`/`event-dto` gain attached `citations`/`media`/`notes`/
+// `tags` id lists, and `source-dto` gains `author`/`pub-info`/`repositories`. New records
+// `citation-dto`, `media-dto`, `note-dto`, `repository-dto`, `tag-dto`, `place-dto` and the
+// `confidence`/`place-type` enums. A breaking change to `commands`, `query`, and `types`.
+//
+// Version 0.9.0 round-trips privacy (GEDCOM v7 `RESN` — data-model §6, §16). A new `restriction`
+// enum (Confidential/Locked/Privacy); the nine record DTOs (person/family/event/source/citation/
+// media/note/repository/place) carry a `restrictions` list; and `commands` gains a
+// `set-<record>-restrictions` verb per record so an importer writes them back. A breaking change to
+// `commands`, `query`, and `types`.
+//
+// Version 0.10.0 round-trips a media object's MIME type: `media-dto` gains a `mime` field and
+// `commands` gains `set-media-mime` so an importer writes it back (GEDCOM `OBJE.FILE.FORM`, Gramps
+// `<file mime=…>`). An additive change to `media-dto`, `query`, and `commands`.
+//
+// Version 0.11.0 round-trips a child's per-partner relationships (GEDCOM `_FREL`/`_MREL`, Gramps
+// `frel`/`mrel`). A new `child-relationship` variant + `child-parent-rel`/`family-child` records;
+// `family-dto.children` becomes `list<family-child>` and `add-child` gains a `relationships`
+// argument. A breaking change to `family-dto`, `query`, and `commands`.
+//
+// Version 0.12.0 round-trips the explicit family↔event link: `family-dto` gains an `events` list and
+// `commands` gains `link-family-event`, so a family event nests under its `FAM`/`<family>` by its
+// recorded link rather than only by the participant-set heuristic. Additive to `family-dto`,
+// `query`, and `commands`.
+//
+// Version 0.13.0 carries the participation payload (data-model §17, ADR 0019): the `participation`
+// read record gains `age`, `attributes`, and `notes`, and `add-event-participant` takes a
+// `participation-input` record (role + age + attributes + note human-ids + import-only citation
+// human-ids) instead of a bare role — so a participant's age at an event, event-level `ASSO`
+// witnesses, and their notes/citations round-trip. New `age-bound`/`age`/`attribute` records. A
+// breaking signature change to `commands` and an additive change to the `participation` read record.
+//
+// Version 0.15.0 wires plugin-UI submission (ADR 0022): the `ui-panel` world gains a required
+// `handle-action` export (the field values a form collected are round-tripped back to the plugin,
+// which returns a `submit-result` JSON string) and now imports `commands` so a submission can drive
+// audited mutations through the app boundary (ADR 0011 §5). A new required export on an existing
+// world is a deliberate break, documented like the ADR 0013 `0.2.0`->`0.3.0` world removal: the
+// first-party plugin fleet has no external consumers and is rebuilt in lockstep, so no shim.
+//
+// Version 0.16.0 opens the assisted-import host capabilities `net` and `media-store` (ADR 0017 §2,
+// §3). `net.fetch` is a GET-only, host-mediated HTTP fetch under a caller-supplied policy
+// (https-only, host allowlist re-checked on every redirect hop, host-side timeout, response-size
+// cap); it returns the whole body so HTML/JSON pages cross the boundary but large binaries do not.
+// `media-store` writes files strictly under the workspace `media/` root: `fetch-and-store` streams a
+// download (a separate, larger binary cap) to disk and `store` writes guest-held bytes, both
+// returning a `stored-media` with a `"sha256:<hex>"` checksum, the sniffed MIME, the size, and an
+// `existed` dedup flag. The `host-imports` and `fixture` worlds gain both interfaces (the fixture's
+// `try-fetch`/`try-store`/`try-fetch-store` exports drive the grant/policy tests). Additive to the
+// package — the existing worlds are unchanged.
+//
+// Version 0.17.0 opens the assisted-import `ai` capability (ADR 0017 §4). `ai.interpret-media`
+// takes an optional provider name (none resolves the configured `[ai].default`), a media-store
+// relative path (validated under the workspace `media/` root), and a prompt, and returns the model's
+// raw text — the plugin owns any JSON extraction, so the host stays schema-opaque. Providers are
+// config-declared in client/presentation scope (ADR 0015): a `kind = "command"` provider runs a
+// local executable with an explicit argv vector (no shell; `{prompt}`/`{media}` substituted as whole
+// arguments), a `kind = "vision-api"` provider POSTs an OpenAI-compatible chat-completions request
+// with a base64 image and reads the API key from a named env var at call time. The `host-imports` and
+// `fixture` worlds gain the interface (the fixture's `try-interpret` export drives the grant/provider
+// tests). Additive to the package — the existing worlds are unchanged.
+//
+// Version 0.18.0 plumbs a media crop/region of interest through the attach verbs (ADR 0017 §9;
+// data-model §7). A new `media-crop` record in `types` carries left/top/width/height percentages,
+// and `attach-{person,family,event}-media` each gain `crop: option<media-crop>` and `caption:
+// option<string>` so an importer records a per-use crop + caption when attaching a media object —
+// the Gramps `<objref>`/`<region>` round-trip and the assisted-import face/line crop. GEDCOM has no
+// region concept and passes `none`. A breaking signature change to `commands`.
+//
+// Version 0.19.0 opens the assisted-import `present` capability and the `assisted-import` world
+// (ADR 0017 §5). `present.show` takes an opaque payload string and returns an opaque response string:
+// it is an async host function that suspends the invocation until the frontend answers, so a plugin
+// can drive a record-by-record review wizard from one long-running call. The host stays opaque to
+// both strings — the payload is the typed assisted-import presentation contract parsed by
+// `vitni-ui` (NOT the ADR 0022 UI vocabulary), rendered by a first-party wizard. The new
+// `assisted-import` world runs the whole session as a single `run-assisted(request)` export and
+// imports every capability the flow needs (`log`, `query`, `commands`, `progress`, `net`,
+// `media-store`, `ai`, `present`); wizard state is plain guest memory for the life of the call, with
+// no state-blob protocol. The `host-imports` and `fixture` worlds gain `present`; the fixture's
+// `try-present` (echoes a response through a scripted presenter) and `run-assisted` (presents once,
+// returns the response as a summary) exports drive the grant/suspend tests. Additive to the package —
+// the existing worlds are unchanged.
+//
+// Version 0.20.0 threads the file's own export/header date into a bulk import session, once per
+// document rather than inferred per record (ADR 0029 §2). `commands` gains `begin-import`, called by
+// the guest at most once, before any per-record command, with the RFC 3339 export date the format's
+// own header grammar rendered — `none` when the format has no such date, the document's header lacks
+// one, or its own date grammar could not resolve one to a specific day (ADR 0029 §3, the same
+// "honest about carrying no structure" stance as an unparseable event date). The host records it for
+// the rest of the invocation; app-layer commands that support timestamp-gated reconciliation (only
+// `assert-sex` in this slice — data-model's other single-valued fields are follow-up work, ADR 0029
+// §4) compare it against the target's live assertion `occurred_at` to decide supersede vs. leave
+// untouched, instead of today's unconditional additive-only skip on an already-existing person.
+// Additive to `commands`.
+//
+// Version 0.21.0 closes the Phase 10 PR4 round-trip gaps (data-model §17), landed one item at a time.
+// Round-trips a source's abbreviation (GEDCOM `SOUR.ABBR`, Gramps `<sabbrev>`): `source-dto` gains
+// `abbrev: option<string>` and `commands` gains `set-source-abbrev`, mirroring `author`/`pub-info`'s
+// own 0.8.0 addition exactly. Round-trips multiple `NAME`/`<name>` records per person: `commands`
+// gains `add-person-name` (a second-or-later name, alongside `create-person`'s existing first-name
+// parameter) and `person-dto`'s flattened `given`/`surname`/… fields are replaced by `names:
+// list<person-name>`, every currently-live name in assertion order. Carries a media attachment's
+// per-use caption and crop out to an exporter: a new `media-ref` record (human id, caption, crop,
+// and the object's own path/mime) replaces the bare `list<string>` on `person-dto`/`family-dto`/
+// `event-dto`'s `media` field, so Gramps `<region>` export is no longer blocked on a second
+// `list-media` lookup. Round-trips a source-repository link's call number and medium (GEDCOM
+// `SOUR.REPO.CALN`/`.MEDI`): a new `source-media-type` variant and `repository-ref` record (human id,
+// call number, medium) replace the bare `list<string>` on `source-dto`'s `repositories` field, and
+// `link-source-repository` gains `call-number`/`media-type` parameters instead of linking bare.
+// A breaking change to `person-dto`, `family-dto`, `event-dto`, `source-dto`, and
+// `link-source-repository`; additive to the rest of `commands`.
+//
+// Version 0.22.0 renames the project from `genealogy` to `Vitni` (issue #324), so the package
+// identifier becomes `vitni:host-api`. No interface, world, record, or function changes — every
+// guest recompiles against the new package name and is otherwise untouched.
+package vitni:host-api@0.22.0;
+
+interface types {
+    // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `vitni_core::name::NameType`.
+    variant name-type {
+        birth-name,
+        married-name,
+        maiden,
+        immigrant,
+        professional,
+        also-known-as,
+        religious-name,
+        custom(string),
+    }
+
+    // The structured parts of a person's name (GEDCOM 7 `NAME` sub-records — data-model §7), mirroring
+    // the parts of `vitni_core::name::PersonName` an importer parses and an exporter reconstructs.
+    record person-name {
+        name-type: name-type,
+        given: option<string>,
+        surname-prefix: option<string>, // GEDCOM SPFX
+        surname: option<string>,        // GEDCOM SURN
+        nickname: option<string>,       // GEDCOM NICK
+        prefix: option<string>,         // GEDCOM NPFX (-> title)
+        suffix: option<string>,         // GEDCOM NSFX
+    }
+
+    // A person as a frontend reads it — mirrors `vitni_app::PersonSummary` plus every asserted
+    // name, sex, facts, and associations an exporter needs to reconstruct a GEDCOM `INDI`.
+    record person-dto {
+        human-id: string,
+        names: list<person-name>, // every currently-live name, in assertion order (first = primary)
+        sex: option<sex>,
+        facts: list<fact>,
+        associations: list<association-ref>,
+        participations: list<participation>,
+        citations: list<string>, // human ids of attached citations (INDI.SOUR)
+        media: list<media-ref>,  // attached media, each with its per-use caption/crop (INDI.OBJE)
+        notes: list<string>,     // human ids of attached notes (INDI.NOTE)
+        tags: list<string>,      // ids of applied tags
+        restrictions: list<restriction>, // GEDCOM RESN
+    }
+
+    // A one-sided bound on an age (GEDCOM `AGE` `<` / `>` — data-model §7), mirroring
+    // `vitni_core::age::AgeBound`.
+    enum age-bound {
+        less-than,
+        greater-than,
+    }
+
+    // A participant's age at an event, as a duration (data-model §7, ADR 0019), mirroring
+    // `vitni_core::age::Age`. Weeks are normalized to days at parse time, so none appear here.
+    record age {
+        bound: option<age-bound>,
+        years: option<u16>,
+        months: option<u16>,
+        days: option<u16>,
+        phrase: option<string>, // free-text age that does not decompose (GEDCOM AGE phrase)
+    }
+
+    // A typed key/value attribute (data-model §7), mirroring `vitni_core::text::Attribute`. Its
+    // backing citations live on the assertion envelope (ADR 0020), not here.
+    record attribute {
+        attribute-type: string,
+        value: string,
+    }
+
+    // A person's participation in a shared event (data-model §6, §10; ADR 0019): the event's human
+    // id, the role, and the participant-scoped payload a source records — the age at the event, typed
+    // attributes, and note human-ids. A person's participation is recorded on the person (not the
+    // event aggregate), so this is where an exporter reads which events a person took part in.
+    // Backing citations live on the assertion envelope (ADR 0020) and are not surfaced here.
+    record participation {
+        event: string,
+        role: participant-role,
+        age: option<age>,
+        attributes: list<attribute>,
+        notes: list<string>, // human ids of notes about this participation
+    }
+
+    // What an importer records a participation with (ADR 0019): the role, the participant's age, typed
+    // attributes, note human-ids, and citation human-ids. The citations are import-only — they go to
+    // the assertion envelope (ADR 0020, the sole evidence channel) and are not re-surfaced by the read
+    // `participation` record.
+    record participation-input {
+        role: participant-role,
+        age: option<age>,
+        attributes: list<attribute>,
+        notes: list<string>,     // human ids of notes about this participation
+        citations: list<string>, // human ids of citations backing this participation (envelope-only)
+    }
+
+    // A single-person fact as a frontend reads it (an INDI attribute — data-model §7), mirroring
+    // `vitni_core::fact::Fact` for the parts an exporter serializes.
+    record fact {
+        fact-type: fact-type,
+        value: option<string>,
+        date: option<genealogical-date>,
+    }
+
+    // A person-to-person association as a frontend reads it (GEDCOM `ASSO` — data-model §10): the
+    // associated person's human id and the role.
+    record association-ref {
+        other: string,
+        role: association-role,
+    }
+
+    // An event as a frontend reads it — mirrors `vitni_app::EventSummary`. The linked place is
+    // referenced by its human id; participants are read from each person's `participation` list.
+    record event-dto {
+        human-id: string,
+        event-type: option<event-type>,
+        date: option<genealogical-date>,
+        place: option<string>,
+        description: option<string>,
+        addresses: list<address>,
+        citations: list<string>,
+        media: list<media-ref>,
+        notes: list<string>,
+        tags: list<string>,
+        restrictions: list<restriction>,
+    }
+
+    // How a source is held at a repository (GEDCOM `SOUR.REPO.CALN.MEDI`), mirroring
+    // `vitni_core::enums::SourceMediaType`.
+    variant source-media-type {
+        book,
+        card,
+        electronic,
+        fiche,
+        film,
+        magazine,
+        manuscript,
+        map-item, // `map` is a reserved WIT keyword
+        newspaper,
+        photo,
+        tombstone,
+        video,
+        audio,
+        custom(string),
+    }
+
+    // A repository link as a frontend reads it — mirrors `vitni_app::RepositoryLinkRef`'s
+    // round-trippable parts: the linked repository's human id, its call number / shelf mark
+    // (GEDCOM `CALN`), and the medium it's held in (GEDCOM `CALN.MEDI`).
+    record repository-ref {
+        human-id: string,
+        call-number: option<string>,
+        media-type: source-media-type,
+    }
+
+    // A source as a frontend reads it — mirrors `vitni_app::SourceSummary` for the parts an
+    // exporter serializes to a top-level GEDCOM `SOUR` record.
+    record source-dto {
+        human-id: string,
+        title: option<string>,
+        author: option<string>,        // GEDCOM AUTH
+        pub-info: option<string>,       // GEDCOM PUBL
+        abbrev: option<string>,         // GEDCOM ABBR, Gramps <sabbrev>
+        repositories: list<repository-ref>, // linked repositories (GEDCOM REPO), each with its CALN/MEDI
+        restrictions: list<restriction>,
+    }
+
+    // A family as a frontend reads it — mirrors `vitni_app::FamilySummary`. Partners and
+    // children are referenced by their human ids.
+    record family-dto {
+        human-id: string,
+        partners: list<string>,
+        children: list<family-child>,
+        events: list<string>,
+        citations: list<string>,
+        media: list<media-ref>,
+        notes: list<string>,
+        tags: list<string>,
+        restrictions: list<restriction>,
+    }
+
+    // A citation as a frontend reads it — mirrors `vitni_app::CitationSummary`.
+    record citation-dto {
+        human-id: string,
+        source: option<string>,         // human id of the cited source
+        page: option<string>,
+        confidence: option<confidence>,
+        restrictions: list<restriction>,
+    }
+
+    // A crop / region of interest within a media object, as left/top/width/height percentages
+    // (0–100), mirroring `vitni_core::text::Rect`. Gramps records it per `<objref>` as a
+    // `<region>` with two opposite corners; the importer converts to this top-left origin + extent.
+    record media-crop {
+        left: u8,
+        top: u8,
+        width: u8,
+        height: u8,
+    }
+
+    // A media attachment as a frontend reads it — mirrors `vitni_app::MediaRefSummary`: the
+    // attached object's human id, its per-use caption and crop (GEDCOM `OBJE.CAPT`, Gramps
+    // `<objref>`/`<region>`), and the object's own path/mime an exporter needs to reconstruct it
+    // without a second `list-media` lookup.
+    record media-ref {
+        human-id: string,
+        caption: option<string>,
+        crop: option<media-crop>,
+        path: option<string>,
+        mime: option<string>,
+    }
+
+    // A media object as a frontend reads it — mirrors `vitni_app::MediaSummary`.
+    record media-dto {
+        human-id: string,
+        path: option<string>,           // file path / URL (GEDCOM FILE)
+        mime: option<string>,           // MIME type (GEDCOM OBJE.FILE.FORM, Gramps <file mime>)
+        restrictions: list<restriction>,
+    }
+
+    // A note as a frontend reads it — mirrors `vitni_app::NoteSummary`.
+    record note-dto {
+        human-id: string,
+        text: option<string>,
+        restrictions: list<restriction>,
+    }
+
+    // A repository as a frontend reads it — mirrors `vitni_app::RepositorySummary`.
+    record repository-dto {
+        human-id: string,
+        name: option<string>,
+        restrictions: list<restriction>,
+    }
+
+    // A tag as a frontend reads it — mirrors `vitni_app::TagSummary`. Tags have no human id;
+    // `id` is the tag's UUID string, which the attach verbs reference.
+    record tag-dto {
+        id: string,
+        name: option<string>,
+    }
+
+    // A place as a frontend reads it — mirrors `vitni_app::PlaceSummary`. Enclosing places are
+    // referenced by their human ids (the hierarchy chain).
+    record place-dto {
+        human-id: string,
+        name: option<string>,
+        place-type: option<place-type>,
+        enclosed-by: list<string>,
+        restrictions: list<restriction>,
+    }
+
+    // The operator's surety in a claim (data-model §8), mirroring `vitni_core::provenance::Confidence`.
+    enum confidence {
+        very-low,
+        low,
+        normal,
+        high,
+        very-high,
+    }
+
+    // The kind of a place (data-model §7), mirroring `vitni_core::enums::PlaceType`.
+    variant place-type {
+        country,
+        county,
+        municipality,
+        parish,
+        city,
+        town,
+        village,
+        farm,
+        building,
+        custom(string),
+    }
+
+    // A stable identifier in an external system (data-model §7, §11) — mirrors
+    // `vitni_core::text::ExternalId`. The re-import resolution key: an incoming record carrying
+    // an external id is matched to its existing aggregate rather than duplicated. `authority` names
+    // the system (e.g. `gedcom-uid`), `value` the id within it.
+    record external-id {
+        authority: string,
+        value: string,
+        kind: option<string>,
+        url: option<string>,
+    }
+
+    // Biological sex as recorded (data-model §10), mirroring `vitni_core::enums::Sex` for the
+    // values an importer produces.
+    enum sex {
+        male,
+        female,
+        unknown,
+        intersex,
+    }
+
+    // A privacy restriction on a record (GEDCOM v7 `RESN` — data-model §6), mirroring
+    // `vitni_core::enums::Restriction`. A record carries a set of these; empty = unrestricted.
+    enum restriction {
+        confidential,
+        locked,
+        privacy,
+    }
+
+    // The outcome of a resolve-or-create command: the aggregate's human id, and whether it was newly
+    // created (false = an existing aggregate was resolved by external id). An importer uses `created`
+    // to attach owned records (events, places) only on first import, keeping re-import idempotent.
+    record import-result {
+        human-id: string,
+        created: bool,
+    }
+
+    // The kind of an event (data-model §10), mirroring the first-class `vitni_core::enums::EventType`
+    // variants (the `Custom` escape is not produced by the importer).
+    enum event-type {
+        birth,
+        death,
+        marriage,
+        baptism,
+        christening,
+        burial,
+        cremation,
+        census,
+        residence,
+        immigration,
+        emigration,
+        adoption,
+        confirmation,
+        bar-mitzvah,
+        bas-mitzvah,
+        first-communion,
+        graduation,
+        naturalization,
+        ordination,
+        probate,
+        retirement,
+        will,
+        engagement,
+        annulment,
+        divorce,
+        divorce-filed,
+        marriage-banns,
+        marriage-contract,
+        marriage-license,
+        marriage-settlement,
+    }
+
+    // A participant's role in an event (data-model §10), mirroring the first-class
+    // `vitni_core::enums::ParticipantRole` variants.
+    enum participant-role {
+        primary,
+        witness,
+        officiator,
+        clergy,
+        father,
+        mother,
+        parent,
+        child,
+        husband,
+        wife,
+        spouse,
+        godparent,
+        friend,
+        neighbour,
+        multiple,
+        bride,
+        groom,
+    }
+
+    // The kind of a single-person fact — an attribute-shaped claim (data-model §7, §10 / GEDCOM INDI
+    // attributes), mirroring the first-class `vitni_core::enums::FactType` variants. Vital types
+    // (birth/death/baptism/burial) are Events with a Primary participant, not facts (ADR 0021 §2).
+    variant fact-type {
+        occupation,
+        residence,
+        religion,
+        caste,
+        physical-description,
+        education,
+        ethnicity,
+        national-id,
+        nationality,
+        number-of-children,
+        number-of-marriages,
+        property,
+        social-security-number,
+        nobility-title,
+        custom(string),
+    }
+
+    // The kind of a person-to-person association (GEDCOM 7 `ASSO.ROLE` — data-model §7), mirroring
+    // `vitni_core::enums::AssociationRole`.
+    variant association-role {
+        clergy,
+        friend,
+        godparent,
+        neighbour,
+        officiator,
+        witness,
+        child,
+        father,
+        mother,
+        parent,
+        husband,
+        wife,
+        spouse,
+        multiple,
+        custom(string),
+    }
+
+    // A child's relationship to one parent (data-model §6/§7), mirroring
+    // `vitni_core::enums::ChildParentRelationship` (GEDCOM `_FREL`/`_MREL`, Gramps `frel`/`mrel`).
+    variant child-relationship {
+        birth,
+        adopted,
+        foster,
+        step,
+        sealed,
+        unknown,
+        custom(string),
+    }
+
+    // A child's relationship to one family partner: the partner's human id + the relationship.
+    record child-parent-rel {
+        partner: string,
+        relationship: child-relationship,
+    }
+
+    // A family child: its human id and its per-partner relationships (empty when none recorded).
+    record family-child {
+        human-id: string,
+        relationships: list<child-parent-rel>,
+    }
+
+    // A calendar a date is expressed in (data-model §7.1), mirroring `vitni_core::date::Calendar`.
+    enum date-calendar {
+        gregorian,
+        julian,
+        hebrew,
+        french-republican,
+        islamic,
+        swedish,
+    }
+
+    // How reliable a date is (data-model §7.1), mirroring `vitni_core::date::DateQuality`.
+    enum date-quality {
+        normal,
+        estimated,
+        calculated,
+    }
+
+    // A single, possibly-partial point on a calendar; `year` may be negative for BCE (data-model §7.1).
+    record date-point {
+        year: option<s32>,
+        month: option<u8>,
+        day: option<u8>,
+    }
+
+    // Two points bounding a `range` (uncertainty) or `span` (duration).
+    record date-range {
+        start: date-point,
+        end: date-point,
+    }
+
+    // A date interpreted from a free-text phrase (GEDCOM `INT`): the structured reading plus the phrase.
+    record interpreted-date {
+        date: date-point,
+        phrase: string,
+    }
+
+    // How a date is qualified (data-model §7.1), mirroring `vitni_core::date::DateModifier` plus the
+    // `text-only` free-text fallback (`GenealogicalDateBody::TextOnly`) for an unparseable date.
+    variant date-modifier {
+        exact(date-point),
+        before(date-point),
+        after(date-point),
+        about(date-point),
+        range(date-range),
+        span(date-range),
+        from-date(date-point),
+        to-date(date-point),
+        interpreted(interpreted-date),
+        text-only(string),
+    }
+
+    // A full structured genealogical date (data-model §7.1) — calendar, quality, modifier, optional
+    // dual-dating month, and the verbatim source phrase. The host computes the sort key.
+    record genealogical-date {
+        calendar: date-calendar,
+        quality: date-quality,
+        modifier: date-modifier,
+        new-year-begins: option<u8>,
+        original-text: option<string>,
+    }
+
+    // A postal address (GEDCOM `ADDR` — data-model §7), mirroring `vitni_core::address::Address`.
+    record address {
+        lines: list<string>,
+        locality: option<string>,
+        region: option<string>,
+        postal-code: option<string>,
+        country: option<string>,
+        phone: option<string>,
+        email: option<string>,
+        fax: option<string>,
+        www: option<string>,
+        original-text: option<string>,
+    }
+
+    // Why a capability call failed. `denied` is the deny-by-default signal (ADR 0011 §2): the
+    // capability was not granted to this instance. `backend` carries an I/O or infrastructure
+    // failure message (a missing file, an unreadable stream).
+    variant capability-error {
+        denied,
+        invalid-input(string),
+        backend(string),
+    }
+}
+
+// Structured logging from the guest into host `tracing` (ADR 0007 §6).
+interface log {
+    enum level {
+        debug,
+        info,
+        warn,
+        error,
+    }
+
+    log: func(level: level, message: string);
+}
+
+// Read views as frontend-neutral DTOs (ADR 0007 §6 `query`).
+interface query {
+    use types.{person-dto, family-dto, event-dto, source-dto, citation-dto, media-dto, note-dto, repository-dto, tag-dto, place-dto, capability-error};
+
+    list-persons: func() -> result<list<person-dto>, capability-error>;
+    list-families: func() -> result<list<family-dto>, capability-error>;
+    list-events: func() -> result<list<event-dto>, capability-error>;
+    list-sources: func() -> result<list<source-dto>, capability-error>;
+    list-citations: func() -> result<list<citation-dto>, capability-error>;
+    list-media: func() -> result<list<media-dto>, capability-error>;
+    list-notes: func() -> result<list<note-dto>, capability-error>;
+    list-repositories: func() -> result<list<repository-dto>, capability-error>;
+    list-tags: func() -> result<list<tag-dto>, capability-error>;
+    list-places: func() -> result<list<place-dto>, capability-error>;
+}
+
+// Submit domain commands through `vitni-app` use-cases (ADR 0007 §6 `commands`). Every change
+// is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
+// assigned human ids, which the guest maps back to source-file cross-references.
+interface commands {
+    use types.{external-id, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, media-crop, source-media-type, capability-error};
+
+    // Declares the file's own asserted-as-of date (its export/header date, RFC 3339) for the rest of
+    // this import session — the input the app-layer timestamp-gated reconciliation rule gates on
+    // (ADR 0029 §2). Called by the guest at most once, before any per-record command; `none` when the
+    // format/document has no such date or it could not be resolved to a specific day (ADR 0029 §3).
+    // Not calling it at all is equivalent to calling it with `none` (today's additive-only behavior).
+    begin-import: func(file-asserted-at: option<string>) -> result<_, capability-error>;
+    // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
+    // person is returned (`created = false`) and the name is asserted only if not already present
+    // (idempotent, additive re-import); otherwise a new person is created (`created = true`). When
+    // `external-id` is absent, a new person is always created.
+    create-person: func(name: option<person-name>, external-id: option<external-id>) -> result<import-result, capability-error>;
+    // Asserts an additional name on an existing person (a second-or-later GEDCOM `NAME`/Gramps
+    // `<name>`), so a multi-`NAME` record round-trips instead of the first NAME silently clobbering.
+    add-person-name: func(person: string, name: person-name) -> result<_, capability-error>;
+    // Resolve-or-create a family, by `external-id` as `create-person`.
+    create-family: func(external-id: option<external-id>) -> result<import-result, capability-error>;
+    // Add a partner; an already-present partner is a no-op (idempotent re-import).
+    add-partner: func(family: string, person: string) -> result<_, capability-error>;
+    // Add a child with its per-partner relationships (empty = a plain birth child); an
+    // already-present child is a no-op (idempotent re-import).
+    add-child: func(family: string, child: string, relationships: list<child-parent-rel>) -> result<_, capability-error>;
+    // Link an existing event to a family (the explicit `FamilyEventLinked`); idempotent re-import.
+    link-family-event: func(family: string, event: string) -> result<_, capability-error>;
+    // Assert a person's sex.
+    assert-sex: func(person: string, sex: sex) -> result<_, capability-error>;
+    // Assert a single-person fact (an INDI attribute — occupation, religion, …) with an optional
+    // free-text value and date.
+    assert-fact: func(person: string, fact: fact-type, value: option<string>, date: option<genealogical-date>) -> result<_, capability-error>;
+    // Assert a person-to-person association (GEDCOM `ASSO`) from one person to another, with a role.
+    assert-association: func(person: string, other: string, role: association-role) -> result<_, capability-error>;
+    // Create a place with `name` (granularity unknown — typed as a custom place). Returns its human
+    // id; the caller dedups by name so each distinct place is created once per import.
+    create-place: func(name: string) -> result<string, capability-error>;
+    // Create an event of `kind`. Returns its human id.
+    create-event: func(kind: event-type) -> result<string, capability-error>;
+    // Assert an event's date (the full GEDCOM date grammar — calendar, quality, modifier).
+    set-event-date: func(event: string, date: genealogical-date) -> result<_, capability-error>;
+    // Add a postal address (GEDCOM `ADDR`) to an event.
+    set-event-address: func(event: string, address: address) -> result<_, capability-error>;
+    // Link an event to a place.
+    link-event-place: func(event: string, place: string) -> result<_, capability-error>;
+    // Record that a person participated in an event, with the full participation payload (role, age,
+    // attributes, notes, and import-only backing citations — ADR 0019).
+    add-event-participant: func(person: string, event: string, participation: participation-input) -> result<_, capability-error>;
+    // Create a source with an optional title. Returns its human id; the caller dedups by source so
+    // each is created once per import.
+    create-source: func(title: option<string>) -> result<string, capability-error>;
+    // Create a citation of `source` (a source human id) with an optional page locator. Returns its
+    // human id.
+    create-citation: func(source: string, page: option<string>) -> result<string, capability-error>;
+    // Create a media object with an optional file path/URL. Returns its human id; the caller dedups
+    // by file so a shared media object is created once.
+    create-media: func(file: option<string>) -> result<string, capability-error>;
+    // Set (or change) a media object's MIME type (GEDCOM `OBJE.FILE.FORM`, Gramps `<file mime>`).
+    set-media-mime: func(media: string, mime: string) -> result<_, capability-error>;
+    // Create a note with Markdown text. Returns its human id.
+    create-note: func(text: string) -> result<string, capability-error>;
+    // Create a repository with a name. Returns its human id; the caller dedups by name.
+    create-repository: func(name: string) -> result<string, capability-error>;
+    // Create a tag with a name. Returns its id (a UUID string); the caller dedups by name.
+    create-tag: func(name: string) -> result<string, capability-error>;
+
+    // Attach an owned citation/media/note (created earlier this import) to its owner, so the link
+    // round-trips out. Each takes the owner's human id and the attached record's human id.
+    attach-person-citation: func(person: string, citation: string) -> result<_, capability-error>;
+    attach-person-media: func(person: string, media: string, crop: option<media-crop>, caption: option<string>) -> result<_, capability-error>;
+    attach-person-note: func(person: string, note: string) -> result<_, capability-error>;
+    attach-family-citation: func(family: string, citation: string) -> result<_, capability-error>;
+    attach-family-media: func(family: string, media: string, crop: option<media-crop>, caption: option<string>) -> result<_, capability-error>;
+    attach-family-note: func(family: string, note: string) -> result<_, capability-error>;
+    attach-event-citation: func(event: string, citation: string) -> result<_, capability-error>;
+    attach-event-media: func(event: string, media: string, crop: option<media-crop>, caption: option<string>) -> result<_, capability-error>;
+    attach-event-note: func(event: string, note: string) -> result<_, capability-error>;
+
+    // Apply a tag (a tag id from `create-tag`) to an owner.
+    apply-person-tag: func(person: string, tag: string) -> result<_, capability-error>;
+    apply-family-tag: func(family: string, tag: string) -> result<_, capability-error>;
+    apply-event-tag: func(event: string, tag: string) -> result<_, capability-error>;
+
+    // Enrich a source: author (GEDCOM AUTH), publication info (PUBL), abbreviation (ABBR, Gramps
+    // <sabbrev>), and a linked repository (REPO) with its call number and medium (CALN/MEDI).
+    set-source-author: func(source: string, author: string) -> result<_, capability-error>;
+    set-source-pub-info: func(source: string, pub-info: string) -> result<_, capability-error>;
+    set-source-abbrev: func(source: string, abbrev: string) -> result<_, capability-error>;
+    link-source-repository: func(
+        source: string,
+        repository: string,
+        call-number: option<string>,
+        media-type: source-media-type,
+    ) -> result<_, capability-error>;
+
+    // Set a citation's confidence (GEDCOM QUAY).
+    set-citation-confidence: func(citation: string, confidence: confidence) -> result<_, capability-error>;
+
+    // Set a place's type, and link it to the place that encloses it (the hierarchy chain).
+    set-place-type: func(place: string, place-type: place-type) -> result<_, capability-error>;
+    set-place-enclosed-by: func(place: string, enclosing: string) -> result<_, capability-error>;
+
+    // Set a record's privacy restrictions (GEDCOM v7 RESN). Each takes the owner's human id (the
+    // tag's id for none here — tags do not round-trip privacy) and the full restriction set.
+    set-person-restrictions: func(person: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-family-restrictions: func(family: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-event-restrictions: func(event: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-source-restrictions: func(source: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-citation-restrictions: func(citation: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-media-restrictions: func(media: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-note-restrictions: func(note: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-repository-restrictions: func(repository: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-place-restrictions: func(place: string, restrictions: list<restriction>) -> result<_, capability-error>;
+}
+
+// Coarse-grained progress reporting for a bulk operation (ADR 0013). The guest reports as it
+// advances; the host forwards each update to a frontend-supplied sink (the CLI prints a line, a GUI
+// updates a bar). `total` is optional because an importer often cannot know the record count until
+// it has read the whole document.
+//
+// Each report is also a cancellation point: the host's answer tells the guest whether to keep going
+// or stop. A guest must honor `cancel` by ending the operation promptly (returning what it has done
+// so far); the frontend triggers it (a GUI cancel button, a CLI interrupt).
+interface progress {
+    use types.{capability-error};
+
+    // The host's answer to a progress report.
+    enum control {
+        proceed,
+        cancel,
+    }
+
+    report: func(step: string, processed: u32, total: option<u32>) -> result<control, capability-error>;
+}
+
+// A host-opened byte source for a bulk import (ADR 0013). The host owns the actual path or URL the
+// frontend selected; the guest streams it a chunk at a time. One source per instance: `open` readies
+// it, then `read` returns up to `len` bytes until an empty list signals end of input.
+interface import-source {
+    use types.{capability-error};
+
+    open: func() -> result<_, capability-error>;
+    read: func(len: u32) -> result<list<u8>, capability-error>;
+}
+
+// A host-resolved byte sink for a bulk export (ADR 0013). The guest proposes a file name; the host
+// decides the real destination (a frontend-chosen path, or a default directory). One sink per
+// instance: `open` resolves and creates it, `write` appends chunks, `finish` flushes.
+interface export-sink {
+    use types.{capability-error};
+
+    open: func(suggested-name: string) -> result<_, capability-error>;
+    write: func(bytes: list<u8>) -> result<_, capability-error>;
+    finish: func() -> result<_, capability-error>;
+}
+
+// Host-mediated HTTP for the assisted-import flow (ADR 0017 §2). GET-only: the host fetches `url`
+// under the invocation's net policy — HTTPS-only, the host allowlist re-checked on every redirect
+// hop (cap 10), a host-side request timeout, and a response-size cap enforced while the body streams
+// (guarding `Content-Length` lies). URLs with userinfo or IP-literal hosts are refused. The whole
+// body is returned, so HTML/JSON pages cross the boundary but large binaries do not — those go
+// through `media-store.fetch-and-store`. There is no authentication surface (anonymous access).
+interface net {
+    use types.{capability-error};
+
+    // A fetched HTTP response. `final-url` is the URL after all redirects (each hop allowlist-checked);
+    // `body` is capped by the invocation's net policy.
+    record http-response {
+        status: u16,
+        final-url: string,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+
+    // GET `url` under the invocation's net policy. `denied` when the `net` capability is ungranted;
+    // `invalid-input` for a policy rejection (scheme, host not on the allowlist, userinfo/IP literal,
+    // oversized body); `backend` for a transport failure or timeout.
+    fetch: func(url: string) -> result<http-response, capability-error>;
+}
+
+// Host-owned media-library writes for the assisted-import flow (ADR 0017 §3). Both entry points write
+// strictly under the workspace `media/` root: the plugin proposes a relative path, the host enforces
+// safety (no absolute path, no `..`, no backslash; each component sanitized; the resolved target must
+// stay under the media root). Files are checksummed with SHA-256 (`"sha256:<hex>"`); a re-store of an
+// identical file at the same path is a dedup hit (`existed = true`), while different bytes at a taken
+// path uniquify (`-2`, `-3`, …). The Media aggregate stays metadata-only — bytes live on disk.
+interface media-store {
+    use types.{capability-error};
+
+    record stored-media {
+        relative-path: string, // workspace-relative, forward slashes ("media/…")
+        checksum: string,      // "sha256:<hex>"
+        mime: string,
+        size: u64,
+        existed: bool,         // an identical file was already present (dedup hit)
+    }
+
+    // Download `url` (under the invocation's net policy and a larger binary size cap), streaming to a
+    // temp file, then store it under `suggested-path`. The MIME comes from the response `Content-Type`
+    // when meaningful, else the path extension.
+    fetch-and-store: func(url: string, suggested-path: string) -> result<stored-media, capability-error>;
+    // Store guest-held `bytes` under `suggested-path`. The MIME comes from the path extension.
+    store: func(bytes: list<u8>, suggested-path: string) -> result<stored-media, capability-error>;
+}
+
+// Host-mediated AI interpretation for the assisted-import flow (ADR 0017 §4). Providers are declared
+// in client/presentation config (`[ai.providers.<name>]`); the host resolves the named provider (or
+// the configured `[ai].default` when `provider` is `none`), runs it, and returns the model's raw
+// text — the plugin owns any JSON extraction, so the host stays schema-opaque. A `command` provider
+// runs a local executable with an explicit argv vector (no shell); a `vision-api` provider POSTs an
+// OpenAI-compatible chat-completions request with a base64 image, reading the API key from a named
+// env var at call time (the key never crosses this boundary or reaches a log).
+interface ai {
+    use types.{capability-error};
+
+    // Interpret the media file at `media-path` (a `media-store` relative path, validated under the
+    // workspace media root) with `prompt`, using the AI provider named by `provider` (or the
+    // configured default when `none`). Returns the model's raw text. `denied` when the `ai` capability
+    // is ungranted; `invalid-input` for an unknown provider, a bad media path, or a missing API-key
+    // env var; `backend` for a provider process/transport failure or timeout.
+    interpret-media: func(provider: option<string>, media-path: string, prompt: string) -> result<string, capability-error>;
+}
+
+// Host-mediated present-and-confirm for the assisted-import flow (ADR 0017 §5). `show` hands the
+// frontend an opaque `payload` string and suspends the invocation until the user answers, returning
+// an opaque `response` string — the host parses neither (the payload is the typed assisted-import
+// presentation contract `vitni-ui` parses, NOT the ADR 0022 UI vocabulary). It is the async
+// sibling of `progress`: a plugin drives a record-by-record wizard from one long-running call, holding
+// its state in guest memory. Unbounded by design (user think-time does not burn fuel and is not
+// timeout-bounded, ADR 0017 §8); cancellation rides the response payload, and a dropped frontend
+// channel surfaces as `backend`.
+interface present {
+    use types.{capability-error};
+
+    // Show `payload` and suspend until the user answers, returning their `response`. `denied` when the
+    // `present` capability is ungranted; `backend` when the frontend channel is unavailable or dropped.
+    show: func(payload: string) -> result<string, capability-error>;
+}
+
+// Host-side world that aggregates every capability interface. The host generates its bindings once
+// from this world (the single `Host` trait set + linker wiring); each plugin role world reuses those
+// interfaces via `with` (ADR 0011 §1). A guest plugin-support crate (`vitni-plugin-api`) also
+// generates its callable import bindings from this world.
+world host-imports {
+    import log;
+    import query;
+    import commands;
+    import progress;
+    import import-source;
+    import export-sink;
+    import net;
+    import media-store;
+    import ai;
+    import present;
+}
+
+// A bulk import plugin: reads the document from the host-opened `import-source`, drives `commands`,
+// reports `progress`, and returns the number of records imported. Format-neutral — GEDCOM, Gramps
+// XML, and future formats all use this world (ADR 0013).
+world bulk-import {
+    import log;
+    import commands;
+    import progress;
+    import import-source;
+
+    export run-import: func() -> result<u32, string>;
+}
+
+// A bulk export plugin: reads via `query`, writes the serialized document to the host-resolved
+// `export-sink`, reports `progress`, and returns the number of records written.
+world bulk-export {
+    import log;
+    import query;
+    import progress;
+    import export-sink;
+
+    export run-export: func() -> result<u32, string>;
+}
+
+// A plugin that contributes UI (ADR 0012, ADR 0022): it returns a panel description as a JSON string
+// matching the `vitni-ui` vocabulary schema. The host carries every payload opaquely (it does
+// not parse or render it); the framework renderer parses and interprets it. Imports `log` for the
+// render pass and `commands` so a submission can drive audited mutations (deny-by-default: the host
+// grants only `log` for `run-ui-panel` and `log`+`commands` for `handle-action`, ADR 0022 §3).
+world ui-panel {
+    import log;
+    import commands;
+
+    // Returns the panel as a JSON string whose labels are Fluent message IDs; the frontend resolves
+    // them against the plugin's own catalogue (ADR 0012 §5). Locale-independent, so no locale param.
+    export run-ui-panel: func() -> result<string, string>;
+
+    // Handles an activated action (ADR 0022 §2): `action` is the button's id and `values` is a JSON
+    // object of the form's field values keyed by field name. Returns a `submit-result` JSON string
+    // (success — optionally with a message and a replacement panel — or a validation failure). The
+    // `err` channel is technical failure only; validation feedback rides the `failure` result.
+    export handle-action: func(action: string, values: string) -> result<string, string>;
+}
+
+// An assisted-import plugin: one long-running `run-assisted(request)` invocation drives a whole
+// record-by-record session (ADR 0017 §5). It fetches source pages over `net`, files scans through
+// `media-store`, optionally interprets a hard-to-read page with `ai`, reviews each record with the
+// user through `present` (suspending until they confirm or skip), and drives audited mutations through
+// `commands`, deduping against existing records with `query` and reporting long steps to `progress`.
+// `request` selects what to import (a record URL today; additive kinds later); the result is a JSON
+// summary of what was imported. Source-neutral: no archive appears in the world (ADR 0017 §6).
+world assisted-import {
+    import log;
+    import query;
+    import commands;
+    import progress;
+    import net;
+    import media-store;
+    import ai;
+    import present;
+
+    // Run an assisted-import session for `request` (`{"kind":"url","url":…}`; additive kinds later),
+    // returning a JSON summary of what was imported (or an error string).
+    export run-assisted: func(request: string) -> result<string, string>;
+}
+
+// A test-only world for exercising host mechanics (capability gating, fuel, memory, net/media-store,
+// present) without GEDCOM.
+world fixture {
+    import log;
+    import commands;
+    import net;
+    import media-store;
+    import ai;
+    import present;
+
+    // Create one person; returns its human id. Used to prove a granted/denied `commands` call.
+    export try-create: func() -> result<string, string>;
+    // Loop forever — used to prove the fuel limit traps a runaway guest.
+    export busy-loop: func();
+    // Allocate roughly `mib` MiB of linear memory — used to prove the memory cap.
+    export allocate: func(mib: u32) -> u32;
+    // GET `url` through `net`; returns "status final-url body-len" (or the host error). Proves the
+    // `net` grant and the policy checks.
+    export try-fetch: func(url: string) -> result<string, string>;
+    // Store `bytes` under `suggested-path` through `media-store.store`; returns
+    // "relative-path checksum mime size existed" (or the host error). Proves the `media-store` grant,
+    // path safety, checksum, and dedup.
+    export try-store: func(bytes: list<u8>, suggested-path: string) -> result<string, string>;
+    // Download `url` and store it under `suggested-path` through `media-store.fetch-and-store`;
+    // returns the same summary string. Proves the download + content-type + binary-cap path.
+    export try-fetch-store: func(url: string, suggested-path: string) -> result<string, string>;
+    // Interpret `media-path` with `prompt` through `ai.interpret-media`, using the provider named by
+    // `provider` (or the default when `none`); returns the model's raw text (or the host error).
+    // Proves the `ai` grant and provider resolution.
+    export try-interpret: func(provider: option<string>, media-path: string, prompt: string) -> result<string, string>;
+    // Show `payload` through `present.show` and return the response verbatim (or the host error).
+    // Proves the `present` grant and the suspend/answer round-trip against a scripted presenter.
+    export try-present: func(payload: string) -> result<string, string>;
+    // Present `request` once through `present.show` and return the response as the session summary (or
+    // the host error). A minimal `assisted-import`-shaped export that drives `run_assisted_import`.
+    export run-assisted: func(request: string) -> result<string, string>;
+}

@@ -20,7 +20,7 @@
 //!   `target/dist` (Phase 11 workstream C, ADR 0014 §7).
 //! - `gui-pass` — run the real GUI on a headless Xvfb display, drive it with `xdotool`, and assert
 //!   over screenshots of what SSR cannot reach (the `MapLibre` canvas, the overlay layer). Scenarios
-//!   are TOML files under `crates/genealogy-ui-dioxus/tests/gui-pass/`, so adding one needs no rebuild.
+//!   are TOML files under `crates/vitni-ui-dioxus/tests/gui-pass/`, so adding one needs no rebuild.
 
 mod build_plugins;
 mod css_check;
@@ -97,7 +97,7 @@ fn print_usage() {
     println!("  check          run every static check (i18n-check, css-check, input-guard, issue-sync)");
     println!("  package        assemble a Linux release tarball (binaries + signed plugins) in target/dist");
     println!("  gui-pass       run GUI scenarios on a headless Xvfb display, asserting over screenshots");
-    println!("                 [SCENARIO...]  a name or path under crates/genealogy-ui-dioxus/tests/gui-pass");
+    println!("                 [SCENARIO...]  a name or path under crates/vitni-ui-dioxus/tests/gui-pass");
     println!("                                (default: every scenario there)");
     println!("                 [--reset]      wipe the fixture workspace, isolated home and old shots");
     println!("                 [--keep]       leave Xvfb + the GUI up (attach with x11vnc -display :99)");

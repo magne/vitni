@@ -20,14 +20,14 @@ same cycle so the decision is grounded in working code rather than speculation.
 
 This ADR fixes the three deferred contracts at the granularity the spike needs
 and no further. It does **not** restate ADR 0007; it makes concrete what ADR
-0007 named. Like the host crate, it sits above the `genealogy-app` DTO boundary
+0007 named. Like the host crate, it sits above the `vitni-app` DTO boundary
 (ADR 0006) and reuses the provenance model (ADR 0001/0004) for Software agents.
 
 ## Decision
 
 1. **One versioned host-API package; per-role worlds within it.** The host
    interfaces live in a single semver-versioned WIT package,
-   `genealogy:host-api@0.1.0`. Within it, capabilities are separate
+   `vitni:host-api@0.1.0`. Within it, capabilities are separate
    **interfaces** (`log`, `query`, `commands`) and each plugin role is a
    **world** that imports exactly the capability interfaces it needs and exports
    one entry point (`gedcom-import` exports `run-import`; `gedcom-export` exports
@@ -37,7 +37,7 @@ and no further. It does **not** restate ADR 0007; it makes concrete what ADR
    new interfaces, new functions, or new optional record fields bump the minor
    version; an incompatible change bumps the major version and is a new world the
    host instantiates alongside the old one (the Zed model). WIT records/variants
-   mirror the `genealogy-app` DTOs (ADR 0006); no `cqrs-es`/`sqlx`/`PersonView`
+   mirror the `vitni-app` DTOs (ADR 0006); no `cqrs-es`/`sqlx`/`PersonView`
    type crosses the boundary.
 
 2. **Capabilities are deny-by-default, enforced per instance by a grant set.**
@@ -73,7 +73,7 @@ and no further. It does **not** restate ADR 0007; it makes concrete what ADR
    complement to fuel; it is not wired in the spike.
 
 5. **Capability host functions run through the existing app boundary.** The
-   `commands` interface submits domain commands through `genealogy-app`
+   `commands` interface submits domain commands through `vitni-app`
    use-cases driven by a `Session` whose operator is
    `AgentKind::Software { name, version }` (ADR 0004 §1, ADR 0007 §7), so every
    plugin-authored change is audited as a Software operator through the unchanged
@@ -111,7 +111,7 @@ and no further. It does **not** restate ADR 0007; it makes concrete what ADR
   right wall-clock mechanism for production but adds a host ticker the spike's
   exit criteria do not require.
 - **Reuse the app boundary (5).** Driving commands/queries through
-  `genealogy-app` means plugins inherit the audit trail, the pure core, and the
+  `vitni-app` means plugins inherit the audit trail, the pure core, and the
   DTO boundary with no new machinery — exactly the contract ADR 0006/0007 set up.
 - **Defer loading/signing (6).** The override order and signing are real, decided
   directions (ADR 0007 §4, §9) but are distribution concerns; building them now
@@ -122,7 +122,7 @@ and no further. It does **not** restate ADR 0007; it makes concrete what ADR
 ### Positive
 
 - The host-API contract is concrete and versioned: plugins compile against
-  `genealogy:host-api@0.1.0` and evolution rules are fixed.
+  `vitni:host-api@0.1.0` and evolution rules are fixed.
 - Deny-by-default is enforced and **testable** — a capability call without its
   grant returns `denied`, and a runaway guest is stopped by fuel.
 - Plugin-authored changes are audited as Software operators with no new code, and
@@ -159,7 +159,7 @@ and no further. It does **not** restate ADR 0007; it makes concrete what ADR
 - ADR 0001 / 0004 — event sourcing and the pure `decide()` contract plugins emit
   through; `EventContext` provenance and the `AgentKind::Software` operator slot.
 - ADR 0002 — engine-neutral `Store`; self-contained, versioned events.
-- ADR 0006 — the `genealogy-app` use-cases + `Session` and the frontend-neutral
+- ADR 0006 — the `vitni-app` use-cases + `Session` and the frontend-neutral
   DTOs the host's `query`/`commands` interfaces mirror and drive.
 - ADR 0007 — the plugin system this ADR makes concrete: §2 versioned worlds, §4
   layered loading, §6 capabilities, §7 Software provenance, §8 bundle metadata,

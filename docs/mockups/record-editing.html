@@ -10,7 +10,7 @@
 <body>
 <main class="doc">
   <div class="inline" style="float:right">
-    <button class="btn sm" onclick="(function(){var h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');try{localStorage.setItem('genealogy-mockup-theme',h.getAttribute('data-theme'));}catch(e){}})()">◐ Toggle theme</button>
+    <button class="btn sm" onclick="(function(){var h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');try{localStorage.setItem('vitni-mockup-theme',h.getAttribute('data-theme'));}catch(e){}})()">◐ Toggle theme</button>
     <a class="btn sm" href="index.html">← Gallery</a>
   </div>
   <h1>Record editing — create &amp; edit one record</h1>
@@ -435,7 +435,7 @@
 
 </main>
 <script>
-(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('genealogy-mockup-theme')||'dark');}catch(e){}})();
+(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('vitni-mockup-theme')||'dark');}catch(e){}})();
 </script>
 </body>
 </html>

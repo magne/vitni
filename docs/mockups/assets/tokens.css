@@ -4,7 +4,7 @@
  * Single source of truth for color, type, spacing, radius, shadow, and the
  * domain-semantic cues (confidence, evidence axes, privacy/restriction, tags).
  * Two themes are selected by [data-theme] on <html>; the dark palette is seeded
- * from the existing crates/genealogy-ui-dioxus/src/app.css. When this lands in
+ * from the existing crates/vitni-ui-dioxus/src/app.css. When this lands in
  * code (PR1) these become the canonical token set and app.css is replaced.
  */
 

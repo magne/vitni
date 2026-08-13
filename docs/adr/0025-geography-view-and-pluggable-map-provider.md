@@ -6,7 +6,7 @@
 ## Context
 
 Places carry coordinates but there is no map. The Places screen renders coordinates as two text
-fields (`crates/genealogy-ui-dioxus/src/screens/place.rs`, `place_coordinate_fields`); nothing plots a
+fields (`crates/vitni-ui-dioxus/src/screens/place.rs`, `place_coordinate_fields`); nothing plots a
 place on a map, and a place can only be located by keying decimal degrees. Gramps' `GeoView` (built on
 OsmGpsMap) is the parity target: it plots pins for places and for events whose place has coordinates,
 and it can create or re-position a place from the map.
@@ -28,15 +28,15 @@ event pins, the time slider, and the pluggable provider.
 This ADR fixes **how the geography view is rendered, how geometry is edited from the map, and how the
 map provider is made pluggable**. It builds on ADR 0024 (the `PlaceGeometry` type and the SQLite
 R\*Tree viewport index), ADR 0026 (dated resolution + place succession, which the time slider reads),
-and respects ADR 0008 (Dioxus behind `genealogy-ui`), ADR 0005/0006 (configuration scopes), and the
+and respects ADR 0008 (Dioxus behind `vitni-ui`), ADR 0005/0006 (configuration scopes), and the
 `net` capability (ADR 0007 §2, ADR 0011 §3; landed in the assisted-import phase).
 
 ## Decision
 
 1. **The map is rendered by framework code behind a framework-free view-model — not a plugin.** A map
-   view-model in `genealogy-ui` (markers, the event-at-place pins, current viewport, selection, and a
+   view-model in `vitni-ui` (markers, the event-at-place pins, current viewport, selection, and a
    provider *descriptor*) carries **no framework types**; a per-framework map component in
-   `genealogy-ui-dioxus` embeds a JS map library in the WebKitGTK webview and binds it to that
+   `vitni-ui-dioxus` embeds a JS map library in the WebKitGTK webview and binds it to that
    view-model. **MapLibre GL JS** (BSD-3, GPU vector tiles, styles swappable per provider) is the
    recommended library; Leaflet (raster) is the fallback. WASM plugins cannot render DOM/canvas and
    the plugin-UI vocabulary (ADR 0012/0022) has no map widget — so the renderer is framework code, not
@@ -46,7 +46,7 @@ and respects ADR 0008 (Dioxus behind `genealogy-ui`), ADR 0005/0006 (configurati
    geometry from the map: click to drop or move the point, draw and edit polygon vertices, drag to
    reposition, and create-a-place-at-this-point (Gramps GeoView parity). A map edit emits the picked
    `PlaceGeometry` (ADR 0024) back through the **existing** edit path — `PlaceEdit` /
-   `PlaceChangeSetRequest` (`crates/genealogy-ui/src/navigation.rs`) — so it produces the same audited
+   `PlaceChangeSetRequest` (`crates/vitni-ui/src/navigation.rs`) — so it produces the same audited
    `GeometryAsserted` event, with the same provenance envelope, as a typed-field edit. There is no
    separate "map write" path. Read-only marker/pin display is the baseline; editing layers on top.
 
@@ -75,7 +75,7 @@ and respects ADR 0008 (Dioxus behind `genealogy-ui`), ADR 0005/0006 (configurati
 - Provider choice is a config value, so OSM, a MapLibre style, or Google can be selected per
   deployment/user without code, honoring each provider's licensing and attribution.
 - Map edits reuse the audited change-set path, so provenance and correction semantics are unchanged.
-- The framework boundary (ADR 0008) is preserved; a second UI framework reuses `genealogy-ui`'s map
+- The framework boundary (ADR 0008) is preserved; a second UI framework reuses `vitni-ui`'s map
   view-model with its own map component.
 
 ### Negative / costs
@@ -103,7 +103,7 @@ and respects ADR 0008 (Dioxus behind `genealogy-ui`), ADR 0005/0006 (configurati
 - ADR 0026 — dated-resolution rule + place succession the time slider and titles read.
 - ADR 0007 §2 / ADR 0011 §3 — the deferred `net` (allowlisted `wasi:http`) capability the follow-up
   plugin needs; ADR 0011's world + deny-by-default grant pattern the plugin would follow.
-- ADR 0008 — Dioxus behind the framework-agnostic `genealogy-ui`; the one-way dependency rule that
+- ADR 0008 — Dioxus behind the framework-agnostic `vitni-ui`; the one-way dependency rule that
   keeps the map library below the presentation layer.
 - ADR 0012 / 0022 — the plugin-UI vocabulary a future `Map` widget extends additively.
 - ADR 0024 — `PlaceGeometry` and the SQLite R\*Tree viewport index this view renders and edits.

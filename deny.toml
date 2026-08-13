@@ -5,7 +5,7 @@ version = 2
 # Fail on security advisories and unmaintained crates.
 ignore = [
     # Unmaintained (NOT vulnerable) transitive dependencies of the Dioxus desktop renderer
-    # (`genealogy-ui-dioxus`, ADR 0008): wry/tao pull the gtk-rs GTK3 bindings, which are the
+    # (`vitni-ui-dioxus`, ADR 0008): wry/tao pull the gtk-rs GTK3 bindings, which are the
     # only GTK3 path on Linux, plus a few unmaintained macro/util crates in the GUI tree.
     # There is no maintained alternative while the desktop renderer targets GTK3; re-evaluate
     # when Dioxus moves off GTK3 (its native Blitz renderer) or these crates are replaced.
@@ -23,7 +23,7 @@ ignore = [
     "RUSTSEC-2024-0436", # paste (unmaintained)
     "RUSTSEC-2025-0057", # fxhash (unmaintained)
     # async-std (discontinued, NOT vulnerable). Pulled by `dark-light` 2.0.0, the leaf crate
-    # `genealogy-ui-dioxus` uses for System theme detection; on Linux it hardcodes the
+    # `vitni-ui-dioxus` uses for System theme detection; on Linux it hardcodes the
     # `ashpd`/async-std path with no feature to swap and no maintained upgrade. Re-evaluate when
     # `dark-light` migrates off async-std or is replaced.
     "RUSTSEC-2025-0052", # async-std (discontinued)

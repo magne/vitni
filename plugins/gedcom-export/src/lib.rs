@@ -1,8 +1,8 @@
 //! GEDCOM export plugin (ADR 0013): read persons, families, events, and sources through the host
-//! `query` capability, serialize them to GEDCOM with `genealogy-gedcom`, and write the document to
+//! `query` capability, serialize them to GEDCOM with `vitni-gedcom`, and write the document to
 //! the host-resolved export sink, reporting progress. Human ids become GEDCOM xrefs. The
-//! format-neutral plumbing and the WIT→interchange conversions live in `genealogy-plugin-api`; this
-//! crate only bridges the DTOs to the GEDCOM [`Tree`](genealogy_gedcom::Tree).
+//! format-neutral plumbing and the WIT→interchange conversions live in `vitni-plugin-api`; this
+//! crate only bridges the DTOs to the GEDCOM [`Tree`](vitni_gedcom::Tree).
 //!
 //! Events are distributed back to the records they belong under the way the importer placed them: a
 //! family-event kind (marriage, divorce, …) whose participant set matches a family's partners nests
@@ -11,20 +11,20 @@
 
 wit_bindgen::generate!({
     world: "bulk-export",
-    path: "../../crates/genealogy-plugin-host/wit",
+    path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.21.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.21.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.21.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.21.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.21.0": genealogy_plugin_api::export_sink,
+        "vitni:host-api/types@0.22.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.22.0": vitni_plugin_api::log,
+        "vitni:host-api/query@0.22.0": vitni_plugin_api::query,
+        "vitni:host-api/progress@0.22.0": vitni_plugin_api::progress,
+        "vitni:host-api/export-sink@0.22.0": vitni_plugin_api::export_sink,
     },
 });
 
 use std::collections::{BTreeSet, HashMap};
 
-use genealogy_gedcom::{Association, Event, EventAssociation, EventKind, Fact, Place};
-use genealogy_plugin_api::{convert, query, types};
+use vitni_gedcom::{Association, Event, EventAssociation, EventKind, Fact, Place};
+use vitni_plugin_api::{convert, query, types};
 
 /// A participant in an event, as the exporter reconstructs it from a person's participation: the
 /// participant's human id (a GEDCOM xref), their role, age at the event, and note human-ids.
@@ -49,7 +49,7 @@ impl Guest for Exporter {
         let person_count = persons.len() as u32;
         let family_count = families.len() as u32;
         let total = person_count + family_count;
-        genealogy_plugin_api::log_info(&format!(
+        vitni_plugin_api::log_info(&format!(
             "exporting {person_count} individuals and {family_count} families"
         ));
 
@@ -73,12 +73,12 @@ impl Guest for Exporter {
 
         // Owned-record content keyed by human id, so each person's attached citations/media/notes
         // reconstruct their INDI.SOUR/OBJE/NOTE content.
-        let citation_content: HashMap<String, genealogy_gedcom::Citation> = citations
+        let citation_content: HashMap<String, vitni_gedcom::Citation> = citations
             .into_iter()
             .map(|c| {
                 (
                     c.human_id,
-                    genealogy_gedcom::Citation {
+                    vitni_gedcom::Citation {
                         source_xref: c.source.unwrap_or_default(),
                         page: c.page,
                     },
@@ -88,7 +88,7 @@ impl Guest for Exporter {
         let note_content: HashMap<String, String> =
             notes.into_iter().filter_map(|n| n.text.map(|text| (n.human_id, text))).collect();
 
-        let mut individuals: Vec<genealogy_gedcom::Individual> = persons
+        let mut individuals: Vec<vitni_gedcom::Individual> = persons
             .into_iter()
             .map(|person| individual(person, &citation_content, &note_content))
             .collect();
@@ -103,7 +103,7 @@ impl Guest for Exporter {
             .enumerate()
             .flat_map(|(index, family)| family.events.iter().map(move |event| (event.clone(), index)))
             .collect();
-        let mut families: Vec<genealogy_gedcom::Family> = families
+        let mut families: Vec<vitni_gedcom::Family> = families
             .into_iter()
             .map(|family| {
                 let children = family
@@ -122,7 +122,7 @@ impl Guest for Exporter {
                     .iter()
                     .filter_map(|human_id| note_content.get(human_id).cloned())
                     .collect();
-                genealogy_gedcom::Family {
+                vitni_gedcom::Family {
                     xref: family.human_id,
                     uid: None,
                     partners: family.partners,
@@ -146,13 +146,13 @@ impl Guest for Exporter {
             &note_content,
         );
 
-        let tree = genealogy_gedcom::Tree {
-            header: genealogy_gedcom::Header::default(),
+        let tree = vitni_gedcom::Tree {
+            header: vitni_gedcom::Header::default(),
             individuals,
             families,
             sources: sources
                 .into_iter()
-                .map(|source| genealogy_gedcom::Source {
+                .map(|source| vitni_gedcom::Source {
                     xref: source.human_id,
                     title: source.title,
                     author: source.author,
@@ -163,19 +163,19 @@ impl Guest for Exporter {
                 .collect(),
             repositories: repositories
                 .into_iter()
-                .map(|repository| genealogy_gedcom::Repository {
+                .map(|repository| vitni_gedcom::Repository {
                     xref: repository.human_id,
                     name: repository.name,
                 })
                 .collect(),
         };
 
-        if !genealogy_plugin_api::report("serialize", 0, Some(total))? {
+        if !vitni_plugin_api::report("serialize", 0, Some(total))? {
             return Ok(0);
         }
-        let document = genealogy_gedcom::emit(&tree).into_bytes();
-        genealogy_plugin_api::write_export("export.ged", &document)?;
-        genealogy_plugin_api::report("written", total, Some(total))?;
+        let document = vitni_gedcom::emit(&tree).into_bytes();
+        vitni_plugin_api::write_export("export.ged", &document)?;
+        vitni_plugin_api::report("written", total, Some(total))?;
 
         Ok(total)
     }
@@ -190,9 +190,9 @@ fn distribute_events(
     events: Vec<types::EventDto>,
     event_participants: &HashMap<String, Vec<ParticipantInfo>>,
     family_event_links: &HashMap<String, usize>,
-    individuals: &mut [genealogy_gedcom::Individual],
+    individuals: &mut [vitni_gedcom::Individual],
     individual_index: &HashMap<String, usize>,
-    families: &mut [genealogy_gedcom::Family],
+    families: &mut [vitni_gedcom::Family],
     note_content: &HashMap<String, String>,
 ) {
     let family_partner_sets: Vec<BTreeSet<String>> = families
@@ -276,7 +276,7 @@ fn family_event_for(
 fn nest_individual_event(
     base: &Event,
     participants: &[ParticipantInfo],
-    individuals: &mut [genealogy_gedcom::Individual],
+    individuals: &mut [vitni_gedcom::Individual],
     individual_index: &HashMap<String, usize>,
     note_content: &HashMap<String, String>,
 ) {
@@ -323,9 +323,9 @@ fn witness_association(participant: &ParticipantInfo, note_content: &HashMap<Str
     }
 }
 
-/// Builds a GEDCOM [`ChildRef`](genealogy_gedcom::ChildRef) from a family child, mapping the child's
+/// Builds a GEDCOM [`ChildRef`](vitni_gedcom::ChildRef) from a family child, mapping the child's
 /// relationship to the first partner onto `_FREL` (father) and to the second onto `_MREL` (mother).
-fn child_ref(child: &types::FamilyChild, partners: &[String]) -> genealogy_gedcom::ChildRef {
+fn child_ref(child: &types::FamilyChild, partners: &[String]) -> vitni_gedcom::ChildRef {
     let rel_for = |partner: Option<&String>| -> Option<String> {
         partner.and_then(|target| {
             child
@@ -335,7 +335,7 @@ fn child_ref(child: &types::FamilyChild, partners: &[String]) -> genealogy_gedco
                 .map(|rel| convert::child_relationship_from_wit(&rel.relationship))
         })
     };
-    genealogy_gedcom::ChildRef {
+    vitni_gedcom::ChildRef {
         xref: child.human_id.clone(),
         father_relationship: rel_for(partners.first()),
         mother_relationship: rel_for(partners.get(1)),
@@ -380,8 +380,8 @@ fn is_family_event(kind: EventKind) -> bool {
 
 /// Maps a `media-ref` (an attached media object's human id plus its per-use caption — GEDCOM has no
 /// crop concept, so that part of the record is unused here) onto a GEDCOM `OBJE`.
-fn media_object_from_wit(media_ref: types::MediaRef) -> genealogy_gedcom::MediaObject {
-    genealogy_gedcom::MediaObject {
+fn media_object_from_wit(media_ref: types::MediaRef) -> vitni_gedcom::MediaObject {
+    vitni_gedcom::MediaObject {
         file: media_ref.path,
         title: None,
         mime: media_ref.mime,
@@ -391,9 +391,9 @@ fn media_object_from_wit(media_ref: types::MediaRef) -> genealogy_gedcom::MediaO
 
 /// Maps a `repository-ref` onto a `SOUR.REPO` citation: the linked repository's xref, plus its call
 /// number and medium (GEDCOM nests `MEDI` under `CALN`, so a medium with no call number is dropped —
-/// see [`genealogy_gedcom::RepositoryCitation`]'s doc comment).
-fn repository_citation_from_wit(repository_ref: types::RepositoryRef) -> genealogy_gedcom::RepositoryCitation {
-    genealogy_gedcom::RepositoryCitation {
+/// see [`vitni_gedcom::RepositoryCitation`]'s doc comment).
+fn repository_citation_from_wit(repository_ref: types::RepositoryRef) -> vitni_gedcom::RepositoryCitation {
+    vitni_gedcom::RepositoryCitation {
         xref: repository_ref.human_id,
         call_number: repository_ref.call_number,
         medium: convert::source_media_kind_from_wit(repository_ref.media_type),
@@ -405,9 +405,9 @@ fn repository_citation_from_wit(repository_ref: types::RepositoryRef) -> genealo
 /// filled in by [`distribute_events`].
 fn individual(
     person: types::PersonDto,
-    citation_content: &HashMap<String, genealogy_gedcom::Citation>,
+    citation_content: &HashMap<String, vitni_gedcom::Citation>,
     note_content: &HashMap<String, String>,
-) -> genealogy_gedcom::Individual {
+) -> vitni_gedcom::Individual {
     let names = person.names.into_iter().map(convert::name_from_wit).collect();
     let facts = person.facts.into_iter().filter_map(gedcom_fact).collect();
     let associations = person
@@ -430,7 +430,7 @@ fn individual(
         .filter_map(|human_id| note_content.get(human_id).cloned())
         .collect();
     let restrictions = convert::restrictions_from_wit(&person.restrictions);
-    genealogy_gedcom::Individual {
+    vitni_gedcom::Individual {
         xref: person.human_id,
         uid: None,
         names,

@@ -1,13 +1,13 @@
 //! The typed assisted-import presentation contract, plugin side (ADR 0017 §5).
 //!
-//! These mirror `genealogy_ui::import_payload` as the documented JSON shape the sandboxed plugin
+//! These mirror `vitni_ui::import_payload` as the documented JSON shape the sandboxed plugin
 //! cannot link: the plugin **emits** [`Payload`] through `present` and **parses** the wizard's
 //! [`Response`]. Field names are snake_case and the `kind`/`confidence` discriminators kebab-case, to
 //! match the wizard's serde exactly; the wizard's `parse_payload` is the contract check that a payload
 //! is well-formed. Field/action `label`s are Fluent message ids the wizard resolves against this
 //! plugin's catalogue (ADR 0012 §5); record content (names, dates, places) is sent verbatim.
 
-use genealogy_digitalarkivet::PersonRecord;
+use vitni_digitalarkivet::PersonRecord;
 use serde::{Deserialize, Serialize};
 
 /// The `run-assisted` request: `{"kind":"url","url":…}` (additive kinds later).
@@ -20,13 +20,13 @@ pub struct Request {
     /// An optional explicit page-kind override (`"census-person"`, `"census-residence"`,
     /// `"churchbook-record"`). The GUI omits it — the plugin classifies by the Digitalarkivet host and
     /// path. It exists for host-mediated tests, which serve rewritten fixtures from a mock host that
-    /// [`classify_url`](genealogy_digitalarkivet::classify_url) (host-restricted by design) would not
+    /// [`classify_url`](vitni_digitalarkivet::classify_url) (host-restricted by design) would not
     /// recognize; supplying it routes the flow without weakening classification.
     #[serde(default)]
     pub page: Option<String>,
 }
 
-/// The wizard's answer to a presented [`Payload`] (mirrors `genealogy_ui::ImportResponse`).
+/// The wizard's answer to a presented [`Payload`] (mirrors `vitni_ui::ImportResponse`).
 #[derive(Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Response {
@@ -114,7 +114,7 @@ impl Save {
     }
 }
 
-/// One payload the plugin sends the wizard through `present` (mirrors `genealogy_ui::ImportPayload`).
+/// One payload the plugin sends the wizard through `present` (mirrors `vitni_ui::ImportPayload`).
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Payload {
@@ -372,7 +372,7 @@ fn record_row(record: &PersonRecord) -> RecordRow {
 /// external-id URL, and the default `low` confidence.
 fn provenance(record: &PersonRecord, scan_url: Option<&str>) -> ProvenancePreview {
     let citation = scan_url
-        .and_then(genealogy_digitalarkivet::extract_urn)
+        .and_then(vitni_digitalarkivet::extract_urn)
         .unwrap_or_else(|| record.record_url.clone());
     ProvenancePreview {
         source_title: record.source.title.clone().unwrap_or_else(|| record.record_url.clone()),

@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check [`docs/issues.md`](https://github.com/magne/genealogy/blob/main/docs/issues.md) first —
+        Check [`docs/issues.md`](https://github.com/magne/vitni/blob/main/docs/issues.md) first —
         including its **Decided — no action needed** section, which records deliberate behaviour that
         looks like a defect but isn't.
 
@@ -57,7 +57,7 @@ body:
       description: >
         Commands, or the click path through the GUI. A failing test is better than prose if you have one.
       placeholder: |
-        1. `genealogy init demo /tmp/demo`
+        1. `vitni init demo /tmp/demo`
         2. …
     validations:
       required: true
@@ -67,15 +67,15 @@ body:
     attributes:
       label: Crate and file, if known
       description: Definition of ready asks for this; a guess is fine.
-      placeholder: crates/genealogy-ui-dioxus/src/screens/place.rs
+      placeholder: crates/vitni-ui-dioxus/src/screens/place.rs
 
   - type: dropdown
     id: frontend
     attributes:
       label: Where it shows
       options:
-        - GUI (genealogy-ui-dioxus)
-        - CLI (genealogy)
+        - GUI (vitni-ui-dioxus)
+        - CLI (vitni)
         - Both
         - Neither / library only
     validations:

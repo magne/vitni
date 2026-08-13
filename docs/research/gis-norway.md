@@ -92,7 +92,7 @@ independently. So a farm in 1900 legitimately has a *kommune* parent, a *sokn* p
 one undiscriminated `Vec` (`place/state.rs:38`). `enclosed_by_as_of` returns exactly **one**
 (`place/view.rs:143`); with two undated parents that is `.first()` (`view.rs:153`) and with both
 dated 1838 it is `resolve_as_of`'s "later-encountered wins" tie-break (`temporal.rs:34`) — in both
-cases **import order decides**. `resolve_hop` (`genealogy-app/src/place.rs:1147`) then continues up
+cases **import order decides**. `resolve_hop` (`vitni-app/src/place.rs:1147`) then continues up
 whichever hierarchy that hop landed in, so `hierarchy_chain` can emit a mixed, factually false chain
 and `generated_title` (`place_hierarchy.rs:60`) renders it as the Places-list label, the breadcrumb
 and the record-picker label.
@@ -169,7 +169,7 @@ Already covered by `enums.rs:193`: *amt*/*fylke* → `County`; *formannskapsdist
 is the part the sources are actually organised by. Also missing *grunnkrets*, the statistical unit SSB
 expresses changes in.
 
-The `Custom(String)` consequence is concrete, not theoretical: `crates/genealogy-ui/src/i18n.rs:519`
+The `Custom(String)` consequence is concrete, not theoretical: `crates/vitni-ui/src/i18n.rs:519`
 is `PlaceType::Custom(value) => value.clone()`, so `Custom("prestegjeld")` renders a raw Norwegian
 string in every list, breadcrumb, picker and map-marker label — directly contradicting data-model §14
 ("stored as language-neutral codes … translated in the UI, never stored") and ADR 0003. Additivity is
@@ -239,7 +239,7 @@ pre-2020 border).
 
 **Natural key:** `(authority = "ssb-klass", value = kommunenummer, valid_from = year)` — SSB's own
 key. Place has no `ExternalId`: `for_each_db_external_id_aggregate!` lists only person and family
-(`crates/genealogy-db/src/registry.rs:70-79`), and `genealogy-app/src/import.rs` has no place path
+(`crates/vitni-db/src/registry.rs:70-79`), and `vitni-app/src/import.rs` has no place path
 at all.
 
 **Verdict: Sufficient on the identity rule — it matches Norwegian administrative practice precisely
@@ -381,7 +381,7 @@ be re-measured.
 (`state.rs:50`, `view.rs:176`, DTO `place.rs:131`). **Web:** Bærum carries three *kommunenummer* with
 no boundary change at all (0219 ≤2019, 3024 2020–2023, 3201 2024–), and a place additionally wants a
 Kartverket/matrikkel id, an SSR *stedsnummer* and a Wikidata QID. Today, setting 3201 drops 0219 from
-state (the log keeps it; no read surfaces it), there is no code lookup anywhere in `genealogy-db`, and
+state (the log keeps it; no read surfaces it), there is no code lookup anywhere in `vitni-db`, and
 nothing distinguishes a *kommunenummer* from a QID.
 
 Both referenced documents check out, and they point in different directions. data-model §7/§17 name
@@ -401,13 +401,13 @@ mirroring `name_as_of`. (2) is a projection reshape, free per ADR 0010, touching
 
 Traced, and worse than "only the map view":
 
-- **`places_in_bbox`** — the only caller is a bench (`crates/genealogy-db/benches/store.rs`).
+- **`places_in_bbox`** — the only caller is a bench (`crates/vitni-db/benches/store.rs`).
   `show_geography` deliberately does not use it (`geography.rs:6-10`, the filed "viewport-scoped
   loading" deferral). `Unsupported` here blocks nothing today.
 - **`place_predecessors` / `place_successors`** — called at `place.rs:784-785` inside
   `show_place_resolved`, the shared body of **both** `show_place` and `show_place_as_of`, with `?`
   propagation. The Postgres branches return `Unsupported` (`store.rs:398`, `store.rs:431`). So on a
-  Postgres workspace **every place-detail read fails** — the GUI place screen and `genealogy place
+  Postgres workspace **every place-detail read fails** — the GUI place screen and `vitni place
   show` are broken outright, not degraded. `list_places` is unaffected (it never populates those
   fields).
 - **Writes are fine.** The index queries are appended only in the SQLite path
@@ -504,7 +504,7 @@ ceiling.**
   `place.names.first()` (`geography.rs:152`) — the first-asserted name, not the as-of-resolved one —
   while the *geometry* on the same marker **is** date-resolved. At slider year 1875 the pin reads
   "Oslo" while `generated_title` correctly says "Kristiania". One-line fix; should be filed.
-- **No transactions and no resumability.** `genealogy-db` has none; each `execute_place`
+- **No transactions and no resumability.** `vitni-db` has none; each `execute_place`
   auto-commits, so a create → set-type → assert-enclosure → assert-geometry sequence over thousands
   of places can half-fail with no rollback and no progress marker. Consistent with the accepted
   "change-set is not atomic" stance, but at this scale a crashed import leaves orphans to be diffed
@@ -1216,7 +1216,7 @@ make this **`host-api@0.22.0`** (additive, so a minor bump per ADR 0011 §1):
 | `resolve-or-create-place(name, place-type, external-id)` | idempotency | mirrors the existing `create-person` shape returning `import-result { human-id, created }` |
 | `assert-place-dissolution(place, date)` | cessation | only if §2's additive event is adopted |
 
-Each of these also needs an app use-case and a `pub use` in `genealogy-app/src/lib.rs`, and each
+Each of these also needs an app use-case and a `pub use` in `vitni-app/src/lib.rs`, and each
 raises a CLI/GUI surface question — the CLI has `place assert-succession` but no geometry subcommand,
 and `PlaceEdit::AddEnclosing` carries no date. Those surfaces are out of scope here but should be
 filed alongside, or the plugin becomes the only way to write data the UI cannot then edit.
@@ -1290,7 +1290,7 @@ every assertion in the batch targets one Place.
 over.** The prerequisite is not a batching API — it is two cheap, local fixes: a **generated column
 plus index on `$.state.human_id`** (which converts both full scans into index probes) and an index on
 `place_geometry(place_id)`. A sequence table for `human_id` allocation would remove the remaining
-scan. None of these touch the event model; all three are `genealogy-db` changes. With them, the run
+scan. None of these touch the event model; all three are `vitni-db` changes. With them, the run
 becomes linear and the estimate drops to minutes.
 
 ### Idempotency

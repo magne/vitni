@@ -12,13 +12,13 @@ anyhow = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 # Reuses the plugin bundle signing primitive (ADR 0014): `build-plugins` emits each plugin's
-# signature + manifest sidecars with `genealogy_plugin_host::signing`. There is no dependency cycle
+# signature + manifest sidecars with `vitni_plugin_host::signing`. There is no dependency cycle
 # (nothing depends on `xtask`), so the module is reused rather than split into a separate crate.
-genealogy-plugin-host = { workspace = true }
+vitni-plugin-host = { workspace = true }
 # `gui-pass` seeds the fixture's media record, so it must spell the stored `media/…` path the same way
-# every other layer does — `genealogy_core::media_path` is that one owner (#301). Already in the graph
-# via `genealogy-plugin-host`.
-genealogy-core = { workspace = true }
+# every other layer does — `vitni_core::media_path` is that one owner (#301). Already in the graph
+# via `vitni-plugin-host`.
+vitni-core = { workspace = true }
 
 # `gui-pass`'s `wm-close` step: `xdotool windowclose` is `XDestroyWindow`, which never reaches the
 # app, so a window-manager close is scripted as a `WM_DELETE_WINDOW` ClientMessage instead. Not a new
@@ -27,7 +27,7 @@ x11rb = "0.13"
 
 # Duplicated (the `[lints]` table can't both inherit and override). xtask is a developer
 # task runner whose stdout/stderr is its interface, so the print lints are relaxed — same
-# relaxation genealogy-cli takes. Keep this list in sync with the workspace lint set.
+# relaxation vitni-cli takes. Keep this list in sync with the workspace lint set.
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 unwrap_used = "deny"

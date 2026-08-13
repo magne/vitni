@@ -1,14 +1,14 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "xtask"]
-default-members = ["crates/genealogy-cli"]
+default-members = ["crates/vitni-cli"]
 # WASM plugin components build only for `wasm32-wasip2` and use `wit-bindgen` guest
 # macros, so they cannot build for the host target alongside the native crates.
 # They are standalone packages built via `cargo xtask build-plugins` (ADR 0011).
 exclude = ["plugins"]
 
 # Cranelift compiles every wasm plugin component at load time; under the dev profile it
-# would otherwise run unoptimized, which dominates `genealogy-plugin-host` test time.
+# would otherwise run unoptimized, which dominates `vitni-plugin-host` test time.
 # Optimizing just the compiler crates makes each compile fast at a small one-time,
 # cached, build cost — no effect on emitted code.
 [profile.dev.package.wasmtime-internal-cranelift]
@@ -23,7 +23,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/magne/genealogy"
+repository = "https://github.com/magne/vitni"
 
 # Shared dependencies. Member crates inherit with `dep.workspace = true`.
 # Versions are populated by `cargo add` (current stable at implementation time).
@@ -38,24 +38,24 @@ thiserror = "2.0.19"
 time = { version = "0.3.54", features = ["serde", "serde-well-known", "macros"] }
 sqlx = { version = "0.8.6", features = ["sqlite", "postgres", "runtime-tokio", "json"] }
 tracing = "0.1.41"
-# percent-encodes the served `/media/<rel>` URL space (genealogy-core `media_path`), so a stored media
+# percent-encodes the served `/media/<rel>` URL space (vitni-core `media_path`), so a stored media
 # filename carrying `æøå`, a space or a URL-special character still resolves to its file.
 percent-encoding = "2.3.2"
-# event-store backends (genealogy-db, feature-gated)
+# event-store backends (vitni-db, feature-gated)
 sqlite-es = "0.5.0"
 postgres-es = "0.5.0"
-# plugin host (genealogy-plugin-host; ADR 0007, 0011). Floor held at 47.0.3: 47.0.2 carries
+# plugin host (vitni-plugin-host; ADR 0007, 0011). Floor held at 47.0.3: 47.0.2 carries
 # RUSTSEC-2026-0222 and RUSTSEC-2026-0223, both of which break VM state isolation the sandbox relies on.
 wasmtime = "47.0.3"
 wasmtime-wasi = "47.0.3"
-# plugin bundle signing (genealogy-plugin-host, xtask; ADR 0014): ed25519 detached signatures over a
+# plugin bundle signing (vitni-plugin-host, xtask; ADR 0014): ed25519 detached signatures over a
 # sha2 digest, verified against an embedded trust root. Held at the pre-release: 3.0.0 requires
 # curve25519-dalek ^5.0.0, while `russh` (via the `testcontainers` dev-dependency) requires
 # curve25519-dalek =5.0.0-pre.6, and the russh version cargo falls back to does not compile against
 # the pkcs5 that ed25519-dalek 3.0.0 pulls in. Re-evaluate when testcontainers ships a russh on
 # stable curve25519-dalek.
 ed25519-dalek = "=3.0.0-pre.6"
-# assisted-import host capabilities (genealogy-plugin-host; ADR 0017): host-mediated HTTP,
+# assisted-import host capabilities (vitni-plugin-host; ADR 0017): host-mediated HTTP,
 # media-library storage with SHA-256 checksums, and content-type sniffing.
 reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "gzip", "stream", "json"] }
 sha2 = "0.11.0"
@@ -69,11 +69,11 @@ temp-env = { version = "0.3.6", features = ["async_closure"] }
 # async runtime / test support
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
 tempfile = "3.24.0"
-# framework-free boundary guard (genealogy-ui dev-only; ADR 0008 dependency-tree assertion)
+# framework-free boundary guard (vitni-ui dev-only; ADR 0008 dependency-tree assertion)
 cargo_metadata = "0.23.1"
-# property-based tests for the pure crop/media-naming view-model math (genealogy-ui dev-only; ADR 0017)
+# property-based tests for the pure crop/media-naming view-model math (vitni-ui dev-only; ADR 0017)
 proptest = "1.8.0"
-# performance benchmarks (genealogy-db dev-only; Phase 11 workstream B). default-features off drops
+# performance benchmarks (vitni-db dev-only; Phase 11 workstream B). default-features off drops
 # the plotters/rayon HTML-report tree; only the `cargo bench` harness support is needed.
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 # application layer (config, workspace lifecycle, use-cases)
@@ -81,16 +81,16 @@ figment = { version = "0.10.19", features = ["toml", "env"] }
 directories = "6.0.0"
 whoami = "2.1.2"
 toml = "1.1.3"
-# import/export formats (genealogy-gedcom, genealogy-gramps-xml; plugins)
+# import/export formats (vitni-gedcom, vitni-gramps-xml; plugins)
 quick-xml = "0.41.0"
-# place geometry (ADR 0024): geo-types + geozero convert to GeoPackage WKB behind the genealogy-db
-# spatial index; geojson is the import/export interchange (genealogy-gedcom, genealogy-gramps-xml).
+# place geometry (ADR 0024): geo-types + geozero convert to GeoPackage WKB behind the vitni-db
+# spatial index; geojson is the import/export interchange (vitni-gedcom, vitni-gramps-xml).
 # geozero's own `with-wkb`/`with-gpkg` features cover GeoPackage encoding, so the standalone `wkb`
 # crate is not also depended on (would be a redundant WKB implementation).
 geo-types = "0.7.19"
 geozero = { version = "0.15.1", default-features = false, features = ["with-geo", "with-gpkg"] }
 geojson = "1.0.0"
-# Digitalarkivet HTML parsing (genealogy-digitalarkivet; ADR 0017). Pure CSS-selector scraping
+# Digitalarkivet HTML parsing (vitni-digitalarkivet; ADR 0017). Pure CSS-selector scraping
 # plus WHATWG URL parsing for host checks and base-relative link resolution;
 # both verified to build for wasm32-wasip2 (the plugin target).
 scraper = "0.27.0"
@@ -100,29 +100,29 @@ flate2 = { version = "1.1.5", default-features = false, features = ["rust_backen
 clap = { version = "4.6.4", features = ["derive"] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 anyhow = "1.0.104"
-# localization (genealogy-cli; ADR 0003)
+# localization (vitni-cli; ADR 0003)
 i18n-embed = { version = "0.16.0", features = ["fluent-system", "desktop-requester", "filesystem-assets"] }
 i18n-embed-fl = "0.10.1"
 rust-embed = "8.11.0"
 unic-langid = "0.9.6"
-# localized date/number formatting (genealogy-cli; ICU 2.x, compiled CLDR data — roadmap Spike A)
+# localized date/number formatting (vitni-cli; ICU 2.x, compiled CLDR data — roadmap Spike A)
 icu = "2.2.0"
 assert_cmd = "2.2.2"
 predicates = "3.1.4"
-# ui renderer (genealogy-ui-dioxus; ADR 0008). The desktop renderer is opted into per-crate via a
+# ui renderer (vitni-ui-dioxus; ADR 0008). The desktop renderer is opted into per-crate via a
 # `desktop` feature, so default builds (and the SSR interpreter test) need no webview system libs.
 dioxus = "0.7.8"
 dioxus-ssr = "0.7.8"
-# OS appearance detection for the "System" theme mode (genealogy-ui-dioxus, desktop only)
+# OS appearance detection for the "System" theme mode (vitni-ui-dioxus, desktop only)
 dark-light = "2.0.0"
 # internal crates
-genealogy-interchange = { path = "crates/genealogy-interchange" }
-genealogy-core = { path = "crates/genealogy-core" }
-genealogy-i18n = { path = "crates/genealogy-i18n" }
-genealogy-db = { path = "crates/genealogy-db", default-features = false }
-genealogy-app = { path = "crates/genealogy-app" }
-genealogy-ui = { path = "crates/genealogy-ui" }
-genealogy-plugin-host = { path = "crates/genealogy-plugin-host" }
+vitni-interchange = { path = "crates/vitni-interchange" }
+vitni-core = { path = "crates/vitni-core" }
+vitni-i18n = { path = "crates/vitni-i18n" }
+vitni-db = { path = "crates/vitni-db", default-features = false }
+vitni-app = { path = "crates/vitni-app" }
+vitni-ui = { path = "crates/vitni-ui" }
+vitni-plugin-host = { path = "crates/vitni-plugin-host" }
 
 # Workspace-wide lints (copied from ~/.claude/templates/Cargo-lints.toml).
 # Member crates opt in with `[lints] workspace = true`.

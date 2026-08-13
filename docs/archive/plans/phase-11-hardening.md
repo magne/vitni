@@ -21,8 +21,8 @@ workstream, stacked, each on a feature branch, `--no-ff` merge via PR, TDD. All 
 
 Sequenced sub-PRs (each independently green):
 
-1. **Bundle format + signing primitive.** New signing module in `genealogy-plugin-host` (or a small
-   `genealogy-plugin-sign` seam): `plugin.toml` (de)serialize, canonical digest over manifest+wasm
+1. **Bundle format + signing primitive.** New signing module in `vitni-plugin-host` (or a small
+   `vitni-plugin-sign` seam): `plugin.toml` (de)serialize, canonical digest over manifest+wasm
    (`sha2`), ed25519 sign/verify (`ed25519-dalek`, promoted to a direct dep). Embedded project public
    key(s) as the trust root. Tests first: verify-good, verify-tampered-manifest, verify-tampered-wasm,
    verify-wrong-key, verify-unsigned. `cargo xtask build-plugins` emits bundles + dev-signs first-party.
@@ -30,16 +30,16 @@ Sequenced sub-PRs (each independently green):
    at discovery; present-but-invalid signature = hard load error; absent signature = untrusted-loadable.
    User trust store in client-scope config (`ConfigStore`): `(publisher, pubkey)` pins. Tests: each
    tier resolves correctly; tampered fails closed; pinned publisher promotes to user-trusted.
-3. **Three-layer loader.** One shared resolver in `genealogy-app` mirroring `layered_assets`: workspace
+3. **Three-layer loader.** One shared resolver in `vitni-app` mirroring `layered_assets`: workspace
    > app-dir > embedded, id-keyed, higher-layer/higher-semver override. Replace the duplicated flat
-   `plugins_dir()` in `genealogy-cli/src/commands/io.rs` and `genealogy-ui-dioxus/src/app.rs`. Tests:
+   `plugins_dir()` in `vitni-cli/src/commands/io.rs` and `vitni-ui-dioxus/src/app.rs`. Tests:
    override precedence, semver tiebreak, missing-layer skip.
 4. **Capability-grant model.** Effective grant = declared ∩ user-approved. Extend `PluginPreferences`
    (workspace manifest) with a per-plugin approved-capability set beside `disabled`. Call sites
    (`assisted_grants()`, CLI import/export) pass the resolved effective grant instead of hardcoding.
    Tests: ungranted → `capability-error::denied` with actionable message; declared∩approved math.
-5. **Grant/trust UX.** `genealogy-ui` view-models for the first-load grant prompt + trust-store editor;
-   `genealogy-ui-dioxus` screens (extend `plugin_panel`/`preferences`); CLI grant/trust subcommands.
+5. **Grant/trust UX.** `vitni-ui` view-models for the first-load grant prompt + trust-store editor;
+   `vitni-ui-dioxus` screens (extend `plugin_panel`/`preferences`); CLI grant/trust subcommands.
    All strings Fluent (`en` + `no`). Update `docs/mockups/plugin-manager.html`. SSR tests for the VMs.
 
 ## Workstream B — performance profiling
@@ -55,7 +55,7 @@ and states the verdict; write a snapshotting ADR only if the numbers justify it.
 ## Workstream C — packaging & distribution (Linux-first)
 
 - **CLI:** release tarball + `cargo install` path; strip/optimize release profile.
-- **GUI:** AppImage + `.deb` for `genealogy-ui-dioxus`, bundling the signed first-party plugin fleet
+- **GUI:** AppImage + `.deb` for `vitni-ui-dioxus`, bundling the signed first-party plugin fleet
   and the embedded trust-root public key(s) (Workstream A dependency).
 - **CI:** a release workflow (`.github/workflows/`) building the artifacts on the existing Linux
   runner; pin actions to SHA, `persist-credentials: false`, scan with `zizmor`. macOS/Windows +

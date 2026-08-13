@@ -56,7 +56,7 @@ free-rider to a choice — publish your own source, or buy an exception from the
 
 These are the facts that make the decision cheap right now, and they will not all stay true.
 
-- **Nothing has been granted to anyone.** `gh repo view magne/genealogy` reports
+- **Nothing has been granted to anyone.** `gh repo view magne/vitni` reports
   `visibility: PRIVATE`, `licenseInfo: null`. The workspace `Cargo.toml` declares
   `license = "MIT OR Apache-2.0"`, but **there is no `LICENSE` file in the tree at all** — no
   `LICENSE-MIT`, no `LICENSE-APACHE`, no `NOTICE`, no `CONTRIBUTING.md`. A licence field in a
@@ -94,8 +94,8 @@ permissive, copyleft, source-available and proprietary are all reachable from he
 stating plainly, because it is the first thing one fears when contemplating a licence change.
 
 **The MPL crates, checked properly.** Eight crates are MPL-2.0: `cssparser`, `selectors`,
-`dtoa-short` (pulled by `scraper`, a real — not dev — dependency of `genealogy-digitalarkivet`)
-and `option-ext` (via `directories` in `genealogy-app`). A naive grep for
+`dtoa-short` (pulled by `scraper`, a real — not dev — dependency of `vitni-digitalarkivet`)
+and `option-ext` (via `directories` in `vitni-app`). A naive grep for
 `Incompatible With Secondary Licenses` hits three of their `LICENSE` files and invites the
 conclusion that they cannot be combined with (A)GPL. That conclusion is wrong: the phrase is the
 heading of **Exhibit B inside the standard MPL-2.0 text itself**, present in every verbatim copy
@@ -123,7 +123,7 @@ decade, mostly on payments around US$1.
 
 What it achieves: goal (1) — permissiveness — completely, plus maximum adoption, distro packaging,
 zero legal surface, and no CLA ever needed. What it does not achieve: any *enforceable* payback.
-Anyone may take `genealogy-core`, close it, ship it, host it, rebrand it and undersell you, and
+Anyone may take `vitni-core`, close it, ship it, host it, rebrand it and undersell you, and
 you will have consented in advance. Note that Krita and Ardour are **GPL**, not permissive; their
 leverage over resale is copyleft plus a trademark, not generosity.
 
@@ -147,7 +147,7 @@ its own market already expects, not in an eccentric position needing explanation
 Who would actually buy an exception:
 
 - a genealogy vendor embedding the event-sourced core or the projections engine in a closed
-  product — the real value in `genealogy-core`, and precisely what §3.1 gives away for free;
+  product — the real value in `vitni-core`, and precisely what §3.1 gives away for free;
 - an integrator building a closed system for an archive or a records office;
 - **you**, for an iOS or macOS App Store build — the store terms are incompatible with (A)GPL
   (§4), and the escape is that a sole copyright holder can licence their own work to themselves
@@ -337,14 +337,14 @@ embedded trust root, trust tiers, deny-by-default capability grants, and a three
 (ADR 0011/0014, [`plugin-signing-and-trust.md`](plugin-signing-and-trust.md)).
 
 **The §7 exception is a prerequisite, not a courtesy.** Verified against the current manifests: no
-`plugins/*` component links host code at all — each depends only on `genealogy-plugin-api` (which
-depends on `genealogy-interchange`) plus a format crate, and communicates over the WIT world. The
+`plugins/*` component links host code at all — each depends only on `vitni-plugin-api` (which
+depends on `vitni-interchange`) plus a format crate, and communicates over the WIT world. The
 derivative-work argument is therefore already weak. Make it explicit anyway, as an additional
 permission under AGPLv3 §7 on every AGPL crate:
 
 > Additional permission under GNU AGPL version 3 section 7: if you modify this Program, or any
 > covered work, by combining it with a WebAssembly component that interacts with the Program
-> solely through the versioned `genealogy:plugin` WIT world (or any later version of that world),
+> solely through the versioned `vitni:plugin` WIT world (or any later version of that world),
 > the licensor grants you additional permission to convey the resulting work. Such a component is
 > not required to be licensed under the GNU AGPL.
 
@@ -369,7 +369,7 @@ Two mechanisms for charging, and only one holds:
   which works) but never exclusivity.
 
 **Consequence for the crate split.** A paid plugin is worth nothing if its logic sits in a
-permissive crate, so `genealogy-digitalarkivet` moves to the AGPL column. Nothing internal depends
+permissive crate, so `vitni-digitalarkivet` moves to the AGPL column. Nothing internal depends
 on it but `plugins/digitalarkivet-import`, so the move is free today, whereas MIT on it would
 permanently forfeit charging for anything derived from it. Keeping the existing scraper in-repo
 under AGPL preserves every option: a later *premium* importer (bulk fetch, OCR-assist,
@@ -381,7 +381,7 @@ One non-licensing flag for that plugin specifically: "Digitalarkivet" is the Nat
 Norway's service name. Describing a plugin as an importer *for* Digitalarkivet is ordinary
 nominative use, but shipping a paid product whose name leads with someone else's mark deserves a
 look from counsel before money changes hands, and the fixtures under
-`crates/genealogy-digitalarkivet/tests/fixtures/` are third-party content whose redistribution
+`crates/vitni-digitalarkivet/tests/fixtures/` are third-party content whose redistribution
 terms are a separate question from the code's licence.
 
 ## 7. Operating the money — CRA and VAT, as of 2026
@@ -428,13 +428,13 @@ exceptions sold on request, and paid plugins kept possible by construction.**
 
 | Side | Crates | Licence |
 | --- | --- | --- |
-| Commodity interop — the goodwill generators, nothing that would ever be charged for | `genealogy-interchange`, `genealogy-gedcom`, `genealogy-gramps-xml`, `genealogy-i18n`; `plugins/plugin-api`, `gedcom-import`, `gedcom-export`, `gramps-import`, `gramps-export`, `ui-panel`, `_fixture` | `MIT OR Apache-2.0` (unchanged) |
-| The application | `genealogy-core`, `genealogy-db`, `genealogy-app`, `genealogy-plugin-host`, `genealogy-ui`, `genealogy-ui-dioxus`, `genealogy-cli`, `xtask` | `AGPL-3.0-or-later` + the §7 plugin exception |
-| Chargeable-later feature code | `genealogy-digitalarkivet`, `plugins/digitalarkivet-import` | `AGPL-3.0-or-later` |
+| Commodity interop — the goodwill generators, nothing that would ever be charged for | `vitni-interchange`, `vitni-gedcom`, `vitni-gramps-xml`, `vitni-i18n`; `plugins/plugin-api`, `gedcom-import`, `gedcom-export`, `gramps-import`, `gramps-export`, `ui-panel`, `_fixture` | `MIT OR Apache-2.0` (unchanged) |
+| The application | `vitni-core`, `vitni-db`, `vitni-app`, `vitni-plugin-host`, `vitni-ui`, `vitni-ui-dioxus`, `vitni-cli`, `xtask` | `AGPL-3.0-or-later` + the §7 plugin exception |
+| Chargeable-later feature code | `vitni-digitalarkivet`, `plugins/digitalarkivet-import` | `AGPL-3.0-or-later` |
 
 The split is structurally sound, and `cargo metadata --no-deps` is what proves it: the permissive
-crates have no internal dependency on `genealogy-core` (`genealogy-gedcom` and
-`genealogy-gramps-xml` depend only on `genealogy-interchange`; `genealogy-i18n` on nothing
+crates have no internal dependency on `vitni-core` (`vitni-gedcom` and
+`vitni-gramps-xml` depend only on `vitni-interchange`; `vitni-i18n` on nothing
 internal), and no plugin depends on anything in the AGPL column except `digitalarkivet-import` on
 the crate that moves with it. `MIT OR Apache-2.0` on the leaves deliberately keeps the MIT option
 so that even a GPLv2-only consumer can reuse them — Gramps is GPLv2-**or later**, so either arm
@@ -453,7 +453,7 @@ So neither option delivers all four permanently, and the choice is which partial
 The argument for accepting this one rests on a threat model rather than on the OSI constraint:
 
 - **The realistic free-rider is an embedder, not a reseller.** The plausible harm is an existing
-  genealogy vendor taking `genealogy-core` — the event-sourced, provenance-by-construction model
+  genealogy vendor taking `vitni-core` — the event-sourced, provenance-by-construction model
   that is the entire differentiator — into a closed product. AGPL blocks that permanently and routes
   them to the commercial-exception desk. FSL blocks it for two years.
 - **The two scenarios AGPL fails to block are the two least likely to pay anyone.** A market for
@@ -467,7 +467,7 @@ The argument for accepting this one rests on a threat model rather than on the O
 - **The exclusive revenue line does not need the licence.** Paid plugins (§6) work identically
   under AGPL, FSL, or even MIT, because the paid part is a separate work.
 
-Against **§3.1 permissive everywhere**: it hands `genealogy-core` to a closed competitor for free
+Against **§3.1 permissive everywhere**: it hands `vitni-core` to a closed competitor for free
 and irreversibly, in exchange for adoption obtainable anyway under AGPL.
 
 Against **§3.3 FSL**: it is the licence that matches the requirement as worded, and it keeps the
@@ -526,7 +526,7 @@ done in this change.
 ## References
 
 - `cargo deny --all-features list` over the current `Cargo.lock`; `cargo metadata --no-deps` for
-  the internal dependency directions; `gh repo view magne/genealogy`.
+  the internal dependency directions; `gh repo view magne/vitni`.
 - MPL-2.0 Exhibit A/B, checked in the vendored sources of `cssparser`, `selectors`, `dtoa-short`,
   `option-ext`.
 - FSL-1.1-MIT / FSL-1.1-ALv2 templates and FAQ, `fsl.software`; Fair Source definition, `fair.io`;

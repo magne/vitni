@@ -10,7 +10,7 @@ A place is not fixed in time. Its **name** changes (Oslo → Christiania → Kri
 removed), its **boundary** grows and shrinks, and its very **identity** can change — municipalities
 **merge** (Aker + Kristiania → Oslo, 1948) and counties **split**.
 
-The model already covers the first three without change (confirmed in `genealogy-core`):
+The model already covers the first three without change (confirmed in `vitni-core`):
 `PlaceName { value, date, language }` (`place_name.rs`) and `PlaceRef { place_id, date }`
 (`place_ref.rs`) both **accumulate dated assertions**, and ADR 0024 makes `PlaceGeometry` dated and
 accumulating too. What is missing is (a) a defined rule for reading those dated assertions *as of a
@@ -47,7 +47,7 @@ projection schema (ADR 0009). It gates the full geography phase (roadmap Phase 9
    and citations (ADR 0004 §2, ADR 0020/0021), correctable by retract/supersede. The event is
    self-contained (both endpoint ids in the payload; ADR 0002) and additive (ADR 0004 §4).
 
-4. **Succession is projected as a navigable, symmetric relation.** `genealogy-db` projects
+4. **Succession is projected as a navigable, symmetric relation.** `vitni-db` projects
    succession so a place exposes both its predecessors and its successors (a merged-away place links
    to what it became, and the survivor links back), enabling "what happened to this place?" and
    date-scoped resolution across an identity boundary. The projection is derived and rebuildable from

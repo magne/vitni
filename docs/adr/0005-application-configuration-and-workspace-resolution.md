@@ -11,7 +11,7 @@ open: what a workspace *is* on disk, how a binary finds one, where configuration
 the operator identity is determined. ADR 0004 §3 requires the operator `Agent` to be supplied by
 the application layer on every assertion, without saying where it comes from.
 
-The first shippable frontend is the `genealogy` CLI, so these need answers now. They are not
+The first shippable frontend is the `vitni` CLI, so these need answers now. They are not
 CLI-specific: a native UI and a web backend resolve the same workspaces and need the same operator
 identity, so the model is defined once at the application layer (ADR 0006) and reused.
 
@@ -24,12 +24,12 @@ identity, so the model is defined once at the application layer (ADR 0006) and r
 
    The manifest records:
    - **`database_url`** — the workspace's database. For SQLite, a file reference
-     (`sqlite://genealogy.sqlite3`); a **relative** path is resolved against the workspace
+     (`sqlite://vitni.sqlite3`); a **relative** path is resolved against the workspace
      directory, so a workspace is portable/relocatable. For Postgres, a connection URL.
    - **`id_formats`** — the per-aggregate `HumanId` formats (see §4).
    - **`operators`** — the operators known to this workspace (see §3).
 
-2. **The global config** (`~/.config/genealogy/config.toml`, resolved via the `directories` crate —
+2. **The global config** (`~/.config/vitni/config.toml`, resolved via the `directories` crate —
    XDG on Linux) holds:
    - a **registry of named workspaces** — `[workspaces.<name>]` with the workspace's `path` — and
      the **default** workspace by name (`default = "<name>"`, the last one created);
@@ -62,13 +62,13 @@ identity, so the model is defined once at the application layer (ADR 0006) and r
    person = "I%04d"
    ```
 
-3. **Workspaces are referenced by name.** `genealogy init <name> <path>` creates the directory,
+3. **Workspaces are referenced by name.** `vitni init <name> <path>` creates the directory,
    registers `name → path`, and makes it the default. Resolution for other commands, highest
-   precedence first: the `--workspace <name>` flag → the `GENEALOGY_WORKSPACE` environment variable
+   precedence first: the `--workspace <name>` flag → the `VITNI_WORKSPACE` environment variable
    → the configured default; the name is looked up in the registry.
 
 4. **Standard locations** come from `directories`, never hard-coded: the global config under the
-   config dir; a workspace's default location under the data dir (`…/genealogy/workspaces/<name>`).
+   config dir; a workspace's default location under the data dir (`…/vitni/workspaces/<name>`).
 
 ## Operator identity (direction, partially implemented)
 
@@ -92,7 +92,7 @@ user**. To avoid blocking that, this ADR fixes the direction now:
 `HumanId`s (the Gramps `gramps_id` analog) use **per-aggregate printf formats** (Gramps: Person
 `I%04d`, Family `F%04d`, …). The effective format is resolved **live** at open: a workspace
 manifest `id_formats` *override* if present, else the global `[workspace-defaults].id_formats`;
-`genealogy-core::IdFormat` parses `{prefix}%0{width}d{suffix}` (prefix and suffix may both be
+`vitni-core::IdFormat` parses `{prefix}%0{width}d{suffix}` (prefix and suffix may both be
 non-empty; bare `%d` is unpadded) and is the single place ids are rendered and their numeric part
 extracted. Allocation is numeric (not lexicographic), so it is correct across width growth
 (`I9999` → `I10000`) and arbitrary prefix/suffix.

@@ -7,7 +7,7 @@
 //! `xdotool` is deterministic. `MapLibre` renders there over software GL.
 //!
 //! Scenarios are **data, not code**: each is a TOML file under
-//! `crates/genealogy-ui-dioxus/tests/gui-pass/`, so adding one needs no recompile. A top-level
+//! `crates/vitni-ui-dioxus/tests/gui-pass/`, so adding one needs no recompile. A top-level
 //! `window = [w, h]` sets the size the window is resized to before its steps run, defaulting to
 //! [`WINDOW`] when omitted — the narrow-window case (below `--bp-lg`) needs its own coordinates, never
 //! a single-pane layout's carried over (see `CLAUDE.md`'s "Writing one"). A file lists `[[step]]`s (a
@@ -50,15 +50,15 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use genealogy_core::media_path::{MEDIA_DIR, workspace_media_path};
 use serde::Deserialize;
+use vitni_core::media_path::{MEDIA_DIR, workspace_media_path};
 
 use crate::util::{copy_dir, run_cargo};
 
 /// Where the isolated home, the fixture workspace and the shots are written.
 const OUT_DIR: &str = "target/gui-pass";
 /// Where the scenario files live, beside the SSR tests of the crate they exercise.
-const SCRIPT_DIR: &str = "crates/genealogy-ui-dioxus/tests/gui-pass";
+const SCRIPT_DIR: &str = "crates/vitni-ui-dioxus/tests/gui-pass";
 /// The Xvfb display the GUI is driven on. Overridable with `--display`.
 const DEFAULT_DISPLAY: &str = ":99";
 /// The virtual screen Xvfb serves. Larger than the window so a resize never clips.
@@ -256,8 +256,8 @@ impl Drop for Session {
 pub fn run(args: &[String]) -> Result<()> {
     let options = parse_args(args)?;
     preflight()?;
-    run_cargo(&["build", "-p", "genealogy-ui-dioxus", "--features", "desktop"])?;
-    run_cargo(&["build", "-p", "genealogy-cli"])?;
+    run_cargo(&["build", "-p", "vitni-ui-dioxus", "--features", "desktop"])?;
+    run_cargo(&["build", "-p", "vitni-cli"])?;
 
     let out = PathBuf::from(OUT_DIR);
     if options.reset {
@@ -482,7 +482,7 @@ fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
     fs::create_dir_all(out).with_context(|| format!("creating {}", out.display()))?;
     let workspace = absolute(&workspace)?.to_string_lossy().into_owned();
     cli(home, &["init", FIXTURE_WORKSPACE, &workspace])?;
-    let config = home.join(".config/genealogy/config.toml");
+    let config = home.join(".config/vitni/config.toml");
     if !config.exists() {
         bail!(
             "gui-pass: init wrote no config at {} — the isolation failed and a real config may have been \
@@ -528,11 +528,11 @@ fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
 /// The images are *generated* with `ImageMagick` (already a hard requirement, see [`preflight`]) rather
 /// than committed: a deterministic gradient with a filled circle, textured enough that a `painted`
 /// assertion over the preview frame measures the image and not its background. The repo's own
-/// `assets/genealogy.png` will not do — it is a 64×64 fully transparent placeholder, so it would fail
+/// `assets/vitni.png` will not do — it is a 64×64 fully transparent placeholder, so it would fail
 /// `painted` even when the preview loads perfectly. Both are the same image, so one `painted`
 /// calibration covers both rows.
 ///
-/// The records deliberately carry **no MIME**: `genealogy media` has no `set-mime`, so this is the
+/// The records deliberately carry **no MIME**: `vitni media` has no `set-mime`, so this is the
 /// state every record the CLI creates is in, and #301's two live causes (no inferred MIME, and the
 /// stored `media/` prefix added twice) both fire on it.
 fn seed_media(home: &Path, workspace: &Path) -> Result<()> {
@@ -593,22 +593,22 @@ fn restore_config(out: &Path, home: &Path) -> Result<()> {
             seed.display()
         );
     }
-    let config = home.join(".config/genealogy/config.toml");
+    let config = home.join(".config/vitni/config.toml");
     fs::copy(&seed, &config).with_context(|| format!("restoring {}", config.display()))?;
     Ok(())
 }
 
 /// Runs the CLI against the isolated home, returning its stdout.
 fn cli(home: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("target/debug/genealogy")
+    let output = Command::new("target/debug/vitni")
         .args(args)
         .envs(isolated_home(home))
-        .env("GENEALOGY_WORKSPACE", FIXTURE_WORKSPACE)
+        .env("VITNI_WORKSPACE", FIXTURE_WORKSPACE)
         .output()
-        .with_context(|| format!("running genealogy {}", args.join(" ")))?;
+        .with_context(|| format!("running vitni {}", args.join(" ")))?;
     if !output.status.success() {
         bail!(
-            "genealogy {} failed with {}: {}",
+            "vitni {} failed with {}: {}",
             args.join(" "),
             output.status,
             String::from_utf8_lossy(&output.stderr).trim()
@@ -670,7 +670,7 @@ fn start_session(options: &Options, home: &Path, shots: &Path) -> Result<Session
     let errors = log
         .try_clone()
         .with_context(|| format!("sharing {}", log_path.display()))?;
-    let mut gui = Command::new("target/debug/genealogy-gui");
+    let mut gui = Command::new("target/debug/vitni-gui");
     gui.env("DISPLAY", &options.display)
         // GTK prefers Wayland when the session advertises it, which would put the window on the
         // caller's desktop instead of the headless display.
@@ -684,11 +684,11 @@ fn start_session(options: &Options, home: &Path, shots: &Path) -> Result<Session
         gui.envs(isolated_home(home));
     }
     if let Some(name) = options.workspace.as_deref() {
-        gui.env("GENEALOGY_WORKSPACE", name);
+        gui.env("VITNI_WORKSPACE", name);
     } else if !options.real_config {
-        gui.env("GENEALOGY_WORKSPACE", FIXTURE_WORKSPACE);
+        gui.env("VITNI_WORKSPACE", FIXTURE_WORKSPACE);
     }
-    session.gui = Some(gui.spawn().context("starting genealogy-gui")?);
+    session.gui = Some(gui.spawn().context("starting vitni-gui")?);
     Ok(session)
 }
 
@@ -698,7 +698,7 @@ fn wait_for_window(display: &str) -> Result<String> {
     let mut waited = Duration::ZERO;
     while waited < WINDOW_TIMEOUT {
         let found = Command::new("xdotool")
-            .args(["search", "--name", "^Genealogy$"])
+            .args(["search", "--name", "^Vitni$"])
             .env("DISPLAY", display)
             .output()
             .context("running xdotool search")?;
@@ -709,7 +709,7 @@ fn wait_for_window(display: &str) -> Result<String> {
         sleep(poll);
         waited += poll;
     }
-    bail!("gui-pass: no Genealogy window appeared on {display} within {WINDOW_TIMEOUT:?}")
+    bail!("gui-pass: no Vitni window appeared on {display} within {WINDOW_TIMEOUT:?}")
 }
 
 /// Gives the window keyboard focus.

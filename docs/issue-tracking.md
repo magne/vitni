@@ -188,21 +188,21 @@ stylesheet or the webview rather than what the view logic decided. Treat the cou
 
 | Item | Why it gates a release |
 | --- | --- |
-| [The provenance reason field discards every keystroke](https://github.com/magne/genealogy/issues/299) | No add or attach in the app can record *why* — in a system whose premise is that every assertion carries its operator's reason |
-| [`⌘N` is silent on half the app](https://github.com/magne/genealogy/issues/300) | A `Global` chord advertised as "context-aware" no-ops with no notice on the Dashboard and every tool destination |
-| [A save run whose target leaves the strip hangs](https://github.com/magne/genealogy/issues/302) | Save all can wedge the quit/close path with no way out and no message |
-| [The shared record tabs have no common layout contract](https://github.com/magne/genealogy/issues/303) | Explanations below buttons, gone entirely when empty, and an add bar with no CSS rule at all — on all 13 screens |
-| [Attached records have four different presentations](https://github.com/magne/genealogy/issues/304) | An attached note can be neither read nor opened from the record that references it |
-| [A ghost row action disappears on the hovered row](https://github.com/magne/genealogy/issues/305) | Detach/Remove lose every visual affordance at the moment they are being aimed at |
-| [A record's History tab describes an import in the Dashboard's words](https://github.com/magne/genealogy/issues/306) | One person's history claims several *records* were imported; the audit trail must not misreport its own scope |
-| [Closing a pristine draft tab still raises the unsaved-work confirm](https://github.com/magne/genealogy/issues/307) | Discarding nothing needs a decision, and an untouched draft makes `⌘Q` claim unsaved work |
-| [A draft tab and the `+` menu read "New People"](https://github.com/magne/genealogy/issues/308) | Plural rail labels in a singular slot; ungrammatical in `no` for every category |
-| [The Media record diverges from its mockup](https://github.com/magne/genealogy/issues/309) | The mockups are the design source of truth, so a shipped screen that contradicts them is unfinished |
-| [The Tag screen diverges from its mockup](https://github.com/magne/genealogy/issues/310) | Same rule; no colour swatch anywhere in the read-only view of a record whose content *is* a colour |
-| [The mockups' record-picker specimen pins itself to the viewport's top-left](https://github.com/magne/genealogy/issues/311) | Three mockup pages render a stray floating dropdown, and the specimen's prose contradicts it |
-| [A `SidePanel`'s background is not `inert`](https://github.com/magne/genealogy/issues/312) | Assistive tech still reaches the shell behind an open panel |
-| [Back/forward cannot return to a draft tab](https://github.com/magne/genealogy/issues/313) | `⌘←`/`⌘→` step past an open draft to the last saved record |
-| [The shared record-tab arms are re-implemented on 13 screens](https://github.com/magne/genealogy/issues/322) | The vehicle for #303 and #304: changing the shared frame's shape is 13 edits, so a per-tab explanation lands on ~45 call sites |
+| [The provenance reason field discards every keystroke](https://github.com/magne/vitni/issues/299) | No add or attach in the app can record *why* — in a system whose premise is that every assertion carries its operator's reason |
+| [`⌘N` is silent on half the app](https://github.com/magne/vitni/issues/300) | A `Global` chord advertised as "context-aware" no-ops with no notice on the Dashboard and every tool destination |
+| [A save run whose target leaves the strip hangs](https://github.com/magne/vitni/issues/302) | Save all can wedge the quit/close path with no way out and no message |
+| [The shared record tabs have no common layout contract](https://github.com/magne/vitni/issues/303) | Explanations below buttons, gone entirely when empty, and an add bar with no CSS rule at all — on all 13 screens |
+| [Attached records have four different presentations](https://github.com/magne/vitni/issues/304) | An attached note can be neither read nor opened from the record that references it |
+| [A ghost row action disappears on the hovered row](https://github.com/magne/vitni/issues/305) | Detach/Remove lose every visual affordance at the moment they are being aimed at |
+| [A record's History tab describes an import in the Dashboard's words](https://github.com/magne/vitni/issues/306) | One person's history claims several *records* were imported; the audit trail must not misreport its own scope |
+| [Closing a pristine draft tab still raises the unsaved-work confirm](https://github.com/magne/vitni/issues/307) | Discarding nothing needs a decision, and an untouched draft makes `⌘Q` claim unsaved work |
+| [A draft tab and the `+` menu read "New People"](https://github.com/magne/vitni/issues/308) | Plural rail labels in a singular slot; ungrammatical in `no` for every category |
+| [The Media record diverges from its mockup](https://github.com/magne/vitni/issues/309) | The mockups are the design source of truth, so a shipped screen that contradicts them is unfinished |
+| [The Tag screen diverges from its mockup](https://github.com/magne/vitni/issues/310) | Same rule; no colour swatch anywhere in the read-only view of a record whose content *is* a colour |
+| [The mockups' record-picker specimen pins itself to the viewport's top-left](https://github.com/magne/vitni/issues/311) | Three mockup pages render a stray floating dropdown, and the specimen's prose contradicts it |
+| [A `SidePanel`'s background is not `inert`](https://github.com/magne/vitni/issues/312) | Assistive tech still reaches the shell behind an open panel |
+| [Back/forward cannot return to a draft tab](https://github.com/magne/vitni/issues/313) | `⌘←`/`⌘→` step past an open draft to the last saved record |
+| [The shared record-tab arms are re-implemented on 13 screens](https://github.com/magne/vitni/issues/322) | The vehicle for #303 and #304: changing the shared frame's shape is 13 edits, so a per-tab explanation lands on ~45 call sites |
 
 Fourteen of these came out of that walkthrough: three — #302, #312, #313 — were already in `issues.md`
 from earlier code reading and were promoted here by the same triage, and the other eleven are new.

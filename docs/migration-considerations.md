@@ -4,13 +4,13 @@
 - **Date:** 2026-06-21
 - **Audience:** anyone planning persistence or workspace-lifecycle work
 
-This captures migration concerns surfaced during Phase 3 (Postgres backend + `genealogy rebuild`)
+This captures migration concerns surfaced during Phase 3 (Postgres backend + `vitni rebuild`)
 that are **not yet addressed**. None block Phase 3; each needs design (and likely a gating ADR)
 before implementation. They are recorded here so they are not lost.
 
 ## What Phase 3 *does* cover
 
-Projection rebuild via **`genealogy rebuild`** (ADR 0010): clear every read-model/view table and
+Projection rebuild via **`vitni rebuild`** (ADR 0010): clear every read-model/view table and
 replay the immutable event log (applying upcasters) back into the freshly-created tables. Combined
 with additive, versioned events (ADR 0004 §4), this absorbs *event-shape* evolution and projection
 *content* changes. Table DDL is idempotent `CREATE … IF NOT EXISTS`. There is no in-place `ALTER`
@@ -52,7 +52,7 @@ transfer.
 
 Open questions:
 
-- A `genealogy migrate <from> <to>` (or `export`/`import` of the raw event stream) command:
+- A `vitni migrate <from> <to>` (or `export`/`import` of the raw event stream) command:
   source → target engine, preserving aggregate ids, sequence, event versions, and metadata exactly.
 - Is this a new workspace, or an in-place re-point of an existing one? (Freezing `database_url`
   suggests "new workspace, then switch the registry entry / default".)

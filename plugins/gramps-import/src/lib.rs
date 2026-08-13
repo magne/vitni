@@ -1,5 +1,5 @@
 //! Gramps XML import plugin (ADR 0013, ADR 0018): read the document from the host-opened import
-//! source, parse it with `genealogy-gramps-xml`, then create persons and families through the host
+//! source, parse it with `vitni-gramps-xml`, then create persons and families through the host
 //! `commands` capability, resolving Gramps's `hlink` references (events, places, sources, citations,
 //! notes, media, repositories) into owned aggregates and attaching them to their owner.
 //!
@@ -9,24 +9,24 @@
 
 wit_bindgen::generate!({
     world: "bulk-import",
-    path: "../../crates/genealogy-plugin-host/wit",
+    path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.21.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.21.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.21.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.21.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.21.0": genealogy_plugin_api::import_source,
+        "vitni:host-api/types@0.22.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.22.0": vitni_plugin_api::log,
+        "vitni:host-api/commands@0.22.0": vitni_plugin_api::commands,
+        "vitni:host-api/progress@0.22.0": vitni_plugin_api::progress,
+        "vitni:host-api/import-source@0.22.0": vitni_plugin_api::import_source,
     },
 });
 
 use std::collections::{HashMap, HashSet};
 
-use genealogy_gramps_xml::{Citation, Database, Event, EventRef, Gender, Place, Region, Source};
-use genealogy_interchange::{AssociationKind, parse_age};
-use genealogy_plugin_api::commands;
-use genealogy_plugin_api::convert;
-use genealogy_plugin_api::types;
-use genealogy_plugin_api::types::{
+use vitni_gramps_xml::{Citation, Database, Event, EventRef, Gender, Place, Region, Source};
+use vitni_interchange::{AssociationKind, parse_age};
+use vitni_plugin_api::commands;
+use vitni_plugin_api::convert;
+use vitni_plugin_api::types;
+use vitni_plugin_api::types::{
     Attribute, ChildParentRel, Confidence, ExternalId, MediaCrop, ParticipantRole, ParticipationInput, PlaceType, Sex,
 };
 
@@ -68,11 +68,11 @@ struct Resolver<'a> {
 
 impl Guest for Importer {
     fn run_import() -> Result<u32, String> {
-        let bytes = genealogy_plugin_api::read_source_to_end()?;
-        let db = genealogy_gramps_xml::parse(&bytes).map_err(|error| error.to_string())?;
+        let bytes = vitni_plugin_api::read_source_to_end()?;
+        let db = vitni_gramps_xml::parse(&bytes).map_err(|error| error.to_string())?;
         let people = db.people.len() as u32;
         let families = db.families.len() as u32;
-        genealogy_plugin_api::log_info(&format!("importing {people} people and {families} families"));
+        vitni_plugin_api::log_info(&format!("importing {people} people and {families} families"));
 
         let mut resolver = Resolver::new(&db);
         // Gramps handle -> created person human id, for resolving family members and associations.
@@ -144,7 +144,7 @@ impl Guest for Importer {
             }
             handle_to_human.insert(person.handle.clone(), record.human_id);
             imported += 1;
-            if !genealogy_plugin_api::report("people", index as u32 + 1, Some(people))? {
+            if !vitni_plugin_api::report("people", index as u32 + 1, Some(people))? {
                 return Ok(imported);
             }
         }
@@ -219,7 +219,7 @@ impl Guest for Importer {
                 }
             }
             imported += 1;
-            if !genealogy_plugin_api::report("families", index as u32 + 1, Some(families))? {
+            if !vitni_plugin_api::report("families", index as u32 + 1, Some(families))? {
                 return Ok(imported);
             }
         }

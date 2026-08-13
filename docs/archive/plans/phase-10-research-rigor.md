@@ -40,7 +40,7 @@ that bullet was written. Place `MAP`/coordinates round-trips via GeoJSON since A
 event-level witnesses round-trip since ADR 0019 (data-model §17: "closing the §17 event-level-witness
 gap"). data-model §17's own "Model gaps... (none modelled yet)" bullet still lists `PLAC.MAP` /
 place coordinates, which now reads as stale prose left over from before Phase 9 — not a code gap.
-Verify current state against `genealogy-gedcom`/`genealogy-gramps-xml` before scoping the PR rather
+Verify current state against `vitni-gedcom`/`vitni-gramps-xml` before scoping the PR rather
 than trusting the bullet list verbatim; drop closed items, keep the rest.
 
 ## PR stack
@@ -59,16 +59,16 @@ first, matching how Phase 9's stack sequenced its three ADR-gated slices:
   Fluent-resolved confidence label (person/family/event/place/source/citation/DNA screens, the CLI)
   reads through it instead of a hardcoded per-variant message id. `Confidence`, `EventContext`, GEDCOM
   `QUAY`, and Gramps confidence mapping are **untouched**.
-- **Files (indicative):** `genealogy-app` config types + `ConfigStore` scope; `genealogy-core`
-  unaffected; `genealogy-cli`/`genealogy-ui-dioxus` label resolution; new Fluent fragment(s) for the
+- **Files (indicative):** `vitni-app` config types + `ConfigStore` scope; `vitni-core`
+  unaffected; `vitni-cli`/`vitni-ui-dioxus` label resolution; new Fluent fragment(s) for the
   five default labels (`en`, `no`); a **surety-scheme preferences panel** mockup addition (workspace
   settings screen).
-- **Delivered as:** `SuretyLabelOverride`/`SuretyLabelOverrides` (`genealogy-app::config`), the
+- **Delivered as:** `SuretyLabelOverride`/`SuretyLabelOverrides` (`vitni-app::config`), the
   `[workspace-defaults.surety]` / per-workspace `[surety]` manifest layer (`workspace.rs`, mirroring
   `id_formats`/`locale`), a `ConfigStore::store_workspace_default_surety` seam method, and a
-  `Localizer::with_surety_overrides` builder consumed by both `genealogy-cli` and `genealogy-ui`'s
+  `Localizer::with_surety_overrides` builder consumed by both `vitni-cli` and `vitni-ui`'s
   `confidence_label`/`confidence` — no new Fluent keys needed there (the existing `confidence-*` keys
-  are the default wording ADR 0027 §3 already names). `genealogy-ui-dioxus` gained its own
+  are the default wording ADR 0027 §3 already names). `vitni-ui-dioxus` gained its own
   `prefs-surety-*` chrome keys (`en`/`no`) for the new "Surety scheme" Preferences card
   (`docs/mockups/preferences.html`, `screens/preferences.rs`), which edits the live global default —
   matching the existing locale/id-format cards, not a per-workspace override UI (none of those cards
@@ -82,12 +82,12 @@ first, matching how Phase 9's stack sequenced its three ADR-gated slices:
 - **Minimal slice:** the 13th aggregate, template-following (command/event/state/view/decide/error),
   `SubjectRef` value object, `ResearchNoteCreated`/`RichTextSet`/`Tagged`/`Untagged`/
   `RestrictionsChanged`/retract-supersede, the `UnknownSubject` aggregate-tax check, wired through the
-  three x-macro registries (`genealogy-app::aggregates`, `genealogy-db::registry`, CLI `.ftl` +
-  `for_each_cli_command!`), re-exported from `genealogy-app/src/lib.rs`. CLI-only in this PR
-  (`genealogy research-note create/show/list`); the GUI screen is its own follow-up (below) so this PR
+  three x-macro registries (`vitni-app::aggregates`, `vitni-db::registry`, CLI `.ftl` +
+  `for_each_cli_command!`), re-exported from `vitni-app/src/lib.rs`. CLI-only in this PR
+  (`vitni research-note create/show/list`); the GUI screen is its own follow-up (below) so this PR
   stays reviewable as "one new aggregate," matching the Person/Family template precedent.
 - **Follow-up in the same PR or immediately after:** a minimal **ResearchNote/Argument UI screen**
-  mockup + `genealogy-ui`/`genealogy-ui-dioxus` screen (list + detail, citations, subject link) —
+  mockup + `vitni-ui`/`vitni-ui-dioxus` screen (list + detail, citations, subject link) —
   named explicitly so it is not silently dropped; split into PR2b if PR2 alone is large enough to want
   independent review.
 - **Verification:** TDD per aggregate convention (given/when/then over `decide`); `UnknownSubject`
@@ -98,14 +98,14 @@ first, matching how Phase 9's stack sequenced its three ADR-gated slices:
 ### PR3 — Import merge/sync reconciliation (ADR 0029)
 
 - **Branch:** `feat/import-merge-sync`
-- **Minimal slice:** `genealogy-gedcom` (and the Gramps XML equivalent) resolve `file_asserted_at`
+- **Minimal slice:** `vitni-gedcom` (and the Gramps XML equivalent) resolve `file_asserted_at`
   from `HEAD.1 DATE` / `<header created=…>`; a new host-api `commands` parameter threads it once per
   import session (`host-api@0.19.0` → `0.20.0`, a label bump per ADR 0018 §3, both first-party plugins
-  updated in lockstep); the `genealogy-app` resolve-or-create import use-case gains the timestamp-gated
+  updated in lockstep); the `vitni-app` resolve-or-create import use-case gains the timestamp-gated
   policy (supersede vs. leave-untouched) for exactly two field groups: `Person.sex` and
   `Source.title`/`author`/`pub_info`/`abbrev`.
-- **Files (indicative):** `genealogy-gedcom`/`genealogy-gramps-xml` header-date parsing;
-  `crates/genealogy-plugin-host/wit/host.wit` + `genealogy-plugin-api`; `genealogy-app` import
+- **Files (indicative):** `vitni-gedcom`/`vitni-gramps-xml` header-date parsing;
+  `crates/vitni-plugin-host/wit/host.wit` + `vitni-plugin-api`; `vitni-app` import
   use-cases (`import_person`/`import_source`); a **merge/conflict view** addition to
   `docs/mockups/import.html` showing a reconciled field's audit trail (who/when/why — the generated
   rationale), not an interactive picker (out of scope per the ADR).
@@ -125,7 +125,7 @@ first, matching how Phase 9's stack sequenced its three ADR-gated slices:
   (needs the query-side media-crop DTO from PR #157 first — data-model §17 already names this
   dependency). Can be split into several commit-sized groups (mirroring Phase 4's group lettering)
   rather than one PR if the combined diff is large.
-- **Files (indicative):** `genealogy-gedcom`, `genealogy-gramps-xml`, `genealogy-interchange`, the
+- **Files (indicative):** `vitni-gedcom`, `vitni-gramps-xml`, `vitni-interchange`, the
   `commands`/`query` host-api surface (additive verbs only, reusing existing capabilities per the ADR
   0018 §2 precedent — likely no version bump needed unless a genuinely new verb is required).
 - **Verification:** the existing `gramps_round_trip.rs` / GEDCOM round-trip integration tests extended

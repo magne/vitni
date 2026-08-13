@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Vitni
+GenericName=Genealogy program
+Comment=Event-sourced genealogy program
+Exec=vitni-gui
+Icon=vitni
+Terminal=false
+Categories=Office;Database;Utility;
+Keywords=genealogy;ancestry;family;tree;gedcom;

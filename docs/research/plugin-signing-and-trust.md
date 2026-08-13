@@ -57,7 +57,7 @@ deny-by-default `Grants`.
   media-store (`media.rs`, `"sha256:<hex>"`). A signature over a `sha2` digest reuses proven code.
 - **`ed25519-dalek`, `ed25519`, `signature`, `curve25519-dalek` already resolve in `Cargo.lock`**
   (transitively, via SSH tooling) — so they are permissive-licensed (BSD-3/MIT) and already build in
-  this tree. Promoting `ed25519-dalek` to a direct dependency of `genealogy-plugin-host` adds no new
+  this tree. Promoting `ed25519-dalek` to a direct dependency of `vitni-plugin-host` adds no new
   license or supply-chain surface that `cargo deny` hasn't already cleared.
 - Ed25519 gives small (64-byte) detached signatures, small (32-byte) public keys, fast verification,
   no parameter/curve-choice footguns, and a trivial trust root (embed one 32-byte public key). This is
@@ -105,11 +105,11 @@ so the manifest cannot lie about what the code will attempt.
 ## Three-layer loading — mirror the i18n multiplexor
 
 ADR 0007 §4 says plugin loading must layer "exactly as the i18n `AssetsMultiplexor`". That code is
-`genealogy-i18n::layered_assets(workspace_dir, shared_dir, embedded)` — an ordered list, **highest
+`vitni-i18n::layered_assets(workspace_dir, shared_dir, embedded)` — an ordered list, **highest
 precedence first**, missing layers skipped. Applied to plugins:
 
 1. **Workspace** — `<workspace>/plugins/` (per-dataset plugins; highest precedence).
-2. **App-dir** — `~/.config/genealogy/plugins/` (or the shared-app-dir the config resolver already
+2. **App-dir** — `~/.config/vitni/plugins/` (or the shared-app-dir the config resolver already
    computes, `config.rs` `shared_app_dir`) — user-installed, cross-workspace plugins.
 3. **Embedded** — the sanctioned first-party fleet shipped with the binary (today's `target/plugins`
    in dev; embedded/packaged at release).
@@ -166,8 +166,8 @@ deny-by-default.
   resolver) this loading order mirrors.
 - ADR 0015 — the `ConfigStore` scopes: the user trust store is client/presentation scope; per-plugin
   grants are workspace-functionality scope.
-- `crates/genealogy-plugin-host/src/{lib.rs,discovery.rs,capability.rs}` — today's flat loader, the
+- `crates/vitni-plugin-host/src/{lib.rs,discovery.rs,capability.rs}` — today's flat loader, the
   manifest-free discovery, and the `Grants` model.
-- `crates/genealogy-i18n/src/lib.rs` (`layered_assets`) — the multiplexor to mirror.
+- `crates/vitni-i18n/src/lib.rs` (`layered_assets`) — the multiplexor to mirror.
 - minisign/signify, VS Code Marketplace signing, browser-extension permission prompts, Zed extension
   trust model — the ecosystem precedents.

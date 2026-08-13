@@ -1,4 +1,4 @@
-//! Conversions between the format-neutral [`genealogy_interchange`] value types and the host's WIT
+//! Conversions between the format-neutral [`vitni_interchange`] value types and the host's WIT
 //! types (ADR 0013). Every import/export plugin maps the same leaf vocabulary — sex, names, dates,
 //! addresses, event/fact/association kinds — to and from the `commands`/`query` capability records,
 //! so the mapping lives here once rather than in each plugin.
@@ -6,7 +6,7 @@
 //! `*_to_wit` converts an interchange value into the WIT record an importer submits; `*_from_wit`
 //! converts a WIT record an exporter read back into an interchange value.
 
-use genealogy_interchange::{
+use vitni_interchange::{
     Address, Age, AgeBound, AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, FactKind,
     Name, NameKind, Restriction, Sex, SourceMediaKind,
 };

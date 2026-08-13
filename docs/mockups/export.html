@@ -15,7 +15,7 @@
     <div class="section-note">
       <b>Write the whole workspace out through an export plugin.</b> The wizard is a first-party
       <span class="mono">Tool::Export</span> screen (ADR 0013) — the GUI counterpart of
-      <span class="mono">genealogy export &lt;plugin&gt; [--output FILE]</span>. There is no native file
+      <span class="mono">vitni export &lt;plugin&gt; [--output FILE]</span>. There is no native file
       dialog: you type a destination and see the resolved path live. An empty field or a bare directory
       is an <span class="mono">ExportTarget::Directory</span> and the plugin names the file; a path with
       a file name is an <span class="mono">ExportTarget::File</span> and pins it. The run streams real

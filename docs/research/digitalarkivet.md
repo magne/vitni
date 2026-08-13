@@ -5,7 +5,7 @@
 > prototype `~/Genealogi/scripts/sort-inbox.py` verified against live markup). Findings
 > that will drift — the absence of a public search API, `robots.txt` contents, whether
 > IIIF is production — are flagged inline; **re-verify before implementing ADR 0017's
-> `net` allowlist and the `genealogy-digitalarkivet` parsers**. Every URL below was live
+> `net` allowlist and the `vitni-digitalarkivet` parsers**. Every URL below was live
 > when fetched.
 >
 > Companion: the assisted-import architecture is [ADR 0017](../adr/0017-assisted-import-host-capabilities.md)
@@ -111,7 +111,7 @@ Arkivverket has **IIIF work**, so this was checked directly:
 
 So IIIF is **experimental and photo-scoped**, not a stable, documented Image API 3.0 surface
 over the census/church scans this phase needs. The permanent `urn.digitalarkivet.no/URN:NBN:…jpg`
-route is the proven one. `genealogy-digitalarkivet` should keep the scan-resolution logic
+route is the proven one. `vitni-digitalarkivet` should keep the scan-resolution logic
 behind a function boundary so an IIIF `info.json`/image path can be added later without
 touching the plugin flow — but **ship HTML-first**.
 
@@ -142,7 +142,7 @@ crawlers**, including AI crawlers — `GPTBot`, `ClaudeBot`, `Googlebot-Extended
 for ADR 0017's `net` capability:
 
 - The host's HTTP client **must send a real, honest, non-crawler `User-Agent`** (an
-  identifying product string such as `genealogy/<version> (+contact)`), and must **not**
+  identifying product string such as `vitni/<version> (+contact)`), and must **not**
   impersonate a browser or use any of the blocked names.
 - `robots.txt` **requests a 5-second crawl-delay**. Assisted import is low-volume and
   user-driven — a session fetches a handful of pages plus one scan per record, at human
@@ -172,13 +172,13 @@ regardless. Nothing in the flow requires authentication or a token.
 ## Verdict
 
 Build the Digitalarkivet integration as an **HTML scraper over `*.digitalarkivet.no`**, not
-an API client. Concretely, for ADR 0017 and `genealogy-digitalarkivet`:
+an API client. Concretely, for ADR 0017 and `vitni-digitalarkivet`:
 
 1. **No auth, GET-only, honest `User-Agent`.** The `net` capability fetches public pages
    anonymously; it must not log in and must not use a `robots.txt`-blocked crawler UA.
 2. **`net` allowlist = `*.digitalarkivet.no`** (or exact `www.`/`media.`/`urn.`), HTTPS-only,
    **redirect-following with a final-URL report** (the viewer 302-chain needs it).
-3. **Search is a scrape too.** Design `genealogy-digitalarkivet` with `html` parsers as the
+3. **Search is a scrape too.** Design `vitni-digitalarkivet` with `html` parsers as the
    shipping path and a thin, empty `api` module seam so a documented endpoint (or IIIF) can
    be adopted later without reworking the plugin flow.
 4. **Idempotency via `URN:NBN`.** The permanent image URN is the `ExternalId`

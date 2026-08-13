@@ -12,8 +12,8 @@ A genealogy program in Rust, based on the data model of
 - **Event-sourced core.** State is derived by replaying a log of events, not mutated in place.
   Each event is grouped under an **aggregate** and carries an **event context** naming the
   **operator** who caused it — auditable by construction (who changed what, when, and why).
-- **Two frontends over one core.** The `genealogy` CLI binary and the Dioxus GUI both sit on
-  `genealogy-app` (a web app is planned); domain logic stays in `genealogy-core`.
+- **Two frontends over one core.** The `vitni` CLI binary and the Dioxus GUI both sit on
+  `vitni-app` (a web app is planned); domain logic stays in `vitni-core`.
 
 ## Domain model & architecture
 
@@ -26,7 +26,7 @@ These docs are the source of truth; read them before changing the core or its wi
   entities and rebuildable from the log. There are **13 aggregates** — the 10 Gramps primaries
   (Person, Family, Event, Place, Source, Citation, Repository, Media, Note, Tag) plus `DnaTest`,
   `DnaMatch`, and `ResearchNote` (ADR 0028); `for_each_aggregate!` in
-  `crates/genealogy-app/src/aggregates.rs` is the registry that lists them.
+  `crates/vitni-app/src/aggregates.rs` is the registry that lists them.
 - **`docs/adr/` — architecture decisions. ADRs are immutable**: never edit an accepted ADR;
   supersede it with a new one.
 - **`docs/roadmap.md` (+ `roadmap.html`) owns phase/progress state** — read it rather than
@@ -52,12 +52,12 @@ Binding invariants from the ADRs — the load-bearing part; open the ADR for the
 - **Storage (ADR 0002).** `cqrs-es`; **SQLite is the default**, Postgres feature-gated, engine
   chosen **per workspace at runtime** behind one `PersistedEventRepository` trait.
 - **App model (ADR 0005, 0006).** A workspace is a **directory** with a `workspace.toml`
-  manifest, referenced by name; global config at `~/.config/genealogy/config.toml` layers
-  `[defaults]` (frozen at use) under `[workspace-defaults]` (live fallback). `genealogy-app`
+  manifest, referenced by name; global config at `~/.config/vitni/config.toml` layers
+  `[defaults]` (frozen at use) under `[workspace-defaults]` (live fallback). `vitni-app`
   owns the impure inputs (the `Session` — sole place a clock is read and a UUID v7 minted),
   workspace lifecycle, and the use-cases returning frontend-neutral DTOs.
-- **UI layering (ADR 0008).** One-way dependency `genealogy-app → genealogy-ui →
-  genealogy-ui-<framework>`: no `dioxus::` (or future `slint::`) type appears above the renderer
+- **UI layering (ADR 0008).** One-way dependency `vitni-app → vitni-ui →
+  vitni-ui-<framework>`: no `dioxus::` (or future `slint::`) type appears above the renderer
   crate, so a second framework is purely additive. App screens are per-framework view code over
   shared view-models; only **plugin** screens use the serializable UI vocabulary (ADR 0012, 0022)
   rendered by a per-framework interpreter.
@@ -74,22 +74,22 @@ Each crate's `lib.rs` module header holds the authoritative description; this ta
 
 | Crate | Role |
 | --- | --- |
-| `genealogy-core` | Domain model + event-sourcing engine. Pure — no I/O, no user-facing strings. |
-| `genealogy-app` | Coordination and use-cases (ADR 0005, 0006); returns DTOs. |
-| `genealogy-db` | Persistence (ADR 0002): tables, migrations, event store, projection storage. |
-| `genealogy-cli` | The `genealogy` binary; its stdout/stderr is the interface. |
-| `genealogy-ui` | Framework-agnostic presentation (ADR 0008): view-models, navigation/intents, Fluent, plugin-UI vocabulary. |
-| `genealogy-ui-dioxus` | The Dioxus renderer + GUI binary. Library + binary, so SSR tests render without a window; the entry point is behind the `desktop` feature. |
-| `genealogy-i18n` | Shared Fluent plumbing (ADR 0003): the workspace > shared-app > embedded override chain and locale fallback. |
-| `genealogy-plugin-host` | WASM component host (ADR 0007, 0011, 0014): Wasmtime, deny-by-default capabilities over one versioned WIT world, fuel + memory limits. Sits above `genealogy-app`, driving use-cases under an `AgentKind::Software` session. |
-| `genealogy-interchange` | The format-neutral leaf value vocabulary shared by the interchange formats — simple and serde-free; richer concerns stay in core. |
-| `genealogy-gedcom`, `genealogy-gramps-xml`, `genealogy-digitalarkivet` | Pure parse/emit crates — the format logic of the `plugins/*` glue, free of WASM/host types so `--workspace` unit-tests them. Digitalarkivet fixtures (`…/tests/fixtures/`) are verbatim captures — **never reformat them** (prek skips its whitespace/EOF fixers there). |
+| `vitni-core` | Domain model + event-sourcing engine. Pure — no I/O, no user-facing strings. |
+| `vitni-app` | Coordination and use-cases (ADR 0005, 0006); returns DTOs. |
+| `vitni-db` | Persistence (ADR 0002): tables, migrations, event store, projection storage. |
+| `vitni-cli` | The `vitni` binary; its stdout/stderr is the interface. |
+| `vitni-ui` | Framework-agnostic presentation (ADR 0008): view-models, navigation/intents, Fluent, plugin-UI vocabulary. |
+| `vitni-ui-dioxus` | The Dioxus renderer + GUI binary. Library + binary, so SSR tests render without a window; the entry point is behind the `desktop` feature. |
+| `vitni-i18n` | Shared Fluent plumbing (ADR 0003): the workspace > shared-app > embedded override chain and locale fallback. |
+| `vitni-plugin-host` | WASM component host (ADR 0007, 0011, 0014): Wasmtime, deny-by-default capabilities over one versioned WIT world, fuel + memory limits. Sits above `vitni-app`, driving use-cases under an `AgentKind::Software` session. |
+| `vitni-interchange` | The format-neutral leaf value vocabulary shared by the interchange formats — simple and serde-free; richer concerns stay in core. |
+| `vitni-gedcom`, `vitni-gramps-xml`, `vitni-digitalarkivet` | Pure parse/emit crates — the format logic of the `plugins/*` glue, free of WASM/host types so `--workspace` unit-tests them. Digitalarkivet fixtures (`…/tests/fixtures/`) are verbatim captures — **never reformat them** (prek skips its whitespace/EOF fixers there). |
 | `xtask` (repo root, not `crates/*`) | Repository task runner, not shipped. Aliased in `.cargo/config.toml`. |
 
-A new frontend consumes `genealogy-app` and never re-implements domain rules or coordination;
-a GUI frontend goes through `genealogy-ui`, never `genealogy-app` directly.
+A new frontend consumes `vitni-app` and never re-implements domain rules or coordination;
+a GUI frontend goes through `vitni-ui`, never `vitni-app` directly.
 
-The root `pub use` block in `genealogy-app/src/lib.rs` **is** the app's public surface — any
+The root `pub use` block in `vitni-app/src/lib.rs` **is** the app's public surface — any
 use-case, DTO, or re-exported core type a frontend consumes must be re-exported there (each one
 is its own export). When wiring a new app→UI path, add the `pub use` first, or the consumer hits
 `no X in the root`.
@@ -98,10 +98,10 @@ is its own export). When wiring a new app→UI path, add the `pub use` first, or
 
 ```bash
 cargo build --workspace                                              # build every crate
-cargo run -p genealogy-cli                                           # run the `genealogy` binary
-cargo run -p genealogy-ui-dioxus --features desktop                  # run the GUI
+cargo run -p vitni-cli                                           # run the `vitni` binary
+cargo run -p vitni-ui-dioxus --features desktop                  # run the GUI
 cargo nextest run --workspace --all-features --lib --bins --tests    # all tests (see note below)
-cargo test -p genealogy-core <name>                                  # single test by name in one crate
+cargo test -p vitni-core <name>                                  # single test by name in one crate
 cargo clippy --workspace --all-targets --all-features -- -D warnings # lint (zero warnings)
 cargo fmt --all                                                      # format every crate
 cargo deny --all-features check                                      # advisories, licenses, bans
@@ -116,7 +116,7 @@ prek run                                                             # run git h
 
 ## Testing the GUI
 
-SSR tests (`crates/genealogy-ui-dioxus/tests/*.rs`) assert markup and are the default — fast, and they
+SSR tests (`crates/vitni-ui-dioxus/tests/*.rs`) assert markup and are the default — fast, and they
 cover view logic. They cannot reach anything that only exists in a live webview: `document::eval`,
 CSS, the MapLibre canvas, **which element a handler is attached to**, or **where focus actually goes**.
 Those last two are not theoretical — the first scenarios written found three shipped defects that every
@@ -138,7 +138,7 @@ cargo xtask gui-pass --keep              # leave it up; attach with `x11vnc -dis
 cargo xtask gui-pass --workspace gen     # drive your own config + workspace instead of the fixture
 ```
 
-Scenarios are **TOML, not Rust** — `crates/genealogy-ui-dioxus/tests/gui-pass/*.toml`, so adding one
+Scenarios are **TOML, not Rust** — `crates/vitni-ui-dioxus/tests/gui-pass/*.toml`, so adding one
 needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `drag`, `wheel`, `wait` to sleep and
 let a timed effect fire, `await-exit` to wait for the GUI process to quit) and `[[assert]]`s over the
 shots by name: `differ` for "the UI reacted",
@@ -173,18 +173,18 @@ no frame rate.
 
 The CLI's top-level commands are `init`, `rebuild`, `import`, `export`, `plugin`, plus one
 subcommand-bearing verb per aggregate, generated from `for_each_cli_command!` in
-`crates/genealogy-cli/src/main.rs`. Workspace selection is `--workspace`/`GENEALOGY_WORKSPACE`.
+`crates/vitni-cli/src/main.rs`. Workspace selection is `--workspace`/`VITNI_WORKSPACE`.
 
-> **Always pass `--workspace` / `--all`.** `default-members = ["crates/genealogy-cli"]`, so a
+> **Always pass `--workspace` / `--all`.** `default-members = ["crates/vitni-cli"]`, so a
 > cargo command without `-p`/`--workspace` (`--all` for `fmt`) silently covers the CLI crate
 > alone, skipping most tests, the other crates' `#[cfg(test)]` targets, and `xtask`. `cargo deny`
 > and `cargo xtask` are unaffected. `nextest` is the local runner; CI uses `cargo test` and runs
 > doctests separately, which neither `--lib --bins --tests` nor `nextest` covers.
 
-`--lib --bins --tests` deliberately excludes `benches/`: each `genealogy-db` bench takes ~140 s
+`--lib --bins --tests` deliberately excludes `benches/`: each `vitni-db` bench takes ~140 s
 (15 of them, run `30783699764`), so nextest running them costs ~18 minutes it doesn't need to.
 Clippy still runs `--all-targets`, so the bench code stays linted. Run benches deliberately with
-`cargo bench -p genealogy-db --features sqlite`.
+`cargo bench -p vitni-db --features sqlite`.
 
 ## Git
 
@@ -197,10 +197,10 @@ Clippy still runs `--all-targets`, so the bench code stays linted. Run benches d
   `panic`, `todo`, `unimplemented`, `exit`, `dbg_macro`, etc. Do not silence them with
   `#[allow(...)]` — `allow_attributes` is itself denied. Fix the code instead. `expect_used`
   is `warn`; justify any use.
-- `print_stdout`/`print_stderr` are denied workspace-wide but **allowed in `genealogy-cli`**
-  (its stdout/stderr is the UI). Domain code in `genealogy-core` must use `tracing`, never
+- `print_stdout`/`print_stderr` are denied workspace-wide but **allowed in `vitni-cli`**
+  (its stdout/stderr is the UI). Domain code in `vitni-core` must use `tracing`, never
   `print!`.
-- The `[lints]` table can't both inherit and override, so `genealogy-cli` duplicates the
+- The `[lints]` table can't both inherit and override, so `vitni-cli` duplicates the
   workspace lint set with its print relaxations. Keep the two lists in sync.
 - Event-sourcing invariant: events are the source of truth and are append-only. Never edit
   derived/projected state directly — emit a new event so the audit trail (operator + context)
@@ -208,8 +208,8 @@ Clippy still runs `--all-targets`, so the bench code stays linted. Run benches d
 - **Every user-facing string is localized (ADR 0003).** All frontend text — stdout/stderr,
   labels, prompts, errors mapped from core types — goes through Fluent (`fl!()`), never a
   hardcoded literal and never a framework's built-in i18n. The CLI's per-`<lang>`
-  `genealogy-cli.ftl` is **generated** by `build.rs` from tracked per-module fragments and is
-  gitignored — edit a fragment, never the concatenated file. `genealogy-core` emits no
+  `vitni-cli.ftl` is **generated** by `build.rs` from tracked per-module fragments and is
+  gitignored — edit a fragment, never the concatenated file. `vitni-core` emits no
   user-facing strings: typed errors only, English `tracing` for developers.
 - **Every UI change updates `docs/mockups/` in the same change.** The mockups are the design source
   of truth and must describe *shipped* behaviour, never follow-up work — so a shipped change that the

@@ -3,7 +3,7 @@
 - **Status:** Review findings — implementation planned in
   [data-model-review-plan.md](data-model-review-plan.md) (ADRs 0019–0021)
 - **Date:** 2026-07-10
-- **Scope:** the model as implemented in `genealogy-core` (see
+- **Scope:** the model as implemented in `vitni-core` (see
   [data-model-diagram.md](../data-model-diagram.md)), reviewed against GEDCOM 7, GEDCOM X, Gramps
   (current master), GENTECH GDM 1.0, and Evidence Explained / GPS practice. Primary sources were
   re-checked, not taken from data-model.md §2–§3; citations at the end.
@@ -25,12 +25,12 @@ workspaces, no upcasters); "Defer" = safe to postpone.
 
 ## 1. Participation is asserted twice — finish moving to one owner (Now)
 
-**Status:** implemented in PR [#112](https://github.com/magne/genealogy/pull/112) (ADR 0019).
+**Status:** implemented in PR [#112](https://github.com/magne/vitni/pull/112) (ADR 0019).
 
 **Problem.** A person's participation in an event is independently asserted in two aggregates:
 `PersonState.participations` (`Participation { event_id, role }`,
-`crates/genealogy-core/src/person/state.rs:99`) and `EventState.participants`
-(`EventParticipant { participant_id, role }`, `crates/genealogy-core/src/event/state.rs:47`).
+`crates/vitni-core/src/person/state.rs:99`) and `EventState.participants`
+(`EventParticipant { participant_id, role }`, `crates/vitni-core/src/event/state.rs:47`).
 The UI read-merges both sides with an origin tag; writes are person-canonical and legacy event
 rows are retract-only — i.e. the migration to one owner is already half-taken.
 
@@ -64,10 +64,10 @@ person-side `AssertionId` is the only handle.
 
 ## 2. Two citation channels with undefined precedence (Now)
 
-**Status:** implemented in PR [#110](https://github.com/magne/genealogy/pull/110) (ADR 0020).
+**Status:** implemented in PR [#110](https://github.com/magne/vitni/pull/110) (ADR 0020).
 
 **Problem.** A claim's backing citations can live in two places with no stated rule:
-the envelope (`EventContext.citations`, `crates/genealogy-core/src/provenance.rs:150`) and the
+the envelope (`EventContext.citations`, `crates/vitni-core/src/provenance.rs:150`) and the
 payload of some value objects (`Fact.citations`, `fact.rs:26`; `Attribute.citations`,
 `text.rs:64`; `MediaRef.citations`, `text.rs:93`). The projections then denormalize
 inconsistently: `AssertedName.citations` is copied from the envelope
@@ -97,8 +97,8 @@ shape to `AssertedName`, which finding 6 wants anyway. Needs an ADR (it narrows 
 
 ## 3. Event participation carries a role and nothing else (Now)
 
-**Status:** fully closed. Payload half in PR [#111](https://github.com/magne/genealogy/pull/111)
-(ADR 0019); the plugin-boundary + AGE/ASSO round-trip in PR [#113](https://github.com/magne/genealogy/pull/113) (`host-api@0.13.0`).
+**Status:** fully closed. Payload half in PR [#111](https://github.com/magne/vitni/pull/111)
+(ADR 0019); the plugin-boundary + AGE/ASSO round-trip in PR [#113](https://github.com/magne/vitni/pull/113) (`host-api@0.13.0`).
 
 **Problem.** `EventParticipant`/`Participation` is `{ person_id/event_id, role }`. No
 age-at-event, no participant-scoped notes, no participant attributes. data-model §17 already
@@ -122,7 +122,7 @@ the payload only changes once.
 
 ## 4. Child–parent relationship rows cannot be corrected independently (Now)
 
-**Status:** implemented in PR [#114](https://github.com/magne/genealogy/pull/114) (ADR 0021).
+**Status:** implemented in PR [#114](https://github.com/magne/vitni/pull/114) (ADR 0021).
 
 **Problem.** `ChildEntry.relationships: Vec<(PersonId, ChildParentRelationship)>`
 (`family/state.rs:30`) packs all per-parent relationships into the single child assertion. One
@@ -143,7 +143,7 @@ of those assertions. Payload change → do now, own ADR or fold into finding 1/3
 
 ## 5. Fact vs Event overlap has no promotion rule (Now — rule only, no schema change)
 
-**Status:** implemented in PR [#118](https://github.com/magne/genealogy/pull/118) (ADR 0021 §2).
+**Status:** implemented in PR [#118](https://github.com/magne/vitni/pull/118) (ADR 0021 §2).
 
 **Problem.** `FactType` and `EventType` both carry Birth, Death, Baptism, Burial (plus
 Residence). The same real-world birth is representable as a single-person `Fact` or as an `Event`
@@ -187,7 +187,7 @@ data-model §8. Fold-time only — no event-payload change, no upcasting; snapsh
 here. Cheap, and it removes a whole class of "why does the UI show confidence here but not there"
 bugs before the UI multiplies.
 
-**Status:** implemented in PR [#117](https://github.com/magne/genealogy/pull/117) (ADR 0021 §3).
+**Status:** implemented in PR [#117](https://github.com/magne/vitni/pull/117) (ADR 0021 §3).
 
 ## 7. `Citation.created_by`/`created_at` shadows the envelope, stringly (Now, cheap)
 
@@ -200,11 +200,11 @@ the Human/Software/AiModel distinction §13 exists for), and no other aggregate 
 context into the projection if a read model needs a creation stamp (same denormalize-at-fold
 pattern as `Asserted`). Payload + projection cleanup while cheap.
 
-**Status:** implemented in PR [#117](https://github.com/magne/genealogy/pull/117) (ADR 0021 §4).
+**Status:** implemented in PR [#117](https://github.com/magne/vitni/pull/117) (ADR 0021 §4).
 
 ## 8. Mandatory `Confidence` on every assertion is noise for mechanical ops (Now, trivial)
 
-**Status:** implemented in PR [#116](https://github.com/magne/genealogy/pull/116) (ADR 0021).
+**Status:** implemented in PR [#116](https://github.com/magne/vitni/pull/116) (ADR 0021).
 
 **Problem.** `EventContext.confidence` is non-optional (`provenance.rs:147`), so `Tagged`,
 `RestrictionsChanged`, `TagColorSet`, path/checksum setters all carry a surety judgment nobody
@@ -219,7 +219,7 @@ full ADR.
 
 ## 9. Two confidence layers exist — legitimate, but undocumented (Defer, doc-only)
 
-**Status:** documented in PR [#119](https://github.com/magne/genealogy/pull/119) (data-model §8).
+**Status:** documented in PR [#119](https://github.com/magne/vitni/pull/119) (data-model §8).
 
 **Problem.** Confidence lives on the assertion (`EventContext.confidence`) *and* as data on the
 Citation aggregate (`citation/state.rs` `confidence`, `evidence_analysis`) — the Gramps
@@ -237,7 +237,7 @@ screens show citation confidence; never combine arithmetically. No structural ch
 
 ## 10. Family-linked events vs participant assertions — state the semantics (Defer, doc-only)
 
-**Status:** documented in PR [#119](https://github.com/magne/genealogy/pull/119) (data-model §9/§10; the bespoke `AssertedFamilyEvent` mentioned below is now `Attributed<Asserted<EventId>>` since PR [#117](https://github.com/magne/genealogy/pull/117)).
+**Status:** documented in PR [#119](https://github.com/magne/vitni/pull/119) (data-model §9/§10; the bespoke `AssertedFamilyEvent` mentioned below is now `Attributed<Asserted<EventId>>` since PR [#117](https://github.com/magne/vitni/pull/117)).
 
 **Problem.** A marriage can be referenced three ways: `Family.linked_events`
 (`AssertedFamilyEvent`), each spouse's participation, and the Event's own participant list. All

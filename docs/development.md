@@ -12,7 +12,7 @@ the quickstart; this is the detail it links out to.
 
 ### Desktop GUI system dependencies
 
-`genealogy-ui-dioxus` renders through a system webview (Dioxus desktop → `wry`/`tao`). The webview
+`vitni-ui-dioxus` renders through a system webview (Dioxus desktop → `wry`/`tao`). The webview
 sits behind a non-default **`desktop`** feature, so building the rest of the workspace and running
 the tests needs no system libraries — only running the GUI does.
 
@@ -43,10 +43,10 @@ needs no extra step (it links the system WebView2 loader).
 
 ```bash
 cargo build --workspace                                              # every crate
-cargo run -p genealogy-cli                                           # the `genealogy` binary
-cargo run -p genealogy-ui-dioxus --features desktop                  # the GUI
+cargo run -p vitni-cli                                           # the `vitni` binary
+cargo run -p vitni-ui-dioxus --features desktop                  # the GUI
 cargo nextest run --workspace --all-features --lib --bins --tests    # tests
-cargo test -p genealogy-core <name>                                  # one test in one crate
+cargo test -p vitni-core <name>                                  # one test in one crate
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 cargo deny --all-features check                                      # advisories, licences, bans
@@ -56,14 +56,14 @@ prek run                                                             # the git h
 ```
 
 **Always pass `--workspace`** (or `-p`, or `--all` for `fmt`). `default-members` is
-`crates/genealogy-cli`, so a bare `cargo test` or `cargo clippy` silently covers that one crate and
+`crates/vitni-cli`, so a bare `cargo test` or `cargo clippy` silently covers that one crate and
 skips everything else, including `xtask`.
 
-`--lib --bins --tests` deliberately excludes `benches/`: the `genealogy-db` benchmarks take about
+`--lib --bins --tests` deliberately excludes `benches/`: the `vitni-db` benchmarks take about
 140 s each. Clippy still lints them through `--all-targets`. Run them deliberately:
 
 ```bash
-cargo bench -p genealogy-db --features sqlite
+cargo bench -p vitni-db --features sqlite
 ```
 
 `cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`) plus
@@ -73,7 +73,7 @@ cargo bench -p genealogy-db --features sqlite
 
 Two layers, and they catch different things.
 
-**SSR tests** (`crates/genealogy-ui-dioxus/tests/*.rs`) render components to markup and assert over
+**SSR tests** (`crates/vitni-ui-dioxus/tests/*.rs`) render components to markup and assert over
 it. Fast, and they cover view logic. They cannot see anything that only exists in a live webview:
 `document::eval`, CSS, the map canvas, *which element a handler is attached to*, or *where focus
 actually lands*.
@@ -91,7 +91,7 @@ cargo xtask gui-pass --reset             # wipe the fixture workspace, isolated 
 cargo xtask gui-pass --keep              # leave it running; attach with `x11vnc -display :99`
 ```
 
-Scenarios are **TOML, not Rust** — `crates/genealogy-ui-dioxus/tests/gui-pass/*.toml` — so adding one
+Scenarios are **TOML, not Rust** — `crates/vitni-ui-dioxus/tests/gui-pass/*.toml` — so adding one
 needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `drag`, `wheel`, `wait`,
 `await-exit`) and `[[assert]]`s over the shots by name. Runs are isolated by default: a throwaway
 `XDG_CONFIG_HOME`/`XDG_DATA_HOME` and a freshly seeded fixture workspace under `target/gui-pass/`,
@@ -116,13 +116,13 @@ The ones that will fail a review if missed:
 - **Lints are guardrails, not suggestions.** `unwrap_used`, `panic`, `todo`, `unimplemented`,
   `exit`, `dbg_macro` and others are denied workspace-wide, and `allow_attributes` is denied too —
   so an `#[allow(…)]` is not the way out. Fix the code. `expect_used` warns; justify it if you use
-  it. `print_stdout`/`print_stderr` are denied everywhere except `genealogy-cli`, whose stdout *is*
+  it. `print_stdout`/`print_stderr` are denied everywhere except `vitni-cli`, whose stdout *is*
   the interface.
 - **Events are append-only.** Never edit projected state directly; emit an event, so the audit trail
   keeps its operator and reason. Event payloads are self-contained and versioned, and changes are
   additive, so every historical event stays decodable.
 - **Every user-facing string is localized** through Fluent — no hardcoded literals, no framework
-  i18n. `genealogy-core` emits no user-facing strings at all: typed errors, and English `tracing`
+  i18n. `vitni-core` emits no user-facing strings at all: typed errors, and English `tracing`
   for developers. The CLI's per-language catalogue is *generated* from tracked fragments by
   `build.rs`; edit a fragment, never the concatenated file.
 - **Every UI change updates [`mockups/`](mockups/) in the same change.** The mockups are the design

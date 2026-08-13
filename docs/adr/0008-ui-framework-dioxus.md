@@ -5,7 +5,7 @@
 
 ## Context
 
-The shippable frontend today is the `genealogy` CLI over `genealogy-app` (ADR 0006).
+The shippable frontend today is the `vitni` CLI over `vitni-app` (ADR 0006).
 Validating the domain model and overall design needs a graphical app: navigation, rich
 rendering of `Person`/`Family`/`Event`/`Place`/`Source` and their value objects
 (`GenealogicalDate`, dated `PlaceName`, `RichText`, media), and eventually plugin-
@@ -16,7 +16,7 @@ enough that sandboxed plugins can contribute UI.
 
 Two further project constraints bind the choice. The workspace is licensed
 **MIT OR Apache-2.0** (permissive), which the project keeps; and ADR 0003 fixes
-localization on **Fluent / `i18n-embed`**, with `genealogy-core` string-free and every
+localization on **Fluent / `i18n-embed`**, with `vitni-core` string-free and every
 user-facing string resolved through `fl!()`.
 
 ## Decision
@@ -30,22 +30,22 @@ second framework is additive rather than a rewrite.
    live in Rust, so ADR 0003's `fl!()`/Fluent path applies directly — no gettext, no
    second i18n system.
 
-2. **New framework-agnostic crate `genealogy-ui`.** It holds all presentation logic and
-   **no framework types**: view-models derived from `genealogy-app` DTOs (e.g.
+2. **New framework-agnostic crate `vitni-ui`.** It holds all presentation logic and
+   **no framework types**: view-models derived from `vitni-app` DTOs (e.g.
    formatting `GenealogicalDate`, building list/detail shapes), screen/navigation
-   state, intent dispatch that calls `genealogy-app` use-cases, Fluent string
+   state, intent dispatch that calls `vitni-app` use-cases, Fluent string
    resolution, and the plugin-UI **vocabulary types** (ADR 0007). It depends on
-   `genealogy-app` only.
+   `vitni-app` only.
 
-3. **Thin framework renderer `genealogy-ui-dioxus`.** The `genealogy` GUI binary. It
-   binds view-models to RSX, routes UI events back to `genealogy-ui` intents, and hosts
-   the vocabulary→widgets interpreter (point 5). It sits parallel to `genealogy-cli`
-   and consumes `genealogy-app` through `genealogy-ui`; it does not re-implement domain
+3. **Thin framework renderer `vitni-ui-dioxus`.** The `vitni` GUI binary. It
+   binds view-models to RSX, routes UI events back to `vitni-ui` intents, and hosts
+   the vocabulary→widgets interpreter (point 5). It sits parallel to `vitni-cli`
+   and consumes `vitni-app` through `vitni-ui`; it does not re-implement domain
    rules or coordination. It owns its own `i18n/<lang>/*.ftl` and `RustEmbed` per
    ADR 0003.
 
 4. **Boundary discipline.** Dependencies flow one way:
-   `genealogy-app → genealogy-ui → genealogy-ui-<framework>`. No `dioxus::` (or future
+   `vitni-app → vitni-ui → vitni-ui-<framework>`. No `dioxus::` (or future
    `slint::`) type appears above the renderer crate. This is what makes the framework
    swappable and gives the plugin vocabulary a framework-neutral home.
 
@@ -53,7 +53,7 @@ second framework is additive rather than a rewrite.
    own screens are written as per-framework view code (RSX) over the shared view-models,
    keeping full access to the framework's rich components. Plugin-contributed screens
    instead emit a **constrained, serializable UI vocabulary** (forms/lists/tables)
-   defined in `genealogy-ui`; each framework renderer maps that vocabulary to native
+   defined in `vitni-ui`; each framework renderer maps that vocabulary to native
    widgets once, and every plugin reuses it. The whole app is never rendered through the
    vocabulary — that would rebuild a framework and discard why one was chosen.
 
@@ -62,8 +62,8 @@ second framework is additive rather than a rewrite.
    reimplementation.
 
 7. **A second framework is deferred but additive.** If a native footprint or runtime
-   interpreter later matters, a `genealogy-ui-slint` (or other) renderer can be added,
-   reusing `genealogy-ui` unchanged. Slint is viable for this via its royalty-free
+   interpreter later matters, a `vitni-ui-slint` (or other) renderer can be added,
+   reusing `vitni-ui` unchanged. Slint is viable for this via its royalty-free
    license. Only one frontend is built now — validating the design needs one app, and a
    second in parallel doubles cost for no extra validation.
 
@@ -100,7 +100,7 @@ second framework is additive rather than a rewrite.
 
 ### Negative / costs
 
-- One extra crate (`genealogy-ui`) and the discipline to keep framework types out of it
+- One extra crate (`vitni-ui`) and the discipline to keep framework types out of it
   and to design view-models that assume no render model.
 - Dioxus mobile renders via a webview today (heavier than native); its native renderer
   is still maturing.
@@ -110,14 +110,14 @@ second framework is additive rather than a rewrite.
 ## Out of scope
 
 - The concrete plugin-UI vocabulary schema — deferred to the ADR 0007 follow-up ADR.
-- A second framework renderer (e.g. `genealogy-ui-slint`).
+- A second framework renderer (e.g. `vitni-ui-slint`).
 - Native mobile/web build, signing, and distribution specifics.
 - The concrete view-model set, screen inventory, and design system / theming.
 
 ## References
 
 - ADR 0003 — Fluent / `i18n-embed` localization the UI reuses (strings in Rust).
-- ADR 0005 / 0006 — workspace resolution and the `genealogy-app` use-cases + DTO
+- ADR 0005 / 0006 — workspace resolution and the `vitni-app` use-cases + DTO
   boundary the presentation layer consumes.
 - ADR 0007 — WASM-component plugin system; the deferred plugin-UI vocabulary this ADR
   gives a framework-neutral home.

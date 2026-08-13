@@ -1,4 +1,4 @@
-# 6. Application coordination layer (`genealogy-app`)
+# 6. Application coordination layer (`vitni-app`)
 
 - **Status:** Accepted
 - **Date:** 2026-06-18
@@ -8,23 +8,23 @@
 The decision core is pure by contract (ADR 0004 §3): `decide(state, command, meta)` reads no
 clock and generates no id. Everything non-deterministic — the clock (`occurred_at`), the
 generated `AssertionId` and aggregate ids, and the operator `Agent` — must be produced
-*outside* the core and passed in via `meta`. Likewise, `genealogy-db` exposes a generic event
+*outside* the core and passed in via `meta`. Likewise, `vitni-db` exposes a generic event
 store keyed by aggregate type; turning an operator's intent into a stored, projected fact
 requires building an `AssertionMeta`, generating ids, resolving and opening a workspace,
 allocating a user-facing `human_id`, and mapping framework errors back to a domain result.
 
-This coordination has to live somewhere. Putting it in `genealogy-cli` would force the planned
+This coordination has to live somewhere. Putting it in `vitni-cli` would force the planned
 native UI and web backend (CLAUDE.md) to re-implement it, splitting the one place
 non-determinism enters across every frontend and inviting drift in how provenance is stamped.
 
-`genealogy-db` complements this by exposing a single engine-neutral `Store` (opened from a
+`vitni-db` complements this by exposing a single engine-neutral `Store` (opened from a
 `database_url`, ADR 0002); the application owns the workspace **directory and manifest** (ADR 0005)
 and resolves which `database_url` to open, while the database engine stays entirely inside
-`genealogy-db`.
+`vitni-db`.
 
 ## Decision
 
-Introduce a **`genealogy-app`** crate between `genealogy-core` / `genealogy-db` and every
+Introduce a **`vitni-app`** crate between `vitni-core` / `vitni-db` and every
 frontend. It owns:
 
 1. **The impure inputs.** A `Session` is the single place the clock is read and UUID v7 ids
@@ -33,18 +33,18 @@ frontend. It owns:
    ADR 0004 §3 visible and auditable.
 2. **Configuration and workspace lifecycle.** Loading the global config (operator + workspace
    registry), and creating/opening **workspace directories** with their manifest, database, and
-   `exports/ backups/ media/` (ADR 0005). The engine-neutral store comes from `genealogy-db`
+   `exports/ backups/ media/` (ADR 0005). The engine-neutral store comes from `vitni-db`
    ([`Store::open(database_url)`]); the app resolves the manifest's `database_url` and never names a
    database engine itself.
 3. **Use-cases.** Coarse operations (`create_person`, `add_name`, `show_person`,
-   `list_persons`, …) that build commands, execute them through the `genealogy-db` `Store`, query the
+   `list_persons`, …) that build commands, execute them through the `vitni-db` `Store`, query the
    read model, and return frontend-neutral DTOs. Domain and infrastructure types
    (`PersonView`, cqrs-es, sqlx) do not leak past this boundary; frontends get plain data.
 
-Frontends (`genealogy-cli` today; UI and web later) are thin I/O over these use-cases.
+Frontends (`vitni-cli` today; UI and web later) are thin I/O over these use-cases.
 
-**Backend features forward through the app.** `genealogy-app` declares `sqlite` (default) and
-`postgres` features that re-export `genealogy-db`'s, so the top-level binary selects the
+**Backend features forward through the app.** `vitni-app` declares `sqlite` (default) and
+`postgres` features that re-export `vitni-db`'s, so the top-level binary selects the
 engine set and the choice stays a build-time decision per ADR 0002.
 
 ## Rationale

@@ -1,27 +1,27 @@
 [package]
-name = "genealogy-gramps-export"
+name = "vitni-gramps-export"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
 # Gramps XML export plugin component (ADR 0013, ADR 0018). Thin wasm glue: reads via the host
-# `query` capability and serializes with `genealogy-gramps-xml`. Built for `wasm32-wasip2` via
+# `query` capability and serializes with `vitni-gramps-xml`. Built for `wasm32-wasip2` via
 # `cargo xtask build-plugins`; excluded from the workspace.
 
 [lib]
 crate-type = ["cdylib"]
 
 # ADR 0014 §2 bundle manifest (see `build-plugins`): declared role and capability requests.
-[package.metadata.genealogy-plugin]
+[package.metadata.vitni-plugin]
 role = "bulk-export"
-host_api = "0.21.0"
+host_api = "0.22.0"
 capabilities = ["log", "query", "progress", "export-sink"]
 
 [dependencies]
 wit-bindgen = "0.57.1"
-genealogy-plugin-api = { path = "../plugin-api" }
-genealogy-gramps-xml = { path = "../../crates/genealogy-gramps-xml" }
-genealogy-interchange = { path = "../../crates/genealogy-interchange" }
+vitni-plugin-api = { path = "../plugin-api" }
+vitni-gramps-xml = { path = "../../crates/vitni-gramps-xml" }
+vitni-interchange = { path = "../../crates/vitni-interchange" }
 
 [lints.clippy]
 unwrap_used = "deny"

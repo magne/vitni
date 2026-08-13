@@ -5,7 +5,7 @@
 
 ## Context
 
-`next_human_id` and `find_view_by_human_id` (`genealogy-db`) read every stored `human_id` by
+`next_human_id` and `find_view_by_human_id` (`vitni-db`) read every stored `human_id` by
 JSON-extracting it out of `payload` on every call — the "query surface" ADR 0009 §3 fixed
 deliberately, on the understanding that "when a real query is too slow over the JSON path, the fix
 is local — add a column or index for that query" (ADR 0009 §4). That need arrived: issue #233 and
@@ -18,7 +18,7 @@ first-inserted row), not an index at all.
 Exercising ADR 0009 §4's escape hatch means picking *how* the column arrives on an existing
 workspace. `docs/migration-considerations.md` §1 listed this as an open question: view tables today
 carry no schema-version marker and SQLite has no schema-migration framework in this stack (ADR
-0002 chose no ORM/migration tool; the DDL is owned directly by `genealogy-db`). A `GENERATED ALWAYS
+0002 chose no ORM/migration tool; the DDL is owned directly by `vitni-db`). A `GENERATED ALWAYS
 ... STORED` column sharpens the question further: SQLite cannot `ALTER TABLE ADD COLUMN ... STORED`
 onto an existing table at all, so "migrate in place" is not available regardless of framework.
 
@@ -36,7 +36,7 @@ a generated column in (PG 12+ supports it, at the cost of a table rewrite).
    generated column in place: one migration story for both engines is simpler than two, and the
    drop-and-replay path already exists and is already tested (ADR 0010).
 
-2. **`genealogy-db` detects staleness structurally, not with a version marker.** Each backend probes
+2. **`vitni-db` detects staleness structurally, not with a version marker.** Each backend probes
    the table for the column the current code expects (SQLite `PRAGMA table_xinfo` — not
    `table_info`, which hides a `GENERATED ... STORED` column as "hidden" and would see every table,
    migrated or not, as missing it; Postgres `information_schema.columns`). A table that does not
@@ -130,7 +130,7 @@ a generated column in (PG 12+ supports it, at the cost of a table rewrite).
 ## References
 
 - ADR 0002 — engine selection (SQLite default, Postgres feature-gated); no ORM/migration tool, so
-  `genealogy-db` owns DDL directly, which is what makes a migration story `genealogy-db`'s to write.
+  `vitni-db` owns DDL directly, which is what makes a migration story `vitni-db`'s to write.
 - ADR 0004 §3 — the aggregate-tax cross-aggregate reads this ADR's indexes also serve.
 - ADR 0009 §3 — the JSON-path query surface this ADR's column supersedes for `human_id` specifically;
   §4 — the "add a column or index when a query measurably needs one" escape hatch this ADR exercises;

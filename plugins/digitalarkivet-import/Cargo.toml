@@ -1,11 +1,11 @@
 [package]
-name = "genealogy-digitalarkivet-import"
+name = "vitni-digitalarkivet-import"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
 # Digitalarkivet assisted-import plugin component (ADR 0017). Thin wasm glue: classifies a URL and
-# parses pages with `genealogy-digitalarkivet`, then drives the host `net`, `media-store`, `present`,
+# parses pages with `vitni-digitalarkivet`, then drives the host `net`, `media-store`, `present`,
 # `query`, and `commands` capabilities to review and import one record at a time. Built for
 # `wasm32-wasip2` via `cargo xtask build-plugins`; excluded from the workspace.
 
@@ -13,17 +13,17 @@ publish = false
 crate-type = ["cdylib"]
 
 # ADR 0014 §2 bundle manifest (see `build-plugins`): declared role and capability requests.
-[package.metadata.genealogy-plugin]
+[package.metadata.vitni-plugin]
 role = "assisted-import"
-host_api = "0.21.0"
+host_api = "0.22.0"
 capabilities = ["log", "query", "commands", "progress", "net", "media-store", "ai", "present"]
 
 [dependencies]
 wit-bindgen = "0.57.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-genealogy-plugin-api = { path = "../plugin-api" }
-genealogy-digitalarkivet = { path = "../../crates/genealogy-digitalarkivet" }
+vitni-plugin-api = { path = "../plugin-api" }
+vitni-digitalarkivet = { path = "../../crates/vitni-digitalarkivet" }
 
 [lints.clippy]
 unwrap_used = "deny"

@@ -42,7 +42,7 @@ shape, and how a resolved provider actually reaches the running map.
    change; no toolbar sub-form.** The select only ever chooses among what `[map.providers.*]` already
    declares. A follow-up may add an in-app form; recorded as a backlog item (`docs/issues.md`), not
    built now.
-3. **`genealogy-app` resolves a `MapProvider` into a `MapSource` — the frontend-neutral thing a
+3. **`vitni-app` resolves a `MapProvider` into a `MapSource` — the frontend-neutral thing a
    renderer actually mounts — and this is where map network I/O lives (ADR 0008).** `MapSource` is a
    `MapBasemap` (`Raster { tile_url, tile_size, max_zoom }` or `Style { style_url }`) plus the
    attribution to display. `resolve_map_source`:
@@ -54,8 +54,8 @@ shape, and how a resolved provider actually reaches the running map.
      `.../v1/2dtiles/{z}/{x}/{y}?session=…&key=…` template, and reports Google's own `tileWidth` and
      a fixed `maxZoom` of 22. The session is cached in memory per API key (a token is valid two
      weeks; one mint per process run is the target, not one per provider switch).
-   `genealogy-ui-dioxus` never fetches; it calls `resolve_map_source`/`refresh_map_attribution`
-   through `genealogy-app` and renders whatever comes back.
+   `vitni-ui-dioxus` never fetches; it calls `resolve_map_source`/`refresh_map_attribution`
+   through `vitni-app` and renders whatever comes back.
 4. **A provider switch calls `setStyle`, it does not remount.** The mount script now defines
    `el.__geoInstall(map)` once — the marker/event/draft `GeoJSON` sources and layers, plus (only for a
    `Raster` basemap) the tile source itself, keyed off a runtime descriptor stashed on
@@ -85,7 +85,7 @@ shape, and how a resolved provider actually reaches the running map.
   configured provider's URL/env name had been.
 - **Resolution in the app layer, not the renderer**, keeps ADR 0008's one-way dependency intact and
   gives the Google adapter one place to hold a raw API key and its session token — never passed to
-  `genealogy-ui-dioxus`, so a future renderer for a second framework never needs it either.
+  `vitni-ui-dioxus`, so a future renderer for a second framework never needs it either.
 - **One `__geoInstall`, called from both the initial `load` and every later switch**, is what makes
   "switch without remount" safe: the alternative (a second, switch-specific copy of the overlay-layer
   logic) is exactly the kind of duplication that drifted before (#254's stale-credit bug was one
@@ -107,7 +107,7 @@ shape, and how a resolved provider actually reaches the running map.
 
 ### Negative / costs
 
-- The Google adapter adds `reqwest` to `genealogy-app` and two outbound endpoints
+- The Google adapter adds `reqwest` to `vitni-app` and two outbound endpoints
   (`tile.googleapis.com`) with no automated test against the live service — it needs a billed key
   (`docs/issues.md` records this).
 - No toolbar sub-form for entering a style URL or API key: a provider must already exist in
@@ -133,7 +133,7 @@ shape, and how a resolved provider actually reaches the running map.
   which ADR 0025 itself specified beyond naming the kinds.
 - ADR 0017 §4 — `[ai.providers]`, the named-provider shape `[map.providers]` mirrors, and the
   `for_workspace` config-path bug `ai_config` shares with #283's root cause.
-- ADR 0008 — the one-way `genealogy-app → genealogy-ui → genealogy-ui-<framework>` dependency that
+- ADR 0008 — the one-way `vitni-app → vitni-ui → vitni-ui-<framework>` dependency that
   places map network I/O (and the Google session/API key) in the app layer, never the renderer.
 - ADR 0005 — the global vs. per-workspace config split; `[map]` is global/client-scope, which is what
   made `for_workspace`'s missing `config_path` a silent no-op instead of a load-time error.

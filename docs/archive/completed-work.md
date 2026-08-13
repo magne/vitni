@@ -32,7 +32,7 @@ inaccuracies were found; the two that describe real gaps became outstanding item
 ## Bugs (fixed)
 
 Phase 9 map/geometry defects found in live GUI use — all fixed in
-`crates/genealogy-ui-dioxus/src/screens/{map_shared,place,geography}.rs` (+ the Place VM). Bugs 1, 3
+`crates/vitni-ui-dioxus/src/screens/{map_shared,place,geography}.rs` (+ the Place VM). Bugs 1, 3
 and 5 carry SSR/unit tests; bugs 2 and 4 are verified present in code but **untested** (see the
 verification note above). The interactive MapLibre canvas behavior still needs a **manual webview
 pass** — SSR cannot reach it, and neither can an agent screenshot, which shows rendering but not
@@ -51,7 +51,7 @@ pan/zoom feel or click latency:
 ## Places (delivered)
 
 - **Transitive place-hierarchy walk** — the cycle-aware, date-aware primary-`PlaceRef` walk landed in
-  `genealogy-app/src/place.rs` (`hierarchy_chain` / `generated_title` in `place_hierarchy.rs`),
+  `vitni-app/src/place.rs` (`hierarchy_chain` / `generated_title` in `place_hierarchy.rs`),
   flowing through `PlaceSummary.enclosing` → `PlaceDetail.hierarchy`. An optional DB `place_parent`
   index (Gramps precedent) remains a later scale follow-up, tracked under *Platform & operations →
   Performance & scale*.
@@ -67,7 +67,7 @@ pan/zoom feel or click latency:
 - **Place succession write path.** *(Done — `feat/place-succession-write`, closes #196.)*
   `assert_place_succession` (ADR 0026 §3) was reachable from neither frontend, so the Place screen could
   display a succession no user could create. Both frontends now write one:
-  `PlaceEdit::AssertSuccession { human_id, from_extra, to, kind, date }` (`genealogy-ui`) dispatches to
+  `PlaceEdit::AssertSuccession { human_id, from_extra, to, kind, date }` (`vitni-ui`) dispatches to
   the use-case with the **anchor prepended** to the ceasing set — `human_id` is always one of the places
   that ceased, so `from_extra` names only the *other* ones (a merge's many side) and the app never sees
   the `SuccessionAnchorMismatch` it rejects on. In the GUI the Hierarchy tab's Succession card carries an
@@ -76,7 +76,7 @@ pan/zoom feel or click latency:
   repeatable place pickers (resulting / also-ceased, each excluding this place and the already-picked
   ids) accumulating deletable chips, a structured effective date, and the provenance block; Save is
   inert until a resulting place is picked. The CLI gained
-  `genealogy place assert-succession <HUMAN_ID> --to <ID>… [--from <ID>…] --kind <KIND> [--year/--month/--day]`
+  `vitni place assert-succession <HUMAN_ID> --to <ID>… [--from <ID>…] --kind <KIND> [--year/--month/--day]`
   over a `SuccessionKindArg` `ValueEnum` mirror, promoting `gregorian_date` to the app's public surface.
   Editing an existing succession row is still out of scope — Retract stays the only row action.
 - **Workspace-scope surety labels are writable.** *(Done — `fix/workspace-surety-write`, closes #198.)*
@@ -100,13 +100,13 @@ pan/zoom feel or click latency:
   on the remaining five screens' Media tab — each dispatches its own `{Family,Event,Place,Source,
   Citation}Edit::SetMediaRegion`, mirroring the Person wiring exactly. Added an SSR test per screen
   (`tests/{family,event,citation,place,source}_detail.rs`) asserting the gallery card opens the viewer,
-  plus a dispatch-layer test per aggregate in `genealogy-ui/tests/dispatch_provenance.rs` proving the
+  plus a dispatch-layer test per aggregate in `vitni-ui/tests/dispatch_provenance.rs` proving the
   region supersede reaches the change log. Updated all six owner mockups to show the click-to-open
   affordance (Family's stays a deliberate empty-state specimen; its note now says so).
 
 ## Completed features & phases
 
-- **Bulk import in the GUI.** *(Done — `feat/gui-bulk-import`, closes #191.)* `genealogy-ui-dioxus` had
+- **Bulk import in the GUI.** *(Done — `feat/gui-bulk-import`, closes #191.)* `vitni-ui-dioxus` had
   no local-file import flow — only the assisted online wizard — and the CLI's own target selection
   (`--new NAME PATH` / `--into NAME`, prompting when an existing target already holds persons) had no
   GUI shape. `Tool::Import` gained a front mode choice (`ImportModeSwitch`, `screens/import.rs`): **Bulk
@@ -131,8 +131,8 @@ pan/zoom feel or click latency:
 - **Quit/close-tab keys & customizable keyboard shortcuts.** *(Done — stacked branches
   `feat/quit-close-tab-keys` (PR #187) → `feat/customizable-shortcuts`, gated by
   [ADR 0030](../adr/0030-customizable-keyboard-shortcuts.md).)* `Ctrl+Q`/`Ctrl+W` did not exist, and the
-  shortcut map had two independent sources of truth: `genealogy-ui`'s declarative map fed only the `?`
-  help overlay (decorative), while `genealogy-ui-dioxus`'s dispatcher re-implemented the same matrix
+  shortcut map had two independent sources of truth: `vitni-ui`'s declarative map fed only the `?`
+  help overlay (decorative), while `vitni-ui-dioxus`'s dispatcher re-implemented the same matrix
   hardcoded, so the two could drift and no binding was user-changeable. **Quit/close-tab:** two new
   `Global` actions (`⌘Q`/`⌘W`); closing a saved tab is immediate, closing a draft (or quitting with one
   open) now arms a confirm dialog (`Modal`-based) instead of silently discarding it — the tabstrip `✕`
@@ -144,7 +144,7 @@ pan/zoom feel or click latency:
   `Modifier` became a 3-flag struct (`command`/`shift`/`alt`) so `Alt` composes; `Chord` gained a
   canonical `mod+shift+alt+key` `FromStr`/`Display`; a rejected override (unknown id, unparsable
   chord, non-`Global` action, or a conflict) is a typed error surfaced in the Preferences card, never a
-  silent drop. `[shortcuts]` lives in the global `~/.config/genealogy/config.toml`, client scope only
+  silent drop. `[shortcuts]` lives in the global `~/.config/vitni/config.toml`, client scope only
   (mirrors `[ai]`/`[map]`/`[plugin_trust]`) — no workspace-manifest layer. A save takes effect live (a
   `Signal<ShortcutConfig>` held in shell context), no restart needed. Scoped residuals tracked in
   [`docs/issues.md`](../issues.md) under *Frontend & interaction → Keyboard & shortcuts*.
@@ -219,12 +219,12 @@ pan/zoom feel or click latency:
 - **Assisted import & external search — Digitalarkivet (Phase 8).** *(Done — branches/PRs
   #153–#160.)* There was no way to search an online archive and turn a found record into reviewable
   assertions. Added, under [ADR 0017](../adr/0017-assisted-import-host-capabilities.md), four
-  deny-by-default host capabilities (WIT `genealogy:host-api` 0.15.0 → 0.19.0): `net` (GET-only,
+  deny-by-default host capabilities (WIT `vitni:host-api` 0.15.0 → 0.19.0): `net` (GET-only,
   HTTPS, allowlist re-checked per redirect hop, honest non-crawler User-Agent), `media-store`
   (SHA-256 checksums, path-safe writes under the workspace `media/` root, path+checksum dedup), a
   config-declared multi-provider `ai` (`command`/`vision-api`, client scope), and a suspending
   `present` carrying a typed, versioned assisted-import payload. On top: the `assisted-import` world
-  with a `Confidence::Low` provenance template; a pure `genealogy-digitalarkivet` crate that parses
+  with a `Confidence::Low` provenance template; a pure `vitni-digitalarkivet` crate that parses
   census/church-book pages and resolves the scan-URL chain over verbatim fixtures (HTML-first — the
   research doc found no anonymous public API); media-crop plumbing (`MediaRef.crop`/caption through
   app, DTO, and WIT, with the Gramps `<region>` round-trip proven on import) plus a GUI crop tool,
@@ -238,21 +238,21 @@ pan/zoom feel or click latency:
   `ConfigStore` trait with a `FileConfigStore` backend over the two existing TOML files; the database
   backend (per authenticated user) is deferred to the post-1.0 server work with the server. Fixed the
   inverted env-var precedence: a workspace's configured `ui_language` now outranks a bare
-  `LANGUAGE`/`LANG`, and `GENEALOGY_LANGUAGE` outranks both (plain env < config <
-  `GENEALOGY_`-prefixed), via a pure language resolver wired into every localizer-building site
+  `LANGUAGE`/`LANG`, and `VITNI_LANGUAGE` outranks both (plain env < config <
+  `VITNI_`-prefixed), via a pure language resolver wired into every localizer-building site
   (cli / ui / dioxus). The on-disk layout is unchanged (a clean break was permitted but no consumer
   needed one). Realized as a single typed resolver for the one env key that exists; a general
-  `GENEALOGY_*`-over-config overlay is documented intent (ADR 0015). No new config fields.
+  `VITNI_*`-over-config overlay is documented intent (ADR 0015). No new config fields.
 - **Place map MVP — read-only point (Phase 6).** *(Done — branch `feat/place-map-mvp`.)* A Place's
   point coordinate was only shown as two text fields; there was no way to *see* where a place is. Added
   a read-only **Map** tab to the Place screen that renders one marker at the existing coordinate over
   OpenStreetMap raster tiles (Leaflet 1.9.4, vendored locally and injected into the webview `<head>` so
   only the tiles are fetched — the app's first outbound network request), with a dashed "No coordinates
   yet" empty state otherwise. A framework-free `MapPointVm` on `PlaceDetail`
-  (`crates/genealogy-ui/src/view_model/place.rs`), parsed from the existing `coordinates` DTO string,
+  (`crates/vitni-ui/src/view_model/place.rs`), parsed from the existing `coordinates` DTO string,
   gates the marker; the Leaflet map is initialised via `document::eval` (a no-op under SSR) with a
   `divIcon` marker and the `© OpenStreetMap contributors` attribution rendered in the server-side DOM.
-  No `genealogy-core`, DTO, or event-log change; no ADR. New message ids are localized (`en` + `no`).
+  No `vitni-core`, DTO, or event-log change; no ADR. New message ids are localized (`en` + `no`).
   Editing, polygons, boundaries-over-time, event pins, a time slider, provider choice, and geocoding
   landed later in **Phase 9**.
 - **Tall side panel overflows the viewport.** *(Fixed — branch
@@ -289,7 +289,7 @@ pan/zoom feel or click latency:
   (`components/text_input.rs` `TextInput`/`SelectInput`, `text_field.rs` `TextField`), so the guard is
   wired exactly once per element, and a `cargo xtask input-guard` lint (prek + CI) forbids raw form
   elements outside the primitives so it cannot regress. Field validation state moved into
-  `genealogy-ui` view-models. A general VS Code-style *when* context was deliberately not built; it
+  `vitni-ui` view-models. A general VS Code-style *when* context was deliberately not built; it
   remains explicitly out of scope of customizable keyboard shortcuts
   ([ADR 0030](../adr/0030-customizable-keyboard-shortcuts.md) §Out of scope), unless a real need
   surfaces.

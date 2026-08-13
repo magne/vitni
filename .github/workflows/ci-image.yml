@@ -1,7 +1,7 @@
 name: CI image
 
 # Builds the custom CI build image and pushes it to GHCR. ci.yml consumes
-# ghcr.io/magne/genealogy-ci:latest. On pull requests the image is built but NOT pushed (validates
+# ghcr.io/magne/vitni-ci:latest. On pull requests the image is built but NOT pushed (validates
 # the Dockerfile); pushes to main and manual dispatch publish it.
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/magne/genealogy-ci
+          images: ghcr.io/magne/vitni-ci
           tags: |
             type=raw,value=latest
             type=sha,format=long

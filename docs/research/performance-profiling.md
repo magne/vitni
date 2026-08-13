@@ -4,7 +4,7 @@
 - **Date:** 2026-07-25
 - **Gating ADR:** [0004](../adr/0004-event-sourcing-implementation-contract.md) — snapshotting is
   "deferred until replay cost warrants it"; this workstream is that measurement.
-- **Harness:** `crates/genealogy-db/benches/store.rs` (criterion, `harness = false`).
+- **Harness:** `crates/vitni-db/benches/store.rs` (criterion, `harness = false`).
 
 ## Question
 
@@ -17,7 +17,7 @@ measures them and states the snapshotting verdict.
 ## Methodology
 
 - **Harness.** [criterion](https://crates.io/crates/criterion) 0.8.2 (dev-dependency of
-  `genealogy-db`, `default-features = false` + `cargo_bench_support` only — the plotters/rayon
+  `vitni-db`, `default-features = false` + `cargo_bench_support` only — the plotters/rayon
   HTML-report tree is dropped so `cargo deny` stays clean). One `[[bench]]` target, `store`,
   measuring the public [`Store`] surface. `rebuild_projections` is async and is driven with a single
   `tokio::runtime::Runtime` built once outside the measured closure (`rt.block_on(...)` inside
@@ -83,7 +83,7 @@ follow-up ADR is needed.** The reasoning is two-fold:
    snapshot would save essentially nothing on the command path.
 2. **The one measured full-replay cost is a bounded maintenance operation.** `rebuild_projections`
    replays the whole log, but it is a **maintenance / recovery** path (schema change, corruption
-   recovery, the `genealogy rebuild` command) — never interactive. Steady-state reads never trigger
+   recovery, the `vitni rebuild` command) — never interactive. Steady-state reads never trigger
    a replay: projections update **incrementally** via the live cqrs-es `Query` as each command
    commits. At 52 650 events it is 5.6 s; even the pessimistic ~1-2 min for a very large
    (100k-person) workspace is acceptable for an infrequent operation — **and snapshotting would not
@@ -181,9 +181,9 @@ figure.
 ## Reproducing
 
 ```bash
-cargo bench -p genealogy-db                 # full run (~3-4 min): fixture build + rebuild + query
-cargo bench -p genealogy-db -- rebuild      # rebuild group only
-cargo bench -p genealogy-db -- query        # query group only
+cargo bench -p vitni-db                 # full run (~3-4 min): fixture build + rebuild + query
+cargo bench -p vitni-db -- rebuild      # rebuild group only
+cargo bench -p vitni-db -- query        # query group only
 ```
 
 **`--quick` needs the compiled binary, not `cargo bench -- --quick`.** `cargo bench` also runs the
@@ -195,7 +195,7 @@ back to its own "smoke test" mode (`cargo test --benches`'s mode, which just pri
 Success` with no timings):
 
 ```bash
-cargo bench -p genealogy-db --bench store --features sqlite --no-run
+cargo bench -p vitni-db --bench store --features sqlite --no-run
 ./target/release/deps/store-<hash> --bench --quick   # <hash> from the build output above
 ```
 

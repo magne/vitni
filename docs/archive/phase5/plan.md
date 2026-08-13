@@ -7,15 +7,15 @@
 
 ## Context
 
-Phase 4 is done: all 12 aggregates are modelled, `genealogy-app` exposes Summary DTOs +
+Phase 4 is done: all 12 aggregates are modelled, `vitni-app` exposes Summary DTOs +
 `list_*`/`show_*`/`create_*`/mutation use-cases for **every** aggregate, and the CLI has full CRUD.
-The UI is only the Spike-D proof — `genealogy-ui` (framework-free) has Person view-models + the
-plugin form vocabulary; `genealogy-ui-dioxus` renders one Person list→detail screen and a plugin
+The UI is only the Spike-D proof — `vitni-ui` (framework-free) has Person view-models + the
+plugin form vocabulary; `vitni-ui-dioxus` renders one Person list→detail screen and a plugin
 form over ~207 lines of embedded dark CSS. Eleven aggregates have no UI, there is no design system,
 and the roadmap-mandated pedigree, evidence-editing, and merge screens do not exist.
 
 This plan turns the mockups into screens **without re-implementing domain rules**: the UI consumes
-the existing use-cases in `crates/genealogy-app/src/<aggregate>.rs`. New app-layer code is only the
+the existing use-cases in `crates/vitni-app/src/<aggregate>.rs`. New app-layer code is only the
 few read/command paths that don't exist yet (change-log query, merge, config read/write, pedigree
 traversal), called out per PR.
 
@@ -43,7 +43,7 @@ traversal), called out per PR.
 
 A11y is a property of the foundation, verified at every step — not a late polish pass. Grounding:
 Dioxus 0.7.8 supports keyboard events and `aria-*`/`role`/`tabindex` as standard RSX attributes; the
-SSR test (`crates/genealogy-ui-dioxus/tests/interpreter.rs`) asserts via `html.contains(...)`, so a11y
+SSR test (`crates/vitni-ui-dioxus/tests/interpreter.rs`) asserts via `html.contains(...)`, so a11y
 attributes are unit-testable; `Chrome`/`Localizer` (ADR 0003) localize aria-labels and shortcut hints.
 The crate has **zero** a11y infra today — clean slate.
 
@@ -73,13 +73,13 @@ See [`shortcuts.html`](../../mockups/shortcuts.html) for the full map, focus mod
 
 ## Binding constraints (ADRs)
 
-- **ADR 0008** — dependency direction `genealogy-app → genealogy-ui → genealogy-ui-<framework>`; no
+- **ADR 0008** — dependency direction `vitni-app → vitni-ui → vitni-ui-<framework>`; no
   `dioxus::` type above the renderer. App screens use rich RSX over shared view-models; **only plugin
   screens** use the constrained serializable vocabulary.
 - **ADR 0012** — plugin UI is the JSON form vocabulary (text/number/checkbox/select); labels are
   Fluent message IDs resolved by the frontend. Phase 5 must *complete* this vocabulary.
-- **ADR 0003** — every user-facing string is a Fluent message ID (data catalogue in `genealogy-ui`,
-  chrome catalogue in `genealogy-ui-dioxus`); no hardcoded literals; en + no kept complete (i18n-check).
+- **ADR 0003** — every user-facing string is a Fluent message ID (data catalogue in `vitni-ui`,
+  chrome catalogue in `vitni-ui-dioxus`); no hardcoded literals; en + no kept complete (i18n-check).
 
 ## Differentiators to surface (cross-cutting)
 
@@ -102,29 +102,29 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 
 | PR | Title | Touches | Notes |
 | -- | ----- | ------- | ----- |
-| **1** | Design system foundation (accessible components) ✅ done (audit 2026-07-05; leftovers → plan-2.md PR29 structured DatePicker, PR33 Switch/RadioGroup) | `genealogy-ui-dioxus/src/components/*`, `tokens.css` (replaces `app.css`) | Tokens (light+dark, **contrast-audited to AA**) + reusable components: Button, Input/Select/Checkbox/DatePicker, Card, Tabs, Table/ListRow, Badge/Chip, **ConfidenceBadge, EvidenceAxisChip, no-source flag**, SidePanel, Modal, Breadcrumb, EmptyState, Toast, StatusLine, **History timeline, provenance popover**. **Each ships accessible: roles/labels, `:focus-visible`, keyboard operability, color-not-alone, `prefers-reduced-motion`.** Refactor the existing Person + plugin screens onto them; extend the SSR test to assert roles/labels. Keep it green. |
-| **2** | App shell + navigation + keyboard foundation ✅ done (audit 2026-07-05; leftovers → plan-2.md PR31 palette/search/shortcut dispatch, PR34 drag-to-dock) | `genealogy-ui::navigation::{Screen,Intent}`, `genealogy-ui-dioxus` shell | Entity rail (entities vs Tools), global search box (stub), active-record breadcrumb + status bar, in-app tab container with drag-to-split, landmarks + skip link. **The keyboard layer lives here: central shortcut dispatcher (the localized map), roving-tabindex + focus-trap helpers, the `⌘K` palette, the `?` help overlay, `g`-prefix nav.** Chrome i18n keys for nav labels, shortcut hints, aria-labels. |
-| **3** | Generic list + master-detail framework ✅ done (audit 2026-07-05 — descriptor-driven, `master_detail.rs`) | `genealogy-ui`, `genealogy-ui-dioxus` | Reusable list (search/filter/sort/columns) + detail container with a related-item tab strip, driven by per-aggregate descriptors. Adding an aggregate = view-models + a tab config, not a bespoke screen. |
-| **4** | Person vertical slice (reference) ✅ done (audit 2026-07-05; leftover → plan-2.md PR27 Person tag/untag) | `genealogy-ui/src/view_model.rs`, `genealogy-ui-dioxus`, reuses `app::person`/`app::event` | View-models for the Person tabs (Names/Facts/Events/Associations/Families/Citations/Media/Notes/Tags/History); full list + detail; inline + side-panel editing; inline source + confidence on facts. The copy-template for the rest. |
-| **5** | History / change-log query ✅ done (audit 2026-07-05; leftover → plan-2.md PR31 ⌘Z wiring) | new query use-case in `genealogy-app`, `genealogy-ui` | Per-aggregate event stream → DTOs (operator/when/summary). Renders the History tab + the global **Activity** view + undo. The event-sourced differentiator; reused by every aggregate. |
+| **1** | Design system foundation (accessible components) ✅ done (audit 2026-07-05; leftovers → plan-2.md PR29 structured DatePicker, PR33 Switch/RadioGroup) | `vitni-ui-dioxus/src/components/*`, `tokens.css` (replaces `app.css`) | Tokens (light+dark, **contrast-audited to AA**) + reusable components: Button, Input/Select/Checkbox/DatePicker, Card, Tabs, Table/ListRow, Badge/Chip, **ConfidenceBadge, EvidenceAxisChip, no-source flag**, SidePanel, Modal, Breadcrumb, EmptyState, Toast, StatusLine, **History timeline, provenance popover**. **Each ships accessible: roles/labels, `:focus-visible`, keyboard operability, color-not-alone, `prefers-reduced-motion`.** Refactor the existing Person + plugin screens onto them; extend the SSR test to assert roles/labels. Keep it green. |
+| **2** | App shell + navigation + keyboard foundation ✅ done (audit 2026-07-05; leftovers → plan-2.md PR31 palette/search/shortcut dispatch, PR34 drag-to-dock) | `vitni-ui::navigation::{Screen,Intent}`, `vitni-ui-dioxus` shell | Entity rail (entities vs Tools), global search box (stub), active-record breadcrumb + status bar, in-app tab container with drag-to-split, landmarks + skip link. **The keyboard layer lives here: central shortcut dispatcher (the localized map), roving-tabindex + focus-trap helpers, the `⌘K` palette, the `?` help overlay, `g`-prefix nav.** Chrome i18n keys for nav labels, shortcut hints, aria-labels. |
+| **3** | Generic list + master-detail framework ✅ done (audit 2026-07-05 — descriptor-driven, `master_detail.rs`) | `vitni-ui`, `vitni-ui-dioxus` | Reusable list (search/filter/sort/columns) + detail container with a related-item tab strip, driven by per-aggregate descriptors. Adding an aggregate = view-models + a tab config, not a bespoke screen. |
+| **4** | Person vertical slice (reference) ✅ done (audit 2026-07-05; leftover → plan-2.md PR27 Person tag/untag) | `vitni-ui/src/view_model.rs`, `vitni-ui-dioxus`, reuses `app::person`/`app::event` | View-models for the Person tabs (Names/Facts/Events/Associations/Families/Citations/Media/Notes/Tags/History); full list + detail; inline + side-panel editing; inline source + confidence on facts. The copy-template for the rest. |
+| **5** | History / change-log query ✅ done (audit 2026-07-05; leftover → plan-2.md PR31 ⌘Z wiring) | new query use-case in `vitni-app`, `vitni-ui` | Per-aggregate event stream → DTOs (operator/when/summary). Renders the History tab + the global **Activity** view + undo. The event-sourced differentiator; reused by every aggregate. |
 | **6** | Citation slice (evidence axes) ✅ done (#57) | per-aggregate `view_model`/screens, reuse `app::citation` | View-models + list + detail tabs + edit wiring; the Evidence Explained axes. Shipped in #57. |
 | **7** | Family slice ✅ done (see status note; leftover → plan-2.md PR30 remove partner/child, unlink event) | per-aggregate `view_model`/screens, reuse `app::family` | View-models + list + detail tabs + edit wiring. |
 | **8** | Event · Place slices ✅ done | per-aggregate `view_model`/screens, reuse `app::event`/`app::place` | View-models + list + detail tabs + edit wiring. |
 | **9** | Source · Repository slices ✅ done | per-aggregate `view_model`/screens, reuse `app::source`/`app::repository` | View-models + list + detail tabs + edit wiring. Shipped. |
 | **10** | Media (gallery) · Note (rich text) slices ✅ done | per-aggregate `view_model`/screens, reuse `app::media`/`app::note` | View-models + list + detail tabs + edit wiring. Shipped. |
 | **11** | Tag · DnaTest · DnaMatch slices ✅ done | per-aggregate `view_model`/screens, reuse `app::tag`/`app::dna_test`/`app::dna_match` | View-models + list + detail tabs + edit wiring; the small ones grouped. Shipped. |
-| **12** | `screens.rs` modularization ✅ done | `genealogy-ui-dioxus/src/screens/*` | Split the 8652-line `screens.rs` into per-aggregate modules + `shared`/`prelude`; pure move + re-export, no behavior change. |
-| **13** | Cross-aggregate stable-id backfill (Person · Citation) ✅ done | `genealogy-app`, `genealogy-ui` | Bring `PersonSummary`/`CitationSummary` onto the `AggRef`/joined pattern; move the citation/event joins out of the UI dispatcher into the app layer. Resolves the stable-ids dependency note. |
-| **14** | Deferred field-edit forms ✅ done | `genealogy-ui`, `genealogy-ui-dioxus` | Scalar edit forms (type/date/coords/author/path/provider/…) for Event/Place/Source/Repository/Media/DnaTest, wired to the existing app use-cases. |
-| **15** | Media MIME import/export round-trip ✅ done | `genealogy-gedcom`/`gramps-xml`, `plugins/*`, host-api 0.10.0 | `media-dto.mime` + `set-media-mime`; GEDCOM `OBJE.FILE.FORM` ↔ Gramps `<file mime>`; round-trip tests both formats. |
+| **12** | `screens.rs` modularization ✅ done | `vitni-ui-dioxus/src/screens/*` | Split the 8652-line `screens.rs` into per-aggregate modules + `shared`/`prelude`; pure move + re-export, no behavior change. |
+| **13** | Cross-aggregate stable-id backfill (Person · Citation) ✅ done | `vitni-app`, `vitni-ui` | Bring `PersonSummary`/`CitationSummary` onto the `AggRef`/joined pattern; move the citation/event joins out of the UI dispatcher into the app layer. Resolves the stable-ids dependency note. |
+| **14** | Deferred field-edit forms ✅ done | `vitni-ui`, `vitni-ui-dioxus` | Scalar edit forms (type/date/coords/author/path/provider/…) for Event/Place/Source/Repository/Media/DnaTest, wired to the existing app use-cases. |
+| **15** | Media MIME import/export round-trip ✅ done | `vitni-gedcom`/`gramps-xml`, `plugins/*`, host-api 0.10.0 | `media-dto.mime` + `set-media-mime`; GEDCOM `OBJE.FILE.FORM` ↔ Gramps `<file mime>`; round-trip tests both formats. |
 | **16** | Per-partner child-relationship round-trip ✅ done | same crates, host-api 0.11.0 | `child-relationship`/`family-child` WIT types; GEDCOM `_FREL`/`_MREL` ↔ Gramps `frel`/`mrel`; round-trip tests both formats. |
 | **17** | Explicit `FamilyEventLinked` round-trip ✅ done | host-api 0.12.0, `plugins/*` | `link-family-event` verb + `family-dto.events` so a family event nests under its `FAM`/`<family>` by its recorded link, robust even with no participants. (`translator` on `RichText` stays out of scope — no standard GEDCOM/Gramps representation.) |
-| **18** | Pedigree / tree view ✅ done | new traversal queries in `genealogy-app`, `genealogy-ui`, `genealogy-ui-dioxus` | Ancestor/descendant chart + relationship calculator over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
-| **19** | Compare / merge ✅ done (audit 2026-07-05 — `merge_persons` + `find_duplicate_candidates` + `screens/merge.rs` all shipped; polish → plan-2.md PR28) | new `merge_persons` use-case + duplicate-detection query in `genealogy-app`, `genealogy-ui-dioxus` | Split-view compare + non-destructive merge wizard. Undo via the change log. Remaining: merge reason, `MergeConflict` surface, plain match-score badge (plan-2.md PR28). |
-| **20** | Preferences / configuration ✅ done (audit 2026-07-05 — `screens/preferences.rs`; leftover → plan-2.md PR34 workspace registry card) | new config read/write use-cases in `genealogy-app` (ADR 0005), `genealogy-ui-dioxus` | Operator identity, Appearance/theme, **Language & locale (sane defaults via the ADR 0003 chain)**, date/number format, workspace defaults. Surface the override layers and the resolved values. |
-| **21** | Plugin manager ✅ done (audit 2026-07-05 — `screens/plugin_panel.rs`) | reuse `genealogy-plugin-host`, `genealogy-ui-dioxus` | List installed plugins, enable/disable, show declared capabilities. Trust tiers read-only (full UX lands in roadmap Phase 4 with import/export breadth and distribution — ADR 0011 §6, ADR 0014). |
-| **22** | Complete plugin-UI vocabulary + submission → **continued in plan-2.md (PR35)** | `genealogy-ui` vocabulary + per-framework interpreter | Extend beyond a single form to lists/tables and wire form submission/actions. **Needs a follow-up ADR** (ADR 0012 left submission out). |
-| **23** | Second-framework readiness check → **continued in plan-2.md (PR36)** | `genealogy-ui` (test/guard), docs | Guarantee `genealogy-ui` carries zero framework types (a compile/test guard) and document the checklist a second renderer follows to reuse it unchanged (ADR 0008). Not a full second renderer. |
+| **18** | Pedigree / tree view ✅ done | new traversal queries in `vitni-app`, `vitni-ui`, `vitni-ui-dioxus` | Ancestor/descendant chart + relationship calculator over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
+| **19** | Compare / merge ✅ done (audit 2026-07-05 — `merge_persons` + `find_duplicate_candidates` + `screens/merge.rs` all shipped; polish → plan-2.md PR28) | new `merge_persons` use-case + duplicate-detection query in `vitni-app`, `vitni-ui-dioxus` | Split-view compare + non-destructive merge wizard. Undo via the change log. Remaining: merge reason, `MergeConflict` surface, plain match-score badge (plan-2.md PR28). |
+| **20** | Preferences / configuration ✅ done (audit 2026-07-05 — `screens/preferences.rs`; leftover → plan-2.md PR34 workspace registry card) | new config read/write use-cases in `vitni-app` (ADR 0005), `vitni-ui-dioxus` | Operator identity, Appearance/theme, **Language & locale (sane defaults via the ADR 0003 chain)**, date/number format, workspace defaults. Surface the override layers and the resolved values. |
+| **21** | Plugin manager ✅ done (audit 2026-07-05 — `screens/plugin_panel.rs`) | reuse `vitni-plugin-host`, `vitni-ui-dioxus` | List installed plugins, enable/disable, show declared capabilities. Trust tiers read-only (full UX lands in roadmap Phase 4 with import/export breadth and distribution — ADR 0011 §6, ADR 0014). |
+| **22** | Complete plugin-UI vocabulary + submission → **continued in plan-2.md (PR35)** | `vitni-ui` vocabulary + per-framework interpreter | Extend beyond a single form to lists/tables and wire form submission/actions. **Needs a follow-up ADR** (ADR 0012 left submission out). |
+| **23** | Second-framework readiness check → **continued in plan-2.md (PR36)** | `vitni-ui` (test/guard), docs | Guarantee `vitni-ui` carries zero framework types (a compile/test guard) and document the checklist a second renderer follows to reuse it unchanged (ADR 0008). Not a full second renderer. |
 
 ### Per-aggregate slice → PR map
 
@@ -191,7 +191,7 @@ item 7.
 
 App `*Summary` DTOs reference related aggregates by **`human_id` string** only
 (`CitationSummary.source: Option<String>`, `.media`/`.notes: Vec<String>`, etc. —
-`crates/genealogy-app/src/citation.rs:48`; same pattern across all 12 `*Summary` DTOs). The
+`crates/vitni-app/src/citation.rs:48`; same pattern across all 12 `*Summary` DTOs). The
 only id carried is `TagRef.id` (for the detach command, never rendered). The UI therefore
 **cannot join aggregates by stable id** — clicking a related record (citation→source, fact→event)
 has no id to request the target aggregate by, only a display label.
@@ -226,7 +226,7 @@ ids and joined views (event participants/place/citations with names, surety, sou
 names with language/date, the dated enclosing chain, citations/media/notes/tags — `PlaceView` now
 projects the attachments it previously only tracked in `live_assertions`). The shared `AggRef`,
 `MediaRefSummary`, and a joined `CitationRef` (source · page · surety · evidence axes) moved to
-`genealogy-app/src/dto.rs`. To make the evidence-first cues real (not decorative), Event/Place now
+`vitni-app/src/dto.rs`. To make the evidence-first cues real (not decorative), Event/Place now
 retain per-assertion confidence + citations in the folded core state via a generic
 `Asserted<T>` wrapper (mirroring Family's `AssertedPartner`), with `asserted_*` view accessors. New
 app paths: `change_log_for_event`/`change_log_for_place` + `undo_*`, `set_*_restrictions` exports,
@@ -312,7 +312,7 @@ count; DnaMatch segment lineage / terminal-SNP / fully-identical regions; citati
 
 **Media `mime` — ✅ done (PR 15).** The host-api WIT was bumped 0.9.0 → 0.10.0: `media-dto` gains a
 `mime` field and `commands` gains `set-media-mime`. The two intermediate models
-(`genealogy-gedcom` `MediaObject.mime` ↔ `OBJE.FILE.FORM`; `genealogy-gramps-xml` `MediaObject.mime`
+(`vitni-gedcom` `MediaObject.mime` ↔ `OBJE.FILE.FORM`; `vitni-gramps-xml` `MediaObject.mime`
 ↔ `<file mime>`) parse/emit it; the four `plugins/{gedcom,gramps}-{import,export}` glue paths and the
 host `list_media`/`set-media-mime` carry it; both round-trip tests assert the MIME survives
 import → export → re-import.
@@ -339,13 +339,13 @@ aggregates** likewise have no standard GEDCOM/Gramps representation and stay out
 ## Follow-up — data-quality checks (not yet built) → **continued in plan-2.md (PR32)**
 
 The dashboard's **Needs attention** card and **Data quality** table
-(`genealogy-ui-dioxus/src/screens/dashboard.rs`) currently surface only one real check —
+(`vitni-ui-dioxus/src/screens/dashboard.rs`) currently surface only one real check —
 **facts without a source** (computed in `DashboardStats::build` from the persons' fact citations).
 The mockup ([`app-shell.html`](../../mockups/app-shell.html)) shows two more (**death before birth**, **possible
 duplicates**) plus per-row **Review/Compare** actions; those rows render a "coming in a later
 milestone" note rather than fabricated numbers.
 
-Build these as a **generalized check framework** in `genealogy-app` (not one-off UI queries): a check
+Build these as a **generalized check framework** in `vitni-app` (not one-off UI queries): a check
 is a function over the workspace projections returning a typed finding (kind · affected record(s) ·
 a navigable target), so the set is extensible (death-before-birth, unsourced facts, orphaned records,
 implausible dates/ages, …) and the same findings populate **both** widgets — the card shows counts
@@ -354,7 +354,7 @@ per kind, the table lists rows with a Review action that navigates to the affect
 - **Death before birth** (and other within-record date sanity) reads each person's vital facts — a
   pure projection scan, no new events.
 - **Possible duplicates** overlaps **PR19 (Compare / merge)**, which already needs a
-  duplicate-detection query in `genealogy-app`; build the detector once there and have the dashboard
+  duplicate-detection query in `vitni-app`; build the detector once there and have the dashboard
   reuse its findings. The Compare action routes into the merge wizard.
 
 Until this lands, the dashboard must keep showing real counts only (no placeholders) and label the
@@ -362,27 +362,27 @@ unbuilt checks as deferred.
 
 ## PR18 (Pedigree / tree view) status ✅ done
 
-All four views ship. New read-only `genealogy-app` module `pedigree.rs` (Lookups-pattern, one
+All four views ship. New read-only `vitni-app` module `pedigree.rs` (Lookups-pattern, one
 `list_persons`+`list_families` load, no N+1): `ancestors`/`descendants` build recursive
 `AncestorSlot`/`DescendantNode` trees clamped to `MAX_GENERATION_DEPTH = 10`, and `relationship`
 runs BFS ancestor-distance maps on both persons to a `Kinship` (Same/Ancestor/Descendant/Sibling/
-CommonAncestor) carrying raw generation counts — `genealogy-app` stays string-free (ADR 0003), the
+CommonAncestor) carrying raw generation counts — `vitni-app` stays string-free (ADR 0003), the
 UI composes the kinship label. Traversal is cycle-safe (path-tracked DFS treats a person already on
 the current path as `Unknown`). Every edge carries `Confidence` + `source_count` (evidence-first);
 `PersonRef` carries `restrictions` untouched. Reused/DRY: `year_of_fact`/`lifespan`/`year_of` moved
 `family.rs` → `dto.rs` (`pub(crate)`). Exports added to `lib.rs`.
 
-`genealogy-ui`: `PedigreeVm::build` flattens the recursive tree into generation rows and pads
+`vitni-ui`: `PedigreeVm::build` flattens the recursive tree into generation rows and pads
 unresearched ancestor branches with synthetic `Unknown` slots to a full `2^gen` grid (descendants
 are not padded — empty means no known children); `RelationshipVm`/`Localizer::kinship_summary`
 compose the localized sentence (direct lines, siblings, cousins-N-removed, aunt/uncle both
 directions). New `Intent::ShowPedigree`/`ComputeRelationship` + `IntentOutcome::Pedigree`/
-`Relationship`; a missing person surfaces as a real `AppError`. `genealogy-ui-dioxus`: single-view
+`Relationship`; a missing person surfaces as a real `AppError`. `vitni-ui-dioxus`: single-view
 `PedigreeScreen` at `Destination::Tool(Tool::Pedigree)`; the switcher reuses `Tabs` (roving/ARIA)
 for the three in-screen modes with "List" a separate navigate-away button; the chart is
 `role="tree"`/`treeitem` with `aria-expanded` + a new `roving_grid` helper (2D ↑↓-within-generation /
 ←→-across-generations); nodes show `ConfidenceBadge` (dot + text). i18n: ~30 data keys in
-`genealogy-ui`, 14 chrome keys in `genealogy-ui-dioxus`, en + no complete.
+`vitni-ui`, 14 chrome keys in `vitni-ui-dioxus`, en + no complete.
 
 Tests: 12 app-layer tests (multi-gen ancestors father-before-mother, no-parents, cap-honored,
 childless, cycle-termination, full/half siblings, grandparent symmetry, same-person, unrelated,
@@ -402,7 +402,7 @@ mutation-tested; the SSR a11y test *was* mutation-verified.
 - `cargo nextest run --workspace --all-features --all-targets`
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - `cargo xtask i18n-check`
-- Run `genealogy-ui-dioxus` (desktop feature) and exercise each new screen against the matching mockup.
+- Run `vitni-ui-dioxus` (desktop feature) and exercise each new screen against the matching mockup.
 - **A11y gate:** keyboard-only walkthrough (every action reachable, focus visible, `Esc`/arrows/`g`-prefix
   work); SSR test asserts the screen's roles/labels; automated axe-core (or equivalent) pass clean;
   contrast checked for both themes.

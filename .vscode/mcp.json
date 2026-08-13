@@ -6,7 +6,7 @@
         "code-review-graph",
         "serve"
       ],
-      "cwd": "/home/magne/development/magne/genealogy",
+      "cwd": "/home/magne/development/magne/vitni",
       "type": "stdio"
     }
   }

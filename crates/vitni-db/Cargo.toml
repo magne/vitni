@@ -1,0 +1,49 @@
+[package]
+name = "vitni-db"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["sqlite"]
+sqlite = ["dep:sqlite-es", "dep:sqlx", "dep:serde", "dep:async-trait", "dep:geo-types", "dep:geozero"]
+postgres = ["dep:postgres-es", "dep:sqlx", "dep:serde", "dep:async-trait"]
+
+[dependencies]
+vitni-core = { workspace = true }
+cqrs-es = { workspace = true }
+async-trait = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+sqlite-es = { workspace = true, optional = true }
+postgres-es = { workspace = true, optional = true }
+sqlx = { workspace = true, optional = true }
+# WKB + R*Tree spatial index over Place geometry (ADR 0024 §3), sqlite backend only for now.
+geo-types = { workspace = true, optional = true }
+geozero = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile = { workspace = true }
+uuid = { workspace = true }
+time = { workspace = true }
+# Postgres-backed tests (feature = "postgres"): reuses one container per process, isolating each
+# test in a fresh randomly-named database dropped on Drop.
+test-containers-util = { version = "0.1.4", features = ["pg-sqlx"] }
+# The `migrate` feature provides the empty `Migrator` the test helper requires (our schema is
+# created by `Store::open`, not by sqlx migrations).
+sqlx = { workspace = true, features = ["migrate"] }
+# Projection-rebuild / hot-query benchmarks (Phase 11 workstream B).
+criterion = { workspace = true }
+
+[[bench]]
+name = "store"
+harness = false
+required-features = ["sqlite"]
+
+[lints]
+workspace = true

@@ -1,10 +1,10 @@
 [package]
-name = "genealogy-plugin-api"
+name = "vitni-plugin-api"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
-# Shared guest-side support for the genealogy plugins (ADR 0013). Generates the host-API import
+# Shared guest-side support for the Vitni plugins (ADR 0013). Generates the host-API import
 # bindings once from the WIT (the `host-imports` world) and wraps the bulk source/sink and progress
 # capabilities in ergonomic helpers, so each plugin component stays thin. An rlib, not a component:
 # it is linked into the `plugins/*` cdylib crates and is therefore skipped by `cargo xtask
@@ -13,7 +13,7 @@ publish = false
 
 [dependencies]
 wit-bindgen = "0.57.1"
-genealogy-interchange = { path = "../../crates/genealogy-interchange" }
+vitni-interchange = { path = "../../crates/vitni-interchange" }
 
 [lints.clippy]
 unwrap_used = "deny"
