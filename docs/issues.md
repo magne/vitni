@@ -488,15 +488,15 @@ Residuals from the shortcuts work (ADR 0030); see
   never pixels).
 - **The map view opens pre-fitted, and three `gui-pass` scenarios have failed since 2026-08-11.**
   `map-view`, `map-zoom` and `map-repaint` fail identically on `main` against the same fixture
-  (re-confirmed 2026-08-12 while closing #301): `map-view` at RMSE 0.0032 for `01-map.png` vs
-  `02-fitted.png`, `map-repaint` at 0.0268 twice, `map-zoom` at 0.0000 over the readout region — so the
-  suite cannot be green, and every unrelated change has to re-establish that these three are not its
-  fault. Not a tile failure: `map-view`'s first shot shows a fully painted OSM basemap already framed on
-  the fixture's one place at z4.0, so **Fit has nothing left to change**, and neither `workspace.toml`
-  nor the seeded config carries a camera — this is the map view's initial camera, not fixture state.
-  The other two are separate symptoms on the same screen: the zoom readout does not follow the camera
-  after a `NavigationControl` `+`, and clicking the already-active tool repaints the window when
-  `map-repaint` asserts it changes nothing.
+  (re-confirmed 2026-08-12 while closing #301, and again 2026-08-13): `map-view` at RMSE 0.0032 for
+  `01-map.png` vs `02-fitted.png`, `map-repaint` at 0.0268 twice, `map-zoom` at 0.0000 over the
+  readout region — so the suite cannot be green, and every unrelated change has to re-establish that
+  these three are not its fault. Not a tile failure: `map-view`'s first shot shows a fully painted OSM
+  basemap already framed on the fixture's one place at z4.0, so **Fit has nothing left to change**, and
+  neither `workspace.toml` nor the seeded config carries a camera — this is the map view's initial
+  camera, not fixture state. The other two are separate symptoms on the same screen: the zoom readout
+  does not follow the camera after a `NavigationControl` `+`, and clicking the already-active tool
+  repaints the window when `map-repaint` asserts it changes nothing.
 
 ### GUI ⇄ CLI parity
 
@@ -656,7 +656,19 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   release stage (`xtask/src/package.rs:40,168`) and the `[package.metadata.deb]` assets put it in
   `usr/share/pixmaps/` (`genealogy-ui-dioxus/Cargo.toml:67`), so a `.deb` or AppImage install has no
   working icon. Needs a real one. Found while closing #301, whose `gui-pass` scenario had to *generate*
-  its fixture image with `convert` because this file cannot be decoded.
+  its fixture image with `convert` because this file cannot be decoded. The mark is decided:
+  **V-as-pedigree with a seal impression, disclosed by size** — the letter V drawn as two ascending
+  strokes with three nodes, so the monogram is also a two-generation pedigree fragment, and one
+  **upper terminal** node is a seal carrying an impressed mark and a notch at large sizes. Structure
+  from the V, meaning from the seal: the claim is *witnessed*. The seal sits on an upper terminal
+  rather than the vertex because assertions attach to claims and relationships, not to a person as a
+  whole, and it keeps the shape's visual anchor clean. Two acceptance criteria, not preferences: **at
+  16px the icon must be indistinguishable from the plain V** (breakpoints 256/128 impressed detail,
+  64 a plain disc with a notch, ≤32 the same dot as the other nodes; the symbolic monochrome variant
+  never carries the detail), and **the seal stays inside the V's stroke weight and silhouette**, since
+  a protruding circle reads as a notification badge at dock sizes. Deliverables: SVG source, PNG at
+  16/24/32/48/64/128/256, the symbolic variant, and a legibility check at 16px on light and dark.
+  Not a tree and not a leaf — Gramps, Ancestry and MyHeritage all use those. — #326
 - **`.deb` needs `GENEALOGY_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
   distro-installed binary needs `GENEALOGY_PLUGIN_DIR=/usr/lib/genealogy/plugins` (the AppImage sets it
   via `AppRun`; the tarball resolves the fleet beside the binary). Teaching the embedded layer a default
@@ -722,37 +734,64 @@ The `area/docs` label already existed with no `###` home; this is it.
   during a full-suite run and passed on an immediate re-run of the same scenario — a draw that had not
   reached the canvas within the 4 s settle. Both classes are the same missing capability: the harness
   waits a fixed time instead of waiting for the paint it is about to assert on.
-- **The public release has no licence decision applied, and no licence files at all.** The workspace
-  `Cargo.toml` declares `MIT OR Apache-2.0`, but the tree contains no `LICENSE-MIT`, no
-  `LICENSE-APACHE`, no `NOTICE` and no `CONTRIBUTING.md`, and the repository is still private — so
-  nothing has been granted to anyone yet and every option is still open.
-  [`research/licensing-and-monetization.md`](research/licensing-and-monetization.md) holds the
-  analysis. **The decision itself is open**, and it is a choice between two partial answers rather
-  than a search for the right one: the goal as stated — anyone may use the app, nobody may make
-  money reselling binaries or hosting it, paid plugins stay possible — cannot be expressed in an
-  OSI-approved licence at all (OSD #1 and #6; GPL §4 permits charging for copies). AGPL-3.0-or-later
-  blocks the realistic threat (a vendor embedding `genealogy-core` closed) permanently but permits
-  resale and verbatim paid hosting; FSL-1.1-Apache-2.0 forbids both but only until each release turns
-  two, and forfeits the distro repositories. Tightening later is the expensive direction
-  (HashiCorp/Redis/Elastic each grew a surviving fork), loosening is cheap, and permissive
-  publication is the only irreversible move. The report recommends a per-crate split
-  (`MIT OR Apache-2.0` on the commodity interop crates,
-  `AGPL-3.0-or-later` plus a WIT plugin exception on the application and on
-  `genealogy-digitalarkivet`), a DCO+CLA, and open core over the plugin boundary for anything paid.
-  The work it implies, each item deliberately unfiled until the decision lands: **ADR 0034**
-  recording the split (0016 and 0031 are unwritten, so 0034 is the next free number); the licence
-  files plus per-crate `license =` overrides and the §7 exception in each AGPL crate's `lib.rs`
-  header; per-crate `[[licenses.exceptions]]` in `deny.toml` rather than a wider `licenses.allow`,
-  so an AGPL *dependency* still fails; `CONTRIBUTING.md` with a CLA drafted against åndsverkloven
-  §67(2) and §5; a `COMMERCIAL.md`; and updating the two places that assert today's position
-  (`README.md`'s License section, `CLAUDE.md`'s "keep it that way").
-- **The product has no distinctive name, so there is no trademark to defend it with.** Copyleft
-  permits selling copies (GPL §4), so the only lever against rebranded resale is a mark — the one
-  Krita uses ("change the icon and the application name and rebuild Krita yourself"). "genealogy" is
-  generic and unregistrable, which leaves that lever unavailable. Naming is therefore a pre-publish
-  decision, not branding polish;
-  [`research/licensing-and-monetization.md`](research/licensing-and-monetization.md) §4 has the
-  reasoning.
+- **The licence decision is made but not applied, and the tree has no licence files at all.** Decided
+  from [`research/licensing-and-monetization.md`](research/licensing-and-monetization.md): a
+  per-crate split — `MIT OR Apache-2.0` on the commodity interop crates, **`AGPL-3.0-or-later`** on
+  the application and on `genealogy-digitalarkivet` (kept off the permissive side so a paid importer
+  stays possible), an **additional permission under AGPLv3 §7** so a WASM component talking to the
+  host only through the versioned WIT world need not be AGPL, **DCO + a broad licence-grant CLA**, and
+  open core over the plugin boundary for anything paid. The report §8 records why: AGPL blocks the
+  realistic free-rider (a vendor embedding `genealogy-core` closed) permanently, while the two things
+  it does not block — resale of binaries and verbatim paid hosting — are the two least likely to pay
+  anyone; the alternative that does block them, FSL-1.1-Apache-2.0, lapses two years after each
+  release and forfeits the distro repositories. Outstanding work: **ADR 0034** recording the split
+  (0016 and 0031 are unwritten, so 0034 is next); `LICENSE-AGPL` plus the missing `LICENSE-MIT`,
+  `LICENSE-APACHE` and `NOTICE`; per-crate `license =` overrides replacing `license.workspace = true`
+  on the AGPL side; the §7 text in each AGPL crate's `lib.rs` header; per-crate
+  `[[licenses.exceptions]]` in `deny.toml` rather than a wider `licenses.allow`, so an AGPL
+  *dependency* still fails the check; `CONTRIBUTING.md` carrying the CLA, drafted against
+  åndsverkloven §67(2) (an unclear grant is construed in the contributor's favour, so sublicensing and
+  relicensing must be named) and §5 (moral rights are largely unwaivable, so promise attribution
+  rather than purport to acquire a waiver); a `COMMERCIAL.md`; and updating `CLAUDE.md`'s "keep it
+  that way". — #325
+- **The project is renamed to `Vitni` and the rename is not done.** Old Norse *vitni*, "witness" —
+  it names the thesis (every event is a claim by an operator, with citations and confidence:
+  ADR 0004, ADR 0020) rather than the output, so it hints at the use without limiting it. Chosen
+  because "genealogy" is generic and therefore unregistrable, and a mark is the *only* lever against
+  rebranded resale: copyleft expressly permits selling copies (GPL §4), which is how Krita words it —
+  "change the icon and the application name and rebuild Krita yourself". Verified free on crates.io
+  including every `vitni-*` prefix, and clear of the live Norwegian products that rule out the
+  obvious alternatives (`Ætt*` → ÆtteForsker, `Slekt*` → dinSlekt, `Embla`). `Saga` was rejected for
+  colliding with the saga pattern in this repo's own architecture, and `Odal` because the odal rune is
+  a listed hate symbol. The sweep is 3831 occurrences across 464 tracked files; the surfaces that
+  break quietly rather than loudly are the WIT package `genealogy:host-api@0.21.0` with every
+  `plugins/*` bindgen `with` key that must move in lockstep, the 13 `GENEALOGY_*` environment
+  variables, `APP_NAME` in `crates/genealogy-app/src/config.rs` (which moves the config directory),
+  and the *generated* per-language `genealogy-cli.ftl`, where the tracked fragments get renamed but
+  never the concatenated output. No compatibility shims, per the no-backwards-compatibility rule: no
+  config migration and no dual-reading env vars. One atomic change, not staged — a half-renamed tree
+  does not build. — #324
+- **Repository hygiene before the switch is flipped.** The audit found no secrets — no private keys,
+  no tokens, no `.pem`/`.key`/`.p12` anywhere; the in-tree `signing::DEV_PUBLIC_KEY` is deliberate and
+  documented as never trusted in a release build, and no personal genealogy data is committed (the
+  gui-pass fixture is seeded at runtime). What is left: `SECURITY.md` with a private disclosure route,
+  which a program that loads signed WASM and makes network calls should have; `CODE_OF_CONDUCT.md`;
+  untracking the local agent configuration (`.claude/settings.json` → `.claude/settings.local.json`,
+  plus `.mcp.json`, `.vscode/mcp.json` and the four code-review-graph `.claude/skills/*`), which hold
+  no secrets but do publish local absolute paths, so no history rewrite is needed; and the GitHub
+  settings — description, topics, secret scanning with push protection, branch protection on `main`.
+  Note in `CONTRIBUTING.md` that Actions billing is disabled so the committed workflows never run,
+  and add no CI badge that would render broken. — #327
+- **README screenshots need a one-command refresh path.** The README carries images of the real GUI,
+  and hand-cropping them means they rot. `xtask/src/gui_pass.rs` already runs the GUI on Xvfb against
+  a seeded fixture workspace and writes named PNGs per scenario, and `imagemagick` is already one of
+  its dependencies — so a `screenshots.toml` scenario with stably-named `shot` steps plus a
+  `cargo xtask screenshots` arm beside the existing `gui-pass` dispatch (a plain string match in
+  `xtask/src/main.rs`) turns refreshing them into one command. Acceptance: two consecutive runs
+  produce no diff, or it is not a refresh path. Blocked on a **demo seed**: a run on 2026-08-13
+  produced good images whose rail read `People 0`, `Families 0`, `Events 0`, because the fixture seeds
+  two places and nothing else — so the scenario needs a handful of invented persons, families and
+  cited events before any of it can go in the README. — #328
 - **Paid-plugin distribution is unshaped.** The plugin boundary is the only genuinely exclusive
   revenue line (a signed bundle whose source stays private, under its own EULA — selling licence
   keys over an OSI-licensed source does not hold), and it needs decisions before the first one
