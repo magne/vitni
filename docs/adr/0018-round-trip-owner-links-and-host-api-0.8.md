@@ -12,7 +12,7 @@ author/publication. Two gaps blocked this:
 
 1. **No owner-link projection.** The attachment events (`MediaAttached`, `NoteAttached`, `Tagged`,
    and the new `CitationAdded`) existed on the aggregates, but their values were tracked only in
-   `live_assertions`, not projected — a deliberate YAGNI deferral noted in `genealogy-core`'s state
+   `live_assertions`, not projected — a deliberate YAGNI deferral noted in `vitni-core`'s state
    docs as *"ADR 0009 §4: not projected until a query needs one."* Export is that query: an exporter
    cannot re-attach a citation/media/note it cannot read back from the owner.
 2. **The host contract (`host-api@0.7.0`) exposed only a subset.** No verbs created repositories or
@@ -61,9 +61,9 @@ ADR 0011/0013 make the host WIT contract an ADR-governed surface, so growing it 
 
 - Citations, media, notes, repositories, place hierarchy, and citation confidence round-trip out for
   both GEDCOM and Gramps XML; the Gramps round-trip is proven by
-  `crates/genealogy-plugin-host/tests/gramps_round_trip.rs`.
+  `crates/vitni-plugin-host/tests/gramps_round_trip.rs`.
 - The host `commands`/`query` surface roughly doubles; each verb is a thin delegation to a
-  `genealogy-app` use-case, so the growth is mechanical.
+  `vitni-app` use-case, so the growth is mechanical.
 - Tags are not yet carried on the Gramps person/family record (no `<tagref>` mapping yet); place
   coordinates and `MAP` are deferred. These are catalogued in `docs/data-model.md` §17.
 

@@ -1,9 +1,9 @@
-# CI build image for the genealogy workspace.
+# CI build image for the Vitni workspace.
 #
 # Bakes everything ci.yml's `check` job would otherwise install on every run: the Dioxus
 # desktop webview dev libraries, the pinned Rust stable toolchain with the components and
 # the wasm32-wasip2 plugin target from rust-toolchain.toml, and cargo-nextest. Published to
-# ghcr.io/magne/genealogy-ci. Postgres integration tests run in a separate native job, so
+# ghcr.io/magne/vitni-ci. Postgres integration tests run in a separate native job, so
 # this image needs no Docker client.
 #
 # Rust is pinned to match rust-toolchain.toml's resolved stable at image-build time. The
@@ -14,7 +14,7 @@ FROM rust:1.96.1-bookworm
 # (see ci-image.yml); the arch-aware steps below already handle arm64 when it is added.
 ARG TARGETARCH
 
-# Dioxus 0.7 desktop (genealogy-ui-dioxus, feature `desktop`) links a system webview
+# Dioxus 0.7 desktop (vitni-ui-dioxus, feature `desktop`) links a system webview
 # (wry/tao). Union of the Dioxus 0.7 Ubuntu list and what ci.yml installed previously.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

@@ -1,9 +1,9 @@
-# Tailwind CSS for Genealogy — what utility-first would buy a hand-rolled token system
+# Tailwind CSS for Vitni — what utility-first would buy a hand-rolled token system
 
 > Researched 2026-07-15 from fetched primary sources (tailwindcss.com docs/blog, GitHub releases,
 > npm, dioxuslabs.com). Version claims accurate to that date: **Tailwind CSS 4.3.2** (2026-06-29,
 > MIT), Dioxus 0.7 (built-in Tailwind support). Repo claims were spot-checked against the actual
-> files (`crates/genealogy-ui-dioxus/src/app.rs`, `src/components/button.rs`,
+> files (`crates/vitni-ui-dioxus/src/app.rs`, `src/components/button.rs`,
 > `tests/components.rs`, `components.css`). Links were live when fetched.
 >
 > Companion reports: [`web-frontend-strategy.md`](web-frontend-strategy.md) and
@@ -59,7 +59,7 @@ utilities-over-CSS-variables is exactly the tokens.css approach, with a compiler
 
 ## 3. What it would cost in this repo specifically
 
-1. **The `skin.css` layer is the sharpest casualty.** `~/.config/genealogy/skin.css` is injected
+1. **The `skin.css` layer is the sharpest casualty.** `~/.config/vitni/skin.css` is injected
    last so an installation can restyle the app without a rebuild (`app.rs:31-51`). Under v4:
    - *Token-level* overrides **survive** — non-inline `@theme` utilities reference
      `var(--color-accent)`, so a skin redefining the variable still repaints everything.

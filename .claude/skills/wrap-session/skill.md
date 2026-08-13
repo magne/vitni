@@ -1,6 +1,6 @@
 ---
 name: wrap-session
-description: End-of-session wrap-up for the genealogy project. Summarizes what was done this session and proposes durable additions to CLAUDE.md, then prompts for /clear once additions are applied. Use when the user says "wrap session", "end of session", "wrap up the session", or invokes /wrap-session.
+description: End-of-session wrap-up for the Vitni project. Summarizes what was done this session and proposes durable additions to CLAUDE.md, then prompts for /clear once additions are applied. Use when the user says "wrap session", "end of session", "wrap up the session", or invokes /wrap-session.
 ---
 
 ## Wrap Session

@@ -1,0 +1,93 @@
+[package]
+name = "vitni-ui-dioxus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "vitni-gui"
+path = "src/main.rs"
+
+[features]
+# The desktop renderer pulls a webview (libwebkit2gtk on Linux). It is opt-in so the components, the
+# vocabulary interpreter, and the SSR test build without system webview libs; the GUI binary and the
+# full `--all-features` CI build enable it.
+default = []
+desktop = ["dioxus/desktop", "dep:dark-light"]
+# Shows the Preferences "Register workspace…" form's Database URL field, letting the GUI create a
+# Postgres-backed workspace like `vitni init --database-url` already can (ADR 0002). Opt-in
+# because the default build only ever needs SQLite; off by default like `desktop`.
+postgres = ["vitni-app/postgres"]
+
+[dependencies]
+vitni-ui = { workspace = true }
+vitni-app = { workspace = true }
+vitni-i18n = { workspace = true }
+vitni-plugin-host = { workspace = true }
+dioxus = { workspace = true }
+dark-light = { workspace = true, optional = true }
+serde_json = { workspace = true }
+# `sync` backs the assisted-import driver's mpsc/oneshot channels between the plugin invocation and the
+# wizard (ADR 0017 §5); `time` backs the shell toast's auto-dismiss timer (`shell/toast.rs`), which is
+# not behind the `desktop` feature — unlike `shell/window_geometry.rs`'s timer, which gets `time`
+# transitively from `desktop`; `async-trait` makes the channel-backed `Presenter` object-safe.
+tokio = { workspace = true, features = ["sync", "time"] }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+i18n-embed = { workspace = true }
+i18n-embed-fl = { workspace = true }
+rust-embed = { workspace = true }
+unic-langid = { workspace = true }
+
+[dev-dependencies]
+dioxus-ssr = { workspace = true }
+vitni-core = { workspace = true }
+tempfile = { workspace = true }
+uuid = { workspace = true }
+
+# `.deb` packaging for the `vitni-gui` GUI (Phase 11 workstream C, ADR 0014 §7). Built with
+# `cargo deb -p vitni-ui-dioxus -- --features desktop` (the webview renderer is off by default).
+# `target/release/` is cargo-deb's special prefix; the plugin fleet and README use workspace-relative
+# `../../` paths. `cargo xtask build-plugins` MUST run first. Runtime webview deps are declared beside
+# `$auto` (the ones baked into the CI image / listed for Dioxus 0.7 desktop on Linux).
+[package.metadata.deb]
+name = "vitni-gui"
+maintainer = "Magne Rasmussen <magne.rasmussen@corporater.com>"
+copyright = "2026, The Vitni authors"
+extended-description = "Event-sourced genealogy program (desktop GUI). A Dioxus/webview frontend over the same event-sourced core as the CLI, bundling the signed first-party plugin fleet."
+section = "misc"
+priority = "optional"
+depends = "$auto, libwebkit2gtk-4.1-0, libgtk-3-0, libayatana-appindicator3-1"
+assets = [
+    ["target/release/vitni-gui", "usr/bin/", "755"],
+    ["assets/vitni.desktop", "usr/share/applications/", "644"],
+    ["assets/vitni.png", "usr/share/pixmaps/", "644"],
+    ["../../target/plugins/**/*", "usr/lib/vitni/plugins/", "644"],
+    ["../../README.md", "usr/share/doc/vitni-gui/README.md", "644"],
+]
+
+# Interactive GUI: startup diagnostics go to stdout/stderr, so the print lints are relaxed (as in
+# vitni-cli). The rest of the workspace's strict lints are duplicated (the `[lints]` table can't
+# both inherit and override).
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "warn"
+panic = "deny"
+panic_in_result_fn = "deny"
+unimplemented = "deny"
+allow_attributes = "deny"
+dbg_macro = "deny"
+todo = "deny"
+print_stdout = "allow"
+print_stderr = "allow"
+await_holding_lock = "deny"
+large_futures = "deny"
+exit = "deny"
+mem_forget = "deny"
+module_name_repetitions = "allow"
+similar_names = "allow"
+missing_errors_doc = "allow"

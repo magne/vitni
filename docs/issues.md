@@ -1,4 +1,4 @@
-# Genealogy Issues
+# Vitni Issues
 
 Outstanding work, grouped by **area**. [`roadmap.md`](roadmap.md) owns phase detail, sequencing, and
 progress state — this file owns open bugs, scoped residuals, and unscheduled backlog, and does not
@@ -45,7 +45,7 @@ none needs an event rewrite — and the first three are gated by an unwritten **
   provenance form doesn't yet default its date to the active time-slider year. This is also what makes
   a dated hierarchy unwritable from the app layer at all: a county transfer or a 19th-century parish
   boundary can only be expressed today by building a raw `PlaceCommand` and calling
-  `Store::execute_place`, which is what `crates/genealogy-app/tests/place_temporal.rs` does and
+  `Store::execute_place`, which is what `crates/vitni-app/tests/place_temporal.rs` does and
   documents as a gap.
 - **`MultiPolygon` geometry variant** — `PlaceGeometry` is `Point`/`Polygon`, so a place whose area is
   topologically disconnected cannot be expressed: 280 of 357 Norwegian municipalities have coastline and
@@ -66,7 +66,7 @@ none needs an event rewrite — and the first three are gated by an unwritten **
   metres would inherit a user-chosen label.
 - **Ecclesiastical `PlaceType` variants** — `Diocese`/`Deanery`/`District` are missing, which is the
   whole hierarchy above the parish and the one Norwegian genealogical sources are organised by.
-  `Custom(String)` is not a substitute: `genealogy-ui/src/i18n.rs` renders it verbatim, so a raw
+  `Custom(String)` is not a substitute: `vitni-ui/src/i18n.rs` renders it verbatim, so a raw
   Norwegian string reaches every list, breadcrumb, picker and map label, against data-model §14.
 - **Dissolved places resolve forever** — each dated assertion is read as effective-*from* with no way to
   say "ceased", so a municipality dissolved in 1964 still resolves a name, a parent and a geometry as of
@@ -117,7 +117,7 @@ The `area/records/tags` label has existed since the taxonomy was applied; this i
   that PR fixed (no inferred MIME, the doubled `media/` prefix) genuinely fire on that fixture, while the
   operator's own records have a recorded MIME and an unprefixed path, so neither explained the symptom
   that was reported. Fixed by making the `/media/<rel>` URL space encoded end to end
-  (`media_url_path`/`media_url_decode` in `genealogy_core::media_path`), with the gui-pass fixture gaining
+  (`media_url_path`/`media_url_decode` in `vitni_core::media_path`), with the gui-pass fixture gaining
   a second record named in the real data's alphabet.
 - **"Add file to media library" action.** The media-save dialog and the pure naming logic
   (`suggest_filename`/`slugify`) ship and are SSR-tested; the app-layer copy use-case that writes an
@@ -139,7 +139,7 @@ The `area/records/tags` label has existed since the taxonomy was applied; this i
   record for a file that is not on this machine is legitimate. There is no download when *Web path*
   changes with a file path set (the mockup already draws `⤓ Download`, `media.html:73`), which needs an
   overwrite prompt on checksum mismatch. And nothing *records* a `mime`: the extension→MIME mapping now
-  lives in `genealogy_core::media_path::mime_for_path` and drives the display gate (an image with no
+  lives in `vitni_core::media_path::mime_for_path` and drives the display gate (an image with no
   recorded MIME still previews, #301), but no command writes an inferred value into the record, and the
   editor's MIME box stays blank. Writing one on save is the work left — deliberately not done as part of
   #301, because `MediaDraft::from_detail` seeds the editor from `mime` and `edits_against` diffs it, so
@@ -169,7 +169,7 @@ long-standing "DNA match views in the UI" item is closed.
 - **`run_checks` is dead code, and there is no CLI data-quality command** — its body is `list_persons`
   \+ `check_persons` (`checks.rs:53-56`), and the GUI's Data Quality view calls `check_persons` directly
   with the person list it already holds, so GUI coverage is *equivalent* — nothing is missing there.
-  Either delete the wrapper, or keep it to back a `genealogy check` subcommand so quality findings are
+  Either delete the wrapper, or keep it to back a `vitni check` subcommand so quality findings are
   scriptable.
 - **Data-quality checks are person-only** — both `CheckKind`s are `DeathBeforeBirth` and
   `PossibleDuplicates`. Widening checks to the other twelve aggregates is its own item.
@@ -179,7 +179,7 @@ long-standing "DNA match views in the UI" item is closed.
   reported from the GUI as "*Evidence* is never displayed", but it is a model gap, not a render one:
   `CitationRefVm` (`view_model/common.rs:175-199`) and `CitationDetail` (`view_model/citation.rs:56-63`)
   carry only the three Evidence-Explained axes, which `citations_table` renders as chips
-  (`screens/tabs.rs:62-66`), and `genealogy-core` has no transcription/evidence-text field either. The
+  (`screens/tabs.rs:62-66`), and `vitni-core` has no transcription/evidence-text field either. The
   decision is whether the transcribed words of a source belong on `Citation` as a `RichText`, or stay
   an attached note of `NoteType::Transcript` (`core/src/enums.rs:368`) — which already exists and is
   the cheaper answer. Either way the column needs a name that matches what it shows. — #316
@@ -197,7 +197,7 @@ long-standing "DNA match views in the UI" item is closed.
 - **Back/forward cannot return to a draft tab.** `NavLocation.record` is `(Category, String)`, a saved
   record's key, so a draft is never recorded in the history and `⌘←`/`⌘→` step past it to the last saved
   record instead. True before several drafts per category (#260) and unchanged by it, but a strip that
-  can now hold four drafts makes it easier to notice. `NavLocation` lives in `genealogy-ui`
+  can now hold four drafts makes it easier to notice. `NavLocation` lives in `vitni-ui`
   (framework-neutral, ADR 0008) and a history entry naming a draft goes dead when the draft is cancelled
   *or* committed, so the variant needs a rule for that first. — #313
 - **A save run whose target leaves the strip hangs.** `advance_save_run` arms the next queued `EditKey`
@@ -289,7 +289,7 @@ which is what makes them worth fixing in the shared code rather than per screen.
   of *assertions on that one record*, so a single person claims several records were imported;
   `view_model/tests.rs:119-135` pins that wording today. It needs its own key naming the run's origin
   ("Imported from Digitalarkivet"), which means the origin has to reach the view-model. Two things to
-  fix alongside: the collapse is implemented twice, once in `genealogy-app/src/history.rs:247-302` and
+  fix alongside: the collapse is implemented twice, once in `vitni-app/src/history.rs:247-302` and
   once in the view-model, and the collapsed row is stripped of its `assertion_id` so `⌘Z` silently
   skips the whole run. — #306
 - **The 13 detail screens re-implement the shared tab arms instead of calling one shared frame.**
@@ -309,8 +309,8 @@ which is what makes them worth fixing in the shared code rather than per screen.
 - **The per-aggregate save path is written out 25 times in `services.rs` and again in every detail
   pane.** `services.rs:261-608` holds 12 `save_*_edit` and 13 `commit_*_change_set` wrappers whose
   bodies are the same four statements — `localizer()`, `open()`,
-  `Session::new(config.operator_agent())`, `genealogy_ui::dispatch_*(…).map_err(|e| loc.error(&e))` —
-  differing only in the dispatch fn and its request type. The `genealogy-ui` dispatchers they call do
+  `Session::new(config.operator_agent())`, `vitni_ui::dispatch_*(…).map_err(|e| loc.error(&e))` —
+  differing only in the dispatch fn and its request type. The `vitni-ui` dispatchers they call do
   genuinely differ per aggregate (each maps its own fields), so the duplication is confined to this
   wrapper layer. Above them the detail panes repeat the same closures: `on_retract_confirm` in 10
   screens is 23 lines byte-identical apart from `XEdit::UndoAssertion`/`save_x_edit`
@@ -321,14 +321,14 @@ which is what makes them worth fixing in the shared code rather than per screen.
   constructors, `save`) implemented once per aggregate, behind a `use_detail_commits::<A>()` hook
   returning the four callbacks; the `services.rs` wrappers collapse into that `save` or into the
   x-macro idiom the app layer and the CLI already use (`for_each_aggregate!` in
-  `genealogy-app/src/aggregates.rs`, `for_each_cli_command!` in `genealogy-cli/src/main.rs`). One
+  `vitni-app/src/aggregates.rs`, `for_each_cli_command!` in `vitni-cli/src/main.rs`). One
   wrinkle to settle first: `save_edit` (person) returns `Result<(), String>` where the other twelve
   return `Result<String, String>`.
 - **Every detail pane spells out the 19 `IntentOutcome` variants it does not handle.** The terminal
   `match` of each pane ends in a catch-all arm naming every other variant so no wildcard is used — 21
   lines apiece at `note.rs:337-358`, `person.rs:781-802`, `tag.rs:165-186` and 11 more, 14 sites in
   all, every one of them `=> rsx! {}`. `IntentOutcome` has 22 variants
-  (`genealogy-ui/src/intent.rs:101-153`), so adding a 23rd is 14 mechanical edits producing 14 compile
+  (`vitni-ui/src/intent.rs:101-153`), so adding a 23rd is 14 mechanical edits producing 14 compile
   errors that carry no information: no pane has ever handled another aggregate's outcome. Wanted: a
   `detail_state<'a, T>(&'a Option<ScreenData>, pick: impl Fn(&'a IntentOutcome) -> Option<&'a T>)`
   helper in `screens/shared.rs` returning `Loading | Error | NotFound | Ready(&T) | Other`, each screen
@@ -360,7 +360,7 @@ which is what makes them worth fixing in the shared code rather than per screen.
   also why #309/#310 have nowhere to land their shared half — the `components/draft_field.rs` change
   from stacked `.field` to same-line `.fact-row`.
 - **Collection history nodes cannot be expanded and show no count.** `collapse_runs`
-  (`genealogy-app/src/history.rs:247-302`) folds a software run into one synthetic
+  (`vitni-app/src/history.rs:247-302`) folds a software run into one synthetic
   `ActivityDetail::ImportBatch { count }` row and **discards the children**, and `ActivityVm`
   (`view_model/history.rs:99-122`) has no count field either — the number survives only baked into the
   localized sentence. Wanted: keep the children, show the count muted beside the node, and make the
@@ -406,9 +406,9 @@ Residuals from the shortcuts work (ADR 0030); see
   rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.
 - **No chord sequences beyond the existing `g`-prefix** — `resolved_shortcuts` resolves single chords
   only.
-- **The framework-free `Key` enum (`genealogy-ui::shortcuts`) is still closed** — no function keys, so
+- **The framework-free `Key` enum (`vitni-ui::shortcuts`) is still closed** — no function keys, so
   `e`/`F2` (the within-screen edit chord) could not be rebound even if that group were opened up.
-- **No keyboard topic in the in-app Help browser.** `genealogy-ui::help.rs`'s `HelpSection::Reference`
+- **No keyboard topic in the in-app Help browser.** `vitni-ui::help.rs`'s `HelpSection::Reference`
   is documented as "Lookup material (shortcuts, glossaries)" and `Run::Kbd` is unused — no authored doc
   covers shortcuts; the `?` overlay is the only in-app reference today.
 
@@ -437,7 +437,7 @@ Residuals from the shortcuts work (ADR 0030); see
   `format_zoom` (`:477`) and `save_year` (`:1078`) name no framework type and are already unit-tested
   as pure functions (`map_shared.rs:1165`), while their siblings `clamp_zoom`, `clamp_slider_year`,
   `display_coordinates` and `MarkerShapeVm` live one layer down in
-  `genealogy-ui/src/view_model/geography.rs`. A second renderer would re-implement the editing rules
+  `vitni-ui/src/view_model/geography.rs`. A second renderer would re-implement the editing rules
   rather than reuse them, against ADR 0008 §7 and
   [`second-renderer-checklist.md`](second-renderer-checklist.md) §2 ("the renderer holds no domain
   rules or coordination"). The cut is the state machine only — the GeoJSON builders, the `*_script`
@@ -476,7 +476,7 @@ Residuals from the shortcuts work (ADR 0030); see
   directory, so they land in WebKit's default unmanaged cache at a path the app neither controls nor
   can bound. A viewport-only, size- and TTL-bounded disk cache is possible without leaving Rust: serve
   the raster source from a `use_asset_handler("tiles", …)` route, read/write
-  `project_dirs()?.cache_dir()` (no cache-dir helper exists in `genealogy-app/src/config.rs` yet), and
+  `project_dirs()?.cache_dir()` (no cache-dir helper exists in `vitni-app/src/config.rs` yet), and
   fall through to `reqwest` with a real `User-Agent`. That seam is also the natural place to enforce
   `MapConfig::net_allowlist`. Constraint: `research/geography-rendering.md` commits to caching no more
   than the browser does, so bulk or offline prefetch stays out and the wording needs amending along
@@ -501,12 +501,12 @@ Residuals from the shortcuts work (ADR 0030); see
 ### GUI ⇄ CLI parity
 
 Every per-aggregate verb the CLI exposes has a GUI counterpart (audited
-`genealogy-cli/src/{main.rs,commands/*.rs}` against `genealogy-ui/src/{navigation.rs,intent.rs}`); each
-reuses an existing `genealogy-app` use-case rather than a new core verb. One parity gap remains, filed
+`vitni-cli/src/{main.rs,commands/*.rs}` against `vitni-ui/src/{navigation.rs,intent.rs}`); each
+reuses an existing `vitni-app` use-case rather than a new core verb. One parity gap remains, filed
 in its own area: research notes (*Notes & research notes*). The one gap running the other way:
 
 - **Restrictions cannot be set from the CLI on any aggregate** — `restrictions_tag`
-  (`genealogy-cli/src/i18n/person.rs:35`) renders them on record output, but no command writes them:
+  (`vitni-cli/src/i18n/person.rs:35`) renders them on record output, but no command writes them:
   no `Restriction` `ValueEnum`, no `set-restrictions` verb. The app use-cases exist per aggregate and
   the GUI wires all thirteen, so privacy is GUI-only.
   *Shape:* one shared `ValueEnum` plus a `set-restrictions` subcommand per aggregate over the existing
@@ -519,7 +519,7 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
 - **Gramps `<header created>` is parsed but never threaded to `begin-import`** — ADR 0029's
   timestamp-gated reconciliation is only wired on the GEDCOM side
   (`plugins/gedcom-import/src/lib.rs:41`). `plugins/gramps-import/src/lib.rs` goes straight from
-  `parse` to the person loop and never reads `db.header`, though `genealogy-gramps-xml/src/parse.rs:400`
+  `parse` to the person loop and never reads `db.header`, though `vitni-gramps-xml/src/parse.rs:400`
   does parse the date — so a Gramps re-import gets no timestamp gating at all. Found while verifying
   the Phase 10 completion claim, which described both formats as wired.
 - **Source merge/sync reconciliation prerequisite** — Source resolve-or-create (`ExternalId` dedup) +
@@ -541,7 +541,7 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   reads as routine in the history. This destroys editorial judgement rather than merely duplicating data,
   and must be resolved before any import is made recurring. Needs a tombstone rule over retracted
   assertions keyed by originating authority.
-- **Lift `prepare_import_target`** into `genealogy-app::workspace_registry` — still inline in the CLI
+- **Lift `prepare_import_target`** into `vitni-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
 - **No merge/conflict mockup for reconciled fields** — the Phase 10 plan required a merge/conflict view
   in `docs/mockups/import.html` showing a reconciled field's audit trail (who/when/why, not an
@@ -567,12 +567,12 @@ Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none 
   in the crate's documented `api` seam (research doc §IIIF).
 - **`attach-citation-media` WIT verb.** The wizard's census-line crop lands on the *person's* media
   ref because there is no `attach-citation-media` command in the WIT. Citation-level attach is a
-  follow-up (`genealogy-core`/`genealogy-app` already model citation `MediaRef`s).
+  follow-up (`vitni-core`/`vitni-app` already model citation `MediaRef`s).
 - **Politeness delay for `net`.** The archive `robots.txt` requests `Crawl-delay: 5`; `net` enforces
   a timeout and size cap but no inter-request delay (the assisted flow is interactive and low-volume
   today). A politeness delay is a follow-up if usage grows.
 - **`AiProvider::Plugin` is declared but unsupported** — the variant exists in `[ai]` config and
-  round-trips, but `genealogy-plugin-host/src/ai.rs:73` returns `AiError::InvalidInput` for it, so a
+  round-trips, but `vitni-plugin-host/src/ai.rs:73` returns `AiError::InvalidInput` for it, so a
   workspace configured with `kind = "plugin"` fails only at first use. Either implement it or reject it
   at config-load time.
 
@@ -581,9 +581,9 @@ Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none 
 - **`SUBM`/other `HEAD` metadata** — deferred to its own future ADR-gated item; no core-domain concept
   (a document-level submitter/owner) exists to map it onto yet.
 - **RichText `translations`** (text+language, distinct from `translator`) — GEDCOM 7 has a real target
-  (`NOTE.TRAN`), but `genealogy-gedcom` has no structured `Note` model yet (notes are bare strings);
+  (`NOTE.TRAN`), but `vitni-gedcom` has no structured `Note` model yet (notes are bare strings);
   blocked on that prerequisite rewrite. Gramps has no equivalent construct.
-- **`Address` on the Gramps side** — `genealogy-gramps-xml` has no `Address` concept at all, so
+- **`Address` on the Gramps side** — `vitni-gramps-xml` has no `Address` concept at all, so
   `Address.original_text` (which round-trips on the GEDCOM side now) has nowhere to go there; and
   `original_text` has no Gramps DTD equivalent even once an Address type exists.
 
@@ -646,15 +646,15 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   exists). `VAR=… cargo run` works; a desktop launcher (`.desktop`, AppImage, `.deb`) starts the GUI
   with no shell profile, so a keyed MapLibre style, the Google provider, and every `vision-api` AI
   provider are unreachable from an installed build with no way to say so in config. Proposed shape:
-  load `<workspace>/.env` then `~/.config/genealogy/.env` at startup in `genealogy-app`, never
+  load `<workspace>/.env` then `~/.config/vitni/.env` at startup in `vitni-app`, never
   overriding an already-set variable, both gitignored — the key stays out of config files, logs and
   the event log either way, which is the whole point of naming a variable rather than storing a
   secret. — #296
-- **The shipped app icon is a corrupt PNG.** `crates/genealogy-ui-dioxus/assets/genealogy.png` is a
+- **The shipped app icon is a corrupt PNG.** `crates/vitni-ui-dioxus/assets/vitni.png` is a
   144-byte 64×64 stub whose IDAT stream does not decode — `identify` refuses it with `IDAT: invalid
   distance too far back`. It is what installs as the icon: `package.rs`'s `ICON_SRC` copies it into the
   release stage (`xtask/src/package.rs:40,168`) and the `[package.metadata.deb]` assets put it in
-  `usr/share/pixmaps/` (`genealogy-ui-dioxus/Cargo.toml:67`), so a `.deb` or AppImage install has no
+  `usr/share/pixmaps/` (`vitni-ui-dioxus/Cargo.toml:67`), so a `.deb` or AppImage install has no
   working icon. Needs a real one. Found while closing #301, whose `gui-pass` scenario had to *generate*
   its fixture image with `convert` because this file cannot be decoded. The mark is decided:
   **V-as-pedigree with a seal impression, disclosed by size** — the letter V drawn as two ascending
@@ -669,24 +669,24 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   a protruding circle reads as a notification badge at dock sizes. Deliverables: SVG source, PNG at
   16/24/32/48/64/128/256, the symbolic variant, and a legibility check at 16px on light and dark.
   Not a tree and not a leaf — Gramps, Ancestry and MyHeritage all use those. — #326
-- **`.deb` needs `GENEALOGY_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
-  distro-installed binary needs `GENEALOGY_PLUGIN_DIR=/usr/lib/genealogy/plugins` (the AppImage sets it
+- **`.deb` needs `VITNI_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
+  distro-installed binary needs `VITNI_PLUGIN_DIR=/usr/lib/vitni/plugins` (the AppImage sets it
   via `AppRun`; the tarball resolves the fleet beside the binary). Teaching the embedded layer a default
   system path so an installed `.deb` finds the fleet with no env var is the follow-up (see
   [`release.md`](release.md)). — #212
 - **Real release keys not yet generated** — only the deterministic **DEV** signing key exists (Sanctioned
   in debug builds only), so `embedded_sanctioned_keys()` is `None` in a release build until one is
   configured. Before the first real release, generate the release ed25519 keypair, set the private half
-  as the `GENEALOGY_PLUGIN_SIGNING_KEY` repo secret, and embed the public half via
-  `GENEALOGY_PROJECT_PUBLIC_KEY` (ADR 0014 §6; procedure in [`release.md`](release.md)). — #210
+  as the `VITNI_PLUGIN_SIGNING_KEY` repo secret, and embed the public half via
+  `VITNI_PROJECT_PUBLIC_KEY` (ADR 0014 §6; procedure in [`release.md`](release.md)). — #210
 - **The embedded plugin-dir resolver is duplicated *and* divergent** — the ADR 0014 §4 *layering* is
-  shared (`genealogy_app::plugin_layers`), but each frontend still resolves the embedded layer itself
-  and the two disagree on the dev fallback: `genealogy-ui-dioxus/src/app.rs:326` uses
+  shared (`vitni_app::plugin_layers`), but each frontend still resolves the embedded layer itself
+  and the two disagree on the dev fallback: `vitni-ui-dioxus/src/app.rs:326` uses
   `CARGO_MANIFEST_DIR/../../target/plugins` (source-tree-absolute) while
-  `genealogy-cli/src/commands/io.rs:83` uses a bare `target/plugins` **relative to the working
+  `vitni-cli/src/commands/io.rs:83` uses a bare `target/plugins` **relative to the working
   directory**. So a CLI invoked from anywhere but the repo root silently finds no embedded fleet while
   the GUI always finds it. The Phase 11 plan called for replacing this duplication; only the layering
-  half landed. Fold both into one `genealogy-app` resolver — the same change that would give an
+  half landed. Fold both into one `vitni-app` resolver — the same change that would give an
   installed `.deb` a default system path (item above). — #213
 - **No `[profile.release]` section** — the Phase 11 plan's "strip/optimize release profile" was not
   done: the root `Cargo.toml` has no `[profile.release]`, so shipped binaries carry full debug symbols
@@ -702,7 +702,7 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 - **`sqlx` 0.9** — `sqlite-es` / `postgres-es` 0.5.0 (their latest) pin `sqlx` 0.8, so a bump splits the
   tree into two `sqlx` versions and every `Pool<Sqlite>` / `Pool<Postgres>` handed to the event stores
   fails to typecheck (17 mismatches). 0.9 also replaces `&str` query input with `SqlSafeStr`
-  (38 `sqlx::query(&format!(…))` call sites in `genealogy-db` need `AssertSqlSafe`). Re-evaluate when the
+  (38 `sqlx::query(&format!(…))` call sites in `vitni-db` need `AssertSqlSafe`). Re-evaluate when the
   `*-es` crates release on `sqlx` 0.9.
 - **`ed25519-dalek` 3.0.0** — needs `curve25519-dalek` ^5.0.0, while `russh` (via the `testcontainers`
   dev-dependency) needs `curve25519-dalek` =5.0.0-pre.6. Cargo resolves the conflict by downgrading to
@@ -737,11 +737,11 @@ The `area/docs` label already existed with no `###` home; this is it.
 - **The licence decision is made but not applied, and the tree has no licence files at all.** Decided
   from [`research/licensing-and-monetization.md`](research/licensing-and-monetization.md): a
   per-crate split — `MIT OR Apache-2.0` on the commodity interop crates, **`AGPL-3.0-or-later`** on
-  the application and on `genealogy-digitalarkivet` (kept off the permissive side so a paid importer
+  the application and on `vitni-digitalarkivet` (kept off the permissive side so a paid importer
   stays possible), an **additional permission under AGPLv3 §7** so a WASM component talking to the
   host only through the versioned WIT world need not be AGPL, **DCO + a broad licence-grant CLA**, and
   open core over the plugin boundary for anything paid. The report §8 records why: AGPL blocks the
-  realistic free-rider (a vendor embedding `genealogy-core` closed) permanently, while the two things
+  realistic free-rider (a vendor embedding `vitni-core` closed) permanently, while the two things
   it does not block — resale of binaries and verbatim paid hosting — are the two least likely to pay
   anyone; the alternative that does block them, FSL-1.1-Apache-2.0, lapses two years after each
   release and forfeits the distro repositories. Outstanding work: **ADR 0034** recording the split
@@ -754,23 +754,6 @@ The `area/docs` label already existed with no `###` home; this is it.
   relicensing must be named) and §5 (moral rights are largely unwaivable, so promise attribution
   rather than purport to acquire a waiver); a `COMMERCIAL.md`; and updating `CLAUDE.md`'s "keep it
   that way". — #325
-- **The project is renamed to `Vitni` and the rename is not done.** Old Norse *vitni*, "witness" —
-  it names the thesis (every event is a claim by an operator, with citations and confidence:
-  ADR 0004, ADR 0020) rather than the output, so it hints at the use without limiting it. Chosen
-  because "genealogy" is generic and therefore unregistrable, and a mark is the *only* lever against
-  rebranded resale: copyleft expressly permits selling copies (GPL §4), which is how Krita words it —
-  "change the icon and the application name and rebuild Krita yourself". Verified free on crates.io
-  including every `vitni-*` prefix, and clear of the live Norwegian products that rule out the
-  obvious alternatives (`Ætt*` → ÆtteForsker, `Slekt*` → dinSlekt, `Embla`). `Saga` was rejected for
-  colliding with the saga pattern in this repo's own architecture, and `Odal` because the odal rune is
-  a listed hate symbol. The sweep is 3831 occurrences across 464 tracked files; the surfaces that
-  break quietly rather than loudly are the WIT package `genealogy:host-api@0.21.0` with every
-  `plugins/*` bindgen `with` key that must move in lockstep, the 13 `GENEALOGY_*` environment
-  variables, `APP_NAME` in `crates/genealogy-app/src/config.rs` (which moves the config directory),
-  and the *generated* per-language `genealogy-cli.ftl`, where the tracked fragments get renamed but
-  never the concatenated output. No compatibility shims, per the no-backwards-compatibility rule: no
-  config migration and no dual-reading env vars. One atomic change, not staged — a half-renamed tree
-  does not build. — #324
 - **Repository hygiene before the switch is flipped.** The audit found no secrets — no private keys,
   no tokens, no `.pem`/`.key`/`.p12` anywhere; the in-tree `signing::DEV_PUBLIC_KEY` is deliberate and
   documented as never trusted in a release build, and no personal genealogy data is committed (the
@@ -799,7 +782,7 @@ The `area/docs` label already existed with no `###` home; this is it.
   downloadable signed bundle through a merchant of record, and how the free build stays
   unmonetised so it remains outside the CRA (Commission guidance C(2026) 5252 ¶52 — reporting
   duties arrive 11 September 2026, main obligations 11 December 2027). Also unresolved for
-  `genealogy-digitalarkivet` specifically: the National Archives' service name in a paid product's
+  `vitni-digitalarkivet` specifically: the National Archives' service name in a paid product's
   title, and the redistribution terms of the verbatim fixtures under its `tests/fixtures/`.
 
 ## Decided — no action needed
@@ -821,7 +804,7 @@ decision, not a gap.
 - **No per-platform keymaps.** `Modifier::command` abstracts ⌘/Ctrl by design, so a binding that must
   differ between macOS and Linux cannot be expressed.
 - **Bindings are global-only, no per-workspace override.** `[shortcuts]` lives in
-  `~/.config/genealogy/config.toml`, consistent with `[map]`/`[ai]`/`[plugin_trust]` — a keymap is
+  `~/.config/vitni/config.toml`, consistent with `[map]`/`[ai]`/`[plugin_trust]` — a keymap is
   machine/user-local, not a dataset property.
 - **No VS Code-style *when* context.** No context predicates are defined; a design question if a real
   need surfaces, not a missing implementation.

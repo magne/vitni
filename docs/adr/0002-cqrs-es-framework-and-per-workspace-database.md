@@ -27,11 +27,11 @@ Cargo features in the Decision), so a lean local build can ship SQLite alone.
 1. **Framework: `cqrs-es`.** DDD aggregates; per-stream `(aggregate, sequence)` optimistic
    concurrency.
 2. **Databases: Postgres and SQLite, gated by Cargo features; SQLite is the default.**
-   Two features on `genealogy-db` — `sqlite` (default) and `postgres` — gate the `sqlite-es`
+   Two features on `vitni-db` — `sqlite` (default) and `postgres` — gate the `sqlite-es`
    and `postgres-es` backends. The default build ships SQLite only (zero-setup local);
    `postgres` (or both) is opt-in for server / multi-user builds. Both backends implement the
    same cqrs-es `PersistedEventRepository` trait, so when more than one feature is enabled the
-   `genealogy-db` crate dispatches to the right one **per workspace at runtime** behind that
+   `vitni-db` crate dispatches to the right one **per workspace at runtime** behind that
    single trait — no recompilation. Postgres serves server / multi-user / enterprise
    workspaces; SQLite serves embedded / zero-setup / single-user local workspaces.
 3. **Portability commitment (research §6).** To keep a future move to `disintegrate` (the

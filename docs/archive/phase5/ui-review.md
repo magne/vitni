@@ -8,12 +8,12 @@
   from the 2026-07-05 review ([review-findings.md](review-findings.md)), whose findings are
   settled and whose deferred list stays deferred — nothing there is re-litigated here.
 - **Method:** six parallel expert reviews (visual design · usability/interaction ·
-  accessibility · genealogist feature-completeness · code-truth vs `genealogy-ui-dioxus` ·
+  accessibility · genealogist feature-completeness · code-truth vs `vitni-ui-dioxus` ·
   common-tab component audit), each covering all 26 pages and every JS-wired tab (rendered
   via agent-browser + raw HTML), then synthesized and deduplicated here.
 - **Code is the truth:** plan-2.md PRs 24–32 are shipped (draft-based creates, unified record
   form, correction model, structured dates, edit-gap sweep); PRs 33–38 are not. Mockup claims
-  were checked against `crates/genealogy-ui-dioxus/`, `genealogy-ui`, `genealogy-app`.
+  were checked against `crates/vitni-ui-dioxus/`, `vitni-ui`, `vitni-app`.
   Mockups that lag shipped code are findings (§2); mockup features the code lacks are
   stage-2 plan inputs (§8), not mockup bugs.
 - **Resolution column:** every finding is either fixed in the mockups on this branch or
@@ -43,7 +43,7 @@ Findings ranked severity × cost-to-fix-later within each section.
 
 | # | Lens | Finding | Resolution |
 | - | ---- | ------- | ---------- |
-| U1 | code/feat | **person.html still asserts Birth/Death as Facts.** Overview "Vital facts" card, Facts-tab rows (with Edit/Retract implying `AssertFact`), and the Citations "Backs" column all show Birth/Death as Facts — but ADR 0021 §2 (PR #118) removed the vital variants from `FactType`; `fact_type_choices` (genealogy-ui `i18n.rs:1452`) offers 14 non-vital types only. The person's own Birth/Death events are meanwhile *absent* from the Events tab, and the Facts tab-count badge said 6 over 4 rows. A developer cannot build this screen against the real DTOs. | Fixed: Birth/Death moved to the Events tab as Primary-participant events; Facts tab keeps attribute-shaped rows (Occupation, Residence, Religion); counts corrected; Overview card re-labeled to draw from events. |
+| U1 | code/feat | **person.html still asserts Birth/Death as Facts.** Overview "Vital facts" card, Facts-tab rows (with Edit/Retract implying `AssertFact`), and the Citations "Backs" column all show Birth/Death as Facts — but ADR 0021 §2 (PR #118) removed the vital variants from `FactType`; `fact_type_choices` (vitni-ui `i18n.rs:1452`) offers 14 non-vital types only. The person's own Birth/Death events are meanwhile *absent* from the Events tab, and the Facts tab-count badge said 6 over 4 rows. A developer cannot build this screen against the real DTOs. | Fixed: Birth/Death moved to the Events tab as Primary-participant events; Facts tab keeps attribute-shaped rows (Occupation, Residence, Religion); counts corrected; Overview card re-labeled to draw from events. |
 | U2 | a11y | **Nav rail items lose link semantics.** `shell.js` sets `role="listitem"` directly on the `<a class="nav-item">` anchors, overwriting the implicit link role — the 19-item primary nav is invisible to screen-reader link navigation on every page (WCAG 4.1.2). | Fixed: list/listitem scaffolding removed from anchors in `shell.js`. |
 | U3 | a11y | **`?` help modal has no focus trap or inert background.** `aria-modal="true"` but Tab walks into the background rail; `.app` never gets `inert`/`aria-hidden` (ARIA APG modal pattern, WCAG 2.4.3). Escape-close and focus-return already work. | Fixed: Tab/Shift+Tab cycle within the sheet; `inert` set on `.app` while open. **Done (PR40):** app-side — `.app` gets `inert` + `aria-hidden` while the help/palette overlay is open (overlays are siblings of `.app`); Escape-close/focus-return kept. |
 | U4 | a11y | **Record-tab "✕ Close" is a dead control.** `role="button"` + `aria-label` but no `tabindex` and no handler anywhere — announced as actionable, unreachable and inoperable (WCAG 2.1.1/4.1.2). | Fixed: focusable with Enter/Space/click handler that removes the tab. **Done (PR40):** app-side — record-tab close is keyboard-operable (`tabindex` + Enter/Space) with a contextual `aria-label`. |

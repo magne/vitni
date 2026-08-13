@@ -39,9 +39,9 @@ jobs:
       contents: read
       packages: read
     container:
-      # Pin to `ghcr.io/magne/genealogy-ci@sha256:...` once ci-image.yml has published the image;
+      # Pin to `ghcr.io/magne/vitni-ci@sha256:...` once ci-image.yml has published the image;
       # the digest does not exist until the first push.
-      image: ghcr.io/magne/genealogy-ci:latest # zizmor: ignore[unpinned-images]
+      image: ghcr.io/magne/vitni-ci:latest # zizmor: ignore[unpinned-images]
     # Dropping debuginfo for the dev/test profiles slashes object size and linker memory (the heavy
     # tree — dioxus-desktop, wasmtime, icu, postgres dev-deps — otherwise ran the linker out of
     # memory). Safe across targets (unlike a `-fuse-ld` RUSTFLAG, which would break the wasm32 build).
@@ -70,7 +70,7 @@ jobs:
       contents: read
       packages: read
     container:
-      image: ghcr.io/magne/genealogy-ci:latest # zizmor: ignore[unpinned-images]
+      image: ghcr.io/magne/vitni-ci:latest # zizmor: ignore[unpinned-images]
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
@@ -100,12 +100,12 @@ jobs:
       # `--network host` on container jobs and puts spawned testcontainers on an unreachable network,
       # so those run in the native `postgres` job below instead.
       # `--lib --bins --tests` (not `--all-targets`) so nextest skips `benches/store.rs`: run
-      # 30783699764 showed 15 `genealogy-db::bench/store` entries at ~140 s each, ~18 minutes of
+      # 30783699764 showed 15 `vitni-db::bench/store` entries at ~140 s each, ~18 minutes of
       # this job for benchmarks nobody asserts on in CI. The clippy job keeps `--all-targets`, so
       # the bench code still builds and lints; run it deliberately with
-      # `cargo bench -p genealogy-db --features sqlite`.
+      # `cargo bench -p vitni-db --features sqlite`.
       - name: test
-        run: cargo nextest run --workspace --all-features --lib --bins --tests -E 'not binary_id(=genealogy-db::postgres_store)'
+        run: cargo nextest run --workspace --all-features --lib --bins --tests -E 'not binary_id(=vitni-db::postgres_store)'
       # nextest does not run doctests; keep them a separate cargo step.
       - name: doctests
         run: cargo test --workspace --all-features --doc
@@ -113,8 +113,8 @@ jobs:
   postgres:
     name: postgres integration tests
     # Native runner (not the container image): testcontainers needs a reachable Docker daemon, which
-    # only works outside a container job. genealogy-db has no webview/UI deps, so no apt setup is
-    # needed; the test-containers-util helper starts and reuses the `genealogy-pg` container.
+    # only works outside a container job. vitni-db has no webview/UI deps, so no apt setup is
+    # needed; the test-containers-util helper starts and reuses the `vitni-pg` container.
     runs-on: ubuntu-latest
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -128,11 +128,11 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       # Pre-pull so the first test doesn't race the image pull (testcontainers reuses one
-      # `genealogy-pg` container, isolating each test in its own database).
+      # `vitni-pg` container, isolating each test in its own database).
       - name: pre-pull postgres image
         run: docker pull postgres:18-alpine
       - name: test
-        run: cargo test -p genealogy-db --features postgres
+        run: cargo test -p vitni-db --features postgres
 
   deny:
     name: cargo-deny

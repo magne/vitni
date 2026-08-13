@@ -5,7 +5,7 @@
 
 ## Context
 
-ADR 0005 fixed the application configuration model: a global `~/.config/genealogy/config.toml`
+ADR 0005 fixed the application configuration model: a global `~/.config/vitni/config.toml`
 (operator identity, the named-workspace registry, app-level `[defaults]`, live
 `[workspace-defaults]`) and a per-workspace `workspace.toml` manifest (`database_url`, `id_formats`,
 `operators`, UI preferences, locale overrides, plugin toggles). That model split configuration along
@@ -61,13 +61,13 @@ three named scopes, introduces a storage seam, and fixes the env-precedence orde
       system locale, the weakest signal;
    2. **configured `ui_language`** — the workspace override resolved over the live app default; wins
       over the ambient env (the bug fix);
-   3. **`GENEALOGY_LANGUAGE`** — an explicit, app-scoped override; wins over everything, so a user can
+   3. **`VITNI_LANGUAGE`** — an explicit, app-scoped override; wins over everything, so a user can
       force a language for one run without editing config.
 
    A pure resolver `resolve_requested_languages(config_ui_language, plain_env, prefixed_env)` encodes
    the order (`[prefixed]` else `[config]` else `plain_env`); the frontends supply `plain_env` from
-   `DesktopLanguageRequester` (keeping `genealogy-app` free of `i18n_embed`) and read
-   `GENEALOGY_LANGUAGE` through the app. `genealogy-core`/`genealogy-app` still emit no user-facing
+   `DesktopLanguageRequester` (keeping `vitni-app` free of `i18n_embed`) and read
+   `VITNI_LANGUAGE` through the app. `vitni-core`/`vitni-app` still emit no user-facing
    strings — this is the request the frontends' Fluent loaders negotiate against.
 
 5. **On-disk layout: the two ADR 0005 files are retained.** A clean file-format break is permitted
@@ -86,8 +86,8 @@ rather than re-slicing config. Keeping the file layout stable keeps the change r
 migration no user benefits from.
 
 The precedence fix follows the principle already in ADR 0003 — explicit configuration beats the
-ambient system locale — and adds one explicit escape hatch (`GENEALOGY_LANGUAGE`) above config for a
-one-off override, matching how `GENEALOGY_WORKSPACE` already overrides the default workspace.
+ambient system locale — and adds one explicit escape hatch (`VITNI_LANGUAGE`) above config for a
+one-off override, matching how `VITNI_WORKSPACE` already overrides the default workspace.
 
 ## Consequences
 
@@ -96,8 +96,8 @@ one-off override, matching how `GENEALOGY_WORKSPACE` already overrides the defau
 - The three owners are separated before the surface grows, so the Phase 13 server adds a `ConfigStore`
   backend instead of re-entangling config.
 - Configured `ui_language` now wins over an ambient `LANGUAGE`, so a workspace renders in its
-  configured language regardless of the host env; `GENEALOGY_LANGUAGE` gives a clean per-run override.
-- The pure resolver is unit-tested for every precedence case; `genealogy-app` stays free of
+  configured language regardless of the host env; `VITNI_LANGUAGE` gives a clean per-run override.
+- The pure resolver is unit-tested for every precedence case; `vitni-app` stays free of
   `i18n_embed`.
 
 ### Negative / costs
@@ -116,12 +116,12 @@ one-off override, matching how `GENEALOGY_WORKSPACE` already overrides the defau
   surety scheme are named as workspace-functionality scope by ADR 0005 / the roadmap but have no
   consumer yet, so they are not added here (YAGNI).
 - A **general environment-overlay seam.** Only the one env key that exists (`LANGUAGE` /
-  `GENEALOGY_LANGUAGE`) is resolved, by a single typed resolver; a general `GENEALOGY_*`-over-config
+  `VITNI_LANGUAGE`) is resolved, by a single typed resolver; a general `VITNI_*`-over-config
   overlay is documented intent, not built (a deliberate scope trim — there is one key to resolve).
 
 ## References
 
 - ADR 0005 — the configuration and workspace-resolution model this ADR groups into scopes and puts
   behind a store.
-- ADR 0006 — the `genealogy-app` coordination layer / `Session` seam the store and resolver live in.
+- ADR 0006 — the `vitni-app` coordination layer / `Session` seam the store and resolver live in.
 - ADR 0003 — the Fluent locale resolution the env-precedence fix plugs into.

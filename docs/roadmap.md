@@ -2,7 +2,7 @@
 
 - **Status:** Draft
 - **Date:** 2026-07-17
-- **Audience:** anyone planning or sequencing work on the genealogy workspace
+- **Audience:** anyone planning or sequencing work on the Vitni workspace
 
 This roadmap says **what to build next** and **in what order**. It is derived from the current
 code, [`docs/data-model.md`](data-model.md), and the accepted ADRs
@@ -36,18 +36,18 @@ The workspace builds clean (zero warnings), and 69 tests pass across four crates
 
 | Crate | State |
 | --- | --- |
-| `genealogy-core` | **Person + Family aggregates only** (2 of 12). Full value-object catalog, pure `decide`/`evolve`, `EventContext` + `AssertionId` carried in the payload. |
-| `genealogy-db` | **SQLite working** (`cqrs-es` + `sqlite-es`), projections, `HumanId` allocation. **Postgres stubbed** (returns `Unsupported`). |
-| `genealogy-app` | Use-cases for Person + Family, `Session` (the sole clock/UUID-v7 boundary), config + workspace lifecycle, frontend-neutral DTOs. |
-| `genealogy-cli` | `init`, `person create/add-name/show/list`, `family create/add-partner/remove-partner/add-child/remove-child/show/list`. Fluent i18n (`en`, `no`). |
+| `vitni-core` | **Person + Family aggregates only** (2 of 12). Full value-object catalog, pure `decide`/`evolve`, `EventContext` + `AssertionId` carried in the payload. |
+| `vitni-db` | **SQLite working** (`cqrs-es` + `sqlite-es`), projections, `HumanId` allocation. **Postgres stubbed** (returns `Unsupported`). |
+| `vitni-app` | Use-cases for Person + Family, `Session` (the sole clock/UUID-v7 boundary), config + workspace lifecycle, frontend-neutral DTOs. |
+| `vitni-cli` | `init`, `person create/add-name/show/list`, `family create/add-partner/remove-partner/add-child/remove-child/show/list`. Fluent i18n (`en`, `no`). |
 
 **Unknowns still open (what the roadmap exists to close):** the 10 remaining aggregates (Event,
 Place, Source, Citation, Repository, Media, Note, Tag, DnaTest, DnaMatch); cross-aggregate id links
 and projection-based invariant checks (the "aggregate tax", data-model §9); `PersonsMerged`;
-event-version upcasting; projection rebuild-from-log; the Postgres backend; `genealogy-plugin-host`
-(WASM); import/export; `genealogy-ui` + `genealogy-ui-dioxus`; the plugin-UI vocabulary.
+event-version upcasting; projection rebuild-from-log; the Postgres backend; `vitni-plugin-host`
+(WASM); import/export; `vitni-ui` + `vitni-ui-dioxus`; the plugin-UI vocabulary.
 
-> Note: `EventContext.citations` already exists in `genealogy-core`, but the **Citation aggregate
+> Note: `EventContext.citations` already exists in `vitni-core`, but the **Citation aggregate
 > does not** — provenance links currently have nothing to point at. Spike A closes this.
 
 ## Phase 1 — De-risking spikes
@@ -78,9 +78,9 @@ present (`en`, `no`), the **multi-locale completeness checker** also lands now �
 it only until a second locale existed; that condition is met, and landing it before string volume
 grows keeps the `no` catalogue from drifting.
 
-**Crates/types touched.** `genealogy-core` (new `event`, `place`, `source`, `citation` modules
-following the Person/Family template); `genealogy-db` (projections + invariant-check queries);
-`genealogy-app` (use-cases + DTOs); `genealogy-cli` (commands + `.ftl` strings); i18n tooling.
+**Crates/types touched.** `vitni-core` (new `event`, `place`, `source`, `citation` modules
+following the Person/Family template); `vitni-db` (projections + invariant-check queries);
+`vitni-app` (use-cases + DTOs); `vitni-cli` (commands + `.ftl` strings); i18n tooling.
 
 **Exit criteria.** An Event can be created, linked to a Place and to participant Persons, and cited;
 `UnknownPlace`/`UnknownSource` are returned for dangling refs; a localized date renders correctly in
@@ -100,7 +100,7 @@ both `en` and `no`; the completeness checker fails CI when a key is missing from
 large and the schema has drifted. ADR 0004 fixed the *encoding* on day one precisely so this is
 possible; this spike proves the *tooling*.
 
-**Crates/types touched.** `genealogy-core` (versioned event + upcaster); `genealogy-db` (rebuild
+**Crates/types touched.** `vitni-core` (versioned event + upcaster); `vitni-db` (rebuild
 routine over the event store).
 
 **Exit criteria.** A workspace written with the `v1` event schema reads back correctly after the
@@ -113,7 +113,7 @@ technical unknown.
 
 **What it must prove.**
 
-- `genealogy-plugin-host` (new crate above `genealogy-app`): Wasmtime + Component Model, **one
+- `vitni-plugin-host` (new crate above `vitni-app`): Wasmtime + Component Model, **one
   versioned WIT host world**, deny-by-default capabilities, per-instance resource limits (memory,
   fuel/epoch timeout) — ADR 0007.
 - A **GEDCOM import plugin** and a **GEDCOM export plugin** as `wasm32-wasip2` components: import
@@ -126,7 +126,7 @@ technical unknown.
 into the plugin spike means one slice proves the host, the WIT/DTO boundary, Software-agent
 provenance, and a real import/export round-trip at once.
 
-**Crates touched.** New `genealogy-plugin-host`; two plugin component crates; `genealogy-app`
+**Crates touched.** New `vitni-plugin-host`; two plugin component crates; `vitni-app`
 (use-case entry points the host calls).
 
 **Exit criteria.** A GEDCOM file imports into a workspace as personas + family with Software-agent
@@ -139,17 +139,17 @@ stopped by the resource limit.
 
 **What it must prove.**
 
-- `genealogy-ui` (new crate, depends on `genealogy-app` only, **zero framework types**): view-models
+- `vitni-ui` (new crate, depends on `vitni-app` only, **zero framework types**): view-models
   derived from DTOs for a person list + detail, intent dispatch to use-cases, Fluent resolution.
-- `genealogy-ui-dioxus` (new GUI binary, parallel to the CLI): one real screen — person list →
-  detail — in RSX, routing events to `genealogy-ui` intents.
+- `vitni-ui-dioxus` (new GUI binary, parallel to the CLI): one real screen — person list →
+  detail — in RSX, routing events to `vitni-ui` intents.
 - A **minimal plugin-UI vocabulary** type (a serializable form/list description) plus a per-framework
   interpreter that renders one plugin-supplied form (ADR 0007 follow-up, ADR 0008).
 - The dependency direction `app → ui → ui-<framework>` holds: no `dioxus::` type appears above the
   renderer crate.
 
 **Exit criteria.** The Dioxus binary lists persons from a real workspace and opens a detail view; a
-plugin-described form renders through the vocabulary interpreter; `genealogy-ui` compiles with no
+plugin-described form renders through the vocabulary interpreter; `vitni-ui` compiles with no
 framework dependency.
 
 > After Phase 1, no major unknown remains. Phases 2–12 repeat proven patterns.
@@ -182,23 +182,23 @@ Cross-cutting operations added alongside the aggregate breadth:
 
 ✅ **Wiring refactor (issue #38) done.** The monolithic registries (db store, CLI i18n) that every
 Phase 2 aggregate had to edit are split into per-aggregate x-macro registries, so adding an aggregate
-no longer touches a central list. See <https://github.com/magne/genealogy/issues/38>.
+no longer touches a central list. See <https://github.com/magne/vitni/issues/38>.
 
 ## Phase 3 — Persistence hardening ✅ done
 
 - ✅ Implemented the **Postgres** backend behind the existing `PersistedEventRepository`/`Store`
-  abstraction (the `postgres` feature; `postgres-es` + `sqlx`). `genealogy-cli` compiles **both**
+  abstraction (the `postgres` feature; `postgres-es` + `sqlx`). `vitni-cli` compiles **both**
   backends, so one binary selects the engine **per workspace at runtime** from each workspace's
-  `database_url` (ADR 0002). A workspace is created on Postgres with `genealogy init --database-url
+  `database_url` (ADR 0002). A workspace is created on Postgres with `vitni init --database-url
   postgres://…`, or by setting `[defaults].database_url` in the global config (precedence: flag >
   config > the `engine` default). Postgres is exercised in CI against a containerized server
   (`test-containers-util`/`testcontainers`, image `postgres:18-alpine`), each test isolated in its
   own database.
-- ✅ Promoted Spike B's rebuild into the **`genealogy rebuild`** maintenance command
+- ✅ Promoted Spike B's rebuild into the **`vitni rebuild`** maintenance command
   (`Workspace::rebuild_projections` → the engine-neutral `Store::rebuild_projections`).
 - **Migration story.** The event log is immutable and append-only, so the migration model is:
   schema *evolution* is **additive events + upcasters** (ADR 0004 §4 / ADR 0010), and any
-  read-model/projection-schema change is absorbed by **`genealogy rebuild`** — drop the projections
+  read-model/projection-schema change is absorbed by **`vitni rebuild`** — drop the projections
   and replay the log (with upcasters) into the freshly-created tables. Table DDL is idempotent
   `CREATE … IF NOT EXISTS`; there is deliberately **no in-place `ALTER` migration framework**
   (YAGNI — projections are disposable, the log is the source of truth). Migration concerns this does
@@ -220,10 +220,10 @@ moved to later phases (see the note). Detailed history/remaining-work checklist:
   are generalized into format-neutral **`bulk-import`/`bulk-export`** worlds with a **`progress`**
   capability (step / processed / optional total) and **host-mediated streaming** source/sink (the
   host owns the path; the plugin streams a chunk at a time). Shared guest plumbing lives in a new
-  **`genealogy-plugin-api`** crate; the GEDCOM plugins are migrated onto it; the CLI gains
-  **`genealogy import`/`export`** commands that render progress. Host-API package → `@0.3.0`
+  **`vitni-plugin-api`** crate; the GEDCOM plugins are migrated onto it; the CLI gains
+  **`vitni import`/`export`** commands that render progress. Host-API package → `@0.3.0`
   ([ADR 0013](adr/0013-import-export-contract.md)).
-- ✅ **Gramps XML and GEDCOM 7 round-trip with idempotent re-import.** A pure `genealogy-gramps-xml`
+- ✅ **Gramps XML and GEDCOM 7 round-trip with idempotent re-import.** A pure `vitni-gramps-xml`
   crate + `gramps-import`/`gramps-export` plugins; full **GEDCOM 7** round-trip (structured names,
   the complete date grammar, addresses, the civil/common event set, INDI attributes, associations,
   and owner-recoverable export); and `ExternalId`-based re-import **idempotency and deduplication**
@@ -247,8 +247,8 @@ Residue: plugin-UI vocabulary *extensions* (ADR 0022 out-of-scope) and DNA match
   work.)
 - ✅ A design system and the plugin-UI vocabulary (ADR 0012/0022; further vocabulary extensions
   are a documented follow-up).
-- ✅ Second-framework readiness check: a new renderer must reuse `genealogy-ui` unchanged
-  (ADR 0008), enforced by `crates/genealogy-ui/tests/framework_free.rs`.
+- ✅ Second-framework readiness check: a new renderer must reuse `vitni-ui` unchanged
+  (ADR 0008), enforced by `crates/vitni-ui/tests/framework_free.rs`.
 
 ## Phase 6 — Place map MVP (read-only point) ✅ done
 
@@ -283,7 +283,7 @@ database. Gated by **ADR 0015** (written in this cycle). Three scopes replace to
   theme, view preferences, keyboard shortcuts, and the endpoint (or local `database_url`) the client
   connects through. Local to the client.
 - **Storage seam.** A `ConfigStore` abstraction so each scope reads/writes either a TOML file
-  (embedded — today's `workspace.toml` + `~/.config/genealogy/config.toml`) or a database. This
+  (embedded — today's `workspace.toml` + `~/.config/vitni/config.toml`) or a database. This
   phase ships the split, the trait, and the **file** backend; the **database** backend (operator +
   presentation config, per authenticated user) is implemented in Phase 13 with the server, which
   owns authentication.
@@ -297,8 +297,8 @@ three scopes behind a `ConfigStore` trait ([ADR 0015](adr/0015-configuration-spl
 with a `FileConfigStore` backend over the two existing TOML files; the callers (workspace registry,
 CLI open/import, the GUI startup, and the Preferences/theme/window/recent/plugin save paths) go
 through it. The inverted env-var precedence is fixed: a workspace's configured `ui_language` now
-outranks a bare `LANGUAGE`/`LANG`, and `GENEALOGY_LANGUAGE` outranks both (plain env < config <
-`GENEALOGY_`-prefixed), via a pure resolver wired into every localizer-building site. The database
+outranks a bare `LANGUAGE`/`LANG`, and `VITNI_LANGUAGE` outranks both (plain env < config <
+`VITNI_`-prefixed), via a pure resolver wired into every localizer-building site. The database
 backend stays **Phase 13**; the on-disk layout is retained (a clean break was permitted but no
 consumer needed one) and no new config fields were added (YAGNI).
 
@@ -315,28 +315,28 @@ deferred and ADR 0013 left out of scope.
   \— the Media aggregate stays metadata-only); and a pluggable, **named, multi-provider `ai`** capability
   (config declares `[ai.providers.<name>]` entries, each `kind = "command"` or `"vision-api"`, with
   an `[ai].default`; no hardcoded provider).
-- **`digitalarkivet-import` plugin** + a pure `genealogy-digitalarkivet` crate that parses census and
-  churchbook pages and resolves the scan URL chain, consuming the `genealogy-import` fixtures (never
+- **`digitalarkivet-import` plugin** + a pure `vitni-digitalarkivet` crate that parses census and
+  churchbook pages and resolves the scan URL chain, consuming the `vitni-import` fixtures (never
   reformat them). Flow: fetch source page → store scan → parse transcribed fields or AI-interpret the
   scan → import as low-confidence Person/Source/Citation/Media with an `ExternalId` back to the record
   URL.
 - **Interactive present-and-confirm (GUI).** A host `present` capability shows the interpreted record
   **and the scan** for confirm/edit before import. It suspends on a frontend presenter and carries a
   typed, versioned assisted-import payload rendered by a **first-party `Tool::Import` wizard** in the
-  Dioxus GUI (ADR 0008); `genealogy-ui` parses the payload — it is not the ADR 0022 plugin-UI
+  Dioxus GUI (ADR 0008); `vitni-ui` parses the payload — it is not the ADR 0022 plugin-UI
   vocabulary. The earlier sketch of a CLI rendering the image inline (kitty graphics / sixel) is
   **dropped** (owner decision, 2026-07-19); `present` stays frontend-neutral so a CLI presenter could
   be added later, but none ships in Phase 8 (ADR 0017, Out of scope).
 
 ✅ **Delivered** (branches/PRs #153–#160): four deny-by-default host capabilities land under
-[ADR 0017](adr/0017-assisted-import-host-capabilities.md) (WIT `genealogy:host-api` 0.15.0 → 0.19.0)
+[ADR 0017](adr/0017-assisted-import-host-capabilities.md) (WIT `vitni:host-api` 0.15.0 → 0.19.0)
 — **`net`** (GET-only, HTTPS, an allowlist re-checked on every redirect hop, an honest non-crawler
 User-Agent), **`media-store`** (SHA-256 checksums, path-safe writes under the workspace `media/` root,
 path+checksum dedup), a config-declared multi-provider **`ai`** (client-scope `[ai.providers.<name>]`
 entries, each `command` — argv, no shell — or `vision-api`, plus a reserved `plugin` kind), and a
 suspending **`present`** carrying a typed, versioned assisted-import payload. On top of them: the
 **`assisted-import` world** with a `Confidence::Low` provenance template; the pure
-**`genealogy-digitalarkivet`** crate that parses census/church-book pages and resolves the scan-URL
+**`vitni-digitalarkivet`** crate that parses census/church-book pages and resolves the scan-URL
 chain over verbatim fixtures (HTML-first — the research doc found no anonymous public API); **crop
 plumbing end-to-end** (`MediaRef.crop`/caption through app, DTO, and WIT, with the Gramps `<region>`
 round-trip proven on import) plus a GUI crop tool, media viewer, and media-save dialog; the
@@ -378,25 +378,25 @@ Plan: [`docs/archive/plans/places-geography-temporal.md`](archive/plans/places-g
 `feat/geography-view`). Three slices, one per gating ADR:
 
 - **Geometry & spatial storage (ADR 0024).** A typed `PlaceGeometry` (`Point`/`Polygon`) over integer
-  `Microdegrees` in `genealogy-core`, asserted **dated and accumulating** via
+  `Microdegrees` in `vitni-core`, asserted **dated and accumulating** via
   `AssertGeometry`/`GeometryAsserted` (the old undated `CoordinatesAsserted` folds as the `Point` case).
-  `genealogy-db` materialises geometry as **WKB behind a SQLite R\*Tree** with a `places_in_bbox` query,
-  rebuildable by `genealogy rebuild`. GeoJSON is the interchange (permissive GeoRust crates:
+  `vitni-db` materialises geometry as **WKB behind a SQLite R\*Tree** with a `places_in_bbox` query,
+  rebuildable by `vitni rebuild`. GeoJSON is the interchange (permissive GeoRust crates:
   `geo-types`, `geozero` with `with-geo`/`with-gpkg`, `geojson`); GEDCOM `PLAC.MAP` / Gramps `<coord>`
   points round-trip. `LineString`/`Multi*` variants and the Postgres GiST mirror stay additive
   follow-ups.
 - **Succession & temporal resolution (ADR 0026).** A pure **effective-from** resolver (latest dated
   assertion ≤ target, else the undated/primary) selects name / enclosing parent / geometry as of a
   date — one rule shared by the generated title, the **transitive, cycle-aware, date-aware
-  place-hierarchy walk** (`genealogy-app/src/place.rs`, the old backlog item), and the time
+  place-hierarchy walk** (`vitni-app/src/place.rs`, the old backlog item), and the time
   slider. `AssertSuccession`/`SuccessionAsserted { from, to, kind, date }`
   (`Merged`/`Split`/`Absorbed`/`Elevated`/`Renamed`, modelled like Person `AssociationAsserted`) records
   identity change, projected as a symmetric predecessor/successor relation with the aggregate-tax
   existence check; a plain rename stays a dated `PlaceName` on the same aggregate. Explicit
   `[from, until)` validity intervals remain the documented additive follow-up.
-- **Geography view, editing & provider (ADR 0025).** A framework-free `GeographyVm` in `genealogy-ui`
+- **Geography view, editing & provider (ADR 0025).** A framework-free `GeographyVm` in `vitni-ui`
   (markers, event-at-place pins, viewport, selected year, provider descriptor) and a **MapLibre GL JS
-  5.24.0** component (vendored) in `genealogy-ui-dioxus` behind a persistent `document::eval`
+  5.24.0** component (vendored) in `vitni-ui-dioxus` behind a persistent `document::eval`
   click-stream. In-map editing (drop/move a point, draw polygon vertices, "new place here") emits the
   picked geometry through the **existing** `PlaceEdit`/`PlaceChangeSetRequest` change-set path — same
   audited `GeometryAsserted` event, no separate map-write path. A time slider resolves as-of a year via
@@ -522,19 +522,19 @@ Direction set by the project owner; sketched here so the 1.0 architecture stays 
 scheduled. After 1.0 the app gains a third deployment shape alongside today's embedded
 (workspace = local directory + database):
 
-1. **Backend server.** Run `genealogy-app` as a long-lived server process that owns one or more
+1. **Backend server.** Run `vitni-app` as a long-lived server process that owns one or more
    workspaces and exposes the existing use-cases over the network. This is an additive frontend over
    the same coordination layer (ADR 0006) — the server re-exposes use-cases and DTOs; it does not
    re-implement domain rules. The `Session` (clock + UUID v7 + operator `Agent`) stays the impure
    boundary, now resolving the operator from an **authenticated** principal (the direction ADR 0005
    already fixed: operator → authenticated user, operator aggregate in the event store).
-2. **Web frontend.** A browser client over the server, reusing `genealogy-ui` view-models and
-   intents unchanged (ADR 0008's promise: a second renderer reuses `genealogy-ui` as-is; the ordered
+2. **Web frontend.** A browser client over the server, reusing `vitni-ui` view-models and
+   intents unchanged (ADR 0008's promise: a second renderer reuses `vitni-ui` as-is; the ordered
    steps are in [`second-renderer-checklist.md`](second-renderer-checklist.md), and the framework-free
-   guard in `crates/genealogy-ui/tests/framework_free.rs` keeps the boundary honest). The web
-   renderer is a new crate parallel to `genealogy-ui-dioxus` — Dioxus already targets web, so this
+   guard in `crates/vitni-ui/tests/framework_free.rs` keeps the boundary honest). The web
+   renderer is a new crate parallel to `vitni-ui-dioxus` — Dioxus already targets web, so this
    may be a web target of the same renderer or a sibling, decided when built.
-3. **Server-connected workspaces.** `genealogy init`/the GUI gains the ability to register a
+3. **Server-connected workspaces.** `vitni init`/the GUI gains the ability to register a
    workspace that points at a **server endpoint** instead of a local `database_url`. The CLI/GUI
    then act as **clients**: use-case calls travel to the server rather than to a local event store.
    The `PersistedEventRepository`/`Store` trait (ADR 0002) is the natural seam — a remote
@@ -548,7 +548,7 @@ principal** server-side (the workspace-functionality scope already lives with th
 client carries no local config file. The embedded build keeps the file backend unchanged.
 
 > These three pieces are deliberately additive: the embedded build keeps working unchanged, the
-> server is a new frontend over `genealogy-app`, and the web client reuses `genealogy-ui`.
+> server is a new frontend over `vitni-app`, and the web client reuses `vitni-ui`.
 
 ## Risk register
 
@@ -592,7 +592,7 @@ they are confirmed when the ADR is written.
 | [ADR 0014](adr/0014-plugin-signing-trust-tiers-and-loading.md) — **accepted** | Plugin signing, trust tiers, capability-grant UX, and three-layer loading | Phase 11 | ADR 0007 |
 | [ADR 0030](adr/0030-customizable-keyboard-shortcuts.md) — **accepted** | Customizable keyboard shortcuts: one resolved `Chord` map, Global-group-only rebinding, client-scope `[shortcuts]` config | Ease of use | ADR 0008, 0015 |
 | [ADR 0032](adr/0032-projection-schema-evolution-by-replay.md) — **accepted** | Projection schema evolution by replay: a `human_id` generated column + indexes on every view table, migrated by drop-and-replay rather than in-place `ALTER TABLE` | 0.9 — UI stabilization | ADR 0009, 0010 |
-| [ADR 0033](adr/0033-named-map-providers-and-live-switching.md) — **accepted** | Named `[map.providers.*]` config (mirroring `[ai.providers]`), a `MapSource` resolved in `genealogy-app` (incl. a Google Map Tiles session adapter), and live `setStyle` provider switching with no remount | 0.9 — UI stabilization | ADR 0025, 0017, 0008 |
+| [ADR 0033](adr/0033-named-map-providers-and-live-switching.md) — **accepted** | Named `[map.providers.*]` config (mirroring `[ai.providers]`), a `MapSource` resolved in `vitni-app` (incl. a Google Map Tiles session adapter), and live `setStyle` provider switching with no remount | 0.9 — UI stabilization | ADR 0025, 0017, 0008 |
 | ADR 0031 | Place model for real-world administrative geography: reopen the `Multi*` geometry variant, add a civil/ecclesiastical/judicial `relation` to `PlaceRef`, and carry positional accuracy separately from `Confidence` | Phase 9 residual closure | ADR 0024, 0026, 0027 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 
@@ -614,9 +614,9 @@ ADR 0009), keeping ADRs grounded in working code rather than speculation.
 ## Dependency notes
 
 - Spikes B, C, and D all build on the cross-aggregate machinery proven in **Spike A**.
-- **Spike C** sits above the `genealogy-app` DTO boundary (ADR 0006) and reuses the provenance model
+- **Spike C** sits above the `vitni-app` DTO boundary (ADR 0006) and reuses the provenance model
   (ADR 0001/0004) for Software agents.
-- **Spike D** consumes `genealogy-app` DTOs (ADR 0006) and Fluent strings (ADR 0003), and is where
+- **Spike D** consumes `vitni-app` DTOs (ADR 0006) and Fluent strings (ADR 0003), and is where
   the plugin-UI vocabulary (ADR 0007 follow-up, ADR 0008) first appears.
 - Phase ordering honors the four decided constraints: full vision to 1.0, de-risk all frontiers
   first, risk-first then breadth, and import/export as WASM plugins.

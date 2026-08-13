@@ -21,9 +21,9 @@ both before writing code.
 - **Decision: vendor v5.24.0's UMD build** (`dist/maplibre-gl.js` + `dist/maplibre-gl.css`), fetched from
   `unpkg.com/maplibre-gl@5.24.0/dist/`. This is a `<script>`-global build (`window.maplibregl`) — the
   same shape Leaflet's vendored `assets/leaflet.js` already is, so it drops into the existing
-  `scripts_head()` `<head>`-injection pattern (`crates/genealogy-ui-dioxus/src/app.rs`) with **zero**
+  `scripts_head()` `<head>`-injection pattern (`crates/vitni-ui-dioxus/src/app.rs`) with **zero**
   new build tooling (no bundler, no worker-URL wiring, no ESM `import` at runtime).
-- Vendored files: `crates/genealogy-ui-dioxus/src/assets/maplibre-gl.js` (~1.03 MB) and
+- Vendored files: `crates/vitni-ui-dioxus/src/assets/maplibre-gl.js` (~1.03 MB) and
   `maplibre-gl.css` (~70 KB). License is BSD-3-Clause (`dist/LICENSE.txt`, not vendored verbatim but
   cited in the `app.rs` doc comment, matching how Leaflet's BSD-2-Clause notice is handled).
 - Only tile/style requests are fetched over the network at runtime, per each provider's own policy —
@@ -72,7 +72,7 @@ never pre-fetching or caching beyond the browser's own cache.
 
 ## What this unblocked
 
-With the version and seam settled, the map component (`crates/genealogy-ui-dioxus/src/screens/geography.rs`)
+With the version and seam settled, the map component (`crates/vitni-ui-dioxus/src/screens/geography.rs`)
 composes cleanly from parts this codebase already had precedent for: `onmounted` to arm the map
 (`place.rs`'s Leaflet mount), a persistent `dioxus.send`/`recv` channel (`record_picker.rs`'s scroll
 watcher), and GeoJSON `Value` construction via `serde_json::json!` (already a dependency). No new Rust

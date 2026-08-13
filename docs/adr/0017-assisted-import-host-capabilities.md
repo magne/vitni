@@ -33,8 +33,8 @@ technology test. Search, page parsing, and scan-URL resolution all ship as
 `User-Agent` (`robots.txt` blocks 151 named crawlers and requests a 5 s
 crawl-delay for the rest).
 
-The GUI is the interactive frontend (Dioxus behind `genealogy-ui`, ADR 0008). This
-ADR sits above the `genealogy-app` DTO boundary (ADR 0006), reuses the plugin host
+The GUI is the interactive frontend (Dioxus behind `vitni-ui`, ADR 0008). This
+ADR sits above the `vitni-app` DTO boundary (ADR 0006), reuses the plugin host
 (ADR 0011) and its deny-by-default grant model, the Software-agent provenance
 (ADR 0001/0004/0007), and the client-scope config store (ADR 0015). It does not
 restate them.
@@ -118,7 +118,7 @@ restate them.
 
    **The `present` payload is a typed, versioned assisted-import presentation
    contract — NOT the ADR 0022 UI vocabulary.** It is parsed in framework-free
-   `genealogy-ui` (`import_payload.rs`, mirroring `vocabulary.rs::parse`) and
+   `vitni-ui` (`import_payload.rs`, mirroring `vocabulary.rs::parse`) and
    rendered by a **first-party wizard Tool screen** (`Tool::Import`, like the Merge
    wizard). Stage payloads carry a records list, a per-record confirm block
    (`fields: [{key, label, value}]`, scan relative-path, suggested line-region,
@@ -193,7 +193,7 @@ restate them.
   provenance card right) that a first-party Tool screen renders far better than a
   generic widget vocabulary, and loading the vocabulary with import-only affordances
   couples two unrelated schemas. A dedicated, versioned assisted-import payload —
-  parsed by `genealogy-ui`, rendered by `Tool::Import` — keeps the plugin describing
+  parsed by `vitni-ui`, rendered by `Tool::Import` — keeps the plugin describing
   *data* (not widgets), leaves the ui-panel vocabulary untouched, and keeps the host
   opaque to the payload exactly as it is to GEDCOM bytes and ui-panels.
 - **Custom `net` interface vs. `wasi:http` (2).** `wasi:http` is standard but bypasses

@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check [`docs/issues.md`](https://github.com/magne/genealogy/blob/main/docs/issues.md) first —
+        Check [`docs/issues.md`](https://github.com/magne/vitni/blob/main/docs/issues.md) first —
         most known gaps already have a bullet, and filing should usually *link* one rather than
         duplicate it.
 
@@ -55,7 +55,7 @@ body:
       label: Suggested shape
       description: >
         Name the existing types, use-cases, or components to reuse. This repo strongly prefers
-        extending what exists — `genealogy-app`'s use-case surface usually already covers the domain
+        extending what exists — `vitni-app`'s use-case surface usually already covers the domain
         side, and the gap is only the frontend wiring.
     validations:
       required: true

@@ -31,7 +31,7 @@ later ADR; this ADR covers only the bulk path.
 ## Decision
 
 1. **Format-neutral `bulk-import` / `bulk-export` worlds replace the GEDCOM
-   worlds.** The host-API package bumps to `genealogy:host-api@0.3.0`. The
+   worlds.** The host-API package bumps to `vitni:host-api@0.3.0`. The
    `gedcom-import` / `gedcom-export` worlds are **removed** (the first world
    removal — they were spike-only and have no external plugins) and replaced by
    `bulk-import` (exports `run-import: func() -> result<u32, string>`) and
@@ -81,7 +81,7 @@ later ADR; this ADR covers only the bulk path.
    `import-source`; export: `query` + `log` + `progress` + `export-sink`). A
    per-plugin declared-capability manifest is deferred to ADR 0014.
 
-5. **Shared guest support lives in a `genealogy-plugin-api` crate.** The format
+5. **Shared guest support lives in a `vitni-plugin-api` crate.** The format
    plugins repeat the same plumbing — drain the import source, write the export
    sink, report progress, log. That plumbing lives once in a guest-side library
    crate that generates the host-API **import** bindings (the `host-imports`
@@ -92,10 +92,10 @@ later ADR; this ADR covers only the bulk path.
    component discovery (cargo builds it transitively as a dependency).
 
 6. **Format logic stays in pure crates; the wasm glue stays thin.** As with
-   `genealogy-gedcom` (ADR 0011), each format's parse/emit logic lives in a pure,
+   `vitni-gedcom` (ADR 0011), each format's parse/emit logic lives in a pure,
    workspace-tested crate; the `plugins/*` component is glue that bridges the
    format's intermediate model to the host capabilities. GEDCOM 7 breadth and a
-   new `genealogy-gramps-xml` crate, plus `ExternalId`-based re-import
+   new `vitni-gramps-xml` crate, plus `ExternalId`-based re-import
    idempotency, are built on this contract in the breadth work (see
    `docs/archive/phase-4-followups.md`); the mapping *strategy* — map external records to
    persona-level aggregates, carry the origin as an `ExternalId`, and resolve
@@ -123,7 +123,7 @@ later ADR; this ADR covers only the bulk path.
   bindings (ADR 0011 §1) and keeps each new format plugin to its format logic.
 - **Pure format crates (6).** Keeping parse/emit out of the wasm glue means the
   format logic is unit-tested through the normal `--workspace` path, never the
-  slow component-build path, exactly as `genealogy-gedcom` already is.
+  slow component-build path, exactly as `vitni-gedcom` already is.
 
 ## Consequences
 
@@ -134,7 +134,7 @@ later ADR; this ADR covers only the bulk path.
 - Arbitrarily large documents stream through a chunked source/sink without being
   held whole in guest memory, and the host controls every path the guest touches.
 - Long operations report progress to any frontend through one capability.
-- The streaming/progress glue is written once in `genealogy-plugin-api`.
+- The streaming/progress glue is written once in `vitni-plugin-api`.
 
 ### Negative / costs
 
@@ -164,7 +164,7 @@ later ADR; this ADR covers only the bulk path.
 
 - ADR 0001 / 0004 — event sourcing and the pure `decide()` path plugins emit
   through; `AgentKind::Software` provenance.
-- ADR 0006 — the `genealogy-app` use-cases + DTOs the host capabilities mirror.
+- ADR 0006 — the `vitni-app` use-cases + DTOs the host capabilities mirror.
 - ADR 0007 — the plugin system: §6 capabilities, §7 Software provenance, §9
   signing (deferred), §12 coarse-grained boundary.
 - ADR 0011 — the host this ADR extends: §1 versioned worlds, §2 deny-by-default

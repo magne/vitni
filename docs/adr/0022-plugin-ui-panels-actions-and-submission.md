@@ -7,7 +7,7 @@
 
 ADR 0012 fixed the first plugin-UI vocabulary: a single-screen **form** — a title, an
 ordered list of typed fields (`text`, `number`, `checkbox`, `select`), and a submit label
-— emitted as JSON, parsed by `genealogy-ui`, and rendered once per framework. It
+— emitted as JSON, parsed by `vitni-ui`, and rendered once per framework. It
 deliberately left two things out of scope: **richer top-level descriptions** (lists,
 tables) and **form submission back to the host** (the command-capability round-trip). It
 named both as additive follow-ups "when a real plugin needs them" (ADR 0012 §1, Out of
@@ -18,8 +18,8 @@ plugin that shows a form must be able to *do something* with it — create a not
 check, preview a result — and it needs a way to display the outcome and a read-only list.
 This ADR fixes the panel taxonomy, the two new field kinds a real form needs, and the
 submission round-trip, staying within the layering ADR 0012/0011/0008 set: the vocabulary
-lives in `genealogy-ui`, the host carries every payload opaquely, and mutations flow only
-through `genealogy-app` use-cases under a Software operator.
+lives in `vitni-ui`, the host carries every payload opaquely, and mutations flow only
+through `vitni-app` use-cases under a Software operator.
 
 The app's own screens remain out of scope — they are per-framework view code over shared
 view-models (ADR 0008 §5). Only plugin-contributed screens use this vocabulary.
@@ -56,7 +56,7 @@ view-models (ADR 0008 §5). Only plugin-contributed screens use this vocabulary.
 
 3. **`ui-panel` imports `commands`, gated at submit only.** Because a submission mutates
    state, the `ui-panel` world now imports the `commands` capability. Mutations flow only
-   through `genealogy-app` use-cases driven by a `Session` whose operator is
+   through `vitni-app` use-cases driven by a `Session` whose operator is
    `AgentKind::Software` (ADR 0011 §2, §5; ADR 0007 §7), so a plugin-authored change is
    audited like any other. Capabilities stay **deny-by-default**: the render invocation
    (`run-ui-panel`) grants only `log`, and the submit invocation (`handle-action`) grants
@@ -73,7 +73,7 @@ view-models (ADR 0008 §5). Only plugin-contributed screens use this vocabulary.
    with documentation rather than be kept forever). Every plugin's pinned host-API version
    is swept to `@0.15.0`.
 
-5. **Resolution extends ADR 0012 §5.** `genealogy_ui::resolve_panel(panel, …)` and
+5. **Resolution extends ADR 0012 §5.** `vitni_ui::resolve_panel(panel, …)` and
    `resolve_submit_result(result, …)` resolve Fluent message IDs against the plugin's own
    catalogue with the same nb/nn→no→en fallback and verbatim-on-miss behaviour as
    `resolve_form`. What they resolve: panel/form/table titles, field labels and
@@ -145,8 +145,8 @@ view-models (ADR 0008 §5). Only plugin-contributed screens use this vocabulary.
 
 - ADR 0003 — Fluent/`i18n-embed` localization; governs how message IDs resolve.
 - ADR 0007 — WASM-component plugin system; §2 versioned worlds, §7 Software provenance.
-- ADR 0008 — Dioxus behind `genealogy-ui`; the framework-neutral home for the vocabulary.
-- ADR 0011 — the `genealogy:host-api` WIT package, §2 deny-by-default capabilities, §5
-  commands through the `genealogy-app` boundary under a Software `Session`.
+- ADR 0008 — Dioxus behind `vitni-ui`; the framework-neutral home for the vocabulary.
+- ADR 0011 — the `vitni:host-api` WIT package, §2 deny-by-default capabilities, §5
+  commands through the `vitni-app` boundary under a Software `Session`.
 - ADR 0012 — the plugin-UI form vocabulary this ADR extends (panels, actions, submission).
 - ADR 0013 — the `0.2.0 → 0.3.0` precedent for a documented pre-1.0 world break with no shim.

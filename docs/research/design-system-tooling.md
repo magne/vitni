@@ -1,4 +1,4 @@
-# A design-system platform for Genealogy — Storybook, its alternatives, and the Rust problem
+# A design-system platform for Vitni — Storybook, its alternatives, and the Rust problem
 
 > Researched 2026-07-15 from fetched primary sources (npm, GitHub, storybook.js.org, docs.rs,
 > tool pricing pages). Version claims accurate to that date: **Storybook 10.5.0** (MIT),

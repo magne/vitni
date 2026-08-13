@@ -120,7 +120,7 @@ block — read mode and edit mode are both mocked on all 12 pages.
 | gap           | The **inferred relationship** was presented as a DnaMatch-owned, match-editable value, and History listed "Relationship inferred … ↩ Undo" as a DnaMatch event. §12 is explicit: the inference is a separate `FactAsserted`/`AssociationAsserted` on Person/Family that *cites* the match — there is no such verb in the DnaMatch stream. | Fixed: card is read-only with a "view assertion on Person" link; the History entry moved out (replaced by match-stream events).          |
 | gap           | `MatchConfirmed`/`MatchRejected` had no affordance and no status display, though the use-cases + `MatchStatus` DTO exist (PR11).                                                                                                                                                                                                          | Fixed: status badge + Confirm/Reject actions in the head.                                                                                |
 | gap           | Segments and Shared-ancestors tabs were read-only ( `add_segment`/`assert_shared_ancestor` use-cases exist).                                                                                                                                                                                                                              | Fixed: "+ Add segment" / "+ Link shared ancestor" + row actions.                                                                         |
-| inconsistency | Head claimed "DNA matches have no short id — identified by their UUID v7"; the app assigns `human_id` format `X%04d` (`genealogy-app/src/aggregates.rs:60`).                                                                                                                                                                              | Fixed: `X0007`-style id shown. **Doc follow-up:** data-model §12 is silent on DnaTest/DnaMatch `human_id` — should state they carry one. |
+| inconsistency | Head claimed "DNA matches have no short id — identified by their UUID v7"; the app assigns `human_id` format `X%04d` (`vitni-app/src/aggregates.rs:60`).                                                                                                                                                                              | Fixed: `X0007`-style id shown. **Doc follow-up:** data-model §12 is silent on DnaTest/DnaMatch `human_id` — should state they carry one. |
 
 ### merge.html
 
@@ -209,7 +209,7 @@ Only two aggregates create records the way the locked model requires (`record-ed
 create = throwaway draft, **nothing written until Save**, Cancel discards): **Person**
 (`commit_person_change_set` — validate-first, Source→Citation→Person sequenced) and **Tag**
 (`commit_tag_change_set`). The other **10** persist an aggregate the moment "+ New" is pressed and
-then edit the already-created record (`crates/genealogy-ui-dioxus/src/services.rs`):
+then edit the already-created record (`crates/vitni-ui-dioxus/src/services.rs`):
 
 - empty creates: `create_family_record` (:192), `create_place_record` (:243),
   `create_source_record` (:273), `create_repository_record` (:302, name `None`),

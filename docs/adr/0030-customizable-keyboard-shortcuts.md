@@ -5,9 +5,9 @@
 
 ## Context
 
-`crates/genealogy-ui/src/shortcuts.rs` defines `shortcuts()`, a framework-free, declarative
+`crates/vitni-ui/src/shortcuts.rs` defines `shortcuts()`, a framework-free, declarative
 `Chord`/`ShortcutAction`/`Shortcut` map. It is **decorative only**: it feeds the `?` help overlay and
-nothing else. `crates/genealogy-ui-dioxus/src/shell/keyboard.rs`'s `shell_intent()` re-implements the
+nothing else. `crates/vitni-ui-dioxus/src/shell/keyboard.rs`'s `shell_intent()` re-implements the
 same matrix in `dioxus` `Key`/`Code`/`Modifiers` terms, hardcoded, and is what actually runs. There is
 no `Chord → ShortcutAction → behavior` lookup anywhere, so the help overlay can drift from what the
 dispatcher does, and an operator cannot change a binding — `docs/issues.md` (then §Ease of use) has carried
@@ -19,19 +19,19 @@ client/presentation) behind a `ConfigStore` trait, and its Out of scope explicit
 fields" pending a consumer. A user-rebindable keymap is that consumer: it is a **client/presentation**
 setting — how *this* session's keyboard behaves — not a property of the dataset or the operator
 identity, matching the `[ai]`/`[map]`/`[plugin-trust]` sections already living in the global
-`~/.config/genealogy/config.toml` (client-scope, global-only: a keymap is machine/user-local, the same
+`~/.config/vitni/config.toml` (client-scope, global-only: a keymap is machine/user-local, the same
 way AI provider credentials and plugin trust pins are).
 
-Two constraints from prior ADRs bound the design. ADR 0008 fixed `genealogy-ui` as framework-free —
+Two constraints from prior ADRs bound the design. ADR 0008 fixed `vitni-ui` as framework-free —
 `Chord`'s current `Modifier` enum (`None`/`Command`/`CommandShift`) is already too narrow to add
-`Alt`, and no `dioxus::` type may enter `genealogy-ui`. ADR 0003 fixed shortcut descriptions as Fluent
+`Alt`, and no `dioxus::` type may enter `vitni-ui`. ADR 0003 fixed shortcut descriptions as Fluent
 message ids resolved by the renderer's chrome catalogue, not literal strings — a rebound chord must
 still resolve through the same catalogue, unchanged.
 
 ## Decision
 
 1. **One resolved map, one source of truth.** `ShortcutAction` is the canonical, stable command id.
-   `genealogy-ui::resolved_shortcuts(overrides)` merges the default map with a workspace's overrides
+   `vitni-ui::resolved_shortcuts(overrides)` merges the default map with a workspace's overrides
    into the one `Vec<Shortcut>` both the dispatcher (`shell_intent`) and the `?` overlay
    (`help_overlay.rs`) read. The two-implementations situation this ADR exists to close ends here: the
    dispatcher becomes a lookup against the resolved map rather than a second hardcoded matrix.
@@ -44,7 +44,7 @@ still resolve through the same catalogue, unchanged.
    use case (a genealogy desktop app, not an IDE) with no demonstrated demand for it. If a real workflow
    later needs it, a follow-up ADR revisits those mechanisms specifically.
 
-3. **`[shortcuts]` lives in the global `~/.config/genealogy/config.toml`, client scope, not the
+3. **`[shortcuts]` lives in the global `~/.config/vitni/config.toml`, client scope, not the
    workspace manifest.** This follows the `[ai]`/`[map]`/`[plugin-trust]` precedent exactly (ADR 0015
    §1's client/presentation scope, materialized as client-scope-but-global-only tables): a keymap is
    tied to the person typing at this machine, not to the dataset. It has no live
@@ -65,14 +65,14 @@ still resolve through the same catalogue, unchanged.
 5. **`Modifier` is replaced, not extended.** The two-variant `Modifier` enum (`None`/`Command`/
    `CommandShift`) cannot express `Alt` or independent shift without combinatorial variants; it becomes
    a `Copy + Eq` struct of three independent flags (`command`, `shift`, `alt`). This is a breaking
-   change to `genealogy-ui`'s public type with no shim or dual form (repo philosophy) — every consumer
+   change to `vitni-ui`'s public type with no shim or dual form (repo philosophy) — every consumer
    (`help_overlay.rs`'s `render_chord`/`primary_glyph`/`key_glyph`) is fixed in the same change.
 
-6. **`genealogy-app` stores the override map as untyped strings.** `ShortcutConfig { bindings:
+6. **`vitni-app` stores the override map as untyped strings.** `ShortcutConfig { bindings:
    BTreeMap<String, String> }` (action config id → chord string) lives on `Config`, following the
-   `AiConfig`/`MapConfig`/`PluginTrustConfig` shape. `genealogy-app` must not depend on `genealogy-ui`
+   `AiConfig`/`MapConfig`/`PluginTrustConfig` shape. `vitni-app` must not depend on `vitni-ui`
    (app → ui is the fixed dependency direction, ADR 0008); all chord parsing, validation, and conflict
-   detection lives in `genealogy-ui::resolved_shortcuts`, which the `genealogy-ui-dioxus` renderer calls
+   detection lives in `vitni-ui::resolved_shortcuts`, which the `vitni-ui-dioxus` renderer calls
    with the loaded `BTreeMap`.
 
 ## Rationale
@@ -101,7 +101,7 @@ redesigning them for configurability is not justified by any request on file.
 
 ### Negative / costs
 
-- `Modifier`'s replacement is a breaking public-API change in `genealogy-ui`, requiring every direct
+- `Modifier`'s replacement is a breaking public-API change in `vitni-ui`, requiring every direct
   consumer (`help_overlay.rs`) to be updated in the same PR.
 - The dispatcher's digit-range (`⌘1…9`) and `g`-prefix handling stay special-cased outside the flat
   lookup (they are physical-code-based and two-key respectively) — the lookup replaces the letter-chord
@@ -129,8 +129,8 @@ redesigning them for configurability is not justified by any request on file.
 
 - ADR 0015 §1–2 — the client/presentation configuration scope and the `ConfigStore` trait this ADR's
   `[shortcuts]` section slots into.
-- ADR 0008 — the framework-free `genealogy-ui` boundary `Chord`/`Modifier`/`resolved_shortcuts` must
-  respect; the app → ui dependency direction that keeps parsing out of `genealogy-app`.
+- ADR 0008 — the framework-free `vitni-ui` boundary `Chord`/`Modifier`/`resolved_shortcuts` must
+  respect; the app → ui dependency direction that keeps parsing out of `vitni-app`.
 - ADR 0003 — the Fluent label-id convention the resolved map's descriptions continue to follow.
 - ADR 0027 — the prior "gate a config extension with an ADR" precedent this ADR follows structurally.
 - `docs/issues.md` (then §Ease of use / Completed; now §Frontend & interaction → Keyboard & shortcuts,

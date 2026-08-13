@@ -1,11 +1,11 @@
 [package]
-name = "genealogy-gedcom-import"
+name = "vitni-gedcom-import"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
 # GEDCOM import plugin component (ADR 0007, ADR 0011). Thin wasm glue: parses with
-# `genealogy-gedcom` and drives the host `commands` capability. Built for `wasm32-wasip2` via
+# `vitni-gedcom` and drives the host `commands` capability. Built for `wasm32-wasip2` via
 # `cargo xtask build-plugins`; excluded from the workspace.
 
 [lib]
@@ -14,15 +14,15 @@ crate-type = ["cdylib"]
 # ADR 0014 §2 bundle manifest: the plugin's declared role and capability requests (the interface
 # names of the WIT world it implements). `cargo xtask build-plugins` emits these into
 # `<id>.plugin.toml` beside the component and signs the manifest+component pair.
-[package.metadata.genealogy-plugin]
+[package.metadata.vitni-plugin]
 role = "bulk-import"
-host_api = "0.21.0"
+host_api = "0.22.0"
 capabilities = ["log", "commands", "progress", "import-source"]
 
 [dependencies]
 wit-bindgen = "0.57.1"
-genealogy-plugin-api = { path = "../plugin-api" }
-genealogy-gedcom = { path = "../../crates/genealogy-gedcom" }
+vitni-plugin-api = { path = "../plugin-api" }
+vitni-gedcom = { path = "../../crates/vitni-gedcom" }
 
 [lints.clippy]
 unwrap_used = "deny"

@@ -58,38 +58,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
-name = "genealogy-gramps-export"
-version = "0.1.0"
-dependencies = [
- "genealogy-gramps-xml",
- "genealogy-interchange",
- "genealogy-plugin-api",
- "wit-bindgen",
-]
-
-[[package]]
-name = "genealogy-gramps-xml"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "genealogy-interchange",
- "quick-xml",
- "thiserror",
-]
-
-[[package]]
-name = "genealogy-interchange"
-version = "0.1.0"
-
-[[package]]
-name = "genealogy-plugin-api"
-version = "0.1.0"
-dependencies = [
- "genealogy-interchange",
- "wit-bindgen",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -311,6 +279,38 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "vitni-gramps-export"
+version = "0.1.0"
+dependencies = [
+ "vitni-gramps-xml",
+ "vitni-interchange",
+ "vitni-plugin-api",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "vitni-gramps-xml"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "quick-xml",
+ "thiserror",
+ "vitni-interchange",
+]
+
+[[package]]
+name = "vitni-interchange"
+version = "0.1.0"
+
+[[package]]
+name = "vitni-plugin-api"
+version = "0.1.0"
+dependencies = [
+ "vitni-interchange",
+ "wit-bindgen",
+]
 
 [[package]]
 name = "wasm-encoder"

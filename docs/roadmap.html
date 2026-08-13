@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>genealogy — Project Roadmap</title>
+<title>Vitni — Project Roadmap</title>
 <style>
   :root {
     --bg: #0f1419; --panel: #1a2129; --panel2: #222b35; --ink: #e6edf3;
@@ -150,7 +150,7 @@
 <div class="wrap">
 
 <header class="hero">
-  <h1>genealogy — Project Roadmap</h1>
+  <h1>Vitni — Project Roadmap</h1>
   <div class="sub">Status: Draft · 2026-07-17 · companion to
     <a href="roadmap.md">roadmap.md</a>, <a href="data-model.md">data-model.md</a>, and
     <a href="adr/">the ADRs</a></div>
@@ -178,23 +178,23 @@
 </div>
 
 <h2 id="crates">Crate dependency map</h2>
-<p>Dependency direction is one-way. Frontends consume <code>genealogy-app</code> DTOs; the GUI goes
-through <code>genealogy-ui</code> (never the framework above the renderer). Dashed = planned.</p>
+<p>Dependency direction is one-way. Frontends consume <code>vitni-app</code> DTOs; the GUI goes
+through <code>vitni-ui</code> (never the framework above the renderer). Dashed = planned.</p>
 <div class="diagram">
   <div>
-    <span class="node core"><b>genealogy-core</b><small>pure decide/evolve · 12/12 aggregates ✓</small></span>
+    <span class="node core"><b>vitni-core</b><small>pure decide/evolve · 12/12 aggregates ✓</small></span>
     <span class="arrow">←</span>
-    <span class="node"><b>genealogy-db</b><small>SQLite ✓ · Postgres ✓</small></span>
+    <span class="node"><b>vitni-db</b><small>SQLite ✓ · Postgres ✓</small></span>
     <span class="arrow">←</span>
-    <span class="node app"><b>genealogy-app</b><small>Session · use-cases · DTOs</small></span>
+    <span class="node app"><b>vitni-app</b><small>Session · use-cases · DTOs</small></span>
   </div>
   <div style="margin-top:10px; padding-left:40px;">
     <span class="arrow">↳</span>
-    <span class="node"><b>genealogy-cli</b><small>shipped frontend</small></span>
-    <span class="node core"><b>genealogy-plugin-host</b><small>Wasmtime · WIT (Spike C ✓)</small></span>
-    <span class="node core"><b>genealogy-ui</b><small>view-models (Spike D ✓)</small></span>
+    <span class="node"><b>vitni-cli</b><small>shipped frontend</small></span>
+    <span class="node core"><b>vitni-plugin-host</b><small>Wasmtime · WIT (Spike C ✓)</small></span>
+    <span class="node core"><b>vitni-ui</b><small>view-models (Spike D ✓)</small></span>
     <span class="arrow">←</span>
-    <span class="node core"><b>genealogy-ui-dioxus</b><small>RSX renderer (Spike D ✓)</small></span>
+    <span class="node core"><b>vitni-ui-dioxus</b><small>RSX renderer (Spike D ✓)</small></span>
   </div>
   <pre style="margin-top:14px;">core ◀── db ◀── app ◀──┬── cli                 (shipped)
                        ├── plugin-host        (Spike C — import/export plugins)
@@ -209,7 +209,7 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
 <div class="diagram">
 <pre>
    operator intent                          ┌─────────────────────────────┐
-   (human · CLI · GUI · plugin)             │  Session  (genealogy-app)   │
+   (human · CLI · GUI · plugin)             │  Session  (vitni-app)   │
             │                               │  • reads the clock          │
             ▼                               │  • mints UUID v7 ids        │
    ┌──────────────────┐   fills context     │  • carries operator Agent   │
@@ -219,7 +219,7 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
             ▼
    ┌──────────────────────────┐   decide(state, command)
    │  decision core (PURE)    │   ───────────────────────▶  Result&lt;Vec&lt;Event&gt;, Error&gt;
-   │  genealogy-core          │   no clock · no id · no I/O
+   │  vitni-core          │   no clock · no id · no I/O
    └──────────────────────────┘
             │ emits
             ▼
@@ -256,12 +256,12 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
     <div class="tl-bar done"><span class="chip done">done</span> &nbsp;All 12 aggregates complete
       (PRs #28–#37) · <code>PersonsMerged</code> · <code>AssociationAsserted</code> · universal
       retract/supersede · privacy on Person/Family/Event · wiring refactor
-      <a href="https://github.com/magne/genealogy/issues/38">#38</a> ✓</div>
+      <a href="https://github.com/magne/vitni/issues/38">#38</a> ✓</div>
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 3</div>
     <div class="tl-bar done"><span class="chip done">done</span> &nbsp;Postgres backend ✓
-      (per-workspace engine selection, runtime) · <code>genealogy rebuild</code> command ✓ ·
+      (per-workspace engine selection, runtime) · <code>vitni rebuild</code> command ✓ ·
       migration story <a href="migration-considerations.md">noted</a> · snapshotting
       <span class="chip deferred">if measured</span></div>
   </div>
@@ -296,7 +296,7 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
       external search (Digitalarkivet) delivered: four deny-by-default host capabilities —
       <code>net</code> · <code>media-store</code> · pluggable <code>ai</code> · suspending
       <code>present</code> · the <code>assisted-import</code> world + pure
-      <code>genealogy-digitalarkivet</code> crate · media crop plumbing + GUI crop tool ·
+      <code>vitni-digitalarkivet</code> crate · media crop plumbing + GUI crop tool ·
       first-party <code>Tool::Import</code> wizard · <code>digitalarkivet-import</code> plugin +
       idempotent e2e · GUI-only (ADR 0017, WIT 0.19.0)</div>
   </div>
@@ -355,7 +355,7 @@ to point at.</p>
 </ul>
 <p class="kills">Kills: "does the multi-aggregate reference + invariant pattern actually hold?"</p>
 <p>Cross-aggregate <code>decide</code> with a projection-backed check (illustrative):</p>
-<pre class="code"><span class="cm">// genealogy-core::event::decide — the cross-aggregate invariant the spike must prove.</span>
+<pre class="code"><span class="cm">// vitni-core::event::decide — the cross-aggregate invariant the spike must prove.</span>
 <span class="cm">// `known_places` is a snapshot of the Place projection, passed in by the app layer —</span>
 <span class="cm">// the decision core stays pure; the "aggregate tax" is a read, not a transaction.</span>
 <span class="kw">pub fn</span> <span class="fn">decide</span>(state: &amp;<span class="ty">EventState</span>, cmd: <span class="ty">EventCommand</span>, known_places: &amp;<span class="ty">PlaceIndex</span>)
@@ -386,7 +386,7 @@ to point at.</p>
         other =&gt; <span class="ty">unreachable_version</span>(other), <span class="cm">// typed error, never panic</span>
     }
 }
-<span class="cm">// genealogy-db: rebuild = drop projections, fold the whole log forward again.</span>
+<span class="cm">// vitni-db: rebuild = drop projections, fold the whole log forward again.</span>
 <span class="kw">async fn</span> <span class="fn">rebuild</span>(store: &amp;<span class="ty">Store</span>) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">DbError</span>&gt; { <span class="cm">/* replay → reproject */</span> }</pre>
 
 <h3>Spike C — Plugin host (WASM) + GEDCOM import/export plugin <span class="chip done">done</span></h3>
@@ -394,7 +394,7 @@ to point at.</p>
 Software-agent provenance, and a real import/export round-trip.</p>
 <p class="kills">Kills: "does the WASM component plugin host work end-to-end?"</p>
 <pre class="code"><span class="cm">// host.wit — ONE versioned host world; plugins pin the interface, not the app (ADR 0007).</span>
-<span class="kw">package</span> genealogy:host@<span class="nu">0.1.0</span>;
+<span class="kw">package</span> vitni:host@<span class="nu">0.1.0</span>;
 
 <span class="kw">interface</span> use-cases {
     <span class="cm">// Plugins see the same frontend-neutral DTOs as the UI — no cqrs-es / sqlx leakage.</span>
@@ -416,14 +416,14 @@ Software-agent provenance, and a real import/export round-trip.</p>
 }</pre>
 
 <h3>Spike D — UI layer (Dioxus) <span class="chip done">done</span></h3>
-<p>Prove the framework-agnostic split and the plugin-UI vocabulary. <code>genealogy-ui</code> holds
-zero framework types; only <code>genealogy-ui-dioxus</code> knows about RSX.</p>
+<p>Prove the framework-agnostic split and the plugin-UI vocabulary. <code>vitni-ui</code> holds
+zero framework types; only <code>vitni-ui-dioxus</code> knows about RSX.</p>
 <p class="kills">Kills: "does the app→ui→renderer split + plugin-UI vocabulary work?"</p>
-<pre class="code"><span class="cm">// genealogy-ui — view-model derived from a DTO. NO dioxus:: type here (ADR 0008).</span>
+<pre class="code"><span class="cm">// vitni-ui — view-model derived from a DTO. NO dioxus:: type here (ADR 0008).</span>
 <span class="kw">pub struct</span> <span class="ty">PersonListVm</span> { <span class="kw">pub</span> rows: <span class="ty">Vec</span>&lt;<span class="ty">PersonRowVm</span>&gt;, <span class="kw">pub</span> selected: <span class="ty">Option</span>&lt;<span class="ty">HumanId</span>&gt; }
 <span class="kw">pub enum</span> <span class="ty">Intent</span> { <span class="ty">Select</span>(<span class="ty">HumanId</span>), <span class="ty">CreatePerson</span> { given: <span class="ty">String</span>, surname: <span class="ty">String</span> } }
 
-<span class="cm">// genealogy-ui-dioxus — the ONLY crate that binds view-models to RSX.</span>
+<span class="cm">// vitni-ui-dioxus — the ONLY crate that binds view-models to RSX.</span>
 <span class="fn">rsx!</span> {
     <span class="kw">for</span> row <span class="kw">in</span> vm.rows {
         div { class: <span class="st">"row"</span>, onclick: <span class="kw">move</span> |_| dispatch(<span class="ty">Intent</span>::<span class="ty">Select</span>(row.id)),
@@ -450,7 +450,7 @@ template was applied to each aggregate, with app use-cases and CLI commands.</p>
 </ul>
 <div class="callout">
   <b>✅ Wiring refactor done:</b> the per-aggregate wiring refactor
-  (<a href="https://github.com/magne/genealogy/issues/38">issue #38</a>) split the monolithic
+  (<a href="https://github.com/magne/vitni/issues/38">issue #38</a>) split the monolithic
   registries (db store, CLI i18n) into per-aggregate x-macro registries, so adding an aggregate no
   longer touches a central list.
 </div>
@@ -461,15 +461,15 @@ template was applied to each aggregate, with app use-cases and CLI commands.</p>
 <div class="mock">
   <div class="bar"><span class="dot" style="background:#ff5f56"></span>
     <span class="dot" style="background:#ffbd2e"></span>
-    <span class="dot" style="background:#27c93f"></span> &nbsp;genealogy</div>
-  <div class="body term"><span class="p">$</span> genealogy person create --given Ada --surname Lovelace --evidence conclusion
+    <span class="dot" style="background:#27c93f"></span> &nbsp;vitni</div>
+  <div class="body term"><span class="p">$</span> vitni person create --given Ada --surname Lovelace --evidence conclusion
 <span class="o">created I0001: Ada Lovelace (conclusion)</span>
 
-<span class="p">$</span> genealogy person list
+<span class="p">$</span> vitni person list
 <span class="o">I0001  Ada Lovelace            conclusion
 I0002  Augusta Ada King        persona</span>
 
-<span class="p">$</span> genealogy family add-child F0001 I0003 --relationship adopted
+<span class="p">$</span> vitni family add-child F0001 I0003 --relationship adopted
 <span class="o">F0001: I0001, I0002  →  I0003 (adopted)</span></div>
 </div>
 
@@ -477,7 +477,7 @@ I0002  Augusta Ada King        persona</span>
 <div class="mock">
   <div class="bar"><span class="dot" style="background:#ff5f56"></span>
     <span class="dot" style="background:#ffbd2e"></span>
-    <span class="dot" style="background:#27c93f"></span> &nbsp;genealogy-ui-dioxus</div>
+    <span class="dot" style="background:#27c93f"></span> &nbsp;vitni-ui-dioxus</div>
   <div class="gui">
     <div class="side">
       <div class="item sel">I0001 · Ada Lovelace</div>
@@ -535,16 +535,16 @@ interpreter renders it. This is the ADR 0007 follow-up vocabulary.</p>
 keeps working unchanged.</p>
 <div class="grid2">
   <div class="callout">
-    <b>Backend server.</b> Run <code>genealogy-app</code> as a long-lived process owning workspaces,
+    <b>Backend server.</b> Run <code>vitni-app</code> as a long-lived process owning workspaces,
     exposing the existing use-cases + DTOs over the network — a new frontend over the same
     coordination layer (ADR 0006), not a re-implementation. <code>Session</code> stays the impure
     boundary; the operator now resolves from an <b>authenticated</b> principal (the direction ADR
     0005 already fixed).
   </div>
   <div class="callout">
-    <b>Web frontend.</b> A browser client reusing <code>genealogy-ui</code> view-models and intents
-    unchanged — ADR 0008's promise that a second renderer reuses <code>genealogy-ui</code> as-is. A
-    new renderer parallel to <code>genealogy-ui-dioxus</code> (Dioxus already targets web).
+    <b>Web frontend.</b> A browser client reusing <code>vitni-ui</code> view-models and intents
+    unchanged — ADR 0008's promise that a second renderer reuses <code>vitni-ui</code> as-is. A
+    new renderer parallel to <code>vitni-ui-dioxus</code> (Dioxus already targets web).
   </div>
   <div class="callout">
     <b>Server-connected workspaces.</b> <code>init</code>/the GUI can register a workspace pointing
@@ -601,7 +601,7 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Ease of use</td><td>ADR 0008, 0015</td></tr>
     <tr><td><b><a href="adr/0032-projection-schema-evolution-by-replay.md">ADR 0032</a></b> &mdash; accepted</td><td>Projection schema evolution by replay: a <code>human_id</code> generated column + indexes on every view table, migrated by drop-and-replay rather than in-place <code>ALTER TABLE</code></td>
       <td>0.9 &mdash; UI stabilization</td><td>ADR 0009, 0010</td></tr>
-    <tr><td><b><a href="adr/0033-named-map-providers-and-live-switching.md">ADR 0033</a></b> &mdash; accepted</td><td>Named <code>[map.providers.*]</code> config (mirroring <code>[ai.providers]</code>), a <code>MapSource</code> resolved in <code>genealogy-app</code> (incl. a Google Map Tiles session adapter), and live <code>setStyle</code> provider switching with no remount</td>
+    <tr><td><b><a href="adr/0033-named-map-providers-and-live-switching.md">ADR 0033</a></b> &mdash; accepted</td><td>Named <code>[map.providers.*]</code> config (mirroring <code>[ai.providers]</code>), a <code>MapSource</code> resolved in <code>vitni-app</code> (incl. a Google Map Tiles session adapter), and live <code>setStyle</code> provider switching with no remount</td>
       <td>0.9 &mdash; UI stabilization</td><td>ADR 0025, 0017, 0008</td></tr>
     <tr><td><b>ADR 0031</b></td><td>Place model for real-world administrative geography: reopen the <code>Multi*</code> geometry variant, add a civil/ecclesiastical/judicial <code>relation</code> to <code>PlaceRef</code>, and carry positional accuracy separately from <code>Confidence</code></td>
       <td>Phase 9 residual closure</td><td>ADR 0024, 0026, 0027</td></tr>

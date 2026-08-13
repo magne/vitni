@@ -2,7 +2,7 @@
 //! a record-by-record review-and-import session over the sandboxed host capabilities.
 //!
 //! Flow (prototype-proven, `sort-inbox.py`): classify the request URL, fetch the page(s) over `net`,
-//! parse them with the pure `genealogy-digitalarkivet` crate, present each record to the user through
+//! parse them with the pure `vitni-digitalarkivet` crate, present each record to the user through
 //! `present` (suspending until they confirm or skip), file the scan once per source page through
 //! `media-store`, and record the confirmed record as low-confidence Software-agent assertions through
 //! `commands`, resolving-or-creating by `ExternalId` so a re-run imports no duplicates.
@@ -19,26 +19,26 @@
 
 wit_bindgen::generate!({
     world: "assisted-import",
-    path: "../../crates/genealogy-plugin-host/wit",
+    path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.21.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.21.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.21.0": genealogy_plugin_api::query,
-        "genealogy:host-api/commands@0.21.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.21.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/net@0.21.0": genealogy_plugin_api::net,
-        "genealogy:host-api/media-store@0.21.0": genealogy_plugin_api::media_store,
-        "genealogy:host-api/ai@0.21.0": genealogy_plugin_api::ai,
-        "genealogy:host-api/present@0.21.0": genealogy_plugin_api::present,
+        "vitni:host-api/types@0.22.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.22.0": vitni_plugin_api::log,
+        "vitni:host-api/query@0.22.0": vitni_plugin_api::query,
+        "vitni:host-api/commands@0.22.0": vitni_plugin_api::commands,
+        "vitni:host-api/progress@0.22.0": vitni_plugin_api::progress,
+        "vitni:host-api/net@0.22.0": vitni_plugin_api::net,
+        "vitni:host-api/media-store@0.22.0": vitni_plugin_api::media_store,
+        "vitni:host-api/ai@0.22.0": vitni_plugin_api::ai,
+        "vitni:host-api/present@0.22.0": vitni_plugin_api::present,
     },
 });
 
-use genealogy_digitalarkivet::{
+use vitni_digitalarkivet::{
     AUTHORITY, PageKind, ParseError, PersonRecord, REPOSITORY, census_year, classify_url, extract_urn,
     parse_person_page, parse_residence_page, parse_viewer_page, slugify, suggest_filename,
 };
-use genealogy_plugin_api::types::{Confidence, ExternalId, FactType, MediaCrop, NameType, PersonName, SourceMediaType};
-use genealogy_plugin_api::{commands, log_info, log_warn, media_store, query, report};
+use vitni_plugin_api::types::{Confidence, ExternalId, FactType, MediaCrop, NameType, PersonName, SourceMediaType};
+use vitni_plugin_api::{commands, log_info, log_warn, media_store, query, report};
 
 mod contract;
 
@@ -416,7 +416,7 @@ fn resolve_scan_url(record: &PersonRecord) -> Option<String> {
 
 /// GETs `url` over the host `net` capability and decodes the body as UTF-8, lossily.
 fn fetch(url: &str) -> Result<String, String> {
-    let bytes = genealogy_plugin_api::fetch_bytes(url)?;
+    let bytes = vitni_plugin_api::fetch_bytes(url)?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
@@ -429,7 +429,7 @@ fn parse_response(json: &str) -> Result<Response, String> {
 /// `present` capability).
 fn show(payload: &Payload) -> Result<String, String> {
     let json = serde_json::to_string(payload).map_err(|error| format!("serializing the payload failed: {error}"))?;
-    genealogy_plugin_api::present(&json)
+    vitni_plugin_api::present(&json)
 }
 
 /// The value of a confirm field by key (the user's edited value).

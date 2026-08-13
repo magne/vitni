@@ -1,4 +1,4 @@
-//! Guest-side support for the genealogy plugins (ADR 0013).
+//! Guest-side support for the Vitni plugins (ADR 0013).
 //!
 //! This crate generates the host-API **import** bindings once from the shared WIT (`host-imports`
 //! world) and re-exports each capability module, so a plugin component maps the shared interfaces to
@@ -9,10 +9,10 @@
 
 wit_bindgen::generate!({
     world: "host-imports",
-    path: "../../crates/genealogy-plugin-host/wit",
+    path: "../../crates/vitni-plugin-host/wit",
 });
 
-pub use genealogy::host_api::{
+pub use vitni::host_api::{
     ai, commands, export_sink, import_source, log, media_store, net, present, progress, query, types,
 };
 
@@ -96,7 +96,7 @@ pub fn interpret(provider: Option<&str>, media_path: &str, prompt: &str) -> Resu
 
 /// Shows `payload` to the frontend through the host `present` capability (ADR 0017 §5) and suspends
 /// until the user answers, returning their response verbatim. Both strings are the typed
-/// assisted-import presentation contract (`genealogy-ui`), opaque to the host; the plugin owns
+/// assisted-import presentation contract (`vitni-ui`), opaque to the host; the plugin owns
 /// serializing the payload and parsing the response.
 ///
 /// # Errors

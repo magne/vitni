@@ -124,38 +124,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "genealogy-digitalarkivet"
-version = "0.1.0"
-dependencies = [
- "scraper",
- "thiserror",
- "url",
-]
-
-[[package]]
-name = "genealogy-digitalarkivet-import"
-version = "0.1.0"
-dependencies = [
- "genealogy-digitalarkivet",
- "genealogy-plugin-api",
- "serde",
- "serde_json",
- "wit-bindgen",
-]
-
-[[package]]
-name = "genealogy-interchange"
-version = "0.1.0"
-
-[[package]]
-name = "genealogy-plugin-api"
-version = "0.1.0"
-dependencies = [
- "genealogy-interchange",
- "wit-bindgen",
-]
-
-[[package]]
 name = "getopts"
 version = "0.2.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -779,6 +747,38 @@ name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
+
+[[package]]
+name = "vitni-digitalarkivet"
+version = "0.1.0"
+dependencies = [
+ "scraper",
+ "thiserror",
+ "url",
+]
+
+[[package]]
+name = "vitni-digitalarkivet-import"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "vitni-digitalarkivet",
+ "vitni-plugin-api",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "vitni-interchange"
+version = "0.1.0"
+
+[[package]]
+name = "vitni-plugin-api"
+version = "0.1.0"
+dependencies = [
+ "vitni-interchange",
+ "wit-bindgen",
+]
 
 [[package]]
 name = "wasm-encoder"

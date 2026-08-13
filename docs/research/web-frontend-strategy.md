@@ -1,4 +1,4 @@
-# Exposing Genealogy on the web — Dioxus web target vs. a web-native JS frontend
+# Exposing Vitni on the web — Dioxus web target vs. a web-native JS frontend
 
 > Researched 2026-07-15 from fetched primary sources (dioxuslabs.com docs, docs.rs, GitHub
 > issues/PRs, npm). Version claims are accurate to that date: **Dioxus 0.7.4** (0.7 line at 0.7.8,
@@ -14,7 +14,7 @@
 
 You already made most of it. ADR 0008 chose Dioxus partly *because* "one Rust codebase targets
 desktop now and mobile/web later" and explicitly "avoids a JS frontend"; it rejected Tauri for
-moving the UI onto web tech. Roadmap Phase 11 commits the web frontend to "reusing `genealogy-ui`
+moving the UI onto web tech. Roadmap Phase 11 commits the web frontend to "reusing `vitni-ui`
 view-models and intents unchanged" and defers exactly one thing: whether the web renderer is *"a
 web target of the same renderer or a sibling [crate], decided when built"* — gated by the proposed
 ADR 0016.
@@ -83,10 +83,10 @@ This is the decisive section, because your architecture was explicitly built to 
 
 | Layer | Dioxus web target | JS frontend (React/Vue/Svelte) |
 | --- | --- | --- |
-| `genealogy-core` / `genealogy-app` | unchanged (behind the Phase-10 server) | unchanged (behind the same server) |
+| `vitni-core` / `vitni-app` | unchanged (behind the Phase-10 server) | unchanged (behind the same server) |
 | Server API / DTO wire contract | shared | shared — this is the baseline, not an advantage |
-| `genealogy-ui`: view-models, intents, navigation, shortcuts, palette | **reused unchanged** (ADR 0008's promise, enforced by `framework_free.rs`) | **hand-ported to TypeScript and maintained forever in parallel** |
-| ~50 RSX components in `genealogy-ui-dioxus` | **reused** — same components compile for `web` and `desktop` features; platform-conditional code is minimal because `document::eval` and most hooks are renderer-agnostic | rebuilt on a JS component stack |
+| `vitni-ui`: view-models, intents, navigation, shortcuts, palette | **reused unchanged** (ADR 0008's promise, enforced by `framework_free.rs`) | **hand-ported to TypeScript and maintained forever in parallel** |
+| ~50 RSX components in `vitni-ui-dioxus` | **reused** — same components compile for `web` and `desktop` features; platform-conditional code is minimal because `document::eval` and most hooks are renderer-agnostic | rebuilt on a JS component stack |
 | ~55 SSR tests (`dioxus_ssr::render`) | reused as-is (renderer-agnostic) | replaced by Testing Library / Vitest equivalents |
 | Fluent i18n (ADR 0003) | `fl!()` unchanged | **`.ftl` files reusable as data** via `@fluent/bundle` (Mozilla, Apache-2.0, 0.19.1 2025-04 — stable but slow-moving); the resolution *code* is rewritten |
 | Design-system CSS (`tokens.css` / `components.css`) | shared verbatim, as today | shareable in principle (it's plain CSS) but the component markup that targets it is rewritten |
@@ -106,7 +106,7 @@ the cost ADR 0008 spent a crate boundary to avoid.
 
 What you would actually sign up for:
 
-1. **Re-implement `genealogy-ui` in TypeScript** — view-model shaping, intent dispatch, navigation
+1. **Re-implement `vitni-ui` in TypeScript** — view-model shaping, intent dispatch, navigation
    state, keyboard shortcuts, the palette, plus the plugin-UI vocabulary interpreter (ADR 0012) a
    second time. Every future screen is then built twice or drifts.
 2. **Second i18n runtime** — same `.ftl` catalogues via fluent.js (genuine content reuse; ADR 0003
@@ -188,7 +188,7 @@ a form, and should be engineered as one.
 ## 7. Verdict
 
 **Stay on the Dioxus path for the web app; do not build a JS frontend.** The architecture you
-already paid for (framework-free `genealogy-ui`, renderer-agnostic SSR tests, shared CSS) makes
+already paid for (framework-free `vitni-ui`, renderer-agnostic SSR tests, shared CSS) makes
 the Dioxus web target nearly free where a JS frontend is a second product. Nothing found in
 Dioxus-web's current state is disqualifying for a post-1.0, authenticated, non-SEO app — and the
 decision point is still phases away.
@@ -199,7 +199,7 @@ point so it never becomes an argument about the app framework.
 
 ### What to do now (cheap, order-independent)
 
-1. **Spike a `web` build of `genealogy-ui-dioxus`** (a day or two): add the feature/target, run
+1. **Spike a `web` build of `vitni-ui-dioxus`** (a day or two): add the feature/target, run
    the existing screens in a browser, note what breaks (window/geometry/plugin-host coupling,
    `include_str!` CSS is already portable). This empirically answers Phase 11's "same crate or
    sibling" question long before ADR 0016 — and it doubles as the second-renderer readiness check

@@ -1,0 +1,3309 @@
+//! Person use-case integration tests: create / name / show / list against a temp workspace dir.
+//!
+//! These exercise the full application path — id generation, meta stamping, command execution
+//! through the engine-neutral store, projection query — over a real on-disk workspace directory.
+
+#![expect(clippy::expect_used, reason = "tests abort on setup failure")]
+
+use std::collections::BTreeSet;
+
+use uuid::Uuid;
+use vitni_app::{
+    AppDefaults, Centimorgans, DnaProvider, MutationMeta, NewCitation, NewDnaMatch, NewDnaTest, NewEvent, NewFact,
+    NewMedia, NewNote, NewPerson, NewPlace, NewRepository, NewSource, OperatorConfig, PersonNameParts, Provenance,
+    Session, TagChangeSet, TagTarget, Workspace, WorkspaceDefaults, add_name, assert_association,
+    assert_dna_test_haplogroup, assert_fact, attach_person_note, change_log_for_citation, change_log_for_dna_match,
+    change_log_for_dna_test, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
+    change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, change_log_for_tag,
+    commit_tag_change_set, create_citation, create_dna_test, create_event, create_media, create_note, create_person,
+    create_place, create_repository, create_source, create_tag, list_person_rows, list_persons, merge_persons,
+    observe_dna_match, rename_tag, set_dna_match_status, set_dna_test_provider, set_event_description,
+    set_family_restrictions, set_media_mime, set_note_text, set_page, set_place_code, set_repository_name,
+    set_source_author, show_dna_match, show_dna_test, show_person, show_source, tag_person, undo_assertion,
+};
+use vitni_app::{CitingContext, CitingKind};
+use vitni_app::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
+use vitni_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, PlaceType, Restriction};
+use vitni_core::ids::AgentId;
+use vitni_core::provenance::{Agent, AgentKind, Confidence};
+
+fn operator() -> OperatorConfig {
+    OperatorConfig {
+        id: AgentId::from_uuid(Uuid::from_u128(1)),
+        display: Some("Tester".to_owned()),
+        email: None,
+    }
+}
+
+fn session() -> Session {
+    Session::new(Agent {
+        kind: AgentKind::Human,
+        id: AgentId::from_uuid(Uuid::from_u128(1)),
+        display: Some("Tester".to_owned()),
+    })
+}
+
+async fn workspace() -> (Workspace, tempfile::TempDir) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ws = dir.path().join("ws");
+    Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+    let workspace = Workspace::open(&ws, &operator(), &WorkspaceDefaults::default())
+        .await
+        .expect("open workspace");
+    (workspace, dir)
+}
+
+fn new_person(given: &str, surname: &str) -> NewPerson {
+    NewPerson {
+        human_id: None,
+        name: Some(PersonNameParts::simple(
+            Some(given.to_owned()),
+            Some(surname.to_owned()),
+        )),
+        evidence_level: EvidenceLevel::Conclusion,
+    }
+}
+
+/// Resolves a person's `human_id` to its internal `PersonId` — the id a `SubjectRef` carries.
+async fn person_id(workspace: &Workspace, human_id: &str) -> vitni_core::ids::PersonId {
+    workspace
+        .store()
+        .find_person(human_id)
+        .await
+        .expect("find person")
+        .expect("person projected")
+        .person_id()
+        .expect("person id set")
+}
+
+#[tokio::test]
+async fn create_auto_allocates_sequential_human_ids() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let first = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create");
+    let second = create_person(&ws, &session, new_person("Alan", "Turing"), Provenance::default(), &[])
+        .await
+        .expect("create");
+    assert_eq!(first, "I0001");
+    assert_eq!(second, "I0002");
+}
+
+#[tokio::test]
+async fn create_honors_a_supplied_id_then_rejects_a_duplicate() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let supplied = NewPerson {
+        human_id: Some("I0500".to_owned()),
+        name: Some(PersonNameParts::simple(
+            Some("Grace".to_owned()),
+            Some("Hopper".to_owned()),
+        )),
+        evidence_level: EvidenceLevel::Conclusion,
+    };
+    let assigned = create_person(&ws, &session, supplied.clone(), Provenance::default(), &[])
+        .await
+        .expect("create");
+    assert_eq!(assigned, "I0500");
+
+    let err = create_person(&ws, &session, supplied, Provenance::default(), &[]).await;
+    assert!(matches!(err, Err(vitni_app::AppError::HumanIdTaken(id)) if id == "I0500"));
+}
+
+#[tokio::test]
+async fn show_reflects_an_added_name() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let id = create_person(
+        &ws,
+        &session,
+        NewPerson {
+            human_id: None,
+            name: Some(PersonNameParts::simple(Some("Ada".to_owned()), None)),
+            evidence_level: EvidenceLevel::Conclusion,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create");
+
+    add_name(
+        &ws,
+        &session,
+        &id,
+        PersonNameParts::simple(Some("Augusta".to_owned()), Some("Lovelace".to_owned())),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("add name");
+
+    let summary = show_person(&ws, &id).await.expect("show").expect("person exists");
+    assert_eq!(summary.human_id, "I0001");
+    // The first asserted name (given-only "Ada") is the display name.
+    assert_eq!(summary.display_name.as_deref(), Some("Ada"));
+}
+
+#[tokio::test]
+async fn list_returns_persons_in_human_id_order() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create");
+    create_person(&ws, &session, new_person("Alan", "Turing"), Provenance::default(), &[])
+        .await
+        .expect("create");
+
+    let people = list_persons(&ws).await.expect("list");
+    let ids: Vec<&str> = people.iter().map(|p| p.human_id.as_str()).collect();
+    assert_eq!(ids, ["I0001", "I0002"]);
+    assert_eq!(people[0].display_name.as_deref(), Some("Ada Lovelace"));
+}
+
+#[tokio::test]
+async fn list_person_rows_matches_the_name_and_sex_of_the_full_summaries() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create");
+    create_person(&ws, &session, new_person("Alan", "Turing"), Provenance::default(), &[])
+        .await
+        .expect("create");
+
+    // The lightweight list rows carry the same id / name / sex the full summaries do, in the same
+    // human-id order — the list view renders identically whether built from rows or summaries.
+    let summaries = list_persons(&ws).await.expect("list summaries");
+    let rows = list_person_rows(&ws).await.expect("list rows");
+    assert_eq!(rows.len(), summaries.len());
+    for (row, summary) in rows.iter().zip(&summaries) {
+        assert_eq!(row.human_id, summary.human_id);
+        assert_eq!(row.display_name, summary.display_name);
+        assert_eq!(row.given, summary.given);
+        assert_eq!(row.surname, summary.surname);
+        assert_eq!(row.sex, summary.sex);
+    }
+    let ids: Vec<&str> = rows.iter().map(|row| row.human_id.as_str()).collect();
+    assert_eq!(ids, ["I0001", "I0002"]);
+}
+
+#[tokio::test]
+async fn list_surfaces_facts_and_resolves_association_targets_to_human_ids() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let john = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("create john");
+    let jane = create_person(&ws, &session, new_person("Jane", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("create jane");
+
+    assert_fact(
+        &ws,
+        &session,
+        &john,
+        NewFact {
+            fact_type: FactType::Occupation,
+            value: Some("Carpenter".to_owned()),
+            date: None,
+        },
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("assert fact");
+    assert_association(
+        &ws,
+        &session,
+        &john,
+        &jane,
+        AssociationRole::Witness,
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert association");
+
+    let summary = show_person(&ws, &john).await.expect("show").expect("john exists");
+    assert_eq!(summary.facts.len(), 1, "the occupation fact surfaces");
+    assert_eq!(summary.facts[0].fact.fact_type, FactType::Occupation);
+    assert_eq!(summary.facts[0].fact.value.as_deref(), Some("Carpenter"));
+    assert_eq!(
+        summary.facts[0].confidence,
+        Some(Confidence::High),
+        "the asserted confidence surfaces on the fact summary"
+    );
+    assert_eq!(summary.associations.len(), 1, "the association surfaces");
+    assert_eq!(
+        summary.associations[0].other.human_id, jane,
+        "the association target resolves to its human_id"
+    );
+    assert_eq!(summary.associations[0].role, AssociationRole::Witness);
+}
+
+#[tokio::test]
+async fn a_facts_citations_resolve_with_their_creation_provenance() {
+    // Backs the "Why we believe" popover: a fact's per-claim citations resolve to full refs (source
+    // title, page) carrying the creating operator + timestamp ("asserted by …").
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("1850 U.S. Census".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: Some("p. 14".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create citation");
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create person");
+    assert_fact(
+        &ws,
+        &session,
+        &person,
+        NewFact {
+            fact_type: FactType::Occupation,
+            value: None,
+            date: None,
+        },
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: std::slice::from_ref(&citation),
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("assert fact");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person exists");
+    let fact = summary
+        .facts
+        .iter()
+        .find(|fact| fact.fact.fact_type == FactType::Occupation)
+        .expect("the occupation fact surfaces");
+    assert_eq!(fact.citations.len(), 1, "the fact resolves its backing citation");
+    let resolved = &fact.citations[0];
+    assert_eq!(resolved.human_id, citation, "the resolved citation is the one attached");
+    assert_eq!(resolved.source_title.as_deref(), Some("1850 U.S. Census"));
+    assert_eq!(resolved.page.as_deref(), Some("p. 14"));
+    assert_eq!(
+        resolved.asserted_by.as_deref(),
+        Some("Tester"),
+        "the citation carries its creating operator"
+    );
+    assert!(
+        resolved.asserted_at.is_some(),
+        "the citation carries its creation timestamp"
+    );
+}
+
+#[tokio::test]
+async fn fact_envelope_citations_back_the_reverse_citation_index() {
+    // A fact's citations travel on the assertion envelope (ADR 0020). They must both resolve on the
+    // person's fact summary and appear as a `Fact` backer in the source's reverse citation index.
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: Some("p. 42".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create citation");
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create person");
+    assert_fact(
+        &ws,
+        &session,
+        &person,
+        NewFact {
+            fact_type: FactType::Occupation,
+            value: Some("Carpenter".to_owned()),
+            date: None,
+        },
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: std::slice::from_ref(&citation),
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("assert fact");
+
+    // (i) The envelope citation resolves on the person's fact summary.
+    let summary = show_person(&ws, &person).await.expect("show").expect("person exists");
+    let fact = summary
+        .facts
+        .iter()
+        .find(|fact| fact.fact.fact_type == FactType::Occupation)
+        .expect("the occupation fact surfaces");
+    assert_eq!(fact.citations.len(), 1, "the fact resolves its envelope citation");
+    assert_eq!(fact.citations[0].human_id, citation);
+
+    // (ii) The source's reverse index lists the fact as a backer of the citation.
+    let source_summary = show_source(&ws, &source).await.expect("show").expect("source exists");
+    let row = source_summary
+        .citations
+        .iter()
+        .find(|row| row.citation.human_id == citation)
+        .expect("the citation is listed under the source");
+    let backer = row
+        .backers
+        .iter()
+        .find(|backer| matches!(backer.context, CitingContext::Fact(_)))
+        .expect("the fact backs the citation in the reverse index");
+    assert_eq!(backer.kind, CitingKind::Person);
+    assert_eq!(backer.human_id, person);
+}
+
+#[tokio::test]
+async fn families_for_person_reports_partner_and_child_roles() {
+    use vitni_app::{
+        ChildParentRelationship, PersonFamilyRole, add_child, add_partner, create_family, families_for_person,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let parent = create_person(&ws, &session, new_person("Jane", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("create parent");
+    let child = create_person(&ws, &session, new_person("Junior", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("create child");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("create family");
+    add_partner(&ws, &session, &family, &parent, MutationMeta::default())
+        .await
+        .expect("add partner");
+    add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![(parent.clone(), ChildParentRelationship::Birth)],
+        MutationMeta::default(),
+    )
+    .await
+    .expect("add child");
+
+    let parent_families = families_for_person(&ws, &parent).await.expect("parent families");
+    assert_eq!(parent_families.len(), 1);
+    assert_eq!(parent_families[0].family_human_id, family);
+    assert_eq!(parent_families[0].role, PersonFamilyRole::Partner);
+    assert_eq!(
+        parent_families[0].children,
+        vec![(child.clone(), vec![(parent.clone(), ChildParentRelationship::Birth)])]
+    );
+
+    let child_families = families_for_person(&ws, &child).await.expect("child families");
+    assert_eq!(child_families.len(), 1);
+    assert_eq!(
+        child_families[0].role,
+        PersonFamilyRole::Child(vec![(parent.clone(), ChildParentRelationship::Birth)])
+    );
+    assert_eq!(child_families[0].partners, vec![parent.clone()]);
+}
+
+#[tokio::test]
+async fn show_family_surfaces_partners_children_and_a_linked_event() {
+    use vitni_app::{
+        ChildParentRelationship, EventType, NewEvent, add_child, add_partner, create_event, create_family,
+        link_family_event, show_family,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let partner_a = create_person(&ws, &session, new_person("Mary", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("a");
+    let partner_b = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("b");
+    let child = create_person(
+        &ws,
+        &session,
+        new_person("Jonathan", "Smith"),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("c");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("family");
+    add_partner(&ws, &session, &family, &partner_a, MutationMeta::default())
+        .await
+        .expect("partner a");
+    add_partner(&ws, &session, &family, &partner_b, MutationMeta::default())
+        .await
+        .expect("partner b");
+    add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![
+            (partner_a.clone(), ChildParentRelationship::Birth),
+            (partner_b.clone(), ChildParentRelationship::Step),
+        ],
+        MutationMeta::default(),
+    )
+    .await
+    .expect("child");
+    let marriage = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event");
+    link_family_event(&ws, &session, &family, &marriage, MutationMeta::default())
+        .await
+        .expect("link event");
+
+    let summary = show_family(&ws, &family).await.expect("show").expect("family");
+    assert!(!summary.id.is_empty(), "the stable family id is surfaced");
+    assert_eq!(summary.partners.len(), 2);
+    assert_eq!(summary.partners[0].name.as_deref(), Some("Mary Doe"));
+    assert_eq!(summary.children.len(), 1);
+    let child_row = &summary.children[0];
+    let links: Vec<(String, ChildParentRelationship)> = child_row
+        .relationships
+        .iter()
+        .map(|link| (link.partner_human_id.clone(), link.relationship.clone()))
+        .collect();
+    assert_eq!(
+        links,
+        vec![
+            (partner_a.clone(), ChildParentRelationship::Birth),
+            (partner_b.clone(), ChildParentRelationship::Step),
+        ],
+        "per-partner relationships, by partner human_id"
+    );
+    // Each link is its own assertion (ADR 0021): distinct ids, none equal to the membership id.
+    for link in &child_row.relationships {
+        assert_ne!(
+            link.assertion_id, child_row.assertion_id,
+            "a link carries its own assertion, not the membership's"
+        );
+    }
+    assert_ne!(
+        child_row.relationships[0].assertion_id, child_row.relationships[1].assertion_id,
+        "the two links carry distinct assertion ids"
+    );
+    assert_eq!(summary.events.len(), 1);
+    assert_eq!(summary.events[0].human_id, marriage);
+    assert_eq!(summary.events[0].event_type, Some(EventType::Marriage));
+}
+
+#[tokio::test]
+async fn list_family_rows_matches_partners_marriage_date_and_child_count() {
+    use vitni_app::{
+        ChildParentRelationship, DateParts, EventType, NewEvent, add_child, add_partner, assert_event_date,
+        create_event, create_family, link_family_event, list_families, list_family_rows,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let partner_a = create_person(&ws, &session, new_person("Mary", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("a");
+    let partner_b = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("b");
+    let child = create_person(&ws, &session, new_person("Jon", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("c");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("family");
+    add_partner(&ws, &session, &family, &partner_a, MutationMeta::default())
+        .await
+        .expect("partner a");
+    add_partner(&ws, &session, &family, &partner_b, MutationMeta::default())
+        .await
+        .expect("partner b");
+    add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![(partner_a.clone(), ChildParentRelationship::Birth)],
+        MutationMeta::default(),
+    )
+    .await
+    .expect("child");
+    let marriage = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event");
+    assert_event_date(
+        &ws,
+        &session,
+        &marriage,
+        DateParts {
+            year: 1875,
+            month: None,
+            day: None,
+        },
+        MutationMeta::default(),
+    )
+    .await
+    .expect("date");
+    link_family_event(&ws, &session, &family, &marriage, MutationMeta::default())
+        .await
+        .expect("link");
+
+    // The lightweight rows carry the same partners (id + name), marriage date, and child count the
+    // full summaries do — the family list renders identically whether built from rows or summaries.
+    let summaries = list_families(&ws).await.expect("summaries");
+    let rows = list_family_rows(&ws).await.expect("rows");
+    assert_eq!(rows.len(), summaries.len());
+    let summary = &summaries[0];
+    let row = &rows[0];
+    assert_eq!(row.human_id, summary.human_id);
+    let summary_partners: Vec<(String, Option<String>)> = summary
+        .partners
+        .iter()
+        .map(|partner| (partner.human_id.clone(), partner.name.clone()))
+        .collect();
+    let row_partners: Vec<(String, Option<String>)> = row
+        .partners
+        .iter()
+        .map(|partner| (partner.human_id.clone(), partner.name.clone()))
+        .collect();
+    assert_eq!(row_partners, summary_partners);
+    let summary_marriage = summary
+        .events
+        .iter()
+        .find(|event| event.event_type == Some(EventType::Marriage))
+        .and_then(|event| event.date.clone());
+    assert_eq!(row.marriage_date, summary_marriage);
+    assert!(row.marriage_date.is_some(), "the dated marriage surfaces on the row");
+    assert_eq!(row.child_count, summary.children.len());
+    assert_eq!(row.child_count, 1);
+}
+
+#[tokio::test]
+async fn list_event_rows_matches_type_date_and_place() {
+    use vitni_app::{
+        DateParts, EventType, NewEvent, NewPlace, PlaceType, assert_event_date, create_event, create_place, link_place,
+        list_event_rows, list_events,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create_place(
+        &ws,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::City,
+            name: Some("Oslo".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("place");
+    let event = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Census,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event");
+    assert_event_date(
+        &ws,
+        &session,
+        &event,
+        DateParts {
+            year: 1801,
+            month: None,
+            day: None,
+        },
+        MutationMeta::default(),
+    )
+    .await
+    .expect("date");
+    link_place(&ws, &session, &event, &place, MutationMeta::default())
+        .await
+        .expect("place link");
+
+    // The lightweight rows carry the same type/date/place the full summaries do.
+    let summaries = list_events(&ws).await.expect("summaries");
+    let rows = list_event_rows(&ws).await.expect("rows");
+    assert_eq!(rows.len(), summaries.len());
+    let summary = &summaries[0];
+    let row = &rows[0];
+    assert_eq!(row.human_id, summary.human_id);
+    assert_eq!(row.event_type, summary.event_type);
+    assert_eq!(row.date, summary.date);
+    let summary_place = summary
+        .place
+        .as_ref()
+        .map(|place| (place.human_id.clone(), place.name.clone()));
+    let row_place = row
+        .place
+        .as_ref()
+        .map(|place| (place.human_id.clone(), place.name.clone()));
+    assert_eq!(row_place, summary_place);
+    assert_eq!(
+        row.place.as_ref().and_then(|place| place.name.clone()),
+        Some("Oslo".to_owned()),
+        "the linked place name resolves on the row"
+    );
+}
+
+/// A family (100) with two partners and a child that has one link per partner, returning the
+/// workspace, session, and the ids `(family, child, partner_a, partner_b)`.
+async fn family_with_two_child_links() -> (Workspace, tempfile::TempDir, Session, [String; 4]) {
+    use vitni_app::{ChildParentRelationship, add_child, add_partner, create_family};
+
+    let (ws, dir) = workspace().await;
+    let session = session();
+    let partner_a = create_person(&ws, &session, new_person("Mary", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("a");
+    let partner_b = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("b");
+    let child = create_person(&ws, &session, new_person("Jon", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("c");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("family");
+    add_partner(&ws, &session, &family, &partner_a, MutationMeta::default())
+        .await
+        .expect("partner a");
+    add_partner(&ws, &session, &family, &partner_b, MutationMeta::default())
+        .await
+        .expect("partner b");
+    add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![
+            (partner_a.clone(), ChildParentRelationship::Birth),
+            (partner_b.clone(), ChildParentRelationship::Step),
+        ],
+        MutationMeta::default(),
+    )
+    .await
+    .expect("child");
+    (ws, dir, session, [family, child, partner_a, partner_b])
+}
+
+#[tokio::test]
+async fn retracting_one_child_relationship_leaves_membership_and_the_other_link() {
+    use vitni_app::{show_family, undo_family_assertion};
+
+    let (ws, _dir, session, [family, _child, partner_a, partner_b]) = family_with_two_child_links().await;
+    let before = show_family(&ws, &family).await.expect("show").expect("family");
+    let child_row = &before.children[0];
+    let link_a = child_row
+        .relationships
+        .iter()
+        .find(|link| link.partner_human_id == partner_a)
+        .expect("link a")
+        .assertion_id
+        .clone();
+    let membership = child_row.assertion_id.clone();
+
+    // Retract only partner A's link.
+    undo_family_assertion(&ws, &session, &family, &link_a, None)
+        .await
+        .expect("retract link a");
+
+    let after = show_family(&ws, &family).await.expect("show").expect("family");
+    assert_eq!(after.children.len(), 1, "membership stands");
+    let child_row = &after.children[0];
+    assert_eq!(child_row.assertion_id, membership, "same membership assertion");
+    assert_eq!(child_row.relationships.len(), 1, "only the retracted link is gone");
+    assert_eq!(
+        child_row.relationships[0].partner_human_id, partner_b,
+        "partner B's link is untouched"
+    );
+}
+
+#[tokio::test]
+async fn assert_child_relationship_supersedes_per_row() {
+    use vitni_app::{ChildParentRelationship, assert_child_relationship, show_family};
+
+    let (ws, _dir, session, [family, child, partner_a, _partner_b]) = family_with_two_child_links().await;
+    let before = show_family(&ws, &family).await.expect("show").expect("family");
+    let link_a = before.children[0]
+        .relationships
+        .iter()
+        .find(|link| link.partner_human_id == partner_a)
+        .expect("link a")
+        .assertion_id
+        .clone();
+
+    // Supersede partner A's Birth link with an Adopted link.
+    assert_child_relationship(
+        &ws,
+        &session,
+        &family,
+        &child,
+        &partner_a,
+        ChildParentRelationship::Adopted,
+        MutationMeta {
+            supersedes: Some(&link_a),
+            ..MutationMeta::default()
+        },
+    )
+    .await
+    .expect("supersede link a");
+
+    let after = show_family(&ws, &family).await.expect("show").expect("family");
+    assert_eq!(after.children[0].relationships.len(), 2, "still one link per partner");
+    let link_a = after.children[0]
+        .relationships
+        .iter()
+        .find(|link| link.partner_human_id == partner_a)
+        .expect("link a");
+    assert_eq!(
+        link_a.relationship,
+        ChildParentRelationship::Adopted,
+        "partner A's link is now Adopted"
+    );
+}
+
+#[tokio::test]
+async fn import_add_child_is_additive_across_reimport() {
+    use vitni_app::{ChildParentRelationship, add_partner, create_family, import_add_child, show_family};
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let partner_a = create_person(&ws, &session, new_person("Mary", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("a");
+    let partner_b = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("b");
+    let child = create_person(&ws, &session, new_person("Jon", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("c");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("family");
+    for partner in [&partner_a, &partner_b] {
+        add_partner(&ws, &session, &family, partner, MutationMeta::default())
+            .await
+            .expect("partner");
+    }
+
+    // First import: membership + partner A's birth link.
+    import_add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![(partner_a.clone(), ChildParentRelationship::Birth)],
+    )
+    .await
+    .expect("first import");
+    // Re-import the identical link: a no-op (membership + link both already present).
+    import_add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![(partner_a.clone(), ChildParentRelationship::Birth)],
+    )
+    .await
+    .expect("re-import same");
+    let after_same = show_family(&ws, &family).await.expect("show").expect("family");
+    assert_eq!(after_same.children.len(), 1, "still one child");
+    assert_eq!(
+        after_same.children[0].relationships.len(),
+        1,
+        "the identical re-import adds nothing"
+    );
+
+    // Re-import with a newly-appearing partner B link: additive (the child stays, the link is added).
+    import_add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![
+            (partner_a.clone(), ChildParentRelationship::Birth),
+            (partner_b.clone(), ChildParentRelationship::Step),
+        ],
+    )
+    .await
+    .expect("re-import with a new link");
+    let after_new = show_family(&ws, &family).await.expect("show").expect("family");
+    assert_eq!(after_new.children.len(), 1, "still one child");
+    assert_eq!(
+        after_new.children[0].relationships.len(),
+        2,
+        "the newly-appearing link is added"
+    );
+}
+
+#[tokio::test]
+async fn a_partner_carries_its_assertion_id_and_can_be_retracted() {
+    use vitni_app::{add_partner, create_family, show_family, undo_family_assertion};
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let partner = create_person(&ws, &session, new_person("Mary", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("partner");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("family");
+    add_partner(&ws, &session, &family, &partner, MutationMeta::default())
+        .await
+        .expect("add partner");
+
+    let summary = show_family(&ws, &family).await.expect("show").expect("family");
+    assert_eq!(summary.partners.len(), 1);
+    let assertion_id = summary.partners[0].assertion_id.clone();
+    assert!(!assertion_id.is_empty(), "the partner's assertion id is surfaced");
+
+    undo_family_assertion(&ws, &session, &family, &assertion_id, None)
+        .await
+        .expect("retract partner");
+
+    let after = show_family(&ws, &family).await.expect("show").expect("family");
+    assert!(
+        after.partners.is_empty(),
+        "retracting the partner removes it from the view"
+    );
+}
+
+#[tokio::test]
+async fn missing_person_and_empty_name_surface_distinct_errors() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create");
+
+    let missing = add_name(
+        &ws,
+        &session,
+        "I9999",
+        PersonNameParts::simple(Some("X".to_owned()), None),
+        MutationMeta::default(),
+    )
+    .await;
+    assert!(matches!(missing, Err(vitni_app::AppError::PersonNotFound(id)) if id == "I9999"));
+
+    let empty = add_name(
+        &ws,
+        &session,
+        "I0001",
+        PersonNameParts::simple(None, None),
+        MutationMeta::default(),
+    )
+    .await;
+    assert!(matches!(empty, Err(vitni_app::AppError::Domain(_))));
+}
+
+#[tokio::test]
+async fn merge_links_the_merged_person_as_a_persona_of_the_survivor() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let survivor = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("create survivor");
+    let merged = create_person(&ws, &session, new_person("John", "Smyth"), Provenance::default(), &[])
+        .await
+        .expect("create merged");
+
+    let result = merge_persons(&ws, &session, &survivor, &merged, None)
+        .await
+        .expect("merge");
+    assert_eq!(result.survivor.human_id, survivor);
+    assert_eq!(result.merged_human_id, merged);
+    assert!(
+        result.survivor.merged.iter().any(|persona| persona.human_id == merged),
+        "the survivor's summary lists the merged persona: {:?}",
+        result.survivor.merged
+    );
+
+    // The merged person's own record is untouched — it still resolves.
+    let merged_summary = show_person(&ws, &merged).await.expect("show").expect("still exists");
+    assert_eq!(merged_summary.human_id, merged);
+}
+
+#[tokio::test]
+async fn merging_a_person_with_itself_is_rejected_and_emits_no_event() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let solo = create_person(&ws, &session, new_person("Solo", "Person"), Provenance::default(), &[])
+        .await
+        .expect("create");
+
+    let result = merge_persons(&ws, &session, &solo, &solo, None).await;
+    assert!(matches!(result, Err(vitni_app::AppError::Domain(_))));
+
+    let log = change_log_for_person(&ws, &solo).await.expect("log");
+    assert!(
+        log.iter().all(|entry| entry.event_type != "PersonsMerged"),
+        "a rejected self-merge emits no event: {log:?}"
+    );
+}
+
+#[tokio::test]
+async fn merge_with_an_unknown_human_id_surfaces_person_not_found() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let survivor = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("create");
+
+    let missing_merged = merge_persons(&ws, &session, &survivor, "I9999", None).await;
+    assert!(matches!(missing_merged, Err(vitni_app::AppError::PersonNotFound(id)) if id == "I9999"));
+
+    let missing_survivor = merge_persons(&ws, &session, "I9998", &survivor, None).await;
+    assert!(matches!(missing_survivor, Err(vitni_app::AppError::PersonNotFound(id)) if id == "I9998"));
+}
+
+#[tokio::test]
+async fn undoing_a_merge_removes_the_persona_link() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let survivor = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("create survivor");
+    let merged = create_person(&ws, &session, new_person("John", "Smyth"), Provenance::default(), &[])
+        .await
+        .expect("create merged");
+    merge_persons(&ws, &session, &survivor, &merged, None)
+        .await
+        .expect("merge");
+
+    let log = change_log_for_person(&ws, &survivor).await.expect("log");
+    let merge_entry = log
+        .iter()
+        .find(|entry| entry.event_type == "PersonsMerged")
+        .expect("merge entry logged");
+    assert!(merge_entry.can_undo, "a merge assertion can be undone");
+    undo_assertion(&ws, &session, &survivor, &merge_entry.assertion_id, None)
+        .await
+        .expect("undo merge");
+
+    let after = show_person(&ws, &survivor).await.expect("show").expect("survivor");
+    assert!(
+        after.merged.iter().all(|persona| persona.human_id != merged),
+        "undoing the merge removes the persona link: {:?}",
+        after.merged
+    );
+}
+
+#[tokio::test]
+async fn a_persons_applied_tag_reflects_a_later_rename_and_recolour() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create person");
+    let tag = commit_tag_change_set(
+        &ws,
+        &session,
+        TagChangeSet {
+            target: TagTarget::New,
+            name: "Ancestor".to_owned(),
+            priority: 1,
+            color: "#e5534b".to_owned(),
+            restrictions: std::collections::BTreeSet::new(),
+            provenance: Provenance::default(),
+            citations: Vec::new(),
+        },
+    )
+    .await
+    .expect("create tag");
+    tag_person(&ws, &session, &person, &tag, false, MutationMeta::default())
+        .await
+        .expect("apply tag");
+
+    let before = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(before.tag_refs.len(), 1);
+    assert_eq!(before.tag_refs[0].name, "Ancestor");
+    assert_eq!(before.tag_refs[0].color.as_deref(), Some("#e5534b"));
+
+    // Rename + recolour the tag.
+    commit_tag_change_set(
+        &ws,
+        &session,
+        TagChangeSet {
+            target: TagTarget::Existing { id: tag.clone() },
+            name: "Direct ancestor".to_owned(),
+            priority: 1,
+            color: "#2faa6a".to_owned(),
+            restrictions: std::collections::BTreeSet::new(),
+            provenance: Provenance::default(),
+            citations: Vec::new(),
+        },
+    )
+    .await
+    .expect("edit tag");
+
+    let after = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(after.tag_refs.len(), 1);
+    assert_eq!(
+        after.tag_refs[0].name, "Direct ancestor",
+        "the applied-tag view reflects the rename"
+    );
+    assert_eq!(
+        after.tag_refs[0].color.as_deref(),
+        Some("#2faa6a"),
+        "the applied-tag view reflects the recolour"
+    );
+    // The id is still carried (for the change-set diff) but never derived from a stale label.
+    assert_eq!(after.tags, vec![tag]);
+}
+
+/// The PR24 acceptance round trip: an assertion made with a rationale, a backing citation, and an
+/// Evidence Explained analysis surfaces all three back through the History change-log DTO.
+#[tokio::test]
+async fn a_fact_assertion_round_trips_rationale_citation_and_evidence_analysis_through_history() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: Some("f. 3".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("citation");
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+
+    let analysis = EvidenceAnalysis {
+        source: SourceQuality::Original,
+        information: InformationKind::Primary,
+        evidence: EvidenceKind::Direct,
+    };
+    assert_fact(
+        &ws,
+        &session,
+        &person,
+        NewFact {
+            fact_type: FactType::Occupation,
+            value: None,
+            date: None,
+        },
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: Some("census entry".to_owned()),
+                evidence_analysis: Some(analysis),
+            },
+            citations: std::slice::from_ref(&citation),
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("assert fact");
+
+    let log = change_log_for_person(&ws, &person).await.expect("log");
+    let fact = log
+        .iter()
+        .find(|entry| entry.event_type == "FactAsserted")
+        .expect("the fact assertion is logged");
+    assert_eq!(
+        fact.rationale.as_deref(),
+        Some("census entry"),
+        "the rationale round-trips"
+    );
+    assert_eq!(fact.confidence, Some(Confidence::High), "the confidence round-trips");
+    assert_eq!(
+        fact.evidence_analysis,
+        Some(analysis),
+        "the evidence analysis round-trips"
+    );
+    assert_eq!(
+        fact.citations.len(),
+        1,
+        "the backing citation round-trips through the change log"
+    );
+}
+
+/// A non-create mutation called with `supersedes` wraps its command in a supersession: the projection
+/// shows the replacement value (not a second, buried assertion) and the change log records it.
+#[tokio::test]
+async fn superseding_a_name_replaces_it_and_logs_a_supersession() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(
+        &ws,
+        &session,
+        NewPerson {
+            human_id: None,
+            name: None,
+            evidence_level: EvidenceLevel::Conclusion,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("person");
+    add_name(
+        &ws,
+        &session,
+        &person,
+        PersonNameParts::simple(Some("Ada".to_owned()), Some("Lovelace".to_owned())),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("first name");
+
+    let target = change_log_for_person(&ws, &person)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "NameAsserted")
+        .expect("the name assertion is logged")
+        .assertion_id;
+
+    add_name(
+        &ws,
+        &session,
+        &person,
+        PersonNameParts::simple(Some("Augusta".to_owned()), Some("King".to_owned())),
+        MutationMeta {
+            provenance: Provenance::default(),
+            citations: &[],
+            dna_matches: &[],
+            supersedes: Some(&target),
+        },
+    )
+    .await
+    .expect("supersede name");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(
+        summary.names.len(),
+        1,
+        "the supersession replaces the name rather than adding a second"
+    );
+    assert_eq!(
+        summary.given.as_deref(),
+        Some("Augusta"),
+        "the replacement name is now primary"
+    );
+    assert!(
+        change_log_for_person(&ws, &person)
+            .await
+            .expect("log")
+            .iter()
+            .any(|entry| entry.event_type == "AssertionSuperseded"),
+        "the supersession is recorded in the change log"
+    );
+}
+
+/// An unparseable `supersedes` id is rejected before any write (parsed like a history undo target).
+#[tokio::test]
+async fn superseding_with_an_unparseable_assertion_id_is_rejected() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+
+    let rejected = add_name(
+        &ws,
+        &session,
+        &person,
+        PersonNameParts::simple(Some("X".to_owned()), None),
+        MutationMeta {
+            provenance: Provenance::default(),
+            citations: &[],
+            dna_matches: &[],
+            supersedes: Some("not-a-uuid"),
+        },
+    )
+    .await;
+    assert!(
+        matches!(rejected, Err(vitni_app::AppError::Db(_))),
+        "an unparseable supersede id is a malformed-input error: {rejected:?}"
+    );
+}
+
+/// Undo carries an operator rationale through to the retraction's provenance, replacing the default
+/// "Undo" label.
+#[tokio::test]
+async fn undo_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    assert_fact(
+        &ws,
+        &session,
+        &person,
+        NewFact {
+            fact_type: FactType::Occupation,
+            value: None,
+            date: None,
+        },
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert fact");
+
+    let fact_assertion = change_log_for_person(&ws, &person)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "FactAsserted")
+        .expect("the fact assertion is logged")
+        .assertion_id;
+    undo_assertion(
+        &ws,
+        &session,
+        &person,
+        &fact_assertion,
+        Some("entered in error".to_owned()),
+    )
+    .await
+    .expect("undo");
+
+    let retraction = change_log_for_person(&ws, &person)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "AssertionRetracted")
+        .expect("the retraction is logged");
+    assert_eq!(
+        retraction.rationale.as_deref(),
+        Some("entered in error"),
+        "the undo rationale replaces the default label"
+    );
+}
+
+/// A merge carries an operator rationale through to the `PersonsMerged` provenance.
+#[tokio::test]
+async fn merge_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let survivor = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("survivor");
+    let merged = create_person(&ws, &session, new_person("John", "Smyth"), Provenance::default(), &[])
+        .await
+        .expect("merged");
+
+    merge_persons(
+        &ws,
+        &session,
+        &survivor,
+        &merged,
+        Some("same individual per DNA match".to_owned()),
+    )
+    .await
+    .expect("merge");
+
+    let entry = change_log_for_person(&ws, &survivor)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "PersonsMerged")
+        .expect("the merge is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("same individual per DNA match"),
+        "the merge rationale is recorded"
+    );
+}
+
+// PR24 per-aggregate coverage: each test performs one non-create mutation with a caller-supplied
+// `MutationMeta` rationale (and confidence, where the aggregate isn't Tag's flat signature) and
+// asserts both round-trip through that aggregate's change log.
+
+#[tokio::test]
+async fn family_restrictions_records_the_supplied_rationale() {
+    use vitni_app::create_family;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("create family");
+
+    let mut restrictions = BTreeSet::new();
+    restrictions.insert(Restriction::Privacy);
+    set_family_restrictions(
+        &ws,
+        &session,
+        &family,
+        restrictions,
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: Some("living partner, privacy requested".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set restrictions");
+
+    let log = change_log_for_family(&ws, &family).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "RestrictionsChanged")
+        .expect("the restrictions change is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("living partner, privacy requested"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
+}
+
+#[tokio::test]
+async fn event_description_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let event = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create event");
+
+    set_event_description(
+        &ws,
+        &session,
+        &event,
+        "Wedding at St. Mary's".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::Normal),
+                rationale: Some("per parish register".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set description");
+
+    let log = change_log_for_event(&ws, &event).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "DescriptionSet")
+        .expect("the description assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("per parish register"),
+        "the rationale round-trips"
+    );
+}
+
+#[tokio::test]
+async fn place_code_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create_place(
+        &ws,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::City,
+            name: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create place");
+
+    set_place_code(
+        &ws,
+        &session,
+        &place,
+        "OSLO".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: Some("matches gazetteer entry".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set code");
+
+    let log = change_log_for_place(&ws, &place).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "CodeSet")
+        .expect("the code assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("matches gazetteer entry"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
+}
+
+#[tokio::test]
+async fn source_author_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create source");
+
+    set_source_author(
+        &ws,
+        &session,
+        &source,
+        "Rev. John Doe".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::Normal),
+                rationale: Some("title page attribution".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set author");
+
+    let log = change_log_for_source(&ws, &source).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "AuthorSet")
+        .expect("the author assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("title page attribution"),
+        "the rationale round-trips"
+    );
+}
+
+#[tokio::test]
+async fn citation_page_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("1850 U.S. Census".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create citation");
+
+    set_page(
+        &ws,
+        &session,
+        &citation,
+        "p. 42".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: Some("re-read the microfilm".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set page");
+
+    let log = change_log_for_citation(&ws, &citation).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "PageSet")
+        .expect("the page assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("re-read the microfilm"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
+}
+
+#[tokio::test]
+async fn repository_name_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let repository = create_repository(
+        &ws,
+        &session,
+        NewRepository {
+            human_id: None,
+            name: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create repository");
+
+    set_repository_name(
+        &ws,
+        &session,
+        &repository,
+        "National Archives".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::Normal),
+                rationale: Some("per correspondence".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set name");
+
+    let log = change_log_for_repository(&ws, &repository).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "NameSet")
+        .expect("the name assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("per correspondence"),
+        "the rationale round-trips"
+    );
+}
+
+#[tokio::test]
+async fn media_mime_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let media = create_media(
+        &ws,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create media");
+
+    set_media_mime(
+        &ws,
+        &session,
+        &media,
+        "image/jpeg".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: Some("inspected file header".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set mime");
+
+    let log = change_log_for_media(&ws, &media).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "MimeSet")
+        .expect("the mime assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("inspected file header"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
+}
+
+#[tokio::test]
+async fn note_text_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let note = create_note(
+        &ws,
+        &session,
+        NewNote {
+            human_id: None,
+            text: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create note");
+
+    set_note_text(
+        &ws,
+        &session,
+        &note,
+        "Interviewed the family in 1998.".to_owned(),
+        None,
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::Normal),
+                rationale: Some("researcher's field notes".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set text");
+
+    let log = change_log_for_note(&ws, &note).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "RichTextSet")
+        .expect("the text assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("researcher's field notes"),
+        "the rationale round-trips"
+    );
+}
+
+// Tag mutations take a flat `Provenance` + citations (data-model §9: tags carry no supersede path),
+// not a `MutationMeta` — the signature that makes this one aggregate special among the eleven.
+#[tokio::test]
+async fn tag_rename_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let tag = create_tag(&ws, &session, "Ancestor".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("create tag");
+
+    rename_tag(
+        &ws,
+        &session,
+        &tag,
+        "Direct ancestor".to_owned(),
+        Provenance {
+            confidence: Some(Confidence::Normal),
+            rationale: Some("clarified during review".to_owned()),
+            evidence_analysis: None,
+        },
+        &[],
+    )
+    .await
+    .expect("rename tag");
+
+    let log = change_log_for_tag(&ws, &tag).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "TagRenamed")
+        .expect("the rename is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("clarified during review"),
+        "the rationale round-trips"
+    );
+}
+
+#[tokio::test]
+async fn a_mechanical_act_records_no_confidence() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let tag = create_tag(&ws, &session, "Ancestor".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("create tag");
+
+    let log = change_log_for_tag(&ws, &tag).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "TagCreated")
+        .expect("the creation is logged");
+    assert_eq!(
+        entry.confidence, None,
+        "a default (mechanical) provenance records no surety judgment (ADR 0021 §5)"
+    );
+}
+
+#[tokio::test]
+async fn dna_test_provider_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create person");
+    let dna_test = create_dna_test(
+        &ws,
+        &session,
+        NewDnaTest { human_id: None, person },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create dna test");
+
+    set_dna_test_provider(
+        &ws,
+        &session,
+        &dna_test,
+        DnaProvider::AncestryDna,
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: Some("kit label confirms vendor".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set provider");
+
+    let log = change_log_for_dna_test(&ws, &dna_test).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "ProviderSet")
+        .expect("the provider assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("kit label confirms vendor"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
+}
+
+#[tokio::test]
+async fn dna_match_status_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person_a = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create person a");
+    let person_b = create_person(&ws, &session, new_person("Alan", "Turing"), Provenance::default(), &[])
+        .await
+        .expect("create person b");
+    let test_a = create_dna_test(
+        &ws,
+        &session,
+        NewDnaTest {
+            human_id: None,
+            person: person_a,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create dna test a");
+    let test_b = create_dna_test(
+        &ws,
+        &session,
+        NewDnaTest {
+            human_id: None,
+            person: person_b,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create dna test b");
+    let dna_match = observe_dna_match(
+        &ws,
+        &session,
+        NewDnaMatch {
+            human_id: None,
+            test_a,
+            test_b,
+            provider: DnaProvider::AncestryDna,
+            shared_cm: Centimorgans::from_hundredths(3_500),
+            percent_shared: None,
+            segment_count: 12,
+            largest_segment_cm: Centimorgans::from_hundredths(800),
+            predicted_relationship: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("observe match");
+
+    set_dna_match_status(
+        &ws,
+        &session,
+        &dna_match,
+        true,
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: Some("confirmed via shared tree research".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("confirm match");
+
+    let log = change_log_for_dna_match(&ws, &dna_match).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "MatchConfirmed")
+        .expect("the confirmation is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("confirmed via shared tree research"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
+}
+
+/// Sets up two people, their DNA tests, and an observed match between them; returns the workspace,
+/// its temp dir, a session, and the match / person-A / person-B `human_id`s (PR45 fixture).
+async fn two_person_dna_match() -> (Workspace, tempfile::TempDir, Session, String, String, String) {
+    let (ws, dir) = workspace().await;
+    let session = session();
+    let person_a = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person a");
+    let person_b = create_person(&ws, &session, new_person("Alan", "Turing"), Provenance::default(), &[])
+        .await
+        .expect("person b");
+    let new_test = |person: String| NewDnaTest { human_id: None, person };
+    let test_a = create_dna_test(&ws, &session, new_test(person_a.clone()), Provenance::default(), &[])
+        .await
+        .expect("test a");
+    let test_b = create_dna_test(&ws, &session, new_test(person_b.clone()), Provenance::default(), &[])
+        .await
+        .expect("test b");
+    let dna_match = observe_dna_match(
+        &ws,
+        &session,
+        NewDnaMatch {
+            human_id: None,
+            test_a,
+            test_b,
+            provider: DnaProvider::AncestryDna,
+            shared_cm: Centimorgans::from_hundredths(90_000),
+            percent_shared: None,
+            segment_count: 3,
+            largest_segment_cm: Centimorgans::from_hundredths(4_000),
+            predicted_relationship: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("match");
+    (ws, dir, session, dna_match, person_a, person_b)
+}
+
+/// A Person association that cites a DNA match surfaces on the match's cited-by inferences with a
+/// back-link to the citing person; superseding the assertion drops the row (data-model §12, ADR 0023).
+#[tokio::test]
+async fn a_dna_cited_person_inference_surfaces_on_the_match_and_supersede_drops_it() {
+    let (ws, _dir, session, dna_match, person_a, person_b) = two_person_dna_match().await;
+
+    // Assert a DNA-backed association on person A, citing the match as its sole evidence.
+    let dna_matches = [dna_match.clone()];
+    assert_association(
+        &ws,
+        &session,
+        &person_a,
+        &person_b,
+        AssociationRole::Godparent,
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::Low),
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &dna_matches,
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("assert dna-backed association");
+
+    let summary = show_dna_match(&ws, &dna_match)
+        .await
+        .expect("show")
+        .expect("match present");
+    assert_eq!(
+        summary.cited_by.len(),
+        1,
+        "the DNA-cited inference surfaces on the match"
+    );
+    let inference = &summary.cited_by[0];
+    assert_eq!(inference.record.kind, CitingKind::Person);
+    assert_eq!(inference.record.human_id, person_a);
+    assert_eq!(inference.confidence, Some(Confidence::Low));
+    assert_eq!(inference.source_count, 0, "no documentary source beyond the DNA match");
+    assert!(
+        matches!(
+            inference.record.context,
+            CitingContext::Association(AssociationRole::Godparent)
+        ),
+        "the relationship reading is carried in the citing context"
+    );
+    assert!(
+        Uuid::parse_str(&inference.record.id).is_ok(),
+        "the back-link carries the citing record's stable id"
+    );
+
+    // Supersede the association by its AssertionId with a plain (non-DNA) one; the cited-by row drops.
+    let assertion_id = change_log_for_person(&ws, &person_a)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "AssociationAsserted")
+        .expect("the association is logged")
+        .assertion_id;
+    assert_association(
+        &ws,
+        &session,
+        &person_a,
+        &person_b,
+        AssociationRole::Godparent,
+        MutationMeta {
+            citations: &[],
+            dna_matches: &[],
+            supersedes: Some(assertion_id.as_str()),
+            ..MutationMeta::default()
+        },
+    )
+    .await
+    .expect("supersede association");
+
+    let summary = show_dna_match(&ws, &dna_match)
+        .await
+        .expect("show")
+        .expect("match present");
+    assert!(
+        summary.cited_by.is_empty(),
+        "superseding the assertion by AssertionId drops the DNA-cited inference row"
+    );
+}
+
+// --- PR29 step 2: assertion ids surface on collection-row DTOs (the read side of corrections) ---
+
+/// A name summary carries the same `AssertionId` the change log records for its `NameAsserted` — the
+/// id a per-row Edit/Retract targets (ADR 0004 §2).
+#[tokio::test]
+async fn add_name_summary_carries_the_change_log_assertion_id() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    add_name(
+        &ws,
+        &session,
+        &person,
+        PersonNameParts::simple(Some("Augusta".to_owned()), Some("King".to_owned())),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("second name");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    let logged: std::collections::BTreeSet<String> = change_log_for_person(&ws, &person)
+        .await
+        .expect("log")
+        .into_iter()
+        .filter(|entry| entry.event_type == "NameAsserted")
+        .map(|entry| entry.assertion_id)
+        .collect();
+    let on_summary: std::collections::BTreeSet<String> =
+        summary.names.iter().map(|name| name.assertion_id.clone()).collect();
+    assert_eq!(
+        on_summary, logged,
+        "every name row carries its introducing assertion id"
+    );
+    assert!(summary.names.iter().all(|name| !name.assertion_id.is_empty()));
+}
+
+/// Superseding a name replaces the row with one carrying a *new* assertion id (not the retired one).
+#[tokio::test]
+async fn superseding_a_name_stamps_the_replacement_assertion_id() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let original = show_person(&ws, &person)
+        .await
+        .expect("show")
+        .expect("person")
+        .names
+        .first()
+        .expect("one name")
+        .assertion_id
+        .clone();
+
+    add_name(
+        &ws,
+        &session,
+        &person,
+        PersonNameParts::simple(Some("Augusta".to_owned()), Some("King".to_owned())),
+        MutationMeta {
+            provenance: Provenance::default(),
+            citations: &[],
+            dna_matches: &[],
+            supersedes: Some(&original),
+        },
+    )
+    .await
+    .expect("supersede");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(summary.names.len(), 1, "supersede replaces rather than appends");
+    let replacement = &summary.names[0].assertion_id;
+    assert_ne!(replacement, &original, "the surviving row carries a new assertion id");
+    assert_eq!(summary.given.as_deref(), Some("Augusta"));
+}
+
+/// Undoing an attach assertion drops the attached row from the summary (Detach = retract the attach).
+#[tokio::test]
+async fn undoing_a_note_attach_drops_the_row() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let note = create_note(
+        &ws,
+        &session,
+        NewNote {
+            human_id: None,
+            text: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("note");
+    attach_person_note(&ws, &session, &person, &note, MutationMeta::default())
+        .await
+        .expect("attach note");
+
+    let attached = show_person(&ws, &person).await.expect("show").expect("person");
+    let attach_assertion = attached.notes.first().expect("one note").assertion_id.clone();
+    assert!(
+        !attach_assertion.is_empty(),
+        "the note row carries its attach assertion id"
+    );
+
+    undo_assertion(&ws, &session, &person, &attach_assertion, None)
+        .await
+        .expect("detach note");
+
+    let after = show_person(&ws, &person).await.expect("show").expect("person");
+    assert!(after.notes.is_empty(), "undoing the attach drops the note row");
+}
+
+/// Sibling smoke: a DNA-test haplogroup row carries the assertion id its change log records.
+#[tokio::test]
+async fn haplogroup_row_carries_its_assertion_id() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let test = create_dna_test(
+        &ws,
+        &session,
+        NewDnaTest { human_id: None, person },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("dna test");
+    assert_dna_test_haplogroup(&ws, &session, &test, "R-M269".to_owned(), MutationMeta::default())
+        .await
+        .expect("haplogroup");
+
+    let summary = show_dna_test(&ws, &test).await.expect("show").expect("dna test");
+    let row = summary.haplogroups.first().expect("one haplogroup");
+    let logged = change_log_for_dna_test(&ws, &test)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "HaplogroupAsserted")
+        .expect("haplogroup logged")
+        .assertion_id;
+    assert_eq!(row.assertion_id, logged, "the haplogroup row carries its assertion id");
+}
+
+#[tokio::test]
+async fn citation_date_value_round_trips_the_full_grammar() {
+    use vitni_app::{
+        Calendar, DateInput, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody,
+        assert_citation_date_value, build_genealogical_date, show_citation,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source,
+            page: Some("f. 18".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create citation");
+
+    let date = build_genealogical_date(DateInput {
+        calendar: Calendar::Julian,
+        quality: DateQuality::Estimated,
+        body: GenealogicalDateBody::Structured(DateModifier::Range {
+            start: DatePoint {
+                year: Some(1876),
+                month: Some(6),
+                day: Some(14),
+            },
+            end: DatePoint {
+                year: Some(1880),
+                month: None,
+                day: None,
+            },
+        }),
+        new_year_begins: None,
+        original_text: Some("bet 1876 and 1880".to_owned()),
+        time: None,
+    });
+    assert_citation_date_value(&ws, &session, &citation, date.clone(), MutationMeta::default())
+        .await
+        .expect("assert citation date");
+
+    let summary = show_citation(&ws, &citation)
+        .await
+        .expect("show")
+        .expect("citation exists");
+    assert_eq!(
+        summary.date.as_ref(),
+        Some(&date),
+        "the full date round-trips structurally"
+    );
+    let _: Option<GenealogicalDate> = summary.date;
+}
+
+#[tokio::test]
+async fn media_date_value_round_trips_the_full_grammar() {
+    use vitni_app::{
+        Calendar, DateInput, DateModifier, DatePoint, DateQuality, GenealogicalDateBody, assert_media_date_value,
+        build_genealogical_date, show_media,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let media = create_media(
+        &ws,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: Some("portrait.jpg".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create media");
+
+    let date = build_genealogical_date(DateInput {
+        calendar: Calendar::Julian,
+        quality: DateQuality::Estimated,
+        body: GenealogicalDateBody::Structured(DateModifier::About(DatePoint {
+            year: Some(1876),
+            month: Some(6),
+            day: Some(14),
+        })),
+        new_year_begins: None,
+        original_text: Some("abt 14 Jun 1876".to_owned()),
+        time: None,
+    });
+    assert_media_date_value(&ws, &session, &media, date.clone(), MutationMeta::default())
+        .await
+        .expect("assert media date");
+
+    let summary = show_media(&ws, &media).await.expect("show").expect("media exists");
+    assert_eq!(
+        summary.date.as_ref(),
+        Some(&date),
+        "the full date round-trips structurally"
+    );
+}
+
+/// A marriage event with an auto-allocated id, for the participation-bridge tests.
+async fn marriage_event(ws: &Workspace, session: &Session) -> String {
+    create_event(
+        ws,
+        session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event")
+}
+
+#[tokio::test]
+async fn person_side_participation_surfaces_on_the_event() {
+    use vitni_app::{NewParticipation, assert_participation, show_event};
+    use vitni_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let event = marriage_event(&ws, &session).await;
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: Some("f. 12".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("citation");
+    assert_participation(
+        &ws,
+        &session,
+        &person,
+        &event,
+        NewParticipation::with_role(ParticipantRole::Bride),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: std::slice::from_ref(&citation),
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("assert participation");
+
+    let summary = show_event(&ws, &event).await.expect("show").expect("event");
+    assert_eq!(
+        summary.participants.len(),
+        1,
+        "the person-side participation is visible on the event"
+    );
+    let row = &summary.participants[0];
+    assert_eq!(row.human_id, person);
+    assert_eq!(row.role, ParticipantRole::Bride);
+    assert_eq!(
+        row.confidence,
+        Some(Confidence::High),
+        "the event row carries the person-side envelope surety, not a hardcoded default"
+    );
+    assert_eq!(
+        row.source_count, 1,
+        "the event row carries the person-side envelope source count, not a hardcoded zero"
+    );
+}
+
+#[tokio::test]
+async fn primary_participation_in_a_dated_birth_event_sets_the_birth_year() {
+    use vitni_app::{DateParts, NewParticipation, assert_event_date, assert_participation, show_person};
+    use vitni_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let birth = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Birth,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("birth event");
+    assert_event_date(
+        &ws,
+        &session,
+        &birth,
+        DateParts {
+            year: 1815,
+            month: None,
+            day: None,
+        },
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert birth date");
+    assert_participation(
+        &ws,
+        &session,
+        &person,
+        &birth,
+        NewParticipation::with_role(ParticipantRole::Primary),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert primary participation");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert!(
+        summary.birth_date.is_some(),
+        "a dated Birth event with a Primary participant sets birth_date"
+    );
+    assert_eq!(summary.birth_year(), Some(1815));
+    assert_eq!(summary.death_year(), None, "no death event was asserted");
+}
+
+#[tokio::test]
+async fn a_witness_participation_in_a_birth_event_does_not_set_the_birth_year() {
+    use vitni_app::{DateParts, NewParticipation, assert_event_date, assert_participation, show_person};
+    use vitni_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Bea", "Webb"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let birth = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Birth,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("birth event");
+    assert_event_date(
+        &ws,
+        &session,
+        &birth,
+        DateParts {
+            year: 1858,
+            month: None,
+            day: None,
+        },
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert birth date");
+    assert_participation(
+        &ws,
+        &session,
+        &person,
+        &birth,
+        NewParticipation::with_role(ParticipantRole::Witness),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert witness participation");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(
+        summary.birth_date, None,
+        "a Witness participation never sets birth_date"
+    );
+    assert_eq!(summary.birth_year(), None);
+}
+
+#[tokio::test]
+async fn retracting_a_person_side_participation_clears_both_views() {
+    use vitni_app::{NewParticipation, assert_participation, show_event, show_person};
+    use vitni_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let event = marriage_event(&ws, &session).await;
+    assert_participation(
+        &ws,
+        &session,
+        &person,
+        &event,
+        NewParticipation::with_role(ParticipantRole::Bride),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert participation");
+
+    let before = show_person(&ws, &person).await.expect("show").expect("person");
+    let assertion_id = before.participations[0].assertion_id.clone();
+    undo_assertion(&ws, &session, &person, &assertion_id, None)
+        .await
+        .expect("retract");
+
+    let event_summary = show_event(&ws, &event).await.expect("show").expect("event");
+    assert!(
+        event_summary.participants.is_empty(),
+        "the retracted participation is gone from the event"
+    );
+    let person_summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert!(
+        person_summary.participations.is_empty(),
+        "the retracted participation is gone from the person"
+    );
+}
+
+#[tokio::test]
+async fn person_side_participation_carries_age_attributes_notes_and_provenance() {
+    use vitni_app::{Age, AgeBound, Attribute, NewParticipation, assert_participation};
+    use vitni_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let event = marriage_event(&ws, &session).await;
+    let note = create_note(
+        &ws,
+        &session,
+        NewNote {
+            human_id: None,
+            text: Some("a marriage witness".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("note");
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: Some("f. 12".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("citation");
+
+    assert_participation(
+        &ws,
+        &session,
+        &person,
+        &event,
+        NewParticipation {
+            role: ParticipantRole::Witness,
+            age: Some(Age {
+                bound: Some(AgeBound::GreaterThan),
+                years: Some(42),
+                months: Some(3),
+                days: None,
+                phrase: None,
+            }),
+            attributes: vec![Attribute {
+                attribute_type: "occupation".to_owned(),
+                value: "farmer".to_owned(),
+            }],
+            notes: vec![note.clone()],
+        },
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::High),
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: std::slice::from_ref(&citation),
+            dna_matches: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("assert participation");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(summary.participations.len(), 1);
+    let row = &summary.participations[0];
+    assert_eq!(row.role, ParticipantRole::Witness);
+    let age = row.age.as_ref().expect("age recorded");
+    assert_eq!(age.bound, Some(AgeBound::GreaterThan));
+    assert_eq!(age.years, Some(42));
+    assert_eq!(age.months, Some(3));
+    assert_eq!(row.attributes.len(), 1);
+    assert_eq!(row.attributes[0].attribute_type, "occupation");
+    assert_eq!(row.attributes[0].value, "farmer");
+    assert_eq!(row.notes.len(), 1, "the participation note resolves");
+    assert_eq!(row.notes[0].human_id, note, "the note is resolved to its human id");
+    assert_eq!(
+        row.confidence,
+        Some(Confidence::High),
+        "the row denormalizes the surety"
+    );
+    assert_eq!(row.source_count, 1, "the row denormalizes the backing-citation count");
+}
+
+#[tokio::test]
+async fn assert_participation_with_unknown_note_is_not_found() {
+    use vitni_app::{NewParticipation, assert_participation};
+    use vitni_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let event = marriage_event(&ws, &session).await;
+
+    let result = assert_participation(
+        &ws,
+        &session,
+        &person,
+        &event,
+        NewParticipation {
+            role: ParticipantRole::Witness,
+            age: None,
+            attributes: Vec::new(),
+            notes: vec!["N9999".to_owned()],
+        },
+        MutationMeta::default(),
+    )
+    .await;
+    assert!(
+        matches!(result, Err(vitni_app::AppError::NoteNotFound(_))),
+        "an unknown note human id is rejected: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn research_note_argues_about_a_person_and_is_found_by_subject() {
+    use vitni_app::{
+        NewResearchNote, NewResearchNoteSubject, SubjectRef, create_research_note, list_research_notes_for_subject,
+        set_research_note_body, show_research_note,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+
+    let human_id = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![NewResearchNoteSubject::Person(person.clone())],
+            title: Some("Same person as the 1865 census entry?".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create research note");
+    assert_eq!(human_id, "A0001");
+
+    set_research_note_body(
+        &ws,
+        &session,
+        &human_id,
+        "The 1865 census and the parish register agree on the birth year.".to_owned(),
+        None,
+        MutationMeta::default(),
+    )
+    .await
+    .expect("set body");
+
+    let summary = show_research_note(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(
+        summary.body.as_deref(),
+        Some("The 1865 census and the parish register agree on the birth year.")
+    );
+    assert_eq!(summary.title.as_deref(), Some("Same person as the 1865 census entry?"));
+
+    assert_eq!(summary.subjects.len(), 1, "expected exactly one subject recorded");
+    let subject = *summary.subjects.iter().next().expect("subject recorded");
+    assert!(
+        matches!(subject, SubjectRef::Person(_)),
+        "expected a Person subject, got {subject:?}"
+    );
+
+    let for_subject = list_research_notes_for_subject(&ws, subject)
+        .await
+        .expect("list for subject");
+    assert_eq!(for_subject.len(), 1);
+    assert_eq!(for_subject[0].human_id, human_id);
+}
+
+#[tokio::test]
+async fn research_note_subjects_resolve_to_the_ids_a_frontend_links_by() {
+    use vitni_app::{
+        NewPlace, NewResearchNote, NewResearchNoteSubject, PlaceType, create_place, create_research_note,
+        list_research_notes, show_research_note,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let place = create_place(
+        &ws,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::City,
+            name: Some("London".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("place");
+
+    let human_id = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![
+                NewResearchNoteSubject::Person(person.clone()),
+                NewResearchNoteSubject::Place(place.clone()),
+            ],
+            title: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create research note");
+
+    let summary = show_research_note(&ws, &human_id).await.expect("show").expect("found");
+    let mut resolved: Vec<(String, String)> = summary
+        .subject_refs
+        .iter()
+        .map(|subject| (subject.kind.clone(), subject.human_id.clone()))
+        .collect();
+    resolved.sort();
+    assert_eq!(
+        resolved,
+        vec![
+            ("person".to_owned(), person.clone()),
+            ("place".to_owned(), place.clone()),
+        ],
+        "each subject carries its own aggregate kind and human id"
+    );
+    assert!(
+        summary.subject_refs.iter().all(|subject| !subject.id.is_empty()),
+        "the aggregate id stays available as the join key"
+    );
+
+    let listed = list_research_notes(&ws).await.expect("list");
+    assert_eq!(
+        listed[0].subject_refs.len(),
+        2,
+        "the list query resolves subjects too, not only show"
+    );
+}
+
+#[tokio::test]
+async fn research_notes_about_a_record_are_found_by_its_human_id() {
+    use vitni_app::{
+        AppError, NewResearchNote, NewResearchNoteSubject, create_research_note, list_research_notes_about,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let ada = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let babbage = create_person(
+        &ws,
+        &session,
+        new_person("Charles", "Babbage"),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("person");
+
+    let human_id = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![NewResearchNoteSubject::Person(ada.clone())],
+            title: Some("Same person as the 1865 census entry?".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create research note");
+
+    let about_ada = list_research_notes_about(&ws, NewResearchNoteSubject::Person(ada.clone()))
+        .await
+        .expect("about ada");
+    assert_eq!(about_ada.len(), 1);
+    assert_eq!(about_ada[0].human_id, human_id);
+
+    let about_babbage = list_research_notes_about(&ws, NewResearchNoteSubject::Person(babbage))
+        .await
+        .expect("about babbage");
+    assert!(about_babbage.is_empty(), "a record with no arguments about it is empty");
+
+    let unknown = list_research_notes_about(&ws, NewResearchNoteSubject::Person("I9999".to_owned())).await;
+    let Err(AppError::PersonNotFound(missing)) = unknown else {
+        panic!("an unknown subject id is an error, not an empty list: {unknown:?}");
+    };
+    assert_eq!(missing, "I9999");
+}
+
+#[tokio::test]
+async fn research_note_against_an_unknown_person_is_not_found() {
+    use vitni_app::{NewResearchNote, NewResearchNoteSubject, create_research_note};
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let result = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![NewResearchNoteSubject::Person("I9999".to_owned())],
+            title: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await;
+    assert!(
+        matches!(&result, Err(vitni_app::AppError::PersonNotFound(id)) if id == "I9999"),
+        "an unknown subject human id is rejected: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn import_assert_sex_asserts_plainly_when_no_prior_value() {
+    use vitni_app::{import_assert_sex, show_person};
+    use vitni_core::enums::Sex;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+
+    import_assert_sex(&ws, &session, &human_id, Sex::Female, None, Provenance::default())
+        .await
+        .expect("assert sex");
+
+    let summary = show_person(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(summary.sex, Some(Sex::Female));
+}
+
+#[tokio::test]
+async fn import_assert_sex_is_idempotent_when_the_value_already_matches() {
+    use vitni_app::{assert_sex, import_assert_sex};
+    use vitni_core::enums::Sex;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    assert_sex(&ws, &session, &human_id, Sex::Female, MutationMeta::default())
+        .await
+        .expect("assert sex");
+    let before = change_log_for_person(&ws, &human_id).await.expect("log").len();
+
+    // No file date is needed: an already-matching value is a no-op before any timestamp comparison.
+    import_assert_sex(&ws, &session, &human_id, Sex::Female, None, Provenance::default())
+        .await
+        .expect("re-assert the same value");
+
+    let after = change_log_for_person(&ws, &human_id).await.expect("log").len();
+    assert_eq!(before, after, "re-asserting an already-live value emits nothing");
+}
+
+#[tokio::test]
+async fn import_assert_sex_leaves_the_live_value_when_the_file_date_is_missing() {
+    use vitni_app::{import_assert_sex, show_person};
+    use vitni_core::enums::Sex;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    vitni_app::assert_sex(&ws, &session, &human_id, Sex::Female, MutationMeta::default())
+        .await
+        .expect("assert sex");
+
+    // A missing/unparseable export date is the conservative default: leave the workspace's value
+    // untouched rather than guess (ADR 0029 §3).
+    import_assert_sex(&ws, &session, &human_id, Sex::Male, None, Provenance::default())
+        .await
+        .expect("import assert sex");
+
+    let summary = show_person(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(
+        summary.sex,
+        Some(Sex::Female),
+        "the differing import value is not applied"
+    );
+}
+
+#[tokio::test]
+async fn research_note_names_two_subjects_and_is_found_by_either() {
+    use vitni_app::{
+        NewResearchNote, NewResearchNoteSubject, SubjectRef, create_research_note, list_research_notes_for_subject,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let ada = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person a");
+    let annabella = create_person(
+        &ws,
+        &session,
+        new_person("Annabella", "Byron"),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("person b");
+
+    let human_id = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![
+                NewResearchNoteSubject::Person(ada.clone()),
+                NewResearchNoteSubject::Person(annabella.clone()),
+            ],
+            title: Some("Shared ancestor question".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create research note");
+
+    let subject_a = SubjectRef::Person(person_id(&ws, &ada).await);
+    let subject_b = SubjectRef::Person(person_id(&ws, &annabella).await);
+
+    for subject in [subject_a, subject_b] {
+        let found = list_research_notes_for_subject(&ws, subject)
+            .await
+            .expect("list for subject");
+        assert_eq!(found.len(), 1, "expected one note for {subject:?}");
+        assert_eq!(found[0].human_id, human_id);
+    }
+}
+
+#[tokio::test]
+async fn creating_a_research_note_with_no_subjects_is_rejected() {
+    use vitni_app::{AppError, NewResearchNote, create_research_note};
+    use vitni_core::research_note::ResearchNoteError;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let result = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: Vec::new(),
+            title: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await;
+    assert!(
+        matches!(
+            &result,
+            Err(AppError::ResearchNoteDomain(ResearchNoteError::SubjectRequired))
+        ),
+        "an empty subject set is rejected: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn import_assert_sex_leaves_the_live_value_when_the_file_is_older() {
+    use time::macros::datetime;
+    use vitni_app::{Timestamp, import_assert_sex, show_person};
+    use vitni_core::enums::Sex;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    vitni_app::assert_sex(&ws, &session, &human_id, Sex::Female, MutationMeta::default())
+        .await
+        .expect("assert sex");
+
+    // The live assertion was just made ("now"); a file exported in 2000 is stale relative to it.
+    let stale_file_date = Timestamp::new(datetime!(2000-01-01 00:00:00 UTC));
+    import_assert_sex(
+        &ws,
+        &session,
+        &human_id,
+        Sex::Male,
+        Some(stale_file_date),
+        Provenance::default(),
+    )
+    .await
+    .expect("import assert sex");
+
+    let summary = show_person(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(
+        summary.sex,
+        Some(Sex::Female),
+        "a stale file must not override a newer live value"
+    );
+}
+
+#[tokio::test]
+async fn add_subject_extends_a_note_and_is_idempotent_then_last_removal_is_rejected() {
+    use vitni_app::{
+        AppError, NewResearchNote, NewResearchNoteSubject, add_subject_to_research_note, create_research_note,
+        list_research_notes_for_subject, remove_subject_from_research_note, show_research_note,
+    };
+    use vitni_core::research_note::ResearchNoteError;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let ada = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person a");
+    let annabella = create_person(
+        &ws,
+        &session,
+        new_person("Annabella", "Byron"),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("person b");
+
+    let human_id = create_research_note(
+        &ws,
+        &session,
+        NewResearchNote {
+            human_id: None,
+            subjects: vec![NewResearchNoteSubject::Person(ada.clone())],
+            title: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create research note");
+
+    add_subject_to_research_note(
+        &ws,
+        &session,
+        &human_id,
+        NewResearchNoteSubject::Person(annabella.clone()),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("add subject");
+
+    let summary = show_research_note(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(summary.subjects.len(), 2, "the added subject must be recorded");
+
+    // Idempotent: re-adding the same (resolved) subject is a no-op, not an error.
+    add_subject_to_research_note(
+        &ws,
+        &session,
+        &human_id,
+        NewResearchNoteSubject::Person(annabella.clone()),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("re-adding is a no-op");
+
+    // Remove the added subject: back down to one.
+    remove_subject_from_research_note(
+        &ws,
+        &session,
+        &human_id,
+        NewResearchNoteSubject::Person(annabella.clone()),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("remove subject");
+    let summary = show_research_note(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(summary.subjects.len(), 1, "back down to the original single subject");
+
+    let subject_a = vitni_app::SubjectRef::Person(person_id(&ws, &ada).await);
+    let found = list_research_notes_for_subject(&ws, subject_a)
+        .await
+        .expect("list for subject");
+    assert_eq!(found.len(), 1, "still found by its one remaining subject");
+
+    // Removing the last remaining subject is rejected.
+    let result = remove_subject_from_research_note(
+        &ws,
+        &session,
+        &human_id,
+        NewResearchNoteSubject::Person(ada.clone()),
+        MutationMeta::default(),
+    )
+    .await;
+    assert!(
+        matches!(
+            &result,
+            Err(AppError::ResearchNoteDomain(ResearchNoteError::SubjectRequired))
+        ),
+        "removing the last subject is rejected: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn import_assert_sex_supersedes_the_live_value_when_the_file_is_newer() {
+    use time::macros::datetime;
+    use vitni_app::{Timestamp, import_assert_sex, show_person};
+    use vitni_core::enums::Sex;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    vitni_app::assert_sex(&ws, &session, &human_id, Sex::Female, MutationMeta::default())
+        .await
+        .expect("assert sex");
+
+    // A file exported in 2100 is at least as current as the live assertion just made ("now").
+    let fresher_file_date = Timestamp::new(datetime!(2100-01-01 00:00:00 UTC));
+    import_assert_sex(
+        &ws,
+        &session,
+        &human_id,
+        Sex::Male,
+        Some(fresher_file_date),
+        Provenance::default(),
+    )
+    .await
+    .expect("import assert sex");
+
+    let summary = show_person(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(summary.sex, Some(Sex::Male), "a fresher file supersedes the live value");
+}

@@ -13,7 +13,7 @@ and, in §3, reserved the cqrs-es `Services` slot for **cross-aggregate projecti
 Spike A (`docs/roadmap.md`) is the first slice to add aggregates that reference each other
 (Event→Place, Citation→Source) and so the first to need a read model that those cross-aggregate
 checks can interrogate. The roadmap flags this ADR as gating Spike A, and the sequencing rule is
-that the spike informs the decision: the Person and Family projections already in `genealogy-db`
+that the spike informs the decision: the Person and Family projections already in `vitni-db`
 show the working shape, so this ADR fixes it rather than speculating.
 
 The current read model (Person, Family) is the baseline this ADR generalizes: each `cqrs-es` `View`
@@ -27,7 +27,7 @@ surface those checks read, nothing more.
 
 The decision is **engine-agnostic** — the same schema applies to both backends ADR 0002 selects
 between (SQLite default, Postgres feature-gated). Only the JSON-path *dialect* differs between
-engines, and that difference is isolated inside `genealogy-db`'s query layer, never leaking upward.
+engines, and that difference is isolated inside `vitni-db`'s query layer, never leaking upward.
 
 ## Decision
 
@@ -48,7 +48,7 @@ engines, and that difference is isolated inside `genealogy-db`'s query layer, ne
    view (e.g. `human_id`) extract it with the backend's JSON-path operator — SQLite
    `json_extract(payload, '$.state.<field>')`, Postgres the equivalent `jsonb` path expression. The
    *query surface* (which fields are looked up) is engine-neutral and defined here; the concrete
-   dialect is a `genealogy-db` implementation detail. This covers what Spike A and the breadth
+   dialect is a `vitni-db` implementation detail. This covers what Spike A and the breadth
    phases need (human-id resolution, `HumanId` allocation, listing).
 
 4. **No denormalized columns until a query measurably needs one.** We do **not** add typed columns,

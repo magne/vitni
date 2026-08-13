@@ -1,0 +1,78 @@
+# #301: a media image never appeared anywhere in the GUI. The view code always rendered the `<img>`, so
+# every SSR test passed — the failure was in resolving its `src` and in the image gate ahead of it, and
+# only a real webview loading real bytes off disk can tell a served image from a 404.
+#
+# The fixture seeds **two** Media records, both with **no MIME**: `vitni media` has no `set-mime`, so
+# this is the state every record the CLI creates is in, and both of #301's original causes fire on it —
+# nothing inferred a MIME from the extension (so no `<img>` was rendered at all), and the stored `media/`
+# prefix was added a second time when building the URL (so the one that was rendered 404'd). The two
+# records differ only in the alphabet of their filenames, and both rows are asserted:
+#
+#   * `media/portraits/portrait.png` — ASCII, no spaces.
+#   * `media/02_folketelling/1920 greipstad_bergstøl-asbjørn.png` — `æøå` and a space, which is what
+#     `slugify` and the plugin host's `sanitize_component` actually produce. The webview percent-encodes
+#     those bytes in its request, so an ASCII-only fixture cannot see a `/media/<rel>` URL space that is
+#     not encoded/decoded symmetrically — which is why #301 shipped with every Nordic filename still
+#     blank in the operator's own workspace.
+#
+# The `painted` region is a 200x100 rectangle wholly inside the preview frame, read off this scenario's
+# own shot: the seeded image paints x 995-1312, y 340-656, and its red circle's top arc crosses the
+# region, so a loaded image measures a deviation of ~0.20 there. Both records are the same image, so one
+# calibration covers both rows. Two things the region deliberately avoids, because each would let a
+# broken build pass:
+#
+#   * the frame's **centre**, where both the 📷 placeholder glyph and WebKit's broken-image marker
+#     paint — their own texture would answer for the image;
+#   * a region large enough to be dominated by the `.img-photo` frame's decorative background gradient,
+#     which measures ~0.035 over the frame's middle and is what a first, larger region here passed on
+#     while the image was still 404-ing.
+#
+# Measured on this fixture: 0 with the placeholder (no `<img>` rendered), 0.0035 with a broken `<img>`,
+# 0.20 with the image loaded. `min_deviation` sits 14x above the broken case and 4x below the loaded
+# one.
+#
+# Coordinates are window pixels at 1800x1200, read off this scenario's own shots. The explorer rows are
+# separated at y 71 / 118 / 165, so the two row centres are y 95 and y 141 — `media-list` is the shot
+# those come off, and where a third seeded record would show up.
+description = "Both seeded images' Media previews actually paint, ASCII and Nordic alike (#301)"
+
+[[step]]
+do = "click"
+at = [85, 431]
+label = "rail: Media"
+
+[[step]]
+do = "shot"
+name = "media-list"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: the seeded portrait.png row"
+
+[[step]]
+do = "shot"
+name = "media-detail"
+
+[[step]]
+do = "click"
+at = [300, 141]
+label = "explorer: the seeded 1920 greipstad_bergstøl-asbjørn.png row"
+
+[[step]]
+do = "shot"
+name = "media-detail-nordic"
+
+[[assert]]
+kind = "painted"
+shot = "media-detail"
+region = [1000, 360, 200, 100]
+min_deviation = 0.05
+because = "the Media preview must load the seeded image's bytes, not a placeholder or a broken img (#301)"
+
+[[assert]]
+kind = "painted"
+shot = "media-detail-nordic"
+region = [1000, 360, 200, 100]
+min_deviation = 0.05
+because = "a filename carrying æøå and a space must resolve too — the served URL is percent-encoded per segment and decoded by the asset handler"

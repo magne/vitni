@@ -15,7 +15,7 @@ distribution (roadmap Phase 11, ADR 0014)." This is that ADR.
 What exists today (grounded in `docs/research/plugin-signing-and-trust.md`):
 
 - **Loader:** a single flat directory. `PluginHost::load_by_id(plugins_dir, id)` resolves
-  `plugins_dir/{id}.wasm`; `plugins_dir()` is `$GENEALOGY_PLUGIN_DIR` else `target/plugins`. No layers,
+  `plugins_dir/{id}.wasm`; `plugins_dir()` is `$VITNI_PLUGIN_DIR` else `target/plugins`. No layers,
   no embedded plugins.
 - **Discovery:** `discovery.rs` reads id/role/host-API-version/capabilities **off the compiled
   component itself** — there is no manifest, no signature, no publisher identity. The module comment
@@ -33,14 +33,14 @@ browser extensions (manifest-declared permissions surfaced for approval), Zed (f
 third-party WASM components), and minisign (ed25519 + a one-key trust root). All converge on the shape
 ADR 0007 §9 and ADR 0011's `Grants` already imply.
 
-This ADR sits above `genealogy-app` (ADR 0006), extends the plugin host (ADR 0011), and reuses the
+This ADR sits above `vitni-app` (ADR 0006), extends the plugin host (ADR 0011), and reuses the
 `ConfigStore` scopes (ADR 0015) and the layered-override precedent (ADR 0003/0005). It does not restate
 them.
 
 ## Decision
 
 1. **Signing primitive: ed25519 detached signatures over a `sha2` digest, verified against an embedded
-   trust root.** `ed25519-dalek` is promoted to a direct dependency of `genealogy-plugin-host`. A
+   trust root.** `ed25519-dalek` is promoted to a direct dependency of `vitni-plugin-host`. A
    bundle is signed by computing a canonical SHA-256 digest over its manifest **and** its component
    (so neither can be swapped independently) and producing a 64-byte detached signature. The
    **project's ed25519 public key is embedded in the binary** as the sanctioned trust root. RSA/ECDSA
@@ -48,7 +48,7 @@ them.
 
 2. **The bundle format ADR 0007 §8 deferred.** A plugin is a directory containing:
    - `plugin.toml` — `id`, `version` (the plugin's own semver, distinct from the host-API version),
-     `publisher`, `host_api` (the `genealogy:host-api` version it pins), `role` (bulk-import /
+     `publisher`, `host_api` (the `vitni:host-api` version it pins), `role` (bulk-import /
      bulk-export / assisted-import / ui-panel), and `capabilities` (the **authoritative
      grant-request** the UX surfaces).
    - `plugin.wasm` — the component.
@@ -78,13 +78,13 @@ them.
    discovered across, highest precedence first:
    1. **Workspace** — `<workspace>/plugins/`.
    2. **App-dir** — the shared app plugin dir under the config resolver's `shared_app_dir`
-      (`~/.local/share/genealogy/plugins` / `~/.config/genealogy/plugins`).
+      (`~/.local/share/vitni/plugins` / `~/.config/vitni/plugins`).
    3. **Embedded** — the sanctioned first-party fleet shipped with the binary.
 
    Resolution is **id-keyed**: a higher layer overrides a lower layer for the same id; within a layer,
    higher plugin semver wins. Missing layers are skipped (as `layered_assets` skips absent dirs). This
-   replaces the flat `plugins_dir()` in `genealogy-cli` and `genealogy-ui-dioxus` with one shared
-   resolver in `genealogy-app`.
+   replaces the flat `plugins_dir()` in `vitni-cli` and `vitni-ui-dioxus` with one shared
+   resolver in `vitni-app`.
 
 5. **Capability-grant UX: declared ∩ user-approved, persisted per plugin, surfaced interactively.**
    - The **effective grant** for a plugin is the intersection of the capabilities it **declares** in
@@ -165,8 +165,8 @@ them.
   release secret.
 - New key-management responsibility (release secret, rotation set, revocation-by-release).
 - `ed25519-dalek` becomes a direct dependency (already `cargo deny`-cleared transitively).
-- A trust-store UX and a first-load grant prompt are new UI surfaces (mockup + `genealogy-ui`
-  view-models + `genealogy-ui-dioxus` screens), plus a CLI grant/trust command surface.
+- A trust-store UX and a first-load grant prompt are new UI surfaces (mockup + `vitni-ui`
+  view-models + `vitni-ui-dioxus` screens), plus a CLI grant/trust command surface.
 
 ## Out of scope
 
@@ -196,6 +196,6 @@ them.
   (and stays out of scope here).
 - `docs/research/plugin-signing-and-trust.md` — the ecosystem survey and the in-tree crypto findings
   this decision rests on.
-- `crates/genealogy-plugin-host/src/{lib.rs,discovery.rs,capability.rs}`, `genealogy-i18n/src/lib.rs`
-  (`layered_assets`), `genealogy-app/src/{config.rs,workspace.rs}` — the code this ADR reshapes.
+- `crates/vitni-plugin-host/src/{lib.rs,discovery.rs,capability.rs}`, `vitni-i18n/src/lib.rs`
+  (`layered_assets`), `vitni-app/src/{config.rs,workspace.rs}` — the code this ADR reshapes.
 - `docs/roadmap.md` Phase 11; `docs/mockups/plugin-manager.html`.

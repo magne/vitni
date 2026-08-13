@@ -7,7 +7,7 @@
 
 A `Place` today stores a single centre point — `GeoCoordinates { latitude, longitude }` over
 `Microdegrees` (a scaled `i32`, chosen so the value keeps `Eq` and a byte-stable serialization;
-`crates/genealogy-core/src/geo.rs`), asserted last-writer-wins and **undated** via
+`crates/vitni-core/src/geo.rs`), asserted last-writer-wins and **undated** via
 `PlaceCommand::AssertCoordinates` → `PlaceEventBody::CoordinatesAsserted` (data-model §7,
 `GeoCoordinates` at `docs/data-model.md:262`; Place row at `:217`).
 
@@ -47,7 +47,7 @@ place geometry. The geography *view* and its pluggable map provider are ADR 0025
    `Attributed<Asserted<PlaceGeometry>>` — it carries its `AssertionId`, confidence, and citations,
    and is correctable by `AssertionId` (ADR 0004 §2, ADR 0020/0021) like any other claim.
 
-3. **The projection materialises geometry as WKB behind a SQLite R\*Tree index.** In `genealogy-db`,
+3. **The projection materialises geometry as WKB behind a SQLite R\*Tree index.** In `vitni-db`,
    the place read model stores each geometry as **Well-Known Binary** (compact; the GeoPackage
    geometry encoding) and maintains a **SQLite R\*Tree** virtual table on its bounding box, so a
    geography view can query `places_in_bbox(min_lat, min_lon, max_lat, max_lon)` without scanning
@@ -66,8 +66,8 @@ place geometry. The geography *view* and its pluggable map provider are ADR 0025
    `wkb`, and `geozero` (convert `geo-types` ↔ WKB ↔ GeoJSON, including GeoPackage WKB), with
    `rstar` / `geo` available for in-memory indexing and containment. All are `MIT`/`Apache-2.0`,
    keeping the workspace's `MIT OR Apache-2.0` license clean (`cargo deny check` enforces this).
-   `genealogy-core` depends only on the pure primitive/serde parts; WKB and the index live in
-   `genealogy-db`; GeoJSON lives at the import/export and view boundaries.
+   `vitni-core` depends only on the pure primitive/serde parts; WKB and the index live in
+   `vitni-db`; GeoJSON lives at the import/export and view boundaries.
 
 ## Consequences
 

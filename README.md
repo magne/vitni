@@ -40,19 +40,19 @@ installs itself from `rust-toolchain.toml`.
 
 ```bash
 # Create a workspace, add a person, list what is there
-cargo run -p genealogy-cli -- init demo /path/to/demo-ws
-cargo run -p genealogy-cli -- --workspace demo person create --given Ada --surname Lovelace
-cargo run -p genealogy-cli -- --workspace demo person list
+cargo run -p vitni-cli -- init demo /path/to/demo-ws
+cargo run -p vitni-cli -- --workspace demo person create --given Ada --surname Lovelace
+cargo run -p vitni-cli -- --workspace demo person list
 
 # Build the import/export and UI plugins into target/plugins/
 cargo xtask build-plugins
 
 # Run the desktop GUI against that workspace
-GENEALOGY_WORKSPACE=demo cargo run -p genealogy-ui-dioxus --features desktop
+VITNI_WORKSPACE=demo cargo run -p vitni-ui-dioxus --features desktop
 ```
 
 A workspace is a directory with a `workspace.toml` manifest, referred to by name; global settings
-live in `~/.config/genealogy/config.toml`. The CLI has one subcommand-bearing verb per record type
+live in `~/.config/vitni/config.toml`. The CLI has one subcommand-bearing verb per record type
 (`person`, `family`, `place`, `source`, `citation`, `event`, `note`, `media`, `tag`, `repository`,
 `dna-test`, `dna-match`, `research-note`) plus `init`, `rebuild`, `import`, `export` and `plugin`.
 
@@ -63,7 +63,7 @@ extra system libraries. Platform-by-platform setup is in
 Interface language follows the system locale, or set it explicitly:
 
 ```bash
-LANGUAGE=no cargo run -p genealogy-ui-dioxus --features desktop
+LANGUAGE=no cargo run -p vitni-ui-dioxus --features desktop
 ```
 
 ## Data model
@@ -87,16 +87,16 @@ via `cargo xtask build-plugins`.
 
 | Crate | Role |
 | --- | --- |
-| `genealogy-core` | Domain model and event-sourcing engine. Pure: no I/O, no clock, no user-facing strings. |
-| `genealogy-db` | Persistence: event store, projections, migrations. SQLite by default, Postgres feature-gated. |
-| `genealogy-app` | Coordination: config, workspace lifecycle, the impure inputs (clock, ids, operator) and the use-cases returning frontend-neutral DTOs. |
-| `genealogy-cli` | The `genealogy` binary. |
-| `genealogy-ui` | Framework-agnostic presentation: view-models, navigation intents, Fluent resolution, the plugin-UI vocabulary. |
-| `genealogy-ui-dioxus` | The `genealogy-gui` binary — a Dioxus renderer over `genealogy-ui`. |
-| `genealogy-plugin-host` | Wasmtime component host: capability grants, fuel and memory limits, bundle signature verification. |
-| `genealogy-i18n` | Fluent plumbing: the workspace → shared → embedded override chain and locale fallback. |
-| `genealogy-interchange` | The format-neutral leaf value vocabulary shared by the interchange formats. |
-| `genealogy-gedcom`, `genealogy-gramps-xml`, `genealogy-digitalarkivet` | Pure parse/emit crates behind the corresponding plugins. |
+| `vitni-core` | Domain model and event-sourcing engine. Pure: no I/O, no clock, no user-facing strings. |
+| `vitni-db` | Persistence: event store, projections, migrations. SQLite by default, Postgres feature-gated. |
+| `vitni-app` | Coordination: config, workspace lifecycle, the impure inputs (clock, ids, operator) and the use-cases returning frontend-neutral DTOs. |
+| `vitni-cli` | The `vitni` binary. |
+| `vitni-ui` | Framework-agnostic presentation: view-models, navigation intents, Fluent resolution, the plugin-UI vocabulary. |
+| `vitni-ui-dioxus` | The `vitni-gui` binary — a Dioxus renderer over `vitni-ui`. |
+| `vitni-plugin-host` | Wasmtime component host: capability grants, fuel and memory limits, bundle signature verification. |
+| `vitni-i18n` | Fluent plumbing: the workspace → shared → embedded override chain and locale fallback. |
+| `vitni-interchange` | The format-neutral leaf value vocabulary shared by the interchange formats. |
+| `vitni-gedcom`, `vitni-gramps-xml`, `vitni-digitalarkivet` | Pure parse/emit crates behind the corresponding plugins. |
 | `xtask` | Repository task runner (`cargo xtask …`), not shipped. |
 
 ## Development
@@ -125,8 +125,8 @@ Platform setup, the two GUI test layers and the rest of the conventions are in
 
 Split by layer:
 
-- The **interchange crates** — `genealogy-interchange`, `genealogy-gedcom`,
-  `genealogy-gramps-xml`, `genealogy-i18n` and the bundled plugin sources — are
+- The **interchange crates** — `vitni-interchange`, `vitni-gedcom`,
+  `vitni-gramps-xml`, `vitni-i18n` and the bundled plugin sources — are
   **`MIT OR Apache-2.0`**, so anything can reuse them, including a GPLv2-only project.
 - The **application** is **`AGPL-3.0-or-later`**, with an additional permission under section 7: a
   WebAssembly component that talks to the host only through the versioned plugin interface is not

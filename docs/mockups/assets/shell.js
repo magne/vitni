@@ -9,7 +9,7 @@
  * (index, design-system, shortcuts) omit MOCK and just get the theme bootstrap.
  *
  * This is a mockup harness only — the real chrome + shortcut dispatcher are RSX
- * in crates/genealogy-ui-dioxus (plan PR1/PR2).
+ * in crates/vitni-ui-dioxus (plan PR1/PR2).
  */
 (function () {
   "use strict";
@@ -98,11 +98,11 @@
 
   function applyTheme(t) {
     document.documentElement.setAttribute("data-theme", t);
-    try { localStorage.setItem("genealogy-mockup-theme", t); } catch (e) {}
+    try { localStorage.setItem("vitni-mockup-theme", t); } catch (e) {}
   }
   function initTheme() {
     var t = null;
-    try { t = localStorage.getItem("genealogy-mockup-theme"); } catch (e) {}
+    try { t = localStorage.getItem("vitni-mockup-theme"); } catch (e) {}
     if (!t) {
       t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
     }
@@ -124,7 +124,7 @@
   function buildRail(active) {
     var rail = el("aside", "rail");
     attr(rail, { role: "navigation", "aria-label": "Primary" });
-    rail.appendChild(el("div", "brand", '<span class="logo" aria-hidden="true">G</span><span>Genealogy</span>'));
+    rail.appendChild(el("div", "brand", '<span class="logo" aria-hidden="true">V</span><span>Vitni</span>'));
     var nav = el("nav");
     nav.appendChild(attr(el("div", "nav-group-label", "Entities"), { id: "grp-entities" }));
     var entWrap = attr(el("div"), { "aria-label": "Entities" });

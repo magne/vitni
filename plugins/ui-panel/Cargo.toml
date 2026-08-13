@@ -1,12 +1,12 @@
 [package]
-name = "genealogy-ui-panel-plugin"
+name = "vitni-ui-panel-plugin"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
 # Plugin-UI demo component (ADR 0012, ADR 0022). Thin wasm glue: returns a panel description as a
-# JSON string matching the `genealogy-ui` vocabulary schema, and handles submitted actions. The
-# plugin does not link `genealogy-ui` — the contract is the documented JSON shape, so a non-Rust
+# JSON string matching the `vitni-ui` vocabulary schema, and handles submitted actions. The
+# plugin does not link `vitni-ui` — the contract is the documented JSON shape, so a non-Rust
 # plugin contributes UI the same way. Built for `wasm32-wasip2` via `cargo xtask build-plugins`;
 # excluded from the workspace, so it declares its own dependencies.
 
@@ -14,9 +14,9 @@ publish = false
 crate-type = ["cdylib"]
 
 # ADR 0014 §2 bundle manifest (see `build-plugins`): declared role and capability requests.
-[package.metadata.genealogy-plugin]
+[package.metadata.vitni-plugin]
 role = "ui-panel"
-host_api = "0.21.0"
+host_api = "0.22.0"
 capabilities = ["log", "commands"]
 
 [dependencies]

@@ -8,8 +8,8 @@
 ## Context
 
 A `Place` already stores a single point coordinate (`GeoCoordinates { latitude, longitude }`,
-`crates/genealogy-core/src/geo.rs`), but the UI only shows it as two text fields
-(`crates/genealogy-ui-dioxus/src/screens/place.rs`, `place_coordinate_fields`). Users cannot *see*
+`crates/vitni-core/src/geo.rs`), but the UI only shows it as two text fields
+(`crates/vitni-ui-dioxus/src/screens/place.rs`, `place_coordinate_fields`). Users cannot *see*
 where a place is. This MVP adds the smallest useful visual: a **read-only map with one marker** at the
 existing coordinate. It ships value early and de-risks embedding a JS map library in the WebKitGTK
 webview before the much larger geography phase ([`places-geography-temporal.md`](places-geography-temporal.md))
@@ -34,11 +34,11 @@ below, not gated.
   (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`), with the required
   `© OpenStreetMap contributors` attribution always visible and a descriptive `User-Agent`
   (OSM tile policy). No provider selection — that is Phase 9.
-- **View-model (framework-free, `genealogy-ui`):** add a small `MapPointVm { lat, lon, label }`
-  option to `PlaceDetail` (`crates/genealogy-ui/src/view_model/place.rs`), derived from the existing
+- **View-model (framework-free, `vitni-ui`):** add a small `MapPointVm { lat, lon, label }`
+  option to `PlaceDetail` (`crates/vitni-ui/src/view_model/place.rs`), derived from the existing
   `coordinates` the DTO already carries. No framework types (ADR 0008).
-- **Renderer (`genealogy-ui-dioxus`):** a `PlaceMap` component beside `place_coordinate_fields`
-  (`crates/genealogy-ui-dioxus/src/screens/place.rs`) that mounts Leaflet in the webview and drops one
+- **Renderer (`vitni-ui-dioxus`):** a `PlaceMap` component beside `place_coordinate_fields`
+  (`crates/vitni-ui-dioxus/src/screens/place.rs`) that mounts Leaflet in the webview and drops one
   marker; renders the empty state when `MapPointVm` is `None`. Leaflet's JS/CSS are bundled as local
   assets (mirroring how the mockup skin is embedded via `include_str!`) so the app does not fetch the
   library over the network — only the tiles.
@@ -47,10 +47,10 @@ below, not gated.
 
 ## Files
 
-- `crates/genealogy-ui/src/view_model/place.rs` — add `MapPointVm`, populate from `coordinates`.
-- `crates/genealogy-ui-dioxus/src/screens/place.rs` — `PlaceMap` component + a "Map" tab/card.
-- `crates/genealogy-ui-dioxus/src/assets/` — bundled Leaflet JS + CSS (local, offline-safe).
-- `crates/genealogy-ui/i18n/{en,no}/genealogy-ui.ftl` — new message IDs (keep the `no` catalogue
+- `crates/vitni-ui/src/view_model/place.rs` — add `MapPointVm`, populate from `coordinates`.
+- `crates/vitni-ui-dioxus/src/screens/place.rs` — `PlaceMap` component + a "Map" tab/card.
+- `crates/vitni-ui-dioxus/src/assets/` — bundled Leaflet JS + CSS (local, offline-safe).
+- `crates/vitni-ui/i18n/{en,no}/vitni-ui.ftl` — new message IDs (keep the `no` catalogue
   complete; `cargo xtask i18n-check`).
 
 ## Privacy / network note
@@ -62,9 +62,9 @@ offline/opt-out control and provider choice are Phase 9 (presentation-config, af
 
 ## Verification
 
-- `cargo run -p genealogy-ui-dioxus`; open a place **with** coordinates → marker renders at the point;
+- `cargo run -p vitni-ui-dioxus`; open a place **with** coordinates → marker renders at the point;
   open a place **without** → empty state.
 - View-model unit/SSR test that `MapPointVm` is `Some` iff `coordinates` is set (mirror existing
-  `genealogy-ui-dioxus/tests` patterns).
+  `vitni-ui-dioxus/tests` patterns).
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo xtask i18n-check`,
   `cargo xtask css-check` all clean.

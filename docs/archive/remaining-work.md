@@ -23,7 +23,7 @@ notes.
 ### Round-trip / read surface
 
 - `RichText` **translator** GEDCOM/Gramps round-trip (display is already backed; no standard tag).
-- `Address.original_text` round-trip — the core field exists (`genealogy-core` `address.rs`); the
+- `Address.original_text` round-trip — the core field exists (`vitni-core` `address.rs`); the
   GEDCOM/Gramps format crates don't carry it yet.
 - `ExternalId` read surface — the `AddExternalId`/`add_external_id` verb exists but is **import-only**
   (only `import.rs` calls it); no interactive CLI/UI caller.
@@ -63,12 +63,12 @@ Its deferred/decision residue lives in [`docs/issues.md`](../issues.md).
 - **List DOM virtualization.** The lightweight-row use-cases (`list_person_rows`/`list_family_rows`/
   `list_event_rows`) removed the heavy `Lookups`/`FamilyLookups`/`EventLookups` join cascade, so list
   data now loads cheaply. Still deferred: `ListPane`
-  (`crates/genealogy-ui-dioxus/src/master_detail.rs`) mounts every row and a `MountedEvent` per row.
+  (`crates/vitni-ui-dioxus/src/master_detail.rs`) mounts every row and a `MountedEvent` per row.
   A follow-up should render only a scrolled window with a `store.count`-sized spacer and make the
   roving-focus `nodes` bookkeeping window-aware. If server-side windowing is chosen instead of the
   current client-side search/sort over the full cached row set, add `list_view_page(table, offset,
   limit)` (+ Postgres mirror) and a generated column + index on `$.state.human_id` in
-  `crates/genealogy-db`. *(Now tracked in [`docs/issues.md`](../issues.md).)*
+  `crates/vitni-db`. *(Now tracked in [`docs/issues.md`](../issues.md).)*
 
 ## Phase 4 import/export — remaining (tracked in roadmap)
 

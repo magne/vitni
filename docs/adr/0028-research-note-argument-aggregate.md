@@ -32,8 +32,8 @@ research-task/log thread is a materially different, orthogonal feature (a to-do,
 is deferred (§Out of scope).
 
 Every one of the twelve existing aggregates follows the same template (command/event/state/view/decide/
-error) and is wired through three x-macro registries — `genealogy-app::aggregates::for_each_aggregate!`
-/ `for_each_human_id_aggregate!`, the matching `genealogy-db` registry rows, and per-aggregate CLI
+error) and is wired through three x-macro registries — `vitni-app::aggregates::for_each_aggregate!`
+/ `for_each_human_id_aggregate!`, the matching `vitni-db` registry rows, and per-aggregate CLI
 `.ftl` fragments (issue #38) — so adding a thirteenth aggregate is a template exercise, not new
 architecture.
 
@@ -88,15 +88,15 @@ architecture.
    its subjects; "which arguments exist about this Person" is answered by a reverse query
    (`list_research_notes_for_subject`) over the `ResearchNote` projection — the same reverse-index
    shape ADR 0020's consequences already establish ("the reverse citation index... covers facts").
-   Because `subjects` is now a set, the reverse index is a JSON-array walk (`genealogy-db`'s
+   Because `subjects` is now a set, the reverse index is a JSON-array walk (`vitni-db`'s
    `json_each`/`json_array_elements` over `$.state.subjects`, the same array-walk shape as the
    `ExternalId` re-import lookup) rather than a single-value match, so one note materializes under
    every subject it names. This keeps the change local to the new aggregate: **zero** event/state
    changes to Person, Family, Event, or Place.
 
 6. **Wiring is mechanical, through the existing registries.** A new row in `for_each_aggregate!` /
-   `for_each_human_id_aggregate!` (`genealogy-app/src/aggregates.rs`), the matching `genealogy-db`
-   registry rows, `genealogy-app/src/lib.rs` re-exports (the DTO/use-case surface every frontend
+   `for_each_human_id_aggregate!` (`vitni-app/src/aggregates.rs`), the matching `vitni-db`
+   registry rows, `vitni-app/src/lib.rs` re-exports (the DTO/use-case surface every frontend
    consumes), and a new CLI `.ftl` fragment (`research_note.ftl`) plus `research-note` subcommands in
    `for_each_cli_command!`. No change to the registry macros themselves.
 
@@ -164,5 +164,5 @@ architecture.
   envelope reuses unchanged.
 - `docs/research/proof-argument-modelling.md` — the GEDCOM X / GPS / RootsMagic / Evidentia findings
   this scoping decision rests on.
-- Issue #38 / the x-macro registry pattern (`genealogy-app/src/aggregates.rs`,
-  `genealogy-db/src/registry.rs`) — the mechanical wiring path a 13th aggregate follows.
+- Issue #38 / the x-macro registry pattern (`vitni-app/src/aggregates.rs`,
+  `vitni-db/src/registry.rs`) — the mechanical wiring path a 13th aggregate follows.

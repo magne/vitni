@@ -48,7 +48,7 @@ pub struct CargoManifest {
 }
 
 /// A `Cargo.toml` `[package]` table: the name (drives the artifact file name), the plugin's own
-/// semver (goes into the bundle manifest), and the optional `[package.metadata.genealogy-plugin]`
+/// semver (goes into the bundle manifest), and the optional `[package.metadata.vitni-plugin]`
 /// bundle-manifest table (ADR 0014 §2).
 #[derive(Deserialize)]
 pub struct Package {
@@ -61,11 +61,11 @@ pub struct Package {
 /// The `[package.metadata]` table, carrying the plugin bundle-manifest declaration.
 #[derive(Deserialize)]
 pub struct PackageMetadata {
-    #[serde(rename = "genealogy-plugin")]
-    pub genealogy_plugin: Option<PluginMetadata>,
+    #[serde(rename = "vitni-plugin")]
+    pub vitni_plugin: Option<PluginMetadata>,
 }
 
-/// The `[package.metadata.genealogy-plugin]` table (ADR 0014 §2): the declared role, the host-API
+/// The `[package.metadata.vitni-plugin]` table (ADR 0014 §2): the declared role, the host-API
 /// version the plugin pins, its capability requests, and an optional publisher identity.
 #[derive(Deserialize)]
 pub struct PluginMetadata {

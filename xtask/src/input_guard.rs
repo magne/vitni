@@ -1,7 +1,7 @@
 //! `input-guard` — guards the shared-input-primitive convention (the "global keys fire inside text
 //! controls" fix): every form control in the renderer must compose the guarded behavior cores
 //! ([`TextInput`]/[`SelectInput`]), so the keydown typing guard is wired in exactly one place. This
-//! lint scans `crates/genealogy-ui-dioxus/src/**/*.rs` and flags any RSX `input {` / `textarea {` /
+//! lint scans `crates/vitni-ui-dioxus/src/**/*.rs` and flags any RSX `input {` / `textarea {` /
 //! `select {` element outside the two allowlisted primitive files, reporting `file` + line.
 //! Diagnostics are collected per file; the command only exits non-zero after scanning everything.
 //!
@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 
 /// Directory holding the renderer source.
-const SRC_DIR: &str = "crates/genealogy-ui-dioxus/src";
+const SRC_DIR: &str = "crates/vitni-ui-dioxus/src";
 /// The behavior-core files allowed to render raw form elements.
 const ALLOWLISTED_FILES: [&str; 2] = ["text_input.rs", "select_input.rs"];
 /// Input `r#type` values that do not capture typing and so are allowed anywhere.

@@ -5,11 +5,11 @@
 
 ## Context
 
-The shippable surface today is the `genealogy` CLI over `genealogy-app` (ADR 0006). Whole
+The shippable surface today is the `vitni` CLI over `vitni-app` (ADR 0006). Whole
 categories of feature — import and export (GEDCOM first), reports, analysis, integrity
 checking and repair, integration with online archives and search engines — should be added
 and shipped *independently* of the core, by us and by third parties, without forcing changes
-to `genealogy-core` or risking its invariants.
+to `vitni-core` or risking its invariants.
 
 Third-party extension code is untrusted, so it must run in a **sandbox** and reach the rest
 of the system only through capabilities it is explicitly granted. It must also respect the
@@ -37,33 +37,33 @@ with interfaces defined in **WIT**.
    contract. Host-API evolution is additive wherever possible.
 
 3. **Stable plugin identity and version-based override.** Every plugin carries a **stable id**
-   (publisher-namespaced, e.g. `genealogy.gedcom-import`) plus a semver **version**. The id —
+   (publisher-namespaced, e.g. `vitni.gedcom-import`) plus a semver **version**. The id —
    not the file path or load order — is the plugin's identity. When the same id appears in more
    than one source, the host resolves a single active plugin, letting a newer version override
    an older one. This is what lets a bundled plugin be updated out-of-band (ship a newer
-   `genealogy.gedcom-import` without a new app build).
+   `vitni.gedcom-import` without a new app build).
 
 4. **Plugins load from three layered sources** (mirroring the ADR 0003 / ADR 0005 override
    order, highest precedence first):
    - **workspace** — `<workspace-dir>/plugins/` (per-dataset extensions/overrides),
-   - **app-wide** — `~/.config/genealogy/plugins/` (user-installed, all workspaces),
+   - **app-wide** — `~/.config/vitni/plugins/` (user-installed, all workspaces),
    - **embedded** — built-in plugins shipped with the binary (the base set, e.g. GEDCOM).
 
    Resolution is by stable id: a higher layer overrides a lower one for the same id (normally
    to supply a newer version), exactly as the i18n `AssetsMultiplexor` layers catalogues.
 
-5. **The plugin host is a new impure crate above the app layer.** A `genealogy-plugin-host`
+5. **The plugin host is a new impure crate above the app layer.** A `vitni-plugin-host`
    crate owns Wasmtime, component loading/instantiation, capability wiring, and bundle
-   handling. It sits *above* `genealogy-app` because plugins read views (via the
-   `genealogy-db` `Store`) and send commands (via `genealogy-app` use-cases + `Session`).
-   `genealogy-core` never links Wasmtime and stays pure; frontends drive plugins through the
+   handling. It sits *above* `vitni-app` because plugins read views (via the
+   `vitni-db` `Store`) and send commands (via `vitni-app` use-cases + `Session`).
+   `vitni-core` never links Wasmtime and stays pure; frontends drive plugins through the
    host.
 
 6. **Capabilities are deny-by-default.** A plugin can do nothing outside its sandbox until
    granted. Host interfaces a plugin may request, each granted explicitly:
    - **query** — read views/aggregates, returning the same frontend-neutral DTOs use-cases
      return (no `PersonView`/cqrs-es/sqlx leakage).
-   - **commands** — submit domain commands through `genealogy-app` use-cases.
+   - **commands** — submit domain commands through `vitni-app` use-cases.
    - **files** — a WASI Preview 2 *preopened directory* handle, scoped to a single
      workspace-relative directory (e.g. `exports/`, `media/`); the handle confers access to
      that directory and nothing else.
@@ -94,7 +94,7 @@ with interfaces defined in **WIT**.
 10. **Plugin localization reuses ADR 0003.** A plugin's `.ftl` files are layered into the
     existing `i18n-embed` `AssetsMultiplexor` as a plugin-scoped layer, so plugin strings
     localize through the same Fluent path as the app, honoring the workspace > shared-app >
-    embedded override order. `genealogy-core` remains string-free.
+    embedded override order. `vitni-core` remains string-free.
 
 11. **Base plugins ship on the same path as third-party plugins.** GEDCOM import/export (and
     future bundled reports/analysis) are WASM components loaded through this system, not native
@@ -158,7 +158,7 @@ with interfaces defined in **WIT**.
   `EventContext` provenance and the `AgentKind::Software` operator slot.
 - ADR 0002 — engine-neutral `Store`; self-contained, versioned events.
 - ADR 0003 — Fluent / `i18n-embed` `AssetsMultiplexor` layering reused for plugin catalogues.
-- ADR 0005 / 0006 — workspace directories and the `genealogy-app` use-cases + `Session` the
+- ADR 0005 / 0006 — workspace directories and the `vitni-app` use-cases + `Session` the
   host drives.
 - Wasmtime Component Model embedding (`wasmtime::component`, `bindgen!`); WASI Preview 2
   capability model (preopened dirs, `wasi:http`).

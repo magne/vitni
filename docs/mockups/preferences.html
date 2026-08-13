@@ -160,7 +160,7 @@
         <div class="field-label" style="margin:12px 0 6px">Where each level's wording comes from</div>
         <div class="stack">
           <div class="fact-row card" style="margin:0"><span class="badge">wins</span><span class="grow">Very low — Workspace — workspace.toml</span></div>
-          <div class="fact-row card" style="margin:0"><span class="badge">fallback</span><span class="grow">Low — Shared app — ~/.config/genealogy/config.toml</span></div>
+          <div class="fact-row card" style="margin:0"><span class="badge">fallback</span><span class="grow">Low — Shared app — ~/.config/vitni/config.toml</span></div>
           <div class="fact-row card" style="margin:0"><span class="badge">fallback</span><span class="grow">Normal — Embedded — built-in baseline</span></div>
           <div class="fact-row card" style="margin:0"><span class="badge">fallback</span><span class="grow">High — Embedded — built-in baseline</span></div>
           <div class="fact-row card" style="margin:0"><span class="badge">wins</span><span class="grow">Very high — Workspace — workspace.toml</span></div>
@@ -217,7 +217,7 @@
           </div>
           <div class="fact-row card" style="margin:0">
             <span class="badge">fallback</span>
-            <span class="grow muted">Shared app <span class="mono">[workspace-defaults]</span> — <span class="mono">~/.config/genealogy/config.toml</span> (live fallback)</span>
+            <span class="grow muted">Shared app <span class="mono">[workspace-defaults]</span> — <span class="mono">~/.config/vitni/config.toml</span> (live fallback)</span>
             <span class="conf" data-level="normal"><span class="dot"></span>Normal</span>
           </div>
           <div class="fact-row card" style="margin:0">
@@ -279,7 +279,7 @@
         <h3>Maintenance</h3>
         <div class="muted" style="font-size:var(--fs-sm);margin-bottom:12px">
           Rebuild every projection from the event log. Projections are derived state, not the source
-          of truth, so this never loses data — use it after a <span class="mono">genealogy-db</span>
+          of truth, so this never loses data — use it after a <span class="mono">vitni-db</span>
           schema change, or if a projection looks out of sync with the log.
         </div>
         <div class="row-actions"><button class="btn">Rebuild projections</button></div>

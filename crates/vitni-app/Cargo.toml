@@ -1,0 +1,36 @@
+[package]
+name = "vitni-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["sqlite"]
+sqlite = ["vitni-db/sqlite"]
+postgres = ["vitni-db/postgres"]
+
+[dependencies]
+vitni-core = { workspace = true }
+vitni-db = { workspace = true }
+uuid = { workspace = true }
+time = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+directories = { workspace = true }
+whoami = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+unic-langid = { workspace = true, features = ["serde"] }
+# The Google Map Tiles adapter (ADR 0033): session/tile/viewport-copyright requests. Map network I/O
+# stays in the app layer (ADR 0008) — the renderer never fetches.
+reqwest = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

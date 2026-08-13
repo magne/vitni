@@ -1,10 +1,10 @@
-# Genealogy data model
+# Vitni data model
 
 - **Status:** Draft
 - **Date:** 2026-06-17
-- **Audience:** anyone implementing `genealogy-core` (aggregates, events, projections)
+- **Audience:** anyone implementing `vitni-core` (aggregates, events, projections)
 
-This document defines the domain data model for the genealogy workspace: the entities and value
+This document defines the domain data model for the Vitni workspace: the entities and value
 objects we store, the weaknesses we inherited from our reference model and what we decided to do
 about them, and the mapping of all of it onto the event-sourcing architecture committed in
 [ADR 0001](adr/0001-use-event-sourcing-for-the-domain-core.md) and
@@ -308,7 +308,7 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
   (CommonMark); `text/plain` and `text/html` are accepted so imports round-trip losslessly. Replaces
   Gramps' offset-range `StyledText`: Markdown-as-text is more expressive, diffs cleanly, is
   human- and AI-readable, and needs no fragile span bookkeeping (YAGNI). Typed links to aggregates
-  use a documented URI scheme (`x-genealogy:person/<uuid>`) — the one capability Gramps' styled
+  use a documented URI scheme (`x-vitni:person/<uuid>`) — the one capability Gramps' styled
   links had. Mirrors GEDCOM 7 `NOTE`(text + `MIME` + `LANG`), and carries a `translations` list —
   the same content in other languages (GEDCOM `NOTE`.`TRAN`), parallel to
   `PersonName.transliterations`. See §14.
@@ -566,7 +566,7 @@ consistent.
 
 Several services expose genealogical data, some with APIs: FamilySearch (a GEDCOM X REST API),
 MyHeritage, Geni, Ancestry (largely GEDCOM export plus record hints), and Digitalarkivet (the
-Norwegian National Archives — the target of `genealogy-import`). They affect the model in three
+Norwegian National Archives — the target of `vitni-import`). They affect the model in three
 small, consistent ways — none of which disturbs the layering, because the model was already built
 around evidence and provenance.
 

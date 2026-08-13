@@ -32,8 +32,8 @@ tracking; this plan tracks only its own PRs.
   with mermaid-cli using a `--no-sandbox` puppeteer config), and a
   `Status: implemented in PR #NNN` line on the closed finding in `data-model-review.md`.
 - **Registry note:** participation and child links ride their owning aggregate's rows in the three
-  `for_each_*!` registries (`genealogy-app/src/aggregates.rs`, `genealogy-db/src/registry.rs`,
-  `genealogy-cli/src/main.rs`). No PR here adds an aggregate, so no registry rows are added;
+  `for_each_*!` registries (`vitni-app/src/aggregates.rs`, `vitni-db/src/registry.rs`,
+  `vitni-cli/src/main.rs`). No PR here adds an aggregate, so no registry rows are added;
   only PR-A2 touches registry-adjacent wiring (the event resolver).
 
 ## Blast radius (traced, not guessed)
@@ -41,13 +41,13 @@ tracking; this plan tracks only its own PRs.
 Findings that turned out **smaller** than the review assumed:
 
 - **Importers already write person-side participation.** `plugin-host/src/state.rs:347
-  add_event_participant()` calls `genealogy_app::assert_participation` (person aggregate), and
+  add_event_participant()` calls `vitni_app::assert_participation` (person aggregate), and
   both import plugins go through it. No importer change for finding 1.
 - **Exporters already walk `person.participations`** to reconstruct INDI/FAM events
   (`plugins/gedcom-export/src/lib.rs:47–56, 157`; `plugins/gramps-export/src/lib.rs:48–52`).
   Event-side removal does not touch export logic.
 - **`Attribute.citations` is a dead field** — constructed empty at all four production sites
-  (`genealogy-app/src/{citation.rs:364, source.rs:343, media.rs:290}`, one core test), read
+  (`vitni-app/src/{citation.rs:364, source.rs:343, media.rs:290}`, one core test), read
   nowhere, absent from WIT. Removal is trivial.
 - **`Citation.created_by`/`created_at` are already fold-derived from the envelope**
   (`citation/decide.rs:171–172` read `event.context`), so they cannot diverge; finding 7 reduces
@@ -70,8 +70,8 @@ Key consumer sets per finding (full traces in the PR items):
 
 ### PR-A1 — ADR 0019 + participation payload substance (person side)
 
-Findings: 3 (and the payload half of 1). Crates: `genealogy-core`, `genealogy-app`,
-`genealogy-ui`, `genealogy-ui-dioxus`, `genealogy-cli`. Additive — event side untouched.
+Findings: 3 (and the payload half of 1). Crates: `vitni-core`, `vitni-app`,
+`vitni-ui`, `vitni-ui-dioxus`, `vitni-cli`. Additive — event side untouched.
 
 - [x] Write `docs/adr/0019-participation-ownership-and-payload.md`: person-owned participation
       (review option a); event participant lists become projections; payload gains substance.
@@ -85,10 +85,10 @@ Findings: 3 (and the payload half of 1). Crates: `genealogy-core`, `genealogy-ap
       (`Asserted`-shaped: confidence + citations denormalized from the envelope — person side
       reaches parity with the event side it will replace).
 - [x] App: extend `assert_participation` (`person.rs:415`) and `ParticipationRef`; re-export any
-      new types from `genealogy-app/src/lib.rs` (the pub-use surface).
+      new types from `vitni-app/src/lib.rs` (the pub-use surface).
 - [x] UI: extend `PersonEdit::AssertParticipation` intent, `participation_vm`, and the dioxus
       `ParticipationForm` (age/notes/attributes inputs); new Fluent keys in the per-module
-      fragments (never the generated `genealogy-cli.ftl`).
+      fragments (never the generated `vitni-cli.ftl`).
 - [x] CLI: extend `person assert-participation` args.
 - [x] Tests: decide/fold round-trip for the new payload; form dispatch; old-shape events are gone
       (no legacy decode path — prove new events decode, delete fixtures using the old shape).
@@ -97,8 +97,8 @@ Findings: 3 (and the payload half of 1). Crates: `genealogy-core`, `genealogy-ap
 
 ### PR-A2 — retire the event-side participation and the read-merge bridge
 
-Finding: 1. Depends on: PR-A1 (parity of the person-side rows). Crates: `genealogy-core`,
-`genealogy-db`, `genealogy-app`, `genealogy-ui`, `genealogy-ui-dioxus`, `genealogy-cli`.
+Finding: 1. Depends on: PR-A1 (parity of the person-side rows). Crates: `vitni-core`,
+`vitni-db`, `vitni-app`, `vitni-ui`, `vitni-ui-dioxus`, `vitni-cli`.
 
 - [x] Core: remove `AddParticipantRole`/`RemoveParticipantRole` commands,
       `ParticipantRoleAdded/Removed` events, `EventState.participants`, `EventParticipant`, and
@@ -123,12 +123,12 @@ Finding: 1. Depends on: PR-A1 (parity of the person-side rows). Crates: `genealo
 ### PR-A3 — participation over the plugin boundary + AGE/ASSO round-trip
 
 Finding: 3 (round-trip half; closes the data-model §17 witness gap). Depends on: PR-A1.
-Crates: `genealogy-plugin-host`, `plugins/*`, `genealogy-gedcom`.
+Crates: `vitni-plugin-host`, `plugins/*`, `vitni-gedcom`.
 
 - [x] WIT: extend `record participation` (`host.wit:124`) with age/attributes/notes; bump the
       host-api version label (`@0.13.0`); host mapping in `state.rs` (`add_event_participant` keeps
       writing the person aggregate — now takes a `participation-input` record). `Age` lives in
-      `genealogy-interchange` with the shared AGE grammar (`parse_age`/`age_value`).
+      `vitni-interchange` with the shared AGE grammar (`parse_age`/`age_value`).
 - [x] Import: GEDCOM `AGE` (individual events) and `HUSB`/`WIFE` `AGE` (family events) → the
       participation `age`; event-level `ASSO` (`ROLE` + citations→envelope + notes) → a participation
       with role and note/citation payload — the §17 "event-level witnesses" gap. Gramps eventref
@@ -138,7 +138,7 @@ Crates: `genealogy-plugin-host`, `plugins/*`, `genealogy-gedcom`.
       (INDI `2 AGE`, family `HUSB`/`WIFE` `3 AGE`) where the model has it; Gramps person-side
       `<eventref role=…>` with `Age`/attributes/noteref for payload-carrying participations.
 - [x] Tests: gedcom/gramps round-trip fixtures with witnesses and ages (fixtures under
-      `genealogy-import` are verbatim captures — added new fixtures, never reformatted existing).
+      `vitni-import` are verbatim captures — added new fixtures, never reformatted existing).
 - [x] Docs: data-model §17 (moved witnesses/AGE to the round-trip list; documented the new
       GEDCOM-lossy gaps — attributes, primary-participation notes, import-only witness citations);
       review finding 3 status (fully closed).
@@ -147,8 +147,8 @@ Crates: `genealogy-plugin-host`, `plugins/*`, `genealogy-gedcom`.
 
 ### PR-B1 — ADR 0020 + envelope-only evidence citations
 
-Finding: 2 (+ the dead-field removal). Independent of Phase A. Crates: `genealogy-core`,
-`genealogy-app`, `genealogy-ui`.
+Finding: 2 (+ the dead-field removal). Independent of Phase A. Crates: `vitni-core`,
+`vitni-app`, `vitni-ui`.
 
 - [x] Write `docs/adr/0020-evidence-citations-live-in-the-envelope.md`: `EventContext.citations`
       is the sole evidence channel for a claim; `MediaRef.citations` retained (per-use context,
@@ -174,8 +174,8 @@ Finding: 2 (+ the dead-field removal). Independent of Phase A. Crates: `genealog
 
 ### PR-C1 — ADR 0021 + per-(child, parent) relationship assertions
 
-Finding: 4. Independent. Crates: `genealogy-core`, `genealogy-app`, `genealogy-ui`,
-`genealogy-ui-dioxus`, `genealogy-plugin-host`, `plugins/*`.
+Finding: 4. Independent. Crates: `vitni-core`, `vitni-app`, `vitni-ui`,
+`vitni-ui-dioxus`, `vitni-plugin-host`, `plugins/*`.
 
 - [x] Write `docs/adr/0021-assertion-granularity-and-envelope-cleanups.md` covering findings
       4/5/6/7/8 (one small ADR, per the review's grouping); this PR implements the finding-4 part.
@@ -198,8 +198,8 @@ Finding: 4. Independent. Crates: `genealogy-core`, `genealogy-app`, `genealogy-u
 ### PR-C2 — optional confidence on the envelope
 
 Finding: 8. Independent (do before PR-C3 so the `Asserted` shape settles once). Crates:
-`genealogy-core`, `genealogy-app`, `genealogy-ui`, `genealogy-ui-dioxus`, `genealogy-cli`,
-`genealogy-db` (test fixtures).
+`vitni-core`, `vitni-app`, `vitni-ui`, `vitni-ui-dioxus`, `vitni-cli`,
+`vitni-db` (test fixtures).
 
 - [x] Core: `EventContext.confidence: Option<Confidence>` with `#[serde(default)]`
       (`provenance.rs:148`); `Asserted<T>.confidence` (and the bespoke structs until PR-C3)
@@ -217,7 +217,7 @@ Finding: 8. Independent (do before PR-C3 so the `Asserted` shape settles once). 
 ### PR-C3 — uniform `Asserted<T>` projections + typed creation stamp
 
 Findings: 6, 7. Depends on: PR-A1/A2 (participation rows final), PR-B1 (`AssertedFact` shape),
-PR-C2 (Option confidence). Crates: `genealogy-core`, `genealogy-app`, `genealogy-ui` (+ dioxus).
+PR-C2 (Option confidence). Crates: `vitni-core`, `vitni-app`, `vitni-ui` (+ dioxus).
 
 - [x] Core: replace bespoke `AssertedName`/`AssertedFact`/`AssertedAssociation`/`AssertedPartner`/
       `AssertedChild`/`AssertedFamilyEvent` with generic `Asserted<T>` (the `assertions.rs:38` doc
@@ -240,8 +240,8 @@ PR-C2 (Option confidence). Crates: `genealogy-core`, `genealogy-app`, `genealogy
 
 ### PR-C4 — Fact/Event rule + `FactType` trim
 
-Finding: 5. Depends on: PR-B1 (Fact shape settled). Crates: `genealogy-core`,
-`genealogy-app`, `plugins/*` (import mapping), `genealogy-ui` (fact-type choices).
+Finding: 5. Depends on: PR-B1 (Fact shape settled). Crates: `vitni-core`,
+`vitni-app`, `plugins/*` (import mapping), `vitni-ui` (fact-type choices).
 
 - [x] Adopt the ADR 0021 rule (default per review): vital/shared-capable types — Birth, Death,
       Baptism, Burial — are asserted as **Events with a Primary participant**; `Fact` is reserved

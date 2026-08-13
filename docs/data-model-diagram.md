@@ -2,7 +2,7 @@
 
 - **Status:** Generated from code — regenerate when aggregate state changes
 - **Date:** 2026-07-10
-- **Source of truth:** `crates/genealogy-core/src/<aggregate>/state.rs` (+ `view.rs`); see
+- **Source of truth:** `crates/vitni-core/src/<aggregate>/state.rs` (+ `view.rs`); see
   [data-model.md](data-model.md) for the narrative model.
 
 Class diagrams of the twelve aggregates (conclusion-layer shape) and the value objects they embed.

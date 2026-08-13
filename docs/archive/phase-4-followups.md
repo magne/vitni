@@ -7,8 +7,8 @@
 Phase 4 of [`docs/roadmap.md`](../roadmap.md) is large and is being delivered as a
 sequence of PRs, each landing with its gating ADR. The **foundation** — the
 format-neutral `bulk-import`/`bulk-export` worlds, streaming source/sink, the
-`progress` capability, the `genealogy-plugin-api` crate, the migrated GEDCOM
-plugins, and the `genealogy import`/`export` CLI commands — is **done**
+`progress` capability, the `vitni-plugin-api` crate, the migrated GEDCOM
+plugins, and the `vitni import`/`export` CLI commands — is **done**
 ([ADR 0013](../adr/0013-import-export-contract.md)). This document captures the work
 that remains so it is not lost.
 
@@ -20,7 +20,7 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
 
 ### Done
 
-- **A — `ExternalId` assertion.** `ExternalId` (`genealogy-core` `text.rs`,
+- **A — `ExternalId` assertion.** `ExternalId` (`vitni-core` `text.rs`,
   data-model §7/§11) wired into **Person and Family**: `AddExternalId` command +
   `ExternalIdAdded` event (accumulate-in-state), idempotent in `decide` (re-adding
   the same `(authority, value)` emits no event). *(Source/Citation/Media join in
@@ -28,22 +28,22 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
 - **B — projection lookup by external id.** `find_person_by_external_id` /
   `find_family_by_external_id` on the store and both backends (SQLite `json_each`,
   Postgres `json_array_elements`).
-- **C — resolve-or-create import use-cases.** `genealogy-app` `import_person` /
+- **C — resolve-or-create import use-cases.** `vitni-app` `import_person` /
   `import_family` resolve an incoming record by `(authority, value)` and update the
   existing aggregate instead of duplicating it (data-model §11); names are added
   additively; `import_add_partner` / `import_add_child` treat an already-present
   member as a no-op. Host `commands` capability bumped to WIT `host-api@0.4.0`
   (`external-id` record; `create-person` / `create-family` take an optional
-  external id and upsert). `genealogy-gedcom` captures/emits `_UID`; the GEDCOM
+  external id and upsert). `vitni-gedcom` captures/emits `_UID`; the GEDCOM
   import plugin keys on `_UID` (authority `gedcom-uid`), falling back to the file
   xref (`gedcom-xref`). This is the mechanism behind re-importing the same
   Digitalarkivet URL or re-syncing a Gramps export.
 - **D — idempotency verification.** Re-importing an identical file produces no new
   events (host integration test; manual run on a 1513-person MyHeritage export).
-- **E — new-workspace-default CLI.** `genealogy import` imports into a fresh
+- **E — new-workspace-default CLI.** `vitni import` imports into a fresh
   workspace by default (`--new NAME PATH`); `--into NAME` targets an existing one
   and prompts for confirmation when it already holds data (skipped with `--yes`).
-- **F — GEDCOM 7 round-trip.** `genealogy-gedcom` now parses and emits `SEX`,
+- **F — GEDCOM 7 round-trip.** `vitni-gedcom` now parses and emits `SEX`,
   events (`BIRT`/`DEAT`/`MARR`/`CHR`/`BURI`/`CENS`/`RESI`/`IMMI`/`EMIG`) with
   `DATE`/`PLAC`, top-level `SOUR` records + `SOUR`/`PAGE` citations, inline `OBJE`
   media (`FILE`/`TITL`), and `NOTE`. Each maps to its aggregate (Event, Place,
@@ -56,7 +56,7 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
   citations, 69 media, 21 notes — all unchanged on re-import. Structured name
   parts and `ADDR` are not yet mapped. (Note: the simpler owner-gating made the
   originally-planned `ExternalId` on Source/Citation/Media unnecessary.)
-- **F′ — GEDCOM 7 round-trip, finishing touches + breadth.** The `genealogy-gedcom`
+- **F′ — GEDCOM 7 round-trip, finishing touches + breadth.** The `vitni-gedcom`
   parser was rebuilt around a generic level-nested node tree (so deep structures
   like `NAME`/`ADDR` sub-records are reachable), then broadened to the model's
   first-class enums. Landed behind WIT `host-api@0.6.0`: `create-person` carries a
@@ -93,18 +93,18 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
   but unfolded). The `sex` enum gained `intersex` so GEDCOM 7 `X` round-trips.
   Verified by a host import → export → re-import integration test (structured name,
   `ABT` date, `ADDR`, `SEX`, `OCCU` fact, and `ASSO` all survive the cycle).
-- **G — Gramps XML.** A pure `genealogy-gramps-xml` crate (parse/emit over a Gramps
+- **G — Gramps XML.** A pure `vitni-gramps-xml` crate (parse/emit over a Gramps
   `Database` intermediate model — gzip-sniffing `.gramps` files via `flate2` +
-  `quick-xml`, mirroring `genealogy-gedcom`), plus `plugins/gramps-import` and
+  `quick-xml`, mirroring `vitni-gedcom`), plus `plugins/gramps-import` and
   `plugins/gramps-export` on the `bulk-import`/`bulk-export` worlds. The
-  format-neutral value vocabulary was first extracted into `genealogy-interchange`
+  format-neutral value vocabulary was first extracted into `vitni-interchange`
   (shared by both format crates and the `plugin-api` convert layer).
 - **Citations / media / notes round-trip out** (and repositories, tags,
   place hierarchy, citation confidence, source author/`PUBL`/`REPO`). The
   owner-link gap is closed: Person/Family/Event project their attached
   citations/media/notes/tags ([ADR 0018](../adr/0018-round-trip-owner-links-and-host-api-0.8.md)),
   exposed through `host-api@0.8.0`. Verified by
-  `crates/genealogy-plugin-host/tests/gramps_round_trip.rs` (import → export →
+  `crates/vitni-plugin-host/tests/gramps_round_trip.rs` (import → export →
   re-import preserves persons, families, events, places, sources, citations,
   notes; re-import emits no new events).
 
@@ -141,7 +141,7 @@ host contract ADR 0011 §3 deferred and ADR 0013 left out of scope:
   or `kind = "vision-api"`, plus `[ai].default = "<name>"`. The host `ai`
   capability resolves a provider **by name** (caller may pass a name; absent →
   default) and dispatches on `kind`. No single hardcoded provider.
-- **`plugins/digitalarkivet-import`** glue + a pure `genealogy-digitalarkivet`
+- **`plugins/digitalarkivet-import`** glue + a pure `vitni-digitalarkivet`
   crate that parses census (`/census/person`, `/census/rural-residence`) and
   churchbook (`/view/{src}/{rec}`) pages and resolves the scan URL chain
   (`scannedImageLink` → media viewer → `permanent_image_link` / `og:image` →
@@ -171,7 +171,7 @@ host contract ADR 0011 §3 deferred and ADR 0013 left out of scope:
   trust tiers (ADR 0007 §9), the three-layer loading override (workspace >
   app-dir > embedded, ADR 0007 §4), a per-plugin declared-capability manifest, and
   the capability-grant UX. Replaces the foundation's minimal
-  `PluginHost::load_by_id` directory loader and the CLI's `$GENEALOGY_PLUGIN_DIR`
+  `PluginHost::load_by_id` directory loader and the CLI's `$VITNI_PLUGIN_DIR`
   / `target/plugins` default.
 
 ## Smaller deferred items

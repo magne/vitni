@@ -9,8 +9,8 @@ ADR 0007 deferred *plugin-provided UI* ("a declarative UI vocabulary … rendere
 by the host … deferred to its own ADR when the native/web frontend lands") and ADR 0008
 named that follow-up explicitly ("the concrete plugin-UI vocabulary schema — deferred to
 the ADR 0007 follow-up ADR") while fixing where it lives: the framework-neutral
-`genealogy-ui` crate, with each framework renderer mapping it to native widgets once
-(ADR 0008 §5). Spike D builds the first GUI (`genealogy-ui-dioxus`) and must prove a
+`vitni-ui` crate, with each framework renderer mapping it to native widgets once
+(ADR 0008 §5). Spike D builds the first GUI (`vitni-ui-dioxus`) and must prove a
 plugin can contribute UI rendered by the host. This ADR fixes that vocabulary.
 
 The app's own screens are **not** in scope: they are written as per-framework view code
@@ -21,11 +21,11 @@ inject arbitrary markup.
 
 ## Decision
 
-1. **A small, serializable form vocabulary, defined in `genealogy-ui`.** The first
+1. **A small, serializable form vocabulary, defined in `vitni-ui`.** The first
    vocabulary is a single-screen **form**: a title, an ordered list of typed fields, and a
    submit label. Field kinds are the minimum that proves the mechanism — `text`, `number`,
    `checkbox`, `select` (with options). The Rust types live in
-   `genealogy-ui` (`vocabulary.rs`), the framework-neutral home ADR 0008 chose. The
+   `vitni-ui` (`vocabulary.rs`), the framework-neutral home ADR 0008 chose. The
    vocabulary is deliberately additive: new field kinds and new top-level descriptions
    (lists, tables) are added later without breaking older renderers or plugins.
 
@@ -33,8 +33,8 @@ inject arbitrary markup.
    plugin emits the form as a JSON document matching this schema. The plugin does **not**
    share the Rust types — it is a sandboxed component that may be written in any language,
    so the contract is the documented JSON shape, not a linked crate (mirroring how
-   `genealogy-gedcom` keeps the format logic separate from the WASM glue).
-   `genealogy-ui::vocabulary::parse` validates the JSON into the `Form` type. Serde uses
+   `vitni-gedcom` keeps the format logic separate from the WASM glue).
+   `vitni-ui::vocabulary::parse` validates the JSON into the `Form` type. Serde uses
    the project's **internally-tagged** convention (a `kind` discriminator on each field),
    matching the event encoding (ADR 0004 §4). Every human-readable label in the form (the
    title, the submit label, each field label, each option label, a text placeholder) is a
@@ -42,26 +42,26 @@ inject arbitrary markup.
    translation in catalogues rather than in code branches.
 
 3. **The host stays UI-agnostic; it carries the form as an opaque payload.** The
-   plugin-UI capability is a new **`ui-panel` world** in the existing `genealogy:host-api`
+   plugin-UI capability is a new **`ui-panel` world** in the existing `vitni:host-api`
    WIT package, exporting `run-ui-panel: func() -> result<string, string>` and importing
    only `log`. The host instantiates the world and returns the JSON **string** unparsed —
-   exactly as `run-gedcom-export` returns GEDCOM bytes. `genealogy-plugin-host` therefore
-   gains no dependency on `genealogy-ui`; the renderer crate
-   (`genealogy-ui-dioxus`), which already depends on both, calls the host, parses with
-   `genealogy-ui`, and renders. This is additive to the WIT package, bumping it from
+   exactly as `run-gedcom-export` returns GEDCOM bytes. `vitni-plugin-host` therefore
+   gains no dependency on `vitni-ui`; the renderer crate
+   (`vitni-ui-dioxus`), which already depends on both, calls the host, parses with
+   `vitni-ui`, and renders. This is additive to the WIT package, bumping it from
    `@0.1.0` to `@0.2.0` (ADR 0011 §1: additive change → minor bump; existing worlds and
    plugins are untouched). The entry point takes no locale — the labels are
    locale-independent IDs, resolved by the frontend (point 5).
 
-4. **Each framework renderer interprets the vocabulary once.** `genealogy-ui-dioxus`
+4. **Each framework renderer interprets the vocabulary once.** `vitni-ui-dioxus`
    contains a `Form → RSX` interpreter. A second framework (ADR 0008 §7) adds its own
-   interpreter over the same `genealogy-ui` types; no plugin changes.
+   interpreter over the same `vitni-ui` types; no plugin changes.
 
 5. **Plugin form labels are resolved by the frontend's Fluent translator (ADR 0003).**
    The plugin returns message IDs and **ships its own Fluent catalogue** —
    `i18n/<locale>/<plugin-id>.ftl`, built and collected alongside the `.wasm`. The
    frontend resolves the form against that catalogue with
-   `genealogy_ui::resolve_form(form, catalogue_dir, plugin_id, requested_languages)`,
+   `vitni_ui::resolve_form(form, catalogue_dir, plugin_id, requested_languages)`,
    which builds a `FluentLanguageLoader` over the plugin's catalogue, negotiates the same
    nb/nn→no→en fallback the app uses (ADR 0003), and looks up each ID. A missing ID — or a
    plugin that ships no catalogue — renders the ID unchanged, so a form always renders.
@@ -80,7 +80,7 @@ inject arbitrary markup.
   `host → app`).
 - **JSON over WIT records for the form tree.** Modelling a recursive, evolving widget
   tree as WIT records would duplicate the schema in `.wit` and force a major bump on every
-  new field kind. A JSON string keeps the single authoritative schema in `genealogy-ui`
+  new field kind. A JSON string keeps the single authoritative schema in `vitni-ui`
   and matches the "coarse-grained boundary" guidance (ADR 0007 §12): one call returns the
   whole form.
 - **Language-neutral contract.** Because the plugin emits JSON rather than linking the
@@ -119,6 +119,6 @@ inject arbitrary markup.
 
 - ADR 0003 — Fluent/`i18n-embed` localization (governs app chrome, not plugin content).
 - ADR 0007 — WASM-component plugin system; the deferred plugin-provided UI this ADR fixes.
-- ADR 0008 — Dioxus behind `genealogy-ui`; the framework-neutral home for the vocabulary.
-- ADR 0011 — the `genealogy:host-api` WIT package and its additive (minor-bump) evolution
+- ADR 0008 — Dioxus behind `vitni-ui`; the framework-neutral home for the vocabulary.
+- ADR 0011 — the `vitni:host-api` WIT package and its additive (minor-bump) evolution
   and deny-by-default capability model.

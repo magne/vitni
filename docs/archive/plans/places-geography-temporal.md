@@ -19,7 +19,7 @@ view work depend on nothing new and could start earlier if resequenced.
 
 ## What the model already supports (no change)
 
-Confirmed in `genealogy-core`:
+Confirmed in `vitni-core`:
 
 - **Name over time** — `PlaceName { value, date, language }` (`place_name.rs`) accumulates: Oslo →
   Christiania → Kristiania → Oslo is four dated name assertions on one aggregate. A **rename keeps the
@@ -53,17 +53,17 @@ GEDCOM `PLAC.MAP` round-trip gap).
 
 ### 3. Geography view + editing (ADR 0025)
 
-- Framework-free map view-model in `genealogy-ui` (markers, event-at-place pins, viewport, selected
-  year, provider descriptor); a MapLibre GL JS component in `genealogy-ui-dioxus`.
+- Framework-free map view-model in `vitni-ui` (markers, event-at-place pins, viewport, selected
+  year, provider descriptor); a MapLibre GL JS component in `vitni-ui-dioxus`.
 - **Editing writes audited assertions:** dropping a point / drawing a polygon / dragging a vertex, and
   create-a-place-at-a-point, all emit the same `GeometryAsserted` (or succession/enclosure) events
   through the existing `PlaceEdit` / `PlaceChangeSetRequest` path
-  (`crates/genealogy-ui/src/navigation.rs`) — with operator, confidence, and reason. Nothing bypasses
+  (`crates/vitni-ui/src/navigation.rs`) — with operator, confidence, and reason. Nothing bypasses
   the log.
 - **Time slider** resolves names/boundaries/jurisdiction as of a year (rule from ADR 0026).
 - **Transitive hierarchy walk** (the long-standing backlog item; now in
   `docs/archive/completed-work.md`) lands here or just before it: cycle-aware
-  primary-parent walk in `genealogy-app/src/place.rs`, date-aware.
+  primary-parent walk in `vitni-app/src/place.rs`, date-aware.
 
 ### 4. Pluggable provider + geocoding (ADR 0025 + Phase 8 `net`)
 
@@ -75,22 +75,22 @@ GEDCOM `PLAC.MAP` round-trip gap).
 
 ## Files (indicative — detailed per gating ADR)
 
-- `genealogy-core`: `PlaceGeometry` value object; `AssertGeometry`/`GeometryAsserted`,
+- `vitni-core`: `PlaceGeometry` value object; `AssertGeometry`/`GeometryAsserted`,
   `AssertSuccession`/`SuccessionAsserted` command/event pairs; date-resolution helpers
   (`place/`, `geo.rs`, `place_ref.rs`).
-- `genealogy-db`: WKB projection column + SQLite R\*Tree virtual table + `places_in_bbox` query;
+- `vitni-db`: WKB projection column + SQLite R\*Tree virtual table + `places_in_bbox` query;
   succession projection.
-- `genealogy-app`: DTO fields (geometry, succession, resolved-as-of-date); transitive walk in
+- `vitni-app`: DTO fields (geometry, succession, resolved-as-of-date); transitive walk in
   `place.rs`; map view-model feed.
-- `genealogy-ui` / `genealogy-ui-dioxus`: map view-model + MapLibre component + draw/edit + time
+- `vitni-ui` / `vitni-ui-dioxus`: map view-model + MapLibre component + draw/edit + time
   slider + provider descriptor; extend `PlaceEdit`.
-- `genealogy-gedcom` / `genealogy-gramps-xml`: GeoJSON geometry round-trip (`PLAC.MAP`).
+- `vitni-gedcom` / `vitni-gramps-xml`: GeoJSON geometry round-trip (`PLAC.MAP`).
 - New: `docs/adr/0026-place-succession-and-temporal-resolution.md`.
 
 ## Verification
 
 - End-to-end via the geography view: create/edit point & polygon from the map → assertions land in the
-  log with provenance; `genealogy rebuild` reproduces the spatial projection identically.
+  log with provenance; `vitni rebuild` reproduces the spatial projection identically.
 - Model: name/parent/geometry resolve correctly for a given year (Oslo/Christiania boundary case);
   a merge makes the successors reachable from the merged place and vice-versa.
 - Round-trip: export → import a GeoJSON geometry with no diff (idempotent re-import).

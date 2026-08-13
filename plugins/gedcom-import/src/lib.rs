@@ -1,40 +1,40 @@
 //! GEDCOM import plugin (ADR 0013): read the document from the host-opened import source, parse it
-//! with `genealogy-gedcom`, then create persons and families through the host `commands` capability,
+//! with `vitni-gedcom`, then create persons and families through the host `commands` capability,
 //! reporting progress as it goes. The format-neutral plumbing (streaming, progress, logging) and the
-//! interchange→WIT conversions live in `genealogy-plugin-api`; this crate only walks the GEDCOM
-//! [`Tree`](genealogy_gedcom::Tree) and drives the host capabilities.
+//! interchange→WIT conversions live in `vitni-plugin-api`; this crate only walks the GEDCOM
+//! [`Tree`](vitni_gedcom::Tree) and drives the host capabilities.
 
 wit_bindgen::generate!({
     world: "bulk-import",
-    path: "../../crates/genealogy-plugin-host/wit",
+    path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.21.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.21.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.21.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.21.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.21.0": genealogy_plugin_api::import_source,
+        "vitni:host-api/types@0.22.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.22.0": vitni_plugin_api::log,
+        "vitni:host-api/commands@0.22.0": vitni_plugin_api::commands,
+        "vitni:host-api/progress@0.22.0": vitni_plugin_api::progress,
+        "vitni:host-api/import-source@0.22.0": vitni_plugin_api::import_source,
     },
 });
 
 use std::collections::HashMap;
 
-use genealogy_gedcom::{
+use vitni_gedcom::{
     Age, Association, Calendar, Date, DateModifier, Event, EventAssociation, Fact, MediaObject, Repository, Source,
 };
-use genealogy_plugin_api::commands;
-use genealogy_plugin_api::convert;
-use genealogy_plugin_api::types;
-use genealogy_plugin_api::types::{ChildParentRel, ExternalId, ParticipantRole, ParticipationInput};
+use vitni_plugin_api::commands;
+use vitni_plugin_api::convert;
+use vitni_plugin_api::types;
+use vitni_plugin_api::types::{ChildParentRel, ExternalId, ParticipantRole, ParticipationInput};
 
 struct Importer;
 
 impl Guest for Importer {
     fn run_import() -> Result<u32, String> {
-        let text = genealogy_plugin_api::read_source_to_string()?;
-        let tree = genealogy_gedcom::parse(&text).map_err(|error| error.to_string())?;
+        let text = vitni_plugin_api::read_source_to_string()?;
+        let tree = vitni_gedcom::parse(&text).map_err(|error| error.to_string())?;
         let individuals = tree.individuals.len() as u32;
         let families = tree.families.len() as u32;
-        genealogy_plugin_api::log_info(&format!("importing {individuals} individuals and {families} families"));
+        vitni_plugin_api::log_info(&format!("importing {individuals} individuals and {families} families"));
 
         // Declare the file's own export date once, before any per-record command, so the host can
         // gate the `assert-sex` reconciliation rule for the rest of this session (ADR 0029 §2).
@@ -136,7 +136,7 @@ impl Guest for Importer {
             }
             xref_to_human.insert(individual.xref.clone(), person.human_id);
             imported += 1;
-            if !genealogy_plugin_api::report("persons", index as u32 + 1, Some(individuals))? {
+            if !vitni_plugin_api::report("persons", index as u32 + 1, Some(individuals))? {
                 return Ok(imported);
             }
         }
@@ -225,7 +225,7 @@ impl Guest for Importer {
                 }
             }
             imported += 1;
-            if !genealogy_plugin_api::report("families", index as u32 + 1, Some(families))? {
+            if !vitni_plugin_api::report("families", index as u32 + 1, Some(families))? {
                 return Ok(imported);
             }
         }

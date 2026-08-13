@@ -5,8 +5,8 @@
 
 ## Context
 
-The product runs one `genealogy-core` (ADR 0001/0002) behind several frontends: the
-shippable **CLI today** (`genealogy-cli`), and a **native GUI** and **web app** planned
+The product runs one `vitni-core` (ADR 0001/0002) behind several frontends: the
+shippable **CLI today** (`vitni-cli`), and a **native GUI** and **web app** planned
 later. Each frontend must present its interface in the user's language. Two deployment
 shapes drive the requirement:
 
@@ -27,7 +27,7 @@ share only the BCP-47 language-identifier vocabulary.
 ## Decision
 
 1. **Message system: Mozilla Fluent** (`fluent` / `fluent-rs`), authored as `.ftl`
-   (Fluent Translation List) files. Genealogy UI text is dense with gendered and
+   (Fluent Translation List) files. Vitni UI text is dense with gendered and
    relationship/plural forms (son/daughter, "N children", possessives, kinship terms);
    Fluent's selectors, plural categories, and term references keep that linguistic logic
    inside the translation files where translators own it, instead of in Rust branching.
@@ -54,13 +54,13 @@ share only the BCP-47 language-identifier vocabulary.
      loads them with fallback.
 
 3. **Crate boundary — localization lives per frontend; the core stays string-free.**
-   - `genealogy-core` exposes **typed error enums and structured values only**. It emits no
+   - `vitni-core` exposes **typed error enums and structured values only**. It emits no
      user-facing strings; its `tracing` output stays developer-facing English. This keeps
      the domain core free of CLI/UI concerns (CLAUDE.md) and means localization choices
      never reach into domain logic.
    - Each frontend owns its `i18n/{language}/{domain}.ftl` assets, its `i18n.toml`, its
      `RustEmbed` struct (where embedding applies), and the mapping from core error/value
-     types to localized messages. `genealogy-cli` does this now; the GUI and web frontends
+     types to localized messages. `vitni-cli` does this now; the GUI and web frontends
      follow the same pattern.
    - **No shared localization crate yet.** Frontends repeat a small amount of loader
      setup; we accept that until a third frontend proves the duplication real (YAGNI —
@@ -102,12 +102,12 @@ share only the BCP-47 language-identifier vocabulary.
   weak on gender and plural logic and has no built-in embed-plus-filesystem-override layer
   — we would hand-build the override. `gettext` has a mature translator ecosystem but, by
   its own crate's admission, is technically inferior to Fluent: plurals only, no gender
-  selectors. Genealogy's gendered, relationship-heavy strings are exactly Fluent's strength.
+  selectors. Vitni's gendered, relationship-heavy strings are exactly Fluent's strength.
 - **`i18n-embed` over a hand-rolled loader.** `AssetsMultiplexor` is a direct fit for
   "embedded baseline plus runtime overrides in priority order", and the same
   `FluentLanguageLoader` drops to `FileSystemAssets` alone for the web — one library covers
   both deployment shapes. `fl!()` gives compile-time key checking.
-- **Per-frontend over a shared crate.** Keeping UI strings out of `genealogy-core`
+- **Per-frontend over a shared crate.** Keeping UI strings out of `vitni-core`
   preserves the ADR 0001/0002 layering (core is pure domain logic) and avoids pulling
   presentation vocabulary toward the domain. A shared crate is a later refactor, not a
   starting assumption.

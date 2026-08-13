@@ -30,9 +30,9 @@ every single-valued claim modelled as `Attributed<Asserted<T>>` (or the bibliogr
 `Attributed<T>` — `Source.title`/`author`/`pub_info`/`abbrev`, `Citation.page`/`date`, ADR 0021 §3)
 carries the introducing `AssertionId` and is correctable via the universal `AssertionSuperseded` event
 (data-model §10); `EventContext.occurred_at` timestamps every assertion (ADR 0004 §1); and the
-resolve-or-create importer already runs at the `genealogy-app` use-case layer (data-model §11, ADR 0013
+resolve-or-create importer already runs at the `vitni-app` use-case layer (data-model §11, ADR 0013
 §6). The one missing input is the **file's own asserted-as-of date** — GEDCOM `HEAD.1 DATE` — which
-`genealogy-gedcom` already parses and today discards.
+`vitni-gedcom` already parses and today discards.
 
 ## Decision
 
@@ -49,7 +49,7 @@ resolve-or-create importer already runs at the `genealogy-app` use-case layer (d
      FamilySearch's mandatory-reason precedent without requiring user input).
 
 2. **The file's export date is one new input to the bulk-import use-case, resolved once per document,
-   not inferred per record.** `genealogy-gedcom` already parses `HEAD.1 DATE`; the Gramps XML
+   not inferred per record.** `vitni-gedcom` already parses `HEAD.1 DATE`; the Gramps XML
    equivalent is its `<header><created date="…">`. The importer resolves a single
    `file_asserted_at: Option<Timestamp>` before importing any record and threads it through the host
    `commands` capability as one new parameter set once per import session. This is a `host-api@0.19.0`
@@ -70,7 +70,7 @@ resolve-or-create importer already runs at the `genealogy-app` use-case layer (d
    updated" versus "a new fact of the same type" is itself an open matching question the importer
    does not resolve today). Implementing the rule surfaced that this §4's premise — "already modelled
    with an existing supersede path" — holds for `Person.sex` but **not yet for `Source`**: unlike
-   Person/Family, a standalone `Source` has no `ExternalId` resolve-or-create today (`genealogy-app`'s
+   Person/Family, a standalone `Source` has no `ExternalId` resolve-or-create today (`vitni-app`'s
    importer creates a fresh `Source` aggregate on every run a citation first references one, so a
    second import of the same file duplicates it rather than resolving to the first); GEDCOM `ABBR` /
    Gramps `<sabbrev>` round-trip does not exist in either format crate; the WIT `commands` capability
@@ -127,7 +127,7 @@ resolve-or-create importer already runs at the `genealogy-app` use-case layer (d
 - A single per-document `file_asserted_at` is coarser than a record-level change date (a GEDCOM record
   can itself carry a more specific `CHAN` date the importer does not yet consult) — a documented
   follow-up, not solved here.
-- The host-api bump touches the shared `genealogy-plugin-api` import plumbing (ADR 0013 §5) and both
+- The host-api bump touches the shared `vitni-plugin-api` import plumbing (ADR 0013 §5) and both
   first-party GEDCOM and Gramps plugins in lockstep — small but mandatory mechanical work.
 - One field is a narrow first slice; the value of "true merge" is not fully realized until more
   single-valued fields are widened into the rule — starting with `Source`, once its prerequisites
@@ -153,7 +153,7 @@ resolve-or-create importer already runs at the `genealogy-app` use-case layer (d
 
 - ADR 0004 §1 — `EventContext.occurred_at`, the timestamp this rule compares against.
 - ADR 0007 §7 — Software-agent attribution, reused for the generated supersede.
-- ADR 0013 §5–6 — the `genealogy-plugin-api` shared import plumbing this ADR extends; the resolve-or-
+- ADR 0013 §5–6 — the `vitni-plugin-api` shared import plumbing this ADR extends; the resolve-or-
   create/`ExternalId` mechanism this reconciliation rule builds on.
 - ADR 0018 §3 — no backwards compatibility (disposable workspaces, first-party plugins): the stance
   that makes the `0.20.0` bump a label, not a compatibility gate.

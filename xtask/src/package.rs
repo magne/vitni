@@ -1,12 +1,12 @@
 //! `package` — assembles a Linux release tarball under `target/dist/` (Phase 11 workstream C,
 //! ADR 0014 §7).
 //!
-//! The tarball carries the two shipped binaries (the `genealogy` CLI and the `genealogy-gui` GUI,
+//! The tarball carries the two shipped binaries (the `vitni` CLI and the `vitni-gui` GUI,
 //! release profile), the **signed** first-party plugin fleet laid out as the embedded loading layer
 //! (a `plugins/` directory beside the binaries), the project README, and — for the GUI — a `.desktop`
 //! launcher plus an icon. Plugins are (re)built and signed through [`crate::build_plugins`], so the
-//! signing key resolves exactly as it does there: the release key from `GENEALOGY_PLUGIN_SIGNING_KEY`
-//! when set, else the deterministic dev key ([`genealogy_plugin_host::signing::resolve_signing_key`]).
+//! signing key resolves exactly as it does there: the release key from `VITNI_PLUGIN_SIGNING_KEY`
+//! when set, else the deterministic dev key ([`vitni_plugin_host::signing::resolve_signing_key`]).
 //!
 //! Every emitted bundle's signature is re-verified against that key before the tarball is written, so
 //! a broken or unsigned bundle fails the command loudly rather than shipping.
@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
-use genealogy_plugin_host::signing::{self, PluginManifest};
+use vitni_plugin_host::signing::{self, PluginManifest};
 
 use crate::build_plugins;
 use crate::util::copy_dir;
@@ -30,14 +30,14 @@ const PLUGIN_DIR: &str = "target/plugins";
 /// The release binary output directory.
 const RELEASE_DIR: &str = "target/release";
 
-/// The `genealogy` CLI binary (crate `genealogy-cli`, release profile).
-const CLI_BIN: &str = "genealogy";
-/// The `genealogy-gui` GUI binary (crate `genealogy-ui-dioxus`, `desktop` feature, release profile).
-const GUI_BIN: &str = "genealogy-gui";
+/// The `vitni` CLI binary (crate `vitni-cli`, release profile).
+const CLI_BIN: &str = "vitni";
+/// The `vitni-gui` GUI binary (crate `vitni-ui-dioxus`, `desktop` feature, release profile).
+const GUI_BIN: &str = "vitni-gui";
 
 /// The committed GUI launcher + icon reused by both the tarball and the `.deb` (`cargo deb`).
-const DESKTOP_SRC: &str = "crates/genealogy-ui-dioxus/assets/genealogy.desktop";
-const ICON_SRC: &str = "crates/genealogy-ui-dioxus/assets/genealogy.png";
+const DESKTOP_SRC: &str = "crates/vitni-ui-dioxus/assets/vitni.desktop";
+const ICON_SRC: &str = "crates/vitni-ui-dioxus/assets/vitni.png";
 
 /// One verified bundle, for the closing summary.
 struct Verified {
@@ -50,11 +50,7 @@ pub fn run() -> Result<()> {
     build_plugins::run().context("building and signing the plugin fleet")?;
     build_release_binaries()?;
 
-    let package_name = format!(
-        "genealogy-{VERSION}-{}-{}",
-        std::env::consts::OS,
-        std::env::consts::ARCH
-    );
+    let package_name = format!("vitni-{VERSION}-{}-{}", std::env::consts::OS, std::env::consts::ARCH);
     let dist = Path::new(DIST_DIR);
     let stage = dist.join(&package_name);
     reset_dir(&stage)?;
@@ -74,15 +70,8 @@ pub fn run() -> Result<()> {
 /// webview renderer) to be a real GUI; the default build has no renderer.
 fn build_release_binaries() -> Result<()> {
     println!("package: building release binaries");
-    crate::util::run_cargo(&["build", "--release", "-p", "genealogy-cli"])?;
-    crate::util::run_cargo(&[
-        "build",
-        "--release",
-        "-p",
-        "genealogy-ui-dioxus",
-        "--features",
-        "desktop",
-    ])?;
+    crate::util::run_cargo(&["build", "--release", "-p", "vitni-cli"])?;
+    crate::util::run_cargo(&["build", "--release", "-p", "vitni-ui-dioxus", "--features", "desktop"])?;
     Ok(())
 }
 
@@ -158,14 +147,14 @@ fn copy_docs(stage: &Path) -> Result<()> {
 /// placeholder — a generated binary icon is out of scope).
 fn install_desktop_entry(stage: &Path) -> Result<()> {
     let desktop_src = Path::new(DESKTOP_SRC);
-    let desktop_dest = stage.join("genealogy.desktop");
+    let desktop_dest = stage.join("vitni.desktop");
     if desktop_src.is_file() {
         copy_if_present(desktop_src, &desktop_dest)?;
     } else {
         fs::write(&desktop_dest, generated_desktop_entry())
             .with_context(|| format!("writing {}", desktop_dest.display()))?;
     }
-    copy_if_present(Path::new(ICON_SRC), &stage.join("genealogy.png"))?;
+    copy_if_present(Path::new(ICON_SRC), &stage.join("vitni.png"))?;
     Ok(())
 }
 
@@ -173,17 +162,17 @@ fn install_desktop_entry(stage: &Path) -> Result<()> {
 fn generated_desktop_entry() -> String {
     "[Desktop Entry]\n\
      Type=Application\n\
-     Name=Genealogy\n\
+     Name=Vitni\n\
      Comment=Event-sourced genealogy program\n\
-     Exec=genealogy-gui\n\
-     Icon=genealogy\n\
+     Exec=vitni-gui\n\
+     Icon=vitni\n\
      Terminal=false\n\
      Categories=Office;Database;Utility;\n"
         .to_owned()
 }
 
 /// Re-verifies every staged bundle's `plugin.sig` against the signing key it was produced with
-/// (release key when `GENEALOGY_PLUGIN_SIGNING_KEY` is set, else the dev key), failing closed on any
+/// (release key when `VITNI_PLUGIN_SIGNING_KEY` is set, else the dev key), failing closed on any
 /// missing or invalid signature so the tarball never ships an unverifiable bundle.
 fn verify_fleet(stage: &Path) -> Result<Vec<Verified>> {
     let signing_key = signing::resolve_signing_key().context("resolving the plugin signing key")?;

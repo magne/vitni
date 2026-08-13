@@ -21,7 +21,7 @@ records and does not retain this history; adopting its schema does not give us p
 
 ## Decision
 
-Domain state in `genealogy-core` is **derived by replaying an append-only event log**, not
+Domain state in `vitni-core` is **derived by replaying an append-only event log**, not
 mutated in place.
 
 - Every change is an **event** appended to the log; events are the source of truth.
@@ -72,7 +72,7 @@ This ADR decides *only* that the domain core is event-sourced. The following are
 to follow-up ADRs, with `docs/research/event-sourcing-rust.md` as the input:
 
 - **Event-store framework** — from-scratch vs. `cqrs-es` vs. `disintegrate` (DCB).
-- **Database engine** — e.g. SQLite vs. Postgres, owned by the `genealogy-db` crate.
+- **Database engine** — e.g. SQLite vs. Postgres, owned by the `vitni-db` crate.
 
 ## References
 
