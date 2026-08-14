@@ -56,7 +56,7 @@ uuid = { workspace = true }
 # `$auto` (the ones baked into the CI image / listed for Dioxus 0.7 desktop on Linux).
 [package.metadata.deb]
 name = "vitni-gui"
-maintainer = "Magne Rasmussen <magne.rasmussen@corporater.com>"
+maintainer = "Magne Rasmussen <magne.rasmussen@gmail.com>"
 copyright = "2026, Magne Rasmussen and the Vitni authors"
 # The binary links the AGPL application crates, so the package's copyright file carries that text.
 # The interchange crates it also links stay MIT OR Apache-2.0; NOTICE ships the mapping (ADR 0034).

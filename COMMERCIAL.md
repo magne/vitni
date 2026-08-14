@@ -46,7 +46,7 @@ they were granted under, and everything released stays released.
 
 ## How to ask
 
-Email **magne.rasmussen@corporater.com** with:
+Email **magne.rasmussen@gmail.com** with:
 
 1. What you want to build and which parts of Vitni it would include.
 2. Whether you intend to distribute it, host it, or both.

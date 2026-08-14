@@ -44,7 +44,7 @@ uuid = { workspace = true }
 # (see docs/release.md — teaching the loader a default system embedded path is a residual).
 [package.metadata.deb]
 name = "vitni"
-maintainer = "Magne Rasmussen <magne.rasmussen@corporater.com>"
+maintainer = "Magne Rasmussen <magne.rasmussen@gmail.com>"
 copyright = "2026, Magne Rasmussen and the Vitni authors"
 # The binary links the AGPL application crates, so the package's copyright file carries that text.
 # The interchange crates it also links stay MIT OR Apache-2.0; NOTICE ships the mapping (ADR 0034).
