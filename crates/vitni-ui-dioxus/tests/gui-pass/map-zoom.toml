@@ -83,10 +83,14 @@ because = "pressing the map's own + button must zoom the camera in, with no whee
 
 # The readout's own rectangle only, here and below. A whole-window compare is answered by the canvas
 # redraw, which says nothing about whether the level shown ever changed.
+#
+# The readout is right-aligned and ends at x=1600, so the rectangle runs *left* from there: `z19.0` at
+# the ceiling starts at 1560 where `z1.0` at the floor starts at 1570. It stops short of the provider
+# select (1610) and of `Fit` (ends 1545), so neither can answer for the readout.
 [[assert]]
 kind = "differ"
 shots = ["map", "nav-zoomed-in"]
-region = [1596, 100, 42, 20]
+region = [1554, 98, 46, 24]
 tolerance = 0.001
 because = "the readout must follow the camera, not stay at the level the map opened with"
 
@@ -112,7 +116,7 @@ because = "maxZoom must stop the camera — 60 more notches in can change nothin
 [[assert]]
 kind = "match"
 shots = ["at-ceiling", "still-at-ceiling"]
-region = [1596, 100, 42, 20]
+region = [1554, 98, 46, 24]
 tolerance = 0.001
 because = "the readout must sit still at the ceiling too, not creep past the last zoom the tiles exist at"
 
@@ -139,7 +143,7 @@ because = "minZoom must stop the camera — 60 more notches out can change nothi
 [[assert]]
 kind = "match"
 shots = ["at-floor", "still-at-floor"]
-region = [1596, 100, 42, 20]
+region = [1554, 98, 46, 24]
 tolerance = 0.001
 because = "the readout must sit still at the floor too"
 
