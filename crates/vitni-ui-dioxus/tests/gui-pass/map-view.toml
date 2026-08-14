@@ -6,7 +6,10 @@
 # option now persists it and repaints the canvas live (#283, ADR 0033), which needs its own seeded
 # second provider and its own before/after shots, so it doesn't share this file's.
 #
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. Fit's own
+# coordinate was re-measured after #283 put the provider select in this toolbar and pushed the buttons
+# left: the old one landed in the gap between Fit and the zoom readout, so the click did nothing and
+# the first assertion failed on a camera that had never moved.
 description = "Fit frames the plotted places and the time slider re-dates the map (#203)"
 
 [[step]]
@@ -20,7 +23,7 @@ name = "map"
 
 [[step]]
 do = "click"
-at = [1558, 110]
+at = [1523, 110]
 label = "toolbar: Fit"
 
 [[step]]

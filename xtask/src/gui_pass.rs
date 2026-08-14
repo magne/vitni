@@ -35,6 +35,10 @@
 //! assertions to real genealogy data. `--real-config` (optionally with `--workspace <name>`) points
 //! the same scripts at the caller's own config and workspaces when reproducing something in real data.
 //!
+//! The driving machinery is parameterised by a [`Fixture`], because a second caller needs the same
+//! harness over different data: `cargo xtask screenshots` (see [`crate::screenshots`]) drives a demo
+//! family through [`run_fixture`] to produce the README images. [`GUI_PASS`] is this command's own.
+//!
 //! Running no window manager does not put the **window-manager close** out of reach: [`Step::WmClose`]
 //! sends the toplevel the `WM_DELETE_WINDOW` `ClientMessage` the ICCCM defines for it, and GDK dispatches
 //! it from its own event handling with no WM in sight — so the titlebar `✕` / session-logout path
@@ -55,12 +59,20 @@ use vitni_core::media_path::{MEDIA_DIR, workspace_media_path};
 
 use crate::util::{copy_dir, run_cargo};
 
-/// Where the isolated home, the fixture workspace and the shots are written.
-const OUT_DIR: &str = "target/gui-pass";
-/// Where the scenario files live, beside the SSR tests of the crate they exercise.
-const SCRIPT_DIR: &str = "crates/vitni-ui-dioxus/tests/gui-pass";
+/// The `gui-pass` fixture: the assertion scenarios, seeded with one place and two media objects.
+const GUI_PASS: Fixture = Fixture {
+    name: "gui-pass",
+    out_dir: "target/gui-pass",
+    script_dir: "crates/vitni-ui-dioxus/tests/gui-pass",
+    workspace: "gui-pass",
+    workspace_dir: "workspace",
+    seed: seed_gui_pass,
+    required_media: &[SEED_MEDIA_REL, SEED_MEDIA_NORDIC_REL],
+    env: &[],
+};
+
 /// The Xvfb display the GUI is driven on. Overridable with `--display`.
-const DEFAULT_DISPLAY: &str = ":99";
+pub const DEFAULT_DISPLAY: &str = ":99";
 /// The virtual screen Xvfb serves. Larger than the window so a resize never clips.
 const SCREEN: &str = "2560x1600x24";
 /// The window size a scenario's coordinates are written against, when it declares no `window` of its
@@ -70,8 +82,6 @@ const WINDOW: (u32, u32) = (1800, 1200);
 /// The largest x a [`focus_click`] uses, matching today's value at the default [`WINDOW`] — see
 /// [`focus_click`].
 const MAX_FOCUS_X: i32 = 900;
-/// The fixture workspace name.
-const FIXTURE_WORKSPACE: &str = "gui-pass";
 /// The pristine copy of the seeded workspace, restored before every scenario.
 const SEED_DIR: &str = "workspace-seed";
 /// The pristine copy of the seeded global config, restored before every scenario — the
@@ -107,6 +117,38 @@ const MIN_STANDARD_DEVIATION: f64 = 0.005;
 /// Normalized RMSE below which two shots count as the same screen. Above the caret blink and text
 /// antialiasing that differ between two grabs of an unchanged screen, far below any real repaint.
 const SAME_SCREEN_RMSE: f64 = 0.01;
+
+/// One fixture the harness can drive: where its state lives, which scenarios belong to it, and how
+/// its workspace is seeded.
+///
+/// Two exist. [`GUI_PASS`] is the assertion harness — one place, two media objects, measured
+/// coordinates. `screenshots` (see [`crate::screenshots`]) seeds a demo family instead, because a
+/// README image of a genealogy program whose rail reads `People 0` argues against the README. They
+/// stay separate fixtures rather than one enriched fixture: every Explorer list and rail count the
+/// scenarios here were measured against would move if persons appeared in this one.
+pub struct Fixture {
+    /// How the fixture names itself in progress and failure messages.
+    pub name: &'static str,
+    /// Where the isolated home, the workspace, its pristine seed copy and the shots are written.
+    pub out_dir: &'static str,
+    /// Where this fixture's scenario files live.
+    pub script_dir: &'static str,
+    /// The workspace name registered in the isolated config.
+    pub workspace: &'static str,
+    /// The workspace directory below [`Self::out_dir`] — also what the status bar prints, since it
+    /// shows the open workspace's directory name.
+    pub workspace_dir: &'static str,
+    /// Fills a freshly `init`ed workspace, and may edit the isolated config before it is copied to
+    /// the config seed. Receives the fixture, the isolated home and the absolute workspace directory.
+    pub seed: fn(&Fixture, &Path, &Path) -> Result<()>,
+    /// Media-library paths (below the workspace's media root) a *reused* seed must already contain.
+    /// A fixture directory left over from before one of them was added is stale, and saying so beats
+    /// failing a scenario in a way that reads like the defect it is meant to catch.
+    pub required_media: &'static [&'static str],
+    /// Extra environment applied to both the seeding CLI and the GUI. `screenshots` pins
+    /// `VITNI_LANGUAGE` with it, so the committed images are English whatever the machine's locale is.
+    pub env: &'static [(&'static str, &'static str)],
+}
 
 /// One scenario: what it proves, the steps to drive, and the assertions over the shots taken.
 #[derive(Deserialize)]
@@ -217,18 +259,37 @@ enum Assertion {
 }
 
 /// How the run is configured.
-struct Options {
+pub struct Options {
     display: String,
-    /// The scenarios to run; empty means every file in [`SCRIPT_DIR`].
+    /// The scenarios to run; empty means every file in the fixture's script directory.
     scripts: Vec<String>,
     /// Use the caller's own config and workspaces instead of the isolated fixture.
     real_config: bool,
-    /// The workspace to open; `None` seeds and opens [`FIXTURE_WORKSPACE`].
+    /// The workspace to open; `None` seeds and opens the fixture's own.
     workspace: Option<String>,
     /// Leave Xvfb and the GUI running so a human can attach (e.g. `x11vnc -display :99`).
     keep: bool,
     /// Delete the isolated home and fixture workspace before seeding.
     reset: bool,
+}
+
+impl Options {
+    /// An always-isolated run of the named scenarios, reseeding the fixture first.
+    ///
+    /// The `--real-config` / `--workspace` escape hatches are unreachable through this constructor
+    /// by design: a caller that writes committed artefacts (`screenshots`) must never be able to
+    /// drive real genealogy data.
+    #[must_use]
+    pub fn isolated(display: String, scripts: Vec<String>, keep: bool) -> Self {
+        Self {
+            display,
+            scripts,
+            real_config: false,
+            workspace: None,
+            keep,
+            reset: true,
+        }
+    }
 }
 
 /// Kills the child processes the run started, whatever the outcome.
@@ -252,54 +313,67 @@ impl Drop for Session {
     }
 }
 
-/// Runs every requested scenario, each in its own GUI instance so one cannot leave state for the next.
+/// Runs the `gui-pass` command: every requested assertion scenario against the [`GUI_PASS`] fixture.
 pub fn run(args: &[String]) -> Result<()> {
     let options = parse_args(args)?;
+    let out = run_fixture(&options, &GUI_PASS)?;
+    println!(
+        "gui-pass: passed — shots under {}/shots; smoothness and latency still need a human.",
+        out.display()
+    );
+    Ok(())
+}
+
+/// Runs every requested scenario of `fixture`, each in its own GUI instance so one cannot leave state
+/// for the next, and returns the fixture's output directory.
+///
+/// # Errors
+///
+/// Fails if a driver tool is missing, a build fails, the fixture cannot be seeded, or any scenario's
+/// steps or assertions fail — reporting every failing scenario rather than stopping at the first.
+pub fn run_fixture(options: &Options, fixture: &Fixture) -> Result<PathBuf> {
     preflight()?;
     run_cargo(&["build", "-p", "vitni-ui-dioxus", "--features", "desktop"])?;
     run_cargo(&["build", "-p", "vitni-cli"])?;
 
-    let out = PathBuf::from(OUT_DIR);
+    let out = PathBuf::from(fixture.out_dir);
     if options.reset {
-        reset(&out)?;
+        reset(fixture, &out)?;
     }
     let home = absolute(&out.join("home"))?;
     if !options.real_config {
-        seed_fixture(&out, &home)?;
+        seed_fixture(fixture, &out, &home)?;
     }
 
-    let scripts = resolve_scripts(&options.scripts)?;
+    let scripts = resolve_scripts(fixture, &options.scripts)?;
     let mut failed = Vec::new();
     for path in &scripts {
         let name = script_name(path);
-        match run_one(&options, &out, &home, path) {
-            Ok(()) => println!("gui-pass: {name} passed"),
+        match run_one(options, fixture, &out, &home, path) {
+            Ok(()) => println!("{}: {name} passed", fixture.name),
             Err(error) => {
-                eprintln!("gui-pass: {name} FAILED: {error:#}");
+                eprintln!("{}: {name} FAILED: {error:#}", fixture.name);
                 failed.push(name);
             }
         }
     }
     if !failed.is_empty() {
         bail!(
-            "gui-pass: {} of {} scenarios failed ({})",
+            "{}: {} of {} scenarios failed ({})",
+            fixture.name,
             failed.len(),
             scripts.len(),
             failed.join(", ")
         );
     }
-    println!(
-        "gui-pass: {} scenarios passed — shots under {}/shots; smoothness and latency still need a human.",
-        scripts.len(),
-        out.display()
-    );
-    Ok(())
+    println!("{}: {} scenarios passed.", fixture.name, scripts.len());
+    Ok(out)
 }
 
 /// Runs one scenario end to end, from a fresh copy of the seeded workspace and an empty shot
 /// directory — a scenario writes events (dropping a map point asserts coordinates), so sharing either
 /// would make one scenario's result depend on which ran before it.
-fn run_one(options: &Options, out: &Path, home: &Path, path: &Path) -> Result<()> {
+fn run_one(options: &Options, fixture: &Fixture, out: &Path, home: &Path, path: &Path) -> Result<()> {
     let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let script: Script = toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
     let name = script_name(path);
@@ -311,12 +385,12 @@ fn run_one(options: &Options, out: &Path, home: &Path, path: &Path) -> Result<()
     fs::create_dir_all(&shots).with_context(|| format!("creating {}", shots.display()))?;
     let shots = shots.as_path();
     if !options.real_config {
-        restore_workspace(out)?;
+        restore_workspace(fixture, out)?;
         restore_config(out, home)?;
     }
 
     let size = window_size(&script);
-    let mut session = start_session(options, home, shots)?;
+    let mut session = start_session(options, fixture, home, shots)?;
     let window = wait_for_window(&options.display)?;
     xdotool(
         &options.display,
@@ -335,14 +409,14 @@ fn run_one(options: &Options, out: &Path, home: &Path, path: &Path) -> Result<()
     }
     // `--real-config` points the isolated fixture's workspace path at the caller's own workspace,
     // which a `manifest` assertion must not read — see `Assertion::Manifest`.
-    let workspace = (!options.real_config).then(|| out.join("workspace"));
+    let workspace = (!options.real_config).then(|| out.join(fixture.workspace_dir));
     check(&script.asserts, &taken, shots, workspace.as_deref())
 }
 
-/// The scenario files to run: the named ones (a bare name, or a path), else every file in
-/// [`SCRIPT_DIR`] in name order.
-fn resolve_scripts(named: &[String]) -> Result<Vec<PathBuf>> {
-    let dir = Path::new(SCRIPT_DIR);
+/// The scenario files to run: the named ones (a bare name, or a path), else every file in the
+/// fixture's script directory in name order.
+fn resolve_scripts(fixture: &Fixture, named: &[String]) -> Result<Vec<PathBuf>> {
+    let dir = Path::new(fixture.script_dir);
     if named.is_empty() {
         let mut found = Vec::new();
         for entry in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
@@ -355,7 +429,7 @@ fn resolve_scripts(named: &[String]) -> Result<Vec<PathBuf>> {
         }
         found.sort();
         if found.is_empty() {
-            bail!("gui-pass: no scenarios in {}", dir.display());
+            bail!("{}: no scenarios in {}", fixture.name, dir.display());
         }
         return Ok(found);
     }
@@ -368,7 +442,7 @@ fn resolve_scripts(named: &[String]) -> Result<Vec<PathBuf>> {
             dir.join(format!("{}.toml", name.trim_end_matches(".toml")))
         };
         if !path.is_file() {
-            bail!("gui-pass: no scenario {name} (looked in {})", dir.display());
+            bail!("{}: no scenario {name} (looked in {})", fixture.name, dir.display());
         }
         chosen.push(path);
     }
@@ -438,14 +512,14 @@ fn preflight() -> Result<()> {
         }
     }
     if !missing.is_empty() {
-        bail!("gui-pass needs: {}", missing.join(", "));
+        bail!("driving the GUI headlessly needs: {}", missing.join(", "));
     }
     Ok(())
 }
 
 /// Deletes the isolated home, the fixture workspace, the seeded global config and the shots.
-fn reset(out: &Path) -> Result<()> {
-    for dir in ["home", "workspace", SEED_DIR, "shots"] {
+fn reset(fixture: &Fixture, out: &Path) -> Result<()> {
+    for dir in ["home", fixture.workspace_dir, SEED_DIR, "shots"] {
         let path = out.join(dir);
         if path.exists() {
             fs::remove_dir_all(&path).with_context(|| format!("removing {}", path.display()))?;
@@ -458,39 +532,57 @@ fn reset(out: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Creates the fixture workspace on first run: one place with coordinates, so the map has something
-/// to plot, two media objects pointing at seeded images (see [`seed_media`]), plus an inactive
-/// `[map.providers.demo]` `MapLibre` style (ADR 0033) the `map-provider-switch` scenario switches to.
-/// Idempotent — an existing workspace directory is reused.
-fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
-    let workspace = out.join("workspace");
+/// Creates the fixture's workspace on first run — `init`, then whatever [`Fixture::seed`] fills it
+/// with — and copies both the workspace and the isolated config into the pristine seeds every
+/// scenario is restored from. Idempotent: an existing workspace directory is reused.
+fn seed_fixture(fixture: &Fixture, out: &Path, home: &Path) -> Result<()> {
+    let workspace = out.join(fixture.workspace_dir);
     if workspace.exists() {
-        // A workspace seeded before either media image was added would fail `media-preview` with a
-        // missing Media row rather than a blank preview, which reads like the defect it is meant to
-        // catch.
-        for rel in [SEED_MEDIA_REL, SEED_MEDIA_NORDIC_REL] {
-            let seeded = out.join(SEED_DIR).join(MEDIA_DIR).join(rel);
-            if !seeded.is_file() {
-                bail!(
-                    "gui-pass: the fixture predates a seeded media image ({} is missing) — re-run with `--reset`",
-                    seeded.display()
-                );
-            }
-        }
-        return Ok(());
+        return verify_seed(fixture, out);
     }
     fs::create_dir_all(out).with_context(|| format!("creating {}", out.display()))?;
-    let workspace = absolute(&workspace)?.to_string_lossy().into_owned();
-    cli(home, &["init", FIXTURE_WORKSPACE, &workspace])?;
-    let config = home.join(".config/vitni/config.toml");
+    let workspace = absolute(&workspace)?;
+    let path = workspace.to_string_lossy().into_owned();
+    cli(fixture, home, &["init", fixture.workspace, &path])?;
+    let config = config_file(home);
     if !config.exists() {
         bail!(
-            "gui-pass: init wrote no config at {} — the isolation failed and a real config may have been \
+            "{}: init wrote no config at {} — the isolation failed and a real config may have been \
              registered instead",
+            fixture.name,
             config.display()
         );
     }
+    (fixture.seed)(fixture, home, &workspace)?;
+    fs::copy(&config, out.join(CONFIG_SEED_FILE)).with_context(|| format!("seeding {CONFIG_SEED_FILE}"))?;
+    copy_dir(&workspace, &out.join(SEED_DIR))?;
+    println!("{}: seeded workspace {} at {path}", fixture.name, fixture.workspace);
+    Ok(())
+}
+
+/// Rejects a reused seed that predates one of the fixture's [`Fixture::required_media`] images: a
+/// workspace seeded before one was added would fail `media-preview` with a missing Media row rather
+/// than a blank preview, which reads like the defect the scenario is meant to catch.
+fn verify_seed(fixture: &Fixture, out: &Path) -> Result<()> {
+    for rel in fixture.required_media {
+        let seeded = out.join(SEED_DIR).join(MEDIA_DIR).join(rel);
+        if !seeded.is_file() {
+            bail!(
+                "{}: the fixture predates a seeded media image ({} is missing) — re-run with `--reset`",
+                fixture.name,
+                seeded.display()
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Fills the [`GUI_PASS`] workspace: one place with coordinates, so the map has something to plot, two
+/// media objects pointing at seeded images (see [`seed_media`]), plus an inactive
+/// `[map.providers.demo]` `MapLibre` style (ADR 0033) the `map-provider-switch` scenario switches to.
+fn seed_gui_pass(fixture: &Fixture, home: &Path, workspace: &Path) -> Result<()> {
     let created = cli(
+        fixture,
         home,
         &["place", "create", "--type", "municipality", "--name", "Kristiansand"],
     )?;
@@ -500,6 +592,7 @@ fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
         .with_context(|| format!("no place id in {created:?}"))?
         .to_owned();
     cli(
+        fixture,
         home,
         &[
             "place",
@@ -511,13 +604,12 @@ fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
             "7.9956",
         ],
     )?;
-    seed_media(home, Path::new(&workspace))?;
+    seed_media(fixture, home, workspace)?;
+    let config = config_file(home);
     let mut text = fs::read_to_string(&config).with_context(|| format!("reading {}", config.display()))?;
     text.push_str(DEMO_MAP_PROVIDER);
     fs::write(&config, text).with_context(|| format!("writing {}", config.display()))?;
-    fs::copy(&config, out.join(CONFIG_SEED_FILE)).with_context(|| format!("seeding {CONFIG_SEED_FILE}"))?;
-    copy_dir(&out.join("workspace"), &out.join(SEED_DIR))?;
-    println!("gui-pass: seeded workspace {FIXTURE_WORKSPACE} at {workspace} with place {place}");
+    println!("gui-pass: seeded place {place}");
     Ok(())
 }
 
@@ -535,7 +627,7 @@ fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
 /// The records deliberately carry **no MIME**: `vitni media` has no `set-mime`, so this is the
 /// state every record the CLI creates is in, and #301's two live causes (no inferred MIME, and the
 /// stored `media/` prefix added twice) both fire on it.
-fn seed_media(home: &Path, workspace: &Path) -> Result<()> {
+fn seed_media(fixture: &Fixture, home: &Path, workspace: &Path) -> Result<()> {
     for rel in [SEED_MEDIA_REL, SEED_MEDIA_NORDIC_REL] {
         let target = workspace.join(MEDIA_DIR).join(rel);
         let parent = target
@@ -559,7 +651,7 @@ fn seed_media(home: &Path, workspace: &Path) -> Result<()> {
             bail!("convert failed with {status} generating {}", target.display());
         }
         let stored = workspace_media_path(rel);
-        cli(home, &["media", "create", "--path", &stored])?;
+        cli(fixture, home, &["media", "create", "--path", &stored])?;
         println!("gui-pass: seeded media {stored}");
     }
     Ok(())
@@ -567,15 +659,16 @@ fn seed_media(home: &Path, workspace: &Path) -> Result<()> {
 
 /// Replaces the fixture workspace with a fresh copy of the seed, so every scenario starts from the
 /// same data. Nothing is running against it yet — this is called before the GUI launches.
-fn restore_workspace(out: &Path) -> Result<()> {
+fn restore_workspace(fixture: &Fixture, out: &Path) -> Result<()> {
     let seed = out.join(SEED_DIR);
     if !seed.is_dir() {
         bail!(
-            "gui-pass: no seed at {} — re-run with --reset to reseed the fixture",
+            "{}: no seed at {} — re-run with --reset to reseed the fixture",
+            fixture.name,
             seed.display()
         );
     }
-    let workspace = out.join("workspace");
+    let workspace = out.join(fixture.workspace_dir);
     if workspace.exists() {
         fs::remove_dir_all(&workspace).with_context(|| format!("removing {}", workspace.display()))?;
     }
@@ -593,17 +686,28 @@ fn restore_config(out: &Path, home: &Path) -> Result<()> {
             seed.display()
         );
     }
-    let config = home.join(".config/vitni/config.toml");
+    let config = config_file(home);
     fs::copy(&seed, &config).with_context(|| format!("restoring {}", config.display()))?;
     Ok(())
 }
 
-/// Runs the CLI against the isolated home, returning its stdout.
-fn cli(home: &Path, args: &[&str]) -> Result<String> {
+/// The global configuration file inside an isolated home (ADR 0005 paths under `XDG_CONFIG_HOME`).
+#[must_use]
+pub fn config_file(home: &Path) -> PathBuf {
+    home.join(".config/vitni/config.toml")
+}
+
+/// Runs the CLI against the isolated home and the fixture's workspace, returning its stdout.
+///
+/// # Errors
+///
+/// Fails if the binary cannot be run, or if it exits non-zero — quoting its stderr.
+pub fn cli(fixture: &Fixture, home: &Path, args: &[&str]) -> Result<String> {
     let output = Command::new("target/debug/vitni")
         .args(args)
         .envs(isolated_home(home))
-        .env("VITNI_WORKSPACE", FIXTURE_WORKSPACE)
+        .envs(fixture.env.iter().copied())
+        .env("VITNI_WORKSPACE", fixture.workspace)
         .output()
         .with_context(|| format!("running vitni {}", args.join(" ")))?;
     if !output.status.success() {
@@ -651,7 +755,7 @@ fn absolute(path: &Path) -> Result<PathBuf> {
 /// `/dev/null`: `tracing_subscriber::fmt::init()` and any webview or GTK diagnostic write there, and a
 /// discarded stream makes a failing scenario undiagnosable. `RUST_LOG=info` because the default filter
 /// is `ERROR` only, which hides every `info!` the app emits.
-fn start_session(options: &Options, home: &Path, shots: &Path) -> Result<Session> {
+fn start_session(options: &Options, fixture: &Fixture, home: &Path, shots: &Path) -> Result<Session> {
     let xvfb = Command::new("Xvfb")
         .args([&options.display, "-screen", "0", SCREEN, "-nolisten", "tcp"])
         .stdout(Stdio::null())
@@ -678,6 +782,7 @@ fn start_session(options: &Options, home: &Path, shots: &Path) -> Result<Session
         .env_remove("WAYLAND_DISPLAY")
         .env_remove("XDG_SESSION_TYPE")
         .env("RUST_LOG", "info")
+        .envs(fixture.env.iter().copied())
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(errors));
     if !options.real_config {
@@ -686,7 +791,7 @@ fn start_session(options: &Options, home: &Path, shots: &Path) -> Result<Session
     if let Some(name) = options.workspace.as_deref() {
         gui.env("VITNI_WORKSPACE", name);
     } else if !options.real_config {
-        gui.env("VITNI_WORKSPACE", FIXTURE_WORKSPACE);
+        gui.env("VITNI_WORKSPACE", fixture.workspace);
     }
     session.gui = Some(gui.spawn().context("starting vitni-gui")?);
     Ok(session)

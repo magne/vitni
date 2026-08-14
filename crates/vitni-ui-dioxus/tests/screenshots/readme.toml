@@ -1,0 +1,79 @@
+# The README images (#328), taken from the real GUI over the seeded demo family.
+#
+# This scenario asserts nothing: it exists to produce pixels, and `cargo xtask screenshots` is what
+# turns each named shot into a committed PNG under `docs/assets/`. Its sibling scenarios under
+# `tests/gui-pass/` are the ones that check behaviour.
+#
+# Order is load-bearing. The Dashboard is shot first, before any navigation, so the images never show
+# a half-explored workspace; the Pedigree tool charts whatever record is *active*, so a person has to
+# be opened before the rail switches to it — opening an Event instead leaves the tool on its "open a
+# person" empty state.
+#
+# Marit (I0005) is the pedigree's focus on purpose: she is the only person with two researched
+# generations above her, so the chart has depth. Three generations rather than the default four, so
+# the unresearched lines do not crowd out the researched ones.
+#
+# Coordinates are window pixels at 1800x1200, read off this scenario's own shots.
+description = "The README images: the workspace at a glance, the pedigree chart, and the map"
+
+[[step]]
+do = "shot"
+name = "hero"
+
+[[step]]
+do = "click"
+at = [85, 173]
+label = "rail: People"
+
+[[step]]
+do = "click"
+at = [350, 323]
+label = "explorer: Marit Olsdotter Vestheim (I0005), the pedigree's focus"
+
+[[step]]
+do = "click"
+at = [85, 734]
+label = "rail: Pedigree"
+
+[[step]]
+do = "click"
+at = [455, 171]
+label = "pedigree: the generations field"
+
+[[step]]
+do = "key"
+chord = "ctrl+a"
+label = "select the generation count"
+
+[[step]]
+do = "key"
+chord = "3"
+label = "type: 3"
+
+[[step]]
+do = "click"
+at = [548, 171]
+label = "pedigree: Show"
+
+[[step]]
+do = "shot"
+name = "pedigree"
+
+[[step]]
+do = "click"
+at = [85, 882]
+label = "rail: Geography"
+
+[[step]]
+do = "click"
+at = [1567, 110]
+label = "map toolbar: Fit, framing the plotted places"
+
+[[step]]
+do = "wait"
+seconds = 4
+label = "let the camera settle and the tiles at the new zoom land"
+
+[[step]]
+do = "shot"
+name = "geography"

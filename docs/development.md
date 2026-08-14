@@ -68,8 +68,8 @@ cargo bench -p vitni-db --features sqlite
 ```
 
 `cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`,
-`licence-check`, `icons --check`) plus `issue-sync`, `labels` and `package` (the Linux release
-tarball).
+`licence-check`, `icons --check`) plus `issue-sync`, `labels`, `package` (the Linux release tarball)
+and `screenshots` (the README images, below).
 
 ## The app icon and the brand art
 
@@ -148,6 +148,34 @@ convert <in> -crop WxH+X+Y +repage <out>       # crop a region to inspect
 Some things remain human-only, and the `manual-verify` label in
 [`issue-tracking.md`](issue-tracking.md) reserves them: pan and zoom smoothness, click latency,
 motion. Software GL is not a GPU, and a still image has no frame rate.
+
+## The README screenshots
+
+`cargo xtask screenshots` regenerates the images in [`assets/`](assets/) that `README.md` shows. It is
+the same harness as `gui-pass` over a second fixture, so it wants the same `xvfb`, `xdotool` and
+`imagemagick`:
+
+```bash
+cargo xtask screenshots                  # reseed, drive the GUI, rewrite docs/assets/*.png
+cargo xtask screenshots --keep           # leave it running; attach with `x11vnc -display :99`
+```
+
+The scenario is `crates/vitni-ui-dioxus/tests/screenshots/readme.toml` and takes one `shot` per image;
+`IMAGES` in `xtask/src/screenshots.rs` maps each shot name to its committed PNG and the width it is
+scaled to. There are no `[[assert]]`s in it — it exists to produce pixels.
+
+**Two runs must produce no diff**, or the command is not a refresh path. Three things would otherwise
+make each run differ, and the command pins all three: the **clock** (every assertion carries the
+instant it was made, and the Dashboard's activity feed, the History tab and the *Why we believe*
+popover all render it, so the seeded event log is restamped to fixed instants and the projections
+rebuilt from it), the **operator** (`init` names it after the OS user), and the **locale**
+(`VITNI_LANGUAGE=en`). Aggregate ids stay random per run — they are UUIDs no screen renders — and human
+ids are pinned by the seed script.
+
+The demo workspace is **invented data**, seeded from scratch on every run: seven people over three
+generations, two families, eleven dated and placed events, and one archive → source → citations chain
+whose surety deliberately varies. No personal genealogy belongs in the repository, and the fixture is
+isolated (`target/screenshots/`, a throwaway `XDG_CONFIG_HOME`) so a run cannot reach real data.
 
 ## Repository conventions
 

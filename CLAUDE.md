@@ -109,6 +109,7 @@ cargo xtask check                                                    # every sta
 cargo xtask build-plugins                                            # lint + build plugins/* → target/plugins
 cargo xtask icons                                                    # assets/icon/*.svg → the installed PNGs
 cargo xtask gui-pass                                                 # drive the real GUI headless (below)
+cargo xtask screenshots                                              # README images from the real GUI (below)
 prek run                                                             # run git hooks manually
 ```
 
@@ -179,6 +180,16 @@ Writing one:
 Still human-only, and what `manual-verify` in [`docs/issue-tracking.md`](docs/issue-tracking.md)
 reserves: pan/zoom smoothness, click latency, motion. Software GL is not a GPU, and a still image has
 no frame rate.
+
+**`cargo xtask screenshots`** is the same harness over a second fixture (`xtask/src/screenshots.rs`,
+scenario `crates/vitni-ui-dioxus/tests/screenshots/readme.toml`): it reseeds a **demo workspace of
+invented data**, drives the GUI over it, and rewrites the committed README images in `docs/assets/`.
+**Two runs must produce no diff** — so it pins the three things that would otherwise change per run:
+the seeded event log's `occurred_at` (restamped to fixed instants, projections rebuilt, because the
+activity feed / History tab / *Why we believe* popover all render it), the operator display name
+(`init` takes it from the OS user) and `VITNI_LANGUAGE`. Rules and rationale in
+[`docs/development.md`](docs/development.md#the-readme-screenshots); never enrich the `gui-pass`
+fixture with people instead — every scenario there is measured against its current lists and counts.
 
 The CLI's top-level commands are `init`, `rebuild`, `import`, `export`, `plugin`, plus one
 subcommand-bearing verb per aggregate, generated from `for_each_cli_command!` in

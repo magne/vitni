@@ -10,6 +10,9 @@ new assertion that supersedes an old one, and both stay in the record.
 
 *Vitni* is Old Norse for **witness**.
 
+<img src="docs/assets/dashboard.png" width="900"
+     alt="The Vitni desktop GUI: a navigation rail with record counts, workspace statistics, a recent-activity feed naming who changed what and when, and computable data-quality checks.">
+
 ## What makes it different
 
 - **Evidence and conclusions are separate layers.** The event log is the evidence: each entry is an
@@ -44,6 +47,20 @@ are tracked in [`docs/issues.md`](docs/issues.md) rather than papered over.
 > genealogy data elsewhere, treat a Vitni workspace as re-creatable, and export (GEDCOM or Gramps XML)
 > before upgrading. Projections are not the concern here — those rebuild themselves from the event
 > log.
+
+The pedigree tool charts a focus person's ancestors and says plainly which lines are unresearched
+rather than leaving a gap:
+
+<img src="docs/assets/pedigree.png" width="900"
+     alt="The pedigree tool: a focus person and three generations of ancestors, each with their lifespan, and the unresearched lines labelled as unknown.">
+
+The geography view plots every place in the workspace, as of a year you choose:
+
+<img src="docs/assets/geography.png" width="900"
+     alt="The geography view: a map of southern Norway with the workspace's four places plotted, a place list beside it, and a slider setting the year the map is shown as of.">
+
+(All three images are of invented demo data, regenerated from the running GUI by one command — see
+[`docs/development.md`](docs/development.md#the-readme-screenshots).)
 
 ## Quickstart
 
@@ -122,6 +139,7 @@ cargo deny --all-features check          # advisories, licences, bans
 cargo xtask check                        # i18n completeness, CSS tokens, input-handling guard
 cargo xtask build-plugins
 cargo xtask gui-pass                     # drive the real GUI headless and assert over screenshots
+cargo xtask screenshots                  # regenerate the images above from the running GUI
 ```
 
 > Pass `--workspace` (or `-p <crate>`): `default-members` is the CLI alone, so a bare `cargo test`

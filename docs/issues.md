@@ -511,6 +511,14 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   the GUI wires all thirteen, so privacy is GUI-only.
   *Shape:* one shared `ValueEnum` plus a `set-restrictions` subcommand per aggregate over the existing
   use-cases and `restriction_label`. Not a pre-1.0 gate — the milestone rule is GUI reachability. — #225
+- **`person add-participation` cannot cite the participation it asserts** — it takes `--role`, ages,
+  attributes and notes, but no `--citation`/`--confidence`, while the model, the app use-case and the
+  GUI's per-row *Cite* action all carry them. A person's Events and Timeline tabs read the
+  *participation's* citations, not the event's, so everything the CLI links reads `⚠ No source` and
+  `No judgment` however well the event itself is cited. Found while seeding the `screenshots` demo
+  workspace (#328), which is why its person views are not in the README.
+  *Shape:* the `--citation`/`--confidence`/`--rationale` trio `person add-name` already takes, threaded
+  into the same participation command.
 
 ## Import, export & plugins
 
@@ -749,16 +757,6 @@ The `area/docs` label already existed with no `###` home; this is it.
   whole history, and the verbatim Digitalarkivet captures under
   `crates/vitni-digitalarkivet/tests/fixtures/` are third-party content whose redistribution terms are
   unexamined — no blocker for publication, a real question if a paid importer ever ships.
-- **README screenshots need a one-command refresh path.** The README carries images of the real GUI,
-  and hand-cropping them means they rot. `xtask/src/gui_pass.rs` already runs the GUI on Xvfb against
-  a seeded fixture workspace and writes named PNGs per scenario, and `imagemagick` is already one of
-  its dependencies — so a `screenshots.toml` scenario with stably-named `shot` steps plus a
-  `cargo xtask screenshots` arm beside the existing `gui-pass` dispatch (a plain string match in
-  `xtask/src/main.rs`) turns refreshing them into one command. Acceptance: two consecutive runs
-  produce no diff, or it is not a refresh path. Blocked on a **demo seed**: a run on 2026-08-13
-  produced good images whose rail read `People 0`, `Families 0`, `Events 0`, because the fixture seeds
-  two places and nothing else — so the scenario needs a handful of invented persons, families and
-  cited events before any of it can go in the README. — #328
 - **Paid-plugin distribution is unshaped.** The plugin boundary is the only genuinely exclusive
   revenue line (a signed bundle whose source stays private, under its own EULA — selling licence
   keys over an OSI-licensed source does not hold), and it needs decisions before the first one

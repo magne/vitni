@@ -26,6 +26,16 @@ vitni-core = { workspace = true }
 # crate in the graph — dioxus-desktop already pulls x11rb in through global-hotkey.
 x11rb = "0.13"
 
+# `screenshots` pins the demo seed's clock so the README images are reproducible (#328): it rewrites
+# every stored assertion's `occurred_at` in the fixture's SQLite event log, then has the CLI rebuild
+# the projections from it. Reaching the log needs a driver and a runtime; `time` formats the pinned
+# instants and `serde_json` edits the payloads. All four are already in the graph via `vitni-db` and
+# `vitni-core`, so nothing new is compiled for them.
+sqlx = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+time = { workspace = true }
+
 # `icons` rasterises the committed SVG icon sources into the installed PNG sizes (#326). In-process so
 # a regenerated icon depends on `Cargo.lock` alone rather than on whichever SVG renderer a machine
 # happens to have; `default-features = false` drops text shaping (fontdb, system fonts) — the icon
