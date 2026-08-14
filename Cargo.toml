@@ -123,6 +123,10 @@ vitni-db = { path = "crates/vitni-db", default-features = false }
 vitni-app = { path = "crates/vitni-app" }
 vitni-ui = { path = "crates/vitni-ui" }
 vitni-plugin-host = { path = "crates/vitni-plugin-host" }
+# The two frontends, consumed as libraries by the `vitni` launcher (ADR 0035). The renderer's webview
+# is opted into through the launcher's `gui` feature, so it stays off here.
+vitni-cli = { path = "crates/vitni-cli" }
+vitni-ui-dioxus = { path = "crates/vitni-ui-dioxus", default-features = false }
 
 # Workspace-wide lints (copied from ~/.claude/templates/Cargo-lints.toml).
 # Member crates opt in with `[lints] workspace = true`.

@@ -87,6 +87,10 @@ name = "vitni-cli"
 allow = ["AGPL-3.0-or-later"]
 
 [[licenses.exceptions]]
+name = "vitni"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
 name = "vitni-digitalarkivet"
 allow = ["AGPL-3.0-or-later"]
 

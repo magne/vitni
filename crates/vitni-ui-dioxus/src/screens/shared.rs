@@ -62,8 +62,9 @@ pub fn register_fields_form(chrome: &Chrome, register: RegisterFields) -> Elemen
 
 /// The optional "Database URL" field: freezes a Postgres connection string into the manifest at
 /// registration (mirrors `vitni init --database-url`); empty keeps the default SQLite engine.
-/// Gated behind the `postgres` feature — off by default, so the field never appears unless the
-/// binary was built to support it.
+/// Gated behind the `postgres` feature — off in this crate's default build, so the field never appears
+/// unless the binary was built to support it. The shipped `vitni` launcher turns it on, because it
+/// links Postgres through `vitni-cli` either way (ADR 0035 §5).
 #[cfg(feature = "postgres")]
 fn database_url_field(chrome: &Chrome, mut database_url: Signal<String>) -> Element {
     rsx! {

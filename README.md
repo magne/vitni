@@ -77,7 +77,7 @@ cargo run -p vitni-cli -- --workspace demo person list
 cargo xtask build-plugins
 
 # Run the desktop GUI against that workspace
-VITNI_WORKSPACE=demo cargo run -p vitni-ui-dioxus --features desktop
+VITNI_WORKSPACE=demo cargo run -p vitni
 ```
 
 A workspace is a directory with a `workspace.toml` manifest, referred to by name; global settings
@@ -119,9 +119,10 @@ via `cargo xtask build-plugins`.
 | `vitni-core` | Domain model and event-sourcing engine. Pure: no I/O, no clock, no user-facing strings. |
 | `vitni-db` | Persistence: event store, projections, migrations. SQLite by default, Postgres feature-gated. |
 | `vitni-app` | Coordination: config, workspace lifecycle, the impure inputs (clock, ids, operator) and the use-cases returning frontend-neutral DTOs. |
-| `vitni-cli` | The `vitni` binary. |
+| `vitni-cli` | The terminal frontend, and the headless `vitni-cli` binary. |
 | `vitni-ui` | Framework-agnostic presentation: view-models, navigation intents, Fluent resolution, the plugin-UI vocabulary. |
-| `vitni-ui-dioxus` | The `vitni-gui` binary — a Dioxus renderer over `vitni-ui`. |
+| `vitni-ui-dioxus` | A Dioxus renderer over `vitni-ui`. |
+| `vitni` | The `vitni` binary: the GUI with no arguments, the CLI with any. |
 | `vitni-plugin-host` | Wasmtime component host: capability grants, fuel and memory limits, bundle signature verification. |
 | `vitni-i18n` | Fluent plumbing: the workspace → shared → embedded override chain and locale fallback. |
 | `vitni-interchange` | The format-neutral leaf value vocabulary shared by the interchange formats. |

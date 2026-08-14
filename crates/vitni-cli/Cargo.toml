@@ -8,7 +8,7 @@ license = "AGPL-3.0-or-later"
 repository.workspace = true
 
 [[bin]]
-name = "vitni"
+name = "vitni-cli"
 path = "src/main.rs"
 
 [dependencies]
@@ -35,15 +35,17 @@ predicates = { workspace = true }
 tempfile = { workspace = true }
 uuid = { workspace = true }
 
-# `.deb` packaging for the `vitni` CLI (Phase 11 workstream C, ADR 0014 §7). Built with the
+# `.deb` packaging for the `vitni-cli` CLI (Phase 11 workstream C, ADR 0014 §7). Built with the
 # `cargo deb` subcommand (a CI/dev tool, never a workspace dependency): `cargo deb -p vitni-cli`.
+# This is the headless package — `depends = "$auto"`, no webview (ADR 0035 §7); the `vitni` package
+# built from `crates/vitni` is the one that opens a window.
 # `target/release/` is cargo-deb's special prefix (rewritten to the real target dir); `target/plugins`
 # has no such rewrite, so the fleet is referenced via the workspace-relative `../../target/plugins`.
 # `cargo xtask build-plugins` MUST run first so the signed bundles exist. The fleet installs to a
 # system path; a packaged binary resolves it via `VITNI_PLUGIN_DIR=/usr/lib/vitni/plugins`
 # (see docs/release.md — teaching the loader a default system embedded path is a residual).
 [package.metadata.deb]
-name = "vitni"
+name = "vitni-cli"
 maintainer = "Magne Rasmussen <magne.rasmussen@gmail.com>"
 copyright = "2026, Magne Rasmussen and the Vitni authors"
 # The binary links the AGPL application crates, so the package's copyright file carries that text.
@@ -55,10 +57,10 @@ section = "utils"
 priority = "optional"
 depends = "$auto"
 assets = [
-    ["target/release/vitni", "usr/bin/", "755"],
+    ["target/release/vitni-cli", "usr/bin/", "755"],
     ["../../target/plugins/**/*", "usr/lib/vitni/plugins/", "644"],
-    ["../../README.md", "usr/share/doc/vitni/README.md", "644"],
-    ["../../NOTICE", "usr/share/doc/vitni/NOTICE", "644"],
+    ["../../README.md", "usr/share/doc/vitni-cli/README.md", "644"],
+    ["../../NOTICE", "usr/share/doc/vitni-cli/NOTICE", "644"],
 ]
 
 # This crate is an interactive terminal app: stdout/stderr ARE the interface, so

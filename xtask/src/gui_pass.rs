@@ -71,6 +71,11 @@ const GUI_PASS: Fixture = Fixture {
     env: &[],
 };
 
+/// The `vitni` launcher (ADR 0035), which both halves of a run drive: spawned with no arguments it is
+/// the GUI under test, and invoked with arguments it is the CLI that seeds the fixture — so one build
+/// covers both, and each dispatch arm is exercised by every run.
+const LAUNCHER: &str = "target/debug/vitni";
+
 /// The Xvfb display the GUI is driven on. Overridable with `--display`.
 pub const DEFAULT_DISPLAY: &str = ":99";
 /// The virtual screen Xvfb serves. Larger than the window so a resize never clips.
@@ -333,8 +338,7 @@ pub fn run(args: &[String]) -> Result<()> {
 /// steps or assertions fail — reporting every failing scenario rather than stopping at the first.
 pub fn run_fixture(options: &Options, fixture: &Fixture) -> Result<PathBuf> {
     preflight()?;
-    run_cargo(&["build", "-p", "vitni-ui-dioxus", "--features", "desktop"])?;
-    run_cargo(&["build", "-p", "vitni-cli"])?;
+    run_cargo(&["build", "-p", "vitni"])?;
 
     let out = PathBuf::from(fixture.out_dir);
     if options.reset {
@@ -703,7 +707,7 @@ pub fn config_file(home: &Path) -> PathBuf {
 ///
 /// Fails if the binary cannot be run, or if it exits non-zero — quoting its stderr.
 pub fn cli(fixture: &Fixture, home: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("target/debug/vitni")
+    let output = Command::new(LAUNCHER)
         .args(args)
         .envs(isolated_home(home))
         .envs(fixture.env.iter().copied())
@@ -774,7 +778,9 @@ fn start_session(options: &Options, fixture: &Fixture, home: &Path, shots: &Path
     let errors = log
         .try_clone()
         .with_context(|| format!("sharing {}", log_path.display()))?;
-    let mut gui = Command::new("target/debug/vitni-gui");
+    // No arguments, so the launcher takes its GUI arm (ADR 0035 §2) — which is what makes every
+    // scenario a test of that dispatch as well as of the window it opens.
+    let mut gui = Command::new(LAUNCHER);
     gui.env("DISPLAY", &options.display)
         // GTK prefers Wayland when the session advertises it, which would put the window on the
         // caller's desktop instead of the headless display.
@@ -793,7 +799,7 @@ fn start_session(options: &Options, fixture: &Fixture, home: &Path, shots: &Path
     } else if !options.real_config {
         gui.env("VITNI_WORKSPACE", fixture.workspace);
     }
-    session.gui = Some(gui.spawn().context("starting vitni-gui")?);
+    session.gui = Some(gui.spawn().context("starting the GUI")?);
     Ok(session)
 }
 

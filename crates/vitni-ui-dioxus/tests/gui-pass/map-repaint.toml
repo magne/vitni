@@ -22,7 +22,9 @@ name = "map"
 
 [[step]]
 do = "click"
-at = [1249, 110]
+# Pan's pill spans x 1192..1234 — column-scanned, because the toolbar moved and 1249 had drifted onto
+# the left edge of Drop / move a point, which armed the Point tool instead of re-clicking Pan.
+at = [1213, 110]
 label = "toolbar: Pan (already active)"
 
 [[step]]
@@ -49,7 +51,7 @@ name = "polygon-armed"
 
 [[step]]
 do = "click"
-at = [1249, 110]
+at = [1213, 110]
 label = "toolbar: Pan"
 
 [[step]]

@@ -14,15 +14,17 @@ framework namespace. A new renderer changes nothing in `vitni-ui`, so that guard
 ## 1. Create the crate and layer it correctly (ADR 0008 §§3,4)
 
 - New member crate `crates/vitni-ui-<framework>`, parallel to `vitni-ui-dioxus` and
-  `vitni-cli`. It is the GUI binary (a `[[bin]]`) plus a library so tests can render components
-  without opening a window.
+  `vitni-cli`. It is a **library**, with no binary of its own: it exposes a `run_desktop()`-shaped
+  entry point that the `vitni` launcher calls, the way `vitni-ui-dioxus` does (ADR 0035 §1). Being a
+  library is also what lets tests render components without opening a window.
 - Depend on **`vitni-ui`** (view-models, intents, Fluent resolution, plugin-UI vocabulary) and
   **`vitni-app`** (DTOs, use-cases). The concrete framework dependency and the plugin host
   (`vitni-plugin-host`) live **only here** — never in `vitni-ui`. This crate is the only
   layer that names a framework type.
 - Put the system-library-heavy backend (e.g. a webview) behind an opt-in feature so the components,
   the interpreter, and the SSR test build without it. `vitni-ui-dioxus` gates its webview behind
-  a `desktop` feature; `default = []`.
+  a `desktop` feature; `default = []`. Which renderer ships is then a `crates/vitni` feature, so
+  selecting between two is a launcher decision rather than a second binary (ADR 0035 §Out of scope).
 - Duplicate the workspace lint set with the print relaxations an interactive GUI needs
   (`print_stdout`/`print_stderr` allowed), the way `vitni-ui-dioxus/Cargo.toml` does — the
   `[lints]` table can't both inherit and override.

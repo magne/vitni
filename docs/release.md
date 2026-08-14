@@ -1,7 +1,8 @@
 # Releasing (Linux)
 
 Phase 11 workstream C. Scope is **Linux-first** (ADR 0014 §7): a tarball, a `.deb`, and an AppImage,
-each carrying the two shipped binaries and the **signed** first-party plugin fleet. macOS/Windows and
+each carrying the two shipped binaries — the `vitni` launcher and the headless `vitni-cli`
+(ADR 0035) — and the **signed** first-party plugin fleet. macOS/Windows and
 OS-level code signing/notarization are **out of scope** (deferred cycle, ADR 0014 §7 / Out of scope).
 
 ## Artifacts
@@ -10,10 +11,10 @@ OS-level code signing/notarization are **out of scope** (deferred cycle, ADR 001
 
 | Artifact                                   | Contents                                                                                     |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| `vitni-<ver>-linux-<arch>.tar.gz`      | `vitni` (CLI) + `vitni-gui` (GUI) + `plugins/` (signed fleet) + README + `.desktop` + `vitni.png` + `share/icons/hicolor/` |
-| `vitni_<ver>_<arch>.deb` (CLI)         | `/usr/bin/vitni` + fleet in `/usr/lib/vitni/plugins`                                  |
-| `vitni-gui_<ver>_<arch>.deb` (GUI)     | `/usr/bin/vitni-gui` + `.desktop` + the icon theme (`hicolor` 16–256 px, the symbolic SVG, and a `pixmaps` fallback) + fleet in `/usr/lib/vitni/plugins` |
-| `Vitni-x86_64.AppImage`                | self-contained GUI + bundled fleet (its `AppRun` points `VITNI_PLUGIN_DIR` at the fleet) |
+| `vitni-<ver>-linux-<arch>.tar.gz`      | `vitni` (launcher) + `vitni-cli` (headless) + `plugins/` (signed fleet) + README + `.desktop` + `vitni.png` + `share/icons/hicolor/` |
+| `vitni_<ver>_<arch>.deb` (launcher)    | `/usr/bin/vitni` + `.desktop` + the icon theme (`hicolor` 16–256 px, the symbolic SVG, and a `pixmaps` fallback) + fleet in `/usr/lib/vitni/plugins` |
+| `vitni-cli_<ver>_<arch>.deb` (CLI)     | `/usr/bin/vitni-cli` + fleet in `/usr/lib/vitni/plugins`. `depends = "$auto"`, so it installs with no webview — the headless package |
+| `Vitni-x86_64.AppImage`                | self-contained launcher + `vitni-cli` + bundled fleet (its `AppRun` points `VITNI_PLUGIN_DIR` at the fleet) |
 
 The plugin fleet is laid out as the ADR 0014 §4 **embedded layer**: one bundle directory per plugin
 (`<id>/{plugin.toml,plugin.wasm,plugin.sig,i18n/}`). Both binaries resolve the embedded layer from
@@ -67,8 +68,8 @@ sanctioned trust root.
   Set `VITNI_PLUGIN_SIGNING_KEY` to release-sign; otherwise the dev key is used and every staged
   bundle's signature is still re-verified before the tarball is written.
 - **`.deb`** (needs `cargo install cargo-deb`): run `cargo xtask build-plugins` first (the fleet must
-  exist), then `cargo deb -p vitni-cli` and `cargo deb -p vitni-ui-dioxus -- --features desktop`
-  → `target/debian/*.deb`.
+  exist), then `cargo deb -p vitni-cli` and `cargo deb -p vitni` → `target/debian/*.deb`. The
+  launcher's webview `gui` feature is on by default, so neither needs a `--features` flag.
 - **AppImage**: needs `appimagetool` (the workflow downloads a SHA-256-pinned `continuous` build).
 
 ## Residuals

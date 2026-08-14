@@ -1,4 +1,4 @@
-//! End-to-end CLI tests driving the `vitni` binary against a temp named workspace.
+//! End-to-end CLI tests driving the `vitni-cli` binary against a temp named workspace.
 //!
 //! `HOME`/`XDG_*` point at a temp dir so the global config bootstraps in isolation, and
 //! `VITNI_WORKSPACE` selects the workspace by name. This exercises the whole stack: arg parsing
@@ -16,7 +16,7 @@ use vitni_app::{LocaleOverrides, save_locale_overrides};
 
 /// Builds a `vitni` command isolated to `dir`, selecting the workspace named `gen`.
 fn vitni(dir: &Path) -> Command {
-    let mut cmd = Command::cargo_bin("vitni").unwrap();
+    let mut cmd = Command::cargo_bin("vitni-cli").unwrap();
     cmd.env("HOME", dir)
         .env("XDG_CONFIG_HOME", dir.join("config"))
         .env("XDG_DATA_HOME", dir.join("data"))
@@ -37,7 +37,7 @@ fn vitni(dir: &Path) -> Command {
 /// that a bare `LANGUAGE` is (and is not) outranked. `VITNI_LANGUAGE` is still cleared so a dev
 /// machine that sets it can't regress the assertions; the test that needs it re-sets it explicitly.
 fn vitni_env_language(dir: &Path) -> Command {
-    let mut cmd = Command::cargo_bin("vitni").unwrap();
+    let mut cmd = Command::cargo_bin("vitni-cli").unwrap();
     cmd.env("HOME", dir)
         .env("XDG_CONFIG_HOME", dir.join("config"))
         .env("XDG_DATA_HOME", dir.join("data"))
