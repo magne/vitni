@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Vitni">
+  <!-- Vitni app icon — small tier, rasterised at 32, 24 and 16 px (see xtask/src/icons.rs).
+
+       Two things change from vitni-plain.svg, both because a 16 px raster has no room to spare: the
+       mark grows to about 71% of the plate (60% on the larger tiers) and the stroke thickens with it,
+       so the V survives as a shape rather than as three grey hairlines. The seal is an ordinary node
+       here — the acceptance criterion for #326 is that at 16 px the icon is indistinguishable from the
+       plain V. -->
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1e2b38"/>
+      <stop offset="1" stop-color="#0d141b"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="54" x2="0" y2="207" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8ecbff"/>
+      <stop offset="1" stop-color="#4b9be0"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#plate)"/>
+  <path d="M57 74 L128 187 L199 74" fill="none" stroke="url(#mark)" stroke-width="30"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="57" cy="74" r="20" fill="url(#mark)"/>
+  <circle cx="128" cy="187" r="20" fill="url(#mark)"/>
+  <circle cx="199" cy="74" r="20" fill="url(#mark)"/>
+</svg>

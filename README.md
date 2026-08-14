@@ -1,5 +1,9 @@
 # Vitni
 
+<img src="crates/vitni-ui-dioxus/assets/icon/vitni-128.png" width="96" height="96"
+     alt="The Vitni icon: a V drawn as two ascending strokes with three nodes — also a two-generation
+     pedigree — whose right upper node is a seal.">
+
 **An evidence-first genealogy program.** Every fact is a recorded claim — who asserted it, when,
 from which source, and with what confidence. The family tree you read is a *conclusion* derived from
 those claims, not a database edited in place. Nothing is ever silently overwritten: a correction is a

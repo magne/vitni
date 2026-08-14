@@ -105,14 +105,20 @@ cargo test -p vitni-core <name>                                  # single test b
 cargo clippy --workspace --all-targets --all-features -- -D warnings # lint (zero warnings)
 cargo fmt --all                                                      # format every crate
 cargo deny --all-features check                                      # advisories, licenses, bans
-cargo xtask check                                                    # i18n-check + css-check + input-guard
+cargo xtask check                                                    # every static check, in one pass
 cargo xtask build-plugins                                            # lint + build plugins/* → target/plugins
+cargo xtask icons                                                    # assets/icon/*.svg → the installed PNGs
 cargo xtask gui-pass                                                 # drive the real GUI headless (below)
 prek run                                                             # run git hooks manually
 ```
 
-`cargo xtask` also runs the individual checks (`i18n-check`, `css-check`, `input-guard`) plus
-`issue-sync`, `labels`, and `package` (Linux release tarball).
+`cargo xtask` also runs the individual checks (`i18n-check`, `css-check`, `input-guard`,
+`licence-check`, `icons --check`) plus `issue-sync`, `labels`, and `package` (Linux release tarball).
+
+The **app icon** lives in `crates/vitni-ui-dioxus/assets/icon/`: four SVG tiers (the seal on the V's
+right upper terminal is disclosed by size) plus the symbolic variant, and the committed PNGs
+`cargo xtask icons` rasterises from them. Edit a source, regenerate, commit both — the design rules and
+the size→tier mapping are in [`docs/development.md`](docs/development.md#the-app-icon).
 
 ## Testing the GUI
 

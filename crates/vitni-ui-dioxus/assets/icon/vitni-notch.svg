@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Vitni">
+  <!-- Vitni app icon — notch tier, rasterised at 64 px (see xtask/src/icons.rs). Same geometry as
+       vitni.svg with the impressed chevron dropped: at 64 px the chevron is under a pixel wide and
+       reads as dirt, so the seal keeps only the cut flat on its rim. -->
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1e2b38"/>
+      <stop offset="1" stop-color="#0d141b"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="64" x2="0" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8ecbff"/>
+      <stop offset="1" stop-color="#4b9be0"/>
+    </linearGradient>
+    <mask id="impression" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
+      <rect width="256" height="256" fill="#ffffff"/>
+      <path d="M212.4 88.72 L181.28 57.6 L199.67 39.22 L230.78 70.33 Z" fill="#000000"/>
+    </mask>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#plate)"/>
+  <rect x="1.5" y="1.5" width="253" height="253" rx="54.5" fill="none" stroke="#ffffff"
+        stroke-opacity="0.1" stroke-width="3"/>
+  <g mask="url(#impression)">
+    <path d="M68 82 L128 178 L188 82" fill="none" stroke="url(#mark)" stroke-width="24"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="68" cy="82" r="17" fill="url(#mark)"/>
+    <circle cx="128" cy="178" r="17" fill="url(#mark)"/>
+    <circle cx="188" cy="82" r="17" fill="url(#mark)"/>
+  </g>
+</svg>

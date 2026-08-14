@@ -10,9 +10,9 @@ OS-level code signing/notarization are **out of scope** (deferred cycle, ADR 001
 
 | Artifact                                   | Contents                                                                                     |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| `vitni-<ver>-linux-<arch>.tar.gz`      | `vitni` (CLI) + `vitni-gui` (GUI) + `plugins/` (signed fleet) + README + `.desktop` + icon |
+| `vitni-<ver>-linux-<arch>.tar.gz`      | `vitni` (CLI) + `vitni-gui` (GUI) + `plugins/` (signed fleet) + README + `.desktop` + `vitni.png` + `share/icons/hicolor/` |
 | `vitni_<ver>_<arch>.deb` (CLI)         | `/usr/bin/vitni` + fleet in `/usr/lib/vitni/plugins`                                  |
-| `vitni-gui_<ver>_<arch>.deb` (GUI)     | `/usr/bin/vitni-gui` + `.desktop` + icon + fleet in `/usr/lib/vitni/plugins`         |
+| `vitni-gui_<ver>_<arch>.deb` (GUI)     | `/usr/bin/vitni-gui` + `.desktop` + the icon theme (`hicolor` 16–256 px, the symbolic SVG, and a `pixmaps` fallback) + fleet in `/usr/lib/vitni/plugins` |
 | `Vitni-x86_64.AppImage`                | self-contained GUI + bundled fleet (its `AppRun` points `VITNI_PLUGIN_DIR` at the fleet) |
 
 The plugin fleet is laid out as the ADR 0014 §4 **embedded layer**: one bundle directory per plugin

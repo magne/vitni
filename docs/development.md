@@ -50,8 +50,9 @@ cargo test -p vitni-core <name>                                  # one test in o
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 cargo deny --all-features check                                      # advisories, licences, bans
-cargo xtask check                                                    # i18n-check + css-check + input-guard
+cargo xtask check                                                    # every static check, in one pass
 cargo xtask build-plugins                                            # plugins/* → target/plugins
+cargo xtask icons                                                    # SVG icon sources → installed PNGs
 prek run                                                             # the git hooks, by hand
 ```
 
@@ -66,8 +67,31 @@ skips everything else, including `xtask`.
 cargo bench -p vitni-db --features sqlite
 ```
 
-`cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`) plus
-`issue-sync`, `labels` and `package` (the Linux release tarball).
+`cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`,
+`licence-check`, `icons --check`) plus `issue-sync`, `labels` and `package` (the Linux release
+tarball).
+
+## The app icon
+
+`crates/vitni-ui-dioxus/assets/icon/` holds four SVG sources and the PNGs generated from them. The
+sources are the design; the PNGs are committed because a `.deb` and an AppImage install files rather
+than render vectors. Edit an SVG, run `cargo xtask icons`, and commit both.
+
+The mark is a **V drawn as two ascending strokes with three nodes** — a monogram that is also a
+two-generation pedigree fragment — whose right upper terminal is a **seal**, disclosed by size:
+
+| Size | Source | The seal |
+| --- | --- | --- |
+| 256, 128 | `vitni.svg` | cut flat on the rim + an impressed chevron |
+| 64 | `vitni-notch.svg` | the cut flat alone |
+| 48 | `vitni-plain.svg` | an ordinary node |
+| 32, 24, 16 | `vitni-small.svg` | an ordinary node, mark grown to ~71% of the plate |
+| any | `vitni-symbolic.svg` | never — monochrome, plate-less, for GNOME and the tray |
+
+Both the flat and the chevron are **subtracted** from the mark through a mask, so the silhouette is
+the plain V's at every size, and at 16 px the icon is indistinguishable from it. `cargo xtask icons
+--check` (part of `cargo xtask check`) re-reads every committed raster: decodable, the right size, and
+not fully transparent — which is what the previous stub was.
 
 ## Testing the GUI
 

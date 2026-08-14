@@ -669,25 +669,6 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   overriding an already-set variable, both gitignored — the key stays out of config files, logs and
   the event log either way, which is the whole point of naming a variable rather than storing a
   secret. — #296
-- **The shipped app icon is a corrupt PNG.** `crates/vitni-ui-dioxus/assets/vitni.png` is a
-  144-byte 64×64 stub whose IDAT stream does not decode — `identify` refuses it with `IDAT: invalid
-  distance too far back`. It is what installs as the icon: `package.rs`'s `ICON_SRC` copies it into the
-  release stage (`xtask/src/package.rs:40,168`) and the `[package.metadata.deb]` assets put it in
-  `usr/share/pixmaps/` (`vitni-ui-dioxus/Cargo.toml:67`), so a `.deb` or AppImage install has no
-  working icon. Needs a real one. Found while closing #301, whose `gui-pass` scenario had to *generate*
-  its fixture image with `convert` because this file cannot be decoded. The mark is decided:
-  **V-as-pedigree with a seal impression, disclosed by size** — the letter V drawn as two ascending
-  strokes with three nodes, so the monogram is also a two-generation pedigree fragment, and one
-  **upper terminal** node is a seal carrying an impressed mark and a notch at large sizes. Structure
-  from the V, meaning from the seal: the claim is *witnessed*. The seal sits on an upper terminal
-  rather than the vertex because assertions attach to claims and relationships, not to a person as a
-  whole, and it keeps the shape's visual anchor clean. Two acceptance criteria, not preferences: **at
-  16px the icon must be indistinguishable from the plain V** (breakpoints 256/128 impressed detail,
-  64 a plain disc with a notch, ≤32 the same dot as the other nodes; the symbolic monochrome variant
-  never carries the detail), and **the seal stays inside the V's stroke weight and silhouette**, since
-  a protruding circle reads as a notification badge at dock sizes. Deliverables: SVG source, PNG at
-  16/24/32/48/64/128/256, the symbolic variant, and a legibility check at 16px on light and dark.
-  Not a tree and not a leaf — Gramps, Ancestry and MyHeritage all use those. — #326
 - **`.deb` needs `VITNI_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
   distro-installed binary needs `VITNI_PLUGIN_DIR=/usr/lib/vitni/plugins` (the AppImage sets it
   via `AppRun`; the tarball resolves the fleet beside the binary). Teaching the embedded layer a default
