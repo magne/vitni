@@ -11,8 +11,10 @@
 //!   from a `var(--token)` in `tokens.css`).
 //! - `input-guard` — verify no RSX form element is rendered outside the guarded behavior-core
 //!   primitives (so the typing guard is wired once; fixes "global keys fire inside text controls").
-//! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`) in one pass,
-//!   reporting all failures rather than stopping at the first.
+//! - `licence-check` — verify the per-crate licence split holds: every crate declares a licence, and
+//!   no permissive crate reaches an `AGPL-3.0-or-later` one (ADR 0034).
+//! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`,
+//!   `licence-check`) in one pass, reporting all failures rather than stopping at the first.
 //! - `issue-sync` — verify the `docs/issues.md` ↔ GitHub Issues linkage: references well-formed and
 //!   unique, every backlog bullet inside an `###` area. `--online` also reconciles against `gh`.
 //! - `labels` — reconcile GitHub's issue labels with `.github/labels.toml` (`--apply` to write).
@@ -37,6 +39,7 @@ mod i18n_check;
 mod input_guard;
 mod issue_sync;
 mod labels;
+mod licence_check;
 mod package;
 mod util;
 
@@ -53,6 +56,7 @@ fn main() -> Result<()> {
         Some("build-plugins") => build_plugins::run(),
         Some("css-check") => css_check::run(),
         Some("input-guard") => input_guard::run(),
+        Some("licence-check") => licence_check::run(),
         Some("issue-sync") => issue_sync::run(),
         Some("labels") => labels::run(),
         Some("package") => package::run(),
@@ -71,10 +75,11 @@ fn main() -> Result<()> {
 
 /// Runs every static check, reporting all failures (never stopping at the first).
 fn check() -> Result<()> {
-    let checks: [Check; 4] = [
+    let checks: [Check; 5] = [
         ("i18n-check", i18n_check::run),
         ("css-check", css_check::run),
         ("input-guard", input_guard::run),
+        ("licence-check", licence_check::run),
         ("issue-sync", issue_sync::run),
     ];
     let mut failed = Vec::new();
@@ -100,9 +105,10 @@ fn print_usage() {
     println!("  build-plugins  lint + build the WASM plugin components, collecting them in target/plugins");
     println!("  css-check      verify bundled component CSS hardcodes no colour literals");
     println!("  input-guard    verify no RSX form element is rendered outside the input primitives");
+    println!("  licence-check  verify no permissive crate reaches AGPL code and every crate declares a licence");
     println!("  issue-sync     verify the docs/issues.md <-> GitHub Issues linkage (--online to reconcile)");
     println!("  labels         reconcile GitHub labels with .github/labels.toml (--apply to write)");
-    println!("  check          run every static check (i18n-check, css-check, input-guard, issue-sync)");
+    println!("  check          run every static check (i18n-check, css-check, input-guard, licence-check, issue-sync)");
     println!("  package        assemble a Linux release tarball (binaries + signed plugins) in target/dist");
     println!("  gui-pass       run GUI scenarios on a headless Xvfb display, asserting over screenshots");
     println!("                 [SCENARIO...]  a name or path under crates/vitni-ui-dioxus/tests/gui-pass");

@@ -650,7 +650,7 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   runtimes: `vitni-cli`'s entry is `#[tokio::main] async fn` and `dioxus::desktop` needs the main
   thread for `tao`, so the launcher's `main` stays sync and the CLI owns its runtime internally.
   Needs **ADR 0035** — a launcher above two sibling frontends is outside ADR 0008's one-way
-  `vitni-app → vitni-ui → vitni-ui-<framework>` rule (0034 is claimed by the licence split, #325).
+  `vitni-app → vitni-ui → vitni-ui-<framework>` rule (0034 is taken by the licence split).
   Open in the ADR: whether `vitni-gui` survives at all once `.desktop` can say `Exec=vitni`, how the
   `.deb`s split, and whether `vitni --workspace demo` with no subcommand should open the GUI rather
   than hit clap's "subcommand required". Also makes `vitni` a real crate rather than a reserved name,
@@ -753,26 +753,6 @@ The `area/docs` label already existed with no `###` home; this is it.
   during a full-suite run and passed on an immediate re-run of the same scenario — a draw that had not
   reached the canvas within the 4 s settle. Both classes are the same missing capability: the harness
   waits a fixed time instead of waiting for the paint it is about to assert on.
-- **The licence decision is made but not applied, and the tree has no licence files at all.** Decided
-  from [`research/licensing-and-monetization.md`](research/licensing-and-monetization.md): a
-  per-crate split — `MIT OR Apache-2.0` on the commodity interop crates, **`AGPL-3.0-or-later`** on
-  the application and on `vitni-digitalarkivet` (kept off the permissive side so a paid importer
-  stays possible), an **additional permission under AGPLv3 §7** so a WASM component talking to the
-  host only through the versioned WIT world need not be AGPL, **DCO + a broad licence-grant CLA**, and
-  open core over the plugin boundary for anything paid. The report §8 records why: AGPL blocks the
-  realistic free-rider (a vendor embedding `vitni-core` closed) permanently, while the two things
-  it does not block — resale of binaries and verbatim paid hosting — are the two least likely to pay
-  anyone; the alternative that does block them, FSL-1.1-Apache-2.0, lapses two years after each
-  release and forfeits the distro repositories. Outstanding work: **ADR 0034** recording the split
-  (0016 and 0031 are unwritten, so 0034 is next); `LICENSE-AGPL` plus the missing `LICENSE-MIT`,
-  `LICENSE-APACHE` and `NOTICE`; per-crate `license =` overrides replacing `license.workspace = true`
-  on the AGPL side; the §7 text in each AGPL crate's `lib.rs` header; per-crate
-  `[[licenses.exceptions]]` in `deny.toml` rather than a wider `licenses.allow`, so an AGPL
-  *dependency* still fails the check; `CONTRIBUTING.md` carrying the CLA, drafted against
-  åndsverkloven §67(2) (an unclear grant is construed in the contributor's favour, so sublicensing and
-  relicensing must be named) and §5 (moral rights are largely unwaivable, so promise attribution
-  rather than purport to acquire a waiver); a `COMMERCIAL.md`; and updating `CLAUDE.md`'s "keep it
-  that way". — #325
 - **Repository hygiene before the switch is flipped.** The audit found no secrets — no private keys,
   no tokens, no `.pem`/`.key`/`.p12` anywhere; the in-tree `signing::DEV_PUBLIC_KEY` is deliberate and
   documented as never trusted in a release build, and no personal genealogy data is committed (the

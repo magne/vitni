@@ -219,10 +219,16 @@ Clippy still runs `--all-targets`, so the bench code stays linted. Run benches d
   language metadata (`LanguageTag`, `RichText.language`, `PlaceName`,
   `PersonName.transliterations`, data-model §14) describes what language a *record* is in. They
   share only the BCP-47 vocabulary (`unic-langid`).
-- **License: the workspace is `MIT OR Apache-2.0` (permissive). Keep it that way.** New
-  dependencies must be permissive-compatible; `cargo deny check` enforces this. **Never copy
-  Gramps (GPLv2+) source** — the Gramps-derived model is a clean-room reimplementation; copying
-  its code would force a copyleft relicense.
+- **License: the workspace is split per crate (ADR 0034).** The interchange crates
+  (`vitni-interchange`, `-gedcom`, `-gramps-xml`, `-i18n`) and the permissive `plugins/*` inherit the
+  workspace `MIT OR Apache-2.0`; the application (`vitni-core`, `-db`, `-app`, `-plugin-host`, `-ui`,
+  `-ui-dioxus`, `-cli`, `xtask`) plus `vitni-digitalarkivet` override it with
+  `license = "AGPL-3.0-or-later"` and carry the AGPLv3 §7 plugin permission in their module header.
+  A new crate must pick a side, and **no permissive crate may depend on an AGPL one** —
+  `cargo xtask licence-check` fails on either. **Dependencies stay permissive-compatible
+  regardless**; `cargo deny check` enforces that, and its per-crate `[[licenses.exceptions]]` cover
+  only this repo's own AGPL crates. **Never copy Gramps (GPLv2+) source** — the Gramps-derived model
+  is a clean-room reimplementation; copying its code would force a copyleft relicense.
 
 ## Code navigation
 
