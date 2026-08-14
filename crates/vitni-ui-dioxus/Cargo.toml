@@ -3,7 +3,8 @@ name = "vitni-ui-dioxus"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+# AGPL-3.0-or-later, not the workspace default: this is an application crate (ADR 0034 §1).
+license = "AGPL-3.0-or-later"
 repository.workspace = true
 
 [[bin]]
@@ -56,7 +57,10 @@ uuid = { workspace = true }
 [package.metadata.deb]
 name = "vitni-gui"
 maintainer = "Magne Rasmussen <magne.rasmussen@corporater.com>"
-copyright = "2026, The Vitni authors"
+copyright = "2026, Magne Rasmussen and the Vitni authors"
+# The binary links the AGPL application crates, so the package's copyright file carries that text.
+# The interchange crates it also links stay MIT OR Apache-2.0; NOTICE ships the mapping (ADR 0034).
+license-file = ["../../LICENSE-AGPL", 0]
 extended-description = "Event-sourced genealogy program (desktop GUI). A Dioxus/webview frontend over the same event-sourced core as the CLI, bundling the signed first-party plugin fleet."
 section = "misc"
 priority = "optional"
@@ -67,6 +71,7 @@ assets = [
     ["assets/vitni.png", "usr/share/pixmaps/", "644"],
     ["../../target/plugins/**/*", "usr/lib/vitni/plugins/", "644"],
     ["../../README.md", "usr/share/doc/vitni-gui/README.md", "644"],
+    ["../../NOTICE", "usr/share/doc/vitni-gui/NOTICE", "644"],
 ]
 
 # Interactive GUI: startup diagnostics go to stdout/stderr, so the print lints are relaxed (as in

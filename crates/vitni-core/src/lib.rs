@@ -20,6 +20,14 @@
 //! Every event embeds its [`provenance::EventContext`] and an [`ids::AssertionId`] in the payload
 //! — never in `cqrs-es` metadata. The decision core is pure: the clock, generated ids, and the
 //! operator are supplied by the application layer via [`provenance::AssertionMeta`], never sampled.
+//!
+//! # Licence
+//!
+//! `AGPL-3.0-or-later` (ADR 0034). Additional permission under GNU AGPL version 3 section 7: if you
+//! modify this Program, or any covered work, by combining it with a WebAssembly component that
+//! interacts with the Program solely through the versioned `vitni:host-api` WIT world (or any later
+//! version of that world), the licensor grants you additional permission to convey the resulting
+//! work. Such a component is not required to be licensed under the GNU AGPL.
 
 pub mod address;
 pub mod age;

@@ -21,6 +21,14 @@
 //! - `gui-pass` — run the real GUI on a headless Xvfb display, drive it with `xdotool`, and assert
 //!   over screenshots of what SSR cannot reach (the `MapLibre` canvas, the overlay layer). Scenarios
 //!   are TOML files under `crates/vitni-ui-dioxus/tests/gui-pass/`, so adding one needs no rebuild.
+//!
+//! # Licence
+//!
+//! `AGPL-3.0-or-later` (ADR 0034). Additional permission under GNU AGPL version 3 section 7: if you
+//! modify this Program, or any covered work, by combining it with a WebAssembly component that
+//! interacts with the Program solely through the versioned `vitni:host-api` WIT world (or any later
+//! version of that world), the licensor grants you additional permission to convey the resulting
+//! work. Such a component is not required to be licensed under the GNU AGPL.
 
 mod build_plugins;
 mod css_check;

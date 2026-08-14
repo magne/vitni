@@ -2,6 +2,8 @@
 name = "vitni-digitalarkivet-import"
 version = "0.1.0"
 edition = "2024"
+# chargeable-later feature code (ADR 0034 §1). Outside the workspace, so nothing is inherited.
+license = "AGPL-3.0-or-later"
 publish = false
 
 # Digitalarkivet assisted-import plugin component (ADR 0017). Thin wasm glue: classifies a URL and

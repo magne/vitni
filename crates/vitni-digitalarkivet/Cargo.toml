@@ -3,7 +3,8 @@ name = "vitni-digitalarkivet"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+# AGPL-3.0-or-later, not the workspace default: this is an application crate (ADR 0034 §1).
+license = "AGPL-3.0-or-later"
 repository.workspace = true
 
 [dependencies]

@@ -54,6 +54,46 @@ allow = [
 ]
 confidence-threshold = 0.9
 
+# This workspace's own application crates are AGPL-3.0-or-later (ADR 0034 §1). They are listed one
+# by one rather than added to `allow` on purpose: `allow` would also let an AGPL *dependency*
+# through, and the project can only ship copyleft it owns. A new AGPL crate here is a deliberate
+# edit; a new AGPL dependency still fails.
+[[licenses.exceptions]]
+name = "vitni-core"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+name = "vitni-db"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+name = "vitni-app"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+name = "vitni-plugin-host"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+name = "vitni-ui"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+name = "vitni-ui-dioxus"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+name = "vitni-cli"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+name = "vitni-digitalarkivet"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+name = "xtask"
+allow = ["AGPL-3.0-or-later"]
+
 [bans]
 # Warn on duplicate versions of the same crate; allow otherwise.
 multiple-versions = "warn"

@@ -3,7 +3,8 @@ name = "vitni-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+# AGPL-3.0-or-later, not the workspace default: this is an application crate (ADR 0034 §1).
+license = "AGPL-3.0-or-later"
 repository.workspace = true
 
 [[bin]]
@@ -44,7 +45,10 @@ uuid = { workspace = true }
 [package.metadata.deb]
 name = "vitni"
 maintainer = "Magne Rasmussen <magne.rasmussen@corporater.com>"
-copyright = "2026, The Vitni authors"
+copyright = "2026, Magne Rasmussen and the Vitni authors"
+# The binary links the AGPL application crates, so the package's copyright file carries that text.
+# The interchange crates it also links stay MIT OR Apache-2.0; NOTICE ships the mapping (ADR 0034).
+license-file = ["../../LICENSE-AGPL", 0]
 extended-description = "Event-sourced genealogy program (CLI). Import/export runs as sandboxed WebAssembly plugins with deny-by-default capabilities."
 section = "utils"
 priority = "optional"
@@ -53,6 +57,7 @@ assets = [
     ["target/release/vitni", "usr/bin/", "755"],
     ["../../target/plugins/**/*", "usr/lib/vitni/plugins/", "644"],
     ["../../README.md", "usr/share/doc/vitni/README.md", "644"],
+    ["../../NOTICE", "usr/share/doc/vitni/NOTICE", "644"],
 ]
 
 # This crate is an interactive terminal app: stdout/stderr ARE the interface, so
