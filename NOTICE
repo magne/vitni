@@ -30,6 +30,13 @@ licensed as described in CONTRIBUTING.md.
 
 ---
 
+CODE_OF_CONDUCT.md is adapted from the Contributor Covenant version 3.0
+(https://www.contributor-covenant.org/version/3/0/), stewarded by the
+Organization for Ethical Source and licensed CC BY-SA 4.0. That licence covers
+that document only, not the source code in this distribution.
+
+---
+
 Vitni's domain model follows the entity vocabulary of Gramps
 (https://github.com/gramps-project/gramps), which is licensed GPLv2-or-later.
 That vocabulary is reimplemented clean-room from the published data model and

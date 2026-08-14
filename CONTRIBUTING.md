@@ -4,6 +4,8 @@ Bug reports, reproductions and pull requests are all welcome. Two things are wor
 you open a pull request: how the repository expects a change to be shaped, and the licence terms
 your contribution comes in under.
 
+Participation is under the [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) (Contributor Covenant 3.0).
+
 ## Before you start
 
 - **Build and test setup** is in [`docs/development.md`](docs/development.md) — platform
@@ -29,11 +31,21 @@ your contribution comes in under.
 - `prek run` passes (`prek install` once, to get the hooks).
 - The pull request description says what the code does now — not which approaches you discarded.
 
+### The checks are local — CI does not run
+
+The workflows under `.github/workflows/` are committed and lint-clean but **never execute**: GitHub
+Actions billing is disabled for this repository. So no check runs on your pull request, and there is
+no CI badge in the README to render a misleading green.
+
+Run them yourself before pushing — `prek run` plus the commands above, and `cargo xtask check` for the
+i18n, CSS and input-handling guards. Labels are reconciled with `cargo xtask labels --apply` rather
+than through `labels.yml`. [`docs/development.md`](docs/development.md) has the full command set.
+
 ## Sign your commits (DCO)
 
 Every commit needs a `Signed-off-by` line, which `git commit -s` adds:
 
-```
+```text
 Signed-off-by: Your Name <your.email@example.com>
 ```
 
@@ -105,5 +117,5 @@ pull request; it must be permissive-compatible, and `cargo deny check` enforces 
 
 ## Reporting a security issue
 
-Do not open a public issue. See [`SECURITY.md`](SECURITY.md) if present, or contact the maintainer
-directly.
+Do not open a public issue. [`SECURITY.md`](SECURITY.md) has the private disclosure route, what is in
+scope, and what to expect.

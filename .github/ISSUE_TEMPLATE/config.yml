@@ -8,3 +8,6 @@ contact_links:
   - name: How this tracker works
     url: https://github.com/magne/vitni/blob/main/docs/issue-tracking.md
     about: Labels, milestones, triage, and what happens to an item when the work completes.
+  - name: Report a security vulnerability
+    url: https://github.com/magne/vitni/blob/main/SECURITY.md
+    about: Sandbox escapes, capability or signature bypasses, malicious-input handling — reported privately, never as an issue.
