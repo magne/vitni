@@ -1,9 +1,9 @@
 //! `package` — assembles a Linux release tarball under `target/dist/` (Phase 11 workstream C,
 //! ADR 0014 §7).
 //!
-//! The tarball carries the two shipped binaries (the `vitni` CLI and the `vitni-gui` GUI,
-//! release profile), the **signed** first-party plugin fleet laid out as the embedded loading layer
-//! (a `plugins/` directory beside the binaries), the project README, and — for the GUI — a `.desktop`
+//! The tarball carries the two shipped binaries (the `vitni` launcher and the headless `vitni-cli`,
+//! release profile — ADR 0035 §1), the **signed** first-party plugin fleet laid out as the embedded
+//! loading layer (a `plugins/` directory beside the binaries), the project README, and a `.desktop`
 //! launcher plus the icon set (`share/icons/hicolor/…` and a top-level `vitni.png`, which is where an
 //! `AppImage` looks). Plugins are (re)built and signed through [`crate::build_plugins`], so the
 //! signing key resolves exactly as it does there: the release key from `VITNI_PLUGIN_SIGNING_KEY`
@@ -31,10 +31,10 @@ const PLUGIN_DIR: &str = "target/plugins";
 /// The release binary output directory.
 const RELEASE_DIR: &str = "target/release";
 
-/// The `vitni` CLI binary (crate `vitni-cli`, release profile).
-const CLI_BIN: &str = "vitni";
-/// The `vitni-gui` GUI binary (crate `vitni-ui-dioxus`, `desktop` feature, release profile).
-const GUI_BIN: &str = "vitni-gui";
+/// The `vitni` launcher binary (crate `vitni`, `gui` feature, release profile).
+const LAUNCHER_BIN: &str = "vitni";
+/// The headless `vitni-cli` binary (crate `vitni-cli`, release profile).
+const CLI_BIN: &str = "vitni-cli";
 
 /// The committed GUI launcher + icon set reused by both the tarball and the `.deb` (`cargo deb`).
 const DESKTOP_SRC: &str = "crates/vitni-ui-dioxus/assets/vitni.desktop";
@@ -75,19 +75,19 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-/// Builds both shipped binaries in the release profile. The GUI needs its `desktop` feature (the
-/// webview renderer) to be a real GUI; the default build has no renderer.
+/// Builds both shipped binaries in the release profile. The launcher's `gui` feature (the webview
+/// renderer) is on by default, so neither build needs a `--features` flag.
 fn build_release_binaries() -> Result<()> {
     println!("package: building release binaries");
     crate::util::run_cargo(&["build", "--release", "-p", "vitni-cli"])?;
-    crate::util::run_cargo(&["build", "--release", "-p", "vitni-ui-dioxus", "--features", "desktop"])?;
+    crate::util::run_cargo(&["build", "--release", "-p", "vitni"])?;
     Ok(())
 }
 
 /// Copies the two release binaries to the staging root, so `plugins/` sits beside them (the embedded
 /// layer a frontend resolves relative to the binary — ADR 0014 §4).
 fn copy_binaries(stage: &Path) -> Result<()> {
-    for binary in [CLI_BIN, GUI_BIN] {
+    for binary in [LAUNCHER_BIN, CLI_BIN] {
         let source = Path::new(RELEASE_DIR).join(binary);
         if !source.is_file() {
             bail!(
@@ -212,7 +212,7 @@ fn generated_desktop_entry() -> String {
      Type=Application\n\
      Name=Vitni\n\
      Comment=Event-sourced genealogy program\n\
-     Exec=vitni-gui\n\
+     Exec=vitni\n\
      Icon=vitni\n\
      Terminal=false\n\
      Categories=Office;Database;Utility;\n"

@@ -77,12 +77,12 @@ jobs:
       - name: install cargo-deb
         run: cargo install cargo-deb --version 3.7.0 --locked
 
-      # `.deb` reuses target/release binaries; the GUI needs its desktop (webview) feature. The
-      # bundle fleet from `package` (target/plugins) is picked up by the crates' asset globs.
+      # `.deb` reuses target/release binaries; the launcher's webview `gui` feature is on by default
+      # (ADR 0035). The bundle fleet from `package` (target/plugins) is picked up by the asset globs.
       - name: build .deb packages
         run: |
           cargo deb -p vitni-cli
-          cargo deb -p vitni-ui-dioxus -- --features desktop
+          cargo deb -p vitni
 
       # AppImage for the GUI. appimagetool's `continuous` asset is version-pinned by SHA-256; the
       # `continuous` tag is rolling, so refresh this checksum when the upstream build changes (the
@@ -95,7 +95,7 @@ jobs:
           appdir="target/appimage/Vitni.AppDir"
           rm -rf "${appdir}"
           mkdir -p "${appdir}/usr/bin" "${appdir}/usr/lib/vitni"
-          cp "${stage}/vitni" "${stage}/vitni-gui" "${appdir}/usr/bin/"
+          cp "${stage}/vitni" "${stage}/vitni-cli" "${appdir}/usr/bin/"
           cp -r "${stage}/plugins" "${appdir}/usr/lib/vitni/plugins"
           cp "${stage}/vitni.desktop" "${appdir}/vitni.desktop"
           # appimagetool takes the icon from the AppDir root; the theme tree is what the installed
@@ -107,7 +107,7 @@ jobs:
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "$0")")"
           export VITNI_PLUGIN_DIR="${HERE}/usr/lib/vitni/plugins"
-          exec "${HERE}/usr/bin/vitni-gui" "$@"
+          exec "${HERE}/usr/bin/vitni" "$@"
           APPRUN
           chmod +x "${appdir}/AppRun"
           tool=/tmp/appimagetool

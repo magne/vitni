@@ -4,8 +4,9 @@
 //! the vocabulary→widgets interpreter (ADR 0012). It consumes `vitni-app` through `vitni-ui`
 //! and drives the plugin host directly. This is the only layer that names `dioxus::` types.
 //!
-//! Library + binary: the components live in the library so the SSR/interpreter test can render them
-//! without a desktop window; `main.rs` is the thin GUI entry point (behind the `desktop` feature).
+//! Library only (ADR 0035 §1): the components live here so the SSR/interpreter test can render them
+//! without a desktop window, and [`run_desktop`] — the window/theme entry point, behind the `desktop`
+//! feature — is what the `vitni` launcher calls. Run the GUI with `cargo run -p vitni`.
 //!
 //! # Licence
 //!
@@ -17,6 +18,7 @@
 
 pub mod app;
 pub mod components;
+mod desktop;
 pub mod i18n;
 pub mod master_detail;
 pub mod media_asset;
@@ -24,3 +26,5 @@ pub mod screens;
 pub mod services;
 pub mod shell;
 pub mod vocabulary_render;
+
+pub use desktop::run_desktop;

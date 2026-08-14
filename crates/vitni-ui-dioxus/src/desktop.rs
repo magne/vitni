@@ -1,18 +1,24 @@
-//! The `vitni-gui` binary (ADR 0008): the Dioxus desktop frontend, parallel to `vitni`.
+//! The desktop entry point (ADR 0035 §1): the window/theme setup the `vitni` launcher calls when it
+//! is invoked with no arguments.
 //!
-//! Launching the desktop window needs a system webview, so it is behind the `desktop` feature; a
-//! build without it still produces the binary (and the library, components, and tests build with no
-//! webview libs). Run with the feature enabled: `cargo run -p vitni-ui-dioxus --features desktop`.
+//! Opening the window needs a system webview, so the real body is behind the `desktop` feature; a
+//! build without it still exposes [`run_desktop`] (the library, components, and tests build with no
+//! webview libs) and says so instead of opening a window. Run the GUI with `cargo run -p vitni`.
 
 /// The window size used when a workspace has no saved geometry (logical pixels).
 #[cfg(feature = "desktop")]
 const DEFAULT_WINDOW_SIZE: (f64, f64) = (1280.0, 840.0);
 
+/// Opens the desktop window and runs the app until it closes.
+///
+/// Must be called on the process main thread: `dioxus::desktop` drives `tao`, which requires it. The
+/// launcher's `main` is sync for that reason (ADR 0035 §3).
 #[cfg(feature = "desktop")]
-fn main() {
+pub fn run_desktop() {
     use dioxus::desktop::tao::dpi::LogicalSize;
     use dioxus::desktop::{Config, WindowBuilder};
-    use vitni_ui_dioxus::app::{App, resolve_startup_prefs, scripts_head, styles_head};
+
+    use crate::app::{App, resolve_startup_prefs, scripts_head, styles_head};
 
     tracing_subscriber::fmt::init();
 
@@ -45,10 +51,12 @@ fn main() {
         .launch(App);
 }
 
+/// Reports that this build has no renderer, instead of opening a window.
 #[cfg(not(feature = "desktop"))]
-fn main() {
+pub fn run_desktop() {
     eprintln!(
-        "vitni-gui was built without the `desktop` feature; rebuild with \
-         `--features desktop` (needs a system webview, e.g. libwebkit2gtk) to run the GUI."
+        "vitni was built with no GUI renderer; rebuild the launcher with its default `gui` \
+         feature (needs a system webview, e.g. libwebkit2gtk) to open a window. Terminal \
+         commands work in this build: try `vitni --help`."
     );
 }
