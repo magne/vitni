@@ -33,6 +33,15 @@ are the remaining work. Release artifacts are **Linux-first** — a tarball, a `
 the same application layer, so they stay in step by construction; two known gaps in either direction
 are tracked in [`docs/issues.md`](docs/issues.md) rather than papered over.
 
+> **Pre-1.0 data notice.** Upgrading between pre-1.0 versions is **not migration-safe**. Event
+> payloads change without upcasters and configuration files owe no backwards compatibility
+> ([ADR 0018 §3](docs/adr/0018-round-trip-owner-links-and-host-api-0.8.md),
+> [ADR 0015](docs/adr/0015-configuration-split-and-storage.md)), so a workspace or a `config.toml`
+> written by an earlier build may not open in a later one. Keep the authoritative copy of your
+> genealogy data elsewhere, treat a Vitni workspace as re-creatable, and export (GEDCOM or Gramps XML)
+> before upgrading. Projections are not the concern here — those rebuild themselves from the event
+> log.
+
 ## Quickstart
 
 Needs a current stable Rust toolchain via [`rustup`](https://rustup.rs); the `wasm32-wasip2` target
@@ -145,6 +154,13 @@ that need no licence at all.
 
 Contributions come in under the grant in [`CONTRIBUTING.md`](CONTRIBUTING.md), which also explains
 why that grant is as broad as it is.
+
+## Contributing, conduct and security
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) covers how a change should be shaped and why CI does not run;
+participation is under [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) (Contributor Covenant 3.0). Found a
+vulnerability? Do not open a public issue — [`SECURITY.md`](SECURITY.md) has the private route, the
+scope, and what to expect.
 
 [gramps]: https://github.com/gramps-project/gramps
 [webtrees]: https://webtrees.net/

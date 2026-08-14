@@ -824,7 +824,7 @@ mod tests {
 default = "gen"
 
 [workspaces.gen]
-path = "/home/magne/gen"
+path = "/home/user/gen"
 
 [operator]
 id = "019ed99c-6bde-73c2-a71a-05934c744a49"

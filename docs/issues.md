@@ -753,17 +753,21 @@ The `area/docs` label already existed with no `###` home; this is it.
   during a full-suite run and passed on an immediate re-run of the same scenario — a draw that had not
   reached the canvas within the 4 s settle. Both classes are the same missing capability: the harness
   waits a fixed time instead of waiting for the paint it is about to assert on.
-- **Repository hygiene before the switch is flipped.** The audit found no secrets — no private keys,
-  no tokens, no `.pem`/`.key`/`.p12` anywhere; the in-tree `signing::DEV_PUBLIC_KEY` is deliberate and
-  documented as never trusted in a release build, and no personal genealogy data is committed (the
-  gui-pass fixture is seeded at runtime). What is left: `SECURITY.md` with a private disclosure route,
-  which a program that loads signed WASM and makes network calls should have; `CODE_OF_CONDUCT.md`;
-  untracking the local agent configuration (`.claude/settings.json` → `.claude/settings.local.json`,
-  plus `.mcp.json`, `.vscode/mcp.json` and the four code-review-graph `.claude/skills/*`), which hold
-  no secrets but do publish local absolute paths, so no history rewrite is needed; and the GitHub
-  settings — description, topics, secret scanning with push protection, branch protection on `main`.
-  Note in `CONTRIBUTING.md` that Actions billing is disabled so the committed workflows never run,
-  and add no CI badge that would render broken. — #327
+- **The GitHub settings that only exist on a public repository.** Everything else #327 asked for has
+  landed: `SECURITY.md`, `CODE_OF_CONDUCT.md`, the local agent and editor configuration untracked, the
+  maintainer's home directory out of the config examples, `CONTRIBUTING.md` explaining that Actions
+  billing is disabled so no check runs and no CI badge exists, and the repository description and
+  topics. **Secret scanning with push protection**, **private vulnerability reporting** (which
+  `SECURITY.md` already points at) and **branch protection on `main`** are all unavailable on a private
+  repository on the free plan, so they can only be switched on at the moment of the flip — do it then,
+  in that order, and confirm a direct push to `main` is refused afterwards. Recorded here so it is not
+  re-audited: the pre-flip scan found no secrets — no private keys, no tokens, no `.pem`/`.key`/`.p12`
+  anywhere; the in-tree `signing::DEV_PUBLIC_KEY` is deliberate and documented as never trusted in a
+  release build; and no personal genealogy data is committed, the `gui-pass` fixture being seeded at
+  runtime. Two one-way doors accepted with it: the author's commit email becomes public across the
+  whole history, and the verbatim Digitalarkivet captures under
+  `crates/vitni-digitalarkivet/tests/fixtures/` are third-party content whose redistribution terms are
+  unexamined — no blocker for publication, a real question if a paid importer ever ships.
 - **README screenshots need a one-command refresh path.** The README carries images of the real GUI,
   and hand-cropping them means they rot. `xtask/src/gui_pass.rs` already runs the GUI on Xvfb against
   a seeded fixture workspace and writes named PNGs per scenario, and `imagemagick` is already one of

@@ -48,7 +48,7 @@ identity, so the model is defined once at the application layer (ADR 0006) and r
    default = "gen"
 
    [workspaces.gen]
-   path = "/home/magne/gen"
+   path = "/home/user/gen"
 
    [operator]
    id = "019ed99c-…"

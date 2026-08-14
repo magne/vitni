@@ -1107,7 +1107,7 @@ mod tests {
 default = "gen"
 
 [workspaces.gen]
-path = "/home/magne/gen"
+path = "/home/user/gen"
 
 [operator]
 id = "019ed99c-6bde-73c2-a71a-05934c744a49"
@@ -1124,7 +1124,7 @@ person = "I%04d"
         assert_eq!(config.default.as_deref(), Some("gen"));
         assert_eq!(
             config.resolve_workspace(None).expect("default"),
-            PathBuf::from("/home/magne/gen")
+            PathBuf::from("/home/user/gen")
         );
         assert_eq!(config.defaults.engine, Engine::Sqlite);
         assert_eq!(config.workspace_defaults.id_formats.person, "I%04d");

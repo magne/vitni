@@ -27,16 +27,22 @@ ChatGPT.md
 .env.*
 
 
-# VS Code
+# VS Code. Editor state is per-developer: `settings.json` (colour customizations) and `mcp.json`
+# (absolute paths to a local MCP server) are machine-local, so nothing here is committed except
+# launch/task/extension definitions, which are project content.
 .vscode/*
-!.vscode/settings.json
 !.vscode/launch.json
 !.vscode/tasks.json
 !.vscode/extensions.json
 
-# Claude AI
+# Agent configuration. Machine-local for the same reason: hooks and MCP server entries carry absolute
+# paths to this checkout, and the skills are wrappers around a local MCP server rather than project
+# content. Agent instructions that *are* project content live in the committed CLAUDE.md.
 .claire/
 .claude/worktrees/
+.claude/settings.json
+.claude/skills/
+.mcp.json
 *.rlib
 # Added by code-review-graph
 .code-review-graph/
