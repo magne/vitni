@@ -60,7 +60,8 @@ maintainer = "Magne Rasmussen <magne.rasmussen@gmail.com>"
 copyright = "2026, Magne Rasmussen and the Vitni authors"
 # The binary links the AGPL application crates, so the package's copyright file carries that text.
 # The interchange crates it also links stay MIT OR Apache-2.0; NOTICE ships the mapping (ADR 0034).
-license-file = ["../../LICENSE-AGPL", 0]
+# The skip-lines count is a *string* in cargo-deb's schema; an integer fails the manifest parse.
+license-file = ["../../LICENSE-AGPL", "0"]
 extended-description = "Event-sourced genealogy program (desktop GUI). A Dioxus/webview frontend over the same event-sourced core as the CLI, bundling the signed first-party plugin fleet."
 section = "misc"
 priority = "optional"
