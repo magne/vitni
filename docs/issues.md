@@ -636,6 +636,25 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 ### Packaging & release
 
+- **There is no single entry point, and the name a user types belongs to the CLI.** `vitni-cli`'s
+  binary is `vitni`, so the obvious command runs the terminal frontend and the GUI hides behind
+  `vitni-gui`. Merging the two into one binary would fix that but make a headless `vitni person list`
+  pull `libwebkit2gtk-4.1-0`, `libgtk-3-0` and `libayatana-appindicator3-1` — today `vitni-cli`'s
+  `.deb` is plain `depends = "$auto"`. Three binaries pay for neither: rename the CLI's binary to
+  `vitni-cli`, leave `vitni-gui` as it is, and add a `crates/vitni` launcher whose `vitni` binary
+  calls the GUI with no arguments and the CLI with any — **in-process library calls, not a spawned
+  child**, so there is no argv re-quoting and no exit-code laundering. Both entry points are already
+  nearly thin enough: `vitni-ui-dioxus` has a library and a 54-line `main.rs` whose ~40 real lines
+  become `pub fn run_desktop()`, and `vitni-cli` already splits `main` from `async fn run(cli)`
+  (`main.rs:190`) so a `lib.rs` exposing `pub fn run() -> ExitCode` is mostly a move. The trap is
+  runtimes: `vitni-cli`'s entry is `#[tokio::main] async fn` and `dioxus::desktop` needs the main
+  thread for `tao`, so the launcher's `main` stays sync and the CLI owns its runtime internally.
+  Needs **ADR 0035** — a launcher above two sibling frontends is outside ADR 0008's one-way
+  `vitni-app → vitni-ui → vitni-ui-<framework>` rule (0034 is claimed by the licence split, #325).
+  Open in the ADR: whether `vitni-gui` survives at all once `.desktop` can say `Exec=vitni`, how the
+  `.deb`s split, and whether `vitni --workspace demo` with no subcommand should open the GUI rather
+  than hit clap's "subcommand required". Also makes `vitni` a real crate rather than a reserved name,
+  which is what the crates.io usage policy distinguishes. — #331
 - **Cross-platform packaging** — 1.0 is Linux-first (tarball + `.deb` + AppImage). macOS/Windows
   bundles and **OS-level code-signing / notarization** (Gatekeeper, Authenticode) are a later cycle
   (ADR 0014 §Out of scope). — #215
