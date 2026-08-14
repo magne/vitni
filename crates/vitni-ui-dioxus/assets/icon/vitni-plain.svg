@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Vitni">
+  <!-- Vitni app icon — plain tier, rasterised at 48 px (see xtask/src/icons.rs). The seal is an
+       ordinary node: at 48 px the cut flat is 0.75 px deep, which is a fuzzy edge rather than a notch.
+       Same geometry as vitni-notch.svg with the mask dropped. Below 32 px the mark grows instead;
+       that is vitni-small.svg. -->
+  <rect width="256" height="256" rx="56" fill="#142132"/>
+  <rect x="1.5" y="1.5" width="253" height="253" rx="54.5" fill="none" stroke="#ffffff"
+        stroke-opacity="0.1" stroke-width="3"/>
+  <g fill="#e0a92e" stroke="#e0a92e" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M66 74 L126 182" fill="none" stroke-width="30"/>
+    <path d="M192 74 L126 182" fill="none" stroke-width="16"/>
+    <circle cx="192" cy="74" r="10" stroke="none"/>
+    <circle cx="126" cy="182" r="17" stroke="none"/>
+  </g>
+</svg>

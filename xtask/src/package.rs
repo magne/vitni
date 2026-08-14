@@ -4,7 +4,8 @@
 //! The tarball carries the two shipped binaries (the `vitni` CLI and the `vitni-gui` GUI,
 //! release profile), the **signed** first-party plugin fleet laid out as the embedded loading layer
 //! (a `plugins/` directory beside the binaries), the project README, and — for the GUI — a `.desktop`
-//! launcher plus an icon. Plugins are (re)built and signed through [`crate::build_plugins`], so the
+//! launcher plus the icon set (`share/icons/hicolor/…` and a top-level `vitni.png`, which is where an
+//! `AppImage` looks). Plugins are (re)built and signed through [`crate::build_plugins`], so the
 //! signing key resolves exactly as it does there: the release key from `VITNI_PLUGIN_SIGNING_KEY`
 //! when set, else the deterministic dev key ([`vitni_plugin_host::signing::resolve_signing_key`]).
 //!
@@ -35,9 +36,16 @@ const CLI_BIN: &str = "vitni";
 /// The `vitni-gui` GUI binary (crate `vitni-ui-dioxus`, `desktop` feature, release profile).
 const GUI_BIN: &str = "vitni-gui";
 
-/// The committed GUI launcher + icon reused by both the tarball and the `.deb` (`cargo deb`).
+/// The committed GUI launcher + icon set reused by both the tarball and the `.deb` (`cargo deb`).
 const DESKTOP_SRC: &str = "crates/vitni-ui-dioxus/assets/vitni.desktop";
-const ICON_SRC: &str = "crates/vitni-ui-dioxus/assets/vitni.png";
+const ICON_DIR: &str = "crates/vitni-ui-dioxus/assets/icon";
+
+/// The icon sizes `cargo xtask icons` generates, staged as a `hicolor` theme tree (#326).
+const ICON_SIZES: [u16; 7] = [16, 24, 32, 48, 64, 128, 256];
+/// The size copied to the staging root as `vitni.png`: an `AppImage` takes its icon from the `AppDir` root.
+const ROOT_ICON_SIZE: u16 = 256;
+/// The monochrome variant, installed into the theme's `symbolic` directory for GNOME and the tray.
+const SYMBOLIC_ICON: &str = "vitni-symbolic.svg";
 
 /// One verified bundle, for the closing summary.
 struct Verified {
@@ -59,6 +67,7 @@ pub fn run() -> Result<()> {
     copy_plugin_fleet(&stage)?;
     copy_docs(&stage)?;
     install_desktop_entry(&stage)?;
+    install_icons(&stage)?;
 
     let verified = verify_fleet(&stage)?;
     let tarball = make_tarball(dist, &package_name)?;
@@ -146,9 +155,8 @@ fn copy_docs(stage: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Installs the GUI `.desktop` launcher and icon into the staging root, copying the committed assets
-/// when they exist and generating a minimal launcher otherwise (an icon is only ever the committed
-/// placeholder — a generated binary icon is out of scope).
+/// Installs the GUI `.desktop` launcher into the staging root, copying the committed one when it
+/// exists and generating a minimal launcher otherwise.
 fn install_desktop_entry(stage: &Path) -> Result<()> {
     let desktop_src = Path::new(DESKTOP_SRC);
     let desktop_dest = stage.join("vitni.desktop");
@@ -158,7 +166,43 @@ fn install_desktop_entry(stage: &Path) -> Result<()> {
         fs::write(&desktop_dest, generated_desktop_entry())
             .with_context(|| format!("writing {}", desktop_dest.display()))?;
     }
-    copy_if_present(Path::new(ICON_SRC), &stage.join("vitni.png"))?;
+    Ok(())
+}
+
+/// Installs the icon set: a `hicolor` theme tree under `<stage>/share/icons` (every raster size plus
+/// the symbolic SVG) and a copy of the largest raster as `<stage>/vitni.png`, which is where an
+/// `AppImage` looks for its icon.
+///
+/// A missing raster is an error, not a warning: shipping a bundle whose launcher points at no icon is
+/// the defect this replaced (#326). Regenerate them with `cargo xtask icons`.
+fn install_icons(stage: &Path) -> Result<()> {
+    let source = Path::new(ICON_DIR);
+    let apps = |directory: &str| stage.join("share/icons/hicolor").join(directory).join("apps");
+
+    for size in ICON_SIZES {
+        let raster = source.join(format!("vitni-{size}.png"));
+        let dest = apps(&format!("{size}x{size}"));
+        copy_icon(&raster, &dest.join("vitni.png"))?;
+        if size == ROOT_ICON_SIZE {
+            copy_icon(&raster, &stage.join("vitni.png"))?;
+        }
+    }
+    copy_icon(&source.join(SYMBOLIC_ICON), &apps("symbolic").join(SYMBOLIC_ICON))
+}
+
+/// Copies one icon file, creating its parent directory and failing loudly when the source is absent.
+fn copy_icon(source: &Path, dest: &Path) -> Result<()> {
+    if !source.is_file() {
+        bail!(
+            "icon {} is missing — run `cargo xtask icons` to generate the rasters",
+            source.display()
+        );
+    }
+    let parent = dest
+        .parent()
+        .with_context(|| format!("{} has no parent directory", dest.display()))?;
+    fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    fs::copy(source, dest).with_context(|| format!("copying {} to {}", source.display(), dest.display()))?;
     Ok(())
 }
 

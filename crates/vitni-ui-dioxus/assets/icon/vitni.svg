@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Vitni">
+  <!-- Vitni app icon — full-detail tier, rasterised at 256 and 128 px (see xtask/src/icons.rs).
+
+       The mark is a V with the weight a broad nib gives it: a heavy descending stroke, a light
+       ascending one, three nodes — so the monogram is also a two-generation pedigree fragment. It
+       stands in three ruled lines: the record the conclusion is derived from, which is what this
+       program is about, and the reason the vertex node overlaps the top line rather than resting
+       above it.
+
+       The heavy upper terminal is a seal. Its impression — a concentric ring and a chevron echoing
+       the mark itself — is cut *out* of the terminal through a mask, never added to it, so the
+       silhouette is the plain V's at every size. The seal sits on an upper terminal rather than the
+       vertex because an assertion attaches to a claim or a relationship, not to a person as a whole;
+       putting it on the *heavy* stroke makes it exactly as wide as the stroke it caps, so it can never
+       read as a notification badge. -->
+  <defs>
+    <mask id="impression" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
+      <rect width="256" height="256" fill="#ffffff"/>
+      <circle cx="68" cy="66" r="11.2" fill="none" stroke="#000000" stroke-width="1.8"/>
+      <path d="M62 62.5 L68 69.5 L74 62.5" fill="none" stroke="#000000" stroke-width="3.2"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="#142132"/>
+  <rect x="1.5" y="1.5" width="253" height="253" rx="54.5" fill="none" stroke="#ffffff"
+        stroke-opacity="0.1" stroke-width="3"/>
+  <g fill="#e0a92e" stroke="#e0a92e" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="none" fill="#8a6a26">
+      <rect x="40" y="172" width="176" height="7" rx="3.5"/>
+      <rect x="40" y="190" width="176" height="7" rx="3.5"/>
+      <rect x="40" y="208" width="108" height="7" rx="3.5"/>
+    </g>
+    <g mask="url(#impression)">
+      <path d="M68 66 L126 164" fill="none" stroke-width="30"/>
+      <path d="M188 66 L126 164" fill="none" stroke-width="15"/>
+      <circle cx="188" cy="66" r="8" stroke="none"/>
+      <circle cx="126" cy="164" r="16" stroke="none"/>
+    </g>
+  </g>
+</svg>

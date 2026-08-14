@@ -50,8 +50,9 @@ cargo test -p vitni-core <name>                                  # one test in o
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 cargo deny --all-features check                                      # advisories, licences, bans
-cargo xtask check                                                    # i18n-check + css-check + input-guard
+cargo xtask check                                                    # every static check, in one pass
 cargo xtask build-plugins                                            # plugins/* → target/plugins
+cargo xtask icons                                                    # SVG icon sources → installed PNGs
 prek run                                                             # the git hooks, by hand
 ```
 
@@ -66,8 +67,47 @@ skips everything else, including `xtask`.
 cargo bench -p vitni-db --features sqlite
 ```
 
-`cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`) plus
-`issue-sync`, `labels` and `package` (the Linux release tarball).
+`cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`,
+`licence-check`, `icons --check`) plus `issue-sync`, `labels` and `package` (the Linux release
+tarball).
+
+## The app icon and the brand art
+
+`crates/vitni-ui-dioxus/assets/icon/` holds five SVG sources and the PNGs generated from them;
+`assets/brand/` holds the two lockups and theirs. The sources are the design; the PNGs are committed
+because a `.deb` and an AppImage install files rather than render vectors, and GitHub renders an
+`<img>`. Edit an SVG, run `cargo xtask icons`, and commit both.
+
+The mark is a **V with the weight a broad nib gives it** — heavy descending stroke, light ascending
+one, three nodes — so the monogram is also a two-generation pedigree fragment. It stands in **three
+ruled lines**: the record the conclusion is derived from. The heavy upper terminal is a **seal**, and
+both it and the ruled lines are disclosed by size:
+
+| Size | Source | The seal | The record |
+| --- | --- | --- | --- |
+| 256, 128 | `vitni.svg` | impressed ring + a chevron | three ruled lines |
+| 64 | `vitni-notch.svg` | one cut flat on the rim | — |
+| 48 | `vitni-plain.svg` | an ordinary node | — |
+| 32, 24, 16 | `vitni-small.svg` | an ordinary node, mark 1.15× | — |
+| any | `vitni-symbolic.svg` | never — monochrome, plate-less, for GNOME and the tray | — |
+
+Palette, flat: plate `#142132`, mark `#e0a92e`, ruled lines `#8a6a26`. The gold matters — the mark
+used to be the app's own `--accent`, which made the icon read as a chip from its own toolbar.
+
+The impression is **subtracted** from the terminal through a mask, never added to it, so the
+silhouette is the plain V's at every size and at 16 px the icon is indistinguishable from it. The seal
+sits on the *heavy* stroke, which makes it exactly as wide as the stroke it caps, so it cannot read as
+a notification badge.
+
+`assets/brand/vitni-wordmark.svg` is the mark beside the name for `README.md`, and
+`vitni-splash.svg` is 1280×640 — GitHub's social-preview size, and a ground for an About dialog or
+splash when the app grows one. **Their letters are geometry, not text**: `resvg` is built without text
+shaping, and a wordmark that depended on system fonts would render differently on every machine. Each
+capital therefore takes the same nib logic as the mark; the layout parameters are in the wordmark's
+header comment, and both files carry the lockup because SVG has no include.
+
+`cargo xtask icons --check` (part of `cargo xtask check`) re-reads every committed raster: decodable,
+the right size, and not fully transparent — which is what the previous stub was.
 
 ## Testing the GUI
 

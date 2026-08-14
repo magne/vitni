@@ -98,7 +98,11 @@ jobs:
           cp "${stage}/vitni" "${stage}/vitni-gui" "${appdir}/usr/bin/"
           cp -r "${stage}/plugins" "${appdir}/usr/lib/vitni/plugins"
           cp "${stage}/vitni.desktop" "${appdir}/vitni.desktop"
+          # appimagetool takes the icon from the AppDir root; the theme tree is what the installed
+          # desktop reads once the AppImage is integrated (#326).
           cp "${stage}/vitni.png" "${appdir}/vitni.png"
+          mkdir -p "${appdir}/usr/share"
+          cp -r "${stage}/share/icons" "${appdir}/usr/share/icons"
           cat > "${appdir}/AppRun" <<'APPRUN'
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "$0")")"

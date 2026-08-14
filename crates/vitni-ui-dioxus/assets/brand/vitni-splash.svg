@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img"
+     aria-label="Vitni">
+  <!-- Vitni splash / about art, rasterised to vitni-splash-1280x640.png by `cargo xtask icons`.
+       1280x640 is what GitHub asks for as a repository social preview, and it is a usable About-dialog
+       or splash ground — the app has no such surface yet (`Destination::Help` is the only screen of that
+       kind), so nothing renders this in-app today.
+
+       The same lockup as vitni-wordmark.svg over a faint ruled ground carried edge to edge. No tagline:
+       that stays real localizable text in whatever shows this, rather than a picture of English
+       (ADR 0003).
+
+       The lockup layout — cap height 96 on a baseline at y=136, heavy stroke 21, light stroke 11.5,
+       letter spacing 23 — is documented in vitni-wordmark.svg, whose geometry this duplicates inside a
+       1.55× group. SVG has no include, so a change to the mark or the letterforms is a change to this
+       file, the wordmark and the icon tiers. -->
+  <defs>
+    <mask id="impression" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
+      <rect width="256" height="256" fill="#ffffff"/>
+      <circle cx="68" cy="66" r="11.2" fill="none" stroke="#000000" stroke-width="1.8"/>
+      <path d="M62 62.5 L68 69.5 L74 62.5" fill="none" stroke="#000000" stroke-width="3.2"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <rect width="1280" height="640" fill="#142132"/>
+  <g fill="#ffffff" fill-opacity="0.04">
+    <rect x="0" y="96" width="1280" height="6"/>
+    <rect x="0" y="176" width="1280" height="6"/>
+    <rect x="0" y="256" width="1280" height="6"/>
+    <rect x="0" y="336" width="1280" height="6"/>
+    <rect x="0" y="416" width="1280" height="6"/>
+    <rect x="0" y="496" width="1280" height="6"/>
+  </g>
+  <g transform="translate(82.00 165.00) scale(1.55)">
+    <g fill="#e0a92e" stroke="#e0a92e" stroke-linecap="round" stroke-linejoin="round">
+      <g stroke="none" fill="#8a6a26">
+        <rect x="90.3" y="148.0" width="539.4" height="6" rx="3"/>
+        <rect x="90.3" y="162.0" width="539.4" height="6" rx="3"/>
+        <rect x="90.3" y="176.0" width="296.7" height="6" rx="3"/>
+        <rect x="240.0" y="40.0" width="3.0" height="96" rx="1.5"/>
+      </g>
+      <g transform="translate(45.91 -8.70) scale(0.8372)" mask="url(#impression)">
+        <path d="M68 66 L126 164" fill="none" stroke-width="30"/>
+        <path d="M188 66 L126 164" fill="none" stroke-width="15"/>
+        <circle cx="188" cy="66" r="8" stroke="none"/>
+        <circle cx="126" cy="164" r="16" stroke="none"/>
+      </g>
+      <g fill="none">
+        <path d="M283.5 50.5 L311.4 125.5" stroke-width="21.0"/>
+        <path d="M344.1 45.8 L311.4 125.5" stroke-width="11.5"/>
+        <path d="M383.3 50.5 L383.3 125.5" stroke-width="21.0"/>
+        <path d="M422.6 45.8 L482.1 45.8" stroke-width="11.5"/>
+        <path d="M452.3 50.5 L452.3 125.5" stroke-width="21.0"/>
+        <path d="M516.6 45.8 L516.6 130.2" stroke-width="11.5"/>
+        <path d="M521.3 50.5 L575.2 125.5" stroke-width="21.0"/>
+        <path d="M580.0 45.8 L580.0 130.2" stroke-width="11.5"/>
+        <path d="M619.2 50.5 L619.2 125.5" stroke-width="21.0"/>
+      </g>
+    </g>
+  </g>
+</svg>

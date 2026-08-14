@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Vitni">
+  <!-- Vitni app icon — small tier, rasterised at 32, 24 and 16 px (see xtask/src/icons.rs).
+
+       The plain tier's mark scaled 1.15× about the plate's centre, so it fills about 68% of the plate
+       instead of 60%, with the stroke weights growing with it. A 16 px raster has no room to spare:
+       at the larger tiers' proportions the V becomes three grey hairlines. The light ascending stroke
+       is the first casualty of downscaling, which is why it thickens here rather than staying in
+       proportion — the weight contrast stays visible, but only just.
+
+       No seal detail at any size on this tier: the acceptance criterion for #326 is that at 16 px the
+       icon is indistinguishable from the plain V. -->
+  <rect width="256" height="256" rx="56" fill="#142132"/>
+  <g fill="#e0a92e" stroke="#e0a92e" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M56 65 L126 190" fill="none" stroke-width="35"/>
+    <path d="M202 65 L126 190" fill="none" stroke-width="20"/>
+    <circle cx="202" cy="65" r="12" stroke="none"/>
+    <circle cx="126" cy="190" r="20" stroke="none"/>
+  </g>
+</svg>

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="200" viewBox="0 0 720 200" role="img"
+     aria-label="Vitni">
+  <!-- Vitni wordmark, rasterised to vitni-wordmark-720.png by `cargo xtask icons`. Used by README.md.
+
+       The navy plate is deliberate rather than a transparent lockup: gold on white is about 1.9:1, so a
+       transparent version would be illegible in GitHub's light theme. One asset works in both.
+
+       The letters are drawn, not set: `resvg` is built without text shaping, and a wordmark that
+       depended on system fonts would render differently on every machine. Drawing them also lets each
+       capital take the weight a broad nib gives it — heavy stems and heavy descending diagonals, light
+       crossbars and light ascending diagonals — the same logic as the mark. The layout is cap height 96
+       on a baseline at y=136, heavy stroke 21, light stroke 11.5, letter spacing 23, round caps;
+       every coordinate below follows from those five numbers.
+
+       The mark is the icon's V and seal without its plate or its own ruled lines — in the lockup the
+       record runs under the whole name instead — and the thin rule between them is what stops the
+       mark's V reading as a second letter V. Same lockup in vitni-splash.svg; SVG has no include, so a
+       change to the mark or the letterforms is a change to both files and to the icon tiers. -->
+  <defs>
+    <mask id="impression" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
+      <rect width="256" height="256" fill="#ffffff"/>
+      <circle cx="68" cy="66" r="11.2" fill="none" stroke="#000000" stroke-width="1.8"/>
+      <path d="M62 62.5 L68 69.5 L74 62.5" fill="none" stroke="#000000" stroke-width="3.2"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <rect width="720" height="200" rx="24" fill="#142132"/>
+  <g fill="#e0a92e" stroke="#e0a92e" stroke-linecap="round" stroke-linejoin="round">
+      <g stroke="none" fill="#8a6a26">
+        <rect x="90.3" y="148.0" width="539.4" height="6" rx="3"/>
+        <rect x="90.3" y="162.0" width="539.4" height="6" rx="3"/>
+        <rect x="90.3" y="176.0" width="296.7" height="6" rx="3"/>
+        <rect x="240.0" y="40.0" width="3.0" height="96" rx="1.5"/>
+      </g>
+      <g transform="translate(45.91 -8.70) scale(0.8372)" mask="url(#impression)">
+        <path d="M68 66 L126 164" fill="none" stroke-width="30"/>
+        <path d="M188 66 L126 164" fill="none" stroke-width="15"/>
+        <circle cx="188" cy="66" r="8" stroke="none"/>
+        <circle cx="126" cy="164" r="16" stroke="none"/>
+      </g>
+      <g fill="none">
+        <path d="M283.5 50.5 L311.4 125.5" stroke-width="21.0"/>
+        <path d="M344.1 45.8 L311.4 125.5" stroke-width="11.5"/>
+        <path d="M383.3 50.5 L383.3 125.5" stroke-width="21.0"/>
+        <path d="M422.6 45.8 L482.1 45.8" stroke-width="11.5"/>
+        <path d="M452.3 50.5 L452.3 125.5" stroke-width="21.0"/>
+        <path d="M516.6 45.8 L516.6 130.2" stroke-width="11.5"/>
+        <path d="M521.3 50.5 L575.2 125.5" stroke-width="21.0"/>
+        <path d="M580.0 45.8 L580.0 130.2" stroke-width="11.5"/>
+        <path d="M619.2 50.5 L619.2 125.5" stroke-width="21.0"/>
+      </g>
+  </g>
+</svg>

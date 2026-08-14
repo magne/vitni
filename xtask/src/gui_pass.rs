@@ -527,10 +527,10 @@ fn seed_fixture(out: &Path, home: &Path) -> Result<()> {
 ///
 /// The images are *generated* with `ImageMagick` (already a hard requirement, see [`preflight`]) rather
 /// than committed: a deterministic gradient with a filled circle, textured enough that a `painted`
-/// assertion over the preview frame measures the image and not its background. The repo's own
-/// `assets/vitni.png` will not do — it is a 64×64 fully transparent placeholder, so it would fail
-/// `painted` even when the preview loads perfectly. Both are the same image, so one `painted`
-/// calibration covers both rows.
+/// assertion over the preview frame measures the image and not its background. The committed icon
+/// rasters (`assets/icon/`) will not do — the largest is 256 px of near-flat plate, so a `painted`
+/// calibration over the preview frame would measure the plate rather than the preview. Both are the
+/// same image, so one `painted` calibration covers both rows.
 ///
 /// The records deliberately carry **no MIME**: `vitni media` has no `set-mime`, so this is the
 /// state every record the CLI creates is in, and #301's two live causes (no inferred MIME, and the

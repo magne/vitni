@@ -1,3 +1,6 @@
+<img src="crates/vitni-ui-dioxus/assets/brand/vitni-wordmark-720.png" width="360" height="100"
+     alt="Vitni — a V whose heavy stroke ends in a seal, standing in three ruled lines, beside the name.">
+
 # Vitni
 
 **An evidence-first genealogy program.** Every fact is a recorded claim — who asserted it, when,

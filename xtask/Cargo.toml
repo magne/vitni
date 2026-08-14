@@ -26,6 +26,12 @@ vitni-core = { workspace = true }
 # crate in the graph — dioxus-desktop already pulls x11rb in through global-hotkey.
 x11rb = "0.13"
 
+# `icons` rasterises the committed SVG icon sources into the installed PNG sizes (#326). In-process so
+# a regenerated icon depends on `Cargo.lock` alone rather than on whichever SVG renderer a machine
+# happens to have; `default-features = false` drops text shaping (fontdb, system fonts) — the icon
+# sources are pure geometry.
+resvg = { version = "0.48", default-features = false }
+
 # Duplicated (the `[lints]` table can't both inherit and override). xtask is a developer
 # task runner whose stdout/stderr is its interface, so the print lints are relaxed — same
 # relaxation vitni-cli takes. Keep this list in sync with the workspace lint set.
