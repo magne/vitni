@@ -26,6 +26,9 @@
 //! - `gui-pass` — run the real GUI on a headless Xvfb display, drive it with `xdotool`, and assert
 //!   over screenshots of what SSR cannot reach (the `MapLibre` canvas, the overlay layer). Scenarios
 //!   are TOML files under `crates/vitni-ui-dioxus/tests/gui-pass/`, so adding one needs no rebuild.
+//! - `screenshots` — regenerate the README images from the running GUI over a seeded demo workspace
+//!   (#328), using the same harness. Reproducible: the seed's clock, operator and locale are pinned,
+//!   so two runs produce no diff.
 //!
 //! # Licence
 //!
@@ -45,6 +48,7 @@ mod issue_sync;
 mod labels;
 mod licence_check;
 mod package;
+mod screenshots;
 mod util;
 
 use std::env;
@@ -66,6 +70,7 @@ fn main() -> Result<()> {
         Some("labels") => labels::run(),
         Some("package") => package::run(),
         Some("gui-pass") => gui_pass::run(&env::args().skip(2).collect::<Vec<String>>()),
+        Some("screenshots") => screenshots::run(&env::args().skip(2).collect::<Vec<String>>()),
         Some("check") => check(),
         Some(other) => {
             print_usage();
@@ -128,4 +133,7 @@ fn print_usage() {
     println!("                 [--display :N] drive a different display (default :99)");
     println!("                 [--real-config] use your own config/workspaces instead of the fixture");
     println!("                 [--workspace NAME] open that workspace (implies --real-config)");
+    println!("  screenshots    regenerate the README images in docs/assets from the running GUI");
+    println!("                 [--display :N] drive a different display (default :99)");
+    println!("                 [--keep]       leave Xvfb + the GUI up (attach with x11vnc -display :99)");
 }
