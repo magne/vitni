@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2b2d42"/>
+      <stop offset="100%" stop-color="#1a1c2e"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8c630"/>
+      <stop offset="100%" stop-color="#e09f1e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background shield / tablet (represents the record) -->
+  <rect x="64" y="64" width="384" height="384" rx="48" fill="url(#bg)" stroke="#f8c630" stroke-width="8"/>
+
+  <!-- Central symbol: an eye (witness) + a quill (record) merged -->
+  <!-- Outer eye ring -->
+  <circle cx="256" cy="220" r="72" fill="none" stroke="url(#glow)" stroke-width="10"/>
+
+  <!-- Iris / pupil (the "fact" at the center) -->
+  <circle cx="256" cy="220" r="24" fill="#f8c630"/>
+  <circle cx="256" cy="220" r="8" fill="#2b2d42"/>
+
+  <!-- Quill / pen crossing the eye diagonally (writing the record) -->
+  <g stroke="#f8c630" stroke-width="8" stroke-linecap="round">
+    <!-- Quill shaft -->
+    <line x1="180" y1="300" x2="330" y2="150"/>
+    <!-- Feather barbs -->
+    <line x1="210" y1="270" x2="250" y2="240"/>
+    <line x1="230" y1="250" x2="270" y2="220"/>
+    <line x1="195" y1="285" x2="230" y2="255"/>
+    <!-- Nib tip -->
+    <line x1="330" y1="150" x2="345" y2="135"/>
+  </g>
+
+  <!-- Three small dots below (representing the three layers: evidence, conclusion, source) -->
+  <circle cx="210" cy="360" r="8" fill="#f8c630" opacity="0.6"/>
+  <circle cx="256" cy="370" r="10" fill="#f8c630"/>
+  <circle cx="302" cy="360" r="8" fill="#f8c630" opacity="0.6"/>
+
+  <!-- Subtle chain/link arc at the bottom (continuity / trail of assertions) -->
+  <path d="M 140 400 Q 256 440 372 400" fill="none" stroke="#f8c630" stroke-width="4" opacity="0.4" stroke-dasharray="8 8"/>
+
+</svg>
