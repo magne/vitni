@@ -1,0 +1,37 @@
+Vitni — an evidence-first genealogy program
+Copyright (c) 2026 Magne Rasmussen and the Vitni authors
+
+This distribution is licensed per crate, not as a whole. The authoritative
+mapping from crate to licence is the `license` field of each crate's
+`Cargo.toml`; the reasoning is in `docs/adr/0034-licence-split-agpl-application-permissive-interchange.md`.
+
+In outline:
+
+  * The interchange crates and the bundled plugin sources are licensed under
+    either the MIT licence (LICENSE-MIT) or the Apache License, Version 2.0
+    (LICENSE-APACHE), at your option.
+
+  * The application crates are licensed under the GNU Affero General Public
+    License, version 3 or (at your option) any later version (LICENSE-AGPL),
+    with the additional permission stated below.
+
+Additional permission under GNU AGPL version 3 section 7: if you modify this
+Program, or any covered work, by combining it with a WebAssembly component
+that interacts with the Program solely through the versioned `vitni:host-api`
+WIT world (or any later version of that world), the licensor grants you
+additional permission to convey the resulting work. Such a component is not
+required to be licensed under the GNU AGPL.
+
+A commercial licence is available for anyone who needs to embed the
+application layer in a closed product; see COMMERCIAL.md.
+
+Unless you state otherwise, contributions you submit for inclusion are
+licensed as described in CONTRIBUTING.md.
+
+---
+
+Vitni's domain model follows the entity vocabulary of Gramps
+(https://github.com/gramps-project/gramps), which is licensed GPLv2-or-later.
+That vocabulary is reimplemented clean-room from the published data model and
+its documentation: no Gramps source code has been copied into this project,
+and none may be.

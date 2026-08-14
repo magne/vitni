@@ -127,14 +127,24 @@ Split by layer:
 
 - The **interchange crates** — `vitni-interchange`, `vitni-gedcom`,
   `vitni-gramps-xml`, `vitni-i18n` and the bundled plugin sources — are
-  **`MIT OR Apache-2.0`**, so anything can reuse them, including a GPLv2-only project.
-- The **application** is **`AGPL-3.0-or-later`**, with an additional permission under section 7: a
-  WebAssembly component that talks to the host only through the versioned plugin interface is not
-  required to be AGPL. Third-party plugins, including proprietary ones, are welcome.
+  **`MIT OR Apache-2.0`** ([`LICENSE-MIT`](LICENSE-MIT), [`LICENSE-APACHE`](LICENSE-APACHE)), so
+  anything can reuse them, including a GPLv2-only project.
+- The **application** is **`AGPL-3.0-or-later`** ([`LICENSE-AGPL`](LICENSE-AGPL)), with an additional
+  permission under section 7: a WebAssembly component that talks to the host only through the
+  versioned plugin interface is not required to be AGPL. Third-party plugins, including proprietary
+  ones, are welcome.
+
+[`NOTICE`](NOTICE) has the crate-by-crate mapping, and
+[ADR 0034](docs/adr/0034-licence-split-agpl-application-permissive-interchange.md) records why the
+split is shaped this way; the longer analysis is in
+[`docs/research/licensing-and-monetization.md`](docs/research/licensing-and-monetization.md).
 
 A **commercial licence** is available for anyone who needs to embed the application layer in a closed
-product; ask. The reasoning behind this arrangement, including what it does and does not protect, is
-written up in [`docs/research/licensing-and-monetization.md`](docs/research/licensing-and-monetization.md).
+product — [`COMMERCIAL.md`](COMMERCIAL.md) covers what it does and does not include, and the cases
+that need no licence at all.
+
+Contributions come in under the grant in [`CONTRIBUTING.md`](CONTRIBUTING.md), which also explains
+why that grant is as broad as it is.
 
 [gramps]: https://github.com/gramps-project/gramps
 [webtrees]: https://webtrees.net/

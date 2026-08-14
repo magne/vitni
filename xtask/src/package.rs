@@ -133,10 +133,14 @@ fn bundle_role(bundle: &Path) -> Result<Option<String>> {
     Ok(Some(manifest.role))
 }
 
-/// Copies the top-level docs the tarball ships (README, and any license text if present).
+/// Copies the top-level docs the tarball ships (README, NOTICE, and the licence texts).
+///
+/// All three licences ship: the tarball carries both the AGPL application and the permissive
+/// interchange crates, and `NOTICE` is what maps crate to licence (ADR 0034).
 fn copy_docs(stage: &Path) -> Result<()> {
     copy_if_present(Path::new("README.md"), &stage.join("README.md"))?;
-    for license in ["LICENSE", "LICENSE-MIT", "LICENSE-APACHE"] {
+    copy_if_present(Path::new("NOTICE"), &stage.join("NOTICE"))?;
+    for license in ["LICENSE-AGPL", "LICENSE-MIT", "LICENSE-APACHE"] {
         copy_if_present(Path::new(license), &stage.join(license))?;
     }
     Ok(())

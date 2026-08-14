@@ -2,6 +2,8 @@
 name = "vitni-gedcom-import"
 version = "0.1.0"
 edition = "2024"
+# commodity interop (ADR 0034 §1). Outside the workspace, so nothing is inherited.
+license = "MIT OR Apache-2.0"
 publish = false
 
 # GEDCOM import plugin component (ADR 0007, ADR 0011). Thin wasm glue: parses with
