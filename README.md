@@ -1,8 +1,7 @@
-# Vitni
+<img src="crates/vitni-ui-dioxus/assets/brand/vitni-wordmark-720.png" width="360" height="100"
+     alt="Vitni — a V whose heavy stroke ends in a seal, standing in three ruled lines, beside the name.">
 
-<img src="crates/vitni-ui-dioxus/assets/icon/vitni-128.png" width="96" height="96"
-     alt="The Vitni icon: a V drawn as two ascending strokes with three nodes — also a two-generation
-     pedigree — whose right upper node is a seal.">
+# Vitni
 
 **An evidence-first genealogy program.** Every fact is a recorded claim — who asserted it, when,
 from which source, and with what confidence. The family tree you read is a *conclusion* derived from

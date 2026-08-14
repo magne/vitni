@@ -13,8 +13,8 @@
 //!   primitives (so the typing guard is wired once; fixes "global keys fire inside text controls").
 //! - `licence-check` — verify the per-crate licence split holds: every crate declares a licence, and
 //!   no permissive crate reaches an `AGPL-3.0-or-later` one (ADR 0034).
-//! - `icons` — rasterise the committed SVG icon sources into the installed PNG sizes; `--check`
-//!   verifies the committed rasters instead of rewriting them (#326).
+//! - `icons` — rasterise the committed SVG art into the installed icon PNG sizes and the brand
+//!   lockups' PNGs; `--check` verifies the committed rasters instead of rewriting them (#326).
 //! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`,
 //!   `licence-check`, `icons --check`) in one pass, reporting all failures rather than stopping at
 //!   the first.
@@ -112,7 +112,7 @@ fn print_usage() {
     println!("  css-check      verify bundled component CSS hardcodes no colour literals");
     println!("  input-guard    verify no RSX form element is rendered outside the input primitives");
     println!("  licence-check  verify no permissive crate reaches AGPL code and every crate declares a licence");
-    println!("  icons          rasterise the SVG icon sources into the installed PNG sizes");
+    println!("  icons          rasterise the SVG icon tiers and brand lockups into their PNGs");
     println!("                 [--check]      verify the committed rasters instead of rewriting them");
     println!("  issue-sync     verify the docs/issues.md <-> GitHub Issues linkage (--online to reconcile)");
     println!("  labels         reconcile GitHub labels with .github/labels.toml (--apply to write)");

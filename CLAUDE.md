@@ -115,10 +115,13 @@ prek run                                                             # run git h
 `cargo xtask` also runs the individual checks (`i18n-check`, `css-check`, `input-guard`,
 `licence-check`, `icons --check`) plus `issue-sync`, `labels`, and `package` (Linux release tarball).
 
-The **app icon** lives in `crates/vitni-ui-dioxus/assets/icon/`: four SVG tiers (the seal on the V's
-right upper terminal is disclosed by size) plus the symbolic variant, and the committed PNGs
-`cargo xtask icons` rasterises from them. Edit a source, regenerate, commit both — the design rules and
-the size→tier mapping are in [`docs/development.md`](docs/development.md#the-app-icon).
+The **app icon** lives in `crates/vitni-ui-dioxus/assets/icon/` (four SVG tiers — the seal on the V's
+heavy upper terminal and the ruled lines under it are both disclosed by size — plus the symbolic
+variant) and the **brand lockups** in `assets/brand/`, all with the committed PNGs `cargo xtask icons`
+rasterises from them. Their letterforms are geometry, not text: the rasteriser has no text shaping, by
+design. Edit a source, regenerate, commit both — the design rules, palette and size→tier mapping are in
+[`docs/development.md`](docs/development.md#the-app-icon-and-the-brand-art). Concept art the design was
+weighed against, with the verdict, is in [`docs/concept-art/`](docs/concept-art/concept-art.md).
 
 ## Testing the GUI
 
