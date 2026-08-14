@@ -43,8 +43,9 @@ needs no extra step (it links the system WebView2 loader).
 
 ```bash
 cargo build --workspace                                              # every crate
-cargo run -p vitni-cli                                           # the `vitni` binary
-cargo run -p vitni-ui-dioxus --features desktop                  # the GUI
+cargo run -p vitni                                               # the `vitni` launcher: the GUI
+cargo run -p vitni -- person list                                # …and the CLI, with arguments
+cargo run -p vitni-cli                                           # the CLI alone, no webview linked
 cargo nextest run --workspace --all-features --lib --bins --tests    # tests
 cargo test -p vitni-core <name>                                  # one test in one crate
 cargo clippy --workspace --all-targets --all-features -- -D warnings

@@ -12,8 +12,9 @@ A genealogy program in Rust, based on the data model of
 - **Event-sourced core.** State is derived by replaying a log of events, not mutated in place.
   Each event is grouped under an **aggregate** and carries an **event context** naming the
   **operator** who caused it — auditable by construction (who changed what, when, and why).
-- **Two frontends over one core.** The `vitni` CLI binary and the Dioxus GUI both sit on
-  `vitni-app` (a web app is planned); domain logic stays in `vitni-core`.
+- **Two frontends over one core.** The terminal frontend and the Dioxus GUI both sit on
+  `vitni-app` (a web app is planned); domain logic stays in `vitni-core`. One `vitni` binary
+  launches either — the GUI with no arguments, the CLI with any (ADR 0035).
 
 ## Domain model & architecture
 
@@ -77,13 +78,14 @@ Each crate's `lib.rs` module header holds the authoritative description; this ta
 | `vitni-core` | Domain model + event-sourcing engine. Pure — no I/O, no user-facing strings. |
 | `vitni-app` | Coordination and use-cases (ADR 0005, 0006); returns DTOs. |
 | `vitni-db` | Persistence (ADR 0002): tables, migrations, event store, projection storage. |
-| `vitni-cli` | The `vitni` binary; its stdout/stderr is the interface. |
+| `vitni-cli` | The terminal frontend; its stdout/stderr is the interface. Library + binary (`vitni-cli`), so the launcher shares one `run()`. |
 | `vitni-ui` | Framework-agnostic presentation (ADR 0008): view-models, navigation/intents, Fluent, plugin-UI vocabulary. |
-| `vitni-ui-dioxus` | The Dioxus renderer + GUI binary. Library + binary, so SSR tests render without a window; the entry point is behind the `desktop` feature. |
+| `vitni-ui-dioxus` | The Dioxus renderer. Library only — SSR tests render without a window; `run_desktop()`, its window entry point, is behind the `desktop` feature. |
 | `vitni-i18n` | Shared Fluent plumbing (ADR 0003): the workspace > shared-app > embedded override chain and locale fallback. |
 | `vitni-plugin-host` | WASM component host (ADR 0007, 0011, 0014): Wasmtime, deny-by-default capabilities over one versioned WIT world, fuel + memory limits. Sits above `vitni-app`, driving use-cases under an `AgentKind::Software` session. |
 | `vitni-interchange` | The format-neutral leaf value vocabulary shared by the interchange formats — simple and serde-free; richer concerns stay in core. |
 | `vitni-gedcom`, `vitni-gramps-xml`, `vitni-digitalarkivet` | Pure parse/emit crates — the format logic of the `plugins/*` glue, free of WASM/host types so `--workspace` unit-tests them. Digitalarkivet fixtures (`…/tests/fixtures/`) are verbatim captures — **never reformat them** (prek skips its whitespace/EOF fixers there). |
+| `vitni` | The `vitni` launcher binary (ADR 0035): the GUI with no arguments, the CLI with any, both as in-process library calls. Holds no logic of its own. |
 | `xtask` (repo root, not `crates/*`) | Repository task runner, not shipped. Aliased in `.cargo/config.toml`. |
 
 A new frontend consumes `vitni-app` and never re-implements domain rules or coordination;
@@ -98,8 +100,9 @@ is its own export). When wiring a new app→UI path, add the `pub use` first, or
 
 ```bash
 cargo build --workspace                                              # build every crate
-cargo run -p vitni-cli                                           # run the `vitni` binary
-cargo run -p vitni-ui-dioxus --features desktop                  # run the GUI
+cargo run -p vitni                                               # run the GUI (`vitni`, no arguments)
+cargo run -p vitni -- person list                                # …and the CLI, with arguments
+cargo run -p vitni-cli                                           # the CLI alone — no webview linked
 cargo nextest run --workspace --all-features --lib --bins --tests    # all tests (see note below)
 cargo test -p vitni-core <name>                                  # single test by name in one crate
 cargo clippy --workspace --all-targets --all-features -- -D warnings # lint (zero warnings)
@@ -193,7 +196,8 @@ fixture with people instead — every scenario there is measured against its cur
 
 The CLI's top-level commands are `init`, `rebuild`, `import`, `export`, `plugin`, plus one
 subcommand-bearing verb per aggregate, generated from `for_each_cli_command!` in
-`crates/vitni-cli/src/main.rs`. Workspace selection is `--workspace`/`VITNI_WORKSPACE`.
+`crates/vitni-cli/src/lib.rs`. Workspace selection is `--workspace`/`VITNI_WORKSPACE`. Every one of
+them is reachable through the `vitni` launcher too, which forwards anything with arguments.
 
 > **Always pass `--workspace` / `--all`.** `default-members = ["crates/vitni-cli"]`, so a
 > cargo command without `-p`/`--workspace` (`--all` for `fmt`) silently covers the CLI crate
