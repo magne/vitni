@@ -1,25 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Vitni">
   <!-- Vitni app icon — small tier, rasterised at 32, 24 and 16 px (see xtask/src/icons.rs).
 
-       Two things change from vitni-plain.svg, both because a 16 px raster has no room to spare: the
-       mark grows to about 71% of the plate (60% on the larger tiers) and the stroke thickens with it,
-       so the V survives as a shape rather than as three grey hairlines. The seal is an ordinary node
-       here — the acceptance criterion for #326 is that at 16 px the icon is indistinguishable from the
-       plain V. -->
-  <defs>
-    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="256" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1e2b38"/>
-      <stop offset="1" stop-color="#0d141b"/>
-    </linearGradient>
-    <linearGradient id="mark" x1="0" y1="54" x2="0" y2="207" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#8ecbff"/>
-      <stop offset="1" stop-color="#4b9be0"/>
-    </linearGradient>
-  </defs>
-  <rect width="256" height="256" rx="56" fill="url(#plate)"/>
-  <path d="M57 74 L128 187 L199 74" fill="none" stroke="url(#mark)" stroke-width="30"
-        stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="57" cy="74" r="20" fill="url(#mark)"/>
-  <circle cx="128" cy="187" r="20" fill="url(#mark)"/>
-  <circle cx="199" cy="74" r="20" fill="url(#mark)"/>
+       The plain tier's mark scaled 1.15× about the plate's centre, so it fills about 68% of the plate
+       instead of 60%, with the stroke weights growing with it. A 16 px raster has no room to spare:
+       at the larger tiers' proportions the V becomes three grey hairlines. The light ascending stroke
+       is the first casualty of downscaling, which is why it thickens here rather than staying in
+       proportion — the weight contrast stays visible, but only just.
+
+       No seal detail at any size on this tier: the acceptance criterion for #326 is that at 16 px the
+       icon is indistinguishable from the plain V. -->
+  <rect width="256" height="256" rx="56" fill="#142132"/>
+  <g fill="#e0a92e" stroke="#e0a92e" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M56 65 L126 190" fill="none" stroke-width="35"/>
+    <path d="M202 65 L126 190" fill="none" stroke-width="20"/>
+    <circle cx="202" cy="65" r="12" stroke="none"/>
+    <circle cx="126" cy="190" r="20" stroke="none"/>
+  </g>
 </svg>

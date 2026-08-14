@@ -1,16 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Vitni">
   <!-- Vitni symbolic icon — GNOME and the tray. Monochrome, no plate, and no seal detail at any size:
-       the seal is one of the three ordinary nodes here.
+       the seal is one of the three ordinary nodes here. The V keeps the lapidary weight contrast of
+       the full mark — heavy descending stroke, light ascending one — so the family reads as one.
 
        Every shape is a filled `path`/`circle` in the Adwaita foreground colour, never a stroke: GTK
        recolours a symbolic icon by forcing `fill` on `rect,circle,path`, so a stroked outline would
-       stay dark on a dark panel. The two arms are therefore the stroke's outline as an explicit quad,
-       and the three node circles round off their ends. -->
+       stay dark on a dark panel. The two arms are therefore each stroke's outline as an explicit
+       quad, and the node circles round off their ends. -->
   <g fill="#2e3436">
-    <path d="M3.525 3.405 L8.925 11.805 L7.075 12.995 L1.675 4.595 Z"/>
-    <path d="M14.325 4.595 L8.925 12.995 L7.075 11.805 L12.475 3.405 Z"/>
-    <circle cx="2.6" cy="4" r="1.6"/>
-    <circle cx="13.4" cy="4" r="1.6"/>
+    <path d="M4.26 3.51 L9.16 11.71 L6.84 13.09 L1.94 4.89 Z"/>
+    <path d="M13.83 4.60 L8.63 12.80 L7.37 12.00 L12.57 3.80 Z"/>
+    <circle cx="3.1" cy="4.2" r="1.35"/>
+    <circle cx="13.2" cy="4.2" r="0.95"/>
     <circle cx="8" cy="12.4" r="1.6"/>
   </g>
 </svg>

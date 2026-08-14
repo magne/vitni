@@ -1,34 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Vitni">
   <!-- Vitni app icon — full-detail tier, rasterised at 256 and 128 px (see xtask/src/icons.rs).
-       The mark is a V drawn as two ascending strokes with three nodes, so the monogram is also a
-       two-generation pedigree fragment. The right upper terminal is a seal: its rim carries a cut flat
-       and its face an impressed chevron, both subtracted from the mark rather than added to it, so the
-       silhouette never grows past the plain V's. The seal sits on an upper terminal, not the vertex,
-       because an assertion attaches to a claim or a relationship, not to a person as a whole. -->
+
+       The mark is a V with the weight a broad nib gives it: a heavy descending stroke, a light
+       ascending one, three nodes — so the monogram is also a two-generation pedigree fragment. It
+       stands in three ruled lines: the record the conclusion is derived from, which is what this
+       program is about, and the reason the vertex node overlaps the top line rather than resting
+       above it.
+
+       The heavy upper terminal is a seal. Its impression — a concentric ring and a chevron echoing
+       the mark itself — is cut *out* of the terminal through a mask, never added to it, so the
+       silhouette is the plain V's at every size. The seal sits on an upper terminal rather than the
+       vertex because an assertion attaches to a claim or a relationship, not to a person as a whole;
+       putting it on the *heavy* stroke makes it exactly as wide as the stroke it caps, so it can never
+       read as a notification badge. -->
   <defs>
-    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="256" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1e2b38"/>
-      <stop offset="1" stop-color="#0d141b"/>
-    </linearGradient>
-    <linearGradient id="mark" x1="0" y1="64" x2="0" y2="196" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#8ecbff"/>
-      <stop offset="1" stop-color="#4b9be0"/>
-    </linearGradient>
     <mask id="impression" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
       <rect width="256" height="256" fill="#ffffff"/>
-      <path d="M212.4 88.72 L181.28 57.6 L199.67 39.22 L230.78 70.33 Z" fill="#000000"/>
-      <path d="M182 79 L188 86 L194 79" fill="none" stroke="#000000" stroke-width="3.6"
+      <circle cx="68" cy="66" r="11.2" fill="none" stroke="#000000" stroke-width="1.8"/>
+      <path d="M62 62.5 L68 69.5 L74 62.5" fill="none" stroke="#000000" stroke-width="3.2"
             stroke-linecap="round" stroke-linejoin="round"/>
     </mask>
   </defs>
-  <rect width="256" height="256" rx="56" fill="url(#plate)"/>
+  <rect width="256" height="256" rx="56" fill="#142132"/>
   <rect x="1.5" y="1.5" width="253" height="253" rx="54.5" fill="none" stroke="#ffffff"
         stroke-opacity="0.1" stroke-width="3"/>
-  <g mask="url(#impression)">
-    <path d="M68 82 L128 178 L188 82" fill="none" stroke="url(#mark)" stroke-width="24"
-          stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="68" cy="82" r="17" fill="url(#mark)"/>
-    <circle cx="128" cy="178" r="17" fill="url(#mark)"/>
-    <circle cx="188" cy="82" r="17" fill="url(#mark)"/>
+  <g fill="#e0a92e" stroke="#e0a92e" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="none" fill="#8a6a26">
+      <rect x="40" y="172" width="176" height="7" rx="3.5"/>
+      <rect x="40" y="190" width="176" height="7" rx="3.5"/>
+      <rect x="40" y="208" width="108" height="7" rx="3.5"/>
+    </g>
+    <g mask="url(#impression)">
+      <path d="M68 66 L126 164" fill="none" stroke-width="30"/>
+      <path d="M188 66 L126 164" fill="none" stroke-width="15"/>
+      <circle cx="188" cy="66" r="8" stroke="none"/>
+      <circle cx="126" cy="164" r="16" stroke="none"/>
+    </g>
   </g>
 </svg>
