@@ -919,8 +919,8 @@ fn DnaTestNoteForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, Proven
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::Notes,
         loc.field_label("note"),
         "note".to_owned(),
@@ -928,11 +928,7 @@ fn DnaTestNoteForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, Proven
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         onsubmit.call((
             DnaTestEdit::AttachNote {
                 human_id: human_id.clone(),
@@ -941,7 +937,8 @@ fn DnaTestNoteForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, Proven
             prov(),
         ));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The DNA-test "Add tag" form: a picker of existing tags by name → [`DnaTestEdit::Tag`].

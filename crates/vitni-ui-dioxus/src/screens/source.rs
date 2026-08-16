@@ -840,8 +840,8 @@ fn SourceLinkRepositoryForm(
         .as_ref()
         .and_then(|row| source_media_type_choices().iter().position(|m| *m == row.media_type))
         .unwrap_or(0);
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::Repositories,
         loc.tab_label("repositories"),
         "repository".to_owned(),
@@ -873,12 +873,7 @@ fn SourceLinkRepositoryForm(
             onchange: move |event: FormEvent| media.set(event.value().parse::<usize>().unwrap_or(0)),
         }
     };
-    let picker_for_save = picker.clone();
-    let fixed_for_save = fixed.as_ref().map(|(id, _)| id.clone());
-    let onsave = use_callback(move |()| {
-        let Some(repository_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
-            return;
-        };
+    let onattach = use_callback(move |repository_id: String| {
         let media_type = source_media_type_choices()
             .get(media())
             .cloned()
@@ -895,6 +890,12 @@ fn SourceLinkRepositoryForm(
             prov(),
         ));
     });
+    let attach_onsave = use_attach_save(services, &attach, prov, onattach);
+    let fixed_for_save = fixed.as_ref().map(|(id, _)| id.clone());
+    let onsave = use_callback(move |()| match &fixed_for_save {
+        Some(id) => onattach.call(id.clone()),
+        None => attach_onsave.call(()),
+    });
     if let Some((id, name)) = &fixed {
         rsx! {
             div { class: "field",
@@ -910,7 +911,7 @@ fn SourceLinkRepositoryForm(
             }
         }
     } else {
-        attach_picker_form(loc, &picker, extra, prov, onsave)
+        attach_link_form(loc, &attach, extra, prov, onsave)
     }
 }
 
@@ -975,8 +976,8 @@ fn SourceAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Sou
     } else {
         Category::Media
     };
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         category,
         loc.field_label(&field),
         field.clone(),
@@ -984,11 +985,7 @@ fn SourceAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Sou
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         let edit = match field.as_str() {
             "note" => SourceEdit::AttachNote {
                 human_id: human_id.clone(),
@@ -1001,7 +998,8 @@ fn SourceAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Sou
         };
         onsubmit.call((edit, prov()));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The source "Add tag" form: a picker of existing tags by name → [`SourceEdit::Tag`].

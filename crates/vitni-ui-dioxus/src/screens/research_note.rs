@@ -279,8 +279,16 @@ fn SubjectChooser(save_label: String, onpick: EventHandler<(Category, PickerSele
     }
 }
 
-/// One category's existing-record picker with its own Save, isolated in a component so its option load
-/// is scoped to the chosen kind.
+/// One category's find-or-create picker with its own Save, isolated in a component so its option load
+/// is scoped to the chosen kind. "+ New …" offers create wherever [`vitni_ui::NewRecordDraft::supports`]
+/// says `category` can seed one (People/Events/Places here — Families and `DnaTests`, the other two subject
+/// kinds `subject_categories` lists, stay existing-only, correctly: a family needs partners and a DNA
+/// test needs an anchoring person, neither of which a bare subject pick supplies).
+///
+/// Commits on click, not deferred to the note's own Save (`record-editing.html` §6b's one exception,
+/// same as the provenance block's own "+ New citation" card): the create form's subject list is a plain
+/// `Vec<human_id>`, so a "+ New …" draft here has nowhere to live nested — Save creates the support
+/// record immediately, adds it as a subject, and resets the field for the next pick.
 #[component]
 fn SubjectPickField(category: Category, save_label: String, onpick: EventHandler<PickerSelection>) -> Element {
     let Some(AppCtx::Ready(state)) = try_consume_context::<AppCtx>() else {
@@ -288,29 +296,62 @@ fn SubjectPickField(category: Category, save_label: String, onpick: EventHandler
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let picker = use_existing_picker(
-        services,
+    let nav = try_consume_context::<NavState>();
+    let attach = use_attach_picker(
+        services.clone(),
         category,
         loc.subject_kind_label(category),
         "subject".to_owned(),
         loc.picker_entity(category),
         Vec::new(),
     );
-    let mut state_signal = picker.state;
-    let disabled = picker.state.read().selection.is_none();
-    let picked = picker.state.read().selection.clone();
+    let mut attach_link = attach.link;
+    let disabled = *attach_link.saving.read() || !link_is_savable(&attach_link.link.read());
+    let onclick = move |_| {
+        let current = attach_link.link.read().clone();
+        match current {
+            vitni_ui::RecordLink::Existing(selection) => {
+                onpick.call(selection);
+                attach_link.link.set(vitni_ui::RecordLink::Empty);
+                attach_link.state.write().clear();
+            }
+            vitni_ui::RecordLink::New(draft) => {
+                let Some(request) = draft.to_request() else {
+                    return;
+                };
+                let summary = draft.summary();
+                let services = services.clone();
+                attach_link.error.set(None);
+                attach_link.saving.set(true);
+                spawn(async move {
+                    let created = commit_new_record(services, request, ProvenanceDraft::default()).await;
+                    attach_link.saving.set(false);
+                    match created {
+                        Ok(human_id) => {
+                            if let Some(mut nav) = nav {
+                                nav.mark_changed();
+                            }
+                            attach_link.link.set(vitni_ui::RecordLink::Empty);
+                            attach_link.state.write().clear();
+                            onpick.call(PickerSelection {
+                                human_id: human_id.clone(),
+                                title: summary.unwrap_or(human_id),
+                            });
+                        }
+                        Err(message) => attach_link.error.set(Some(message)),
+                    }
+                });
+            }
+            vitni_ui::RecordLink::Empty => {}
+        }
+    };
     rsx! {
-        {record_picker(loc, &picker)}
+        {attach_link_field(loc, &attach)}
         Button {
             label: save_label,
             variant: ButtonVariant::Default,
             disabled,
-            onclick: move |_| {
-                if let Some(selection) = picked.clone() {
-                    onpick.call(selection);
-                    state_signal.write().clear();
-                }
-            },
+            onclick,
         }
     }
 }

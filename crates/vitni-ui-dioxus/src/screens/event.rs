@@ -1083,10 +1083,10 @@ fn EventAddParticipantForm(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    // Edit mode fixes the person (only the participation changes); add mode offers an existing-person picker.
+    // Edit mode fixes the person (only the participation changes); add mode offers a find-or-create picker.
     let fixed_person = seed.as_ref().map(|row| row.human_id.clone());
-    let person_picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::People,
         loc.field_label("name"),
         "participant".to_owned(),
@@ -1102,8 +1102,31 @@ fn EventAddParticipantForm(
             notes: row.notes.clone(),
             supersedes: Some(row.assertion_id.clone()),
         });
-    let picker_for_save = person_picker.clone();
-    let fixed_for_save = fixed_person.clone();
+    // The participation's own provenance draft lives inside `ParticipationForm`; `prov` here only
+    // relays it to `use_attach_save` at submit time (so a "+ New person" create shares the same
+    // operator "why" as the participation it is being attached to — `record-editing.html` §5b), and
+    // `pending` carries the submitted fields across to `onattach`, which fires once the person id is
+    // resolved (synchronously for an existing pick, after the create commits for a "+ New …" draft).
+    let mut prov = use_signal(ProvenanceDraft::default);
+    let mut pending = use_signal(|| None::<NewParticipation>);
+    let human_id_for_attach = human_id.clone();
+    let onattach = use_callback(move |person_id: String| {
+        let Some(fields) = pending.write().take() else {
+            return;
+        };
+        onsubmit.call((
+            EventEdit::AddParticipant {
+                human_id: human_id_for_attach.clone(),
+                person_id,
+                role: fields.role,
+                age: fields.age,
+                attributes: fields.attributes,
+                notes: fields.notes,
+            },
+            prov(),
+        ));
+    });
+    let onsave = use_attach_save(services, &attach, prov, onattach);
     rsx! {
         if let Some(person) = &fixed_person {
             div { class: "field",
@@ -1111,25 +1134,28 @@ fn EventAddParticipantForm(
                 super::shared::RecordLink { category: Category::People, human_id: person.clone(), label: person.clone() }
             }
         } else {
-            {record_picker(loc, &person_picker)}
+            {attach_link_field(loc, &attach)}
         }
         ParticipationForm {
             seed: participation_seed,
-            onsubmit: move |(fields, prov): (NewParticipation, ProvenanceDraft)| {
-                let Some(person_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
+            onsubmit: move |(fields, incoming_prov): (NewParticipation, ProvenanceDraft)| {
+                if let Some(person_id) = fixed_person.clone() {
+                    onsubmit.call((
+                        EventEdit::AddParticipant {
+                            human_id: human_id.clone(),
+                            person_id,
+                            role: fields.role,
+                            age: fields.age,
+                            attributes: fields.attributes,
+                            notes: fields.notes,
+                        },
+                        incoming_prov,
+                    ));
                     return;
-                };
-                onsubmit.call((
-                    EventEdit::AddParticipant {
-                        human_id: human_id.clone(),
-                        person_id,
-                        role: fields.role,
-                        age: fields.age,
-                        attributes: fields.attributes,
-                        notes: fields.notes,
-                    },
-                    prov,
-                ));
+                }
+                prov.set(incoming_prov);
+                pending.set(Some(fields));
+                onsave.call(());
             },
         }
     }
@@ -1148,8 +1174,8 @@ fn EventAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Even
         "note" => Category::Notes,
         _ => Category::Media,
     };
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         category,
         loc.field_label(&field),
         field.clone(),
@@ -1157,11 +1183,7 @@ fn EventAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Even
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         let edit = match field.as_str() {
             "citation" => EventEdit::AttachCitation {
                 human_id: human_id.clone(),
@@ -1178,7 +1200,8 @@ fn EventAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Even
         };
         onsubmit.call((edit, prov()));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The event "Add tag" form: a picker of existing tags by name → [`EventEdit::Tag`].

@@ -1040,8 +1040,8 @@ fn CitationAttachForm(
     } else {
         ("media", Category::Media)
     };
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         category,
         loc.field_label(field),
         field.to_owned(),
@@ -1049,11 +1049,7 @@ fn CitationAttachForm(
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         let edit = if is_note {
             CitationEdit::AttachNote {
                 human_id: human_id.clone(),
@@ -1067,7 +1063,8 @@ fn CitationAttachForm(
         };
         onsubmit.call((edit, prov()));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The "Add tag" form: a picker of existing tags by name (the tag id is the option value, never

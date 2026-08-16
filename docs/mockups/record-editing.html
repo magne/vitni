@@ -299,8 +299,8 @@
     to. Cancel discards
     the draft; nothing is written. On Save the draft tab becomes the stored record in place, and the
     Explorer list beside it gains the new row and the rail's count badge updates — no manual refresh.
-    The same holds for every <b>record picker</b> still open elsewhere (§6b, and the existing-only pickers
-    of <a href="edit-patterns.html">edit-patterns</a> §c) and for the open <a href="search-palette.html">command
+    The same holds for every <b>record picker</b> still open elsewhere (§6b, and the find-or-create
+    pickers of <a href="edit-patterns.html">edit-patterns</a> §c) and for the open <a href="search-palette.html">command
     palette</a>: each reloads its options after any create, edit or undo, so a record created while it stays
     open is pickable in it without reopening the form.</p>
   <div class="specimen">
@@ -324,11 +324,18 @@
   <h2>6b · Nested drafts — cascading create</h2>
   <p class="muted">A field that links to another record uses a <a href="edit-patterns.html">record
     picker</a>: type to search, pick an existing record, or press the picker's <b>“+ New …”</b> row to
-    create one inline. A “+ New” child opens a <b><span class="mono">.draft-card</span></b> — a raised,
-    bordered, offset sub-form <b>named for what it creates</b> — nested inside the root draft, and
-    recursively (a new Citation card can hold a new Source card). Each card carries a <b>draft</b> badge
-    and a <b>✕</b> that discards <i>just that child</i> (its subtree drops; the rest of the draft stays).
-    <b>No new aggregate persists until the root record is saved.</b></p>
+    create one inline, seeded with whatever you typed. A “+ New” row opens a <b><span class="mono">.draft-card</span></b>
+    — a raised, bordered, offset sub-form <b>named for what it creates</b> — nested inside its container,
+    and, inside a create form, recursively (a new Citation card can hold a new Source card). Each card
+    carries a <b>draft</b> badge and a <b>✕</b> that discards <i>just that child</i> (its subtree drops;
+    the rest of the draft stays).</p>
+  <p class="muted">This same nested-draft mechanism appears in exactly three containers: a record's own
+    <b>create form</b> (recursive, as above — the whole tree commits with the root's Save), the
+    <a href="design-system.html">provenance block</a>'s own “+ New citation” card, and an
+    <a href="edit-patterns.html">attach side panel</a>'s link field (below). <b>No new aggregate persists
+    until the container's own Save commits it</b> — with one deliberate exception: the provenance block's
+    citation card commits on <b>Add</b>, not on the record's Save, because it isn't inside a record's own
+    Save at all.</p>
   <div class="specimen">
     <div class="label">Person draft → new Citation card → new Source card (surfaces alternate)</div>
     <div class="card" style="margin-bottom:0">
@@ -360,7 +367,31 @@
     <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">On the root's <b>Save</b>, the
       draft tree commits in dependency order (new Source → new Citation → link to Person). <b>Cancel</b>
       discards the whole tree; a card's <b>✕</b> discards only that card. Commit is <i>ordered on Save</i>,
-      not one atomic transaction — the promise is only that nothing is written before you save the root.</div>
+      not one atomic transaction — the promise is only that nothing is written before you save the root.
+      An attach side panel's own “+ New …” (below) follows the same order on its Save — create the
+      support record, then attach it — and the same promise: nothing is written before you save the
+      panel. The one exception is the provenance block's “+ New citation” card, which commits on
+      <b>Add</b> rather than deferring to any outer Save.</div>
+  </div>
+  <div class="specimen">
+    <div class="label">Attach side panel — same “+ New …” card, seeded from the typed search, picker already collapsed</div>
+    <div class="sidepanel">
+      <div class="sp-head"><h3>Attach citation</h3><span class="spacer"></span><button class="btn sm ghost">✕</button></div>
+      <div class="sp-body stack">
+        <div class="field"><label>Source</label>
+          <div class="draft-card">
+            <div class="draft-card-head">
+              <h4 class="draft-card-title">New source</h4>
+              <span class="badge draft">draft</span>
+              <button class="icon-btn" aria-label="Discard New source">✕</button>
+            </div>
+            <div class="field"><label>Title</label><input class="in" value="trinity"></div>
+          </div>
+        </div>
+        <div class="field"><label>Confidence</label><select class="in"><option>Very low</option><option>Low</option><option selected>Normal</option><option>High</option><option>Very high</option></select></div>
+      </div>
+      <div class="sp-foot"><button class="btn">Cancel</button><button class="btn primary">Save</button></div>
+    </div>
   </div>
 
   <!-- 7 · Validation -->

@@ -17,7 +17,7 @@ pub use vitni_ui::{
     RecordDraft, RecordRef, RepositoryDetail, RepositoryEdit, RestrictionKind, RowVm, SharedAncestorVm,
     SourceCitationVm, SourceDetail, SourceEdit, SubmitResult, TagDetail, TagDraft, TagUsageGroupVm, TimelineRowVm,
     Tool, TranslationVm, UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs, family_tabs,
-    media_tabs, note_tabs, person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
+    link_is_savable, media_tabs, note_tabs, person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
 };
 
 pub use crate::app::{AppCtx, AppState};
@@ -49,10 +49,11 @@ pub use super::record_form::{
 };
 pub use super::research_note::ResearchNotesTab;
 pub use super::shared::{
-    JumpButton, MediaTabState, RecordLink, RegisterFields, RetractTarget, RowRetract, RowVerb, attach_picker_form,
-    create_record_frame, id_list, media_tab, non_empty, optional_enum_select, picker_selection_id, provenance_block,
-    provenance_block_dna, provenance_cue, record_enum_select, register_fields_form, retract_side_panel,
-    row_actions_cell, source_cue, source_media_type_choices, use_detail_tab, use_existing_picker, use_record_undo,
+    JumpButton, MediaTabState, RecordLink, RegisterFields, RetractTarget, RowRetract, RowVerb, attach_link_field,
+    attach_link_form, create_record_frame, id_list, media_tab, non_empty, optional_enum_select, picker_selection_id,
+    provenance_block, provenance_block_dna, provenance_cue, record_enum_select, register_fields_form,
+    retract_side_panel, row_actions_cell, source_cue, source_media_type_choices, use_attach_picker, use_attach_save,
+    use_detail_tab, use_existing_picker, use_record_undo,
 };
 pub use super::tabs::{
     AddressForm, ParticipationForm, ParticipationSeed, TabActionStyle, TabActionTarget, address_cards, citations_table,

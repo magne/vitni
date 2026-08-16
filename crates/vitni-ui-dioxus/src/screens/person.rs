@@ -1909,19 +1909,37 @@ fn AssociationForm(
         supersedes: seed.as_ref().map(|s| s.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    // Edit mode fixes the other person; add mode offers an existing-person picker.
+    // Edit mode fixes the other person; add mode offers a find-or-create picker.
     let fixed_other = seed.as_ref().map(|s| s.other_id.clone());
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::People,
         loc.field_label("association"),
         "other".to_owned(),
         loc.picker_entity(Category::People),
         Vec::new(),
     );
-    let picker_for_save = picker.clone();
     let save_label = loc.action_button(ActionLabel::Save);
+    let onattach = use_callback(move |other_id: String| {
+        let role = choices
+            .get(role_index())
+            .map_or(AssociationRole::Witness, |(role, _)| role.clone());
+        onsubmit.call((
+            PersonEdit::AssertAssociation {
+                human_id: human_id.clone(),
+                other_id,
+                role,
+            },
+            prov(),
+        ));
+    });
+    let attach_onsave = use_attach_save(services, &attach, prov, onattach);
     let fixed_for_save = fixed_other.clone();
+    let onsave = use_callback(move |()| match &fixed_for_save {
+        Some(id) => onattach.call(id.clone()),
+        None => attach_onsave.call(()),
+    });
+    let disabled = fixed_other.is_none() && (*attach.link.saving.read() || !link_is_savable(&attach.link.link.read()));
     rsx! {
         if let Some(other) = &fixed_other {
             div { class: "field",
@@ -1929,7 +1947,7 @@ fn AssociationForm(
                 RecordLink { category: Category::People, human_id: other.clone(), label: other.clone() }
             }
         } else {
-            {record_picker(loc, &picker)}
+            {attach_link_field(loc, &attach)}
         }
         Select {
             label: loc.field_label("relationship"),
@@ -1942,18 +1960,8 @@ fn AssociationForm(
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let Some(other_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
-                    return;
-                };
-                let role = choices
-                    .get(role_index())
-                    .map_or(AssociationRole::Witness, |(role, _)| role.clone());
-                onsubmit.call((
-                    PersonEdit::AssertAssociation { human_id: human_id.clone(), other_id, role },
-                    prov(),
-                ));
-            },
+            disabled,
+            onclick: move |_| onsave.call(()),
         }
     }
 }
@@ -1971,8 +1979,8 @@ fn AttachForm(human_id: String, kind: EditForm, onsubmit: EventHandler<(PersonEd
         EditForm::Note => ("note", Category::Notes),
         _ => ("citation", Category::Citations),
     };
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         category,
         loc.field_label(field),
         field.to_owned(),
@@ -1980,11 +1988,7 @@ fn AttachForm(human_id: String, kind: EditForm, onsubmit: EventHandler<(PersonEd
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         let edit = match kind {
             EditForm::Media => PersonEdit::AttachMedia {
                 human_id: human_id.clone(),
@@ -2001,7 +2005,8 @@ fn AttachForm(human_id: String, kind: EditForm, onsubmit: EventHandler<(PersonEd
         };
         onsubmit.call((edit, prov()));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 #[cfg(test)]

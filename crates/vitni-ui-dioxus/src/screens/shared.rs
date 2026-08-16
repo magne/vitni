@@ -1142,32 +1142,6 @@ pub fn picker_selection_id(picker: &RecordPicker) -> Option<String> {
         .map(|selection| selection.human_id.clone())
 }
 
-/// A side-panel attach/link form body over an existing-only record picker: the picker, optional
-/// `extra` fields (a role select, a call-number input, relationship selects), the provenance block, and
-/// a Save button disabled until a record is picked. The caller's `onsave` reads the picked id from the
-/// picker's state ([`picker_selection_id`]) plus any extra-field signals and dispatches the one `*Edit`
-/// command. A pure fn (the picker + prov signals passed in) so the SSR tests render it without `AppCtx`.
-pub fn attach_picker_form(
-    loc: &Localizer,
-    picker: &RecordPicker,
-    extra: Element,
-    prov: Signal<ProvenanceDraft>,
-    onsave: Callback<()>,
-) -> Element {
-    let disabled = picker.state.read().selection.is_none();
-    rsx! {
-        {record_picker(loc, picker)}
-        {extra}
-        {provenance_block(loc, prov)}
-        Button {
-            label: loc.action_button(ActionLabel::Save),
-            variant: ButtonVariant::Primary,
-            disabled,
-            onclick: move |_| onsave.call(()),
-        }
-    }
-}
-
 /// The find-or-create half of an attach picker's live state (issue #314): the link itself (unset, an
 /// existing selection, or a "+ New …" draft), the underlying picker's [`PickerState`] (the *same*
 /// signal [`AttachPicker::picker`] holds — writing here and reading through the picker agree, so a
@@ -1251,10 +1225,12 @@ pub fn attach_link_field(loc: &Localizer, attach: &AttachPicker) -> Element {
     }
 }
 
-/// A side-panel attach/link form body over a find-or-create [`AttachPicker`] — the find-or-create
-/// counterpart of [`attach_picker_form`]: [`attach_link_field`], optional `extra` fields, the provenance
-/// block, and a Save disabled while a create is in flight or the link is not yet
-/// [`link_is_savable`] (an unset link, or a "+ New …" draft that has not validated).
+/// The side-panel attach/link form body (`edit-patterns.html` §c) over a find-or-create
+/// [`AttachPicker`] — used by every collection-row link side panel (person/event/family/citation/
+/// media/source/repository/dna attach + link forms, issue #314): [`attach_link_field`], optional
+/// `extra` fields (a role select, a call-number input, relationship selects), the provenance block,
+/// and a Save disabled while a create is in flight or the link is not yet [`link_is_savable`] (an
+/// unset link, or a "+ New …" draft that has not validated).
 pub fn attach_link_form(
     loc: &Localizer,
     attach: &AttachPicker,

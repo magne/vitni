@@ -808,8 +808,8 @@ fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<(Repository
             label: loc.source_media_type_label(media_type),
         })
         .collect();
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::Sources,
         loc.tab_label("sources"),
         "source".to_owned(),
@@ -829,11 +829,7 @@ fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<(Repository
             onchange: move |event: FormEvent| media.set(event.value().parse::<usize>().unwrap_or(0)),
         }
     };
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(source_id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |source_id: String| {
         let media_type = source_media_type_choices()
             .get(media())
             .cloned()
@@ -850,7 +846,8 @@ fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<(Repository
             prov(),
         ));
     });
-    attach_picker_form(loc, &picker, extra, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, extra, prov, onsave)
 }
 
 /// The "Attach note by id" form → [`RepositoryEdit::AttachNote`].
@@ -861,8 +858,8 @@ fn RepositoryNoteForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, 
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::Notes,
         loc.field_label("note"),
         "note".to_owned(),
@@ -870,11 +867,7 @@ fn RepositoryNoteForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, 
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         onsubmit.call((
             RepositoryEdit::AttachNote {
                 human_id: human_id.clone(),
@@ -883,7 +876,8 @@ fn RepositoryNoteForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, 
             prov(),
         ));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The repository "Add tag" form: a picker of existing tags by name → [`RepositoryEdit::Tag`].

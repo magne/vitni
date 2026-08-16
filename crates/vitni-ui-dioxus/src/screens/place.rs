@@ -1370,10 +1370,10 @@ fn PlaceEnclosingForm(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    // Edit mode fixes the enclosing place (only the provenance changes); add mode offers a picker.
+    // Edit mode fixes the enclosing place (only the provenance changes); add mode offers a find-or-create picker.
     let fixed = seed.as_ref().map(|row| (row.human_id.clone(), row.name.clone()));
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::Places,
         loc.field_label("place"),
         "enclosing".to_owned(),
@@ -1384,12 +1384,7 @@ fn PlaceEnclosingForm(
         supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    let picker_for_save = picker.clone();
-    let fixed_for_save = fixed.as_ref().map(|(id, _)| id.clone());
-    let onsave = use_callback(move |()| {
-        let Some(enclosing_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
-            return;
-        };
+    let onattach = use_callback(move |enclosing_id: String| {
         onsubmit.call((
             PlaceEdit::AddEnclosing {
                 human_id: human_id.clone(),
@@ -1397,6 +1392,12 @@ fn PlaceEnclosingForm(
             },
             prov(),
         ));
+    });
+    let attach_onsave = use_attach_save(services, &attach, prov, onattach);
+    let fixed_for_save = fixed.as_ref().map(|(id, _)| id.clone());
+    let onsave = use_callback(move |()| match &fixed_for_save {
+        Some(id) => onattach.call(id.clone()),
+        None => attach_onsave.call(()),
     });
     if let Some((id, name)) = &fixed {
         rsx! {
@@ -1412,7 +1413,7 @@ fn PlaceEnclosingForm(
             }
         }
     } else {
-        attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+        attach_link_form(loc, &attach, rsx! {}, prov, onsave)
     }
 }
 
@@ -1621,8 +1622,8 @@ fn PlaceLinkForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
         "note" => (loc.field_label("note"), Category::Notes),
         _ => (loc.field_label("media"), Category::Media),
     };
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         category,
         label,
         field.clone(),
@@ -1630,11 +1631,7 @@ fn PlaceLinkForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         let edit = match field.as_str() {
             "citation" => PlaceEdit::AttachCitation {
                 human_id: human_id.clone(),
@@ -1651,7 +1648,8 @@ fn PlaceLinkForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
         };
         onsubmit.call((edit, prov()));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The place "Add tag" form: a picker of existing tags by name → [`PlaceEdit::Tag`].
