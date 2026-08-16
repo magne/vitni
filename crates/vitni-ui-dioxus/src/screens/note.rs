@@ -422,7 +422,7 @@ fn note_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("content", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("content"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
@@ -433,7 +433,7 @@ fn note_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {note_tab_content(state, detail, active_id, editing, record, on_edit_open, on_retract, on_undo, on_tag_remove)}
+            {note_tab_content(state, detail, &active_tab, editing, record, on_edit_open, on_retract, on_undo, on_tag_remove)}
         }
         {note_edit_panel(state, editing, on_submit, human_id)}
     }
@@ -480,7 +480,7 @@ fn note_restriction_toggles(
 fn note_tab_content(
     state: &AppState,
     detail: &NoteDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<NoteEditForm>>,
     record: RecordEditState<vitni_ui::NoteDraft>,
     on_edit_open: Callback<NoteEditForm>,
@@ -489,10 +489,10 @@ fn note_tab_content(
     on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "language" => tab_frame(
             loc,
-            Some(ActionLabel::AddTranslation),
+            tab,
             TabActionTarget::Form(editing, NoteEditForm::Translation(None)),
             None,
             rsx! {
@@ -505,7 +505,7 @@ fn note_tab_content(
         },
         "tags" => tab_frame(
             loc,
-            Some(ActionLabel::AddTag),
+            tab,
             TabActionTarget::Form(editing, NoteEditForm::Tag),
             Some(TabActionStyle {
                 emphasis: Some(ButtonVariant::Ghost),

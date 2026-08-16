@@ -14,6 +14,7 @@ use vitni_app::{
     PersonNameParts, PersonRow, PersonSummary, Provenance, Sex, SourceQuality, TagRef, WorkspaceCounts,
 };
 
+use crate::action::ActionLabel;
 use crate::detail::DetailTab;
 use crate::i18n::Localizer;
 use crate::list::RowVm;

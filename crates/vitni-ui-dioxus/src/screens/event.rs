@@ -775,7 +775,7 @@ fn event_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record),
@@ -787,7 +787,7 @@ fn event_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {event_tab_content(state, detail, active_id, editing, &ctx, on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+                {event_tab_content(state, detail, &active_tab, editing, &ctx, on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -836,7 +836,7 @@ fn event_restriction_toggles(
 fn event_tab_content(
     state: &AppState,
     detail: &EventDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<EventEditForm>>,
     ctx: &EventEditCtx,
     on_retract: Callback<(String, String, bool)>,
@@ -847,13 +847,13 @@ fn event_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "addresses" => {
             let onedit =
                 Callback::new(move |seed: AddressVm| on_edit_open.call(EventEditForm::Address(Some(Box::new(seed)))));
             tab_frame(
                 loc,
-                Some(ActionLabel::AddAddress),
+                tab,
                 TabActionTarget::Form(editing, EventEditForm::Address(None)),
                 None,
                 rsx! {
@@ -863,7 +863,7 @@ fn event_tab_content(
         }
         "participants" => tab_frame(
             loc,
-            Some(ActionLabel::AddParticipant),
+            tab,
             TabActionTarget::Form(editing, EventEditForm::Participant(None)),
             None,
             rsx! {
@@ -872,7 +872,7 @@ fn event_tab_content(
         ),
         "citations" => tab_frame(
             loc,
-            Some(ActionLabel::AttachCitation),
+            tab,
             TabActionTarget::Form(editing, EventEditForm::Citation),
             None,
             rsx! {
@@ -881,7 +881,7 @@ fn event_tab_content(
         ),
         "media" => tab_frame(
             loc,
-            Some(ActionLabel::AttachMedia),
+            tab,
             TabActionTarget::Form(editing, EventEditForm::Media),
             None,
             rsx! {
@@ -890,7 +890,7 @@ fn event_tab_content(
         ),
         "notes" => tab_frame(
             loc,
-            Some(ActionLabel::AttachNote),
+            tab,
             TabActionTarget::Form(editing, EventEditForm::Note),
             None,
             rsx! {
@@ -899,7 +899,7 @@ fn event_tab_content(
         ),
         "tags" => tab_frame(
             loc,
-            Some(ActionLabel::AddTag),
+            tab,
             TabActionTarget::Form(editing, EventEditForm::Tag),
             Some(TabActionStyle {
                 emphasis: Some(ButtonVariant::Ghost),
@@ -909,6 +909,7 @@ fn event_tab_content(
         ),
         "research-notes" => rsx! {
             ResearchNotesTab {
+                tab: tab.clone(),
                 category: Category::Events,
                 human_id: detail.human_id.clone(),
                 rows: detail.research_notes.clone(),

@@ -1,6 +1,6 @@
 use super::{
-    DetailTab, HistoryEntryVm, Localizer, NoteChangeSetRequest, NoteEdit, RecordDraft, RestrictionKind, RowVm, TagRef,
-    UsingRecordVm, line_label, non_blank, using_record_vm,
+    ActionLabel, DetailTab, HistoryEntryVm, Localizer, NoteChangeSetRequest, NoteEdit, RecordDraft, RestrictionKind,
+    RowVm, TagRef, UsingRecordVm, line_label, non_blank, using_record_vm,
 };
 
 /// One translation of a note's content (Note Language tab): language, text, and translator.
@@ -113,17 +113,22 @@ pub fn note_row(summary: &vitni_app::NoteSummary, loc: &Localizer) -> RowVm {
 /// The tab strip for a note's detail: the content, then the related-item tabs with counts.
 #[must_use]
 pub fn note_tabs(detail: &NoteDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("content", None),
-        tab("language", Some(detail.translations.len() + 1)),
-        tab("references", Some(detail.references.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("history", None),
+        tab("content", None, None),
+        tab(
+            "language",
+            Some(detail.translations.len() + 1),
+            Some(ActionLabel::AddTranslation),
+        ),
+        tab("references", Some(detail.references.len()), None),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("history", None, None),
     ]
 }
 

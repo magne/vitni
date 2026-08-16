@@ -877,7 +877,7 @@ fn person_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let subtitle = match &detail.vitals {
         Some(vitals) => format!("{vitals} · {}", detail.sex),
         None => detail.sex.clone(),
@@ -901,7 +901,7 @@ fn person_detail(
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
-            {person_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+            {person_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
         }
         {edit_panel(state, detail, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -967,7 +967,7 @@ fn restriction_toggles(
 fn person_tab_content(
     state: &AppState,
     detail: &PersonDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<EditForm>>,
     record: RecordEditState<PersonDraft>,
     on_retract: Callback<(String, String, bool)>,
@@ -977,10 +977,10 @@ fn person_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "names" => tab_frame(
             loc,
-            Some(ActionLabel::AddName),
+            tab,
             TabActionTarget::Form(editing, EditForm::Name(None)),
             None,
             rsx! {
@@ -989,17 +989,18 @@ fn person_tab_content(
         ),
         "facts" => tab_frame(
             loc,
-            Some(ActionLabel::AddFact),
+            tab,
             TabActionTarget::Form(editing, EditForm::Fact(None)),
             None,
             rsx! {
                 {facts_table(loc, &detail.facts, on_edit_open, on_retract)}
             },
         ),
+        // No add action yet — see `person_tabs`' "events" comment (issue #314 slice 3 follow-up).
         "events" => events_table(loc, &detail.events, on_edit_open, on_retract),
         "associations" => tab_frame(
             loc,
-            Some(ActionLabel::AddAssociation),
+            tab,
             TabActionTarget::Form(editing, EditForm::Association(None)),
             None,
             rsx! {
@@ -1009,7 +1010,7 @@ fn person_tab_content(
         "families" => families_panel(loc, &detail.families),
         "citations" => tab_frame(
             loc,
-            Some(ActionLabel::AttachCitation),
+            tab,
             TabActionTarget::Form(editing, EditForm::Citation),
             None,
             rsx! {
@@ -1018,7 +1019,7 @@ fn person_tab_content(
         ),
         "media" => tab_frame(
             loc,
-            Some(ActionLabel::AttachMedia),
+            tab,
             TabActionTarget::Form(editing, EditForm::Media),
             None,
             rsx! {
@@ -1027,7 +1028,7 @@ fn person_tab_content(
         ),
         "notes" => tab_frame(
             loc,
-            Some(ActionLabel::AttachNote),
+            tab,
             TabActionTarget::Form(editing, EditForm::Note),
             None,
             rsx! {
@@ -1036,7 +1037,7 @@ fn person_tab_content(
         ),
         "tags" => tab_frame(
             loc,
-            Some(ActionLabel::AddTag),
+            tab,
             TabActionTarget::Form(editing, EditForm::Tag),
             Some(TabActionStyle {
                 emphasis: Some(ButtonVariant::Ghost),
@@ -1046,6 +1047,7 @@ fn person_tab_content(
         ),
         "research-notes" => rsx! {
             ResearchNotesTab {
+                tab: tab.clone(),
                 category: Category::People,
                 human_id: detail.human_id.clone(),
                 rows: detail.research_notes.clone(),

@@ -1,8 +1,8 @@
 use super::{
-    AttachedRefVm, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, CitationSummary, ConfidenceLevel,
-    DateDraft, DetailTab, EvidenceAnalysis, EvidenceAxisVm, EvidenceKind, HistoryEntryVm, InformationKind, Localizer,
-    MediaRefVm, NewSourceFields, RecordDraft, RecordLink, RestrictionKind, RowVm, SourceQuality, TagRef, evidence_axes,
-    non_blank,
+    ActionLabel, AttachedRefVm, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, CitationSummary,
+    ConfidenceLevel, DateDraft, DetailTab, EvidenceAnalysis, EvidenceAxisVm, EvidenceKind, HistoryEntryVm,
+    InformationKind, Localizer, MediaRefVm, NewSourceFields, RecordDraft, RecordLink, RestrictionKind, RowVm,
+    SourceQuality, TagRef, evidence_axes, non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -116,18 +116,23 @@ impl CitationDetail {
 /// The tab strip for a citation's detail: an overview, then the related-item tabs with counts.
 #[must_use]
 pub fn citation_tabs(detail: &CitationDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("overview", None),
-        tab("attributes", Some(detail.attributes.len())),
-        tab("media", Some(detail.media.len())),
-        tab("notes", Some(detail.notes.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("history", None),
+        tab("overview", None, None),
+        tab(
+            "attributes",
+            Some(detail.attributes.len()),
+            Some(ActionLabel::AddAttribute),
+        ),
+        tab("media", Some(detail.media.len()), Some(ActionLabel::AttachMedia)),
+        tab("notes", Some(detail.notes.len()), Some(ActionLabel::AttachNote)),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("history", None, None),
     ]
 }
 

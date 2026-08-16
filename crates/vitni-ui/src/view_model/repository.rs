@@ -1,6 +1,6 @@
 use super::{
-    AddressVm, AttachedRefVm, DetailTab, HistoryEntryVm, Localizer, RecordDraft, RepositoryChangeSetRequest,
-    RepositoryEdit, RestrictionKind, RowVm, TagRef, line_label, non_blank,
+    ActionLabel, AddressVm, AttachedRefVm, DetailTab, HistoryEntryVm, Localizer, RecordDraft,
+    RepositoryChangeSetRequest, RepositoryEdit, RestrictionKind, RowVm, TagRef, line_label, non_blank,
 };
 
 /// One URL recorded on a repository (Repository › URLs tab): the type · href · description plus the
@@ -156,19 +156,20 @@ fn repository_avatar(repository_type: Option<&vitni_app::RepositoryType>) -> Str
 /// The tab strip for a repository's detail: an overview, then the related-item tabs with counts.
 #[must_use]
 pub fn repository_tabs(detail: &RepositoryDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("overview", None),
-        tab("addresses", Some(detail.addresses.len())),
-        tab("urls", Some(detail.urls.len())),
-        tab("sources", Some(detail.sources.len())),
-        tab("notes", Some(detail.notes.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("history", None),
+        tab("overview", None, None),
+        tab("addresses", Some(detail.addresses.len()), Some(ActionLabel::AddAddress)),
+        tab("urls", Some(detail.urls.len()), Some(ActionLabel::AddUrl)),
+        tab("sources", Some(detail.sources.len()), Some(ActionLabel::LinkSource)),
+        tab("notes", Some(detail.notes.len()), Some(ActionLabel::AttachNote)),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("history", None, None),
     ]
 }
 

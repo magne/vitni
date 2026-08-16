@@ -1,9 +1,9 @@
 use super::{
-    AssociationSummary, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, DraftCitationRef,
-    DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactVm, FamilyVm,
-    HistoryEntryVm, Localizer, MediaRefVm, NameSummary, NameType, NameVm, NewCitationFields, PersonChangeSetRequest,
-    PersonName, PersonNameParts, PersonRow, PersonSummary, RecordDraft, RecordLink, RestrictionKind, RowVm, Sex,
-    TagRef, citation_ref_from_ref, line_label,
+    ActionLabel, AssociationSummary, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab,
+    DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactVm,
+    FamilyVm, HistoryEntryVm, Localizer, MediaRefVm, NameSummary, NameType, NameVm, NewCitationFields,
+    PersonChangeSetRequest, PersonName, PersonNameParts, PersonRow, PersonSummary, RecordDraft, RecordLink,
+    RestrictionKind, RowVm, Sex, TagRef, citation_ref_from_ref, line_label,
 };
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
@@ -564,25 +564,41 @@ fn non_blank(value: &str) -> Option<String> {
 /// The tab strip for a person's detail: an overview, then the related-item tabs with counts.
 #[must_use]
 pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("overview", None),
-        tab("names", Some(detail.names.len())),
-        tab("facts", Some(detail.facts.len())),
-        tab("events", Some(detail.events.len())),
-        tab("associations", Some(detail.associations.len())),
-        tab("families", Some(detail.families.len())),
-        tab("citations", Some(detail.citations.len())),
-        tab("media", Some(detail.media.len())),
-        tab("notes", Some(detail.notes.len())),
-        tab("research-notes", Some(detail.research_notes.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("timeline", Some(detail.timeline.len())),
-        tab("history", None),
+        tab("overview", None, None),
+        tab("names", Some(detail.names.len()), Some(ActionLabel::AddName)),
+        tab("facts", Some(detail.facts.len()), Some(ActionLabel::AddFact)),
+        // No add action yet: `screens/person.rs` renders a bare events table, but
+        // `docs/mockups/person.html:275` shows "+ Participate in event" and no Fluent key exists
+        // (issue #314 slice 3 follow-up — report before building the missing form).
+        tab("events", Some(detail.events.len()), None),
+        tab(
+            "associations",
+            Some(detail.associations.len()),
+            Some(ActionLabel::AddAssociation),
+        ),
+        tab("families", Some(detail.families.len()), None),
+        tab(
+            "citations",
+            Some(detail.citations.len()),
+            Some(ActionLabel::AttachCitation),
+        ),
+        tab("media", Some(detail.media.len()), Some(ActionLabel::AttachMedia)),
+        tab("notes", Some(detail.notes.len()), Some(ActionLabel::AttachNote)),
+        tab(
+            "research-notes",
+            Some(detail.research_notes.len()),
+            Some(ActionLabel::NewResearchNote),
+        ),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("timeline", Some(detail.timeline.len()), None),
+        tab("history", None, None),
     ]
 }
 

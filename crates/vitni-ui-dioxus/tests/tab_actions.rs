@@ -4,7 +4,7 @@
 //! generic "Save".
 
 use dioxus::prelude::*;
-use vitni_ui::{ActionLabel, Localizer};
+use vitni_ui::{ActionLabel, DetailTab, Localizer};
 use vitni_ui_dioxus::screens::{TabActionTarget, tab_frame};
 
 /// The stand-in side-panel form the test's `TabActionTarget::Form` arms — the tests never open it,
@@ -22,9 +22,15 @@ fn render_bar(action: ActionLabel) -> String {
     fn Harness(action: ActionLabel) -> Element {
         let loc = loc();
         let editing = use_signal(|| None::<TestForm>);
+        let tab = DetailTab {
+            id: "test",
+            label: String::new(),
+            count: None,
+            action: Some(action),
+        };
         tab_frame(
             &loc,
-            Some(action),
+            &tab,
             TabActionTarget::Form(editing, TestForm),
             None,
             rsx! { div { "BODY" } },
@@ -75,7 +81,13 @@ fn the_action_bar_uses_the_categorys_own_label_never_save() {
 
 fn read_only_tab() -> Element {
     let loc = loc();
-    tab_frame::<TestForm>(&loc, None, TabActionTarget::None, None, rsx! { div { "BODY" } })
+    let tab = DetailTab {
+        id: "test",
+        label: String::new(),
+        count: None,
+        action: None,
+    };
+    tab_frame::<TestForm>(&loc, &tab, TabActionTarget::None, None, rsx! { div { "BODY" } })
 }
 
 #[test]

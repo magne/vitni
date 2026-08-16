@@ -613,7 +613,7 @@ fn place_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
@@ -624,7 +624,7 @@ fn place_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {place_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, on_map_saved, media_state)}
+            {place_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, on_map_saved, media_state)}
         }
         {place_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -672,7 +672,7 @@ fn place_restriction_toggles(
 fn place_tab_content(
     state: &AppState,
     detail: &PlaceDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<PlaceEditForm>>,
     record: RecordEditState<vitni_ui::PlaceDraft>,
     on_retract: Callback<(String, String, bool)>,
@@ -683,11 +683,11 @@ fn place_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "map" => place_map(detail, on_map_saved, on_retract),
         "names" => tab_frame(
             loc,
-            Some(ActionLabel::AddName),
+            tab,
             TabActionTarget::Form(editing, PlaceEditForm::Name(None)),
             None,
             rsx! {
@@ -697,7 +697,7 @@ fn place_tab_content(
         ),
         "hierarchy" => tab_frame(
             loc,
-            Some(ActionLabel::AddEnclosing),
+            tab,
             TabActionTarget::Form(editing, PlaceEditForm::Enclosing(None)),
             None,
             rsx! {
@@ -708,7 +708,7 @@ fn place_tab_content(
         ),
         "citations" => tab_frame(
             loc,
-            Some(ActionLabel::AttachCitation),
+            tab,
             TabActionTarget::Form(editing, PlaceEditForm::Citation),
             None,
             rsx! {
@@ -717,7 +717,7 @@ fn place_tab_content(
         ),
         "media" => tab_frame(
             loc,
-            Some(ActionLabel::AttachMedia),
+            tab,
             TabActionTarget::Form(editing, PlaceEditForm::Media),
             None,
             rsx! {
@@ -726,7 +726,7 @@ fn place_tab_content(
         ),
         "notes" => tab_frame(
             loc,
-            Some(ActionLabel::AttachNote),
+            tab,
             TabActionTarget::Form(editing, PlaceEditForm::Note),
             None,
             rsx! {
@@ -735,7 +735,7 @@ fn place_tab_content(
         ),
         "tags" => tab_frame(
             loc,
-            Some(ActionLabel::AddTag),
+            tab,
             TabActionTarget::Form(editing, PlaceEditForm::Tag),
             Some(TabActionStyle {
                 emphasis: Some(ButtonVariant::Ghost),
@@ -745,6 +745,7 @@ fn place_tab_content(
         ),
         "research-notes" => rsx! {
             ResearchNotesTab {
+                tab: tab.clone(),
                 category: Category::Places,
                 human_id: detail.human_id.clone(),
                 rows: detail.research_notes.clone(),
@@ -1214,11 +1215,19 @@ pub fn place_succession_card(
             }
         }
     };
+    // Not one of `place_tabs()`'s top-level tabs — a card nested in the Hierarchy tab's own body —
+    // but still declares its action through the same `DetailTab`-shaped vocabulary `tab_frame` reads.
+    let succession_tab = DetailTab {
+        id: "succession",
+        label: loc.place_succession_title(),
+        count: None,
+        action: Some(ActionLabel::AddSuccession),
+    };
     rsx! {
         Card { title: loc.place_succession_title(),
             {tab_frame::<PlaceEditForm>(
                 loc,
-                Some(ActionLabel::AddSuccession),
+                &succession_tab,
                 TabActionTarget::Run(Callback::new(move |()| onedit.call(PlaceEditForm::Succession))),
                 Some(TabActionStyle { title: Some(loc.place_succession_add_title()), ..Default::default() }),
                 body,

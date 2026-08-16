@@ -8,7 +8,7 @@ pub use vitni_app::{
 };
 pub use vitni_ui::{
     ActionLabel, ActivityVm, AddressVm, AssociationVm, AttachedRefVm, Category, CitationDetail, CitationEdit,
-    CitationRefVm, CitingRecordVm, ConfidenceLevel, DashboardVm, DataQualityVm, Destination, DnaInferenceVm,
+    CitationRefVm, CitingRecordVm, ConfidenceLevel, DashboardVm, DataQualityVm, Destination, DetailTab, DnaInferenceVm,
     DnaMatchDetail, DnaMatchEdit, DnaSegmentVm, DnaTestDetail, DnaTestEdit, DnaTestMatchVm, DuplicateCandidateVm,
     EventDetail, EventEdit, EventRefVm, FactVm, FamilyDetail, FamilyEdit, FamilyEventVm, FamilyVm, Intent,
     IntentOutcome, JumpVm, Localizer, MediaDetail, MediaEdit, MediaRefVm, MergeBlockedVm, MergeCompareVm, MergeFailure,
@@ -57,5 +57,5 @@ pub use super::shared::{
 };
 pub use super::tabs::{
     AddressForm, ParticipationForm, ParticipationSeed, TabActionStyle, TabActionTarget, address_cards, citations_table,
-    history_panel, tab_frame, tags_panel,
+    fallback_tab, history_panel, tab_frame, tags_panel,
 };

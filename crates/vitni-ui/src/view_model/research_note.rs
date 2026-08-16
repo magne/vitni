@@ -9,8 +9,8 @@
 use vitni_app::{ResearchNoteSubjectRef, ResearchNoteSummary};
 
 use super::{
-    DetailTab, HistoryEntryVm, Localizer, RecordDraft, ResearchNoteChangeSetRequest, ResearchNoteEdit, RestrictionKind,
-    RowVm, SubjectRequest, TagRef, line_label, non_blank,
+    ActionLabel, DetailTab, HistoryEntryVm, Localizer, RecordDraft, ResearchNoteChangeSetRequest, ResearchNoteEdit,
+    RestrictionKind, RowVm, SubjectRequest, TagRef, line_label, non_blank,
 };
 use crate::navigation::Category;
 
@@ -141,16 +141,17 @@ pub fn research_note_row(summary: &ResearchNoteSummary, loc: &Localizer) -> RowV
 /// The tab strip for a research note's detail: the argument, then the related-item tabs with counts.
 #[must_use]
 pub fn research_note_tabs(detail: &ResearchNoteDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("content", None),
-        tab("subjects", Some(detail.subjects.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("history", None),
+        tab("content", None, None),
+        tab("subjects", Some(detail.subjects.len()), Some(ActionLabel::AddSubject)),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("history", None, None),
     ]
 }
 

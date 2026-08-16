@@ -463,7 +463,7 @@ fn media_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
@@ -474,7 +474,7 @@ fn media_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {media_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
+            {media_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
         }
         {media_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -522,7 +522,7 @@ fn media_restriction_toggles(
 fn media_tab_content(
     state: &AppState,
     detail: &MediaDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<MediaEditForm>>,
     record: RecordEditState<vitni_ui::MediaDraft>,
     on_retract: Callback<(String, String, bool)>,
@@ -531,10 +531,10 @@ fn media_tab_content(
     on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "attributes" => tab_frame(
             loc,
-            Some(ActionLabel::AddAttribute),
+            tab,
             TabActionTarget::Form(editing, MediaEditForm::Attribute(None)),
             None,
             rsx! {
@@ -543,7 +543,7 @@ fn media_tab_content(
         ),
         "citations" => tab_frame(
             loc,
-            Some(ActionLabel::AttachCitation),
+            tab,
             TabActionTarget::Form(editing, MediaEditForm::Citation),
             None,
             rsx! {
@@ -552,7 +552,7 @@ fn media_tab_content(
         ),
         "notes" => tab_frame(
             loc,
-            Some(ActionLabel::AttachNote),
+            tab,
             TabActionTarget::Form(editing, MediaEditForm::Note),
             None,
             rsx! {
@@ -561,7 +561,7 @@ fn media_tab_content(
         ),
         "tags" => tab_frame(
             loc,
-            Some(ActionLabel::AddTag),
+            tab,
             TabActionTarget::Form(editing, MediaEditForm::Tag),
             Some(TabActionStyle {
                 emphasis: Some(ButtonVariant::Ghost),

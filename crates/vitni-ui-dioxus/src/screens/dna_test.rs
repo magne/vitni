@@ -627,7 +627,7 @@ fn dna_test_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record),
@@ -639,7 +639,7 @@ fn dna_test_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {dna_test_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
+                {dna_test_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
             }
             {dna_test_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-note")}
@@ -688,7 +688,7 @@ fn dna_test_restriction_toggles(
 fn dna_test_tab_content(
     state: &AppState,
     detail: &DnaTestDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<DnaTestEditForm>>,
     record: RecordEditState<vitni_ui::DnaTestDraft>,
     on_retract: Callback<(String, String, bool)>,
@@ -697,10 +697,10 @@ fn dna_test_tab_content(
     on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "haplogroups" => tab_frame(
             loc,
-            Some(ActionLabel::AddHaplogroup),
+            tab,
             TabActionTarget::Form(editing, DnaTestEditForm::Haplogroup(None)),
             None,
             rsx! {
@@ -710,7 +710,7 @@ fn dna_test_tab_content(
         "matches" => dna_test_matches_table(loc, &detail.matches),
         "notes" => tab_frame(
             loc,
-            Some(ActionLabel::AttachNote),
+            tab,
             TabActionTarget::Form(editing, DnaTestEditForm::Note),
             None,
             rsx! {
@@ -719,7 +719,7 @@ fn dna_test_tab_content(
         ),
         "tags" => tab_frame(
             loc,
-            Some(ActionLabel::AddTag),
+            tab,
             TabActionTarget::Form(editing, DnaTestEditForm::Tag),
             Some(TabActionStyle {
                 emphasis: Some(ButtonVariant::Ghost),

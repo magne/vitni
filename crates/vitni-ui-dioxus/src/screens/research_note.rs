@@ -604,7 +604,7 @@ fn research_note_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("content", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("content"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
@@ -615,7 +615,7 @@ fn research_note_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {research_note_tab_content(state, detail, active_id, editing, record, callbacks)}
+            {research_note_tab_content(state, detail, &active_tab, editing, record, callbacks)}
         }
         {research_note_edit_panel(state, editing, on_submit, human_id)}
     }
@@ -658,16 +658,16 @@ fn research_note_restriction_toggles(
 fn research_note_tab_content(
     state: &AppState,
     detail: &ResearchNoteDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<ResearchNoteEditForm>>,
     record: RecordEditState<vitni_ui::ResearchNoteDraft>,
     callbacks: ResearchNoteCallbacks,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "subjects" => tab_frame(
             loc,
-            Some(ActionLabel::AddSubject),
+            tab,
             TabActionTarget::Form(editing, ResearchNoteEditForm::Subject),
             None,
             rsx! {
@@ -676,7 +676,7 @@ fn research_note_tab_content(
         ),
         "tags" => tab_frame(
             loc,
-            Some(ActionLabel::AddTag),
+            tab,
             TabActionTarget::Form(editing, ResearchNoteEditForm::Tag),
             Some(TabActionStyle {
                 emphasis: Some(ButtonVariant::Ghost),
@@ -760,7 +760,7 @@ pub fn research_note_subjects_table(loc: &Localizer, subjects: &[SubjectVm], onr
 /// idiom, keeping the four screens' tab dispatchers free of extra callback plumbing. Under bare SSR
 /// (no `NavState`) the button renders and does nothing.
 #[component]
-pub fn ResearchNotesTab(category: Category, human_id: String, rows: Vec<RowVm>) -> Element {
+pub fn ResearchNotesTab(tab: DetailTab, category: Category, human_id: String, rows: Vec<RowVm>) -> Element {
     let Some(AppCtx::Ready(state)) = try_consume_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -774,7 +774,7 @@ pub fn ResearchNotesTab(category: Category, human_id: String, rows: Vec<RowVm>) 
     });
     tab_frame::<()>(
         loc,
-        Some(ActionLabel::NewResearchNote),
+        &tab,
         TabActionTarget::Run(on_new),
         None,
         research_notes_table(loc, &rows),

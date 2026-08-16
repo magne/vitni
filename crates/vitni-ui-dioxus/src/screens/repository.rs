@@ -455,7 +455,7 @@ fn repository_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
@@ -466,7 +466,7 @@ fn repository_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {repository_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
+            {repository_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
         }
         {repository_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-note")}
@@ -514,7 +514,7 @@ fn repository_restriction_toggles(
 fn repository_tab_content(
     state: &AppState,
     detail: &RepositoryDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<RepositoryEditForm>>,
     record: RecordEditState<vitni_ui::RepositoryDraft>,
     on_retract: Callback<(String, String, bool)>,
@@ -523,13 +523,13 @@ fn repository_tab_content(
     on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "addresses" => {
             let onedit =
                 Callback::new(move |seed: AddressVm| on_edit_open.call(RepositoryEditForm::Address(Some(seed))));
             tab_frame(
                 loc,
-                Some(ActionLabel::AddAddress),
+                tab,
                 TabActionTarget::Form(editing, RepositoryEditForm::Address(None)),
                 None,
                 rsx! {
@@ -539,7 +539,7 @@ fn repository_tab_content(
         }
         "urls" => tab_frame(
             loc,
-            Some(ActionLabel::AddUrl),
+            tab,
             TabActionTarget::Form(editing, RepositoryEditForm::Url(None)),
             None,
             rsx! {
@@ -548,7 +548,7 @@ fn repository_tab_content(
         ),
         "sources" => tab_frame(
             loc,
-            Some(ActionLabel::LinkSource),
+            tab,
             TabActionTarget::Form(editing, RepositoryEditForm::Source),
             None,
             rsx! {
@@ -557,7 +557,7 @@ fn repository_tab_content(
         ),
         "notes" => tab_frame(
             loc,
-            Some(ActionLabel::AttachNote),
+            tab,
             TabActionTarget::Form(editing, RepositoryEditForm::Note),
             None,
             rsx! {
@@ -566,7 +566,7 @@ fn repository_tab_content(
         ),
         "tags" => tab_frame(
             loc,
-            Some(ActionLabel::AddTag),
+            tab,
             TabActionTarget::Form(editing, RepositoryEditForm::Tag),
             Some(TabActionStyle {
                 emphasis: Some(ButtonVariant::Ghost),

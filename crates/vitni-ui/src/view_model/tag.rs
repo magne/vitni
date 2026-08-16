@@ -235,6 +235,7 @@ pub fn tag_tabs(detail: &TagDetail, loc: &Localizer) -> Vec<DetailTab> {
         id,
         label: loc.tab_label(id),
         count,
+        action: None,
     };
     vec![
         tab("overview", None),

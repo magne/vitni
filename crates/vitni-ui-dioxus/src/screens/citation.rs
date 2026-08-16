@@ -745,7 +745,7 @@ fn citation_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let subtitle = detail.page.clone();
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
@@ -759,7 +759,7 @@ fn citation_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {citation_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+                {citation_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
             }
             {citation_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -808,7 +808,7 @@ fn citation_restriction_toggles(
 fn citation_tab_content(
     state: &AppState,
     detail: &CitationDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<CitationEditForm>>,
     record: RecordEditState<vitni_ui::CitationDraft>,
     on_retract: Callback<(String, String, bool)>,
@@ -818,10 +818,10 @@ fn citation_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "attributes" => tab_frame(
             loc,
-            Some(ActionLabel::AddAttribute),
+            tab,
             TabActionTarget::Form(editing, CitationEditForm::Attribute(None)),
             None,
             rsx! {
@@ -830,7 +830,7 @@ fn citation_tab_content(
         ),
         "media" => tab_frame(
             loc,
-            Some(ActionLabel::AttachMedia),
+            tab,
             TabActionTarget::Form(editing, CitationEditForm::Media),
             None,
             rsx! {
@@ -839,7 +839,7 @@ fn citation_tab_content(
         ),
         "notes" => tab_frame(
             loc,
-            Some(ActionLabel::AttachNote),
+            tab,
             TabActionTarget::Form(editing, CitationEditForm::Note),
             None,
             rsx! {
@@ -848,7 +848,7 @@ fn citation_tab_content(
         ),
         "tags" => tab_frame(
             loc,
-            Some(ActionLabel::AddTag),
+            tab,
             TabActionTarget::Form(editing, CitationEditForm::Tag),
             Some(TabActionStyle {
                 emphasis: Some(ButtonVariant::Ghost),

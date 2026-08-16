@@ -138,17 +138,18 @@ pub struct TabActionStyle {
 
 /// A collection tab's action bar (`record-editing.html` §8): the single button that opens or runs the
 /// tab's one action, above the tab's own `body` — the only fn in the crate that emits `.tab-actions`,
-/// so every tab resolves its label through the same [`ActionLabel`] vocabulary instead of picking one
-/// independently (the drift that once left six labels wrong). `action: None` or
-/// `target: TabActionTarget::None` renders `body` alone, for a read-only tab.
+/// so every tab resolves its label through the [`ActionLabel`] its own [`DetailTab::action`] declares
+/// (issue #314 slice 3), instead of a bare `ActionLabel` picked independently at each call site — the
+/// drift that once left six labels wrong. `tab.action: None` or `target: TabActionTarget::None`
+/// renders `body` alone, for a read-only tab.
 pub fn tab_frame<E: Clone + PartialEq + 'static>(
     loc: &Localizer,
-    action: Option<ActionLabel>,
+    tab: &DetailTab,
     target: TabActionTarget<E>,
     style: Option<TabActionStyle>,
     body: Element,
 ) -> Element {
-    let Some(action) = action else {
+    let Some(action) = tab.action else {
         return body;
     };
     let style = style.unwrap_or_default();
@@ -178,6 +179,20 @@ pub fn tab_frame<E: Clone + PartialEq + 'static>(
     rsx! {
         div { class: "tab-actions", {bar} }
         {body}
+    }
+}
+
+/// A placeholder [`DetailTab`] for `tabs.get(active()).cloned().unwrap_or_else(...)`: `active()` can
+/// point past the end of a shorter tab list (e.g. right after switching records), and the content
+/// dispatcher's `match tab.id` falls through to its default arm regardless of `label`/`count`/`action`,
+/// so only `id` need be real.
+#[must_use]
+pub fn fallback_tab(id: &'static str) -> DetailTab {
+    DetailTab {
+        id,
+        label: String::new(),
+        count: None,
+        action: None,
     }
 }
 

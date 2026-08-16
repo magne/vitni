@@ -9,7 +9,7 @@ use std::rc::Rc;
 use vitni_app::TagRef;
 use vitni_app::{AssociationRole, Attribute, FactType, NameType, ParticipantRole, Sex};
 use vitni_ui::{
-    ActionLabel, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis,
+    ActionLabel, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EventRefVm, EvidenceAxis,
     EvidenceAxisVm, FactVm, FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft, TimelineKind, TimelineRowVm,
 };
 use vitni_ui_dioxus::components::ButtonVariant;
@@ -485,9 +485,15 @@ fn person_tags() -> Element {
         color: Some("#e5534b".to_owned()),
         priority: Some(1),
     }];
+    let tab = DetailTab {
+        id: "tags",
+        label: String::new(),
+        count: None,
+        action: Some(ActionLabel::AddTag),
+    };
     tab_frame(
         &loc,
-        Some(ActionLabel::AddTag),
+        &tab,
         TabActionTarget::Form(editing, EditForm::Tag),
         Some(TabActionStyle {
             emphasis: Some(ButtonVariant::Ghost),

@@ -1,6 +1,6 @@
 use super::{
-    AttachedRefVm, ConfidenceLevel, DetailTab, DnaMatchChangeSetRequest, DnaMatchEdit, HistoryEntryVm, Localizer,
-    RecordDraft, RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref, non_blank,
+    ActionLabel, AttachedRefVm, ConfidenceLevel, DetailTab, DnaMatchChangeSetRequest, DnaMatchEdit, HistoryEntryVm,
+    Localizer, RecordDraft, RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref, non_blank,
 };
 use crate::navigation::Category;
 
@@ -223,18 +223,23 @@ pub fn dna_match_row(summary: &vitni_app::DnaMatchSummary, loc: &Localizer) -> R
 /// The tab strip for a DNA match's detail: overview, then segments/ancestors/notes/tags with counts.
 #[must_use]
 pub fn dna_match_tabs(detail: &DnaMatchDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("overview", None),
-        tab("segments", Some(detail.segments.len())),
-        tab("ancestors", Some(detail.shared_ancestors.len())),
-        tab("notes", Some(detail.notes.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("history", None),
+        tab("overview", None, None),
+        tab("segments", Some(detail.segments.len()), Some(ActionLabel::AddSegment)),
+        tab(
+            "ancestors",
+            Some(detail.shared_ancestors.len()),
+            Some(ActionLabel::AddSharedAncestor),
+        ),
+        tab("notes", Some(detail.notes.len()), Some(ActionLabel::AttachNote)),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("history", None, None),
     ]
 }
 

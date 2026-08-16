@@ -765,7 +765,7 @@ fn family_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record),
@@ -777,7 +777,7 @@ fn family_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {family_tab_content(state, detail, active_id, editing, record, FamilyTabCallbacks { on_retract, on_child_remove, on_edit_open, on_undo, on_tag_remove, media_state })}
+                {family_tab_content(state, detail, &active_tab, editing, record, FamilyTabCallbacks { on_retract, on_child_remove, on_edit_open, on_undo, on_tag_remove, media_state })}
             }
             {family_edit_panel(state, detail, editing, on_submit, on_submit_batch, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -841,7 +841,7 @@ struct FamilyTabCallbacks {
 fn family_tab_content(
     state: &AppState,
     detail: &FamilyDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<FamilyEditForm>>,
     record: RecordEditState<vitni_ui::FamilyDraft>,
     callbacks: FamilyTabCallbacks,
@@ -855,10 +855,10 @@ fn family_tab_content(
         on_tag_remove,
         media_state,
     } = callbacks;
-    match tab_id {
+    match tab.id {
         "children" => tab_frame(
             loc,
-            Some(ActionLabel::AddChild),
+            tab,
             TabActionTarget::Form(editing, FamilyEditForm::Child(None)),
             None,
             rsx! {
@@ -867,7 +867,7 @@ fn family_tab_content(
         ),
         "events" => tab_frame(
             loc,
-            Some(ActionLabel::LinkEvent),
+            tab,
             TabActionTarget::Form(editing, FamilyEditForm::Event),
             None,
             rsx! {
@@ -876,7 +876,7 @@ fn family_tab_content(
         ),
         "citations" => tab_frame(
             loc,
-            Some(ActionLabel::AttachCitation),
+            tab,
             TabActionTarget::Form(editing, FamilyEditForm::Citation),
             None,
             rsx! {
@@ -885,7 +885,7 @@ fn family_tab_content(
         ),
         "media" => tab_frame(
             loc,
-            Some(ActionLabel::AttachMedia),
+            tab,
             TabActionTarget::Form(editing, FamilyEditForm::Media),
             None,
             rsx! {
@@ -894,7 +894,7 @@ fn family_tab_content(
         ),
         "notes" => tab_frame(
             loc,
-            Some(ActionLabel::AttachNote),
+            tab,
             TabActionTarget::Form(editing, FamilyEditForm::Note),
             None,
             rsx! {
@@ -903,7 +903,7 @@ fn family_tab_content(
         ),
         "tags" => tab_frame(
             loc,
-            Some(ActionLabel::AddTag),
+            tab,
             TabActionTarget::Form(editing, FamilyEditForm::Tag),
             Some(TabActionStyle {
                 emphasis: Some(ButtonVariant::Ghost),
@@ -913,6 +913,7 @@ fn family_tab_content(
         ),
         "research-notes" => rsx! {
             ResearchNotesTab {
+                tab: tab.clone(),
                 category: Category::Families,
                 human_id: detail.human_id.clone(),
                 rows: detail.research_notes.clone(),
@@ -971,13 +972,21 @@ pub fn family_overview(
             }
         }
     };
+    // Not one of `family_tabs()`'s top-level tabs — a card nested in the Overview tab's own body — but
+    // still declares its action through the same `DetailTab`-shaped vocabulary `tab_frame` reads.
+    let partners_tab = DetailTab {
+        id: "partners",
+        label: loc.section_label("partners"),
+        count: None,
+        action: Some(ActionLabel::AddPartner),
+    };
     rsx! {
         div { class: "section-note", "{loc.family_overview_note()}" }
         div { class: "grid-2",
             Card { title: loc.section_label("partners"),
                 {tab_frame(
                     loc,
-                    Some(ActionLabel::AddPartner),
+                    &partners_tab,
                     TabActionTarget::Form(editing, FamilyEditForm::Partner),
                     Some(TabActionStyle { emphasis: Some(ButtonVariant::Ghost), ..Default::default() }),
                     partners_body,

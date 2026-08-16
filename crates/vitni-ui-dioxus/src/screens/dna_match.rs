@@ -600,7 +600,7 @@ fn dna_match_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     let status_actions = dna_match_status_actions(loc, on_submit, human_id);
     rsx! {
@@ -613,7 +613,7 @@ fn dna_match_detail(
                 actions: record_head_actions(&labels, record, status_actions, on_record_save),
                 tabs: tab_items,
                 active,
-                {dna_match_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
+                {dna_match_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
             }
             {dna_match_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-note")}
@@ -703,7 +703,7 @@ fn dna_match_restriction_toggles(
 fn dna_match_tab_content(
     state: &AppState,
     detail: &DnaMatchDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<DnaMatchEditForm>>,
     record: RecordEditState<vitni_ui::DnaMatchDraft>,
     on_retract: Callback<(String, String, bool)>,
@@ -712,12 +712,12 @@ fn dna_match_tab_content(
     on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
-        "segments" => dna_match_segments_table(loc, &detail.segments, on_edit_open, on_retract),
-        "ancestors" => dna_match_ancestors_table(loc, &detail.shared_ancestors, on_edit_open, on_retract),
+    match tab.id {
+        "segments" => dna_match_segments_table(loc, tab, &detail.segments, on_edit_open, on_retract),
+        "ancestors" => dna_match_ancestors_table(loc, tab, &detail.shared_ancestors, on_edit_open, on_retract),
         "notes" => tab_frame(
             loc,
-            Some(ActionLabel::AttachNote),
+            tab,
             TabActionTarget::Form(editing, DnaMatchEditForm::Note),
             None,
             rsx! {
@@ -726,7 +726,7 @@ fn dna_match_tab_content(
         ),
         "tags" => tab_frame(
             loc,
-            Some(ActionLabel::AddTag),
+            tab,
             TabActionTarget::Form(editing, DnaMatchEditForm::Tag),
             Some(TabActionStyle {
                 emphasis: Some(ButtonVariant::Ghost),
@@ -809,6 +809,7 @@ fn dna_match_cited_inferences(loc: &Localizer, inferences: &[DnaInferenceVm]) ->
 /// assertion — it stays in History). Never renders the segment's `AssertionId`.
 pub fn dna_match_segments_table(
     loc: &Localizer,
+    tab: &DetailTab,
     segments: &[DnaSegmentVm],
     onedit: Callback<DnaMatchEditForm>,
     onretract: Callback<(String, String, bool)>,
@@ -823,7 +824,7 @@ pub fn dna_match_segments_table(
     };
     tab_frame::<DnaMatchEditForm>(
         loc,
-        Some(ActionLabel::AddSegment),
+        tab,
         TabActionTarget::Run(Callback::new(move |()| onedit.call(DnaMatchEditForm::Segment(None)))),
         None,
         body,
@@ -878,6 +879,7 @@ fn dna_match_segments_rows(
 /// assertion — it stays in History). Never renders the ancestor's `AssertionId`.
 pub fn dna_match_ancestors_table(
     loc: &Localizer,
+    tab: &DetailTab,
     ancestors: &[SharedAncestorVm],
     onedit: Callback<DnaMatchEditForm>,
     onretract: Callback<(String, String, bool)>,
@@ -892,7 +894,7 @@ pub fn dna_match_ancestors_table(
     };
     tab_frame::<DnaMatchEditForm>(
         loc,
-        Some(ActionLabel::AddSharedAncestor),
+        tab,
         TabActionTarget::Run(Callback::new(move |()| onedit.call(DnaMatchEditForm::Ancestor(None)))),
         None,
         body,

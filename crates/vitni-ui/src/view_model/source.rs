@@ -1,6 +1,6 @@
 use super::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EvidenceAxisVm, HistoryEntryVm, Localizer, MediaRefVm,
-    RecordDraft, RestrictionKind, RowVm, SourceChangeSetRequest, SourceEdit, TagRef, citation_ref_from_ref,
+    ActionLabel, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EvidenceAxisVm, HistoryEntryVm, Localizer,
+    MediaRefVm, RecordDraft, RestrictionKind, RowVm, SourceChangeSetRequest, SourceEdit, TagRef, citation_ref_from_ref,
     evidence_axes, line_label, non_blank,
 };
 
@@ -230,20 +230,31 @@ pub fn source_row(summary: &vitni_app::SourceSummary, loc: &Localizer) -> RowVm 
 /// The tab strip for a source's detail: an overview, then the related-item tabs with counts.
 #[must_use]
 pub fn source_tabs(detail: &SourceDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("overview", None),
-        tab("repositories", Some(detail.repositories.len())),
-        tab("citations", Some(detail.citations.len())),
-        tab("attributes", Some(detail.attributes.len())),
-        tab("media", Some(detail.media.len())),
-        tab("notes", Some(detail.notes.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("history", None),
+        tab("overview", None, None),
+        tab(
+            "repositories",
+            Some(detail.repositories.len()),
+            Some(ActionLabel::LinkRepository),
+        ),
+        // Read-only: the citing records that use this source (a reverse index), not a collection
+        // this record's own tab attaches to.
+        tab("citations", Some(detail.citations.len()), None),
+        tab(
+            "attributes",
+            Some(detail.attributes.len()),
+            Some(ActionLabel::AddAttribute),
+        ),
+        tab("media", Some(detail.media.len()), Some(ActionLabel::AttachMedia)),
+        tab("notes", Some(detail.notes.len()), Some(ActionLabel::AttachNote)),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("history", None, None),
     ]
 }
 
