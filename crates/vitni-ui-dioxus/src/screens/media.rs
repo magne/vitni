@@ -532,34 +532,43 @@ fn media_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "attributes" => tab_with_add(
+        "attributes" => tab_frame(
             loc,
-            ActionLabel::AddAttribute,
-            editing,
-            MediaEditForm::Attribute(None),
+            Some(ActionLabel::AddAttribute),
+            TabActionTarget::Form(editing, MediaEditForm::Attribute(None)),
+            None,
             rsx! {
                 {media_attributes_table(loc, &detail.attributes, on_edit_open, on_retract)}
             },
         ),
-        "citations" => tab_with_add(
+        "citations" => tab_frame(
             loc,
-            ActionLabel::AttachCitation,
-            editing,
-            MediaEditForm::Citation,
+            Some(ActionLabel::AttachCitation),
+            TabActionTarget::Form(editing, MediaEditForm::Citation),
+            None,
             rsx! {
                 {citations_table::<MediaEditForm>(loc, &detail.citations, false, on_retract)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            ActionLabel::AttachNote,
-            editing,
-            MediaEditForm::Note,
+            Some(ActionLabel::AttachNote),
+            TabActionTarget::Form(editing, MediaEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, MediaEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, MediaEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => media_overview(loc, detail, record),
     }

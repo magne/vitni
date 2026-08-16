@@ -624,21 +624,24 @@ fn research_note_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "subjects" => tab_with_add(
+        "subjects" => tab_frame(
             loc,
-            ActionLabel::AddSubject,
-            editing,
-            ResearchNoteEditForm::Subject,
+            Some(ActionLabel::AddSubject),
+            TabActionTarget::Form(editing, ResearchNoteEditForm::Subject),
+            None,
             rsx! {
                 {research_note_subjects_table(loc, &detail.subjects, callbacks.on_subject_remove)}
             },
         ),
-        "tags" => tags_panel(
+        "tags" => tab_frame(
             loc,
-            &detail.tags,
-            editing,
-            ResearchNoteEditForm::Tag,
-            callbacks.on_tag_remove,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, ResearchNoteEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, callbacks.on_tag_remove),
         ),
         "history" => history_panel(loc, &detail.history, Some(callbacks.on_undo)),
         _ => research_note_content_tab(loc, record),
@@ -723,20 +726,18 @@ pub fn ResearchNotesTab(category: Category, human_id: String, rows: Vec<RowVm>) 
     let loc = state.data_loc();
     let nav = try_consume_context::<NavState>();
     let subject = human_id.clone();
-    rsx! {
-        div { class: "tab-actions",
-            Button {
-                label: loc.action_button(ActionLabel::NewResearchNote),
-                variant: ButtonVariant::Default,
-                onclick: move |_| {
-                    if let Some(mut nav) = nav {
-                        nav.open_research_note_about(category, subject.clone());
-                    }
-                },
-            }
+    let on_new = Callback::new(move |()| {
+        if let Some(mut nav) = nav {
+            nav.open_research_note_about(category, subject.clone());
         }
-        {research_notes_table(loc, &rows)}
-    }
+    });
+    tab_frame::<()>(
+        loc,
+        Some(ActionLabel::NewResearchNote),
+        TabActionTarget::Run(on_new),
+        None,
+        research_notes_table(loc, &rows),
+    )
 }
 
 /// The reverse-lookup tab's table: one row per argument written about the record, linking to its detail.

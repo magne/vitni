@@ -9,13 +9,14 @@ use std::rc::Rc;
 use vitni_app::TagRef;
 use vitni_app::{AssociationRole, Attribute, FactType, NameType, ParticipantRole, Sex};
 use vitni_ui::{
-    AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm,
-    FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft, TimelineKind, TimelineRowVm,
+    ActionLabel, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis,
+    EvidenceAxisVm, FactVm, FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft, TimelineKind, TimelineRowVm,
 };
+use vitni_ui_dioxus::components::ButtonVariant;
 use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::screens::{
-    EditForm, RecordEditState, associations_table, citations_table, events_table, facts_table, families_panel, id_list,
-    names_table, person_record_fields, tags_panel, timeline_panel,
+    EditForm, RecordEditState, TabActionStyle, TabActionTarget, associations_table, citations_table, events_table,
+    facts_table, families_panel, id_list, names_table, person_record_fields, tab_frame, tags_panel, timeline_panel,
 };
 use vitni_ui_dioxus::shell::ChromeCtx;
 use vitni_ui_dioxus::shell::nav_state::NavState;
@@ -484,7 +485,16 @@ fn person_tags() -> Element {
         color: Some("#e5534b".to_owned()),
         priority: Some(1),
     }];
-    tags_panel(&loc, &tags, editing, EditForm::Tag, on_remove)
+    tab_frame(
+        &loc,
+        Some(ActionLabel::AddTag),
+        TabActionTarget::Form(editing, EditForm::Tag),
+        Some(TabActionStyle {
+            emphasis: Some(ButtonVariant::Ghost),
+            ..Default::default()
+        }),
+        tags_panel(&loc, &tags, on_remove),
+    )
 }
 
 #[test]

@@ -87,7 +87,7 @@ fn note_view() -> Element {
         {note_content_tab(&loc, &detail, record)}
         {note_language_tab(&loc, &detail, use_callback(|_: NoteEditForm| {}), use_callback(|_: (String, String, bool)| {}))}
         {note_references_table(&loc, &detail.references)}
-        {tags_panel(&loc, &detail.tags, use_signal(|| None::<NoteEditForm>), NoteEditForm::Tag, use_callback(|_: String| {}))}
+        {tags_panel(&loc, &detail.tags, use_callback(|_: String| {}))}
     }
 }
 

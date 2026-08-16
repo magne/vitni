@@ -819,34 +819,43 @@ fn citation_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "attributes" => tab_with_add(
+        "attributes" => tab_frame(
             loc,
-            ActionLabel::AddAttribute,
-            editing,
-            CitationEditForm::Attribute(None),
+            Some(ActionLabel::AddAttribute),
+            TabActionTarget::Form(editing, CitationEditForm::Attribute(None)),
+            None,
             rsx! {
                 {citation_attributes_table(loc, &detail.attributes, on_edit_open, on_retract)}
             },
         ),
-        "media" => tab_with_add(
+        "media" => tab_frame(
             loc,
-            ActionLabel::AttachMedia,
-            editing,
-            CitationEditForm::Media,
+            Some(ActionLabel::AttachMedia),
+            TabActionTarget::Form(editing, CitationEditForm::Media),
+            None,
             rsx! {
                 {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            ActionLabel::AttachNote,
-            editing,
-            CitationEditForm::Note,
+            Some(ActionLabel::AttachNote),
+            TabActionTarget::Form(editing, CitationEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, CitationEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, CitationEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => citation_overview(loc, detail, record),
     }

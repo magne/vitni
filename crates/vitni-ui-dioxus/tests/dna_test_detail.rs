@@ -100,7 +100,6 @@ fn dna_test_view() -> Element {
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
-    let editing = use_signal(|| None::<DnaTestEditForm>);
     let on_remove = use_callback(|_: String| {});
     let onedit = use_callback(|_: DnaTestEditForm| {});
     let onretract = use_callback(|_: (String, String, bool)| {});
@@ -111,7 +110,7 @@ fn dna_test_view() -> Element {
         {dna_test_haplogroups_table(&loc, &detail.haplogroups, onedit, onretract)}
         {dna_test_matches_table(&loc, &detail.matches)}
         {id_list(&loc, &detail.notes, Some(onretract))}
-        {tags_panel(&loc, &detail.tags, editing, DnaTestEditForm::Tag, on_remove)}
+        {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }
 

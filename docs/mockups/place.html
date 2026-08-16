@@ -402,7 +402,7 @@
         <!-- NAMES -->
         <div class="tab-pane" data-pane="names">
           <div class="section-note">Names are dated and language-tagged, so the gazetteer reflects how a place was called at any point in time.</div>
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add name</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Add name</button></div>
           <table class="tbl">
             <caption class="sr-only">Historical names for this place</caption>
             <thead><tr><th>Name</th><th>Language</th><th>Period <span class="faint" title="One GenealogicalDate with a from/to modifier — not two dates">(one dated value)</span></th><th>Confidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
@@ -438,7 +438,7 @@
             <a href="place.html">New York (state)</a> <span class="sep">›</span>
             <a href="place.html">United States</a>
           </div>
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary" title="Assert a dated enclosed-by link">+ Add enclosing place</button></div>
+          <div class="tab-actions"><button class="btn sm primary" title="Assert a dated enclosed-by link">+ Add enclosing place</button></div>
           <table class="tbl">
             <caption class="sr-only">Jurisdiction hierarchy chain</caption>
             <thead><tr><th>Level</th><th>Place</th><th>Type</th><th>Dated link</th><th>Confidence</th><th><span class="sr-only">Actions</span></th></tr></thead>
@@ -463,7 +463,7 @@
                  · provenance block + Save. Save stays inert until a resulting place is picked. -->
           <div class="card" style="margin-top:16px">
             <h3>Succession <span class="badge">ADR 0026</span></h3>
-            <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary" title="Assert a merge / split / absorb link to other places">+ Add succession</button></div>
+            <div class="tab-actions"><button class="btn sm primary" title="Assert a merge / split / absorb link to other places">+ Add succession</button></div>
             <div class="faint" style="font-size:var(--fs-xs);margin-bottom:6px">Identity changes — a merge or split reaches <i>different</i> place records, navigable both ways.</div>
             <div class="stack">
               <div class="fact-row"><span class="chip">absorbed</span><span class="grow"><a href="place.html">New Amsterdam</a> → <b>New York</b></span><span class="muted">1664</span><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></div>
@@ -474,7 +474,7 @@
 
         <!-- CITATIONS -->
         <div class="tab-pane" data-pane="citations">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Attach citation</button></div>
           <table class="tbl">
             <caption class="sr-only">Citations attached to this place</caption>
             <thead><tr><th>Source</th><th>Page</th><th>Backs</th><th>Confidence</th><th>Evidence</th><th><span class="sr-only">Actions</span></th></tr></thead>
@@ -486,7 +486,7 @@
 
         <!-- MEDIA -->
         <div class="tab-pane" data-pane="media">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Attach media</button></div>
           <div class="muted" style="font-size:var(--fs-xs);margin-bottom:8px">Each card opens the shared crop viewer (<a href="media.html">Set/Clear region</a>, ADR 0017 §GUI).</div>
           <div class="grid-3">
             <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">🗺</div><div style="margin-top:8px">1870 city map</div><div class="row-actions" style="justify-content:center;margin-top:8px"><button class="btn sm ghost" aria-label="Open 1870 city map" title="Open the crop viewer">Open</button><button class="btn sm ghost" title="Detach this media — recorded in History">Detach</button></div></div>
@@ -495,12 +495,12 @@
 
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Attach note</button></div>
           <div class="card"><h3>Research · en <span class="row-actions" style="float:right"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this note — it stays in History">Retract</button></span></h3><p>Boundary with Brooklyn shifted with the 1898 consolidation — verify which records pre-date the merger.</p></div>
         </div>
         <!-- RESEARCH NOTES (reverse index: arguments written about this record) -->
         <div class="tab-pane" data-pane="research-notes">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ New research note</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ New research note</button></div>
           <div class="section-note">Proof arguments written about this record. A research note is a conclusion in
             prose — the reasoning that turns evidence into a conclusion — and this is the reverse index the
             event-sourced core keeps for free (<a href="research-note.html">research notes</a>).</div>
@@ -515,7 +515,8 @@
 
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
-          <div class="wrap"><span class="chip"><span class="dot" style="background:#6cb6ff"></span>Home town <button class="btn sm ghost" aria-label="Remove tag Home town" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="tab-actions"><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#6cb6ff"></span>Home town <button class="btn sm ghost" aria-label="Remove tag Home town" title="Untag — recorded in History" style="padding:0 4px">×</button></span></div>
         </div>
 
         <!-- HISTORY (audit trail — free from the event log) -->

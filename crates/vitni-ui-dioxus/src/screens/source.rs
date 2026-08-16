@@ -521,11 +521,11 @@ fn source_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "repositories" => tab_with_add(
+        "repositories" => tab_frame(
             loc,
-            ActionLabel::LinkRepository,
-            editing,
-            SourceEditForm::Repository(None),
+            Some(ActionLabel::LinkRepository),
+            TabActionTarget::Form(editing, SourceEditForm::Repository(None)),
+            None,
             rsx! {
                 {source_repositories_table(loc, detail, on_edit_open, on_retract)}
             },
@@ -534,34 +534,43 @@ fn source_tab_content(
             div { class: "section-note", "{loc.source_citations_note()}" }
             {source_citations_table(loc, &detail.citations)}
         },
-        "attributes" => tab_with_add(
+        "attributes" => tab_frame(
             loc,
-            ActionLabel::AddAttribute,
-            editing,
-            SourceEditForm::Attribute(None),
+            Some(ActionLabel::AddAttribute),
+            TabActionTarget::Form(editing, SourceEditForm::Attribute(None)),
+            None,
             rsx! {
                 {source_attributes_table(loc, detail, on_edit_open, on_retract)}
             },
         ),
-        "media" => tab_with_add(
+        "media" => tab_frame(
             loc,
-            ActionLabel::AttachMedia,
-            editing,
-            SourceEditForm::Media,
+            Some(ActionLabel::AttachMedia),
+            TabActionTarget::Form(editing, SourceEditForm::Media),
+            None,
             rsx! {
                 {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            ActionLabel::AttachNote,
-            editing,
-            SourceEditForm::Note,
+            Some(ActionLabel::AttachNote),
+            TabActionTarget::Form(editing, SourceEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, SourceEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, SourceEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => source_overview(loc, detail, record),
     }

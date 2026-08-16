@@ -527,44 +527,53 @@ fn repository_tab_content(
         "addresses" => {
             let onedit =
                 Callback::new(move |seed: AddressVm| on_edit_open.call(RepositoryEditForm::Address(Some(seed))));
-            tab_with_add(
+            tab_frame(
                 loc,
-                ActionLabel::AddAddress,
-                editing,
-                RepositoryEditForm::Address(None),
+                Some(ActionLabel::AddAddress),
+                TabActionTarget::Form(editing, RepositoryEditForm::Address(None)),
+                None,
                 rsx! {
                     {address_cards(loc, &detail.addresses, onedit, on_retract)}
                 },
             )
         }
-        "urls" => tab_with_add(
+        "urls" => tab_frame(
             loc,
-            ActionLabel::AddUrl,
-            editing,
-            RepositoryEditForm::Url(None),
+            Some(ActionLabel::AddUrl),
+            TabActionTarget::Form(editing, RepositoryEditForm::Url(None)),
+            None,
             rsx! {
                 {repository_urls_table(loc, detail, on_edit_open, on_retract)}
             },
         ),
-        "sources" => tab_with_add(
+        "sources" => tab_frame(
             loc,
-            ActionLabel::LinkSource,
-            editing,
-            RepositoryEditForm::Source,
+            Some(ActionLabel::LinkSource),
+            TabActionTarget::Form(editing, RepositoryEditForm::Source),
+            None,
             rsx! {
                 {repository_sources_table(loc, detail)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            ActionLabel::AttachNote,
-            editing,
-            RepositoryEditForm::Note,
+            Some(ActionLabel::AttachNote),
+            TabActionTarget::Form(editing, RepositoryEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, RepositoryEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, RepositoryEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => repository_overview(loc, detail, record),
     }

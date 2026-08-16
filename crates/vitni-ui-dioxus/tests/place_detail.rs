@@ -222,7 +222,7 @@ fn place_view() -> Element {
         {citations_table::<PlaceEditForm>(&loc, &detail.citations, false, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
         {id_list(&loc, &detail.notes, Some(onretract))}
-        {tags_panel(&loc, &detail.tags, use_signal(|| None::<PlaceEditForm>), PlaceEditForm::Tag, use_callback(|_: String| {}))}
+        {tags_panel(&loc, &detail.tags, use_callback(|_: String| {}))}
     }
 }
 

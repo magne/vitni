@@ -55,6 +55,6 @@ pub use super::shared::{
     row_actions_cell, source_cue, source_media_type_choices, use_detail_tab, use_existing_picker, use_record_undo,
 };
 pub use super::tabs::{
-    AddressForm, ParticipationForm, ParticipationSeed, address_cards, citations_table, history_panel, tab_with_add,
-    tags_panel,
+    AddressForm, ParticipationForm, ParticipationSeed, TabActionStyle, TabActionTarget, address_cards, citations_table,
+    history_panel, tab_frame, tags_panel,
 };

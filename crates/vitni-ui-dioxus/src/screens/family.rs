@@ -856,52 +856,61 @@ fn family_tab_content(
         media_state,
     } = callbacks;
     match tab_id {
-        "children" => tab_with_add(
+        "children" => tab_frame(
             loc,
-            ActionLabel::AddChild,
-            editing,
-            FamilyEditForm::Child(None),
+            Some(ActionLabel::AddChild),
+            TabActionTarget::Form(editing, FamilyEditForm::Child(None)),
+            None,
             rsx! {
                 {family_children_table(loc, detail, on_edit_open, on_retract, on_child_remove)}
             },
         ),
-        "events" => tab_with_add(
+        "events" => tab_frame(
             loc,
-            ActionLabel::LinkEvent,
-            editing,
-            FamilyEditForm::Event,
+            Some(ActionLabel::LinkEvent),
+            TabActionTarget::Form(editing, FamilyEditForm::Event),
+            None,
             rsx! {
                 {family_events_table(loc, &detail.events, on_retract)}
             },
         ),
-        "citations" => tab_with_add(
+        "citations" => tab_frame(
             loc,
-            ActionLabel::AttachCitation,
-            editing,
-            FamilyEditForm::Citation,
+            Some(ActionLabel::AttachCitation),
+            TabActionTarget::Form(editing, FamilyEditForm::Citation),
+            None,
             rsx! {
                 {citations_table::<FamilyEditForm>(loc, &detail.citations, true, on_retract)}
             },
         ),
-        "media" => tab_with_add(
+        "media" => tab_frame(
             loc,
-            ActionLabel::AttachMedia,
-            editing,
-            FamilyEditForm::Media,
+            Some(ActionLabel::AttachMedia),
+            TabActionTarget::Form(editing, FamilyEditForm::Media),
+            None,
             rsx! {
                 {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            ActionLabel::AttachNote,
-            editing,
-            FamilyEditForm::Note,
+            Some(ActionLabel::AttachNote),
+            TabActionTarget::Form(editing, FamilyEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, FamilyEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, FamilyEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "research-notes" => rsx! {
             ResearchNotesTab {
                 category: Category::Families,
@@ -920,7 +929,7 @@ fn family_tab_content(
 pub fn family_overview(
     loc: &Localizer,
     detail: &FamilyDetail,
-    mut editing: Signal<Option<FamilyEditForm>>,
+    editing: Signal<Option<FamilyEditForm>>,
     record: RecordEditState<vitni_ui::FamilyDraft>,
     on_retract: Callback<(String, String, bool)>,
 ) -> Element {
@@ -931,42 +940,48 @@ pub fn family_overview(
             {record_edit_provenance(loc, record)}
         };
     }
-    rsx! {
-        div { class: "section-note", "{loc.family_overview_note()}" }
-        div { class: "grid-2",
-            Card { title: loc.section_label("partners"),
-                div { class: "tab-actions",
-                    Button { label: loc.action_button(ActionLabel::AddPartner), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(FamilyEditForm::Partner)) }
-                }
-                if detail.partners.is_empty() {
-                    EmptyState { message: loc.tab_empty() }
-                } else {
-                    div { class: "stack",
-                        for partner in detail.partners.iter() {
-                            div { class: "fact-row",
-                                span { class: "grow", "{partner.name}" }
-                                if let Some(vitals) = partner.vitals.clone() {
-                                    span { class: "muted", "{vitals}" }
-                                }
-                                {provenance_cue(loc, loc.provenance_title_claim(&partner.name), &partner.citations)}
-                                {
-                                    let assertion_id = partner.assertion_id.clone();
-                                    let name = partner.name.clone();
-                                    rsx! {
-                                        Button {
-                                            label: loc.action_button(ActionLabel::Remove),
-                                            variant: ButtonVariant::Ghost,
-                                            small: true,
-                                            title: loc.action_title("remove-partner"),
-                                            aria_label: loc.action_remove_row(&partner.name),
-                                            onclick: move |_| on_retract.call((assertion_id.clone(), name.clone(), false)),
-                                        }
-                                    }
+    let partners_body = if detail.partners.is_empty() {
+        rsx! { EmptyState { message: loc.tab_empty() } }
+    } else {
+        rsx! {
+            div { class: "stack",
+                for partner in detail.partners.iter() {
+                    div { class: "fact-row",
+                        span { class: "grow", "{partner.name}" }
+                        if let Some(vitals) = partner.vitals.clone() {
+                            span { class: "muted", "{vitals}" }
+                        }
+                        {provenance_cue(loc, loc.provenance_title_claim(&partner.name), &partner.citations)}
+                        {
+                            let assertion_id = partner.assertion_id.clone();
+                            let name = partner.name.clone();
+                            rsx! {
+                                Button {
+                                    label: loc.action_button(ActionLabel::Remove),
+                                    variant: ButtonVariant::Ghost,
+                                    small: true,
+                                    title: loc.action_title("remove-partner"),
+                                    aria_label: loc.action_remove_row(&partner.name),
+                                    onclick: move |_| on_retract.call((assertion_id.clone(), name.clone(), false)),
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+    };
+    rsx! {
+        div { class: "section-note", "{loc.family_overview_note()}" }
+        div { class: "grid-2",
+            Card { title: loc.section_label("partners"),
+                {tab_frame(
+                    loc,
+                    Some(ActionLabel::AddPartner),
+                    TabActionTarget::Form(editing, FamilyEditForm::Partner),
+                    Some(TabActionStyle { emphasis: Some(ButtonVariant::Ghost), ..Default::default() }),
+                    partners_body,
+                )}
             }
             Card { title: loc.section_label("marriage"),
                 if let Some(marriage) = detail.marriage.as_ref() {

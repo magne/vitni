@@ -112,7 +112,7 @@ pub use source::{
     source_repositories_table,
 };
 pub use tabs::{
-    AddressForm, ParticipationForm, ParticipationSeed, address_cards, address_form, citations_table, history_panel,
-    participation_form, tab_with_add, tags_panel,
+    AddressForm, ParticipationForm, ParticipationSeed, TabActionStyle, TabActionTarget, address_cards, address_form,
+    citations_table, history_panel, participation_form, tab_frame, tags_panel,
 };
 pub use tag::{tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_usage_tab};

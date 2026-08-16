@@ -978,63 +978,72 @@ fn person_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "names" => tab_with_add(
+        "names" => tab_frame(
             loc,
-            ActionLabel::AddName,
-            editing,
-            EditForm::Name(None),
+            Some(ActionLabel::AddName),
+            TabActionTarget::Form(editing, EditForm::Name(None)),
+            None,
             rsx! {
                 {names_table(loc, &detail.names, on_edit_open, on_retract)}
             },
         ),
-        "facts" => tab_with_add(
+        "facts" => tab_frame(
             loc,
-            ActionLabel::AddFact,
-            editing,
-            EditForm::Fact(None),
+            Some(ActionLabel::AddFact),
+            TabActionTarget::Form(editing, EditForm::Fact(None)),
+            None,
             rsx! {
                 {facts_table(loc, &detail.facts, on_edit_open, on_retract)}
             },
         ),
         "events" => events_table(loc, &detail.events, on_edit_open, on_retract),
-        "associations" => tab_with_add(
+        "associations" => tab_frame(
             loc,
-            ActionLabel::AddAssociation,
-            editing,
-            EditForm::Association(None),
+            Some(ActionLabel::AddAssociation),
+            TabActionTarget::Form(editing, EditForm::Association(None)),
+            None,
             rsx! {
                 {associations_table(loc, &detail.associations, on_edit_open, on_retract)}
             },
         ),
         "families" => families_panel(loc, &detail.families),
-        "citations" => tab_with_add(
+        "citations" => tab_frame(
             loc,
-            ActionLabel::AttachCitation,
-            editing,
-            EditForm::Citation,
+            Some(ActionLabel::AttachCitation),
+            TabActionTarget::Form(editing, EditForm::Citation),
+            None,
             rsx! {
                 {citations_table::<EditForm>(loc, &detail.citations, true, on_retract)}
             },
         ),
-        "media" => tab_with_add(
+        "media" => tab_frame(
             loc,
-            ActionLabel::AttachMedia,
-            editing,
-            EditForm::Media,
+            Some(ActionLabel::AttachMedia),
+            TabActionTarget::Form(editing, EditForm::Media),
+            None,
             rsx! {
                 {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            ActionLabel::AttachNote,
-            editing,
-            EditForm::Note,
+            Some(ActionLabel::AttachNote),
+            TabActionTarget::Form(editing, EditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, EditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, EditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "research-notes" => rsx! {
             ResearchNotesTab {
                 category: Category::People,

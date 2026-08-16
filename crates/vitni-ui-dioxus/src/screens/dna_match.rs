@@ -715,16 +715,25 @@ fn dna_match_tab_content(
     match tab_id {
         "segments" => dna_match_segments_table(loc, &detail.segments, on_edit_open, on_retract),
         "ancestors" => dna_match_ancestors_table(loc, &detail.shared_ancestors, on_edit_open, on_retract),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            ActionLabel::AttachNote,
-            editing,
-            DnaMatchEditForm::Note,
+            Some(ActionLabel::AttachNote),
+            TabActionTarget::Form(editing, DnaMatchEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, DnaMatchEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, DnaMatchEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => dna_match_overview(loc, detail, record),
     }
@@ -804,21 +813,33 @@ pub fn dna_match_segments_table(
     onedit: Callback<DnaMatchEditForm>,
     onretract: Callback<(String, String, bool)>,
 ) -> Element {
-    let add = rsx! {
-        div { class: "tab-actions",
-            Button { label: loc.action_button(ActionLabel::AddSegment), variant: ButtonVariant::Default, onclick: move |_| onedit.call(DnaMatchEditForm::Segment(None)) }
-        }
-    };
-    if segments.is_empty() {
-        return rsx! {
-            {add}
+    let body = if segments.is_empty() {
+        rsx! {
             div { class: "section-note", "{loc.dna_match_segments_note()}" }
             EmptyState { message: loc.tab_empty() }
-        };
-    }
+        }
+    } else {
+        dna_match_segments_rows(loc, segments, onedit, onretract)
+    };
+    tab_frame::<DnaMatchEditForm>(
+        loc,
+        Some(ActionLabel::AddSegment),
+        TabActionTarget::Run(Callback::new(move |()| onedit.call(DnaMatchEditForm::Segment(None)))),
+        None,
+        body,
+    )
+}
+
+/// The Segments tab's populated body — split out of [`dna_match_segments_table`] to keep that fn
+/// within its line budget.
+fn dna_match_segments_rows(
+    loc: &Localizer,
+    segments: &[DnaSegmentVm],
+    onedit: Callback<DnaMatchEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     let dash = "—".to_owned();
     rsx! {
-        {add}
         div { class: "section-note", "{loc.dna_match_segments_note()}" }
         Table {
             caption: loc.tab_label("segments"),
@@ -861,21 +882,33 @@ pub fn dna_match_ancestors_table(
     onedit: Callback<DnaMatchEditForm>,
     onretract: Callback<(String, String, bool)>,
 ) -> Element {
-    let add = rsx! {
-        div { class: "tab-actions",
-            Button { label: loc.action_button(ActionLabel::AddSharedAncestor), variant: ButtonVariant::Default, onclick: move |_| onedit.call(DnaMatchEditForm::Ancestor(None)) }
-        }
-    };
-    if ancestors.is_empty() {
-        return rsx! {
-            {add}
+    let body = if ancestors.is_empty() {
+        rsx! {
             div { class: "section-note", "{loc.dna_match_ancestors_note()}" }
             EmptyState { message: loc.tab_empty() }
-        };
-    }
+        }
+    } else {
+        dna_match_ancestors_rows(loc, ancestors, onedit, onretract)
+    };
+    tab_frame::<DnaMatchEditForm>(
+        loc,
+        Some(ActionLabel::AddSharedAncestor),
+        TabActionTarget::Run(Callback::new(move |()| onedit.call(DnaMatchEditForm::Ancestor(None)))),
+        None,
+        body,
+    )
+}
+
+/// The Shared ancestors tab's populated body — split out of [`dna_match_ancestors_table`] to keep that
+/// fn within its line budget.
+fn dna_match_ancestors_rows(
+    loc: &Localizer,
+    ancestors: &[SharedAncestorVm],
+    onedit: Callback<DnaMatchEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     let dash = "—".to_owned();
     rsx! {
-        {add}
         div { class: "section-note", "{loc.dna_match_ancestors_note()}" }
         Table {
             caption: loc.tab_label("ancestors"),

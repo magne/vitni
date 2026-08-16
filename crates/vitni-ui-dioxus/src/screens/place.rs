@@ -673,7 +673,7 @@ fn place_tab_content(
     state: &AppState,
     detail: &PlaceDetail,
     tab_id: &str,
-    mut editing: Signal<Option<PlaceEditForm>>,
+    editing: Signal<Option<PlaceEditForm>>,
     record: RecordEditState<vitni_ui::PlaceDraft>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<PlaceEditForm>,
@@ -685,49 +685,64 @@ fn place_tab_content(
     let loc = state.data_loc();
     match tab_id {
         "map" => place_map(detail, on_map_saved, on_retract),
-        "names" => rsx! {
-            div { class: "section-note", "{loc.place_names_note()}" }
-            div { class: "tab-actions",
-                Button { label: loc.action_button(ActionLabel::AddName), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Name(None))) }
-            }
-            {place_names_table(loc, detail, on_edit_open, on_retract)}
-        },
-        "hierarchy" => rsx! {
-            div { class: "section-note", "{loc.place_hierarchy_note()}" }
-            div { class: "tab-actions",
-                Button { label: loc.action_button(ActionLabel::AddEnclosing), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Enclosing(None))) }
-            }
-            {place_hierarchy_table(loc, detail, on_edit_open, on_retract)}
-            {place_succession_card(loc, detail, on_edit_open, on_retract)}
-        },
-        "citations" => tab_with_add(
+        "names" => tab_frame(
             loc,
-            ActionLabel::AttachCitation,
-            editing,
-            PlaceEditForm::Citation,
+            Some(ActionLabel::AddName),
+            TabActionTarget::Form(editing, PlaceEditForm::Name(None)),
+            None,
+            rsx! {
+                div { class: "section-note", "{loc.place_names_note()}" }
+                {place_names_table(loc, detail, on_edit_open, on_retract)}
+            },
+        ),
+        "hierarchy" => tab_frame(
+            loc,
+            Some(ActionLabel::AddEnclosing),
+            TabActionTarget::Form(editing, PlaceEditForm::Enclosing(None)),
+            None,
+            rsx! {
+                div { class: "section-note", "{loc.place_hierarchy_note()}" }
+                {place_hierarchy_table(loc, detail, on_edit_open, on_retract)}
+                {place_succession_card(loc, detail, on_edit_open, on_retract)}
+            },
+        ),
+        "citations" => tab_frame(
+            loc,
+            Some(ActionLabel::AttachCitation),
+            TabActionTarget::Form(editing, PlaceEditForm::Citation),
+            None,
             rsx! {
                 {citations_table::<PlaceEditForm>(loc, &detail.citations, false, on_retract)}
             },
         ),
-        "media" => tab_with_add(
+        "media" => tab_frame(
             loc,
-            ActionLabel::AttachMedia,
-            editing,
-            PlaceEditForm::Media,
+            Some(ActionLabel::AttachMedia),
+            TabActionTarget::Form(editing, PlaceEditForm::Media),
+            None,
             rsx! {
                 {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            ActionLabel::AttachNote,
-            editing,
-            PlaceEditForm::Note,
+            Some(ActionLabel::AttachNote),
+            TabActionTarget::Form(editing, PlaceEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, PlaceEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, PlaceEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "research-notes" => rsx! {
             ResearchNotesTab {
                 category: Category::Places,
@@ -1184,30 +1199,30 @@ pub fn place_succession_card(
     on_retract: Callback<(String, String, bool)>,
 ) -> Element {
     let empty = detail.predecessors.is_empty() && detail.successors.is_empty();
+    let body = rsx! {
+        div { class: "faint", style: "font-size:var(--fs-xs);margin-bottom:6px", "{loc.place_succession_note()}" }
+        if empty {
+            EmptyState { message: loc.tab_empty() }
+        } else {
+            div { class: "stack",
+                for rel in detail.predecessors.iter() {
+                    {succession_row(loc, &detail.title, rel, true, on_retract)}
+                }
+                for rel in detail.successors.iter() {
+                    {succession_row(loc, &detail.title, rel, false, on_retract)}
+                }
+            }
+        }
+    };
     rsx! {
         Card { title: loc.place_succession_title(),
-            div { class: "tab-actions",
-                Button {
-                    label: loc.action_button(ActionLabel::AddSuccession),
-                    variant: ButtonVariant::Primary,
-                    small: true,
-                    title: loc.place_succession_add_title(),
-                    onclick: move |_| onedit.call(PlaceEditForm::Succession),
-                }
-            }
-            div { class: "faint", style: "font-size:var(--fs-xs);margin-bottom:6px", "{loc.place_succession_note()}" }
-            if empty {
-                EmptyState { message: loc.tab_empty() }
-            } else {
-                div { class: "stack",
-                    for rel in detail.predecessors.iter() {
-                        {succession_row(loc, &detail.title, rel, true, on_retract)}
-                    }
-                    for rel in detail.successors.iter() {
-                        {succession_row(loc, &detail.title, rel, false, on_retract)}
-                    }
-                }
-            }
+            {tab_frame::<PlaceEditForm>(
+                loc,
+                Some(ActionLabel::AddSuccession),
+                TabActionTarget::Run(Callback::new(move |()| onedit.call(PlaceEditForm::Succession))),
+                Some(TabActionStyle { title: Some(loc.place_succession_add_title()), ..Default::default() }),
+                body,
+            )}
         }
     }
 }
@@ -1471,7 +1486,7 @@ fn succession_place_field(loc: &Localizer, picker: &RecordPicker, mut picked: Si
     let dismiss = loc.action_label(ActionLabel::Dismiss);
     rsx! {
         {record_picker(loc, picker)}
-        div { class: "tab-actions",
+        div { class: "row-actions",
             Button {
                 label: loc.place_succession_add_picked(),
                 variant: ButtonVariant::Default,

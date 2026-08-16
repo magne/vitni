@@ -184,7 +184,7 @@ fn family_view() -> Element {
         {family_overview(&loc, &detail, editing, record, on_retract)}
         {family_children_table(&loc, &detail, on_edit_open, on_retract, on_child_remove)}
         {family_events_table(&loc, &detail.events, on_retract)}
-        {tags_panel(&loc, &detail.tags, editing, FamilyEditForm::Tag, on_remove)}
+        {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }
 

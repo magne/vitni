@@ -856,53 +856,62 @@ fn event_tab_content(
         "addresses" => {
             let onedit =
                 Callback::new(move |seed: AddressVm| on_edit_open.call(EventEditForm::Address(Some(Box::new(seed)))));
-            tab_with_add(
+            tab_frame(
                 loc,
-                ActionLabel::AddAddress,
-                editing,
-                EventEditForm::Address(None),
+                Some(ActionLabel::AddAddress),
+                TabActionTarget::Form(editing, EventEditForm::Address(None)),
+                None,
                 rsx! {
                     {address_cards(loc, &detail.addresses, onedit, on_retract)}
                 },
             )
         }
-        "participants" => tab_with_add(
+        "participants" => tab_frame(
             loc,
-            ActionLabel::AddParticipant,
-            editing,
-            EventEditForm::Participant(None),
+            Some(ActionLabel::AddParticipant),
+            TabActionTarget::Form(editing, EventEditForm::Participant(None)),
+            None,
             rsx! {
                 {event_participants_table(loc, detail, on_edit_open, on_person_retract)}
             },
         ),
-        "citations" => tab_with_add(
+        "citations" => tab_frame(
             loc,
-            ActionLabel::AttachCitation,
-            editing,
-            EventEditForm::Citation,
+            Some(ActionLabel::AttachCitation),
+            TabActionTarget::Form(editing, EventEditForm::Citation),
+            None,
             rsx! {
                 {citations_table::<EventEditForm>(loc, &detail.citations, false, on_retract)}
             },
         ),
-        "media" => tab_with_add(
+        "media" => tab_frame(
             loc,
-            ActionLabel::AttachMedia,
-            editing,
-            EventEditForm::Media,
+            Some(ActionLabel::AttachMedia),
+            TabActionTarget::Form(editing, EventEditForm::Media),
+            None,
             rsx! {
                 {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            ActionLabel::AttachNote,
-            editing,
-            EventEditForm::Note,
+            Some(ActionLabel::AttachNote),
+            TabActionTarget::Form(editing, EventEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, EventEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, EventEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "research-notes" => rsx! {
             ResearchNotesTab {
                 category: Category::Events,

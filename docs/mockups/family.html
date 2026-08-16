@@ -224,7 +224,7 @@
 
         <!-- CHILDREN -->
         <div class="tab-pane" data-pane="children">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add child</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Add child</button></div>
           <table class="tbl">
             <caption class="sr-only">Children</caption>
             <thead><tr><th>Child</th><th>Born</th><th>Rel. to partner 1</th><th>Rel. to partner 2</th><th>Confidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
@@ -262,7 +262,7 @@
 
         <!-- EVENTS (family-level) -->
         <div class="tab-pane" data-pane="events">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add family event</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Link family event</button></div>
           <table class="tbl">
             <caption class="sr-only">Events</caption>
             <thead><tr><th>Event</th><th>Date</th><th>Place</th><th>Confidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
@@ -275,7 +275,7 @@
 
         <!-- CITATIONS -->
         <div class="tab-pane" data-pane="citations">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Attach citation</button></div>
           <table class="tbl">
             <caption class="sr-only">Citations</caption>
             <thead><tr><th>Source</th><th>Page</th><th>Backs</th><th>Confidence</th><th>Evidence</th><th><span class="sr-only">Actions</span></th></tr></thead>
@@ -288,18 +288,18 @@
         <!-- MEDIA -->
         <div class="tab-pane" data-pane="media">
           <div class="section-note">Canonical empty-state specimen — no media attached yet (design-system.html's <code>.card.empty</code> pattern, shown in situ). Once media is attached, each card opens the same interactive crop viewer as <a href="person.html">person.html</a>'s Media tab (Set/Clear region, ADR 0017 §GUI).</div>
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Attach media</button></div>
           <div class="card empty"><div class="big">∅</div>No media yet. <a class="src-link">Attach one →</a></div>
         </div>
 
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Attach note</button></div>
           <div class="card"><h3>Research · en</h3><p>Marriage banns suggest a betrothal in late 1875; check the parish bulletin for the exact reading dates.</p><div class="row-actions" style="margin-top:8px"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this note — recorded in History">Retract</button></div></div>
         </div>
         <!-- RESEARCH NOTES (reverse index: arguments written about this record) -->
         <div class="tab-pane" data-pane="research-notes">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ New research note</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ New research note</button></div>
           <div class="section-note">Proof arguments written about this record. A research note is a conclusion in
             prose — the reasoning that turns evidence into a conclusion — and this is the reverse index the
             event-sourced core keeps for free (<a href="research-note.html">research notes</a>).</div>
@@ -314,7 +314,8 @@
 
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
-          <div class="wrap"><span class="chip"><span class="dot" style="background:#74b449"></span>Ancestral line <button class="btn sm ghost" aria-label="Remove tag Ancestral line" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="tab-actions"><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#74b449"></span>Ancestral line <button class="btn sm ghost" aria-label="Remove tag Ancestral line" title="Untag — recorded in History" style="padding:0 4px">×</button></span></div>
         </div>
 
         <!-- HISTORY (audit trail — free from the event log) -->

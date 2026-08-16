@@ -490,11 +490,11 @@ fn note_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "language" => tab_with_add(
+        "language" => tab_frame(
             loc,
-            ActionLabel::AddTranslation,
-            editing,
-            NoteEditForm::Translation(None),
+            Some(ActionLabel::AddTranslation),
+            TabActionTarget::Form(editing, NoteEditForm::Translation(None)),
+            None,
             rsx! {
                 {note_language_tab(loc, detail, on_edit_open, on_retract)}
             },
@@ -503,7 +503,16 @@ fn note_tab_content(
             div { class: "section-note", "{loc.note_references_note()}" }
             {note_references_table(loc, &detail.references)}
         },
-        "tags" => tags_panel(loc, &detail.tags, editing, NoteEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, NoteEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => note_content_tab(loc, detail, record),
     }

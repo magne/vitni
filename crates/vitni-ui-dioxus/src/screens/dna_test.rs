@@ -698,26 +698,35 @@ fn dna_test_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "haplogroups" => tab_with_add(
+        "haplogroups" => tab_frame(
             loc,
-            ActionLabel::AddHaplogroup,
-            editing,
-            DnaTestEditForm::Haplogroup(None),
+            Some(ActionLabel::AddHaplogroup),
+            TabActionTarget::Form(editing, DnaTestEditForm::Haplogroup(None)),
+            None,
             rsx! {
                 {dna_test_haplogroups_table(loc, &detail.haplogroups, on_edit_open, on_retract)}
             },
         ),
         "matches" => dna_test_matches_table(loc, &detail.matches),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            ActionLabel::AttachNote,
-            editing,
-            DnaTestEditForm::Note,
+            Some(ActionLabel::AttachNote),
+            TabActionTarget::Form(editing, DnaTestEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, DnaTestEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            Some(ActionLabel::AddTag),
+            TabActionTarget::Form(editing, DnaTestEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => dna_test_overview(loc, detail, record),
     }

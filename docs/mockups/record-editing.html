@@ -396,6 +396,18 @@
     emits <span class="mono">ChildRemoved</span>, recording that a membership which once held has
     ended, and the claim that added the child keeps standing. Retract says that claim was a mistake in
     the first place. Both are logged; only the meaning differs, so the two never share a button.</p>
+  <p class="muted">Every collection tab opens its row-editing form the same way: one
+    <span class="mono">.tab-actions</span> bar, above the tab's own table or gallery, holding a single
+    button. That button's verb is drawn from a closed set, never a free string, so a tab can never fall
+    back to a generic "Save": <b>Attach</b> references an existing record (a citation, a media object, a
+    note), <b>Add</b> creates a sub-record the tab itself owns (a name, a fact, a DNA segment), and
+    <b>Link</b> creates a bidirectional association between two existing records (a family's linked
+    event). The bar is the only place in a screen that emits <span class="mono">.tab-actions</span> — a
+    read-only tab (History) renders no bar at all.</p>
+  <div class="specimen">
+    <div class="label">Collection tab action bar (Attach / Add / Link — never "Save")</div>
+    <div class="tab-actions"><button class="btn sm primary">+ Attach citation</button></div>
+  </div>
   <div class="specimen">
     <div class="label">Related collection — per-row editing (Edit = supersede · Retract = retract)</div>
     <table class="tbl">
