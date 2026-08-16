@@ -27,6 +27,7 @@ use vitni_app::{
     SourceMediaType, SourceQuality, SuretyLabelOverrides, UsingKind, config,
 };
 
+use crate::action::{ActionLabel, Affordance};
 use crate::navigation::Category;
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 use crate::view_model::{DateModifierKind, TimelineKind};
@@ -578,12 +579,6 @@ impl Localizer {
     #[must_use]
     pub fn place_succession_note(&self) -> String {
         fl!(self.loader, "place-succession-note")
-    }
-
-    /// The Succession card's add action, which opens the succession panel (ADR 0026 §3).
-    #[must_use]
-    pub fn place_succession_add(&self) -> String {
-        fl!(self.loader, "place-succession-add")
     }
 
     /// The add action's hover tooltip, naming what the panel asserts.
@@ -1173,47 +1168,69 @@ impl Localizer {
         fl!(self.loader, "family-children-count", count = count.to_string())
     }
 
-    /// The localized label for an action, keyed by id (`add-name`, `add-fact`, `edit`, `add-source`,
-    /// `save`, `cancel`, `attach-citation`, …).
+    /// The bare localized text for an [`ActionLabel`] — no affordance glyph. Used by side-panel titles,
+    /// aria-labels and tooltips; a button's visible label goes through [`Self::action_button`]
+    /// instead, which prefixes the glyph the action's affordance carries.
     #[must_use]
-    pub fn action_label(&self, id: &str) -> String {
-        match id {
-            "add-name" => fl!(self.loader, "action-add-name"),
-            "add-fact" => fl!(self.loader, "action-add-fact"),
-            "add-source" => fl!(self.loader, "action-add-source"),
-            "attach-citation" => fl!(self.loader, "action-attach-citation"),
-            "attach-media" => fl!(self.loader, "action-attach-media"),
-            "attach-note" => fl!(self.loader, "action-attach-note"),
-            "add-tag" => fl!(self.loader, "action-add-tag"),
-            "remove-tag" => fl!(self.loader, "action-remove-tag"),
-            "add-association" => fl!(self.loader, "action-add-association"),
-            "add-attribute" => fl!(self.loader, "action-add-attribute"),
-            "add-segment" => fl!(self.loader, "action-add-segment"),
-            "add-shared-ancestor" => fl!(self.loader, "action-add-shared-ancestor"),
-            "add-translation" => fl!(self.loader, "action-add-translation"),
-            "add-haplogroup" => fl!(self.loader, "action-add-haplogroup"),
-            "add-partner" => fl!(self.loader, "action-add-partner"),
-            "add-child" => fl!(self.loader, "action-add-child"),
-            "link-event" => fl!(self.loader, "action-link-event"),
-            "compare" => fl!(self.loader, "action-compare"),
-            "detach-citation" => fl!(self.loader, "action-detach-citation"),
-            "detach-dna-match" => fl!(self.loader, "action-detach-dna-match"),
-            "retract" => fl!(self.loader, "action-retract"),
-            "remove" => fl!(self.loader, "action-remove"),
-            "unlink" => fl!(self.loader, "action-unlink"),
-            "detach" => fl!(self.loader, "action-detach"),
-            "edit" => fl!(self.loader, "action-edit"),
-            "cite" => fl!(self.loader, "action-cite"),
-            "add-subject" => fl!(self.loader, "action-add-subject"),
-            "new-research-note" => fl!(self.loader, "action-new-research-note"),
-            "confirm" => fl!(self.loader, "action-confirm"),
-            "reject" => fl!(self.loader, "action-reject"),
-            "cancel" => fl!(self.loader, "action-cancel"),
-            "saved" => fl!(self.loader, "action-saved"),
-            "created" => fl!(self.loader, "action-created"),
-            "dismiss" => fl!(self.loader, "action-dismiss"),
-            "close" => fl!(self.loader, "action-close"),
-            _ => fl!(self.loader, "action-save"),
+    pub fn action_label(&self, action: ActionLabel) -> String {
+        match action {
+            ActionLabel::AddName => fl!(self.loader, "action-add-name"),
+            ActionLabel::AddFact => fl!(self.loader, "action-add-fact"),
+            ActionLabel::AddSource => fl!(self.loader, "action-add-source"),
+            ActionLabel::AttachCitation => fl!(self.loader, "action-attach-citation"),
+            ActionLabel::AttachMedia => fl!(self.loader, "action-attach-media"),
+            ActionLabel::AttachNote => fl!(self.loader, "action-attach-note"),
+            ActionLabel::AddTag => fl!(self.loader, "action-add-tag"),
+            ActionLabel::RemoveTag => fl!(self.loader, "action-remove-tag"),
+            ActionLabel::AddAssociation => fl!(self.loader, "action-add-association"),
+            ActionLabel::AddAttribute => fl!(self.loader, "action-add-attribute"),
+            ActionLabel::AddSegment => fl!(self.loader, "action-add-segment"),
+            ActionLabel::AddSharedAncestor => fl!(self.loader, "action-add-shared-ancestor"),
+            ActionLabel::AddTranslation => fl!(self.loader, "action-add-translation"),
+            ActionLabel::AddHaplogroup => fl!(self.loader, "action-add-haplogroup"),
+            ActionLabel::AddPartner => fl!(self.loader, "action-add-partner"),
+            ActionLabel::AddChild => fl!(self.loader, "action-add-child"),
+            ActionLabel::LinkEvent => fl!(self.loader, "action-link-event"),
+            ActionLabel::Compare => fl!(self.loader, "action-compare"),
+            ActionLabel::DetachCitation => fl!(self.loader, "action-detach-citation"),
+            ActionLabel::DetachDnaMatch => fl!(self.loader, "action-detach-dna-match"),
+            ActionLabel::Retract => fl!(self.loader, "action-retract"),
+            ActionLabel::Remove => fl!(self.loader, "action-remove"),
+            ActionLabel::Unlink => fl!(self.loader, "action-unlink"),
+            ActionLabel::Detach => fl!(self.loader, "action-detach"),
+            ActionLabel::Edit => fl!(self.loader, "action-edit"),
+            ActionLabel::Cite => fl!(self.loader, "action-cite"),
+            ActionLabel::AddSubject => fl!(self.loader, "action-add-subject"),
+            ActionLabel::NewResearchNote => fl!(self.loader, "action-new-research-note"),
+            ActionLabel::Confirm => fl!(self.loader, "action-confirm"),
+            ActionLabel::Reject => fl!(self.loader, "action-reject"),
+            ActionLabel::Cancel => fl!(self.loader, "action-cancel"),
+            ActionLabel::Saved => fl!(self.loader, "action-saved"),
+            ActionLabel::Created => fl!(self.loader, "action-created"),
+            ActionLabel::Dismiss => fl!(self.loader, "action-dismiss"),
+            ActionLabel::Close => fl!(self.loader, "action-close"),
+            ActionLabel::Save => fl!(self.loader, "action-save"),
+            ActionLabel::AddAddress => fl!(self.loader, "action-add-address"),
+            ActionLabel::AddUrl => fl!(self.loader, "action-add-url"),
+            ActionLabel::AddParticipant => fl!(self.loader, "action-add-participant"),
+            ActionLabel::AddEnclosing => fl!(self.loader, "action-add-enclosing"),
+            ActionLabel::LinkSource => fl!(self.loader, "action-link-source"),
+            ActionLabel::LinkRepository => fl!(self.loader, "action-link-repository"),
+            ActionLabel::NewCitation => fl!(self.loader, "action-new-citation"),
+            ActionLabel::AddSuccession => fl!(self.loader, "place-succession-add"),
+        }
+    }
+
+    /// The visible label for an [`ActionLabel`]'s button: [`Self::action_label`] prefixed with the glyph
+    /// the action's affordance carries (`+` for `Create`/`Attach`/`Link`, `❝` for `Cite`, none for
+    /// `Row`/`Chrome`).
+    #[must_use]
+    pub fn action_button(&self, action: ActionLabel) -> String {
+        let label = self.action_label(action);
+        match action.affordance() {
+            Affordance::Create | Affordance::Attach | Affordance::Link => format!("+ {label}"),
+            Affordance::Cite => format!("❝ {label}"),
+            Affordance::Row | Affordance::Chrome => label,
         }
     }
 
@@ -2110,12 +2127,6 @@ impl Localizer {
     #[must_use]
     pub fn dialog_add_tag_hint(&self) -> String {
         fl!(self.loader, "dialog-add-tag-hint")
-    }
-
-    /// The "+ New citation" action label.
-    #[must_use]
-    pub fn action_new_citation(&self) -> String {
-        fl!(self.loader, "action-new-citation")
     }
 
     /// The "Citation for this name" section heading (a name cites a citation, which cites a source —
@@ -3486,5 +3497,41 @@ mod tests {
         }
         assert_eq!(Localizer::for_test("en").date_invalid_error(), "Not a valid date.");
         assert_eq!(Localizer::for_test("no").date_invalid_error(), "Ikke en gyldig dato.");
+    }
+
+    /// The wildcard `action_label(&str)` used to fall back to "Save" for six live ids with no arm
+    /// (`add-address`, `add-url`, `add-participant`, `add-enclosing`, `link-source`,
+    /// `link-repository`); a typed [`ActionLabel`] with an exhaustive match makes that impossible. `Save`
+    /// itself is the only action allowed to resolve to "Save".
+    #[test]
+    fn no_action_resolves_to_the_save_label_except_save() {
+        use crate::action::{ALL, ActionLabel};
+
+        let loc = Localizer::for_test("en");
+        let save_label = loc.action_label(ActionLabel::Save);
+        for action in ALL {
+            let label = loc.action_label(*action);
+            if *action == ActionLabel::Save {
+                assert_eq!(label, save_label, "ActionLabel::Save should resolve to its own label");
+            } else {
+                assert_ne!(
+                    label, save_label,
+                    "{action:?} resolves to the Save label — missing its own Fluent arm"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_action_resolves_in_the_norwegian_catalogue_too() {
+        use crate::action::ALL;
+
+        let loc = Localizer::for_test("no");
+        for action in ALL {
+            assert!(
+                !loc.action_label(*action).is_empty(),
+                "{action:?} has no Norwegian label"
+            );
+        }
     }
 }

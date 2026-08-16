@@ -302,7 +302,7 @@ pub fn id_list(loc: &Localizer, items: &[AttachedRefVm], detach: Option<Callback
                     "{item.human_id}"
                     if let Some(cb) = detach {
                         Button {
-                            label: loc.action_label("detach"),
+                            label: loc.action_button(ActionLabel::Detach),
                             variant: ButtonVariant::Ghost,
                             small: true,
                             title: loc.action_title("detach-note"),
@@ -413,7 +413,7 @@ fn media_card(
             div { class: "muted media-caption", "{caption}" }
             if let Some(cb) = detach {
                 Button {
-                    label: loc.action_label("detach"),
+                    label: loc.action_button(ActionLabel::Detach),
                     variant: ButtonVariant::Ghost,
                     small: true,
                     title: loc.action_title("detach-media"),
@@ -441,7 +441,7 @@ pub fn media_viewer_labels(loc: &Localizer) -> MediaViewerLabels {
         no_region: loc.media_viewer_no_region(),
         set_region: loc.media_viewer_set_region(),
         clear_region: loc.media_viewer_clear_region(),
-        close: loc.action_label("close"),
+        close: loc.action_label(ActionLabel::Close),
     }
 }
 
@@ -681,7 +681,7 @@ pub fn provenance_cue(loc: &Localizer, title: String, citations: &[CitationRefVm
             ProvenanceTrigger {
                 label: loc.source_count(citations.len()),
                 title,
-                dismiss_label: loc.action_label("dismiss"),
+                dismiss_label: loc.action_label(ActionLabel::Dismiss),
                 citations: citations.to_vec(),
             }
         }
@@ -939,24 +939,29 @@ pub fn retract_side_panel(
     let Some(RetractTarget { label, detach, .. }) = retract() else {
         return rsx! {};
     };
-    let (title_id, button_id, note, accessible) = if detach {
+    let (title_id, action, note, accessible) = if detach {
         (
             "detach",
-            "detach",
+            ActionLabel::Detach,
             loc.action_title(detach_note_id),
             loc.action_detach_row(&label),
         )
     } else {
-        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
+        (
+            "retract",
+            ActionLabel::Retract,
+            loc.retract_note(),
+            loc.action_retract_row(&label),
+        )
     };
     rsx! {
         SidePanel {
             title: loc.panel_title(title_id),
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| retract.set(None),
             footer: rsx! {},
-            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
+            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_button(action), reason, on_confirm)}
         }
     }
 }
@@ -967,12 +972,38 @@ pub fn retract_side_panel(
 pub struct RowRetract {
     /// The `AssertionId` (a UUID string) the action retracts (the sub-record's or attachment's).
     pub assertion_id: String,
-    /// The `action_label` id for the button text (`"retract"`, `"remove"`, `"unlink"`, `"detach"`).
-    pub button_label: &'static str,
+    /// Which of the four verbs the button text (and aria-label) names.
+    pub button_label: RowVerb,
     /// The `action_title` id for the hover tooltip (the mockup sentence).
     pub title: &'static str,
     /// Whether this is a Detach of an attachment (drives the panel's Detach vs Retract wording).
     pub detach: bool,
+}
+
+/// The four verbs a collection row's action button can carry (`record-editing.html` §8): all four
+/// dispatch the same non-destructive `UndoAssertion`, differing only in the button text, the mockup
+/// tooltip and whether the panel says "Detach" or "Retract".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowVerb {
+    /// Ends a membership that once held.
+    Retract,
+    /// Withdraws a membership claimed in error.
+    Remove,
+    /// Unlinks a row.
+    Unlink,
+    /// Detaches an attachment.
+    Detach,
+}
+
+impl From<RowVerb> for ActionLabel {
+    fn from(verb: RowVerb) -> Self {
+        match verb {
+            RowVerb::Retract => Self::Retract,
+            RowVerb::Remove => Self::Remove,
+            RowVerb::Unlink => Self::Unlink,
+            RowVerb::Detach => Self::Detach,
+        }
+    }
 }
 
 /// A collection row's actions cell (`record-editing.html` §8), generic over a screen's edit-form type
@@ -996,7 +1027,7 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
         let accessible = loc.action_edit_row(label);
         rsx! {
             Button {
-                label: loc.action_label("edit"),
+                label: loc.action_button(ActionLabel::Edit),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title,
@@ -1010,7 +1041,7 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
         let accessible = loc.action_cite_row(label);
         rsx! {
             Button {
-                label: loc.action_label("cite"),
+                label: loc.action_button(ActionLabel::Cite),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title,
@@ -1022,14 +1053,14 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
     let retract_button = retract.map(|spec| {
         let label_owned = label.to_owned();
         let accessible = match spec.button_label {
-            "detach" => loc.action_detach_row(label),
-            "remove" => loc.action_remove_row(label),
-            "unlink" => loc.action_unlink_row(label),
-            _ => loc.action_retract_row(label),
+            RowVerb::Detach => loc.action_detach_row(label),
+            RowVerb::Remove => loc.action_remove_row(label),
+            RowVerb::Unlink => loc.action_unlink_row(label),
+            RowVerb::Retract => loc.action_retract_row(label),
         };
         rsx! {
             Button {
-                label: loc.action_label(spec.button_label),
+                label: loc.action_button(spec.button_label.into()),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title: loc.action_title(spec.title),
@@ -1123,7 +1154,7 @@ pub fn attach_picker_form(
         {extra}
         {provenance_block(loc, prov)}
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             disabled,
             onclick: move |_| onsave.call(()),

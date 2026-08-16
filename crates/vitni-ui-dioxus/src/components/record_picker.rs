@@ -25,6 +25,7 @@
 //! binding.
 
 use dioxus::prelude::*;
+use vitni_ui::ActionLabel;
 use vitni_ui::{ActiveMove, Localizer, PickerSelection, PickerState, RowVm, next_active, picker_rows};
 
 use crate::components::{IconButton, ListRow, TextInput};
@@ -273,7 +274,7 @@ fn picker_search(loc: &Localizer, picker: &RecordPicker) -> Element {
     let state = picker.state;
     let query = state.read().query.clone();
     let placeholder = loc.picker_placeholder(&picker.config.entity_label);
-    let scrim_label = loc.action_label("dismiss");
+    let scrim_label = loc.action_label(ActionLabel::Dismiss);
     let results = picker_results_view(loc, picker, &query);
     rsx! {
         PickerSearch {

@@ -5,6 +5,7 @@
 //! the form, so the form reads `draft()` when it dispatches the save.
 
 use dioxus::prelude::*;
+use vitni_ui::ActionLabel;
 use vitni_ui::{
     Category, CitationChangeSetRequest, CitationSourceRequest, ConfidenceLevel, EVIDENCE_KINDS, EvidenceAxis,
     INFORMATION_KINDS, Localizer, NewSourceFields, PickerSelection, PickerState, ProvenanceDraft, RecordLink,
@@ -198,7 +199,7 @@ fn ProvenanceCitations(draft: Signal<ProvenanceDraft>) -> Element {
     };
     let citations = draft().citations;
     let citations_label = loc.field_label("citations");
-    let detach_label = loc.action_label("detach-citation");
+    let detach_label = loc.action_label(ActionLabel::DetachCitation);
     let picker = RecordPicker {
         config: PickerConfig {
             label: loc.provenance_attach_citation(),
@@ -277,7 +278,7 @@ fn ProvenanceDnaMatches(draft: Signal<ProvenanceDraft>) -> Element {
     };
     let dna_matches = draft().dna_matches;
     let label = loc.field_label("dna-evidence");
-    let detach_label = loc.action_label("detach-dna-match");
+    let detach_label = loc.action_label(ActionLabel::DetachDnaMatch);
     let picker = RecordPicker {
         config: PickerConfig {
             label: loc.provenance_attach_dna_match(),

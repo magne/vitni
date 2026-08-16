@@ -28,7 +28,7 @@ pub fn DnaTestCreateRecord(draft_id: DraftId) -> Element {
     let person_onpick = use_callback(move |selection: PickerSelection| draft.write().person = selection.human_id);
     let person_onclear = use_callback(move |()| draft.write().person = String::new());
     let person_onnew = use_callback(move |_query: String| {});
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::DnaTestDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
@@ -54,9 +54,9 @@ pub fn DnaTestCreateRecord(draft_id: DraftId) -> Element {
     use_save_on_request(EditKey::draft(Category::DnaTests, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -349,7 +349,7 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
     let editing = use_signal(|| None::<DnaTestEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -700,7 +700,7 @@ fn dna_test_tab_content(
     match tab_id {
         "haplogroups" => tab_with_add(
             loc,
-            "add-haplogroup",
+            ActionLabel::AddHaplogroup,
             editing,
             DnaTestEditForm::Haplogroup(None),
             rsx! {
@@ -710,7 +710,7 @@ fn dna_test_tab_content(
         "matches" => dna_test_matches_table(loc, &detail.matches),
         "notes" => tab_with_add(
             loc,
-            "attach-note",
+            ActionLabel::AttachNote,
             editing,
             DnaTestEditForm::Note,
             rsx! {
@@ -789,7 +789,7 @@ pub fn dna_test_haplogroups_table(
                         loc,
                         &haplogroup.value,
                         Some((DnaTestEditForm::Haplogroup(Some(haplogroup.clone())), None)), None,
-                        Some(RowRetract { assertion_id: haplogroup.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(RowRetract { assertion_id: haplogroup.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                         Some(onedit),
                         onretract)}
                 }
@@ -839,17 +839,17 @@ fn dna_test_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        DnaTestEditForm::Haplogroup(None) => loc.action_label("add-haplogroup"),
+        DnaTestEditForm::Haplogroup(None) => loc.action_label(ActionLabel::AddHaplogroup),
         DnaTestEditForm::Haplogroup(Some(_)) => loc.panel_title("edit-haplogroup"),
-        DnaTestEditForm::Note => loc.action_label("attach-note"),
-        DnaTestEditForm::Tag => loc.action_label("add-tag"),
+        DnaTestEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+        DnaTestEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     rsx! {
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -879,7 +879,7 @@ fn DnaTestHaplogroupForm(
         supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Input {
             label: loc.field_label("haplogroup"),
@@ -943,7 +943,7 @@ fn DnaTestTagForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, Provena
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();

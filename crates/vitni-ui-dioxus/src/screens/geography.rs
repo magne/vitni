@@ -226,7 +226,7 @@ pub fn GeographyScreen() -> Element {
     });
     let on_clear_draft = EventHandler::new(move |()| draft.set(MapDraft::Empty));
 
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
     let pane = MapPane {
         marker_count,
         event_count,
@@ -799,7 +799,7 @@ fn GeographyCreateForm(point: (f64, f64), onsaved: EventHandler<()>) -> Element 
         }
         {provenance_block(loc, prov)}
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             onclick: move |_| {
                 let request = vitni_ui::PlaceChangeSetRequest {

@@ -4,6 +4,7 @@
 //! inline new-source title field.
 
 use dioxus::prelude::*;
+use vitni_ui::ActionLabel;
 use vitni_ui::{CitationDraft, Localizer, NewSourceFields, PickerSelection, PickerState, ProvenanceDraft, RecordLink};
 use vitni_ui_dioxus::components::{Button, ButtonVariant, PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use vitni_ui_dioxus::screens::{RecordEditState, citation_create_fields, create_record_header, record_edit_provenance};
@@ -38,8 +39,8 @@ fn view(seed: CitationDraft) -> Element {
     };
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
-        Button { label: loc.action_label("save"), variant: ButtonVariant::Primary, small: true, disabled: !can_save, onclick: move |_| {} }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
+        Button { label: loc.action_button(ActionLabel::Save), variant: ButtonVariant::Primary, small: true, disabled: !can_save, onclick: move |_| {} }
     };
     rsx! {
         {create_record_header(&loc.citation_new_title(), &loc.record_draft_badge(), actions)}

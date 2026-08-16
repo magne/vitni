@@ -48,7 +48,7 @@ pub fn DnaMatchCreateRecord(draft_id: DraftId) -> Element {
     let test_b_onpick = use_callback(move |selection: PickerSelection| draft.write().test_b = selection.human_id);
     let test_b_onclear = use_callback(move |()| draft.write().test_b = String::new());
     let noop_new = use_callback(move |_query: String| {});
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::DnaMatchDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
@@ -74,9 +74,9 @@ pub fn DnaMatchCreateRecord(draft_id: DraftId) -> Element {
     use_save_on_request(EditKey::draft(Category::DnaMatches, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -322,7 +322,7 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
     let editing = use_signal(|| None::<DnaMatchEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -632,7 +632,7 @@ fn dna_match_status_actions(
     let human_id_reject = human_id.to_owned();
     rsx! {
         Button {
-            label: loc.action_label("confirm"),
+            label: loc.action_button(ActionLabel::Confirm),
             small: true,
             onclick: move |_| {
                 on_submit
@@ -646,7 +646,7 @@ fn dna_match_status_actions(
             },
         }
         Button {
-            label: loc.action_label("reject"),
+            label: loc.action_button(ActionLabel::Reject),
             small: true,
             onclick: move |_| {
                 on_submit
@@ -717,7 +717,7 @@ fn dna_match_tab_content(
         "ancestors" => dna_match_ancestors_table(loc, &detail.shared_ancestors, on_edit_open, on_retract),
         "notes" => tab_with_add(
             loc,
-            "attach-note",
+            ActionLabel::AttachNote,
             editing,
             DnaMatchEditForm::Note,
             rsx! {
@@ -806,7 +806,7 @@ pub fn dna_match_segments_table(
 ) -> Element {
     let add = rsx! {
         div { class: "tab-actions",
-            Button { label: loc.action_label("add-segment"), variant: ButtonVariant::Default, onclick: move |_| onedit.call(DnaMatchEditForm::Segment(None)) }
+            Button { label: loc.action_button(ActionLabel::AddSegment), variant: ButtonVariant::Default, onclick: move |_| onedit.call(DnaMatchEditForm::Segment(None)) }
         }
     };
     if segments.is_empty() {
@@ -843,7 +843,7 @@ pub fn dna_match_segments_table(
                         loc,
                         &segment.chromosome,
                         Some((DnaMatchEditForm::Segment(Some(segment.clone())), None)), None,
-                        Some(RowRetract { assertion_id: segment.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(RowRetract { assertion_id: segment.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                         Some(onedit),
                         onretract)}
                 }
@@ -863,7 +863,7 @@ pub fn dna_match_ancestors_table(
 ) -> Element {
     let add = rsx! {
         div { class: "tab-actions",
-            Button { label: loc.action_label("add-shared-ancestor"), variant: ButtonVariant::Default, onclick: move |_| onedit.call(DnaMatchEditForm::Ancestor(None)) }
+            Button { label: loc.action_button(ActionLabel::AddSharedAncestor), variant: ButtonVariant::Default, onclick: move |_| onedit.call(DnaMatchEditForm::Ancestor(None)) }
         }
     };
     if ancestors.is_empty() {
@@ -896,7 +896,7 @@ pub fn dna_match_ancestors_table(
                                 loc,
                                 &label,
                                 Some((DnaMatchEditForm::Ancestor(Some(ancestor.clone())), None)), None,
-                                Some(RowRetract { assertion_id: ancestor.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                                Some(RowRetract { assertion_id: ancestor.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                                 Some(onedit),
                                 onretract)}
                         }
@@ -923,15 +923,15 @@ fn dna_match_edit_panel(
         DnaMatchEditForm::Segment(None) => loc.panel_title("add-segment"),
         DnaMatchEditForm::Ancestor(Some(_)) => loc.panel_title("edit-ancestor"),
         DnaMatchEditForm::Ancestor(None) => loc.panel_title("add-ancestor"),
-        DnaMatchEditForm::Note => loc.action_label("attach-note"),
-        DnaMatchEditForm::Tag => loc.action_label("add-tag"),
+        DnaMatchEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+        DnaMatchEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     rsx! {
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -982,7 +982,7 @@ fn DnaMatchSegmentForm(
         })
         .collect();
     let side_selected = sides.iter().position(|kind| *kind == side()).unwrap_or(0).to_string();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Input {
             label: loc.field_label("chromosome"),
@@ -1092,7 +1092,7 @@ fn DnaMatchAncestorForm(
         supersedes: seed.as_ref().map(|s| s.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         if let Some(name) = person_label {
             div { class: "field",
@@ -1165,7 +1165,7 @@ fn DnaMatchTagForm(human_id: String, onsubmit: EventHandler<(DnaMatchEdit, Prove
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();

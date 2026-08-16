@@ -20,6 +20,7 @@
 //! version of that world), the licensor grants you additional permission to convey the resulting
 //! work. Such a component is not required to be licensed under the GNU AGPL.
 
+pub mod action;
 pub mod detail;
 pub mod help;
 pub mod i18n;
@@ -35,6 +36,7 @@ pub mod shortcuts;
 pub mod view_model;
 pub mod vocabulary;
 
+pub use action::{ActionLabel, Affordance};
 pub use detail::DetailTab;
 pub use help::{
     Cell, HelpBlock, HelpDoc, HelpSection, HelpTopicId, HelpTopicMeta, Run, SpecimenKind, help_doc, help_topics,

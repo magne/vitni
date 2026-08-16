@@ -69,7 +69,7 @@ pub fn citations_table<E: Clone + PartialEq + 'static>(
                         &citation.human_id,
                         None,
                         None,
-                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
+                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: RowVerb::Detach, title: "detach-citation", detach: true }),
                         None,
                         onretract,
                     )}
@@ -97,7 +97,7 @@ pub fn tags_panel<E: Clone + PartialEq + 'static>(
     rsx! {
         div { class: "tab-actions",
             Button {
-                label: loc.action_label("add-tag"),
+                label: loc.action_button(ActionLabel::AddTag),
                 variant: ButtonVariant::Default,
                 onclick: move |_| editing.set(Some(add_form.clone())),
             }
@@ -127,14 +127,14 @@ pub fn tags_panel<E: Clone + PartialEq + 'static>(
     }
 }
 
-/// A collection tab with its "+ add" action header (`record-editing.html` §8): a `.tab-actions` bar
+/// A collection tab with its add action header (`record-editing.html` §8): a `.tab-actions` bar
 /// holding a single Default button that opens `add_form` via the `editing` signal, above the tab's
 /// `body`. Generic over the screen's edit-form enum `E` so no add-callback plumbing is needed — the
-/// button just arms the side panel. `add_label_id` is the `action_label` id (e.g. `"add-fact"`,
-/// `"attach-citation"`).
+/// button just arms the side panel. `add_action` is the button's [`ActionLabel`] (e.g.
+/// `ActionLabel::AddFact`, `ActionLabel::AttachCitation`).
 pub fn tab_with_add<E: Clone + PartialEq + 'static>(
     loc: &Localizer,
-    add_label_id: &str,
+    add_action: ActionLabel,
     mut editing: Signal<Option<E>>,
     add_form: E,
     body: Element,
@@ -142,7 +142,7 @@ pub fn tab_with_add<E: Clone + PartialEq + 'static>(
     rsx! {
         div { class: "tab-actions",
             Button {
-                label: loc.action_label(add_label_id),
+                label: loc.action_button(add_action),
                 variant: ButtonVariant::Default,
                 onclick: move |_| editing.set(Some(add_form.clone())),
             }
@@ -179,14 +179,14 @@ pub fn address_cards(
                         Card { title: label.clone(),
                             div { class: "tab-actions",
                                 Button {
-                                    label: loc.action_label("edit"),
+                                    label: loc.action_button(ActionLabel::Edit),
                                     variant: ButtonVariant::Ghost,
                                     small: true,
                                     aria_label: loc.action_edit_row(&label),
                                     onclick: move |_| onedit.call(seed.clone()),
                                 }
                                 Button {
-                                    label: loc.action_label("retract"),
+                                    label: loc.action_button(ActionLabel::Retract),
                                     variant: ButtonVariant::Ghost,
                                     small: true,
                                     title: loc.action_title("retract"),
@@ -272,7 +272,7 @@ pub fn address_form(
         supersedes,
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Input { label: loc.field_label("street"), name: "street".to_owned(), value: street(), oninput: move |event: FormEvent| street.set(event.value()) }
         Input { label: loc.field_label("locality"), name: "locality".to_owned(), value: locality(), oninput: move |event: FormEvent| locality.set(event.value()) }
@@ -434,7 +434,7 @@ pub fn participation_form(
         supersedes: seed.supersedes.clone(),
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let seed_bound = seed.age.as_ref().and_then(|age| age.bound);
     let seed_attributes = seed.attributes.clone();
     let seed_notes = seed.notes.clone();

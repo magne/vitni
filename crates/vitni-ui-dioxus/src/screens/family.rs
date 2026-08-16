@@ -49,7 +49,7 @@ pub fn FamilyCreateRecord(draft_id: DraftId) -> Element {
     let partner_onclear = use_callback(move |()| partner_state_reset.write().clear());
     let mut pending_new_open = pending_new;
     let partner_onnew = use_callback(move |_query: String| pending_new_open.set(Some(NewPersonFields::default())));
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::FamilyDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let services = services.clone();
@@ -73,9 +73,9 @@ pub fn FamilyCreateRecord(draft_id: DraftId) -> Element {
     use_save_on_request(EditKey::draft(Category::Families, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -216,7 +216,7 @@ fn family_partner_chip(
     index: usize,
     partner: &PartnerInput,
 ) -> Element {
-    let dismiss = loc.action_label("dismiss");
+    let dismiss = loc.action_label(ActionLabel::Dismiss);
     match partner {
         PartnerInput::Existing(selection) => {
             let title = selection.title.clone();
@@ -313,7 +313,7 @@ fn family_new_partner_body(
             },
         }
         Button {
-            label: loc.action_label("add-partner"),
+            label: loc.action_button(ActionLabel::AddPartner),
             variant: ButtonVariant::Primary,
             disabled: !can_add,
             onclick: move |_| {
@@ -373,7 +373,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     let mut retract_reason = use_signal(String::new);
     let mut removing_child = use_signal(|| None::<ChildRemoval>);
     let mut removal_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -858,7 +858,7 @@ fn family_tab_content(
     match tab_id {
         "children" => tab_with_add(
             loc,
-            "add-child",
+            ActionLabel::AddChild,
             editing,
             FamilyEditForm::Child(None),
             rsx! {
@@ -867,7 +867,7 @@ fn family_tab_content(
         ),
         "events" => tab_with_add(
             loc,
-            "link-event",
+            ActionLabel::LinkEvent,
             editing,
             FamilyEditForm::Event,
             rsx! {
@@ -876,7 +876,7 @@ fn family_tab_content(
         ),
         "citations" => tab_with_add(
             loc,
-            "attach-citation",
+            ActionLabel::AttachCitation,
             editing,
             FamilyEditForm::Citation,
             rsx! {
@@ -885,7 +885,7 @@ fn family_tab_content(
         ),
         "media" => tab_with_add(
             loc,
-            "attach-media",
+            ActionLabel::AttachMedia,
             editing,
             FamilyEditForm::Media,
             rsx! {
@@ -894,7 +894,7 @@ fn family_tab_content(
         ),
         "notes" => tab_with_add(
             loc,
-            "attach-note",
+            ActionLabel::AttachNote,
             editing,
             FamilyEditForm::Note,
             rsx! {
@@ -936,7 +936,7 @@ pub fn family_overview(
         div { class: "grid-2",
             Card { title: loc.section_label("partners"),
                 div { class: "tab-actions",
-                    Button { label: loc.action_label("add-partner"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(FamilyEditForm::Partner)) }
+                    Button { label: loc.action_button(ActionLabel::AddPartner), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(FamilyEditForm::Partner)) }
                 }
                 if detail.partners.is_empty() {
                     EmptyState { message: loc.tab_empty() }
@@ -954,7 +954,7 @@ pub fn family_overview(
                                     let name = partner.name.clone();
                                     rsx! {
                                         Button {
-                                            label: loc.action_label("remove"),
+                                            label: loc.action_button(ActionLabel::Remove),
                                             variant: ButtonVariant::Ghost,
                                             small: true,
                                             title: loc.action_title("remove-partner"),
@@ -1026,7 +1026,7 @@ pub fn child_removal_side_panel(
         SidePanel {
             title: title.clone(),
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| removing.set(None),
             footer: rsx! {},
             div { class: "stack",
@@ -1043,7 +1043,7 @@ pub fn child_removal_side_panel(
                 }
                 div { class: "muted", style: "font-size:var(--fs-sm)", "{loc.remove_child_note()}" }
                 Button {
-                    label: loc.action_label("remove"),
+                    label: loc.action_button(ActionLabel::Remove),
                     variant: ButtonVariant::Danger,
                     aria_label: loc.action_remove_row(&label),
                     onclick: move |_| on_confirm.call(()),
@@ -1074,14 +1074,14 @@ fn child_actions_cell(
     rsx! {
         td { class: "row-actions",
             Button {
-                label: loc.action_label("edit"),
+                label: loc.action_button(ActionLabel::Edit),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 aria_label: loc.action_edit_row(&child.name),
                 onclick: move |_| onedit.call(form.clone()),
             }
             Button {
-                label: loc.action_label("remove"),
+                label: loc.action_button(ActionLabel::Remove),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title: loc.action_title("remove-child"),
@@ -1089,7 +1089,7 @@ fn child_actions_cell(
                 onclick: move |_| onremove.call(removal.clone()),
             }
             Button {
-                label: loc.action_label("retract"),
+                label: loc.action_button(ActionLabel::Retract),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title: loc.action_title("retract-child"),
@@ -1176,7 +1176,7 @@ pub fn family_events_table(
                         loc,
                         &event.type_label,
                         None, None,
-                        Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "unlink", title: "unlink-event", detach: false }),
+                        Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: RowVerb::Unlink, title: "unlink-event", detach: false }),
                         None,
                         onretract)}
                 }
@@ -1199,14 +1199,14 @@ fn family_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        FamilyEditForm::Partner => loc.action_label("add-partner"),
-        FamilyEditForm::Child(None) => loc.action_label("add-child"),
+        FamilyEditForm::Partner => loc.action_label(ActionLabel::AddPartner),
+        FamilyEditForm::Child(None) => loc.action_label(ActionLabel::AddChild),
         FamilyEditForm::Child(Some(_)) => loc.panel_title("edit-child"),
-        FamilyEditForm::Event => loc.action_label("link-event"),
-        FamilyEditForm::Citation => loc.action_label("attach-citation"),
-        FamilyEditForm::Media => loc.action_label("attach-media"),
-        FamilyEditForm::Note => loc.action_label("attach-note"),
-        FamilyEditForm::Tag => loc.action_label("add-tag"),
+        FamilyEditForm::Event => loc.action_label(ActionLabel::LinkEvent),
+        FamilyEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
+        FamilyEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+        FamilyEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+        FamilyEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     let partners: Vec<(String, String)> = detail
@@ -1218,7 +1218,7 @@ fn family_edit_panel(
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -1414,7 +1414,7 @@ fn FamilyAddChildForm(
             {extra}
             {provenance_block_dna(loc, prov)}
             Button {
-                label: loc.action_label("save"),
+                label: loc.action_button(ActionLabel::Save),
                 variant: ButtonVariant::Primary,
                 onclick: move |_| onsave.call(()),
             }
@@ -1557,7 +1557,7 @@ fn FamilyTagForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Provenanc
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();

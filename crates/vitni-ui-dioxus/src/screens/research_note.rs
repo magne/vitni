@@ -56,7 +56,7 @@ pub fn ResearchNoteCreateRecord(draft_id: DraftId) -> Element {
         });
     });
 
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::ResearchNoteDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let services = services.clone();
@@ -81,13 +81,13 @@ pub fn ResearchNoteCreateRecord(draft_id: DraftId) -> Element {
     let can_save = record.can_save();
     let actions = rsx! {
         Button {
-            label: loc.action_label("cancel"),
+            label: loc.action_button(ActionLabel::Cancel),
             variant: ButtonVariant::Ghost,
             small: true,
             onclick: move |_| nav.cancel_draft(draft_id),
         }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -220,7 +220,7 @@ pub fn research_note_draft_subjects(loc: &Localizer, record: RecordEditState<vit
                 }
             }
             SubjectChooser {
-                save_label: loc.action_label("add-subject"),
+                save_label: loc.action_button(ActionLabel::AddSubject),
                 onpick: move |(category, selection): (Category, PickerSelection)| {
                     draft.write().add_subject(SubjectVm {
                         category,
@@ -339,7 +339,7 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
     let active = use_detail_tab(Category::ResearchNotes, &human_id);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<ResearchNoteEditForm>);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -626,7 +626,7 @@ fn research_note_tab_content(
     match tab_id {
         "subjects" => tab_with_add(
             loc,
-            "add-subject",
+            ActionLabel::AddSubject,
             editing,
             ResearchNoteEditForm::Subject,
             rsx! {
@@ -691,7 +691,7 @@ pub fn research_note_subjects_table(loc: &Localizer, subjects: &[SubjectVm], onr
                             let remove_title = remove_title.clone();
                             rsx! {
                                 Button {
-                                    label: loc.action_label("remove"),
+                                    label: loc.action_button(ActionLabel::Remove),
                                     variant: ButtonVariant::Ghost,
                                     small: true,
                                     title: remove_title,
@@ -726,7 +726,7 @@ pub fn ResearchNotesTab(category: Category, human_id: String, rows: Vec<RowVm>) 
     rsx! {
         div { class: "tab-actions",
             Button {
-                label: loc.action_label("new-research-note"),
+                label: loc.action_button(ActionLabel::NewResearchNote),
                 variant: ButtonVariant::Default,
                 onclick: move |_| {
                     if let Some(mut nav) = nav {
@@ -781,14 +781,14 @@ fn research_note_edit_panel(
     };
     let title = match &form {
         ResearchNoteEditForm::Subject => loc.panel_title("add-subject"),
-        ResearchNoteEditForm::Tag => loc.action_label("add-tag"),
+        ResearchNoteEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     rsx! {
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -810,7 +810,7 @@ fn ResearchNoteSubjectForm(human_id: String, onsubmit: EventHandler<(ResearchNot
     let prov = use_signal(ProvenanceDraft::default);
     rsx! {
         SubjectChooser {
-            save_label: loc.action_label("save"),
+            save_label: loc.action_button(ActionLabel::Save),
             onpick: move |(category, selection): (Category, PickerSelection)| {
                 onsubmit.call((
                     ResearchNoteEdit::AddSubject {
@@ -833,7 +833,7 @@ fn ResearchNoteTagForm(human_id: String, onsubmit: EventHandler<(ResearchNoteEdi
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();

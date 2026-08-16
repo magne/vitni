@@ -21,7 +21,7 @@ pub fn NoteCreateRecord(draft_id: DraftId) -> Element {
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<vitni_ui::NoteDraft>(Category::Notes, draft_id);
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::NoteDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let services = services.clone();
@@ -45,9 +45,9 @@ pub fn NoteCreateRecord(draft_id: DraftId) -> Element {
     use_save_on_request(EditKey::draft(Category::Notes, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -190,7 +190,7 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
     let active = use_detail_tab(Category::Notes, &human_id);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<NoteEditForm>);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -492,7 +492,7 @@ fn note_tab_content(
     match tab_id {
         "language" => tab_with_add(
             loc,
-            "add-translation",
+            ActionLabel::AddTranslation,
             editing,
             NoteEditForm::Translation(None),
             rsx! {
@@ -609,16 +609,16 @@ fn note_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        NoteEditForm::Translation(None) => loc.action_label("add-translation"),
+        NoteEditForm::Translation(None) => loc.action_label(ActionLabel::AddTranslation),
         NoteEditForm::Translation(Some(_)) => loc.panel_title("edit-translation"),
-        NoteEditForm::Tag => loc.action_label("add-tag"),
+        NoteEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     rsx! {
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -650,7 +650,7 @@ fn NoteTranslationForm(
         supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Input { label: loc.field_label("language"), name: "language".to_owned(), value: language(), oninput: move |event: FormEvent| language.set(event.value()) }
         Input { label: loc.field_label("translation"), name: "translation".to_owned(), value: text(), oninput: move |event: FormEvent| text.set(event.value()) }
@@ -681,7 +681,7 @@ fn NoteTagForm(human_id: String, onsubmit: EventHandler<(NoteEdit, ProvenanceDra
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();

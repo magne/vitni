@@ -4,6 +4,7 @@
 //! workspace — over `TagDraft` as a representative record draft.
 
 use dioxus::prelude::*;
+use vitni_ui::ActionLabel;
 use vitni_ui::{Localizer, ProvenanceDraft, TagDraft};
 use vitni_ui_dioxus::components::{DraftSelect, DraftText, SelectChoice};
 use vitni_ui_dioxus::screens::{
@@ -233,8 +234,8 @@ fn a_clean_edit_disables_save_and_hides_the_provenance_block() {
 fn create_frame() -> Element {
     let loc = loc();
     let actions = rsx! {
-        button { class: "btn sm", "{loc.action_label(\"cancel\")}" }
-        button { class: "btn sm primary", "{loc.action_label(\"save\")}" }
+        button { class: "btn sm", "{loc.action_button(ActionLabel::Cancel)}" }
+        button { class: "btn sm primary", "{loc.action_button(ActionLabel::Save)}" }
     };
     rsx! {
         {create_record_header(&loc.person_new_title(), &loc.record_draft_badge(), actions)}

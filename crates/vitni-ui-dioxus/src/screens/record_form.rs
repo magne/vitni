@@ -10,6 +10,7 @@
 use std::future::Future;
 
 use dioxus::prelude::*;
+use vitni_ui::ActionLabel;
 use vitni_ui::{Category, Localizer, ProvenanceDraft, RecordDraft, RecordRef};
 
 use crate::components::{Button, ButtonVariant};
@@ -242,9 +243,9 @@ impl RecordActionLabels {
     #[must_use]
     pub fn resolve(loc: &Localizer) -> Self {
         Self {
-            edit: loc.action_label("edit"),
-            save: loc.action_label("save"),
-            cancel: loc.action_label("cancel"),
+            edit: loc.action_button(ActionLabel::Edit),
+            save: loc.action_button(ActionLabel::Save),
+            cancel: loc.action_button(ActionLabel::Cancel),
         }
     }
 }

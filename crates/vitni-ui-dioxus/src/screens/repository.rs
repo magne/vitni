@@ -16,7 +16,7 @@ pub fn RepositoryCreateRecord(draft_id: DraftId) -> Element {
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<vitni_ui::RepositoryDraft>(Category::Repositories, draft_id);
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::RepositoryDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let services = services.clone();
@@ -40,9 +40,9 @@ pub fn RepositoryCreateRecord(draft_id: DraftId) -> Element {
     use_save_on_request(EditKey::draft(Category::Repositories, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -176,7 +176,7 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
     let editing = use_signal(|| None::<RepositoryEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -529,7 +529,7 @@ fn repository_tab_content(
                 Callback::new(move |seed: AddressVm| on_edit_open.call(RepositoryEditForm::Address(Some(seed))));
             tab_with_add(
                 loc,
-                "add-address",
+                ActionLabel::AddAddress,
                 editing,
                 RepositoryEditForm::Address(None),
                 rsx! {
@@ -539,7 +539,7 @@ fn repository_tab_content(
         }
         "urls" => tab_with_add(
             loc,
-            "add-url",
+            ActionLabel::AddUrl,
             editing,
             RepositoryEditForm::Url(None),
             rsx! {
@@ -548,7 +548,7 @@ fn repository_tab_content(
         ),
         "sources" => tab_with_add(
             loc,
-            "link-source",
+            ActionLabel::LinkSource,
             editing,
             RepositoryEditForm::Source,
             rsx! {
@@ -557,7 +557,7 @@ fn repository_tab_content(
         ),
         "notes" => tab_with_add(
             loc,
-            "attach-note",
+            ActionLabel::AttachNote,
             editing,
             RepositoryEditForm::Note,
             rsx! {
@@ -654,7 +654,7 @@ pub fn repository_urls_table(
                         loc,
                         &url.href,
                         Some((RepositoryEditForm::Url(Some(url.clone())), None)), None,
-                        Some(RowRetract { assertion_id: url.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(RowRetract { assertion_id: url.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                         Some(onedit),
                         onretract)}
                 }
@@ -701,20 +701,20 @@ fn repository_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        RepositoryEditForm::Address(None) => loc.action_label("add-address"),
+        RepositoryEditForm::Address(None) => loc.action_label(ActionLabel::AddAddress),
         RepositoryEditForm::Address(Some(_)) => loc.panel_title("edit-address"),
-        RepositoryEditForm::Url(None) => loc.action_label("add-url"),
+        RepositoryEditForm::Url(None) => loc.action_label(ActionLabel::AddUrl),
         RepositoryEditForm::Url(Some(_)) => loc.panel_title("edit-url"),
-        RepositoryEditForm::Source => loc.action_label("link-source"),
-        RepositoryEditForm::Note => loc.action_label("attach-note"),
-        RepositoryEditForm::Tag => loc.action_label("add-tag"),
+        RepositoryEditForm::Source => loc.action_label(ActionLabel::LinkSource),
+        RepositoryEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+        RepositoryEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     rsx! {
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -760,7 +760,7 @@ fn RepositoryUrlForm(
         supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Input { label: loc.field_label("url"), name: "url".to_owned(), value: href(), oninput: move |event: FormEvent| href.set(event.value()) }
         Input { label: loc.field_label("description"), name: "description".to_owned(), value: description(), oninput: move |event: FormEvent| description.set(event.value()) }
@@ -885,7 +885,7 @@ fn RepositoryTagForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, P
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();

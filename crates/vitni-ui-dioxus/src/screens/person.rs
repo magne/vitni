@@ -17,7 +17,7 @@ pub fn PersonCreateRecord(draft_id: DraftId) -> Element {
     let mut draft = record.draft;
     let selected_tags = use_signal(Vec::<String>::new);
     let save_services = services.clone();
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     // Takes the draft, like the other twelve create screens, so the commit can read the label the draft
     // names itself with rather than re-deriving it from the request.
     let on_save = use_callback(move |(draft, prov): (PersonDraft, ProvenanceDraft)| {
@@ -84,8 +84,8 @@ pub fn PersonCreateRecord(draft_id: DraftId) -> Element {
 
     let title = loc.person_new_title();
     let draft_badge = loc.record_draft_badge();
-    let save_label = loc.action_label("save");
-    let cancel_label = loc.action_label("cancel");
+    let save_label = loc.action_button(ActionLabel::Save);
+    let cancel_label = loc.action_button(ActionLabel::Cancel);
     // The close/quit confirm's Save runs this same commit (issue #240), so a ⌘W/⌘Q over a half-filled
     // create form can keep the draft instead of losing it.
     let save_now = use_callback(move |()| {
@@ -486,7 +486,7 @@ fn tag_multiselect(
                 .map(|tag| (tag.id.clone(), tag.name.clone().unwrap_or_default(), tag.color.clone()))
         })
         .collect();
-    let remove_label = loc.action_label("remove-tag");
+    let remove_label = loc.action_label(ActionLabel::RemoveTag);
     rsx! {
         Select {
             label: loc.section_tags(),
@@ -571,7 +571,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     let mut editing = use_signal(|| None::<EditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -621,7 +621,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
             }
         });
     });
-    let saved_label_rec = state.data_loc().action_label("saved");
+    let saved_label_rec = state.data_loc().action_label(ActionLabel::Saved);
     // The whole-record Save: the buffered draft becomes a change-set commit (the identity edit).
     let on_record_save = use_callback(move |(draft, prov): (PersonDraft, ProvenanceDraft)| {
         let services = record_services.clone();
@@ -663,7 +663,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     });
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
-    let saved_label_retract = state.data_loc().action_label("saved");
+    let saved_label_retract = state.data_loc().action_label(ActionLabel::Saved);
     let mut retract_nav = nav;
     let on_retract_confirm = use_callback(move |()| {
         let Some(target) = retract() else {
@@ -882,7 +882,7 @@ fn person_detail(
         Some(vitals) => format!("{vitals} · {}", detail.sex),
         None => detail.sex.clone(),
     };
-    let compare_label = loc.action_label("compare");
+    let compare_label = loc.action_button(ActionLabel::Compare);
     let mut compare_nav = *nav;
     let labels = RecordActionLabels::resolve(loc);
     // Compare is the view-mode extra action, alongside the record Edit; Save/Cancel replace both in
@@ -980,7 +980,7 @@ fn person_tab_content(
     match tab_id {
         "names" => tab_with_add(
             loc,
-            "add-name",
+            ActionLabel::AddName,
             editing,
             EditForm::Name(None),
             rsx! {
@@ -989,7 +989,7 @@ fn person_tab_content(
         ),
         "facts" => tab_with_add(
             loc,
-            "add-fact",
+            ActionLabel::AddFact,
             editing,
             EditForm::Fact(None),
             rsx! {
@@ -999,7 +999,7 @@ fn person_tab_content(
         "events" => events_table(loc, &detail.events, on_edit_open, on_retract),
         "associations" => tab_with_add(
             loc,
-            "add-association",
+            ActionLabel::AddAssociation,
             editing,
             EditForm::Association(None),
             rsx! {
@@ -1009,7 +1009,7 @@ fn person_tab_content(
         "families" => families_panel(loc, &detail.families),
         "citations" => tab_with_add(
             loc,
-            "attach-citation",
+            ActionLabel::AttachCitation,
             editing,
             EditForm::Citation,
             rsx! {
@@ -1018,7 +1018,7 @@ fn person_tab_content(
         ),
         "media" => tab_with_add(
             loc,
-            "attach-media",
+            ActionLabel::AttachMedia,
             editing,
             EditForm::Media,
             rsx! {
@@ -1027,7 +1027,7 @@ fn person_tab_content(
         ),
         "notes" => tab_with_add(
             loc,
-            "attach-note",
+            ActionLabel::AttachNote,
             editing,
             EditForm::Note,
             rsx! {
@@ -1178,7 +1178,7 @@ pub fn names_table(
                         &name.display,
                         Some((EditForm::Name(Some(name.clone())), None)),
                         Some((EditForm::CiteName(name.clone()), "cite-name")),
-                        Some(RowRetract { assertion_id: name.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(RowRetract { assertion_id: name.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                         Some(onedit),
                         onretract)}
                 }
@@ -1261,7 +1261,7 @@ pub fn facts_table(
                                 loc,
                                 &fact.type_label,
                                 Some((EditForm::Fact(Some(fact.clone())), None)), None,
-                                Some(RowRetract { assertion_id: fact.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                                Some(RowRetract { assertion_id: fact.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                                 Some(onedit),
                                 onretract)}
                         }
@@ -1350,7 +1350,7 @@ fn events_row(
                 loc,
                 &event.role_label,
                 edit, None,
-                Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "remove", title: "remove-participant", detach: false }),
+                Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: RowVerb::Remove, title: "remove-participant", detach: false }),
                 Some(onedit),
                 retract_cb)}
         }
@@ -1403,7 +1403,7 @@ pub fn associations_table(
                         loc,
                         &association.role_label,
                         Some((EditForm::Association(Some(association.clone())), None)), None,
-                        Some(RowRetract { assertion_id: association.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(RowRetract { assertion_id: association.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                         Some(onedit),
                         onretract)}
                 }
@@ -1538,26 +1538,26 @@ fn edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        EditForm::Name(None) => loc.action_label("add-name"),
+        EditForm::Name(None) => loc.action_label(ActionLabel::AddName),
         EditForm::Name(Some(_)) => loc.panel_title("edit-name"),
         EditForm::CiteName(_) => loc.panel_title("cite-name"),
-        EditForm::Fact(None) => loc.action_label("add-fact"),
+        EditForm::Fact(None) => loc.action_label(ActionLabel::AddFact),
         EditForm::Fact(Some(_)) => loc.panel_title("edit-fact"),
         EditForm::CiteFact(_) => loc.panel_title("cite-fact"),
-        EditForm::Association(None) => loc.action_label("add-association"),
+        EditForm::Association(None) => loc.action_label(ActionLabel::AddAssociation),
         EditForm::Association(Some(_)) => loc.panel_title("edit-association"),
         EditForm::Participation(_) => loc.panel_title("edit-participation"),
-        EditForm::Citation => loc.action_label("attach-citation"),
-        EditForm::Media => loc.action_label("attach-media"),
-        EditForm::Note => loc.action_label("attach-note"),
-        EditForm::Tag => loc.action_label("add-tag"),
+        EditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
+        EditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+        EditForm::Note => loc.action_label(ActionLabel::AttachNote),
+        EditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     rsx! {
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -1613,7 +1613,7 @@ fn PersonTagForm(human_id: String, onsubmit: EventHandler<(PersonEdit, Provenanc
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();
@@ -1689,7 +1689,7 @@ fn AddNameForm(
         supersedes: seed.as_ref().map(|s| s.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Input { label: loc.label_given(), name: "given".to_owned(), value: Some(given()), oninput: move |event: FormEvent| given.set(event.value()) }
         Input { label: loc.label_surname(), name: "surname".to_owned(), value: Some(surname()), oninput: move |event: FormEvent| surname.set(event.value()) }
@@ -1741,7 +1741,7 @@ fn CiteNameForm(human_id: String, name: NameVm, onsubmit: EventHandler<(PersonEd
         return rsx! {};
     };
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let prov = use_signal(|| ProvenanceDraft {
         supersedes: Some(name.assertion_id.clone()),
         ..ProvenanceDraft::default()
@@ -1777,7 +1777,7 @@ fn CiteFactForm(human_id: String, fact: FactVm, onsubmit: EventHandler<(PersonEd
         return rsx! {};
     };
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let prov = use_signal(|| ProvenanceDraft {
         supersedes: Some(fact.assertion_id.clone()),
         ..ProvenanceDraft::default()
@@ -1836,7 +1836,7 @@ fn AddFactForm(
             label: label.clone(),
         })
         .collect();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Select {
             label: loc.field_label("fact-type"),
@@ -1911,7 +1911,7 @@ fn AssociationForm(
         Vec::new(),
     );
     let picker_for_save = picker.clone();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let fixed_for_save = fixed_other.clone();
     rsx! {
         if let Some(other) = &fixed_other {

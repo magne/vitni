@@ -1108,7 +1108,7 @@ pub fn GeometrySaveForm(
         {effective_date_choice(loc, slider_year, dated(), move |picked: String| dated.set(picked == EFFECTIVE_DATED))}
         {provenance_block(loc, prov)}
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             onclick: move |_| {
                 let edit = PlaceEdit::AssertGeometry {
