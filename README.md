@@ -3,6 +3,8 @@
 
 # Vitni
 
+[![CI](https://github.com/magne/vitni/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/magne/vitni/actions/workflows/ci.yml)
+
 **An evidence-first genealogy program.** Every fact is a recorded claim — who asserted it, when,
 from which source, and with what confidence. The family tree you read is a *conclusion* derived from
 those claims, not a database edited in place. Nothing is ever silently overwritten: a correction is a
@@ -179,7 +181,7 @@ why that grant is as broad as it is.
 
 ## Contributing, conduct and security
 
-[`CONTRIBUTING.md`](CONTRIBUTING.md) covers how a change should be shaped and why CI does not run;
+[`CONTRIBUTING.md`](CONTRIBUTING.md) covers how a change should be shaped and what CI checks it;
 participation is under [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) (Contributor Covenant 3.0). Found a
 vulnerability? Do not open a public issue — [`SECURITY.md`](SECURITY.md) has the private route, the
 scope, and what to expect.

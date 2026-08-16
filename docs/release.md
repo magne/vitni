@@ -59,8 +59,9 @@ sanctioned trust root.
    assembles the tarball (`cargo xtask package`), builds the `.debs` (`cargo deb`) and the AppImage,
    and uploads all of them to the GitHub Release for the tag.
 
-> The release workflow only runs when the account's GitHub Actions billing is active. It is verified
-> by zizmor, YAML validity, and local reproduction of its steps.
+> The release workflow has never run: no version tag has been pushed yet. It is verified by zizmor,
+> YAML validity, and local reproduction of its steps, so treat the first tag as the end-to-end
+> verification and watch it (#211).
 
 ## Building artifacts locally
 

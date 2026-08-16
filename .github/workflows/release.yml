@@ -2,9 +2,9 @@ name: Release
 
 # Builds and publishes the Linux release artifacts (tarball + `.deb` + AppImage) on a version tag.
 #
-# NOTE: this workflow — like the rest of CI — only runs when the account's GitHub Actions billing is
-# active. It has been verified by zizmor, YAML validity, and local reproduction of each step (see
-# docs/release.md); it has not been exercised by an actual tag build while billing is blocked.
+# NOTE: verified by zizmor, YAML validity, and local reproduction of each step (see docs/release.md),
+# but never exercised by an actual tag build — no version tag has been pushed yet. The first real tag
+# is the end-to-end verification (#211).
 #
 # Signing (ADR 0014 §6): the sanctioned first-party fleet is signed with the release private key held
 # as the `VITNI_PLUGIN_SIGNING_KEY` secret, and every binary embeds the release trust root from

@@ -31,15 +31,20 @@ Participation is under the [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) (Contribut
 - `prek run` passes (`prek install` once, to get the hooks).
 - The pull request description says what the code does now — not which approaches you discarded.
 
-### The checks are local — CI does not run
+### What CI checks, and what it skips
 
-The workflows under `.github/workflows/` are committed and lint-clean but **never execute**: GitHub
-Actions billing is disabled for this repository. So no check runs on your pull request, and there is
-no CI badge in the README to render a misleading green.
+`ci.yml` runs four jobs on every pull request — `fmt + clippy`, `test`, `postgres integration tests`
+and `cargo-deny` — in the repository's own container image. The badge in the README tracks `main`.
 
-Run them yourself before pushing — `prek run` plus the commands above, and `cargo xtask check` for the
-i18n, CSS and input-handling guards. Labels are reconciled with `cargo xtask labels --apply` rather
-than through `labels.yml`. [`docs/development.md`](docs/development.md) has the full command set.
+**A change touching only `docs/**`, `*.md` or `LICENSE*` starts no run at all**: `ci.yml` filters
+those paths out, so a documentation pull request shows no checks rather than a green one. That is
+expected, not a stuck job.
+
+Run the checks yourself before pushing either way — `prek run` plus the commands above, and
+`cargo xtask check` for the i18n, CSS and input-handling guards. The GUI's headless pass
+(`cargo xtask gui-pass`) needs a graphical-capable machine and does not run in CI, so anything that
+only exists in a live webview is still verified by hand.
+[`docs/development.md`](docs/development.md) has the full command set.
 
 ## Sign your commits (DCO)
 

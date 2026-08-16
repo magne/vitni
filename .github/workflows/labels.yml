@@ -4,8 +4,8 @@
 # that reimplements the diff. Never deletes: a label present on GitHub but absent from the file is
 # reported and left alone.
 #
-# Not yet verified end-to-end — Actions billing is blocked at time of writing, so every run fails
-# before starting. Apply labels with `cargo xtask labels --apply` locally until that clears.
+# `cargo xtask labels --apply` locally does the same thing and stays the quicker path while iterating
+# on `.github/labels.toml`; this workflow is what keeps GitHub in step once a change lands on `main`.
 name: Labels
 
 on:

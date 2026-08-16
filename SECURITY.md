@@ -8,9 +8,8 @@ seriously.
 
 **Do not open a public issue.**
 
-Email **magne.rasmussen@gmail.com** with `[vitni security]` in the subject. Once this repository is
-public, GitHub's private vulnerability reporting (*Security* → *Report a vulnerability*) is the
-preferred route; the email address works either way.
+GitHub's private vulnerability reporting (*Security* → *Report a vulnerability*) is the preferred
+route. Email **magne.rasmussen@gmail.com** with `[vitni security]` in the subject also works.
 
 Useful in a report:
 
