@@ -206,7 +206,8 @@ records deliberate non-tasks, so check there before "fixing" something.
 [`issue-tracking.md`](issue-tracking.md) explains the labels, milestones and the doc ↔ tracker
 linkage that `cargo xtask issue-sync` enforces.
 
-> **Note on CI.** The workflows under `.github/workflows/` are committed and lint-clean but do not
-> currently run: Actions billing is disabled for this repository. Run the checks locally — `prek run`
-> plus the commands above — and reconcile labels with `cargo xtask labels --apply` rather than
-> through `labels.yml`.
+> **Note on CI.** `ci.yml` runs `fmt + clippy`, `test`, `postgres integration tests` and `cargo-deny`
+> on every push to `main` and every pull request — but it filters out `docs/**`, `*.md` and
+> `LICENSE*`, so a documentation-only change starts no run. Run the checks locally anyway: `prek run`
+> plus the commands above. `cargo xtask gui-pass` needs a graphical-capable machine and is not part of
+> CI, so the live-webview layer stays a local step.

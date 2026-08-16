@@ -106,6 +106,25 @@ pan/zoom feel or click latency:
 
 ## Completed features & phases
 
+- **`0.9.5 — public release` (milestone complete).** *(Done — #324, #325, #326, #327, #328, #331,
+  #337.)* The repository was private, under a name that collided with an existing crates.io package,
+  licensed as one undifferentiated whole, with a placeholder icon and README screenshots that could
+  only be retaken by hand. Seven changes closed that: the project was renamed to **Vitni** (#324); the
+  licence was split per crate — `MIT OR Apache-2.0` on the interchange crates, `AGPL-3.0-or-later` on
+  the application with the AGPLv3 §7 permission for plugin components, enforced by `cargo xtask
+  licence-check` (#325, [ADR 0034](../adr/0034-licence-split-agpl-application-permissive-interchange.md));
+  a real app icon and brand lockups were designed as geometry with no text shaping, rasterised by
+  `cargo xtask icons` (#326); pre-public hygiene landed `SECURITY.md`, `CODE_OF_CONDUCT.md` and the
+  repository description and topics (#327); `cargo xtask screenshots` made the README images
+  byte-reproducible from a seeded demo workspace (#328); and a `vitni` launcher binary was put over
+  the CLI and GUI libraries — GUI with no arguments, CLI with any (#331,
+  [ADR 0035](../adr/0035-launcher-binary-over-cli-and-gui.md)). #337 was the flip itself: a gitleaks
+  pass over all refs, then public, then secret scanning with push protection, private vulnerability
+  reporting, Dependabot alerts, SHA-pinning required for Actions, and branch protection on `main`
+  (pull request required, force-push and deletion blocked, admins included). GitHub Actions began
+  running for the first time with the flip — public repositories get free runner minutes — so the
+  documentation that explained why no check ran was rewritten and the README gained a CI badge.
+  Publishing to crates.io and registering the Vitni trademark were both left as separate decisions.
 - **Bulk import in the GUI.** *(Done — `feat/gui-bulk-import`, closes #191.)* `vitni-ui-dioxus` had
   no local-file import flow — only the assisted online wizard — and the CLI's own target selection
   (`--new NAME PATH` / `--into NAME`, prompting when an existing target already holds persons) had no

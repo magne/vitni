@@ -14,11 +14,11 @@ Before this was applied the repository had **only GitHub's default labels**, **n
 **no open issues** (the one referenced issue, #38, was closed) — so the taxonomy below was designed
 greenfield, with nothing to migrate or reconcile.
 
-**One caveat about the automation.** Actions billing is blocked, so every workflow run currently fails
-before starting. `.github/workflows/labels.yml` is therefore committed but **never executed** — it is
-zizmor-clean and YAML-valid, no more. Until billing clears, reconcile labels locally with
-`cargo xtask labels --apply`. This is also why the doc↔tracker drift check is an **xtask** rather than
-a scheduled workflow: it has to work without Actions.
+**One note about the automation.** `.github/workflows/labels.yml` reconciles the labels from
+`.github/labels.toml` on a push that touches it, or on `workflow_dispatch`; `cargo xtask labels
+--apply` does the same thing locally and stays the quicker path while iterating. The doc↔tracker
+drift check is an **xtask** rather than a workflow so the same command gates a commit through prek
+and runs in CI; only its online half (§5) is deliberately left to a person.
 
 [`issues.md`](issues.md) currently holds **111 bullets: 92 actionable and 19 that are not tasks at
 all** — the latter live under *Decided — no action needed* and record deliberate choices ("by design",
@@ -163,7 +163,7 @@ rather than kept as history — the archive is the record.
 | Milestone | Contents |
 | --- | --- |
 | **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: **no add or attach can record a reason**, because the provenance field erases what is typed into it (#299); then `⌘N` silently doing nothing on half the destinations (#300) and a save run that hangs when its target leaves the strip (#302). |
-| **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end once billing is active, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
+| **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end on the first real tag, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
 server/web work, the plugin-UI vocabulary tail, the ADR 0014 plugin-trust out-of-scope list, round-trip
@@ -258,12 +258,12 @@ alongside `i18n-check`, `css-check`, and `input-guard`:
 
 - *Offline* (prek + CI, every commit): the doc's own invariants — every `— #N` well-formed, no
   duplicate numbers, no reference to a number below the lowest filed issue.
-- *Online* (`--online`, weekly scheduled job with `GITHUB_TOKEN`): reconcile both directions and report
+- *Online* (`--online`, run by hand against your own `gh` auth): reconcile both directions and report
   drift — an open issue whose bullet is gone, a bullet referencing a closed issue, an open issue with no
   bullet at all.
 
-The offline half gates every commit; the online half is run by hand (or scheduled, once billing
-allows) because it needs a token and network and drift is slow.
+The offline half gates every commit; the online half is run by hand because it needs a token and
+network and drift is slow.
 
 A reference sits at the **end** of a bullet's block, after however many lines of prose — that is where
 it reads naturally, so the parser closes each block at the next bullet, heading, or blank line and

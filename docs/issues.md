@@ -644,16 +644,6 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 ### Packaging & release
 
-- **The repository is still private, and this milestone is what it was waiting on.** The rename
-  (#324), the licence split (#325), the app icon (#326), hygiene (#327), regenerable README images
-  (#328) and the `vitni` launcher (#331) have all landed, so what is left is the flip plus the settings
-  that only start mattering once anyone can read the tree: secret scanning with **push protection**
-  (which stops the next accidental key rather than reporting it), server-side branch protection on
-  `main` (today's never-commit-to-`main` rule is a local prek hook, so a hook-less clone bypasses it),
-  Actions permissions and **billing** — every workflow still fails before starting, which is why
-  `labels.yml` has never executed — Dependabot alerts, and private vulnerability reporting so
-  `SECURITY.md`'s path is real. Before the flip: scan **all refs**, not the tip, since nothing has been
-  public and so nothing has aged out of reach. Publishing to crates.io is a separate decision. — #337
 - **The two `.deb`s cannot both be installed.** `vitni` and `vitni-cli` each list
   `["../../target/plugins/**/*", "usr/lib/vitni/plugins/", "644"]`, so the second `dpkg -i` fails with
   "trying to overwrite … which is also in package". Inherited from the `vitni`/`vitni-gui` split rather
@@ -699,10 +689,10 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   done: the root `Cargo.toml` has no `[profile.release]`, so shipped binaries carry full debug symbols
   and default codegen settings. `strip = true` plus a considered `lto`/`codegen-units` is the cheapest
   size win available before the first tag. — #214
-- **`release.yml` unverified end-to-end** — GitHub Actions billing is currently blocked, so the release
-  workflow is zizmor / YAML / `bash -n` verified and its build/package steps reproduced locally, but has
-  never run a full tag → AppImage → GitHub Release cycle. The first real tag needs a live verification
-  when billing is active. — #211
+- **`release.yml` unverified end-to-end** — no version tag has been pushed, so the release workflow is
+  zizmor / YAML / `bash -n` verified and its build/package steps reproduced locally, but has never run a
+  full tag → AppImage → GitHub Release cycle. The first real tag is that verification, and wants
+  watching. — #211
 
 ### Dependencies blocked upstream
 
@@ -741,21 +731,13 @@ The `area/docs` label already existed with no `###` home; this is it.
   during a full-suite run and passed on an immediate re-run of the same scenario — a draw that had not
   reached the canvas within the 4 s settle. Both classes are the same missing capability: the harness
   waits a fixed time instead of waiting for the paint it is about to assert on.
-- **The GitHub settings that only exist on a public repository.** Everything else #327 asked for has
-  landed: `SECURITY.md`, `CODE_OF_CONDUCT.md`, the local agent and editor configuration untracked, the
-  maintainer's home directory out of the config examples, `CONTRIBUTING.md` explaining that Actions
-  billing is disabled so no check runs and no CI badge exists, and the repository description and
-  topics. **Secret scanning with push protection**, **private vulnerability reporting** (which
-  `SECURITY.md` already points at) and **branch protection on `main`** are all unavailable on a private
-  repository on the free plan, so they can only be switched on at the moment of the flip — do it then,
-  in that order, and confirm a direct push to `main` is refused afterwards. Recorded here so it is not
-  re-audited: the pre-flip scan found no secrets — no private keys, no tokens, no `.pem`/`.key`/`.p12`
-  anywhere; the in-tree `signing::DEV_PUBLIC_KEY` is deliberate and documented as never trusted in a
-  release build; and no personal genealogy data is committed, the `gui-pass` fixture being seeded at
-  runtime. Two one-way doors accepted with it: the author's commit email becomes public across the
-  whole history, and the verbatim Digitalarkivet captures under
-  `crates/vitni-digitalarkivet/tests/fixtures/` are third-party content whose redistribution terms are
-  unexamined — no blocker for publication, a real question if a paid importer ever ships.
+- **`main` is protected without required status checks, and that is a choice.** `ci.yml` filters
+  `docs/**`, `*.md` and `LICENSE*` out of its triggers, so a documentation-only pull request starts no
+  run at all — a required context would sit unfulfilled forever on exactly the changes this repository
+  produces most. The protection therefore requires a pull request (0 approvals, admins included) and
+  blocks force-push and deletion, but requires no check. Making the four CI jobs required means first
+  dropping those `paths-ignore` filters and paying runner minutes on every doc PR; free on a public
+  repository, so it is a live option, not a closed one.
 - **Paid-plugin distribution is unshaped.** The plugin boundary is the only genuinely exclusive
   revenue line (a signed bundle whose source stays private, under its own EULA — selling licence
   keys over an OSI-licensed source does not hold), and it needs decisions before the first one
@@ -894,3 +876,23 @@ decision, not a gap.
   config split: the server adds the `ConfigStore` **database** backend so the operator and
   client/presentation scopes persist per authenticated user, while the embedded build keeps the file
   backend.
+
+### Publication
+
+Recorded when the repository was made public, so none of it is re-audited.
+
+- **The pre-publication scan found nothing to remove.** gitleaks over **all refs**
+  (`--log-opts="--all --full-history"`, 649 non-merge commits) returned two hits, both false
+  positives: a `"0123456789abcdef".repeat(4)` test literal in `vitni-ui/src/view_model/plugin.rs`, and
+  the page token inside the verbatim Digitalarkivet capture at
+  `crates/vitni-digitalarkivet/tests/fixtures/census/viewer.html`. No `.pem`/`.key`/`.p12` has ever
+  been tracked, and no non-source file has ever been deleted from history. The in-tree
+  `signing::DEV_SEED`/`DEV_PUBLIC_KEY` is a real ed25519 seed and deliberately committed — no scanner
+  pattern matches it, and a release build never trusts it (ADR 0014 §6, `SECURITY.md` §What is not in
+  scope). No personal genealogy data is committed: nothing tracked is a `.ged`, `.gramps`, `.csv` or
+  database file, and the `gui-pass` and screenshot fixtures are seeded at runtime from invented data.
+- **Two one-way doors were accepted at publication.** The author's commit address
+  (`magne.rasmussen@gmail.com`) is now public across all 906 commits, and the verbatim Digitalarkivet
+  captures under `crates/vitni-digitalarkivet/tests/fixtures/` are third-party content whose
+  redistribution terms are unexamined — no blocker for publication, a real question if a paid importer
+  ever ships.
