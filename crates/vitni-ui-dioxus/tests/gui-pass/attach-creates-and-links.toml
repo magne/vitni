@@ -1,0 +1,143 @@
+# The find-or-create attach picker (issue #314): a collection tab's Attach panel can create the
+# record it wants to attach, and nothing is written until the panel's own Save. SSR proves the "+ New
+# …" row renders (`attach_picker.rs`) but fires no click at all (`record_picker.rs:185-188`), so it
+# cannot prove the row's `onclick` is live, that picking it swaps the search field for the draft card,
+# or that `Esc` discards the draft without writing anything.
+#
+# The surface: Kristiansand (the fixture's one place, `xtask/src/gui_pass.rs` ~:587) has zero notes,
+# so the Notes tab's picker starts genuinely empty — "No matches" becoming a row is an unambiguous
+# `differ`, with no pre-existing note to confuse it with.
+#
+# The "nothing written" half cannot be proven with `manifest`: `gui_pass.rs` (~:258-262) substring-
+# matches `workspace.toml`, which records the workspace's name and directory, never its aggregates —
+# it cannot see a note that does or doesn't exist. A whole-window `match` against the pre-open shot is
+# the only way to show the discard left no trace, in the UI or (by construction, since nothing but the
+# UI could have written it) on disk.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "A collection tab's Attach panel creates the record it wants to attach, writing nothing until Save (#314)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "click"
+at = [1121, 248]
+label = "detail tab: Notes"
+
+[[step]]
+do = "shot"
+name = "tab-before"
+
+[[step]]
+do = "click"
+at = [572, 300]
+label = "Attach note"
+
+[[step]]
+do = "shot"
+name = "panel-open"
+
+[[step]]
+do = "click"
+at = [1608, 242]
+label = "picker: click the search input"
+
+[[step]]
+do = "key"
+chord = "a"
+label = "picker: type a"
+
+[[step]]
+do = "shot"
+name = "picker-open"
+
+[[step]]
+do = "click"
+at = [1608, 349]
+label = "picker: + New note \"a\"…"
+
+[[step]]
+do = "shot"
+name = "card-open"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "Esc — dismiss the panel; nothing must be written"
+
+[[step]]
+do = "shot"
+name = "tab-after-discard"
+
+[[step]]
+do = "click"
+at = [572, 300]
+label = "Attach note — again"
+
+[[step]]
+do = "click"
+at = [1608, 242]
+label = "picker: click the search input"
+
+[[step]]
+do = "key"
+chord = "a"
+label = "picker: type a"
+
+[[step]]
+do = "click"
+at = [1608, 349]
+label = "picker: + New note \"a\"…"
+
+[[step]]
+do = "shot"
+name = "rail-before"
+
+[[step]]
+do = "click"
+at = [1467, 819]
+label = "new note card: Save — commits N0001 and attaches it"
+
+[[step]]
+do = "shot"
+name = "rail-after"
+
+[[step]]
+do = "shot"
+name = "tab-after-save"
+
+[[assert]]
+kind = "differ"
+shots = ["panel-open", "picker-open"]
+because = "typing must render the + New note row and the row's handler must be live"
+region = [1436, 220, 350, 150]
+
+[[assert]]
+kind = "differ"
+shots = ["picker-open", "card-open"]
+because = "picking + New must swap the search field for the draft card"
+region = [1436, 190, 350, 300]
+
+[[assert]]
+kind = "match"
+shots = ["tab-before", "tab-after-discard"]
+because = "Esc must discard the draft without writing anything — the only proof available, since manifest cannot see aggregates (workspace.toml records only the workspace's own name and directory)"
+
+[[assert]]
+kind = "differ"
+shots = ["tab-after-discard", "tab-after-save"]
+because = "Save must create the note and attach it, replacing the empty state with the N0001 row"
+
+[[assert]]
+kind = "differ"
+shots = ["rail-before", "rail-after"]
+because = "the create marks the workspace changed, so the rail's Notes count goes 0 → 1 (#207)"
+region = [0, 448, 208, 40]

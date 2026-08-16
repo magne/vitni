@@ -1,0 +1,148 @@
+# The find-or-create attach picker's "+ New …" row is reachable by keyboard, and picking it that way
+# leaves focus inside the still-open side panel (issue #314). SSR fires no key events at all
+# (`record_picker.rs:185-188`), so it cannot prove `ArrowDown` walks onto the row, that `Enter` commits
+# it, or — the defect this scenario actually found — where focus lands once the row's card replaces the
+# search input that had it: an element that unmounts while focused drops focus to `<body>`, outside the
+# panel's `[data-focus-trap]`, silently breaking `Esc`/`Tab` until the operator tabs back in by hand.
+#
+# The Notes tab (used by `attach-creates-and-links.toml`) cannot exercise the `ArrowDown` walk: with
+# zero existing notes, the picker's only nav target *is* "+ New …", already highlighted the moment the
+# list opens — `ArrowDown` is a proven no-op there (`next_active`, `vitni-ui/src/picker.rs`), not a
+# meaningful test of it. The Media tab has the fixture's two seeded objects instead
+# (`xtask/src/gui_pass.rs` ~:587), so `ArrowDown` genuinely walks the highlight across two real rows
+# before reaching "+ New …".
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "The picker's + New row is reachable by keyboard and keeps focus inside the panel (#314)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "click"
+at = [1030, 248]
+label = "detail tab: Media"
+
+[[step]]
+do = "click"
+at = [579, 300]
+label = "Attach media"
+
+[[step]]
+do = "shot"
+name = "panel-open"
+
+[[step]]
+do = "click"
+at = [1608, 242]
+label = "picker: click the search input"
+
+[[step]]
+do = "shot"
+name = "keyboard-before"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "picker: Down onto the second row"
+
+[[step]]
+do = "shot"
+name = "highlighted"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "picker: Down past the matched rows onto + New"
+
+[[step]]
+do = "shot"
+name = "highlighted-new"
+
+[[step]]
+do = "key"
+chord = "Return"
+label = "picker: Enter commits + New media object…"
+
+[[step]]
+do = "shot"
+name = "card-focused"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "card: Tab — focus must move within the still-open panel"
+
+[[step]]
+do = "shot"
+name = "card-tabbed"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "Esc — focus was inside the panel, so this must dismiss it"
+
+[[step]]
+do = "shot"
+name = "escaped"
+
+[[step]]
+do = "key"
+chord = "Return"
+label = "reopen with the restored focus"
+
+[[step]]
+do = "shot"
+name = "reopened"
+
+[[assert]]
+kind = "differ"
+shots = ["keyboard-before", "highlighted"]
+because = "ArrowDown must move the highlight onto the second matched row"
+region = [1436, 270, 350, 130]
+
+[[assert]]
+kind = "differ"
+shots = ["highlighted", "highlighted-new"]
+because = "ArrowDown must walk past the matched rows onto + New media object…"
+region = [1436, 270, 350, 130]
+
+[[assert]]
+kind = "differ"
+shots = ["highlighted-new", "card-focused"]
+because = "Enter on the highlighted + New row must commit it and open the draft card"
+
+[[assert]]
+kind = "differ"
+shots = ["card-focused", "card-tabbed"]
+# Scoped to the card's own ✕: a focus ring on one small icon barely moves the whole-window RMSE, so a
+# whole-shot compare would pass by accident whether or not focus actually landed. The card replaced the
+# search input that held focus (`use_attach_picker`'s `onnew`); if it had left focus stranded on `<body>`
+# instead of re-entering the panel's trap, Tab would leave this icon (and everything else) unchanged —
+# `<body>` has nowhere of its own to cycle within.
+because = "Tab must move focus onto the card's own ✕, proving focus followed the row into the card"
+region = [1680, 210, 120, 80]
+
+[[assert]]
+kind = "differ"
+shots = ["card-tabbed", "escaped"]
+because = "Esc must dismiss the panel — reachable because the card kept focus inside the trap, not on <body>"
+
+[[assert]]
+kind = "match"
+shots = ["panel-open", "reopened"]
+# `reopened` is a fresh Attach panel, not "the card again": Esc discards the whole in-progress attach
+# (the query and the draft alike), consistent with there being one dialog here, not a card nested inside
+# it. Left at the default tolerance, not tightened: `panel-open` was reached by a mouse click and
+# `reopened` by a keyboard `Return`, so the panel's own ✕ shows a `:focus-visible` ring in one and not
+# the other (`sidepanel-focus.toml`'s own rule) — a real, small, expected difference this assertion is
+# not about. What it is about still holds at the default: the two are the same panel, restored to the
+# same control (`Attach media`) that opened it.
+because = "Return on the restored focus must reopen the same Attach panel from scratch"

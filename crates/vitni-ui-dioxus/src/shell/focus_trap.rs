@@ -161,6 +161,17 @@ pub fn DialogFocus() -> Element {
     rsx! {}
 }
 
+/// Moves focus back to the open trapped dialog's first control — for a control that mounts *inside*
+/// an already-open dialog and replaces whatever held focus there (an attach picker's "+ New …" card
+/// replacing its search input, issue #314). [`DialogFocus`] only runs once, when the dialog itself
+/// opens, so it never sees a later swap within the same open dialog; and an element that unmounts while
+/// focused drops focus to `<body>` (outside `[data-focus-trap]`), which silently breaks both
+/// `Esc`-to-dismiss and `Tab` cycling — the dialog looks unchanged, but the keyboard no longer reaches
+/// it. Call from the replacement control's own `onmounted`.
+pub fn refocus_dialog_start() {
+    run(focus_end_script(DialogEnd::First));
+}
+
 /// `true` when a character key should stay in the focused text input rather than reach the shell's
 /// global shortcut dispatcher.
 ///

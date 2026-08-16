@@ -29,6 +29,7 @@ use vitni_ui::ActionLabel;
 use vitni_ui::{ActiveMove, Localizer, PickerSelection, PickerState, RowVm, next_active, picker_rows};
 
 use crate::components::{IconButton, ListRow, TextInput};
+use crate::shell::focus_trap::refocus_dialog_start;
 
 /// The already-localized configuration of one picker: its field label, the element-id base, the entity
 /// noun (`person`/`place`/…) used in the placeholder and "+ New" row, and whether "+ New" is offered.
@@ -166,9 +167,15 @@ pub fn draft_picker_field(
 /// created inline. Its head carries the uppercase title, a "draft" badge, and a discard control (✕);
 /// nesting alternates the surface via CSS. The `body` is the record's own fields (which may hold
 /// another picker → another card).
+///
+/// `onmounted` calls [`refocus_dialog_start`] every time this card mounts — including inside an
+/// already-open [`SidePanel`](crate::components::SidePanel), where picking "+ New …" replaces the
+/// picker's search input (which held focus) with this card in the same spot. Without it, focus drops
+/// to `<body>` and the panel's `Esc`/`Tab` trap goes silently dead (issue #314); a no-op the rest of
+/// the time, since a freshly opened panel already lands focus at its first control.
 pub fn draft_card(title: &str, badge: &str, discard_label: String, ondiscard: Callback<()>, body: Element) -> Element {
     rsx! {
-        div { class: "draft-card",
+        div { class: "draft-card", onmounted: move |_| refocus_dialog_start(),
             div { class: "draft-card-head",
                 h4 { class: "draft-card-title", "{title}" }
                 span { class: "badge draft", "{badge}" }
