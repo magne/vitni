@@ -22,9 +22,9 @@ vitni-plugin-host = { workspace = true }
 vitni-core = { workspace = true }
 
 # `gui-pass`'s `wm-close` step: `xdotool windowclose` is `XDestroyWindow`, which never reaches the
-# app, so a window-manager close is scripted as a `WM_DELETE_WINDOW` ClientMessage instead. Not a new
-# crate in the graph — dioxus-desktop already pulls x11rb in through global-hotkey.
-x11rb = "0.13"
+# app, so a window-manager close is scripted as a `WM_DELETE_WINDOW` ClientMessage instead. This is a
+# second copy in the graph: global-hotkey, which dioxus-desktop pulls in, still pins x11rb 0.13.
+x11rb = "0.14"
 
 # `screenshots` pins the demo seed's clock so the README images are reproducible (#328): it rewrites
 # every stored assertion's `occurred_at` in the fixture's SQLite event log, then has the CLI rebuild
