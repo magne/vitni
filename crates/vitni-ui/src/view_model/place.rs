@@ -15,6 +15,21 @@ pub const SUCCESSION_KINDS: [vitni_app::SuccessionKind; 5] = [
     vitni_app::SuccessionKind::Renamed,
 ];
 
+/// The place types offered by every "new place" type picker (a common subset; the model has more) —
+/// the single list, so a place created from the Places category and a place created inline (an event's
+/// "+ New place" cascade) always offer the same choices.
+pub const NEW_PLACE_TYPES: [vitni_app::PlaceType; 9] = [
+    vitni_app::PlaceType::Country,
+    vitni_app::PlaceType::County,
+    vitni_app::PlaceType::Municipality,
+    vitni_app::PlaceType::Parish,
+    vitni_app::PlaceType::City,
+    vitni_app::PlaceType::Town,
+    vitni_app::PlaceType::Village,
+    vitni_app::PlaceType::Farm,
+    vitni_app::PlaceType::Building,
+];
+
 /// One asserted place name (Names tab): text, language, date, surety, and source count.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaceNameVm {

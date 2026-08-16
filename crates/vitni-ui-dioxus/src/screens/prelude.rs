@@ -23,7 +23,7 @@ pub use vitni_ui::{
 pub use crate::app::{AppCtx, AppState};
 pub use crate::components::{
     Button, ButtonVariant, Card, Chip, ConfidenceBadge, DraftPickerView, DraftSelect, DraftText, EmptyState,
-    EvidenceAxisChip, HistoryEntry, HistoryTimeline, Input, NoSourceFlag, PickerCallbacks, PickerConfig,
+    EvidenceAxisChip, HistoryEntry, HistoryTimeline, Input, NewRecordCard, NoSourceFlag, PickerCallbacks, PickerConfig,
     ProvenancePopover, RadioChoice, RadioGroup, RecordPicker, RestrictionChoice, RestrictionSet, Select, SelectChoice,
     SidePanel, SourceLink, Switch, TabItem, Table, TextField, TextInput, TextInputKind, date_draft_field, draft_card,
     draft_picker_field, picker_options, record_picker,
@@ -31,12 +31,12 @@ pub use crate::components::{
 pub use crate::master_detail::{DetailContainer, ListChrome, ListPane, SortChrome};
 pub use crate::services::{
     ScreenData, commit_citation_change_set, commit_dna_match_change_set, commit_dna_test_change_set,
-    commit_event_change_set, commit_family_change_set, commit_media_change_set, commit_note_change_set,
-    commit_person_change_set, commit_place_change_set, commit_repository_change_set, commit_source_change_set,
-    commit_tag_change_set, load_data_quality, load_picker_rows, load_plugin_panel, load_screen, load_tags,
-    merge_persons, save_citation_edit, save_dna_match_edit, save_dna_test_edit, save_edit, save_event_edit,
-    save_family_edit, save_media_edit, save_note_edit, save_place_edit, save_repository_edit, save_source_edit,
-    submit_plugin_panel,
+    commit_event_change_set, commit_family_change_set, commit_media_change_set, commit_new_record,
+    commit_note_change_set, commit_person_change_set, commit_place_change_set, commit_repository_change_set,
+    commit_source_change_set, commit_tag_change_set, load_data_quality, load_picker_rows, load_plugin_panel,
+    load_screen, load_tags, merge_persons, save_citation_edit, save_dna_match_edit, save_dna_test_edit, save_edit,
+    save_event_edit, save_family_edit, save_media_edit, save_note_edit, save_place_edit, save_repository_edit,
+    save_source_edit, submit_plugin_panel,
 };
 pub use crate::shell::ChromeCtx;
 pub use crate::shell::nav_state::{DraftId, EditKey, NavState, data_version_ticket};

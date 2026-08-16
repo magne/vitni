@@ -18,6 +18,7 @@ mod layout;
 mod media_save_dialog;
 mod media_viewer;
 mod nav;
+mod new_record_card;
 mod provenance;
 mod record_picker;
 mod select_input;
@@ -42,6 +43,7 @@ pub use layout::{Card, EmptyState, Modal, SidePanel};
 pub use media_save_dialog::{MediaSaveDialog, MediaSaveLabels};
 pub use media_viewer::{MediaViewer, MediaViewerLabels};
 pub use nav::{Breadcrumb, StatusLine, TabItem, Tabs};
+pub use new_record_card::NewRecordCard;
 pub use provenance::{ProvenanceAxis, ProvenanceBlock, provenance_new_citation_card};
 pub use record_picker::{
     DraftPickerView, PickerCallbacks, PickerConfig, PickerOptions, RecordPicker, draft_card, draft_picker_field,

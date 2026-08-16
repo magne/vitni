@@ -1,7 +1,7 @@
 use vitni_app::Rect;
 use vitni_ui::{
-    EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, MediaRefVm, PickerState, ProvenanceDraft, SOURCE_QUALITIES,
-    rect_css, tab_label,
+    AttachSaveAction, EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, MediaRefVm, NewRecordDraft, PickerState,
+    ProvenanceDraft, SOURCE_QUALITIES, link_is_savable, rect_css, resolve_attach_save, tab_label,
 };
 
 use super::prelude::*;
@@ -1085,8 +1085,14 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
 /// Builds an existing-only record picker for a side-panel link field (`edit-patterns.html` §c): loads
 /// `category`'s rows via [`load_picker_rows`], owns the live [`PickerState`], and wires no-op
 /// pick/clear callbacks — the picked id is read from the returned picker's `state.selection` at submit.
-/// "+ New" is never offered; a side panel commits one immediate command, so inline creation there is
-/// the flagged follow-up. A custom hook (loads rows, holds state), so callers get a ready picker.
+/// "+ New" is never offered here; [`use_attach_picker`] is the find-or-create counterpart that wraps
+/// this fn and layers "+ New …" on top (issue #314) for a panel that resolves one link on Save. A
+/// handful of pickers deliberately stay on this existing-only fn instead, because "resolve one link on
+/// Save" does not fit what they do: the **accumulating** pickers that append to a list rather than
+/// resolving a single field (`place.rs`'s succession from/to pickers, `tabs.rs`'s participation-note
+/// picker, `provenance.rs`'s DNA-evidence picker) and `geography.rs`'s map search, which navigates
+/// rather than picking a record at all. A custom hook (loads rows, holds state), so callers get a ready
+/// picker.
 ///
 /// The rows resource subscribes to [`data_version_ticket`], so a record created or edited elsewhere
 /// while the picker stays open shows up in it without a reopen (#266). [`NavState`] is resolved here
@@ -1159,6 +1165,180 @@ pub fn attach_picker_form(
             disabled,
             onclick: move |_| onsave.call(()),
         }
+    }
+}
+
+/// The find-or-create half of an attach picker's live state (issue #314): the link itself (unset, an
+/// existing selection, or a "+ New …" draft), the underlying picker's [`PickerState`] (the *same*
+/// signal [`AttachPicker::picker`] holds — writing here and reading through the picker agree, so a
+/// freshly-created record's chip renders correctly whichever way the caller looks at it), the last
+/// create failure (rendered inside the [`NewRecordCard`]), and whether a create is in flight (disables
+/// Save so a double-click cannot double-create).
+#[derive(Clone, Copy)]
+pub struct AttachLink {
+    /// The link: unset, an existing record, or a new one being drafted.
+    pub link: Signal<vitni_ui::RecordLink<NewRecordDraft>>,
+    /// The underlying picker's state — shared with [`AttachPicker::picker`], not a second copy.
+    pub state: Signal<PickerState>,
+    /// The last create attempt's localized failure, if any.
+    pub error: Signal<Option<String>>,
+    /// Whether a create is in flight.
+    pub saving: Signal<bool>,
+}
+
+/// A find-or-create attach picker (issue #314): [`use_attach_picker`]'s return value — the existing-only
+/// [`RecordPicker`] it wraps, and the [`AttachLink`] its "+ New …" row and Save drive.
+pub struct AttachPicker {
+    /// The wrapped picker (search + "+ New …" when the category supports it).
+    pub picker: RecordPicker,
+    /// The find-or-create link state.
+    pub link: AttachLink,
+}
+
+/// Builds a find-or-create attach picker for a side-panel link field: wraps [`use_existing_picker`]
+/// (never forking it, so the rows resource, the [`data_version_ticket`] subscription, and the #266
+/// refresh are all inherited unchanged) and layers the "+ New …" mechanism on top — `allow_new` turns on
+/// exactly when [`NewRecordDraft::supports`] says `category` can seed one, and picking a result, clearing
+/// it, or choosing "+ New …" all drive [`AttachLink::link`] instead of the picker's own (still wired,
+/// still shared) selection state.
+pub fn use_attach_picker(
+    services: Services,
+    category: Category,
+    label: String,
+    name: String,
+    entity_label: String,
+    exclude: Vec<String>,
+) -> AttachPicker {
+    let mut picker = use_existing_picker(services, category, label, name, entity_label, exclude);
+    picker.config.allow_new = NewRecordDraft::supports(category);
+    let mut link = use_signal(vitni_ui::RecordLink::<NewRecordDraft>::default);
+    picker.callbacks.onpick =
+        use_callback(move |selection: PickerSelection| link.set(vitni_ui::RecordLink::Existing(selection)));
+    picker.callbacks.onclear = use_callback(move |()| link.set(vitni_ui::RecordLink::Empty));
+    picker.callbacks.onnew = use_callback(move |query: String| {
+        if let Some(draft) = NewRecordDraft::seed(category, &query) {
+            link.set(vitni_ui::RecordLink::New(draft));
+        }
+    });
+    let state = picker.state;
+    AttachPicker {
+        picker,
+        link: AttachLink {
+            link,
+            state,
+            error: use_signal(|| None::<String>),
+            saving: use_signal(|| false),
+        },
+    }
+}
+
+/// The attach link's field: the existing-record picker while unset/picked, or the nested
+/// [`NewRecordCard`] while drafting a new one — the same picker-vs-card branching
+/// `event_place_create_field`/`person_name_citation_field` use for the framework-free record-editor
+/// cascades, applied to the attach picker's own [`AttachLink`] instead of a `RecordDraft` field.
+pub fn attach_link_field(loc: &Localizer, attach: &AttachPicker) -> Element {
+    let is_new = matches!(&*attach.link.link.read(), vitni_ui::RecordLink::New(_));
+    if is_new {
+        rsx! {
+            NewRecordCard {
+                link: attach.link.link,
+                error: attach.link.error,
+                onclose: attach.picker.callbacks.onclear,
+            }
+        }
+    } else {
+        record_picker(loc, &attach.picker)
+    }
+}
+
+/// A side-panel attach/link form body over a find-or-create [`AttachPicker`] — the find-or-create
+/// counterpart of [`attach_picker_form`]: [`attach_link_field`], optional `extra` fields, the provenance
+/// block, and a Save disabled while a create is in flight or the link is not yet
+/// [`link_is_savable`] (an unset link, or a "+ New …" draft that has not validated).
+pub fn attach_link_form(
+    loc: &Localizer,
+    attach: &AttachPicker,
+    extra: Element,
+    prov: Signal<ProvenanceDraft>,
+    onsave: Callback<()>,
+) -> Element {
+    let disabled = *attach.link.saving.read() || !link_is_savable(&attach.link.link.read());
+    rsx! {
+        {attach_link_field(loc, attach)}
+        {extra}
+        {provenance_block(loc, prov)}
+        Button {
+            label: loc.action_button(ActionLabel::Save),
+            variant: ButtonVariant::Primary,
+            disabled,
+            onclick: move |_| onsave.call(()),
+        }
+    }
+}
+
+/// Resolves an [`AttachPicker`]'s link on Save, returning the callback a Save button wires to:
+/// [`resolve_attach_save`] decides which of the three things pressing Save means — dispatch the attach
+/// immediately (an existing selection, today's behaviour unchanged), commit a validated "+ New …" draft
+/// first through [`commit_new_record`] with [`ProvenanceDraft::for_support_record`] (one operator "why"
+/// covers create-then-attach — `record-editing.html` §5b), or nothing (the link is still `Empty` — Save
+/// should have stayed disabled). [`finish_attach_create`] decides what a create's result means.
+#[must_use]
+pub fn use_attach_save(
+    services: Services,
+    attach: &AttachPicker,
+    prov: Signal<ProvenanceDraft>,
+    onattach: Callback<String>,
+) -> Callback<()> {
+    let attach_link = attach.link;
+    let nav = try_consume_context::<NavState>();
+    use_callback(move |()| match resolve_attach_save(&attach_link.link.read()) {
+        AttachSaveAction::Attach(human_id) => onattach.call(human_id),
+        AttachSaveAction::Create { request, summary } => {
+            let services = services.clone();
+            let create_prov = prov.read().for_support_record();
+            let mut attach_link = attach_link;
+            attach_link.error.set(None);
+            attach_link.saving.set(true);
+            spawn(async move {
+                let created = commit_new_record(services, *request, create_prov).await;
+                finish_attach_create(created, summary, attach_link, nav, onattach);
+            });
+        }
+        AttachSaveAction::Blocked => {}
+    })
+}
+
+/// Decides what a `+ New …` draft's create attempt means for the panel, split out of
+/// [`use_attach_save`] so it is host-free testable (mirrors [`finish_draft_commit`]'s split from its own
+/// screen). On success: **flips `link.link` to [`vitni_ui::RecordLink::Existing`]** naming the new
+/// record — the single most important line here, since it turns the card into a `.picker-value` chip,
+/// so pressing Save again (after the *attach* half fails) retries only the attach and cannot re-create
+/// the record; marks the workspace changed ([`NavState::mark_changed`], #207/#266); and calls `onattach`
+/// with the new id. On failure: leaves `link.link` (and every typed character in the card) untouched,
+/// and records the localized error for [`NewRecordCard`] to render in place — `onattach` never fires,
+/// and nothing is marked changed, because nothing was written.
+pub fn finish_attach_create(
+    created: Result<String, String>,
+    summary: Option<String>,
+    mut link: AttachLink,
+    nav: Option<NavState>,
+    onattach: Callback<String>,
+) {
+    link.saving.set(false);
+    match created {
+        Ok(human_id) => {
+            let selection = PickerSelection {
+                human_id: human_id.clone(),
+                title: summary.unwrap_or_else(|| human_id.clone()),
+            };
+            link.link.set(vitni_ui::RecordLink::Existing(selection.clone()));
+            link.state.write().selection = Some(selection);
+            if let Some(mut nav) = nav {
+                nav.mark_changed();
+            }
+            onattach.call(human_id);
+        }
+        Err(message) => link.error.set(Some(message)),
     }
 }
 

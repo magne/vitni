@@ -202,16 +202,11 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
     }
 }
 
-/// The place types offered for an inline "new place" (a common subset; the model has more).
-fn event_place_type_choices() -> [vitni_app::PlaceType; 5] {
-    use vitni_app::PlaceType;
-    [
-        PlaceType::City,
-        PlaceType::Town,
-        PlaceType::Parish,
-        PlaceType::Building,
-        PlaceType::Country,
-    ]
+/// The place types offered for an inline "new place" — [`vitni_ui::NEW_PLACE_TYPES`], the same list
+/// the Places category's own create form and the find-or-create attach card's Place body offer, so the
+/// choices never disagree by entry point.
+fn event_place_type_choices() -> [vitni_app::PlaceType; 9] {
+    vitni_ui::NEW_PLACE_TYPES
 }
 
 /// The event's place field in the whole-record editor: a read-first existing-place picker
@@ -1244,16 +1239,8 @@ fn EventTagForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceD
     }
 }
 
-/// The event types offered by the type picker (a common subset; the model has more).
+/// The event types offered by the type picker — [`vitni_ui::NEW_EVENT_TYPES`], the same list the
+/// find-or-create attach card's Event body offers.
 fn event_type_choices() -> [EventType; 8] {
-    [
-        EventType::Birth,
-        EventType::Death,
-        EventType::Marriage,
-        EventType::Baptism,
-        EventType::Burial,
-        EventType::Census,
-        EventType::Residence,
-        EventType::Immigration,
-    ]
+    vitni_ui::NEW_EVENT_TYPES
 }

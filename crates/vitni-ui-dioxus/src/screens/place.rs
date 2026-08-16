@@ -1712,19 +1712,10 @@ fn PlaceTagForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceD
     }
 }
 
-/// The place types offered by the type picker.
+/// The place types offered by the type picker — [`vitni_ui::NEW_PLACE_TYPES`], the list the
+/// find-or-create attach card's Place body offers too, so the two never disagree.
 fn place_type_choices() -> [PlaceType; 9] {
-    [
-        PlaceType::Country,
-        PlaceType::County,
-        PlaceType::Municipality,
-        PlaceType::Parish,
-        PlaceType::City,
-        PlaceType::Town,
-        PlaceType::Village,
-        PlaceType::Farm,
-        PlaceType::Building,
-    ]
+    vitni_ui::NEW_PLACE_TYPES
 }
 
 #[cfg(test)]

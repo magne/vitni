@@ -5,6 +5,19 @@ use super::{
 };
 use crate::picker::PickerSelection;
 
+/// The event types offered by every "new event" type picker (a common subset; the model has more) —
+/// the single list an event's own create form and the find-or-create attach card both offer.
+pub const NEW_EVENT_TYPES: [EventType; 8] = [
+    EventType::Birth,
+    EventType::Death,
+    EventType::Marriage,
+    EventType::Baptism,
+    EventType::Burial,
+    EventType::Census,
+    EventType::Residence,
+    EventType::Immigration,
+];
+
 /// One event participant (Participants tab): the person, their role, surety, and source count.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParticipantVm {
