@@ -4,6 +4,7 @@
 //! card). Save gated on dirty.
 
 use dioxus::prelude::*;
+use vitni_ui::ActionLabel;
 use vitni_ui::{EventDraft, Localizer, NewPlaceFields, PickerSelection, PickerState, ProvenanceDraft, RecordLink};
 use vitni_ui_dioxus::components::{Button, ButtonVariant, PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use vitni_ui_dioxus::screens::{RecordEditState, create_record_header, event_create_fields, record_edit_provenance};
@@ -38,8 +39,8 @@ fn view(seed: EventDraft) -> Element {
     };
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
-        Button { label: loc.action_label("save"), variant: ButtonVariant::Primary, small: true, disabled: !can_save, onclick: move |_| {} }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
+        Button { label: loc.action_button(ActionLabel::Save), variant: ButtonVariant::Primary, small: true, disabled: !can_save, onclick: move |_| {} }
     };
     rsx! {
         {create_record_header(&loc.event_new_title(), &loc.record_draft_badge(), actions)}

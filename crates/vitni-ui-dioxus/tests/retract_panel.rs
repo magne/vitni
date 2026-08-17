@@ -4,6 +4,7 @@
 //! assertion's UUID — the same discipline as the tag-id SSR tests (data-model §9, ADR 0004 §2).
 
 use dioxus::prelude::*;
+use vitni_ui::ActionLabel;
 use vitni_ui::Localizer;
 use vitni_ui_dioxus::screens::retract_panel;
 
@@ -22,7 +23,7 @@ fn panel() -> Element {
         "Birth",
         loc.action_retract_row("Birth"),
         &loc.retract_note(),
-        loc.action_label("retract"),
+        loc.action_button(ActionLabel::Retract),
         rationale,
         onconfirm,
     )

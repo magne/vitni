@@ -6,14 +6,32 @@
 use dioxus::prelude::*;
 use vitni_app::{ChromosomeSide, MatchStatus, TagRef, UsingKind};
 use vitni_ui::{
-    AttachedRefVm, Category, ConfidenceLevel, DnaInferenceVm, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, Localizer,
-    ProvenanceDraft, SharedAncestorVm, UsingRecordVm,
+    ActionLabel, AttachedRefVm, Category, ConfidenceLevel, DetailTab, DnaInferenceVm, DnaMatchDetail, DnaMatchDraft,
+    DnaSegmentVm, Localizer, ProvenanceDraft, SharedAncestorVm, UsingRecordVm,
 };
 use vitni_ui_dioxus::screens::{
     DnaMatchEditForm, RecordActionLabels, RecordEditState, dna_match_ancestors_table, dna_match_overview,
     dna_match_segments_table, id_list, record_head_actions, tags_panel,
 };
 use vitni_ui_dioxus::shell::nav_state::NavState;
+
+fn segments_tab() -> DetailTab {
+    DetailTab {
+        id: "segments",
+        label: "Segments".to_owned(),
+        count: None,
+        action: Some(ActionLabel::AddSegment),
+    }
+}
+
+fn ancestors_tab() -> DetailTab {
+    DetailTab {
+        id: "ancestors",
+        label: "Shared ancestors".to_owned(),
+        count: None,
+        action: Some(ActionLabel::AddSharedAncestor),
+    }
+}
 
 fn test_ref(human_id: &str, label: &str) -> UsingRecordVm {
     UsingRecordVm {
@@ -126,7 +144,6 @@ fn dna_match_view() -> Element {
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
-    let editing = use_signal(|| None::<DnaMatchEditForm>);
     let on_remove = use_callback(|_: String| {});
     let on_edit = use_callback(|_form: DnaMatchEditForm| {});
     let on_retract = use_callback(|_target: (String, String, bool)| {});
@@ -134,10 +151,10 @@ fn dna_match_view() -> Element {
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (DnaMatchDraft, ProvenanceDraft)| {}))}
         {dna_match_overview(&loc, &detail, record)}
-        {dna_match_segments_table(&loc, &detail.segments, on_edit, on_retract)}
-        {dna_match_ancestors_table(&loc, &detail.shared_ancestors, on_edit, on_retract)}
+        {dna_match_segments_table(&loc, &segments_tab(), &detail.segments, on_edit, on_retract)}
+        {dna_match_ancestors_table(&loc, &ancestors_tab(), &detail.shared_ancestors, on_edit, on_retract)}
         {id_list(&loc, &detail.notes, Some(on_retract))}
-        {tags_panel(&loc, &detail.tags, editing, DnaMatchEditForm::Tag, on_remove)}
+        {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }
 
@@ -147,8 +164,8 @@ fn dna_match_empty_tabs() -> Element {
     let on_edit = use_callback(|_form: DnaMatchEditForm| {});
     let on_retract = use_callback(|_target: (String, String, bool)| {});
     rsx! {
-        {dna_match_segments_table(&loc, &[], on_edit, on_retract)}
-        {dna_match_ancestors_table(&loc, &[], on_edit, on_retract)}
+        {dna_match_segments_table(&loc, &segments_tab(), &[], on_edit, on_retract)}
+        {dna_match_ancestors_table(&loc, &ancestors_tab(), &[], on_edit, on_retract)}
     }
 }
 

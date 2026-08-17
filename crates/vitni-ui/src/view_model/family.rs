@@ -1,5 +1,5 @@
 use super::{
-    AttachedRefVm, ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType,
+    ActionLabel, AttachedRefVm, ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType,
     FamilyChangeSetRequest, FamilyEdit, FamilyForPerson, FamilyRow, FamilySummary, GenealogicalDate, HistoryEntryVm,
     Localizer, MediaRefVm, NewPersonFields, PartnerRequest, PersonFamilyRole, RecordDraft, RestrictionKind, RowVm,
     TagRef, citation_ref_from_ref, line_label, non_blank,
@@ -357,21 +357,30 @@ fn family_row_fields(
 /// The tab strip for a family's detail: an overview, then the related-item tabs with counts.
 #[must_use]
 pub fn family_tabs(detail: &FamilyDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("overview", None),
-        tab("children", Some(detail.children.len())),
-        tab("events", Some(detail.events.len())),
-        tab("citations", Some(detail.citations.len())),
-        tab("media", Some(detail.media.len())),
-        tab("notes", Some(detail.notes.len())),
-        tab("research-notes", Some(detail.research_notes.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("history", None),
+        tab("overview", None, None),
+        tab("children", Some(detail.children.len()), Some(ActionLabel::AddChild)),
+        tab("events", Some(detail.events.len()), Some(ActionLabel::LinkEvent)),
+        tab(
+            "citations",
+            Some(detail.citations.len()),
+            Some(ActionLabel::AttachCitation),
+        ),
+        tab("media", Some(detail.media.len()), Some(ActionLabel::AttachMedia)),
+        tab("notes", Some(detail.notes.len()), Some(ActionLabel::AttachNote)),
+        tab(
+            "research-notes",
+            Some(detail.research_notes.len()),
+            Some(ActionLabel::NewResearchNote),
+        ),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("history", None, None),
     ]
 }
 

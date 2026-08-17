@@ -32,7 +32,7 @@ pub fn EventCreateRecord(draft_id: DraftId) -> Element {
     let place_onclear = use_callback(move |()| draft.write().place = RecordLink::Empty);
     let place_onnew =
         use_callback(move |_query: String| draft.write().place = RecordLink::New(NewPlaceFields::default()));
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::EventDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let services = services.clone();
@@ -56,9 +56,9 @@ pub fn EventCreateRecord(draft_id: DraftId) -> Element {
     use_save_on_request(EditKey::draft(Category::Events, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -202,16 +202,11 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
     }
 }
 
-/// The place types offered for an inline "new place" (a common subset; the model has more).
-fn event_place_type_choices() -> [vitni_app::PlaceType; 5] {
-    use vitni_app::PlaceType;
-    [
-        PlaceType::City,
-        PlaceType::Town,
-        PlaceType::Parish,
-        PlaceType::Building,
-        PlaceType::Country,
-    ]
+/// The place types offered for an inline "new place" — [`vitni_ui::NEW_PLACE_TYPES`], the same list
+/// the Places category's own create form and the find-or-create attach card's Place body offer, so the
+/// choices never disagree by entry point.
+fn event_place_type_choices() -> [vitni_app::PlaceType; 9] {
+    vitni_ui::NEW_PLACE_TYPES
 }
 
 /// The event's place field in the whole-record editor: a read-first existing-place picker
@@ -391,7 +386,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     // event; set alongside `retract` only for that case (`on_person_retract`), cleared with it.
     let mut retract_person = use_signal(|| None::<String>);
     let mut retract_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -526,7 +521,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     });
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
-    let retract_saved = state.data_loc().action_label("saved");
+    let retract_saved = state.data_loc().action_label(ActionLabel::Saved);
     let mut retract_nav = nav;
     let on_retract_confirm = use_callback(move |()| {
         let Some(target) = retract() else {
@@ -780,7 +775,7 @@ fn event_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record),
@@ -792,7 +787,7 @@ fn event_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {event_tab_content(state, detail, active_id, editing, &ctx, on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+                {event_tab_content(state, detail, &active_tab, editing, &ctx, on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -841,7 +836,7 @@ fn event_restriction_toggles(
 fn event_tab_content(
     state: &AppState,
     detail: &EventDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<EventEditForm>>,
     ctx: &EventEditCtx,
     on_retract: Callback<(String, String, bool)>,
@@ -852,59 +847,69 @@ fn event_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "addresses" => {
             let onedit =
                 Callback::new(move |seed: AddressVm| on_edit_open.call(EventEditForm::Address(Some(Box::new(seed)))));
-            tab_with_add(
+            tab_frame(
                 loc,
-                "add-address",
-                editing,
-                EventEditForm::Address(None),
+                tab,
+                TabActionTarget::Form(editing, EventEditForm::Address(None)),
+                None,
                 rsx! {
                     {address_cards(loc, &detail.addresses, onedit, on_retract)}
                 },
             )
         }
-        "participants" => tab_with_add(
+        "participants" => tab_frame(
             loc,
-            "add-participant",
-            editing,
-            EventEditForm::Participant(None),
+            tab,
+            TabActionTarget::Form(editing, EventEditForm::Participant(None)),
+            None,
             rsx! {
                 {event_participants_table(loc, detail, on_edit_open, on_person_retract)}
             },
         ),
-        "citations" => tab_with_add(
+        "citations" => tab_frame(
             loc,
-            "attach-citation",
-            editing,
-            EventEditForm::Citation,
+            tab,
+            TabActionTarget::Form(editing, EventEditForm::Citation),
+            None,
             rsx! {
                 {citations_table::<EventEditForm>(loc, &detail.citations, false, on_retract)}
             },
         ),
-        "media" => tab_with_add(
+        "media" => tab_frame(
             loc,
-            "attach-media",
-            editing,
-            EventEditForm::Media,
+            tab,
+            TabActionTarget::Form(editing, EventEditForm::Media),
+            None,
             rsx! {
                 {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            "attach-note",
-            editing,
-            EventEditForm::Note,
+            tab,
+            TabActionTarget::Form(editing, EventEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, EventEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            tab,
+            TabActionTarget::Form(editing, EventEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "research-notes" => rsx! {
             ResearchNotesTab {
+                tab: tab.clone(),
                 category: Category::Events,
                 human_id: detail.human_id.clone(),
                 rows: detail.research_notes.clone(),
@@ -1007,7 +1012,7 @@ fn event_participant_row(
                 loc,
                 &participant.name,
                 edit, None,
-                Some(RowRetract { assertion_id: participant.assertion_id.clone(), button_label: "remove", title: "remove-participant", detach: false }),
+                Some(RowRetract { assertion_id: participant.assertion_id.clone(), button_label: RowVerb::Remove, title: "remove-participant", detach: false }),
                 Some(onedit),
                 retract_cb)}
         }
@@ -1026,21 +1031,21 @@ fn event_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        EventEditForm::Address(None) => loc.action_label("add-address"),
+        EventEditForm::Address(None) => loc.action_label(ActionLabel::AddAddress),
         EventEditForm::Address(Some(_)) => loc.panel_title("edit-address"),
-        EventEditForm::Participant(None) => loc.action_label("add-participant"),
+        EventEditForm::Participant(None) => loc.action_label(ActionLabel::AddParticipant),
         EventEditForm::Participant(Some(_)) => loc.panel_title("edit-participation"),
-        EventEditForm::Citation => loc.action_label("attach-citation"),
-        EventEditForm::Media => loc.action_label("attach-media"),
-        EventEditForm::Note => loc.action_label("attach-note"),
-        EventEditForm::Tag => loc.action_label("add-tag"),
+        EventEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
+        EventEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+        EventEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+        EventEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     rsx! {
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -1079,10 +1084,10 @@ fn EventAddParticipantForm(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    // Edit mode fixes the person (only the participation changes); add mode offers an existing-person picker.
+    // Edit mode fixes the person (only the participation changes); add mode offers a find-or-create picker.
     let fixed_person = seed.as_ref().map(|row| row.human_id.clone());
-    let person_picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::People,
         loc.field_label("name"),
         "participant".to_owned(),
@@ -1098,8 +1103,31 @@ fn EventAddParticipantForm(
             notes: row.notes.clone(),
             supersedes: Some(row.assertion_id.clone()),
         });
-    let picker_for_save = person_picker.clone();
-    let fixed_for_save = fixed_person.clone();
+    // The participation's own provenance draft lives inside `ParticipationForm`; `prov` here only
+    // relays it to `use_attach_save` at submit time (so a "+ New person" create shares the same
+    // operator "why" as the participation it is being attached to — `record-editing.html` §5b), and
+    // `pending` carries the submitted fields across to `onattach`, which fires once the person id is
+    // resolved (synchronously for an existing pick, after the create commits for a "+ New …" draft).
+    let mut prov = use_signal(ProvenanceDraft::default);
+    let mut pending = use_signal(|| None::<NewParticipation>);
+    let human_id_for_attach = human_id.clone();
+    let onattach = use_callback(move |person_id: String| {
+        let Some(fields) = pending.write().take() else {
+            return;
+        };
+        onsubmit.call((
+            EventEdit::AddParticipant {
+                human_id: human_id_for_attach.clone(),
+                person_id,
+                role: fields.role,
+                age: fields.age,
+                attributes: fields.attributes,
+                notes: fields.notes,
+            },
+            prov(),
+        ));
+    });
+    let onsave = use_attach_save(services, &attach, prov, onattach);
     rsx! {
         if let Some(person) = &fixed_person {
             div { class: "field",
@@ -1107,25 +1135,28 @@ fn EventAddParticipantForm(
                 super::shared::RecordLink { category: Category::People, human_id: person.clone(), label: person.clone() }
             }
         } else {
-            {record_picker(loc, &person_picker)}
+            {attach_link_field(loc, &attach)}
         }
         ParticipationForm {
             seed: participation_seed,
-            onsubmit: move |(fields, prov): (NewParticipation, ProvenanceDraft)| {
-                let Some(person_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
+            onsubmit: move |(fields, incoming_prov): (NewParticipation, ProvenanceDraft)| {
+                if let Some(person_id) = fixed_person.clone() {
+                    onsubmit.call((
+                        EventEdit::AddParticipant {
+                            human_id: human_id.clone(),
+                            person_id,
+                            role: fields.role,
+                            age: fields.age,
+                            attributes: fields.attributes,
+                            notes: fields.notes,
+                        },
+                        incoming_prov,
+                    ));
                     return;
-                };
-                onsubmit.call((
-                    EventEdit::AddParticipant {
-                        human_id: human_id.clone(),
-                        person_id,
-                        role: fields.role,
-                        age: fields.age,
-                        attributes: fields.attributes,
-                        notes: fields.notes,
-                    },
-                    prov,
-                ));
+                }
+                prov.set(incoming_prov);
+                pending.set(Some(fields));
+                onsave.call(());
             },
         }
     }
@@ -1144,8 +1175,8 @@ fn EventAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Even
         "note" => Category::Notes,
         _ => Category::Media,
     };
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         category,
         loc.field_label(&field),
         field.clone(),
@@ -1153,11 +1184,7 @@ fn EventAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Even
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         let edit = match field.as_str() {
             "citation" => EventEdit::AttachCitation {
                 human_id: human_id.clone(),
@@ -1174,7 +1201,8 @@ fn EventAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Even
         };
         onsubmit.call((edit, prov()));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The event "Add tag" form: a picker of existing tags by name → [`EventEdit::Tag`].
@@ -1185,7 +1213,7 @@ fn EventTagForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceD
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();
@@ -1235,16 +1263,8 @@ fn EventTagForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceD
     }
 }
 
-/// The event types offered by the type picker (a common subset; the model has more).
+/// The event types offered by the type picker — [`vitni_ui::NEW_EVENT_TYPES`], the same list the
+/// find-or-create attach card's Event body offers.
 fn event_type_choices() -> [EventType; 8] {
-    [
-        EventType::Birth,
-        EventType::Death,
-        EventType::Marriage,
-        EventType::Baptism,
-        EventType::Burial,
-        EventType::Census,
-        EventType::Residence,
-        EventType::Immigration,
-    ]
+    vitni_ui::NEW_EVENT_TYPES
 }

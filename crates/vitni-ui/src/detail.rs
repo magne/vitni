@@ -3,6 +3,8 @@
 //! wiring and the panel-content switch, the `label` is already localized, and `count` is the
 //! optional related-item badge.
 
+use crate::action::ActionLabel;
+
 /// One tab in a record's detail tab strip.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DetailTab {
@@ -12,4 +14,8 @@ pub struct DetailTab {
     pub label: String,
     /// An optional count badge (the number of related items the tab holds).
     pub count: Option<usize>,
+    /// The action this tab's action bar offers, or `None` for a read-only tab. Declared here, once
+    /// per tab, so a collection tab cannot be added without deciding its action (issue #314) — the
+    /// drift that once let a `tab_frame` call site pick an independent, sometimes-wrong label.
+    pub action: Option<ActionLabel>,
 }

@@ -3,6 +3,7 @@
 //! invalid/half-filled pair (`record-editing.html` §7), and Save gated on dirty + valid.
 
 use dioxus::prelude::*;
+use vitni_ui::ActionLabel;
 use vitni_ui::{Localizer, PlaceDraft, ProvenanceDraft};
 use vitni_ui_dioxus::components::{Button, ButtonVariant, Input};
 use vitni_ui_dioxus::screens::{RecordEditState, create_record_header, place_record_fields, record_edit_provenance};
@@ -22,8 +23,8 @@ fn view(draft_seed: PlaceDraft) -> Element {
     let mut draft = record.draft;
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
-        Button { label: loc.action_label("save"), variant: ButtonVariant::Primary, small: true, disabled: !can_save, onclick: move |_| {} }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
+        Button { label: loc.action_button(ActionLabel::Save), variant: ButtonVariant::Primary, small: true, disabled: !can_save, onclick: move |_| {} }
     };
     rsx! {
         {create_record_header(&loc.place_new_title(), &loc.record_draft_badge(), actions)}

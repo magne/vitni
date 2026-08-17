@@ -116,7 +116,6 @@ fn citation_view() -> Element {
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
-    let editing = use_signal(|| None::<CitationEditForm>);
     let on_remove = use_callback(|_: String| {});
     let onedit = use_callback(|_: CitationEditForm| {});
     let onretract = use_callback(|_: (String, String, bool)| {});
@@ -127,7 +126,7 @@ fn citation_view() -> Element {
         {citation_attributes_table(&loc, &detail.attributes, onedit, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
         {id_list(&loc, &detail.notes, Some(onretract))}
-        {tags_panel(&loc, &detail.tags, editing, CitationEditForm::Tag, on_remove)}
+        {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }
 

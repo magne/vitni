@@ -49,7 +49,7 @@ pub fn FamilyCreateRecord(draft_id: DraftId) -> Element {
     let partner_onclear = use_callback(move |()| partner_state_reset.write().clear());
     let mut pending_new_open = pending_new;
     let partner_onnew = use_callback(move |_query: String| pending_new_open.set(Some(NewPersonFields::default())));
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::FamilyDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let services = services.clone();
@@ -73,9 +73,9 @@ pub fn FamilyCreateRecord(draft_id: DraftId) -> Element {
     use_save_on_request(EditKey::draft(Category::Families, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -216,7 +216,7 @@ fn family_partner_chip(
     index: usize,
     partner: &PartnerInput,
 ) -> Element {
-    let dismiss = loc.action_label("dismiss");
+    let dismiss = loc.action_label(ActionLabel::Dismiss);
     match partner {
         PartnerInput::Existing(selection) => {
             let title = selection.title.clone();
@@ -313,7 +313,7 @@ fn family_new_partner_body(
             },
         }
         Button {
-            label: loc.action_label("add-partner"),
+            label: loc.action_button(ActionLabel::AddPartner),
             variant: ButtonVariant::Primary,
             disabled: !can_add,
             onclick: move |_| {
@@ -373,7 +373,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     let mut retract_reason = use_signal(String::new);
     let mut removing_child = use_signal(|| None::<ChildRemoval>);
     let mut removal_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -765,7 +765,7 @@ fn family_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record),
@@ -777,7 +777,7 @@ fn family_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {family_tab_content(state, detail, active_id, editing, record, FamilyTabCallbacks { on_retract, on_child_remove, on_edit_open, on_undo, on_tag_remove, media_state })}
+                {family_tab_content(state, detail, &active_tab, editing, record, FamilyTabCallbacks { on_retract, on_child_remove, on_edit_open, on_undo, on_tag_remove, media_state })}
             }
             {family_edit_panel(state, detail, editing, on_submit, on_submit_batch, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -841,7 +841,7 @@ struct FamilyTabCallbacks {
 fn family_tab_content(
     state: &AppState,
     detail: &FamilyDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<FamilyEditForm>>,
     record: RecordEditState<vitni_ui::FamilyDraft>,
     callbacks: FamilyTabCallbacks,
@@ -855,55 +855,65 @@ fn family_tab_content(
         on_tag_remove,
         media_state,
     } = callbacks;
-    match tab_id {
-        "children" => tab_with_add(
+    match tab.id {
+        "children" => tab_frame(
             loc,
-            "add-child",
-            editing,
-            FamilyEditForm::Child(None),
+            tab,
+            TabActionTarget::Form(editing, FamilyEditForm::Child(None)),
+            None,
             rsx! {
                 {family_children_table(loc, detail, on_edit_open, on_retract, on_child_remove)}
             },
         ),
-        "events" => tab_with_add(
+        "events" => tab_frame(
             loc,
-            "link-event",
-            editing,
-            FamilyEditForm::Event,
+            tab,
+            TabActionTarget::Form(editing, FamilyEditForm::Event),
+            None,
             rsx! {
                 {family_events_table(loc, &detail.events, on_retract)}
             },
         ),
-        "citations" => tab_with_add(
+        "citations" => tab_frame(
             loc,
-            "attach-citation",
-            editing,
-            FamilyEditForm::Citation,
+            tab,
+            TabActionTarget::Form(editing, FamilyEditForm::Citation),
+            None,
             rsx! {
                 {citations_table::<FamilyEditForm>(loc, &detail.citations, true, on_retract)}
             },
         ),
-        "media" => tab_with_add(
+        "media" => tab_frame(
             loc,
-            "attach-media",
-            editing,
-            FamilyEditForm::Media,
+            tab,
+            TabActionTarget::Form(editing, FamilyEditForm::Media),
+            None,
             rsx! {
                 {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            "attach-note",
-            editing,
-            FamilyEditForm::Note,
+            tab,
+            TabActionTarget::Form(editing, FamilyEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, FamilyEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            tab,
+            TabActionTarget::Form(editing, FamilyEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "research-notes" => rsx! {
             ResearchNotesTab {
+                tab: tab.clone(),
                 category: Category::Families,
                 human_id: detail.human_id.clone(),
                 rows: detail.research_notes.clone(),
@@ -920,7 +930,7 @@ fn family_tab_content(
 pub fn family_overview(
     loc: &Localizer,
     detail: &FamilyDetail,
-    mut editing: Signal<Option<FamilyEditForm>>,
+    editing: Signal<Option<FamilyEditForm>>,
     record: RecordEditState<vitni_ui::FamilyDraft>,
     on_retract: Callback<(String, String, bool)>,
 ) -> Element {
@@ -931,42 +941,56 @@ pub fn family_overview(
             {record_edit_provenance(loc, record)}
         };
     }
-    rsx! {
-        div { class: "section-note", "{loc.family_overview_note()}" }
-        div { class: "grid-2",
-            Card { title: loc.section_label("partners"),
-                div { class: "tab-actions",
-                    Button { label: loc.action_label("add-partner"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(FamilyEditForm::Partner)) }
-                }
-                if detail.partners.is_empty() {
-                    EmptyState { message: loc.tab_empty() }
-                } else {
-                    div { class: "stack",
-                        for partner in detail.partners.iter() {
-                            div { class: "fact-row",
-                                span { class: "grow", "{partner.name}" }
-                                if let Some(vitals) = partner.vitals.clone() {
-                                    span { class: "muted", "{vitals}" }
-                                }
-                                {provenance_cue(loc, loc.provenance_title_claim(&partner.name), &partner.citations)}
-                                {
-                                    let assertion_id = partner.assertion_id.clone();
-                                    let name = partner.name.clone();
-                                    rsx! {
-                                        Button {
-                                            label: loc.action_label("remove"),
-                                            variant: ButtonVariant::Ghost,
-                                            small: true,
-                                            title: loc.action_title("remove-partner"),
-                                            aria_label: loc.action_remove_row(&partner.name),
-                                            onclick: move |_| on_retract.call((assertion_id.clone(), name.clone(), false)),
-                                        }
-                                    }
+    let partners_body = if detail.partners.is_empty() {
+        rsx! { EmptyState { message: loc.tab_empty() } }
+    } else {
+        rsx! {
+            div { class: "stack",
+                for partner in detail.partners.iter() {
+                    div { class: "fact-row",
+                        span { class: "grow", "{partner.name}" }
+                        if let Some(vitals) = partner.vitals.clone() {
+                            span { class: "muted", "{vitals}" }
+                        }
+                        {provenance_cue(loc, loc.provenance_title_claim(&partner.name), &partner.citations)}
+                        {
+                            let assertion_id = partner.assertion_id.clone();
+                            let name = partner.name.clone();
+                            rsx! {
+                                Button {
+                                    label: loc.action_button(ActionLabel::Remove),
+                                    variant: ButtonVariant::Ghost,
+                                    small: true,
+                                    title: loc.action_title("remove-partner"),
+                                    aria_label: loc.action_remove_row(&partner.name),
+                                    onclick: move |_| on_retract.call((assertion_id.clone(), name.clone(), false)),
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+    };
+    // Not one of `family_tabs()`'s top-level tabs — a card nested in the Overview tab's own body — but
+    // still declares its action through the same `DetailTab`-shaped vocabulary `tab_frame` reads.
+    let partners_tab = DetailTab {
+        id: "partners",
+        label: loc.section_label("partners"),
+        count: None,
+        action: Some(ActionLabel::AddPartner),
+    };
+    rsx! {
+        div { class: "section-note", "{loc.family_overview_note()}" }
+        div { class: "grid-2",
+            Card { title: loc.section_label("partners"),
+                {tab_frame(
+                    loc,
+                    &partners_tab,
+                    TabActionTarget::Form(editing, FamilyEditForm::Partner),
+                    Some(TabActionStyle { emphasis: Some(ButtonVariant::Ghost), ..Default::default() }),
+                    partners_body,
+                )}
             }
             Card { title: loc.section_label("marriage"),
                 if let Some(marriage) = detail.marriage.as_ref() {
@@ -1026,7 +1050,7 @@ pub fn child_removal_side_panel(
         SidePanel {
             title: title.clone(),
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| removing.set(None),
             footer: rsx! {},
             div { class: "stack",
@@ -1043,7 +1067,7 @@ pub fn child_removal_side_panel(
                 }
                 div { class: "muted", style: "font-size:var(--fs-sm)", "{loc.remove_child_note()}" }
                 Button {
-                    label: loc.action_label("remove"),
+                    label: loc.action_button(ActionLabel::Remove),
                     variant: ButtonVariant::Danger,
                     aria_label: loc.action_remove_row(&label),
                     onclick: move |_| on_confirm.call(()),
@@ -1074,14 +1098,14 @@ fn child_actions_cell(
     rsx! {
         td { class: "row-actions",
             Button {
-                label: loc.action_label("edit"),
+                label: loc.action_button(ActionLabel::Edit),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 aria_label: loc.action_edit_row(&child.name),
                 onclick: move |_| onedit.call(form.clone()),
             }
             Button {
-                label: loc.action_label("remove"),
+                label: loc.action_button(ActionLabel::Remove),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title: loc.action_title("remove-child"),
@@ -1089,7 +1113,7 @@ fn child_actions_cell(
                 onclick: move |_| onremove.call(removal.clone()),
             }
             Button {
-                label: loc.action_label("retract"),
+                label: loc.action_button(ActionLabel::Retract),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title: loc.action_title("retract-child"),
@@ -1176,7 +1200,7 @@ pub fn family_events_table(
                         loc,
                         &event.type_label,
                         None, None,
-                        Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "unlink", title: "unlink-event", detach: false }),
+                        Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: RowVerb::Unlink, title: "unlink-event", detach: false }),
                         None,
                         onretract)}
                 }
@@ -1199,14 +1223,14 @@ fn family_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        FamilyEditForm::Partner => loc.action_label("add-partner"),
-        FamilyEditForm::Child(None) => loc.action_label("add-child"),
+        FamilyEditForm::Partner => loc.action_label(ActionLabel::AddPartner),
+        FamilyEditForm::Child(None) => loc.action_label(ActionLabel::AddChild),
         FamilyEditForm::Child(Some(_)) => loc.panel_title("edit-child"),
-        FamilyEditForm::Event => loc.action_label("link-event"),
-        FamilyEditForm::Citation => loc.action_label("attach-citation"),
-        FamilyEditForm::Media => loc.action_label("attach-media"),
-        FamilyEditForm::Note => loc.action_label("attach-note"),
-        FamilyEditForm::Tag => loc.action_label("add-tag"),
+        FamilyEditForm::Event => loc.action_label(ActionLabel::LinkEvent),
+        FamilyEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
+        FamilyEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+        FamilyEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+        FamilyEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     let partners: Vec<(String, String)> = detail
@@ -1218,7 +1242,7 @@ fn family_edit_panel(
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -1242,8 +1266,8 @@ fn FamilyAddPartnerForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Pr
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::People,
         loc.field_label("partner"),
         "partner".to_owned(),
@@ -1251,11 +1275,7 @@ fn FamilyAddPartnerForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Pr
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(person_id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |person_id: String| {
         onsubmit.call((
             FamilyEdit::AddPartner {
                 human_id: human_id.clone(),
@@ -1264,7 +1284,8 @@ fn FamilyAddPartnerForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Pr
             prov(),
         ));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The child form. `seed: None` adds a new child (a People picker + one relationship select per
@@ -1303,11 +1324,12 @@ fn FamilyAddChildForm(
                 .map_or_else(|| loc.relationship_none(), |kind| loc.relationship_label(kind)),
         })
         .collect();
-    // Edit mode fixes the child (only the per-partner relationships change); add mode offers a picker.
+    // Edit mode fixes the child (only the per-partner relationships change); add mode offers a
+    // find-or-create picker.
     let fixed_child = seed.as_ref().map(|s| s.human_id.clone());
     let exclude: Vec<String> = partners.iter().map(|(id, _)| id.clone()).collect();
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::People,
         loc.field_label("child"),
         "child".to_owned(),
@@ -1360,13 +1382,8 @@ fn FamilyAddChildForm(
         }
     };
     let partners_for_submit = partners.clone();
-    let picker_for_save = picker.clone();
-    let fixed_for_save = fixed_child.clone();
     let choices_for_save = choices.clone();
-    let onsave = use_callback(move |()| {
-        let Some(person_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
-            return;
-        };
+    let onattach = use_callback(move |person_id: String| {
         let chosen = selections();
         let selected = |index: usize| -> Option<ChildParentRelationship> {
             choices_for_save
@@ -1405,6 +1422,12 @@ fn FamilyAddChildForm(
         };
         onsubmit.call(batch);
     });
+    let attach_onsave = use_attach_save(services, &attach, prov, onattach);
+    let fixed_for_save = fixed_child.clone();
+    let onsave = use_callback(move |()| match &fixed_for_save {
+        Some(id) => onattach.call(id.clone()),
+        None => attach_onsave.call(()),
+    });
     if let Some(child) = &fixed_child {
         rsx! {
             div { class: "field",
@@ -1414,13 +1437,13 @@ fn FamilyAddChildForm(
             {extra}
             {provenance_block_dna(loc, prov)}
             Button {
-                label: loc.action_label("save"),
+                label: loc.action_button(ActionLabel::Save),
                 variant: ButtonVariant::Primary,
                 onclick: move |_| onsave.call(()),
             }
         }
     } else {
-        attach_picker_form(loc, &picker, extra, prov, onsave)
+        attach_link_form(loc, &attach, extra, prov, onsave)
     }
 }
 
@@ -1476,8 +1499,8 @@ fn FamilyLinkEventForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Pro
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::Events,
         loc.tab_label("events"),
         "event".to_owned(),
@@ -1485,11 +1508,7 @@ fn FamilyLinkEventForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Pro
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(event_id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |event_id: String| {
         onsubmit.call((
             FamilyEdit::LinkFamilyEvent {
                 human_id: human_id.clone(),
@@ -1498,7 +1517,8 @@ fn FamilyLinkEventForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Pro
             prov(),
         ));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The "Attach citation/media/note by id" form → [`FamilyEdit::AttachCitation`]/
@@ -1515,8 +1535,8 @@ fn FamilyAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Fam
         "note" => Category::Notes,
         _ => Category::Media,
     };
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         category,
         loc.field_label(&field),
         field.clone(),
@@ -1524,11 +1544,7 @@ fn FamilyAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Fam
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         let edit = match field.as_str() {
             "citation" => FamilyEdit::AttachCitation {
                 human_id: human_id.clone(),
@@ -1545,7 +1561,8 @@ fn FamilyAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Fam
         };
         onsubmit.call((edit, prov()));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The "Add tag" form: a picker of existing tags by name (the tag id is the option value, never
@@ -1557,7 +1574,7 @@ fn FamilyTagForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Provenanc
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();

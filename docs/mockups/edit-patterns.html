@@ -62,7 +62,7 @@
         <div class="field"><label>Evidence axes</label>
           <div class="wrap"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></div>
         </div>
-        <div class="field"><label>Source</label><input class="in" placeholder="Attach a citation…"></div>
+        <div class="field"><label>Source</label><div class="picker-value"><span class="val">Baptism register, vol. 3</span><span class="row-id">S0003</span><button class="icon-btn" aria-label="Clear selection">✕</button></div></div>
         <div class="field"><label>Reason for this change <span class="faint">(optional · shown in History)</span></label><input class="in" placeholder="Why this change is being made…"></div>
         <div class="field"><label>Note</label><textarea class="in" rows="2">From baptism register, vol. 3.</textarea></div>
       </div>
@@ -110,11 +110,14 @@
     returns focus to whatever opened it — see <a href="design-system.html">design-system</a>.</p>
   <p class="muted">The same find-or-create appears <b>in-form</b> as an in-flow <a href="record-editing.html">record
     picker</a> (record-editing §6b) — the create-form variant, where “+ New” opens a nested
-    <span class="mono">.draft-card</span> rather than a modal. In PR28 the side-panel and attach dialogs
-    convert to <b>existing-only</b> pickers (you search instead of typing a memorized id); the inline
-    <b>+ New</b> inside those side panels is a flagged follow-up. An existing-only picker reloads its
-    options after every create, edit or undo, so a record created elsewhere while the panel stays open is
-    pickable in it — no reopen (<a href="record-editing.html">record-editing</a> §6).</p>
+    <span class="mono">.draft-card</span> rather than a modal. The side-panel and attach pickers are
+    find-or-create the same way every other picker is (issue #314): “+ New …” opens a nested
+    <span class="mono">.draft-card</span> seeded with whatever you typed, and nothing is written until the
+    panel’s own Save, which commits <b>create-then-attach</b>, in that order. A failed create writes
+    nothing and leaves the card exactly as typed; a failed attach leaves the just-created record in place
+    and collapses the card to a picked chip, so a retried Save only re-attaches — it never creates the
+    record twice. A picker reloads its options after every create, edit or undo, so a record created
+    elsewhere while the panel stays open is pickable in it — no reopen (<a href="record-editing.html">record-editing</a> §6).</p>
   <p class="muted"><b>Links that carry a role pick it in the same dialog.</b> When the attachment is a
     typed relationship — a person joining an event (<span class="mono">ParticipantRole</span>), a child
     joining a family (<span class="mono">ChildParentRelationship</span> per parent) — the dialog adds the

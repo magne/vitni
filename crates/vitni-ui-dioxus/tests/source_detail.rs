@@ -12,9 +12,8 @@ use vitni_ui::{
 };
 use vitni_ui::{ProvenanceDraft, SourceDraft};
 use vitni_ui_dioxus::screens::{
-    MediaTabState, RecordActionLabels, RecordEditState, SourceEditForm, id_list, media_gallery, media_tab,
-    record_head_actions, source_attributes_table, source_citations_table, source_overview, source_repositories_table,
-    tags_panel,
+    MediaTabState, RecordActionLabels, RecordEditState, id_list, media_gallery, media_tab, record_head_actions,
+    source_attributes_table, source_citations_table, source_overview, source_repositories_table, tags_panel,
 };
 
 /// A representative source detail: an 1850 census with a Normal typical surety, one repository link
@@ -141,7 +140,7 @@ fn source_view() -> Element {
         {source_attributes_table(&loc, &detail, onedit, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
         {id_list(&loc, &detail.notes, Some(onretract))}
-        {tags_panel(&loc, &detail.tags, use_signal(|| None::<SourceEditForm>), SourceEditForm::Tag, use_callback(|_: String| {}))}
+        {tags_panel(&loc, &detail.tags, use_callback(|_: String| {}))}
     }
 }
 

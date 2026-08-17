@@ -1,9 +1,22 @@
 use super::{
-    AddressVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DateDraft, DetailTab, EventChangeSetRequest, EventEdit,
-    EventPlaceRequest, EventRow, EventType, GenealogicalDate, HistoryEntryVm, Localizer, MediaRefVm, NewPlaceFields,
-    RecordDraft, RecordLink, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    ActionLabel, AddressVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DateDraft, DetailTab, EventChangeSetRequest,
+    EventEdit, EventPlaceRequest, EventRow, EventType, GenealogicalDate, HistoryEntryVm, Localizer, MediaRefVm,
+    NewPlaceFields, RecordDraft, RecordLink, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 use crate::picker::PickerSelection;
+
+/// The event types offered by every "new event" type picker (a common subset; the model has more) —
+/// the single list an event's own create form and the find-or-create attach card both offer.
+pub const NEW_EVENT_TYPES: [EventType; 8] = [
+    EventType::Birth,
+    EventType::Death,
+    EventType::Marriage,
+    EventType::Baptism,
+    EventType::Burial,
+    EventType::Census,
+    EventType::Residence,
+    EventType::Immigration,
+];
 
 /// One event participant (Participants tab): the person, their role, surety, and source count.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -254,21 +267,34 @@ fn event_avatar(event_type: Option<&EventType>) -> String {
 /// The tab strip for an event's detail: an overview, then the related-item tabs with counts.
 #[must_use]
 pub fn event_tabs(detail: &EventDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("overview", None),
-        tab("addresses", Some(detail.addresses.len())),
-        tab("participants", Some(detail.participants.len())),
-        tab("citations", Some(detail.citations.len())),
-        tab("media", Some(detail.media.len())),
-        tab("notes", Some(detail.notes.len())),
-        tab("research-notes", Some(detail.research_notes.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("history", None),
+        tab("overview", None, None),
+        tab("addresses", Some(detail.addresses.len()), Some(ActionLabel::AddAddress)),
+        tab(
+            "participants",
+            Some(detail.participants.len()),
+            Some(ActionLabel::AddParticipant),
+        ),
+        tab(
+            "citations",
+            Some(detail.citations.len()),
+            Some(ActionLabel::AttachCitation),
+        ),
+        tab("media", Some(detail.media.len()), Some(ActionLabel::AttachMedia)),
+        tab("notes", Some(detail.notes.len()), Some(ActionLabel::AttachNote)),
+        tab(
+            "research-notes",
+            Some(detail.research_notes.len()),
+            Some(ActionLabel::NewResearchNote),
+        ),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("history", None, None),
     ]
 }
 

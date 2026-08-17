@@ -1,7 +1,7 @@
 use vitni_app::Rect;
 use vitni_ui::{
-    EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, MediaRefVm, PickerState, ProvenanceDraft, SOURCE_QUALITIES,
-    rect_css, tab_label,
+    AttachSaveAction, EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, MediaRefVm, NewRecordDraft, PickerState,
+    ProvenanceDraft, SOURCE_QUALITIES, link_is_savable, rect_css, resolve_attach_save, tab_label,
 };
 
 use super::prelude::*;
@@ -302,7 +302,7 @@ pub fn id_list(loc: &Localizer, items: &[AttachedRefVm], detach: Option<Callback
                     "{item.human_id}"
                     if let Some(cb) = detach {
                         Button {
-                            label: loc.action_label("detach"),
+                            label: loc.action_button(ActionLabel::Detach),
                             variant: ButtonVariant::Ghost,
                             small: true,
                             title: loc.action_title("detach-note"),
@@ -413,7 +413,7 @@ fn media_card(
             div { class: "muted media-caption", "{caption}" }
             if let Some(cb) = detach {
                 Button {
-                    label: loc.action_label("detach"),
+                    label: loc.action_button(ActionLabel::Detach),
                     variant: ButtonVariant::Ghost,
                     small: true,
                     title: loc.action_title("detach-media"),
@@ -441,7 +441,7 @@ pub fn media_viewer_labels(loc: &Localizer) -> MediaViewerLabels {
         no_region: loc.media_viewer_no_region(),
         set_region: loc.media_viewer_set_region(),
         clear_region: loc.media_viewer_clear_region(),
-        close: loc.action_label("close"),
+        close: loc.action_label(ActionLabel::Close),
     }
 }
 
@@ -681,7 +681,7 @@ pub fn provenance_cue(loc: &Localizer, title: String, citations: &[CitationRefVm
             ProvenanceTrigger {
                 label: loc.source_count(citations.len()),
                 title,
-                dismiss_label: loc.action_label("dismiss"),
+                dismiss_label: loc.action_label(ActionLabel::Dismiss),
                 citations: citations.to_vec(),
             }
         }
@@ -939,24 +939,29 @@ pub fn retract_side_panel(
     let Some(RetractTarget { label, detach, .. }) = retract() else {
         return rsx! {};
     };
-    let (title_id, button_id, note, accessible) = if detach {
+    let (title_id, action, note, accessible) = if detach {
         (
             "detach",
-            "detach",
+            ActionLabel::Detach,
             loc.action_title(detach_note_id),
             loc.action_detach_row(&label),
         )
     } else {
-        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
+        (
+            "retract",
+            ActionLabel::Retract,
+            loc.retract_note(),
+            loc.action_retract_row(&label),
+        )
     };
     rsx! {
         SidePanel {
             title: loc.panel_title(title_id),
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| retract.set(None),
             footer: rsx! {},
-            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
+            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_button(action), reason, on_confirm)}
         }
     }
 }
@@ -967,12 +972,38 @@ pub fn retract_side_panel(
 pub struct RowRetract {
     /// The `AssertionId` (a UUID string) the action retracts (the sub-record's or attachment's).
     pub assertion_id: String,
-    /// The `action_label` id for the button text (`"retract"`, `"remove"`, `"unlink"`, `"detach"`).
-    pub button_label: &'static str,
+    /// Which of the four verbs the button text (and aria-label) names.
+    pub button_label: RowVerb,
     /// The `action_title` id for the hover tooltip (the mockup sentence).
     pub title: &'static str,
     /// Whether this is a Detach of an attachment (drives the panel's Detach vs Retract wording).
     pub detach: bool,
+}
+
+/// The four verbs a collection row's action button can carry (`record-editing.html` §8): all four
+/// dispatch the same non-destructive `UndoAssertion`, differing only in the button text, the mockup
+/// tooltip and whether the panel says "Detach" or "Retract".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowVerb {
+    /// Ends a membership that once held.
+    Retract,
+    /// Withdraws a membership claimed in error.
+    Remove,
+    /// Unlinks a row.
+    Unlink,
+    /// Detaches an attachment.
+    Detach,
+}
+
+impl From<RowVerb> for ActionLabel {
+    fn from(verb: RowVerb) -> Self {
+        match verb {
+            RowVerb::Retract => Self::Retract,
+            RowVerb::Remove => Self::Remove,
+            RowVerb::Unlink => Self::Unlink,
+            RowVerb::Detach => Self::Detach,
+        }
+    }
 }
 
 /// A collection row's actions cell (`record-editing.html` §8), generic over a screen's edit-form type
@@ -996,7 +1027,7 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
         let accessible = loc.action_edit_row(label);
         rsx! {
             Button {
-                label: loc.action_label("edit"),
+                label: loc.action_button(ActionLabel::Edit),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title,
@@ -1010,7 +1041,7 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
         let accessible = loc.action_cite_row(label);
         rsx! {
             Button {
-                label: loc.action_label("cite"),
+                label: loc.action_button(ActionLabel::Cite),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title,
@@ -1022,14 +1053,14 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
     let retract_button = retract.map(|spec| {
         let label_owned = label.to_owned();
         let accessible = match spec.button_label {
-            "detach" => loc.action_detach_row(label),
-            "remove" => loc.action_remove_row(label),
-            "unlink" => loc.action_unlink_row(label),
-            _ => loc.action_retract_row(label),
+            RowVerb::Detach => loc.action_detach_row(label),
+            RowVerb::Remove => loc.action_remove_row(label),
+            RowVerb::Unlink => loc.action_unlink_row(label),
+            RowVerb::Retract => loc.action_retract_row(label),
         };
         rsx! {
             Button {
-                label: loc.action_label(spec.button_label),
+                label: loc.action_button(spec.button_label.into()),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title: loc.action_title(spec.title),
@@ -1054,8 +1085,14 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
 /// Builds an existing-only record picker for a side-panel link field (`edit-patterns.html` §c): loads
 /// `category`'s rows via [`load_picker_rows`], owns the live [`PickerState`], and wires no-op
 /// pick/clear callbacks — the picked id is read from the returned picker's `state.selection` at submit.
-/// "+ New" is never offered; a side panel commits one immediate command, so inline creation there is
-/// the flagged follow-up. A custom hook (loads rows, holds state), so callers get a ready picker.
+/// "+ New" is never offered here; [`use_attach_picker`] is the find-or-create counterpart that wraps
+/// this fn and layers "+ New …" on top (issue #314) for a panel that resolves one link on Save. A
+/// handful of pickers deliberately stay on this existing-only fn instead, because "resolve one link on
+/// Save" does not fit what they do: the **accumulating** pickers that append to a list rather than
+/// resolving a single field (`place.rs`'s succession from/to pickers, `tabs.rs`'s participation-note
+/// picker, `provenance.rs`'s DNA-evidence picker) and `geography.rs`'s map search, which navigates
+/// rather than picking a record at all. A custom hook (loads rows, holds state), so callers get a ready
+/// picker.
 ///
 /// The rows resource subscribes to [`data_version_ticket`], so a record created or edited elsewhere
 /// while the picker stays open shows up in it without a reopen (#266). [`NavState`] is resolved here
@@ -1105,29 +1142,179 @@ pub fn picker_selection_id(picker: &RecordPicker) -> Option<String> {
         .map(|selection| selection.human_id.clone())
 }
 
-/// A side-panel attach/link form body over an existing-only record picker: the picker, optional
-/// `extra` fields (a role select, a call-number input, relationship selects), the provenance block, and
-/// a Save button disabled until a record is picked. The caller's `onsave` reads the picked id from the
-/// picker's state ([`picker_selection_id`]) plus any extra-field signals and dispatches the one `*Edit`
-/// command. A pure fn (the picker + prov signals passed in) so the SSR tests render it without `AppCtx`.
-pub fn attach_picker_form(
+/// The find-or-create half of an attach picker's live state (issue #314): the link itself (unset, an
+/// existing selection, or a "+ New …" draft), the underlying picker's [`PickerState`] (the *same*
+/// signal [`AttachPicker::picker`] holds — writing here and reading through the picker agree, so a
+/// freshly-created record's chip renders correctly whichever way the caller looks at it), the last
+/// create failure (rendered inside the [`NewRecordCard`]), and whether a create is in flight (disables
+/// Save so a double-click cannot double-create).
+#[derive(Clone, Copy)]
+pub struct AttachLink {
+    /// The link: unset, an existing record, or a new one being drafted.
+    pub link: Signal<vitni_ui::RecordLink<NewRecordDraft>>,
+    /// The underlying picker's state — shared with [`AttachPicker::picker`], not a second copy.
+    pub state: Signal<PickerState>,
+    /// The last create attempt's localized failure, if any.
+    pub error: Signal<Option<String>>,
+    /// Whether a create is in flight.
+    pub saving: Signal<bool>,
+}
+
+/// A find-or-create attach picker (issue #314): [`use_attach_picker`]'s return value — the existing-only
+/// [`RecordPicker`] it wraps, and the [`AttachLink`] its "+ New …" row and Save drive.
+pub struct AttachPicker {
+    /// The wrapped picker (search + "+ New …" when the category supports it).
+    pub picker: RecordPicker,
+    /// The find-or-create link state.
+    pub link: AttachLink,
+}
+
+/// Builds a find-or-create attach picker for a side-panel link field: wraps [`use_existing_picker`]
+/// (never forking it, so the rows resource, the [`data_version_ticket`] subscription, and the #266
+/// refresh are all inherited unchanged) and layers the "+ New …" mechanism on top — `allow_new` turns on
+/// exactly when [`NewRecordDraft::supports`] says `category` can seed one, and picking a result, clearing
+/// it, or choosing "+ New …" all drive [`AttachLink::link`] instead of the picker's own (still wired,
+/// still shared) selection state.
+pub fn use_attach_picker(
+    services: Services,
+    category: Category,
+    label: String,
+    name: String,
+    entity_label: String,
+    exclude: Vec<String>,
+) -> AttachPicker {
+    let mut picker = use_existing_picker(services, category, label, name, entity_label, exclude);
+    picker.config.allow_new = NewRecordDraft::supports(category);
+    let mut link = use_signal(vitni_ui::RecordLink::<NewRecordDraft>::default);
+    picker.callbacks.onpick =
+        use_callback(move |selection: PickerSelection| link.set(vitni_ui::RecordLink::Existing(selection)));
+    picker.callbacks.onclear = use_callback(move |()| link.set(vitni_ui::RecordLink::Empty));
+    picker.callbacks.onnew = use_callback(move |query: String| {
+        if let Some(draft) = NewRecordDraft::seed(category, &query) {
+            link.set(vitni_ui::RecordLink::New(draft));
+        }
+    });
+    let state = picker.state;
+    AttachPicker {
+        picker,
+        link: AttachLink {
+            link,
+            state,
+            error: use_signal(|| None::<String>),
+            saving: use_signal(|| false),
+        },
+    }
+}
+
+/// The attach link's field: the existing-record picker while unset/picked, or the nested
+/// [`NewRecordCard`] while drafting a new one — the same picker-vs-card branching
+/// `event_place_create_field`/`person_name_citation_field` use for the framework-free record-editor
+/// cascades, applied to the attach picker's own [`AttachLink`] instead of a `RecordDraft` field.
+pub fn attach_link_field(loc: &Localizer, attach: &AttachPicker) -> Element {
+    let is_new = matches!(&*attach.link.link.read(), vitni_ui::RecordLink::New(_));
+    if is_new {
+        rsx! {
+            NewRecordCard {
+                link: attach.link.link,
+                error: attach.link.error,
+                onclose: attach.picker.callbacks.onclear,
+            }
+        }
+    } else {
+        record_picker(loc, &attach.picker)
+    }
+}
+
+/// The side-panel attach/link form body (`edit-patterns.html` §c) over a find-or-create
+/// [`AttachPicker`] — used by every collection-row link side panel (person/event/family/citation/
+/// media/source/repository/dna attach + link forms, issue #314): [`attach_link_field`], optional
+/// `extra` fields (a role select, a call-number input, relationship selects), the provenance block,
+/// and a Save disabled while a create is in flight or the link is not yet [`link_is_savable`] (an
+/// unset link, or a "+ New …" draft that has not validated).
+pub fn attach_link_form(
     loc: &Localizer,
-    picker: &RecordPicker,
+    attach: &AttachPicker,
     extra: Element,
     prov: Signal<ProvenanceDraft>,
     onsave: Callback<()>,
 ) -> Element {
-    let disabled = picker.state.read().selection.is_none();
+    let disabled = *attach.link.saving.read() || !link_is_savable(&attach.link.link.read());
     rsx! {
-        {record_picker(loc, picker)}
+        {attach_link_field(loc, attach)}
         {extra}
         {provenance_block(loc, prov)}
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             disabled,
             onclick: move |_| onsave.call(()),
         }
+    }
+}
+
+/// Resolves an [`AttachPicker`]'s link on Save, returning the callback a Save button wires to:
+/// [`resolve_attach_save`] decides which of the three things pressing Save means — dispatch the attach
+/// immediately (an existing selection, today's behaviour unchanged), commit a validated "+ New …" draft
+/// first through [`commit_new_record`] with [`ProvenanceDraft::for_support_record`] (one operator "why"
+/// covers create-then-attach — `record-editing.html` §5b), or nothing (the link is still `Empty` — Save
+/// should have stayed disabled). [`finish_attach_create`] decides what a create's result means.
+#[must_use]
+pub fn use_attach_save(
+    services: Services,
+    attach: &AttachPicker,
+    prov: Signal<ProvenanceDraft>,
+    onattach: Callback<String>,
+) -> Callback<()> {
+    let attach_link = attach.link;
+    let nav = try_consume_context::<NavState>();
+    use_callback(move |()| match resolve_attach_save(&attach_link.link.read()) {
+        AttachSaveAction::Attach(human_id) => onattach.call(human_id),
+        AttachSaveAction::Create { request, summary } => {
+            let services = services.clone();
+            let create_prov = prov.read().for_support_record();
+            let mut attach_link = attach_link;
+            attach_link.error.set(None);
+            attach_link.saving.set(true);
+            spawn(async move {
+                let created = commit_new_record(services, *request, create_prov).await;
+                finish_attach_create(created, summary, attach_link, nav, onattach);
+            });
+        }
+        AttachSaveAction::Blocked => {}
+    })
+}
+
+/// Decides what a `+ New …` draft's create attempt means for the panel, split out of
+/// [`use_attach_save`] so it is host-free testable (mirrors [`finish_draft_commit`]'s split from its own
+/// screen). On success: **flips `link.link` to [`vitni_ui::RecordLink::Existing`]** naming the new
+/// record — the single most important line here, since it turns the card into a `.picker-value` chip,
+/// so pressing Save again (after the *attach* half fails) retries only the attach and cannot re-create
+/// the record; marks the workspace changed ([`NavState::mark_changed`], #207/#266); and calls `onattach`
+/// with the new id. On failure: leaves `link.link` (and every typed character in the card) untouched,
+/// and records the localized error for [`NewRecordCard`] to render in place — `onattach` never fires,
+/// and nothing is marked changed, because nothing was written.
+pub fn finish_attach_create(
+    created: Result<String, String>,
+    summary: Option<String>,
+    mut link: AttachLink,
+    nav: Option<NavState>,
+    onattach: Callback<String>,
+) {
+    link.saving.set(false);
+    match created {
+        Ok(human_id) => {
+            let selection = PickerSelection {
+                human_id: human_id.clone(),
+                title: summary.unwrap_or_else(|| human_id.clone()),
+            };
+            link.link.set(vitni_ui::RecordLink::Existing(selection.clone()));
+            link.state.write().selection = Some(selection);
+            if let Some(mut nav) = nav {
+                nav.mark_changed();
+            }
+            onattach.call(human_id);
+        }
+        Err(message) => link.error.set(Some(message)),
     }
 }
 

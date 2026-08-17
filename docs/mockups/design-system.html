@@ -211,6 +211,10 @@
     label's own centre would scroll the strip instead of switching the tab. The record tabstrip's
     <span class="mono">.tabs-scroll</span> follows the same rule, with its
     <kbd>‹</kbd>&#8202;<kbd>›</kbd> buttons as the affordance.</p>
+  <div class="specimen">
+    <div class="label">Collection tab action bar (<span class="mono">.tab-actions</span>) — one bar, one button, its verb from a closed set</div>
+    <div class="tab-actions"><button class="btn sm primary">+ Attach citation</button></div>
+  </div>
 
   <h2>History timeline &amp; provenance</h2>
   <div class="specimen grid-2">
@@ -316,11 +320,14 @@
   </div>
 
   <h2>Record picker &amp; nested draft</h2>
-  <p class="muted">A record link is a find-or-create <b>picker</b>: an in-flow result list (never a
-    floater — the <span class="mono">.detail</span> scroll container clips those) over reused
-    <span class="mono">.row</span> markup, a trailing <span class="mono">.picker-new</span> row, and a
-    collapsed <span class="mono">.picker-value</span> once a record is picked. “+ New …” opens a
-    <span class="mono">.draft-card</span> nested in the root draft; surfaces alternate as cards nest.</p>
+  <p class="muted">A record link is a find-or-create <b>picker</b> wherever it appears — a create form, the
+    provenance block, an attach side panel — over reused <span class="mono">.row</span> markup, a trailing
+    <span class="mono">.picker-new</span> row, and a collapsed <span class="mono">.picker-value</span> once
+    a record is picked. The result list is <span class="mono">position: fixed</span>, measured off the
+    input's own on-screen box (<span class="mono">components.css</span> <span class="mono">.picker-results</span>),
+    so it floats free of whatever scroll container the field sits in rather than being clipped by it.
+    “+ New …” opens a <span class="mono">.draft-card</span> nested in its container; surfaces alternate as
+    cards nest.</p>
   <div class="specimen wrap" style="align-items:flex-start">
     <div class="field" style="width:280px">
       <label>Partner</label>

@@ -1,7 +1,7 @@
 use super::{
-    AttachedRefVm, CitationRefVm, DateDraft, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest, MediaEdit,
-    RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, line_label, media_asset_src, media_is_image,
-    non_blank,
+    ActionLabel, AttachedRefVm, CitationRefVm, DateDraft, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest,
+    MediaEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, line_label, media_asset_src,
+    media_is_image, non_blank,
 };
 
 /// A record that references a media object or note (Media "Used by" / Note "References"): its kind
@@ -188,18 +188,27 @@ pub fn media_row(summary: &vitni_app::MediaSummary, loc: &Localizer) -> RowVm {
 /// The tab strip for a media object's detail: an overview, then the related-item tabs with counts.
 #[must_use]
 pub fn media_tabs(detail: &MediaDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("overview", None),
-        tab("attributes", Some(detail.attributes.len())),
-        tab("citations", Some(detail.citations.len())),
-        tab("notes", Some(detail.notes.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("history", None),
+        tab("overview", None, None),
+        tab(
+            "attributes",
+            Some(detail.attributes.len()),
+            Some(ActionLabel::AddAttribute),
+        ),
+        tab(
+            "citations",
+            Some(detail.citations.len()),
+            Some(ActionLabel::AttachCitation),
+        ),
+        tab("notes", Some(detail.notes.len()), Some(ActionLabel::AttachNote)),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("history", None, None),
     ]
 }
 

@@ -15,9 +15,9 @@ pub fn TagCreateRecord(draft_id: DraftId) -> Element {
     let services = state.services().clone();
     let title = loc.tag_new_title();
     let draft_badge = loc.record_draft_badge();
-    let save_label = loc.action_label("save");
-    let cancel_label = loc.action_label("cancel");
-    let created_label = loc.action_label("created");
+    let save_label = loc.action_button(ActionLabel::Save);
+    let cancel_label = loc.action_button(ActionLabel::Cancel);
+    let created_label = loc.action_label(ActionLabel::Created);
     let edit = use_record_create::<TagDraft>(Category::Tags, draft_id);
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
@@ -84,7 +84,7 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
     let mut reload = use_signal(|| 0_u32);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = id.clone();
     let services_for_resource = services.clone();
@@ -290,8 +290,8 @@ fn tag_record_fields(
             title: loc.color_picker_title(),
             presets_label: loc.color_picker_presets(),
             hex_label: loc.color_picker_hex(),
-            confirm_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
+            confirm_label: loc.action_button(ActionLabel::Save),
+            cancel_label: loc.action_button(ActionLabel::Cancel),
             onselect: move |hex: String| {
                 draft.write().color = hex;
                 picker_open.set(false);

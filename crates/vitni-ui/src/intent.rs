@@ -75,9 +75,9 @@ use crate::navigation::{
     Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DnaMatchChangeSetRequest, DnaMatchEdit,
     DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventChangeSetRequest, EventEdit,
     EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent, MediaChangeSetRequest, MediaEdit, MergePersons,
-    NoteChangeSetRequest, NoteEdit, PartnerRequest, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest,
-    PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest, ResearchNoteEdit,
-    SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest,
+    NewRecordRequest, NoteChangeSetRequest, NoteEdit, PartnerRequest, PersonChangeSetRequest, PersonEdit,
+    PlaceChangeSetRequest, PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest,
+    ResearchNoteEdit, SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail,
@@ -2381,6 +2381,37 @@ pub async fn dispatch_place_change_set(
         },
     )
     .await
+}
+
+/// Dispatches a [`NewRecordRequest`] — the validated half of an attach picker's "+ New …" draft
+/// (issue #314) — to whichever of the eight `dispatch_*_change_set` fns matches, returning the new
+/// record's `human_id`. Deliberately not a new `vitni-app` use-case: the change-set placeholder route
+/// (`new_sources`/`new_citations`, `commit_pending_sources_and_citations`) buys no atomicity of its
+/// own — every `commit_*_change_set` that takes a follow-up date assert is already "sequenced,
+/// non-atomic (accepted)" (see `dispatch_media_change_set` above) — so funnelling through the eight
+/// existing dispatch fns costs nothing a dedicated app-layer entry point would have bought.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from whichever `dispatch_*_change_set` fn the request maps to.
+pub async fn dispatch_new_record(
+    workspace: &Workspace,
+    session: &Session,
+    request: &NewRecordRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    match request {
+        NewRecordRequest::Person(request) => dispatch_person_change_set(workspace, session, request, prov).await,
+        NewRecordRequest::Place(request) => dispatch_place_change_set(workspace, session, request, prov).await,
+        NewRecordRequest::Source(request) => dispatch_source_change_set(workspace, session, request, prov).await,
+        NewRecordRequest::Citation(request) => dispatch_citation_change_set(workspace, session, request, prov).await,
+        NewRecordRequest::Note(request) => dispatch_note_change_set(workspace, session, request, prov).await,
+        NewRecordRequest::Media(request) => dispatch_media_change_set(workspace, session, request, prov).await,
+        NewRecordRequest::Event(request) => dispatch_event_change_set(workspace, session, request, prov).await,
+        NewRecordRequest::Repository(request) => {
+            dispatch_repository_change_set(workspace, session, request, prov).await
+        }
+    }
 }
 
 /// Dispatches a [`DnaTestEdit`] to its `vitni-app` command use-case, mutating the workspace.

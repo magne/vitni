@@ -26,7 +26,7 @@ pub fn PlaceCreateRecord(draft_id: DraftId) -> Element {
     let services = state.services().clone();
     let record = use_record_create::<vitni_ui::PlaceDraft>(Category::Places, draft_id);
     let mut draft = record.draft;
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::PlaceDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
@@ -52,9 +52,9 @@ pub fn PlaceCreateRecord(draft_id: DraftId) -> Element {
     use_save_on_request(EditKey::draft(Category::Places, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -297,7 +297,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
     let editing = use_signal(|| None::<PlaceEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -613,7 +613,7 @@ fn place_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
@@ -624,7 +624,7 @@ fn place_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {place_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, on_map_saved, media_state)}
+            {place_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, on_map_saved, media_state)}
         }
         {place_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -672,8 +672,8 @@ fn place_restriction_toggles(
 fn place_tab_content(
     state: &AppState,
     detail: &PlaceDetail,
-    tab_id: &str,
-    mut editing: Signal<Option<PlaceEditForm>>,
+    tab: &DetailTab,
+    editing: Signal<Option<PlaceEditForm>>,
     record: RecordEditState<vitni_ui::PlaceDraft>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<PlaceEditForm>,
@@ -683,53 +683,69 @@ fn place_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "map" => place_map(detail, on_map_saved, on_retract),
-        "names" => rsx! {
-            div { class: "section-note", "{loc.place_names_note()}" }
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-name"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Name(None))) }
-            }
-            {place_names_table(loc, detail, on_edit_open, on_retract)}
-        },
-        "hierarchy" => rsx! {
-            div { class: "section-note", "{loc.place_hierarchy_note()}" }
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-enclosing"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Enclosing(None))) }
-            }
-            {place_hierarchy_table(loc, detail, on_edit_open, on_retract)}
-            {place_succession_card(loc, detail, on_edit_open, on_retract)}
-        },
-        "citations" => tab_with_add(
+        "names" => tab_frame(
             loc,
-            "attach-citation",
-            editing,
-            PlaceEditForm::Citation,
+            tab,
+            TabActionTarget::Form(editing, PlaceEditForm::Name(None)),
+            None,
+            rsx! {
+                div { class: "section-note", "{loc.place_names_note()}" }
+                {place_names_table(loc, detail, on_edit_open, on_retract)}
+            },
+        ),
+        "hierarchy" => tab_frame(
+            loc,
+            tab,
+            TabActionTarget::Form(editing, PlaceEditForm::Enclosing(None)),
+            None,
+            rsx! {
+                div { class: "section-note", "{loc.place_hierarchy_note()}" }
+                {place_hierarchy_table(loc, detail, on_edit_open, on_retract)}
+                {place_succession_card(loc, detail, on_edit_open, on_retract)}
+            },
+        ),
+        "citations" => tab_frame(
+            loc,
+            tab,
+            TabActionTarget::Form(editing, PlaceEditForm::Citation),
+            None,
             rsx! {
                 {citations_table::<PlaceEditForm>(loc, &detail.citations, false, on_retract)}
             },
         ),
-        "media" => tab_with_add(
+        "media" => tab_frame(
             loc,
-            "attach-media",
-            editing,
-            PlaceEditForm::Media,
+            tab,
+            TabActionTarget::Form(editing, PlaceEditForm::Media),
+            None,
             rsx! {
                 {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            "attach-note",
-            editing,
-            PlaceEditForm::Note,
+            tab,
+            TabActionTarget::Form(editing, PlaceEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, PlaceEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            tab,
+            TabActionTarget::Form(editing, PlaceEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "research-notes" => rsx! {
             ResearchNotesTab {
+                tab: tab.clone(),
                 category: Category::Places,
                 human_id: detail.human_id.clone(),
                 rows: detail.research_notes.clone(),
@@ -952,7 +968,7 @@ fn PlaceMapEditor(
                             on_saved.call(());
                         },
                     }
-                    Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| pending.set(None) }
+                    Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| pending.set(None) }
                 }
             }
         }
@@ -1057,7 +1073,7 @@ pub fn place_geometry_table(
                             loc,
                             &geometry.kind_label,
                             Some((geometry.clone(), Some("edit-geometry"))), None,
-                            Some(RowRetract { assertion_id: geometry.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                            Some(RowRetract { assertion_id: geometry.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                             Some(on_edit),
                             on_retract)}
                     }
@@ -1110,7 +1126,7 @@ pub fn place_names_table(
                         loc,
                         &name.text,
                         Some((PlaceEditForm::Name(Some(name.clone())), None)), None,
-                        Some(RowRetract { assertion_id: name.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(RowRetract { assertion_id: name.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                         Some(onedit),
                         onretract)}
                 }
@@ -1164,7 +1180,7 @@ pub fn place_hierarchy_table(
                         loc,
                         &enclosing.name,
                         Some((PlaceEditForm::Enclosing(Some(enclosing.clone())), None)), None,
-                        Some(RowRetract { assertion_id: enclosing.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(RowRetract { assertion_id: enclosing.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                         Some(onedit),
                         onretract)}
                 }
@@ -1184,30 +1200,38 @@ pub fn place_succession_card(
     on_retract: Callback<(String, String, bool)>,
 ) -> Element {
     let empty = detail.predecessors.is_empty() && detail.successors.is_empty();
+    let body = rsx! {
+        div { class: "faint", style: "font-size:var(--fs-xs);margin-bottom:6px", "{loc.place_succession_note()}" }
+        if empty {
+            EmptyState { message: loc.tab_empty() }
+        } else {
+            div { class: "stack",
+                for rel in detail.predecessors.iter() {
+                    {succession_row(loc, &detail.title, rel, true, on_retract)}
+                }
+                for rel in detail.successors.iter() {
+                    {succession_row(loc, &detail.title, rel, false, on_retract)}
+                }
+            }
+        }
+    };
+    // Not one of `place_tabs()`'s top-level tabs — a card nested in the Hierarchy tab's own body —
+    // but still declares its action through the same `DetailTab`-shaped vocabulary `tab_frame` reads.
+    let succession_tab = DetailTab {
+        id: "succession",
+        label: loc.place_succession_title(),
+        count: None,
+        action: Some(ActionLabel::AddSuccession),
+    };
     rsx! {
         Card { title: loc.place_succession_title(),
-            div { class: "tab-actions",
-                Button {
-                    label: loc.place_succession_add(),
-                    variant: ButtonVariant::Primary,
-                    small: true,
-                    title: loc.place_succession_add_title(),
-                    onclick: move |_| onedit.call(PlaceEditForm::Succession),
-                }
-            }
-            div { class: "faint", style: "font-size:var(--fs-xs);margin-bottom:6px", "{loc.place_succession_note()}" }
-            if empty {
-                EmptyState { message: loc.tab_empty() }
-            } else {
-                div { class: "stack",
-                    for rel in detail.predecessors.iter() {
-                        {succession_row(loc, &detail.title, rel, true, on_retract)}
-                    }
-                    for rel in detail.successors.iter() {
-                        {succession_row(loc, &detail.title, rel, false, on_retract)}
-                    }
-                }
-            }
+            {tab_frame::<PlaceEditForm>(
+                loc,
+                &succession_tab,
+                TabActionTarget::Run(Callback::new(move |()| onedit.call(PlaceEditForm::Succession))),
+                Some(TabActionStyle { title: Some(loc.place_succession_add_title()), ..Default::default() }),
+                body,
+            )}
         }
     }
 }
@@ -1244,7 +1268,7 @@ fn succession_row(
                 span { class: "muted", "{date}" }
             }
             Button {
-                label: loc.action_label("retract"),
+                label: loc.action_button(ActionLabel::Retract),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title: loc.action_title("retract"),
@@ -1267,22 +1291,22 @@ fn place_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        PlaceEditForm::Name(None) => loc.action_label("add-name"),
+        PlaceEditForm::Name(None) => loc.action_label(ActionLabel::AddName),
         PlaceEditForm::Name(Some(_)) => loc.panel_title("edit-name"),
-        PlaceEditForm::Enclosing(None) => loc.action_label("add-enclosing"),
+        PlaceEditForm::Enclosing(None) => loc.action_label(ActionLabel::AddEnclosing),
         PlaceEditForm::Enclosing(Some(_)) => loc.panel_title("edit-enclosing"),
-        PlaceEditForm::Succession => loc.place_succession_add(),
-        PlaceEditForm::Citation => loc.action_label("attach-citation"),
-        PlaceEditForm::Media => loc.action_label("attach-media"),
-        PlaceEditForm::Note => loc.action_label("attach-note"),
-        PlaceEditForm::Tag => loc.action_label("add-tag"),
+        PlaceEditForm::Succession => loc.action_label(ActionLabel::AddSuccession),
+        PlaceEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
+        PlaceEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+        PlaceEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+        PlaceEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     rsx! {
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -1317,7 +1341,7 @@ fn PlaceNameForm(
         supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Input {
             label: loc.field_label("name"),
@@ -1355,10 +1379,10 @@ fn PlaceEnclosingForm(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    // Edit mode fixes the enclosing place (only the provenance changes); add mode offers a picker.
+    // Edit mode fixes the enclosing place (only the provenance changes); add mode offers a find-or-create picker.
     let fixed = seed.as_ref().map(|row| (row.human_id.clone(), row.name.clone()));
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::Places,
         loc.field_label("place"),
         "enclosing".to_owned(),
@@ -1369,12 +1393,7 @@ fn PlaceEnclosingForm(
         supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    let picker_for_save = picker.clone();
-    let fixed_for_save = fixed.as_ref().map(|(id, _)| id.clone());
-    let onsave = use_callback(move |()| {
-        let Some(enclosing_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
-            return;
-        };
+    let onattach = use_callback(move |enclosing_id: String| {
         onsubmit.call((
             PlaceEdit::AddEnclosing {
                 human_id: human_id.clone(),
@@ -1382,6 +1401,12 @@ fn PlaceEnclosingForm(
             },
             prov(),
         ));
+    });
+    let attach_onsave = use_attach_save(services, &attach, prov, onattach);
+    let fixed_for_save = fixed.as_ref().map(|(id, _)| id.clone());
+    let onsave = use_callback(move |()| match &fixed_for_save {
+        Some(id) => onattach.call(id.clone()),
+        None => attach_onsave.call(()),
     });
     if let Some((id, name)) = &fixed {
         rsx! {
@@ -1391,13 +1416,13 @@ fn PlaceEnclosingForm(
             }
             {provenance_block(loc, prov)}
             Button {
-                label: loc.action_label("save"),
+                label: loc.action_button(ActionLabel::Save),
                 variant: ButtonVariant::Primary,
                 onclick: move |_| onsave.call(()),
             }
         }
     } else {
-        attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+        attach_link_form(loc, &attach, rsx! {}, prov, onsave)
     }
 }
 
@@ -1468,10 +1493,10 @@ pub fn place_succession_form_fields(
 fn succession_place_field(loc: &Localizer, picker: &RecordPicker, mut picked: Signal<Vec<PickerSelection>>) -> Element {
     let mut picker_state = picker.state;
     let nothing_picked = picker.state.read().selection.is_none();
-    let dismiss = loc.action_label("dismiss");
+    let dismiss = loc.action_label(ActionLabel::Dismiss);
     rsx! {
         {record_picker(loc, picker)}
-        div { class: "tab-actions",
+        div { class: "row-actions",
             Button {
                 label: loc.place_succession_add_picked(),
                 variant: ButtonVariant::Default,
@@ -1563,7 +1588,7 @@ fn PlaceSuccessionForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, Prov
         {place_succession_form_fields(loc, &to_picker, &from_picker, form)}
         {provenance_block(loc, prov)}
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             onclick: move |_| onsave.call(()),
         }
@@ -1606,8 +1631,8 @@ fn PlaceLinkForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
         "note" => (loc.field_label("note"), Category::Notes),
         _ => (loc.field_label("media"), Category::Media),
     };
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         category,
         label,
         field.clone(),
@@ -1615,11 +1640,7 @@ fn PlaceLinkForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         let edit = match field.as_str() {
             "citation" => PlaceEdit::AttachCitation {
                 human_id: human_id.clone(),
@@ -1636,7 +1657,8 @@ fn PlaceLinkForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
         };
         onsubmit.call((edit, prov()));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The place "Add tag" form: a picker of existing tags by name → [`PlaceEdit::Tag`].
@@ -1647,7 +1669,7 @@ fn PlaceTagForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceD
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();
@@ -1697,19 +1719,10 @@ fn PlaceTagForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceD
     }
 }
 
-/// The place types offered by the type picker.
+/// The place types offered by the type picker — [`vitni_ui::NEW_PLACE_TYPES`], the list the
+/// find-or-create attach card's Place body offers too, so the two never disagree.
 fn place_type_choices() -> [PlaceType; 9] {
-    [
-        PlaceType::Country,
-        PlaceType::County,
-        PlaceType::Municipality,
-        PlaceType::Parish,
-        PlaceType::City,
-        PlaceType::Town,
-        PlaceType::Village,
-        PlaceType::Farm,
-        PlaceType::Building,
-    ]
+    vitni_ui::NEW_PLACE_TYPES
 }
 
 #[cfg(test)]

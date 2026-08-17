@@ -1,6 +1,6 @@
 use super::{
-    AttachedRefVm, DetailTab, DnaTestChangeSetRequest, DnaTestEdit, HistoryEntryVm, Localizer, RecordDraft,
-    RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref, non_blank,
+    ActionLabel, AttachedRefVm, DetailTab, DnaTestChangeSetRequest, DnaTestEdit, HistoryEntryVm, Localizer,
+    RecordDraft, RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref, non_blank,
 };
 
 /// An asserted haplogroup — one row on the DNA test › Haplogroups tab, carrying the `AssertionId`
@@ -164,18 +164,25 @@ pub fn dna_test_row(summary: &vitni_app::DnaTestSummary, loc: &Localizer) -> Row
 /// The tab strip for a DNA test's detail: overview, then haplogroups/matches/notes/tags with counts.
 #[must_use]
 pub fn dna_test_tabs(detail: &DnaTestDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("overview", None),
-        tab("haplogroups", Some(detail.haplogroups.len())),
-        tab("matches", Some(detail.matches.len())),
-        tab("notes", Some(detail.notes.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("history", None),
+        tab("overview", None, None),
+        tab(
+            "haplogroups",
+            Some(detail.haplogroups.len()),
+            Some(ActionLabel::AddHaplogroup),
+        ),
+        // Read-only: the matches this kit produced, joined from the DnaMatch aggregate — created
+        // from the Compare tool, not this tab.
+        tab("matches", Some(detail.matches.len()), None),
+        tab("notes", Some(detail.notes.len()), Some(ActionLabel::AttachNote)),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("history", None, None),
     ]
 }
 

@@ -2275,6 +2275,33 @@ pub struct EventChangeSetRequest {
     pub date: Option<DateInput>,
 }
 
+/// The buffered result of a [`NewRecordDraft`](crate::view_model::NewRecordDraft) that validated
+/// (its `to_request()`), dispatched by [`dispatch_new_record`](crate::intent::dispatch_new_record) to
+/// whichever of the eight `dispatch_*_change_set` fns matches — the find-or-create attach mechanism's
+/// "create" half (issue #314): a record-detail side panel's picker offers "+ New …", which seeds one of
+/// these from the typed query, and Save commits it before attaching. One enum rather than a generic
+/// over the create request, because a third of the picker call sites resolve their category from a
+/// runtime `field: String`/`Category` value, not a compile-time type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NewRecordRequest {
+    /// A new person (`Category::People`).
+    Person(PersonChangeSetRequest),
+    /// A new place (`Category::Places`).
+    Place(PlaceChangeSetRequest),
+    /// A new source (`Category::Sources`).
+    Source(SourceChangeSetRequest),
+    /// A new citation (`Category::Citations`).
+    Citation(CitationChangeSetRequest),
+    /// A new note (`Category::Notes`).
+    Note(NoteChangeSetRequest),
+    /// A new media object (`Category::Media`).
+    Media(MediaChangeSetRequest),
+    /// A new event (`Category::Events`).
+    Event(EventChangeSetRequest),
+    /// A new repository (`Category::Repositories`).
+    Repository(RepositoryChangeSetRequest),
+}
+
 /// The buffered result of the deferred DNA-test create form, dispatched to
 /// [`commit_dna_test_change_set`](vitni_app::commit_dna_test_change_set) via
 /// [`dispatch_dna_test_change_set`](crate::intent::dispatch_dna_test_change_set) on Save. Create-only.

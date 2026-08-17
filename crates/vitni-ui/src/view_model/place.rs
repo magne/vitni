@@ -1,7 +1,7 @@
 use super::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EventPinVm, HistoryEntryVm, Localizer, MarkerShapeVm,
-    MediaRefVm, PlaceChangeSetRequest, PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref,
-    event_pin_vm, line_label, marker_shape, non_blank, year_of,
+    ActionLabel, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EventPinVm, HistoryEntryVm, Localizer,
+    MarkerShapeVm, MediaRefVm, PlaceChangeSetRequest, PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef,
+    citation_ref_from_ref, event_pin_vm, line_label, marker_shape, non_blank, year_of,
 };
 
 /// The succession kinds the Succession panel's Kind select offers, in display order — the closed
@@ -13,6 +13,21 @@ pub const SUCCESSION_KINDS: [vitni_app::SuccessionKind; 5] = [
     vitni_app::SuccessionKind::Absorbed,
     vitni_app::SuccessionKind::Elevated,
     vitni_app::SuccessionKind::Renamed,
+];
+
+/// The place types offered by every "new place" type picker (a common subset; the model has more) —
+/// the single list, so a place created from the Places category and a place created inline (an event's
+/// "+ New place" cascade) always offer the same choices.
+pub const NEW_PLACE_TYPES: [vitni_app::PlaceType; 9] = [
+    vitni_app::PlaceType::Country,
+    vitni_app::PlaceType::County,
+    vitni_app::PlaceType::Municipality,
+    vitni_app::PlaceType::Parish,
+    vitni_app::PlaceType::City,
+    vitni_app::PlaceType::Town,
+    vitni_app::PlaceType::Village,
+    vitni_app::PlaceType::Farm,
+    vitni_app::PlaceType::Building,
 ];
 
 /// One asserted place name (Names tab): text, language, date, surety, and source count.
@@ -428,22 +443,35 @@ fn place_avatar(place_type: Option<&vitni_app::PlaceType>) -> String {
 /// The tab strip for a place's detail: an overview, then the related-item tabs with counts.
 #[must_use]
 pub fn place_tabs(detail: &PlaceDetail, loc: &Localizer) -> Vec<DetailTab> {
-    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+    let tab = |id: &'static str, count: Option<usize>, action: Option<ActionLabel>| DetailTab {
         id,
         label: loc.tab_label(id),
         count,
+        action,
     };
     vec![
-        tab("overview", None),
-        tab("map", None),
-        tab("names", Some(detail.names.len())),
-        tab("hierarchy", Some(detail.hierarchy.len())),
-        tab("citations", Some(detail.citations.len())),
-        tab("media", Some(detail.media.len())),
-        tab("notes", Some(detail.notes.len())),
-        tab("research-notes", Some(detail.research_notes.len())),
-        tab("tags", Some(detail.tags.len())),
-        tab("history", None),
+        tab("overview", None, None),
+        tab("map", None, None),
+        tab("names", Some(detail.names.len()), Some(ActionLabel::AddName)),
+        tab(
+            "hierarchy",
+            Some(detail.hierarchy.len()),
+            Some(ActionLabel::AddEnclosing),
+        ),
+        tab(
+            "citations",
+            Some(detail.citations.len()),
+            Some(ActionLabel::AttachCitation),
+        ),
+        tab("media", Some(detail.media.len()), Some(ActionLabel::AttachMedia)),
+        tab("notes", Some(detail.notes.len()), Some(ActionLabel::AttachNote)),
+        tab(
+            "research-notes",
+            Some(detail.research_notes.len()),
+            Some(ActionLabel::NewResearchNote),
+        ),
+        tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
+        tab("history", None, None),
     ]
 }
 

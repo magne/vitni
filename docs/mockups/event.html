@@ -217,7 +217,7 @@
 
         <!-- ADDRESSES -->
         <div class="tab-pane" data-pane="addresses">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add address</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Add address</button></div>
           <div class="grid-2">
             <div class="card">
               <h3>Brooklyn <span class="row-actions" style="float:right"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this address — it stays in History">Retract</button></span></h3>
@@ -241,7 +241,7 @@
 
         <!-- PARTICIPANTS -->
         <div class="tab-pane" data-pane="participants">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add participant</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Add participant</button></div>
           <table class="tbl">
             <caption class="sr-only">Participants</caption>
             <thead><tr><th>Person</th><th>Role</th><th>Age</th><th>Confidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
@@ -280,7 +280,7 @@
               </div>
               <div class="fact-row">
                 <span class="field-label" style="width:80px;margin:0">Notes</span>
-                <span class="picker-value grow" style="flex:1;min-width:120px"><button class="btn sm ghost">Add note…</button></span>
+                <input class="filter grow" style="flex:1;min-width:120px" placeholder="Find note…">
               </div>
             </div>
             <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
@@ -303,7 +303,7 @@
 
         <!-- CITATIONS -->
         <div class="tab-pane" data-pane="citations">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Attach citation</button></div>
           <table class="tbl">
             <caption class="sr-only">Citations</caption>
             <thead><tr><th>Source</th><th>Page</th><th>Confidence</th><th>Evidence</th><th><span class="sr-only">Actions</span></th></tr></thead>
@@ -316,7 +316,7 @@
 
         <!-- MEDIA -->
         <div class="tab-pane" data-pane="media">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Attach media</button></div>
           <div class="muted" style="font-size:var(--fs-xs);margin-bottom:8px">Each card opens the shared crop viewer (<a href="media.html">Set/Clear region</a>, ADR 0017 §GUI).</div>
           <div class="grid-3">
             <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">Marriage register page</div><div class="row-actions" style="justify-content:center;margin-top:8px"><button class="btn sm ghost" aria-label="Open Marriage register page" title="Open the crop viewer">Open</button><button class="btn sm ghost" aria-label="Detach media: Marriage register page" title="Detach this media — recorded in History">Detach</button></div></div>
@@ -325,12 +325,12 @@
 
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ Attach note</button></div>
           <div class="card"><h3>Transcription · en</h3><p>"John Smith, carpenter, of this parish, and Mary Doe, spinster, married this 14th day of June 1876."</p><div class="row-actions" style="margin-top:8px"><button class="btn sm ghost" aria-label="Edit note: Transcription">Edit</button><button class="btn sm ghost" aria-label="Retract note: Transcription" title="Retract this note — recorded in History">Retract</button></div></div>
         </div>
         <!-- RESEARCH NOTES (reverse index: arguments written about this record) -->
         <div class="tab-pane" data-pane="research-notes">
-          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ New research note</button></div>
+          <div class="tab-actions"><button class="btn sm primary">+ New research note</button></div>
           <div class="section-note">Proof arguments written about this record. A research note is a conclusion in
             prose — the reasoning that turns evidence into a conclusion — and this is the reverse index the
             event-sourced core keeps for free (<a href="research-note.html">research notes</a>).</div>
@@ -345,7 +345,8 @@
 
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
-          <div class="wrap"><span class="chip"><span class="dot" style="background:#b07cf0"></span>Verified event <button class="btn sm ghost" aria-label="Remove tag Verified event" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="tab-actions"><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#b07cf0"></span>Verified event <button class="btn sm ghost" aria-label="Remove tag Verified event" title="Untag — recorded in History" style="padding:0 4px">×</button></span></div>
         </div>
 
         <!-- HISTORY (audit trail — free from the event log) -->

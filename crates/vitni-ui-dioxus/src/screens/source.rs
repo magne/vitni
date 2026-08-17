@@ -16,7 +16,7 @@ pub fn SourceCreateRecord(draft_id: DraftId) -> Element {
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<vitni_ui::SourceDraft>(Category::Sources, draft_id);
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::SourceDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let services = services.clone();
@@ -40,9 +40,9 @@ pub fn SourceCreateRecord(draft_id: DraftId) -> Element {
     use_save_on_request(EditKey::draft(Category::Sources, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -151,7 +151,7 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
     let editing = use_signal(|| None::<SourceEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -451,7 +451,7 @@ fn source_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
@@ -462,7 +462,7 @@ fn source_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {source_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+            {source_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
         }
         {source_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -510,7 +510,7 @@ fn source_restriction_toggles(
 fn source_tab_content(
     state: &AppState,
     detail: &SourceDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<SourceEditForm>>,
     record: RecordEditState<vitni_ui::SourceDraft>,
     on_retract: Callback<(String, String, bool)>,
@@ -520,12 +520,12 @@ fn source_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
-        "repositories" => tab_with_add(
+    match tab.id {
+        "repositories" => tab_frame(
             loc,
-            "link-repository",
-            editing,
-            SourceEditForm::Repository(None),
+            tab,
+            TabActionTarget::Form(editing, SourceEditForm::Repository(None)),
+            None,
             rsx! {
                 {source_repositories_table(loc, detail, on_edit_open, on_retract)}
             },
@@ -534,34 +534,43 @@ fn source_tab_content(
             div { class: "section-note", "{loc.source_citations_note()}" }
             {source_citations_table(loc, &detail.citations)}
         },
-        "attributes" => tab_with_add(
+        "attributes" => tab_frame(
             loc,
-            "add-attribute",
-            editing,
-            SourceEditForm::Attribute(None),
+            tab,
+            TabActionTarget::Form(editing, SourceEditForm::Attribute(None)),
+            None,
             rsx! {
                 {source_attributes_table(loc, detail, on_edit_open, on_retract)}
             },
         ),
-        "media" => tab_with_add(
+        "media" => tab_frame(
             loc,
-            "attach-media",
-            editing,
-            SourceEditForm::Media,
+            tab,
+            TabActionTarget::Form(editing, SourceEditForm::Media),
+            None,
             rsx! {
                 {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            "attach-note",
-            editing,
-            SourceEditForm::Note,
+            tab,
+            TabActionTarget::Form(editing, SourceEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, SourceEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            tab,
+            TabActionTarget::Form(editing, SourceEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => source_overview(loc, detail, record),
     }
@@ -651,7 +660,7 @@ pub fn source_repositories_table(
                         loc,
                         &link.name,
                         Some((SourceEditForm::Repository(Some(link.clone())), None)), None,
-                        Some(RowRetract { assertion_id: link.assertion_id.clone(), button_label: "unlink", title: "unlink-repository", detach: false }),
+                        Some(RowRetract { assertion_id: link.assertion_id.clone(), button_label: RowVerb::Unlink, title: "unlink-repository", detach: false }),
                         Some(onedit),
                         onretract)}
                 }
@@ -750,7 +759,7 @@ pub fn source_attributes_table(
                         loc,
                         &attribute.attribute_type,
                         Some((SourceEditForm::Attribute(Some(attribute.clone())), None)), None,
-                        Some(RowRetract { assertion_id: attribute.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(RowRetract { assertion_id: attribute.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                         Some(onedit),
                         onretract)}
                 }
@@ -771,20 +780,20 @@ fn source_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        SourceEditForm::Repository(None) => loc.action_label("link-repository"),
+        SourceEditForm::Repository(None) => loc.action_label(ActionLabel::LinkRepository),
         SourceEditForm::Repository(Some(_)) => loc.panel_title("edit-repository"),
-        SourceEditForm::Attribute(None) => loc.action_label("add-attribute"),
+        SourceEditForm::Attribute(None) => loc.action_label(ActionLabel::AddAttribute),
         SourceEditForm::Attribute(Some(_)) => loc.panel_title("edit-attribute"),
-        SourceEditForm::Media => loc.action_label("attach-media"),
-        SourceEditForm::Note => loc.action_label("attach-note"),
-        SourceEditForm::Tag => loc.action_label("add-tag"),
+        SourceEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+        SourceEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+        SourceEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     rsx! {
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -831,8 +840,8 @@ fn SourceLinkRepositoryForm(
         .as_ref()
         .and_then(|row| source_media_type_choices().iter().position(|m| *m == row.media_type))
         .unwrap_or(0);
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::Repositories,
         loc.tab_label("repositories"),
         "repository".to_owned(),
@@ -864,12 +873,7 @@ fn SourceLinkRepositoryForm(
             onchange: move |event: FormEvent| media.set(event.value().parse::<usize>().unwrap_or(0)),
         }
     };
-    let picker_for_save = picker.clone();
-    let fixed_for_save = fixed.as_ref().map(|(id, _)| id.clone());
-    let onsave = use_callback(move |()| {
-        let Some(repository_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
-            return;
-        };
+    let onattach = use_callback(move |repository_id: String| {
         let media_type = source_media_type_choices()
             .get(media())
             .cloned()
@@ -886,6 +890,12 @@ fn SourceLinkRepositoryForm(
             prov(),
         ));
     });
+    let attach_onsave = use_attach_save(services, &attach, prov, onattach);
+    let fixed_for_save = fixed.as_ref().map(|(id, _)| id.clone());
+    let onsave = use_callback(move |()| match &fixed_for_save {
+        Some(id) => onattach.call(id.clone()),
+        None => attach_onsave.call(()),
+    });
     if let Some((id, name)) = &fixed {
         rsx! {
             div { class: "field",
@@ -895,13 +905,13 @@ fn SourceLinkRepositoryForm(
             {extra}
             {provenance_block(loc, prov)}
             Button {
-                label: loc.action_label("save"),
+                label: loc.action_button(ActionLabel::Save),
                 variant: ButtonVariant::Primary,
                 onclick: move |_| onsave.call(()),
             }
         }
     } else {
-        attach_picker_form(loc, &picker, extra, prov, onsave)
+        attach_link_form(loc, &attach, extra, prov, onsave)
     }
 }
 
@@ -924,7 +934,7 @@ fn SourceAttributeForm(
         supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Input {
             label: loc.field_label("attribute-type"),
@@ -966,8 +976,8 @@ fn SourceAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Sou
     } else {
         Category::Media
     };
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         category,
         loc.field_label(&field),
         field.clone(),
@@ -975,11 +985,7 @@ fn SourceAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Sou
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         let edit = match field.as_str() {
             "note" => SourceEdit::AttachNote {
                 human_id: human_id.clone(),
@@ -992,7 +998,8 @@ fn SourceAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Sou
         };
         onsubmit.call((edit, prov()));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The source "Add tag" form: a picker of existing tags by name → [`SourceEdit::Tag`].
@@ -1003,7 +1010,7 @@ fn SourceTagForm(human_id: String, onsubmit: EventHandler<(SourceEdit, Provenanc
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();

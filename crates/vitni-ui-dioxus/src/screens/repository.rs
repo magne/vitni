@@ -16,7 +16,7 @@ pub fn RepositoryCreateRecord(draft_id: DraftId) -> Element {
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<vitni_ui::RepositoryDraft>(Category::Repositories, draft_id);
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::RepositoryDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let services = services.clone();
@@ -40,9 +40,9 @@ pub fn RepositoryCreateRecord(draft_id: DraftId) -> Element {
     use_save_on_request(EditKey::draft(Category::Repositories, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -176,7 +176,7 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
     let editing = use_signal(|| None::<RepositoryEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -455,7 +455,7 @@ fn repository_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
@@ -466,7 +466,7 @@ fn repository_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {repository_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
+            {repository_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
         }
         {repository_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-note")}
@@ -514,7 +514,7 @@ fn repository_restriction_toggles(
 fn repository_tab_content(
     state: &AppState,
     detail: &RepositoryDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<RepositoryEditForm>>,
     record: RecordEditState<vitni_ui::RepositoryDraft>,
     on_retract: Callback<(String, String, bool)>,
@@ -523,48 +523,57 @@ fn repository_tab_content(
     on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
+    match tab.id {
         "addresses" => {
             let onedit =
                 Callback::new(move |seed: AddressVm| on_edit_open.call(RepositoryEditForm::Address(Some(seed))));
-            tab_with_add(
+            tab_frame(
                 loc,
-                "add-address",
-                editing,
-                RepositoryEditForm::Address(None),
+                tab,
+                TabActionTarget::Form(editing, RepositoryEditForm::Address(None)),
+                None,
                 rsx! {
                     {address_cards(loc, &detail.addresses, onedit, on_retract)}
                 },
             )
         }
-        "urls" => tab_with_add(
+        "urls" => tab_frame(
             loc,
-            "add-url",
-            editing,
-            RepositoryEditForm::Url(None),
+            tab,
+            TabActionTarget::Form(editing, RepositoryEditForm::Url(None)),
+            None,
             rsx! {
                 {repository_urls_table(loc, detail, on_edit_open, on_retract)}
             },
         ),
-        "sources" => tab_with_add(
+        "sources" => tab_frame(
             loc,
-            "link-source",
-            editing,
-            RepositoryEditForm::Source,
+            tab,
+            TabActionTarget::Form(editing, RepositoryEditForm::Source),
+            None,
             rsx! {
                 {repository_sources_table(loc, detail)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            "attach-note",
-            editing,
-            RepositoryEditForm::Note,
+            tab,
+            TabActionTarget::Form(editing, RepositoryEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, RepositoryEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            tab,
+            TabActionTarget::Form(editing, RepositoryEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => repository_overview(loc, detail, record),
     }
@@ -654,7 +663,7 @@ pub fn repository_urls_table(
                         loc,
                         &url.href,
                         Some((RepositoryEditForm::Url(Some(url.clone())), None)), None,
-                        Some(RowRetract { assertion_id: url.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(RowRetract { assertion_id: url.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                         Some(onedit),
                         onretract)}
                 }
@@ -701,20 +710,20 @@ fn repository_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        RepositoryEditForm::Address(None) => loc.action_label("add-address"),
+        RepositoryEditForm::Address(None) => loc.action_label(ActionLabel::AddAddress),
         RepositoryEditForm::Address(Some(_)) => loc.panel_title("edit-address"),
-        RepositoryEditForm::Url(None) => loc.action_label("add-url"),
+        RepositoryEditForm::Url(None) => loc.action_label(ActionLabel::AddUrl),
         RepositoryEditForm::Url(Some(_)) => loc.panel_title("edit-url"),
-        RepositoryEditForm::Source => loc.action_label("link-source"),
-        RepositoryEditForm::Note => loc.action_label("attach-note"),
-        RepositoryEditForm::Tag => loc.action_label("add-tag"),
+        RepositoryEditForm::Source => loc.action_label(ActionLabel::LinkSource),
+        RepositoryEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+        RepositoryEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     rsx! {
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -760,7 +769,7 @@ fn RepositoryUrlForm(
         supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Input { label: loc.field_label("url"), name: "url".to_owned(), value: href(), oninput: move |event: FormEvent| href.set(event.value()) }
         Input { label: loc.field_label("description"), name: "description".to_owned(), value: description(), oninput: move |event: FormEvent| description.set(event.value()) }
@@ -799,8 +808,8 @@ fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<(Repository
             label: loc.source_media_type_label(media_type),
         })
         .collect();
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::Sources,
         loc.tab_label("sources"),
         "source".to_owned(),
@@ -820,11 +829,7 @@ fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<(Repository
             onchange: move |event: FormEvent| media.set(event.value().parse::<usize>().unwrap_or(0)),
         }
     };
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(source_id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |source_id: String| {
         let media_type = source_media_type_choices()
             .get(media())
             .cloned()
@@ -841,7 +846,8 @@ fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<(Repository
             prov(),
         ));
     });
-    attach_picker_form(loc, &picker, extra, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, extra, prov, onsave)
 }
 
 /// The "Attach note by id" form → [`RepositoryEdit::AttachNote`].
@@ -852,8 +858,8 @@ fn RepositoryNoteForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, 
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         Category::Notes,
         loc.field_label("note"),
         "note".to_owned(),
@@ -861,11 +867,7 @@ fn RepositoryNoteForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, 
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         onsubmit.call((
             RepositoryEdit::AttachNote {
                 human_id: human_id.clone(),
@@ -874,7 +876,8 @@ fn RepositoryNoteForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, 
             prov(),
         ));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The repository "Add tag" form: a picker of existing tags by name → [`RepositoryEdit::Tag`].
@@ -885,7 +888,7 @@ fn RepositoryTagForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, P
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();

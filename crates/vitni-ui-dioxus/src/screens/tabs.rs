@@ -69,7 +69,7 @@ pub fn citations_table<E: Clone + PartialEq + 'static>(
                         &citation.human_id,
                         None,
                         None,
-                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
+                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: RowVerb::Detach, title: "detach-citation", detach: true }),
                         None,
                         onretract,
                     )}
@@ -79,46 +79,31 @@ pub fn citations_table<E: Clone + PartialEq + 'static>(
     }
 }
 
-/// The Tags tab, shared by every aggregate that carries tags: an "add tag" action that opens the
-/// screen's tag form (`editing.set(Some(add_form))`), then the applied tags as name + colour-dot
-/// chips, each with a delete control that fires `on_remove` with the tag's id. Generic over the
-/// screen's edit-form enum `E` (the add button is the only place the form type appears — mirrors
-/// `row_actions_cell<E>`); the untag command is dispatched by the caller's `on_remove`. Tags are
-/// referenced by name; their UUID is never rendered (data-model §9), and tags never retract — untag
-/// is the only removal.
-pub fn tags_panel<E: Clone + PartialEq + 'static>(
-    loc: &Localizer,
-    tags: &[TagRef],
-    mut editing: Signal<Option<E>>,
-    add_form: E,
-    on_remove: Callback<String>,
-) -> Element {
+/// The Tags tab's chip rendering, shared by every aggregate that carries tags: the applied tags as
+/// name + colour-dot chips, each with a delete control that fires `on_remove` with the tag's id. Tags
+/// are referenced by name; their UUID is never rendered (data-model §9), and tags never retract — untag
+/// is the only removal. The "add tag" action is the caller's [`tab_frame`] bar, not this fn — the two
+/// used to be one fn with the add button baked in, which was the second `.tab-actions` code path this
+/// split exists to delete.
+pub fn tags_panel(loc: &Localizer, tags: &[TagRef], on_remove: Callback<String>) -> Element {
+    if tags.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
     let untag_title = loc.action_title("untag");
     rsx! {
-        div { class: "tab-actions",
-            Button {
-                label: loc.action_label("add-tag"),
-                variant: ButtonVariant::Default,
-                onclick: move |_| editing.set(Some(add_form.clone())),
-            }
-        }
-        if tags.is_empty() {
-            EmptyState { message: loc.tab_empty() }
-        } else {
-            div { class: "wrap",
-                for tag in tags.iter() {
-                    {
-                        let tag_id = tag.id.clone();
-                        let untag_title = untag_title.clone();
-                        rsx! {
-                            Chip {
-                                key: "{tag.id}",
-                                label: tag.name.clone(),
-                                dot_color: tag.color.clone(),
-                                delete_label: loc.action_remove_tag_named(&tag.name),
-                                delete_title: untag_title,
-                                ondelete: move |()| on_remove.call(tag_id.clone()),
-                            }
+        div { class: "wrap",
+            for tag in tags.iter() {
+                {
+                    let tag_id = tag.id.clone();
+                    let untag_title = untag_title.clone();
+                    rsx! {
+                        Chip {
+                            key: "{tag.id}",
+                            label: tag.name.clone(),
+                            dot_color: tag.color.clone(),
+                            delete_label: loc.action_remove_tag_named(&tag.name),
+                            delete_title: untag_title,
+                            ondelete: move |()| on_remove.call(tag_id.clone()),
                         }
                     }
                 }
@@ -127,27 +112,87 @@ pub fn tags_panel<E: Clone + PartialEq + 'static>(
     }
 }
 
-/// A collection tab with its "+ add" action header (`record-editing.html` §8): a `.tab-actions` bar
-/// holding a single Default button that opens `add_form` via the `editing` signal, above the tab's
-/// `body`. Generic over the screen's edit-form enum `E` so no add-callback plumbing is needed — the
-/// button just arms the side panel. `add_label_id` is the `action_label` id (e.g. `"add-fact"`,
-/// `"attach-citation"`).
-pub fn tab_with_add<E: Clone + PartialEq + 'static>(
+/// What a [`tab_frame`] action button does when clicked, generic over the screen's edit-form enum `E`.
+pub enum TabActionTarget<E> {
+    /// Arms the screen's side panel: writes `form` into `editing` (mirrors `row_actions_cell<E>`'s
+    /// per-row edit-open). The overwhelming majority of tabs — 38 of them.
+    Form(Signal<Option<E>>, E),
+    /// Runs an arbitrary action instead of arming a side panel — the Research Notes tab opens a draft
+    /// tab, not a form.
+    Run(Callback<()>),
+    /// No action: a read-only tab renders no bar at all.
+    None,
+}
+
+/// Styling overrides for a [`tab_frame`] action button, everything defaulting to the mockups' base
+/// case (`Default::default()`/`None`): `emphasis` swaps the button's default `Primary` variant for a
+/// lower-emphasis one (the Tags bar's `Ghost`), and `title` adds a hover tooltip (the Place succession
+/// card's own).
+#[derive(Debug, Clone, Default)]
+pub struct TabActionStyle {
+    /// Overrides the button's default [`ButtonVariant::Primary`].
+    pub emphasis: Option<ButtonVariant>,
+    /// An additional hover tooltip, already localized.
+    pub title: Option<String>,
+}
+
+/// A collection tab's action bar (`record-editing.html` §8): the single button that opens or runs the
+/// tab's one action, above the tab's own `body` — the only fn in the crate that emits `.tab-actions`,
+/// so every tab resolves its label through the [`ActionLabel`] its own [`DetailTab::action`] declares
+/// (issue #314 slice 3), instead of a bare `ActionLabel` picked independently at each call site — the
+/// drift that once left six labels wrong. `tab.action: None` or `target: TabActionTarget::None`
+/// renders `body` alone, for a read-only tab.
+pub fn tab_frame<E: Clone + PartialEq + 'static>(
     loc: &Localizer,
-    add_label_id: &str,
-    mut editing: Signal<Option<E>>,
-    add_form: E,
+    tab: &DetailTab,
+    target: TabActionTarget<E>,
+    style: Option<TabActionStyle>,
     body: Element,
 ) -> Element {
-    rsx! {
-        div { class: "tab-actions",
+    let Some(action) = tab.action else {
+        return body;
+    };
+    let style = style.unwrap_or_default();
+    let variant = style.emphasis.unwrap_or(ButtonVariant::Primary);
+    let label = loc.action_button(action);
+    let bar = match target {
+        TabActionTarget::None => return body,
+        TabActionTarget::Form(mut editing, form) => rsx! {
             Button {
-                label: loc.action_label(add_label_id),
-                variant: ButtonVariant::Default,
-                onclick: move |_| editing.set(Some(add_form.clone())),
+                label,
+                variant,
+                small: true,
+                title: style.title.clone(),
+                onclick: move |_| editing.set(Some(form.clone())),
             }
-        }
+        },
+        TabActionTarget::Run(on_run) => rsx! {
+            Button {
+                label,
+                variant,
+                small: true,
+                title: style.title.clone(),
+                onclick: move |_| on_run.call(()),
+            }
+        },
+    };
+    rsx! {
+        div { class: "tab-actions", {bar} }
         {body}
+    }
+}
+
+/// A placeholder [`DetailTab`] for `tabs.get(active()).cloned().unwrap_or_else(...)`: `active()` can
+/// point past the end of a shorter tab list (e.g. right after switching records), and the content
+/// dispatcher's `match tab.id` falls through to its default arm regardless of `label`/`count`/`action`,
+/// so only `id` need be real.
+#[must_use]
+pub fn fallback_tab(id: &'static str) -> DetailTab {
+    DetailTab {
+        id,
+        label: String::new(),
+        count: None,
+        action: None,
     }
 }
 
@@ -179,14 +224,14 @@ pub fn address_cards(
                         Card { title: label.clone(),
                             div { class: "tab-actions",
                                 Button {
-                                    label: loc.action_label("edit"),
+                                    label: loc.action_button(ActionLabel::Edit),
                                     variant: ButtonVariant::Ghost,
                                     small: true,
                                     aria_label: loc.action_edit_row(&label),
                                     onclick: move |_| onedit.call(seed.clone()),
                                 }
                                 Button {
-                                    label: loc.action_label("retract"),
+                                    label: loc.action_button(ActionLabel::Retract),
                                     variant: ButtonVariant::Ghost,
                                     small: true,
                                     title: loc.action_title("retract"),
@@ -272,7 +317,7 @@ pub fn address_form(
         supersedes,
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Input { label: loc.field_label("street"), name: "street".to_owned(), value: street(), oninput: move |event: FormEvent| street.set(event.value()) }
         Input { label: loc.field_label("locality"), name: "locality".to_owned(), value: locality(), oninput: move |event: FormEvent| locality.set(event.value()) }
@@ -434,7 +479,7 @@ pub fn participation_form(
         supersedes: seed.supersedes.clone(),
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let seed_bound = seed.age.as_ref().and_then(|age| age.bound);
     let seed_attributes = seed.attributes.clone();
     let seed_notes = seed.notes.clone();

@@ -32,9 +32,10 @@ use vitni_ui::{
     Category, CitationChangeSetRequest, CitationEdit, DataQualityVm, DnaMatchChangeSetRequest, DnaMatchEdit,
     DnaTestChangeSetRequest, DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit,
     ImportTargetChoice, Intent, IntentOutcome, Localizer, MediaChangeSetRequest, MediaEdit, MergeFailure, MergePersons,
-    MergeResultVm, NoteChangeSetRequest, NoteEdit, Panel, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest,
-    PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest,
-    ResearchNoteEdit, RowVm, SourceChangeSetRequest, SourceEdit, SubmitResult, TagChangeSetRequest, list_intent,
+    MergeResultVm, NewRecordRequest, NoteChangeSetRequest, NoteEdit, Panel, PersonChangeSetRequest, PersonEdit,
+    PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit,
+    ResearchNoteChangeSetRequest, ResearchNoteEdit, RowVm, SourceChangeSetRequest, SourceEdit, SubmitResult,
+    TagChangeSetRequest, list_intent,
 };
 
 use crate::i18n::Chrome;
@@ -279,6 +280,23 @@ pub async fn commit_person_change_set(
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     vitni_ui::dispatch_person_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Commits a [`NewRecordRequest`] — an attach picker's "+ New …" draft, once it validates — through
+/// [`vitni_ui::dispatch_new_record`], returning the new record's `human_id` (or a localized error).
+/// Nothing else is written: attaching the created record to the panel's own root is a separate command
+/// the caller dispatches afterwards, once this returns `Ok`.
+pub async fn commit_new_record(
+    services: Services,
+    request: NewRecordRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    vitni_ui::dispatch_new_record(&workspace, &session, &request, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }

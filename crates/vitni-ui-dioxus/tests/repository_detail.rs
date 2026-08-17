@@ -116,7 +116,7 @@ fn overview_view() -> Element {
         {repository_urls_table(&loc, &detail, onedit, onretract)}
         {repository_sources_table(&loc, &detail)}
         {id_list(&loc, &detail.notes, Some(onretract))}
-        {tags_panel(&loc, &detail.tags, use_signal(|| None::<RepositoryEditForm>), RepositoryEditForm::Tag, use_callback(|_: String| {}))}
+        {tags_panel(&loc, &detail.tags, use_callback(|_: String| {}))}
     }
 }
 

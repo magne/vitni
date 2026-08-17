@@ -3,6 +3,7 @@
 //! fields rendered as inputs.
 
 use dioxus::prelude::*;
+use vitni_ui::ActionLabel;
 use vitni_ui::{Localizer, ProvenanceDraft, RepositoryDraft};
 use vitni_ui_dioxus::components::{Button, ButtonVariant};
 use vitni_ui_dioxus::screens::{
@@ -22,8 +23,8 @@ fn create_view() -> Element {
         prov: use_signal(ProvenanceDraft::default),
     };
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
-        Button { label: loc.action_label("save"), variant: ButtonVariant::Primary, small: true, disabled: true, onclick: move |_| {} }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
+        Button { label: loc.action_button(ActionLabel::Save), variant: ButtonVariant::Primary, small: true, disabled: true, onclick: move |_| {} }
     };
     rsx! {
         {create_record_header(&loc.repository_new_title(), &loc.record_draft_badge(), actions)}

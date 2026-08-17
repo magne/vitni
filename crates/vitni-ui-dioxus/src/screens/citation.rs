@@ -31,7 +31,7 @@ pub fn CitationCreateRecord(draft_id: DraftId) -> Element {
     let source_onclear = use_callback(move |()| draft.write().source = RecordLink::Empty);
     let source_onnew =
         use_callback(move |_query: String| draft.write().source = RecordLink::New(NewSourceFields::default()));
-    let created_label = loc.action_label("created");
+    let created_label = loc.action_label(ActionLabel::Created);
     let on_save = use_callback(move |(draft, prov): (vitni_ui::CitationDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
@@ -57,9 +57,9 @@ pub fn CitationCreateRecord(draft_id: DraftId) -> Element {
     use_save_on_request(EditKey::draft(Category::Citations, draft_id), record, save_now);
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
+        Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(draft_id) }
         Button {
-            label: loc.action_label("save"),
+            label: loc.action_button(ActionLabel::Save),
             variant: ButtonVariant::Primary,
             small: true,
             disabled: !can_save,
@@ -444,7 +444,7 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
     let editing = use_signal(|| None::<CitationEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label("saved");
+    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -745,7 +745,7 @@ fn citation_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let subtitle = detail.page.clone();
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
@@ -759,7 +759,7 @@ fn citation_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {citation_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+                {citation_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
             }
             {citation_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -808,7 +808,7 @@ fn citation_restriction_toggles(
 fn citation_tab_content(
     state: &AppState,
     detail: &CitationDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     editing: Signal<Option<CitationEditForm>>,
     record: RecordEditState<vitni_ui::CitationDraft>,
     on_retract: Callback<(String, String, bool)>,
@@ -818,35 +818,44 @@ fn citation_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
-    match tab_id {
-        "attributes" => tab_with_add(
+    match tab.id {
+        "attributes" => tab_frame(
             loc,
-            "add-attribute",
-            editing,
-            CitationEditForm::Attribute(None),
+            tab,
+            TabActionTarget::Form(editing, CitationEditForm::Attribute(None)),
+            None,
             rsx! {
                 {citation_attributes_table(loc, &detail.attributes, on_edit_open, on_retract)}
             },
         ),
-        "media" => tab_with_add(
+        "media" => tab_frame(
             loc,
-            "attach-media",
-            editing,
-            CitationEditForm::Media,
+            tab,
+            TabActionTarget::Form(editing, CitationEditForm::Media),
+            None,
             rsx! {
                 {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
-        "notes" => tab_with_add(
+        "notes" => tab_frame(
             loc,
-            "attach-note",
-            editing,
-            CitationEditForm::Note,
+            tab,
+            TabActionTarget::Form(editing, CitationEditForm::Note),
+            None,
             rsx! {
                 {id_list(loc, &detail.notes, Some(on_retract))}
             },
         ),
-        "tags" => tags_panel(loc, &detail.tags, editing, CitationEditForm::Tag, on_tag_remove),
+        "tags" => tab_frame(
+            loc,
+            tab,
+            TabActionTarget::Form(editing, CitationEditForm::Tag),
+            Some(TabActionStyle {
+                emphasis: Some(ButtonVariant::Ghost),
+                ..Default::default()
+            }),
+            tags_panel(loc, &detail.tags, on_tag_remove),
+        ),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => citation_overview(loc, detail, record),
     }
@@ -921,7 +930,7 @@ pub fn citation_attributes_table(
                         loc,
                         &attribute.attribute_type,
                         Some((CitationEditForm::Attribute(Some(attribute.clone())), None)), None,
-                        Some(RowRetract { assertion_id: attribute.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(RowRetract { assertion_id: attribute.assertion_id.clone(), button_label: RowVerb::Retract, title: "retract", detach: false }),
                         Some(onedit),
                         onretract)}
                 }
@@ -942,18 +951,18 @@ fn citation_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        CitationEditForm::Attribute(None) => loc.action_label("add-attribute"),
+        CitationEditForm::Attribute(None) => loc.action_label(ActionLabel::AddAttribute),
         CitationEditForm::Attribute(Some(_)) => loc.panel_title("edit-attribute"),
-        CitationEditForm::Media => loc.action_label("attach-media"),
-        CitationEditForm::Note => loc.action_label("attach-note"),
-        CitationEditForm::Tag => loc.action_label("add-tag"),
+        CitationEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+        CitationEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+        CitationEditForm::Tag => loc.action_label(ActionLabel::AddTag),
     };
     let human_id = human_id.to_owned();
     rsx! {
         SidePanel {
             title,
             open: true,
-            close_label: loc.action_label("cancel"),
+            close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
             footer: rsx! {},
             {match form {
@@ -985,7 +994,7 @@ fn CitationAttributeForm(
         supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
         ..ProvenanceDraft::default()
     });
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     rsx! {
         Input {
             label: loc.field_label("attribute-type"),
@@ -1031,8 +1040,8 @@ fn CitationAttachForm(
     } else {
         ("media", Category::Media)
     };
-    let picker = use_existing_picker(
-        services,
+    let attach = use_attach_picker(
+        services.clone(),
         category,
         loc.field_label(field),
         field.to_owned(),
@@ -1040,11 +1049,7 @@ fn CitationAttachForm(
         Vec::new(),
     );
     let prov = use_signal(ProvenanceDraft::default);
-    let picker_for_save = picker.clone();
-    let onsave = use_callback(move |()| {
-        let Some(id) = picker_selection_id(&picker_for_save) else {
-            return;
-        };
+    let onattach = use_callback(move |id: String| {
         let edit = if is_note {
             CitationEdit::AttachNote {
                 human_id: human_id.clone(),
@@ -1058,7 +1063,8 @@ fn CitationAttachForm(
         };
         onsubmit.call((edit, prov()));
     });
-    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    let onsave = use_attach_save(services, &attach, prov, onattach);
+    attach_link_form(loc, &attach, rsx! {}, prov, onsave)
 }
 
 /// The "Add tag" form: a picker of existing tags by name (the tag id is the option value, never
@@ -1070,7 +1076,7 @@ fn CitationTagForm(human_id: String, onsubmit: EventHandler<(CitationEdit, Prove
     };
     let services = state.services().clone();
     let loc = state.data_loc();
-    let save_label = loc.action_label("save");
+    let save_label = loc.action_button(ActionLabel::Save);
     let field_label = loc.field_label("tag");
     let tags = use_resource(move || {
         let services = services.clone();

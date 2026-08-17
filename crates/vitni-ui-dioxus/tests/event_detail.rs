@@ -224,7 +224,6 @@ fn event_view() -> Element {
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
-    let editing = use_signal(|| None::<EventEditForm>);
     let on_remove = use_callback(|_: String| {});
     let on_edit_open = use_callback(|_: EventEditForm| {});
     let on_edit_address =
@@ -240,7 +239,7 @@ fn event_view() -> Element {
         {citations_table::<EventEditForm>(&loc, &detail.citations, false, on_retract)}
         {media_gallery(&loc, &detail.media, Some(on_retract), None)}
         {id_list(&loc, &detail.notes, Some(on_retract))}
-        {tags_panel(&loc, &detail.tags, editing, EventEditForm::Tag, on_remove)}
+        {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }
 

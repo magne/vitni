@@ -62,6 +62,29 @@ impl ProvenanceDraft {
         }
     }
 
+    /// Narrows this draft to the provenance a *support record* carries — a record a save creates only
+    /// to back the one the operator actually asked for (a citation's inline "+ New source", an attach
+    /// picker's find-or-create draft, issue #314). Keeps the rationale/confidence (still "why the
+    /// operator is doing this"), but drops the backing citations, DNA-match evidence, and
+    /// [`Self::supersedes`] — a support record's own create is never the assertion those describe, and
+    /// `supersedes` in particular must ride only the primary record's own edit: `person.rs`/`place.rs`
+    /// pre-seed it on a per-row Edit draft, and letting it leak onto a nested create would make the
+    /// create supersede an assertion that has nothing to do with it. Per the support-record rule
+    /// `vitni-app`'s `change_set.rs` documents (§ Provenance rule).
+    #[must_use]
+    pub fn for_support_record(&self) -> Self {
+        Self {
+            rationale: self.rationale.clone(),
+            confidence: self.confidence,
+            citations: Vec::new(),
+            dna_matches: Vec::new(),
+            source: self.source,
+            information: self.information,
+            evidence: self.evidence,
+            supersedes: None,
+        }
+    }
+
     /// Bundles this draft into the [`MutationMeta`] a non-create mutation use-case takes, borrowing
     /// the citation ids and threading the supersede target (a per-row Edit) when set.
     #[must_use]
@@ -77,7 +100,7 @@ impl ProvenanceDraft {
 
 #[cfg(test)]
 mod tests {
-    use super::ProvenanceDraft;
+    use super::{ConfidenceLevel, ProvenanceDraft};
 
     #[test]
     fn add_mode_draft_does_not_supersede() {
@@ -102,5 +125,32 @@ mod tests {
             ..ProvenanceDraft::default()
         };
         assert_eq!(draft.meta().supersedes, Some("0190a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5b"));
+    }
+
+    #[test]
+    fn for_support_record_keeps_the_rationale_and_drops_citations_and_supersedes() {
+        let draft = ProvenanceDraft {
+            rationale: "Baptism register, parish of Ullensaker".to_owned(),
+            confidence: Some(ConfidenceLevel::High),
+            citations: vec!["C0001".to_owned()],
+            dna_matches: vec!["X0001".to_owned()],
+            supersedes: Some("0190a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5b".to_owned()),
+            ..ProvenanceDraft::default()
+        };
+        let support = draft.for_support_record();
+        assert_eq!(support.rationale, draft.rationale, "the operator's why survives");
+        assert_eq!(support.confidence, draft.confidence, "the operator's surety survives");
+        assert!(
+            support.citations.is_empty(),
+            "a support record carries no backing citations of its own"
+        );
+        assert!(
+            support.dna_matches.is_empty(),
+            "a support record carries no DNA-match evidence of its own"
+        );
+        assert_eq!(
+            support.supersedes, None,
+            "supersedes must ride only the primary record's own edit, never a nested create"
+        );
     }
 }

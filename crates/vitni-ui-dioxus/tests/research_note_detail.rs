@@ -7,8 +7,8 @@ use dioxus::prelude::*;
 use vitni_app::TagRef;
 use vitni_ui::{Category, Localizer, ProvenanceDraft, ResearchNoteDetail, ResearchNoteDraft, RowVm, SubjectVm};
 use vitni_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, ResearchNoteEditForm, record_head_actions, research_note_content_tab,
-    research_note_subjects_table, research_notes_table, tags_panel,
+    RecordActionLabels, RecordEditState, record_head_actions, research_note_content_tab, research_note_subjects_table,
+    research_notes_table, tags_panel,
 };
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
@@ -75,7 +75,7 @@ fn view_mode() -> Element {
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (ResearchNoteDraft, ProvenanceDraft)| {}))}
         {research_note_content_tab(&loc, record)}
-        {tags_panel(&loc, &sample().tags, use_signal(|| None::<ResearchNoteEditForm>), ResearchNoteEditForm::Tag, use_callback(|_: String| {}))}
+        {tags_panel(&loc, &sample().tags, use_callback(|_: String| {}))}
     }
 }
 
