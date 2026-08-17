@@ -481,7 +481,7 @@ fn associations_and_citations_carry_evidence_cues() {
 fn person_tags() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<EditForm>);
-    let on_remove = use_callback(|_: String| {});
+    let on_remove = use_callback(|_: (String, String)| {});
     let tags = vec![TagRef {
         id: "0190a2b3-0000-7000-8000-0000000000ff".to_owned(),
         name: "Direct ancestor".to_owned(),

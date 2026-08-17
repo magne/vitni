@@ -174,7 +174,7 @@ fn family_view() -> Element {
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
     let editing = use_signal(|| None::<FamilyEditForm>);
-    let on_remove = use_callback(|_: String| {});
+    let on_remove = use_callback(|_: (String, String)| {});
     let on_retract = use_callback(|_target: (String, String, bool)| {});
     let on_child_remove = use_callback(|_child: ChildRemoval| {});
     let on_edit_open = use_callback(|_form: FamilyEditForm| {});

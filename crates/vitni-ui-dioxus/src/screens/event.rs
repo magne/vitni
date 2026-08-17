@@ -487,9 +487,8 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
             retract_reason.set(String::new());
             retract_person.set(Some(person_human_id));
             retract.set(Some(RetractTarget {
-                assertion_id,
+                subject: RetractSubject::Assertion { assertion_id, detach },
                 label,
-                detach,
             }));
         },
     );
@@ -498,13 +497,14 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
 
     // This pane's own retract confirm, not the shared one: a participation is person-canonical
     // (data-model §5), so retracting a canonical participant's row dispatches a `PersonEdit` against
-    // that person while every other row retracts against the event.
+    // that person while every other row retracts against the event. An untag is never person-canonical,
+    // so it takes the same shape here as on the eleven panes the shared confirm serves (issue #315).
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let retract_saved = state.data_loc().action_label(ActionLabel::Saved);
     let mut retract_nav = nav;
     let on_retract_confirm = use_callback(move |()| {
-        let Some(target) = retract() else {
+        let Some(RetractTarget { subject, .. }) = retract() else {
             return;
         };
         let services = retract_services.clone();
@@ -516,18 +516,27 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
         };
         let person_human_id = retract_person();
         spawn(async move {
-            let outcome = if let Some(person_human_id) = person_human_id {
-                let edit = PersonEdit::UndoAssertion {
-                    human_id: person_human_id,
-                    assertion_id: target.assertion_id,
-                };
-                save_person_edit(services, edit, prov).await
-            } else {
-                let edit = EventEdit::UndoAssertion {
-                    human_id,
-                    assertion_id: target.assertion_id,
-                };
-                save_event_edit(services, edit, prov).await
+            let outcome = match subject {
+                RetractSubject::Assertion { assertion_id, .. } => {
+                    if let Some(person_human_id) = person_human_id {
+                        let edit = PersonEdit::UndoAssertion {
+                            human_id: person_human_id,
+                            assertion_id,
+                        };
+                        save_person_edit(services, edit, prov).await
+                    } else {
+                        let edit = EventEdit::UndoAssertion { human_id, assertion_id };
+                        save_event_edit(services, edit, prov).await
+                    }
+                }
+                RetractSubject::Tag { tag_id } => {
+                    let edit = EventEdit::Tag {
+                        human_id,
+                        tag_id,
+                        remove: true,
+                    };
+                    save_event_edit(services, edit, prov).await
+                }
             };
             match outcome {
                 Ok(_) => {
@@ -703,8 +712,8 @@ struct EventCallbacks {
     on_edit_open: Callback<EventEditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
-    on_tag_remove: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
     /// The Media tab's viewer state + crop-supersede wiring.
     media_state: MediaTabState,
 }
@@ -780,7 +789,7 @@ fn event_tab_content(
     on_person_retract: Callback<(String, String, bool, String)>,
     on_edit_open: Callback<EventEditForm>,
     on_undo: Callback<String>,
-    on_tag_remove: Callback<String>,
+    on_tag_remove: Callback<(String, String)>,
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();

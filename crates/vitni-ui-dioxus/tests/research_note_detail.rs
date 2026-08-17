@@ -75,7 +75,7 @@ fn view_mode() -> Element {
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (ResearchNoteDraft, ProvenanceDraft)| {}))}
         {research_note_content_tab(&loc, record)}
-        {tags_panel(&loc, &sample().tags, use_callback(|_: String| {}))}
+        {tags_panel(&loc, &sample().tags, use_callback(|_: (String, String)| {}))}
     }
 }
 

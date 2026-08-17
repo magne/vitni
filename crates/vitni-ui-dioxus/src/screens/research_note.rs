@@ -380,14 +380,18 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
     let mut label_nav = nav;
     let active = use_detail_tab(Category::ResearchNotes, &human_id);
     let editing = use_signal(|| None::<ResearchNoteEditForm>);
-    // The shared commit path (`screens/detail_commits.rs`). Only three of its callbacks are taken: this
-    // pane has no retract confirm at all — removing a subject is a `RemoveSubject` edit that rides
-    // `on_submit`, not a retraction of the assertion that added it.
+    // The shared commit path (`screens/detail_commits.rs`). No *row* here retracts — removing a subject
+    // is a `RemoveSubject` edit that rides `on_submit`, not a retraction of the assertion that added it
+    // — but a tag chip's × arms the shared panel for its rationale (issue #315), so the panel's state
+    // and confirm are taken too.
     let DetailCommits {
         reload,
+        retract,
+        retract_reason,
         on_submit,
         on_undo,
         on_tag_remove,
+        on_retract_confirm,
         ..
     } = use_detail_commits::<ResearchNoteCommits, ResearchNoteEditForm>(&state, &human_id, editing);
     let saved_label = state.data_loc().action_label(ActionLabel::Saved);
@@ -451,7 +455,7 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::ResearchNoteDetail(detail))) => detail.history.clone(),
         _ => Vec::new(),
     });
-    let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read());
+    let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read() || retract.read().is_some());
     let undo_notice = chrome.kbd_nothing_to_undo();
     use_record_undo(
         nav,
@@ -485,10 +489,13 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
                 active,
                 side_edit: editing,
                 record,
+                retract,
+                retract_reason,
             },
             ResearchNoteCallbacks {
                 on_submit,
                 on_record_save,
+                on_retract_confirm,
                 on_undo,
                 on_tag_remove,
                 on_subject_remove,
@@ -529,6 +536,10 @@ struct ResearchNotePane {
     side_edit: Signal<Option<ResearchNoteEditForm>>,
     /// The whole-record (argument · language) edit state.
     record: RecordEditState<vitni_ui::ResearchNoteDraft>,
+    /// The tag being untagged, if the shared correction panel is open.
+    retract: Signal<Option<RetractTarget>>,
+    /// The rationale typed into the open correction panel.
+    retract_reason: Signal<String>,
 }
 
 /// The commit callbacks a research note's detail wires in.
@@ -542,10 +553,12 @@ struct ResearchNoteCallbacks {
     on_submit: Callback<(ResearchNoteEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a diff of `Set*` edits.
     on_record_save: Callback<(vitni_ui::ResearchNoteDraft, ProvenanceDraft)>,
+    /// Confirms the open untag panel — dispatches `Tag { remove: true }` with the typed rationale.
+    on_retract_confirm: Callback<()>,
     /// Retracts an assertion by id from the History tab.
     on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab.
-    on_tag_remove: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
     /// Stops naming a subject from the Subjects tab.
     on_subject_remove: Callback<SubjectVm>,
 }
@@ -564,6 +577,8 @@ fn research_note_detail(
         active,
         side_edit: editing,
         record,
+        retract,
+        retract_reason,
     } = pane;
     let on_submit = callbacks.on_submit;
     let tabs = research_note_tabs(detail, loc);
@@ -589,6 +604,9 @@ fn research_note_detail(
             {research_note_tab_content(state, detail, &active_tab, editing, record, callbacks)}
         }
         {research_note_edit_panel(state, editing, on_submit, human_id)}
+        // Only ever armed for an untag here (no row on this pane retracts), so the Detach note id this
+        // takes is never read — the untag case carries its own.
+        {retract_side_panel(loc, retract, retract_reason, callbacks.on_retract_confirm, "detach-note")}
     }
 }
 

@@ -190,14 +190,18 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
     let mut label_nav = nav;
     let active = use_detail_tab(Category::Notes, &human_id);
     let editing = use_signal(|| None::<NoteEditForm>);
-    // The shared commit path (`screens/detail_commits.rs`). Only three of its callbacks are taken: a
-    // note has no retractable row and so no retract panel, and its own no-op `on_retract` below is
-    // what the shared row-actions cell demands rather than a real one.
+    // The shared commit path (`screens/detail_commits.rs`). A note has no retractable *row* — its own
+    // no-op `on_retract` below is what the shared row-actions cell demands rather than a real one — but
+    // it does carry tags, and an untag arms the shared panel for its rationale (issue #315), so the
+    // panel's state and confirm are taken too.
     let DetailCommits {
         reload,
+        retract,
+        retract_reason,
         on_submit,
         on_undo,
         on_tag_remove,
+        on_retract_confirm,
         ..
     } = use_detail_commits::<NoteCommits, NoteEditForm>(&state, &human_id, editing);
     let saved_label = state.data_loc().action_label(ActionLabel::Saved);
@@ -259,7 +263,7 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::NoteDetail(detail))) => detail.history.clone(),
         _ => Vec::new(),
     });
-    let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read());
+    let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read() || retract.read().is_some());
     let undo_notice = chrome.kbd_nothing_to_undo();
     use_record_undo(
         nav,
@@ -293,12 +297,15 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
                 active,
                 side_edit: editing,
                 record,
+                retract,
+                retract_reason,
             },
             NoteCallbacks {
                 on_submit,
                 on_record_save,
                 on_edit_open,
                 on_retract,
+                on_retract_confirm,
                 on_undo,
                 on_tag_remove,
             },
@@ -339,6 +346,10 @@ struct NotePane {
     side_edit: Signal<Option<NoteEditForm>>,
     /// The whole-record (id · type · content · language) edit state.
     record: RecordEditState<vitni_ui::NoteDraft>,
+    /// The tag being untagged, if the shared correction panel is open.
+    retract: Signal<Option<RetractTarget>>,
+    /// The rationale typed into the open correction panel.
+    retract_reason: Signal<String>,
 }
 
 /// The two commit callbacks a note's detail wires in: one-command collection edits and the
@@ -357,10 +368,12 @@ struct NoteCallbacks {
     on_edit_open: Callback<NoteEditForm>,
     /// The row-actions cell's required retract callback; a no-op — translations are Edit-only.
     on_retract: Callback<(String, String, bool)>,
+    /// Confirms the open untag panel — dispatches `Tag { remove: true }` with the typed rationale.
+    on_retract_confirm: Callback<()>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
-    on_tag_remove: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
 }
 
 /// Renders a loaded note's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -377,6 +390,8 @@ fn note_detail(
         active,
         side_edit: editing,
         record,
+        retract,
+        retract_reason,
     } = pane;
     let on_submit = callbacks.on_submit;
     let on_edit_open = callbacks.on_edit_open;
@@ -406,6 +421,9 @@ fn note_detail(
             {note_tab_content(state, detail, &active_tab, editing, record, on_edit_open, on_retract, on_undo, on_tag_remove)}
         }
         {note_edit_panel(state, editing, on_submit, human_id)}
+        // Only ever armed for an untag here (a note has no retractable row), so the Detach note id this
+        // takes is never read — the untag case carries its own.
+        {retract_side_panel(loc, retract, retract_reason, callbacks.on_retract_confirm, "detach-note")}
     }
 }
 
@@ -423,7 +441,7 @@ fn note_tab_content(
     on_edit_open: Callback<NoteEditForm>,
     on_retract: Callback<(String, String, bool)>,
     on_undo: Callback<String>,
-    on_tag_remove: Callback<String>,
+    on_tag_remove: Callback<(String, String)>,
 ) -> Element {
     let loc = state.data_loc();
     match tab.id {

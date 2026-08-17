@@ -116,7 +116,7 @@ fn citation_view() -> Element {
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
-    let on_remove = use_callback(|_: String| {});
+    let on_remove = use_callback(|_: (String, String)| {});
     let onedit = use_callback(|_: CitationEditForm| {});
     let onretract = use_callback(|_: (String, String, bool)| {});
     let detail = sample();

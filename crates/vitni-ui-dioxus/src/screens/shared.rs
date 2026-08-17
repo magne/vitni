@@ -896,12 +896,13 @@ fn axis_options(unset: &str, labels: impl Iterator<Item = String>) -> Vec<Select
     options
 }
 
-/// A lightweight Retract/Detach side panel (`record-editing.html` §8): the row being acted on, a
-/// "stays in History" note, a rationale-only input, and a Danger confirm button. Reused by all 11
-/// screens for both Retract (a collection row) and Detach (an attachment) — the only difference is the
-/// title/note/button strings the caller passes. A pure fn (the rationale signal + callback are passed
-/// in) so the SSR tests render it without `AppCtx`; the caller builds a `ProvenanceDraft{rationale}`
-/// from the signal and dispatches `*Edit::UndoAssertion`. Never renders the target's `AssertionId`.
+/// A lightweight correction side panel (`record-editing.html` §8): the row or tag being acted on, a
+/// "stays in History" note, a rationale-only input, and a Danger confirm button. Reused by every
+/// screen for Retract (a collection row), Detach (an attachment) and Untag (an applied tag) — the only
+/// difference is the title/note/button strings the caller passes. A pure fn (the rationale signal +
+/// callback are passed in) so the SSR tests render it without `AppCtx`; the caller builds a
+/// `ProvenanceDraft{rationale}` from the signal and dispatches the edit. Never renders the target's
+/// `AssertionId` or a tag's UUID.
 #[expect(
     clippy::too_many_arguments,
     reason = "a self-contained panel takes its localized strings flat"
@@ -941,24 +942,49 @@ pub fn retract_panel(
     }
 }
 
-/// A row's armed retract, for the shared [`retract_side_panel`]. Carries the assertion to retract
-/// plus the row label + detach flag (the panel wording). The retract always targets the active
-/// record's aggregate — the sole owner of every row on its tabs (ADR 0004 §2).
+/// What the shared [`retract_side_panel`]'s confirm acts on — the one thing that differs between the
+/// three corrections it serves, all of which take an operator rationale before anything is written.
+///
+/// Two variants, because the two are not the same kind of change. [`Self::Assertion`] withdraws a
+/// claim from the record's change log **by its `AssertionId`** (ADR 0004 §2) — a Retract, or a Detach
+/// of an attachment. [`Self::Tag`] is not that: untagging dispatches `Tag { remove: true }`, a command
+/// that asserts the tag no longer applies, so there is no `AssertionId` to name and no
+/// `UndoAssertion` to send. Both still belong in this panel, because both are corrections an operator
+/// owes a reason for (issue #315).
 #[derive(Clone, PartialEq)]
-pub struct RetractTarget {
-    /// The `AssertionId` the confirm retracts.
-    pub assertion_id: String,
-    /// The row label shown in the panel and the accessible name.
-    pub label: String,
-    /// Whether this is a Detach of an attachment (drives Detach vs Retract wording).
-    pub detach: bool,
+pub enum RetractSubject {
+    /// An assertion in the record's change log, withdrawn by its `AssertionId`.
+    Assertion {
+        /// The `AssertionId` the confirm retracts.
+        assertion_id: String,
+        /// Whether this is a Detach of an attachment (drives Detach vs Retract wording).
+        detach: bool,
+    },
+    /// A tag applied to the record, removed by `Tag { remove: true }`. Only the id is carried; the
+    /// panel names the tag by [`RetractTarget::label`], never its UUID (data-model §9).
+    Tag {
+        /// The tag's id, passed straight to the untag command.
+        tag_id: String,
+    },
 }
 
-/// The Retract/Detach side panel (`record-editing.html` §8), shared by every screen with retractable
-/// rows: when a row's action is armed (`retract` is `Some`), renders the shared [`retract_panel`]
-/// inside a [`SidePanel`], binding the rationale to `reason`; confirming calls `on_confirm` (which
-/// dispatches `UndoAssertion`). `detach_note_id` is the `action_title` id for the Detach note — the
-/// only per-screen difference (e.g. `"detach-citation"`, `"detach-media"`, `"detach-note"`).
+/// An armed correction, for the shared [`retract_side_panel`]: what the confirm acts on, plus the
+/// label the panel's wording and accessible name use. The change always targets the active record's
+/// aggregate — the sole owner of every row and tag on its tabs (ADR 0004 §2).
+#[derive(Clone, PartialEq)]
+pub struct RetractTarget {
+    /// What the confirm acts on: an assertion, or an applied tag.
+    pub subject: RetractSubject,
+    /// The row or tag name shown in the panel and the accessible name.
+    pub label: String,
+}
+
+/// The Retract/Detach/Untag side panel (`record-editing.html` §8), shared by every screen with
+/// retractable rows or tags: when a correction is armed (`retract` is `Some`), renders the shared
+/// [`retract_panel`] inside a [`SidePanel`], binding the rationale to `reason`; confirming calls
+/// `on_confirm` (which dispatches `UndoAssertion` or the untag). `detach_note_id` is the
+/// `action_title` id for the Detach note — the only per-screen difference (e.g. `"detach-citation"`,
+/// `"detach-media"`, `"detach-note"`), and unread by the other two cases, which have notes of their own.
 pub fn retract_side_panel(
     loc: &Localizer,
     mut retract: Signal<Option<RetractTarget>>,
@@ -966,23 +992,28 @@ pub fn retract_side_panel(
     on_confirm: Callback<()>,
     detach_note_id: &str,
 ) -> Element {
-    let Some(RetractTarget { label, detach, .. }) = retract() else {
+    let Some(RetractTarget { subject, label }) = retract() else {
         return rsx! {};
     };
-    let (title_id, action, note, accessible) = if detach {
-        (
+    let (title_id, action, note, accessible) = match subject {
+        RetractSubject::Tag { .. } => (
+            "untag",
+            ActionLabel::RemoveTag,
+            loc.untag_note(),
+            loc.action_remove_tag_named(&label),
+        ),
+        RetractSubject::Assertion { detach: true, .. } => (
             "detach",
             ActionLabel::Detach,
             loc.action_title(detach_note_id),
             loc.action_detach_row(&label),
-        )
-    } else {
-        (
+        ),
+        RetractSubject::Assertion { detach: false, .. } => (
             "retract",
             ActionLabel::Retract,
             loc.retract_note(),
             loc.action_retract_row(&label),
-        )
+        ),
     };
     rsx! {
         SidePanel {

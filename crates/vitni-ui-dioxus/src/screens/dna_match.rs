@@ -496,8 +496,8 @@ struct DnaMatchCallbacks {
     on_edit_open: Callback<DnaMatchEditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
-    on_tag_remove: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
 }
 
 /// Renders a loaded DNA match's detail container: header (with the sticky-header record Edit/Cancel/
@@ -609,7 +609,7 @@ fn dna_match_tab_content(
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<DnaMatchEditForm>,
     on_undo: Callback<String>,
-    on_tag_remove: Callback<String>,
+    on_tag_remove: Callback<(String, String)>,
 ) -> Element {
     let loc = state.data_loc();
     match tab.id {

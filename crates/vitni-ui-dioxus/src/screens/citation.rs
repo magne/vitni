@@ -638,8 +638,8 @@ struct CitationCallbacks {
     on_edit_open: Callback<CitationEditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
-    on_tag_remove: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
     /// The Media tab's viewer state + crop-supersede wiring.
     media_state: MediaTabState,
 }
@@ -714,7 +714,7 @@ fn citation_tab_content(
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<CitationEditForm>,
     on_undo: Callback<String>,
-    on_tag_remove: Callback<String>,
+    on_tag_remove: Callback<(String, String)>,
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();

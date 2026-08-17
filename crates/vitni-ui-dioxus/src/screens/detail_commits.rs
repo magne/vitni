@@ -16,7 +16,7 @@ use vitni_ui::{ActionLabel, ProvenanceDraft};
 
 use crate::app::AppState;
 use crate::detail_aggregates::for_each_detail_aggregate;
-use crate::screens::shared::RetractTarget;
+use crate::screens::shared::{RetractSubject, RetractTarget};
 use crate::services::Services;
 use crate::shell::nav_state::NavState;
 
@@ -33,7 +33,7 @@ pub trait DetailAggregate: 'static {
     /// per-row Retract/Detach).
     fn undo(human_id: &str, assertion_id: String) -> Self::Edit;
 
-    /// The edit that removes tag `tag_id` from `human_id` (the Tags tab's chip `×`).
+    /// The edit that removes tag `tag_id` from `human_id` (the confirm of the Tags tab's chip `×`).
     fn untag(human_id: &str, tag_id: String) -> Self::Edit;
 
     /// Commits one edit, returning the record's effective `human_id` or a localized error.
@@ -51,7 +51,7 @@ pub trait DetailAggregate: 'static {
 pub struct DetailCommits<A: DetailAggregate> {
     /// The reload counter every successful commit bumps; the pane's detail resource reads it.
     pub reload: Signal<u32>,
-    /// The row being retracted/detached, if the retract panel is open.
+    /// The row or tag being corrected, if the retract panel is open.
     pub retract: Signal<Option<RetractTarget>>,
     /// The rationale typed into the open retract panel.
     pub retract_reason: Signal<String>,
@@ -60,11 +60,11 @@ pub struct DetailCommits<A: DetailAggregate> {
     /// Retracts an assertion by id (the History tab, and `⌘Z` via
     /// [`use_record_undo`](crate::screens::use_record_undo)).
     pub on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab.
-    pub on_tag_remove: Callback<String>,
+    /// Arms the retract panel for a tag: `(tag_id, tag name)`.
+    pub on_tag_remove: Callback<(String, String)>,
     /// Arms the retract panel for a row: `(assertion_id, label, detach)`.
     pub on_retract: Callback<(String, String, bool)>,
-    /// Confirms the open retract panel — dispatches the undo with the typed rationale.
+    /// Confirms the open retract panel — dispatches the undo or the untag with the typed rationale.
     pub on_retract_confirm: Callback<()>,
 }
 
@@ -87,12 +87,13 @@ impl<A: DetailAggregate> Copy for DetailCommits<A> {}
 ///
 /// - `on_submit` — commits one edit; on success closes the side panel (`editing`), bumps `reload`, and
 ///   shows the shell's saved notice. A failure is a sticky error notice and changes nothing else.
-/// - `on_undo` / `on_tag_remove` — both ride `on_submit`, with [`DetailAggregate::undo`] /
-///   [`DetailAggregate::untag`] and a default provenance.
-/// - `on_retract` — arms the panel for a row, clearing the rationale field first.
-/// - `on_retract_confirm` — dispatches the armed row's undo with the typed rationale as the
-///   provenance's `rationale` (the retract note stays in History — ADR 0004 §2), then closes the panel
-///   and reloads.
+/// - `on_undo` — rides `on_submit` with [`DetailAggregate::undo`] and a default provenance: `⌘Z` and
+///   the History tab's undo are keystroke-and-click affordances with no panel to type a reason into.
+/// - `on_retract` / `on_tag_remove` — arm the panel for a row or a tag, clearing the rationale field
+///   first. Neither writes anything; the confirm does.
+/// - `on_retract_confirm` — dispatches the armed subject's [`DetailAggregate::undo`] or
+///   [`DetailAggregate::untag`] with the typed rationale as the provenance's `rationale` (the
+///   correction stays in History — ADR 0004 §2), then closes the panel and reloads.
 ///
 /// The pane keeps what genuinely differs: its `undo_busy` memo, its whole-record `on_record_save`, and
 /// any aggregate-specific confirm (see `screens/event.rs`).
@@ -132,23 +133,27 @@ pub fn use_detail_commits<A: DetailAggregate, E: 'static>(
     let on_undo = use_callback(move |assertion_id: String| {
         on_submit.call((A::undo(&undo_human, assertion_id), ProvenanceDraft::default()));
     });
-    let tag_human = human_id.to_owned();
-    let on_tag_remove = use_callback(move |tag_id: String| {
-        on_submit.call((A::untag(&tag_human, tag_id), ProvenanceDraft::default()));
+    // Untag arms the same panel a per-row Retract/Detach does, rather than committing on the click: it
+    // is a correction, so the operator gets to say why (issue #315).
+    let on_tag_remove = use_callback(move |(tag_id, name): (String, String)| {
+        retract_reason.set(String::new());
+        retract.set(Some(RetractTarget {
+            subject: RetractSubject::Tag { tag_id },
+            label: name,
+        }));
     });
 
     let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
         retract_reason.set(String::new());
         retract.set(Some(RetractTarget {
-            assertion_id,
+            subject: RetractSubject::Assertion { assertion_id, detach },
             label,
-            detach,
         }));
     });
     let retract_human = human_id.to_owned();
     let mut retract_nav = nav;
     let on_retract_confirm = use_callback(move |()| {
-        let Some(RetractTarget { assertion_id, .. }) = retract() else {
+        let Some(RetractTarget { subject, .. }) = retract() else {
             return;
         };
         let services = services.clone();
@@ -159,7 +164,10 @@ pub fn use_detail_commits<A: DetailAggregate, E: 'static>(
             ..ProvenanceDraft::default()
         };
         spawn(async move {
-            let edit = A::undo(&human_id, assertion_id);
+            let edit = match subject {
+                RetractSubject::Assertion { assertion_id, .. } => A::undo(&human_id, assertion_id),
+                RetractSubject::Tag { tag_id } => A::untag(&human_id, tag_id),
+            };
             match A::save(services, edit, prov).await {
                 Ok(_) => {
                     retract.set(None);
