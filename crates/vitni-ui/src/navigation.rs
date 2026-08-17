@@ -734,7 +734,7 @@ pub struct MergePersons {
 }
 
 /// A request to mutate a person, dispatched to a `vitni-app` command use-case via
-/// [`dispatch_edit`](crate::intent::dispatch_edit). Distinct from [`Intent`] (a read): an edit emits
+/// [`dispatch_person_edit`](crate::intent::dispatch_person_edit). Distinct from [`Intent`] (a read): an edit emits
 /// an event and the renderer reloads the detail afterwards.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PersonEdit {

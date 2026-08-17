@@ -8,6 +8,7 @@
 mod bulk_import;
 mod citation;
 mod dashboard;
+mod detail_commits;
 mod dna_match;
 mod dna_test;
 mod event;
@@ -41,6 +42,11 @@ pub use bulk_import::{
 };
 pub use citation::{CitationEditForm, citation_attributes_table, citation_create_fields, citation_overview};
 pub use dashboard::{DashboardScreen, dashboard_view};
+pub use detail_commits::{
+    CitationCommits, DetailAggregate, DetailCommits, DnaMatchCommits, DnaTestCommits, EventCommits, FamilyCommits,
+    MediaCommits, NoteCommits, PersonCommits, PlaceCommits, RepositoryCommits, ResearchNoteCommits, SourceCommits,
+    use_detail_commits,
+};
 pub use dna_match::{
     DnaMatchEditForm, dna_match_ancestors_table, dna_match_create_fields, dna_match_overview, dna_match_record_fields,
     dna_match_segments_table,

@@ -181,10 +181,19 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
     let nav = use_context::<NavState>();
     let mut label_nav = nav;
     let active = use_detail_tab(Category::Media, &human_id);
-    let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<MediaEditForm>);
-    let mut retract = use_signal(|| None::<RetractTarget>);
-    let mut retract_reason = use_signal(String::new);
+    // The shared commit path (`screens/detail_commits.rs`): the reload counter, the retract panel's
+    // state, and the five callbacks every detail pane dispatches through.
+    let DetailCommits {
+        reload,
+        retract,
+        retract_reason,
+        on_submit,
+        on_undo,
+        on_tag_remove,
+        on_retract,
+        on_retract_confirm,
+    } = use_detail_commits::<MediaCommits, MediaEditForm>(&state, &human_id, editing);
     let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
@@ -218,75 +227,8 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
         );
     });
 
-    let submit_services = services.clone();
-    let submit_saved = saved_label.clone();
-    let mut editing_for_submit = editing;
-    let mut submit_nav = nav;
-    let on_submit = use_callback(move |(edit, prov): (MediaEdit, ProvenanceDraft)| {
-        let services = submit_services.clone();
-        let saved = submit_saved.clone();
-        spawn(async move {
-            match save_media_edit(services, edit, prov).await {
-                Ok(_) => {
-                    editing_for_submit.set(None);
-                    reload += 1;
-                    submit_nav.notify(saved);
-                }
-                Err(message) => submit_nav.notify_error(message),
-            }
-        });
-    });
-
-    // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
-    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
-    let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
-        retract_reason.set(String::new());
-        retract.set(Some(RetractTarget {
-            assertion_id,
-            label,
-            detach,
-        }));
-    });
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: MediaEditForm| editing_for_open.set(Some(form)));
-    let media_tag_human = human_id.clone();
-    let on_tag_remove = use_callback(move |tag_id: String| {
-        on_submit.call((
-            MediaEdit::Tag {
-                human_id: media_tag_human.clone(),
-                tag_id,
-                remove: true,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
-    let retract_services = services.clone();
-    let retract_human = human_id.clone();
-    let retract_saved = saved_label.clone();
-    let mut retract_nav = nav;
-    let on_retract_confirm = use_callback(move |()| {
-        let Some(RetractTarget { assertion_id, .. }) = retract() else {
-            return;
-        };
-        let services = retract_services.clone();
-        let human_id = retract_human.clone();
-        let saved = retract_saved.clone();
-        let prov = ProvenanceDraft {
-            rationale: retract_reason(),
-            ..ProvenanceDraft::default()
-        };
-        spawn(async move {
-            let edit = MediaEdit::UndoAssertion { human_id, assertion_id };
-            match save_media_edit(services, edit, prov).await {
-                Ok(_) => {
-                    retract.set(None);
-                    reload += 1;
-                    retract_nav.notify(saved);
-                }
-                Err(message) => retract_nav.notify_error(message),
-            }
-        });
-    });
 
     let record_services = services.clone();
     let record_nav = nav;
@@ -309,16 +251,6 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
     });
     let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read() || retract.read().is_some());
     let undo_notice = chrome.kbd_nothing_to_undo();
-    let undo_human = human_id.clone();
-    let on_undo = use_callback(move |assertion_id: String| {
-        on_submit.call((
-            MediaEdit::UndoAssertion {
-                human_id: undo_human.clone(),
-                assertion_id,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
     use_record_undo(
         nav,
         Category::Media,

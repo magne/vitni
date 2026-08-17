@@ -19,6 +19,7 @@
 pub mod app;
 pub mod components;
 mod desktop;
+mod detail_aggregates;
 pub mod i18n;
 pub mod master_detail;
 pub mod media_asset;

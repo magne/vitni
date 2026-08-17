@@ -567,11 +567,19 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     let mut label_nav = nav;
     let mut record_nav = nav;
     let active = use_detail_tab(Category::People, &human_id);
-    let mut reload = use_signal(|| 0_u32);
     let mut editing = use_signal(|| None::<EditForm>);
-    let mut retract = use_signal(|| None::<RetractTarget>);
-    let mut retract_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
+    // The shared commit path (`screens/detail_commits.rs`): the reload counter, the retract panel's
+    // state, and the five callbacks every detail pane dispatches through.
+    let DetailCommits {
+        mut reload,
+        retract,
+        retract_reason,
+        on_submit,
+        on_undo,
+        on_tag_remove,
+        on_retract,
+        on_retract_confirm,
+    } = use_detail_commits::<PersonCommits, EditForm>(&state, &human_id, editing);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -606,21 +614,6 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     });
 
     let record_services = services.clone();
-    let mut submit_nav = nav;
-    let on_submit = use_callback(move |(edit, prov): (PersonEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
-        spawn(async move {
-            match save_edit(services, edit, prov).await {
-                Ok(()) => {
-                    editing.set(None);
-                    reload += 1;
-                    submit_nav.notify(saved);
-                }
-                Err(message) => submit_nav.notify_error(message),
-            }
-        });
-    });
     let saved_label_rec = state.data_loc().action_label(ActionLabel::Saved);
     // The whole-record Save: the buffered draft becomes a change-set commit (the identity edit).
     let on_record_save = use_callback(move |(draft, prov): (PersonDraft, ProvenanceDraft)| {
@@ -639,59 +632,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
         });
     });
 
-    // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
-    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
-    let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
-        retract_reason.set(String::new());
-        retract.set(Some(RetractTarget {
-            assertion_id,
-            label,
-            detach,
-        }));
-    });
     let on_edit_open = use_callback(move |form: EditForm| editing.set(Some(form)));
-    let tag_human = human_id.clone();
-    let on_tag_remove = use_callback(move |tag_id: String| {
-        on_submit.call((
-            PersonEdit::Tag {
-                human_id: tag_human.clone(),
-                tag_id,
-                remove: true,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
-    let retract_services = state.services().clone();
-    let retract_human = human_id.clone();
-    let saved_label_retract = state.data_loc().action_label(ActionLabel::Saved);
-    let mut retract_nav = nav;
-    let on_retract_confirm = use_callback(move |()| {
-        let Some(target) = retract() else {
-            return;
-        };
-        let services = retract_services.clone();
-        let human_id = retract_human.clone();
-        let saved = saved_label_retract.clone();
-        let prov = ProvenanceDraft {
-            rationale: retract_reason(),
-            ..ProvenanceDraft::default()
-        };
-        spawn(async move {
-            let edit = PersonEdit::UndoAssertion {
-                human_id,
-                assertion_id: target.assertion_id,
-            };
-            let outcome = save_edit(services, edit, prov).await;
-            match outcome {
-                Ok(()) => {
-                    retract.set(None);
-                    reload += 1;
-                    retract_nav.notify(saved);
-                }
-                Err(message) => retract_nav.notify_error(message),
-            }
-        });
-    });
 
     // ⌘Z retracts the newest undoable assertion of this person's loaded change log (WP5).
     let undo_history = use_memo(move || match &*data.read() {
@@ -700,16 +641,6 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     });
     let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read() || retract.read().is_some());
     let undo_notice = chrome.kbd_nothing_to_undo();
-    let undo_human = human_id.clone();
-    let on_undo = use_callback(move |assertion_id: String| {
-        on_submit.call((
-            PersonEdit::UndoAssertion {
-                human_id: undo_human.clone(),
-                assertion_id,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
     use_record_undo(
         nav,
         Category::People,

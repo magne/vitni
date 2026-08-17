@@ -378,8 +378,17 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
     let nav = use_context::<NavState>();
     let mut label_nav = nav;
     let active = use_detail_tab(Category::ResearchNotes, &human_id);
-    let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<ResearchNoteEditForm>);
+    // The shared commit path (`screens/detail_commits.rs`). Only three of its callbacks are taken: this
+    // pane has no retract confirm at all — removing a subject is a `RemoveSubject` edit that rides
+    // `on_submit`, not a retraction of the assertion that added it.
+    let DetailCommits {
+        reload,
+        on_submit,
+        on_undo,
+        on_tag_remove,
+        ..
+    } = use_detail_commits::<ResearchNoteCommits, ResearchNoteEditForm>(&state, &human_id, editing);
     let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
@@ -411,35 +420,6 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
         );
     });
 
-    let submit_services = services.clone();
-    let submit_saved = saved_label.clone();
-    let mut editing_for_submit = editing;
-    let mut submit_nav = nav;
-    let on_submit = use_callback(move |(edit, prov): (ResearchNoteEdit, ProvenanceDraft)| {
-        let services = submit_services.clone();
-        let saved = submit_saved.clone();
-        spawn(async move {
-            match save_research_note_edit(services, edit, prov).await {
-                Ok(_) => {
-                    editing_for_submit.set(None);
-                    reload += 1;
-                    submit_nav.notify(saved);
-                }
-                Err(message) => submit_nav.notify_error(message),
-            }
-        });
-    });
-    let tag_human = human_id.clone();
-    let on_tag_remove = use_callback(move |tag_id: String| {
-        on_submit.call((
-            ResearchNoteEdit::Tag {
-                human_id: tag_human.clone(),
-                tag_id,
-                remove: true,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
     let subject_human = human_id.clone();
     let on_subject_remove = use_callback(move |subject: SubjectVm| {
         on_submit.call((
@@ -472,16 +452,6 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
     });
     let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read());
     let undo_notice = chrome.kbd_nothing_to_undo();
-    let undo_human = human_id.clone();
-    let on_undo = use_callback(move |assertion_id: String| {
-        on_submit.call((
-            ResearchNoteEdit::UndoAssertion {
-                human_id: undo_human.clone(),
-                assertion_id,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
     use_record_undo(
         nav,
         Category::ResearchNotes,

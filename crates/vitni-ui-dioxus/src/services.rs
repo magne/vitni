@@ -29,15 +29,14 @@ use vitni_plugin_host::{
     Presenter, ProgressControl, ProgressUpdate, ResourceBudget, TrustRoots, TrustTier, resolve_trust_roots,
 };
 use vitni_ui::{
-    Category, CitationChangeSetRequest, CitationEdit, DataQualityVm, DnaMatchChangeSetRequest, DnaMatchEdit,
-    DnaTestChangeSetRequest, DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit,
-    ImportTargetChoice, Intent, IntentOutcome, Localizer, MediaChangeSetRequest, MediaEdit, MergeFailure, MergePersons,
-    MergeResultVm, NewRecordRequest, NoteChangeSetRequest, NoteEdit, Panel, PersonChangeSetRequest, PersonEdit,
-    PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit,
-    ResearchNoteChangeSetRequest, ResearchNoteEdit, RowVm, SourceChangeSetRequest, SourceEdit, SubmitResult,
-    TagChangeSetRequest, list_intent,
+    Category, CitationChangeSetRequest, DataQualityVm, DnaMatchChangeSetRequest, DnaTestChangeSetRequest,
+    EventChangeSetRequest, FamilyChangeSetRequest, ImportTargetChoice, Intent, IntentOutcome, Localizer,
+    MediaChangeSetRequest, MergeFailure, MergePersons, MergeResultVm, NewRecordRequest, NoteChangeSetRequest, Panel,
+    PersonChangeSetRequest, PlaceChangeSetRequest, ProvenanceDraft, RepositoryChangeSetRequest,
+    ResearchNoteChangeSetRequest, RowVm, SourceChangeSetRequest, SubmitResult, TagChangeSetRequest, list_intent,
 };
 
+use crate::detail_aggregates::for_each_detail_aggregate;
 use crate::i18n::Chrome;
 
 /// The `ui-panel` plugin's Fluent catalogue domain (its `<domain>.ftl` file name, ADR 0012 §5).
@@ -255,17 +254,31 @@ pub async fn merge_persons(services: Services, request: MergePersons) -> Result<
         .map_err(|error| MergeFailure::from_error(&error, &loc))
 }
 
-/// Saves a [`PersonEdit`] through the matching `vitni-app` command use-case, returning a
-/// localized error on failure. Opens a fresh workspace and mints a [`Session`] for the operator (the
-/// app layer is the sole source of the clock + assertion id).
-pub async fn save_edit(services: Services, edit: PersonEdit, prov: ProvenanceDraft) -> Result<(), String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_edit(&workspace, &session, &edit, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
+/// Generates the one-command save wrapper of every detail aggregate from the registry: open a fresh
+/// workspace, mint a [`Session`] for the operator (the app layer is the sole source of the clock +
+/// assertion id), dispatch, and localize the failure.
+macro_rules! detail_save_wrappers {
+    ($(($noun:literal, $Commits:ident, $Edit:ty, $save:ident, $dispatch:path)),+ $(,)?) => {
+        $(
+            #[doc = concat!("Saves a ", $noun, " edit through the matching `vitni-app` command use-case, returning")]
+            #[doc = concat!("the ", $noun, "'s effective `human_id` (the renamed one, when the edit was a")]
+            /// `SetHumanId`) or a localized error.
+            ///
+            /// Opens a fresh workspace and mints a [`Session`] for the operator (the app layer is the
+            /// sole source of the clock + assertion id).
+            pub async fn $save(services: Services, edit: $Edit, prov: ProvenanceDraft) -> Result<String, String> {
+                let loc = services.localizer();
+                let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+                let session = Session::new(services.config.operator_agent());
+                $dispatch(&workspace, &session, &edit, &prov)
+                    .await
+                    .map_err(|error| loc.error(&error))
+            }
+        )+
+    };
 }
+
+for_each_detail_aggregate!(detail_save_wrappers);
 
 /// Commits the buffered person record (a [`PersonChangeSetRequest`] + its provenance block) through
 /// the app's change-set, returning the person's `human_id` (or a localized error). One operator
@@ -301,21 +314,6 @@ pub async fn commit_new_record(
         .map_err(|error| loc.error(&error))
 }
 
-/// Saves a [`CitationEdit`] through the matching `vitni-app` command use-case, returning a
-/// localized error on failure.
-pub async fn save_citation_edit(
-    services: Services,
-    edit: CitationEdit,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_citation_edit(&workspace, &session, &edit, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
 /// Creates a citation against a source (by its `human_id`), returning the new citation's `human_id`
 /// (or a localized error).
 pub async fn commit_citation_change_set(
@@ -327,17 +325,6 @@ pub async fn commit_citation_change_set(
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     vitni_ui::dispatch_citation_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
-/// Saves a [`FamilyEdit`] through the matching `vitni-app` command use-case, returning a
-/// localized error on failure.
-pub async fn save_family_edit(services: Services, edit: FamilyEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_family_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -357,17 +344,6 @@ pub async fn commit_family_change_set(
         .map_err(|error| loc.error(&error))
 }
 
-/// Saves an [`EventEdit`] through the matching `vitni-app` command use-case, returning a
-/// localized error on failure.
-pub async fn save_event_edit(services: Services, edit: EventEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_event_edit(&workspace, &session, &edit, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
 /// Commits the buffered event create form through the app change-set, returning the new event's `human_id` (or a localized error).
 pub async fn commit_event_change_set(
     services: Services,
@@ -378,17 +354,6 @@ pub async fn commit_event_change_set(
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     vitni_ui::dispatch_event_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
-/// Saves a [`PlaceEdit`] through the matching `vitni-app` command use-case, returning the place's
-/// effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
-pub async fn save_place_edit(services: Services, edit: PlaceEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_place_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -404,17 +369,6 @@ pub async fn commit_place_change_set(
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     vitni_ui::dispatch_place_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
-/// Saves a [`SourceEdit`] through the matching `vitni-app` command use-case, returning the
-/// source's effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
-pub async fn save_source_edit(services: Services, edit: SourceEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_source_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -435,21 +389,6 @@ pub async fn commit_source_change_set(
         .map_err(|error| loc.error(&error))
 }
 
-/// Saves a [`RepositoryEdit`] through the matching `vitni-app` command use-case, returning the
-/// repository's effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
-pub async fn save_repository_edit(
-    services: Services,
-    edit: RepositoryEdit,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_repository_edit(&workspace, &session, &edit, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
 /// Commits the buffered repository create form through the app's change-set, returning the new
 /// repository's `human_id`. One operator action; nothing is written until Save.
 pub async fn commit_repository_change_set(
@@ -461,17 +400,6 @@ pub async fn commit_repository_change_set(
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     vitni_ui::dispatch_repository_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
-/// Saves a [`MediaEdit`] through the matching `vitni-app` command use-case, returning the media
-/// object's effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
-pub async fn save_media_edit(services: Services, edit: MediaEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_media_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -491,17 +419,6 @@ pub async fn commit_media_change_set(
         .map_err(|error| loc.error(&error))
 }
 
-/// Saves a [`NoteEdit`] through the matching `vitni-app` command use-case, returning the note's
-/// effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
-pub async fn save_note_edit(services: Services, edit: NoteEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_note_edit(&workspace, &session, &edit, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
 /// Commits the buffered note create form through the app's change-set, returning the new note's
 /// `human_id`. One operator action; nothing is written until Save.
 pub async fn commit_note_change_set(
@@ -513,21 +430,6 @@ pub async fn commit_note_change_set(
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     vitni_ui::dispatch_note_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
-/// Saves a [`ResearchNoteEdit`] through the matching `vitni-app` command use-case, returning the
-/// research note's `human_id` (unchanged — the aggregate has no rename) or a localized error.
-pub async fn save_research_note_edit(
-    services: Services,
-    edit: ResearchNoteEdit,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_research_note_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -563,21 +465,6 @@ pub async fn commit_tag_change_set(
         .map_err(|error| loc.error(&error))
 }
 
-/// Saves a [`DnaTestEdit`] through the matching `vitni-app` command use-case, returning a
-/// localized error on failure.
-pub async fn save_dna_test_edit(
-    services: Services,
-    edit: DnaTestEdit,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_dna_test_edit(&workspace, &session, &edit, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
 /// Creates a DNA test anchored to a person (by their `human_id`), returning the new test's `human_id`
 /// (or a localized error). Provider/kit/type/build are added afterwards through the detail.
 pub async fn commit_dna_test_change_set(
@@ -589,21 +476,6 @@ pub async fn commit_dna_test_change_set(
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     vitni_ui::dispatch_dna_test_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
-/// Saves a [`DnaMatchEdit`] through the matching `vitni-app` command use-case, returning a
-/// localized error on failure.
-pub async fn save_dna_match_edit(
-    services: Services,
-    edit: DnaMatchEdit,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_dna_match_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }

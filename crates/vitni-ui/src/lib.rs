@@ -50,10 +50,10 @@ pub use import_payload::{
 pub use intent::{
     IntentOutcome, approve_plugin_grants, dispatch, dispatch_citation_change_set, dispatch_citation_edit,
     dispatch_dna_match_change_set, dispatch_dna_match_edit, dispatch_dna_test_change_set, dispatch_dna_test_edit,
-    dispatch_edit, dispatch_event_change_set, dispatch_event_edit, dispatch_family_change_set, dispatch_family_edit,
+    dispatch_event_change_set, dispatch_event_edit, dispatch_family_change_set, dispatch_family_edit,
     dispatch_media_change_set, dispatch_media_edit, dispatch_merge, dispatch_new_record, dispatch_note_change_set,
-    dispatch_note_edit, dispatch_person_change_set, dispatch_place_change_set, dispatch_place_edit,
-    dispatch_repository_change_set, dispatch_repository_edit, dispatch_research_note_change_set,
+    dispatch_note_edit, dispatch_person_change_set, dispatch_person_edit, dispatch_place_change_set,
+    dispatch_place_edit, dispatch_repository_change_set, dispatch_repository_edit, dispatch_research_note_change_set,
     dispatch_research_note_edit, dispatch_source_change_set, dispatch_source_edit, dispatch_tag_change_set,
     pin_publisher, resolve_record_name, unpin_publisher,
 };
