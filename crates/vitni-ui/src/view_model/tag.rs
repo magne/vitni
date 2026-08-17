@@ -1,6 +1,6 @@
 use super::{
     DetailTab, HistoryEntryVm, Localizer, RecordDraft, RestrictionKind, RowVm, TagChangeSetRequest, UsingRecordVm,
-    line_label, toggled_restrictions, using_record_vm,
+    line_label, using_record_vm,
 };
 
 /// One object-type group on the Tag Usage tab: the localized kind, the count, and a few examples.
@@ -120,13 +120,6 @@ impl TagDraft {
             color: detail.color.clone().unwrap_or_else(|| DEFAULT_TAG_COLOR.to_owned()),
             restrictions: detail.restrictions.clone(),
         }
-    }
-
-    /// This draft's restrictions with `kind` toggled on/off, in [`toggled_restrictions`]'s canonical
-    /// order.
-    #[must_use]
-    pub fn toggle_restriction(&self, kind: RestrictionKind) -> Vec<RestrictionKind> {
-        toggled_restrictions(&self.restrictions, kind)
     }
 
     /// The priority parsed from the spinner text, or `None` when empty / non-numeric (invalid).
@@ -276,33 +269,6 @@ mod tag_draft_tests {
     #[test]
     fn a_fresh_create_draft_has_no_restrictions() {
         assert!(TagDraft::new().restrictions.is_empty());
-    }
-
-    #[test]
-    fn toggle_restriction_adds_in_canonical_order_regardless_of_click_order() {
-        let draft = TagDraft {
-            restrictions: Vec::new(),
-            ..seed()
-        };
-        // Toggle Privacy first, then Confidential; canonical order (Confidential before Privacy)
-        // should still win, not click order.
-        let after_privacy = draft.toggle_restriction(RestrictionKind::Privacy);
-        let draft = TagDraft {
-            restrictions: after_privacy,
-            ..draft
-        };
-        let after_confidential = draft.toggle_restriction(RestrictionKind::Confidential);
-        assert_eq!(
-            after_confidential,
-            vec![RestrictionKind::Confidential, RestrictionKind::Privacy]
-        );
-    }
-
-    #[test]
-    fn toggle_restriction_removes_an_already_selected_kind() {
-        let draft = seed();
-        let toggled = draft.toggle_restriction(RestrictionKind::Confidential);
-        assert!(toggled.is_empty());
     }
 
     #[test]

@@ -49,16 +49,16 @@ pub use super::detail_commits::{
 };
 pub use super::record_form::{
     DraftCommit, RecordActionLabels, RecordEditState, apply_record_edits, finish_draft_commit, finish_record_save,
-    record_edit_provenance, record_head_actions, record_keydown, use_record_create, use_record_edit,
-    use_save_on_request,
+    record_edit_provenance, record_head_actions, record_keydown, record_restrictions_field, use_record_create,
+    use_record_edit, use_save_on_request,
 };
 pub use super::research_note::ResearchNotesTab;
 pub use super::shared::{
     JumpButton, MediaTabState, RecordLink, RegisterFields, RetractTarget, RowRetract, RowVerb, attach_link_field,
     attach_link_form, create_record_frame, id_list, media_tab, non_empty, optional_enum_select, picker_selection_id,
     provenance_block, provenance_block_dna, provenance_cue, record_enum_select, register_fields_form,
-    retract_side_panel, row_actions_cell, source_cue, source_media_type_choices, use_attach_picker, use_attach_save,
-    use_detail_tab, use_existing_picker, use_record_undo,
+    restriction_display, retract_side_panel, row_actions_cell, source_cue, source_media_type_choices,
+    use_attach_picker, use_attach_save, use_detail_tab, use_existing_picker, use_record_undo,
 };
 pub use super::tabs::{
     AddressForm, ParticipationForm, ParticipationSeed, TabActionStyle, TabActionTarget, address_cards, citations_table,

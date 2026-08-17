@@ -8,8 +8,8 @@ use vitni_ui::{Category, Localizer, RestrictionKind, TagDetail, TagDraft, TagUsa
 use vitni_ui_dioxus::components::TabItem;
 use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
-    RecordActionLabels, record_head_actions, tag_chips, tag_edit_colour_card, tag_edit_tag_card, tag_overview,
-    tag_usage_tab, use_record_edit,
+    RecordActionLabels, RecordEditState, record_edit_provenance, record_head_actions, tag_chips, tag_edit_colour_card,
+    tag_edit_tag_card, tag_overview, tag_usage_tab, use_record_edit,
 };
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
@@ -155,17 +155,32 @@ fn overview_view_mode_with_restrictions() -> Element {
     }
 }
 
+/// A pristine edit state over `detail`'s draft, in edit mode — what the detail pane hands the record
+/// cards once Edit is pressed.
+fn edit_state(detail: &TagDetail) -> RecordEditState<TagDraft> {
+    let committed = TagDraft::from_detail(detail);
+    RecordEditState {
+        editing: use_signal(|| true),
+        seed: use_signal({
+            let committed = committed.clone();
+            move || committed
+        }),
+        draft: use_signal(move || committed),
+        prov: use_signal(vitni_ui::ProvenanceDraft::default),
+    }
+}
+
 fn overview_edit_mode() -> Element {
     // Edit mode swaps in the editable record cards (what `TagRecordEditor` renders behind the
     // `editing` signal); rendered directly here so the SSR test needs no `AppCtx`.
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let committed = TagDraft::from_detail(&sample());
-    let draft = use_signal(|| committed.clone());
+    let edit = edit_state(&sample());
+    let committed = edit.seed.read().clone();
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
     rsx! {
-        {tag_edit_tag_card(&loc, draft, &committed, name_touched, false)}
-        {tag_edit_colour_card(&loc, draft, &committed, picker_open)}
+        {tag_edit_tag_card(&loc, edit, name_touched, false)}
+        {tag_edit_colour_card(&loc, edit.draft, &committed, picker_open)}
     }
 }
 
@@ -173,13 +188,33 @@ fn overview_edit_mode_with_restrictions() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let mut seed = sample();
     seed.restrictions = vec![RestrictionKind::Locked];
-    let committed = TagDraft::from_detail(&seed);
-    let draft = use_signal(|| committed.clone());
+    let edit = edit_state(&seed);
+    let committed = edit.seed.read().clone();
     let name_touched = use_signal(|| false);
     let picker_open = use_signal(|| false);
     rsx! {
-        {tag_edit_tag_card(&loc, draft, &committed, name_touched, false)}
-        {tag_edit_colour_card(&loc, draft, &committed, picker_open)}
+        {tag_edit_tag_card(&loc, edit, name_touched, false)}
+        {tag_edit_colour_card(&loc, edit.draft, &committed, picker_open)}
+    }
+}
+
+/// A tag draft differing from its committed seed in nothing but its restriction set — savable, and
+/// the provenance block asks why (issue #315).
+fn tag_restriction_change_only() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let labels = RecordActionLabels::resolve(&loc);
+    let seed = TagDraft::from_detail(&sample());
+    let mut draft = seed.clone();
+    draft.restrictions = vec![RestrictionKind::Privacy];
+    let edit = RecordEditState {
+        editing: use_signal(|| true),
+        seed: use_signal(move || seed),
+        draft: use_signal(move || draft),
+        prov: use_signal(vitni_ui::ProvenanceDraft::default),
+    };
+    rsx! {
+        {record_head_actions(&labels, edit, rsx! {}, use_callback(|_: (TagDraft, vitni_ui::ProvenanceDraft)| {}))}
+        {record_edit_provenance(&loc, edit)}
     }
 }
 
@@ -311,7 +346,7 @@ fn view_mode_shows_the_tags_current_restrictions() {
     let html = render(overview_view_mode_with_restrictions);
     assert!(
         html.contains(r#"data-kind="confidential""#),
-        "the restriction toggle set is rendered:\n{html}"
+        "the restriction set is rendered:\n{html}"
     );
     assert!(
         html.contains(r#"aria-pressed="true""#),
@@ -320,11 +355,11 @@ fn view_mode_shows_the_tags_current_restrictions() {
 }
 
 #[test]
-fn view_mode_with_no_restrictions_shows_the_toggle_set_unpressed() {
+fn view_mode_with_no_restrictions_shows_the_set_unpressed() {
     let html = render(overview_view_mode);
     assert!(
         html.contains(r#"data-kind="confidential""#),
-        "the restriction toggle set is rendered even when nothing is set:\n{html}"
+        "the restriction set is rendered even when nothing is set:\n{html}"
     );
     assert!(
         !html.contains(r#"aria-pressed="true""#),
@@ -342,5 +377,33 @@ fn edit_mode_restriction_toggles_are_seeded_from_the_draft() {
     assert!(
         html.contains(r#"aria-pressed="true""#),
         "the locked restriction shows pressed:\n{html}"
+    );
+    assert!(!html.contains("resn-static"), "edit mode offers live toggles:\n{html}");
+}
+
+#[test]
+fn view_mode_restrictions_are_static_not_toggles() {
+    let html = render(overview_view_mode_with_restrictions);
+    assert_eq!(
+        html.matches("resn-static").count(),
+        3,
+        "view mode states every kind, statically (issue #315):\n{html}"
+    );
+    assert!(
+        !html.contains("<button"),
+        "a restriction is changed in edit mode, never by pressing a read row:\n{html}"
+    );
+}
+
+#[test]
+fn a_restriction_change_alone_makes_the_tag_savable() {
+    let html = render(tag_restriction_change_only);
+    assert!(
+        !html.contains("disabled"),
+        "a restriction change alone enables Save:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="prov-reason""#),
+        "and asks for the reason like any other change (issue #315):\n{html}"
     );
 }

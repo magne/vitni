@@ -142,6 +142,7 @@ pub fn family_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::F
                         draft.write().human_id = value;
                     },
                 }
+                {record_restrictions_field(loc, record)}
             }
         }
     }
@@ -610,8 +611,6 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded family's detail container: header (title, restriction toggles), the tab strip,
-/// the active tab's content, and the editing side panel.
 /// The signals a family's detail threads to its tabs: the active tab, the collection-row side panel,
 /// and the whole-record edit state.
 #[derive(Clone, Copy)]
@@ -661,6 +660,9 @@ struct FamilyCallbacks {
     media_state: MediaTabState,
 }
 
+/// Renders a loaded family's detail container: header (title, the restrictions in force, the
+/// sticky-header record Edit/Cancel/Save), the tab strip, the active tab's content, and the editing
+/// side panel.
 fn family_detail(
     state: &AppState,
     detail: &FamilyDetail,
@@ -706,7 +708,7 @@ fn family_detail(
                 title: detail.title.clone(),
                 id_label: Some(detail.human_id.clone()),
                 avatar: "👪".to_owned(),
-                extras: family_restriction_toggles(loc, detail, on_submit, human_id),
+                extras: restriction_display(loc, &detail.restrictions),
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
@@ -715,40 +717,6 @@ fn family_detail(
             {family_edit_panel(state, detail, editing, on_submit, on_submit_batch, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
             {child_removal_side_panel(loc, removing_child, removal_reason, on_child_remove_confirm)}
-        }
-    }
-}
-
-/// The interactive privacy-restriction toggles for a family (the mockup `resn-set`).
-fn family_restriction_toggles(
-    loc: &Localizer,
-    detail: &FamilyDetail,
-    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        RestrictionSet {
-            choices,
-            selected: selected.clone(),
-            group_label: loc.restriction_group_label(),
-            ontoggle: move |kind: RestrictionKind| {
-                let mut next = selected.clone();
-                if let Some(position) = next.iter().position(|&k| k == kind) {
-                    next.remove(position);
-                } else {
-                    next.push(kind);
-                }
-                on_submit.call((FamilyEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
-            },
         }
     }
 }

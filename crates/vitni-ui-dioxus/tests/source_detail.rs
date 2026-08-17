@@ -10,10 +10,13 @@ use vitni_ui::{
     AttachedRefVm, CitationRefVm, CitingRecordVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MediaRefVm,
     RepositoryLinkVm, SourceAttributeVm, SourceCitationVm, SourceDetail, SourceReliabilityVm,
 };
-use vitni_ui::{ProvenanceDraft, SourceDraft};
+use vitni_ui::{ProvenanceDraft, RestrictionKind, SourceDraft};
+use vitni_ui_dioxus::components::TabItem;
+use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
-    MediaTabState, RecordActionLabels, RecordEditState, id_list, media_gallery, media_tab, record_head_actions,
-    source_attributes_table, source_citations_table, source_overview, source_repositories_table, tags_panel,
+    MediaTabState, RecordActionLabels, RecordEditState, id_list, media_gallery, media_tab, record_edit_provenance,
+    record_head_actions, restriction_display, source_attributes_table, source_citations_table, source_overview,
+    source_repositories_table, tags_panel,
 };
 
 /// A representative source detail: an 1850 census with a Normal typical surety, one repository link
@@ -387,5 +390,155 @@ fn media_tab_opens_the_crop_viewer_on_a_card_click() {
     assert!(
         html.contains("Set region") && html.contains("Clear region"),
         "the crop viewer overlay renders with its Set/Clear region actions:\n{html}"
+    );
+}
+
+// ---- Restrictions (issue #315) --------------------------------------------------------------------
+
+/// The source detail header as `source_detail` builds it: the id badge and, as `extras`, the
+/// read-only display of the restrictions in force — the header states them, it no longer changes them.
+fn source_header(loc: &Localizer, detail: &SourceDetail) -> Element {
+    let active = use_signal(|| 0_usize);
+    rsx! {
+        DetailContainer {
+            title: detail.title.clone(),
+            id_label: Some(detail.human_id.clone()),
+            avatar: "📚".to_owned(),
+            extras: restriction_display(loc, &detail.restrictions),
+            actions: rsx! {},
+            tabs: Vec::<TabItem>::new(),
+            active,
+        }
+    }
+}
+
+fn header_with_privacy() -> Element {
+    let mut detail = sample();
+    detail.restrictions = vec![RestrictionKind::Privacy];
+    rsx! {
+        {source_header(&loc(), &detail)}
+    }
+}
+
+fn header_unrestricted() -> Element {
+    rsx! {
+        {source_header(&loc(), &sample())}
+    }
+}
+
+/// The source's edit state over a locked record, in `editing` mode — the restriction set is part of
+/// the draft, so the Overview card renders it from there.
+fn locked_state(editing: bool) -> RecordEditState<SourceDraft> {
+    let mut detail = sample();
+    detail.restrictions = vec![RestrictionKind::Locked];
+    let seed = SourceDraft::from_detail(&detail);
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
+fn locked_overview_view_mode() -> Element {
+    let loc = loc();
+    let mut detail = sample();
+    detail.restrictions = vec![RestrictionKind::Locked];
+    rsx! {
+        {source_overview(&loc, &detail, locked_state(false))}
+    }
+}
+
+fn locked_overview_edit_mode() -> Element {
+    let loc = loc();
+    let mut detail = sample();
+    detail.restrictions = vec![RestrictionKind::Locked];
+    rsx! {
+        {source_overview(&loc, &detail, locked_state(true))}
+    }
+}
+
+/// A draft differing from its committed seed in nothing but its restriction set — the whole point of
+/// #315: that change is savable, and it carries a reason like any other.
+fn restriction_change_only() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let seed = SourceDraft::from_detail(&sample());
+    let mut draft = seed.clone();
+    draft.restrictions = vec![RestrictionKind::Privacy];
+    let record = RecordEditState {
+        editing: use_signal(|| true),
+        seed: use_signal(move || seed),
+        draft: use_signal(move || draft),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (SourceDraft, ProvenanceDraft)| {}))}
+        {record_edit_provenance(&loc, record)}
+    }
+}
+
+#[test]
+fn the_header_states_only_the_restrictions_in_force() {
+    let html = render(header_with_privacy);
+    assert!(html.contains(r#"data-kind="privacy""#), "the set kind shows:\n{html}");
+    assert!(
+        !html.contains(r#"data-kind="locked""#) && !html.contains(r#"data-kind="confidential""#),
+        "an unset kind is not shown in the header at all:\n{html}"
+    );
+    assert!(
+        !html.contains("<button"),
+        "the header's restrictions are a display, not toggles (issue #315):\n{html}"
+    );
+}
+
+#[test]
+fn an_unrestricted_source_shows_no_header_restrictions() {
+    let html = render(header_unrestricted);
+    assert!(
+        !html.contains("resn"),
+        "an unrestricted record's header carries no restriction group:\n{html}"
+    );
+}
+
+#[test]
+fn the_overview_card_states_every_restriction_in_view_mode() {
+    let html = render(locked_overview_view_mode);
+    assert!(html.contains(">Restrictions<"), "the card row is labelled:\n{html}");
+    assert_eq!(
+        html.matches("resn-static").count(),
+        3,
+        "all three kinds render, static, so entering edit mode reflows nothing:\n{html}"
+    );
+}
+
+#[test]
+fn the_overview_card_toggles_restrictions_in_edit_mode() {
+    let html = render(locked_overview_edit_mode);
+    assert!(!html.contains("resn-static"), "edit mode offers live toggles:\n{html}");
+    assert!(
+        html.contains(r#"data-kind="locked" aria-pressed="true""#),
+        "the toggles are seeded from the draft:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"aria-pressed="true""#).count(),
+        1,
+        "only the record's own restriction is pressed:\n{html}"
+    );
+}
+
+#[test]
+fn a_restriction_change_alone_makes_the_source_savable() {
+    let html = render(restriction_change_only);
+    assert!(
+        !html.contains("disabled"),
+        "a restriction change alone enables Save:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="prov-reason""#),
+        "and asks for the reason like any other change (issue #315):\n{html}"
     );
 }

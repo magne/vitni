@@ -160,6 +160,7 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Not
                         draft.write().language = value;
                     },
                 }
+                {record_restrictions_field(loc, record)}
             }
         }
     }
@@ -398,47 +399,13 @@ fn note_detail(
             title: detail.title.clone(),
             id_label: Some(detail.human_id.clone()),
             avatar: "🗒".to_owned(),
-            extras: note_restriction_toggles(loc, detail, on_submit, human_id),
+            extras: restriction_display(loc, &detail.restrictions),
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
             {note_tab_content(state, detail, &active_tab, editing, record, on_edit_open, on_retract, on_undo, on_tag_remove)}
         }
         {note_edit_panel(state, editing, on_submit, human_id)}
-    }
-}
-
-/// The interactive privacy-restriction toggles for a note.
-fn note_restriction_toggles(
-    loc: &Localizer,
-    detail: &NoteDetail,
-    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        RestrictionSet {
-            choices,
-            selected: selected.clone(),
-            group_label: loc.restriction_group_label(),
-            ontoggle: move |kind: RestrictionKind| {
-                let mut next = selected.clone();
-                if let Some(position) = next.iter().position(|&k| k == kind) {
-                    next.remove(position);
-                } else {
-                    next.push(kind);
-                }
-                on_submit.call((NoteEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
-            },
-        }
     }
 }
 

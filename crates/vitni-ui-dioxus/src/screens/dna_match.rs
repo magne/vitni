@@ -218,6 +218,7 @@ pub fn dna_match_record_fields(
                         draft.write().status = value;
                     },
                 }
+                {record_restrictions_field(loc, record)}
             }
         }
     }
@@ -541,7 +542,7 @@ fn dna_match_detail(
                 title: detail.title.clone(),
                 id_label: Some(detail.human_id.clone()),
                 avatar: "🔗".to_owned(),
-                extras: dna_match_restriction_toggles(loc, detail, on_submit, human_id),
+                extras: restriction_display(loc, &detail.restrictions),
                 actions: record_head_actions(&labels, record, status_actions, on_record_save),
                 tabs: tab_items,
                 active,
@@ -589,40 +590,6 @@ fn dna_match_status_actions(
                         },
                         ProvenanceDraft::default(),
                     ));
-            },
-        }
-    }
-}
-
-/// The interactive privacy-restriction toggles for a DNA match (the mockup `resn-set`).
-fn dna_match_restriction_toggles(
-    loc: &Localizer,
-    detail: &DnaMatchDetail,
-    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        RestrictionSet {
-            choices,
-            selected: selected.clone(),
-            group_label: loc.restriction_group_label(),
-            ontoggle: move |kind: RestrictionKind| {
-                let mut next = selected.clone();
-                if let Some(position) = next.iter().position(|&k| k == kind) {
-                    next.remove(position);
-                } else {
-                    next.push(kind);
-                }
-                on_submit.call((DnaMatchEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
             },
         }
     }

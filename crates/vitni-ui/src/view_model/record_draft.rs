@@ -72,3 +72,26 @@ pub fn toggled_restrictions(restrictions: &[RestrictionKind], kind: RestrictionK
         .filter(|k| next.contains(k))
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{RestrictionKind, toggled_restrictions};
+
+    #[test]
+    fn a_toggle_adds_in_canonical_order_regardless_of_click_order() {
+        // Toggle Privacy first, then Confidential; canonical order (Confidential before Privacy)
+        // still wins, so the set compares equal however it was clicked together.
+        let after_privacy = toggled_restrictions(&[], RestrictionKind::Privacy);
+        let after_confidential = toggled_restrictions(&after_privacy, RestrictionKind::Confidential);
+        assert_eq!(
+            after_confidential,
+            vec![RestrictionKind::Confidential, RestrictionKind::Privacy]
+        );
+    }
+
+    #[test]
+    fn a_toggle_removes_an_already_selected_kind() {
+        let toggled = toggled_restrictions(&[RestrictionKind::Confidential], RestrictionKind::Confidential);
+        assert!(toggled.is_empty());
+    }
+}

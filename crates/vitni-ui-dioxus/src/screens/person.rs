@@ -269,6 +269,7 @@ pub fn person_record_fields(loc: &Localizer, record: RecordEditState<PersonDraft
                 {person_name_type_field(loc, editing, record)}
                 {person_name_text_fields(loc, editing, record)}
                 {person_sex_field(loc, editing, record)}
+                {record_restrictions_field(loc, record)}
             }
         }
     }
@@ -615,14 +616,29 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
 
     let record_services = services.clone();
     let saved_label_rec = state.data_loc().action_label(ActionLabel::Saved);
-    // The whole-record Save: the buffered draft becomes a change-set commit (the identity edit).
+    // The whole-record Save: the buffered draft becomes a change-set commit (the identity edit),
+    // followed by the restriction change if there is one. A person's request carries no restrictions
+    // (`PersonChangeSetRequest`), so they cannot ride the same commit the way the other twelve
+    // aggregates' `edits_against` diff carries them — but they are part of the *same* edit, so the
+    // follow-up command reuses this save's `ProvenanceDraft`: one reason covers the whole change
+    // (issue #315). It is keyed on the `human_id` the commit returns, which the change set may itself
+    // have re-keyed.
     let on_record_save = use_callback(move |(draft, prov): (PersonDraft, ProvenanceDraft)| {
         let services = record_services.clone();
         let saved = saved_label_rec.clone();
         let request = draft.to_request();
+        let seed = record.seed.read().clone();
         spawn(async move {
-            match commit_person_change_set(services, request, prov).await {
-                Ok(_) => {
+            let committed = commit_person_change_set(services.clone(), request, prov.clone()).await;
+            let outcome = match committed {
+                Ok(human_id) => match draft.restriction_edit(&seed, &human_id) {
+                    Some(edit) => save_person_edit(services, edit, prov).await.map(|_| ()),
+                    None => Ok(()),
+                },
+                Err(message) => Err(message),
+            };
+            match outcome {
+                Ok(()) => {
                     reload += 1;
                     record_nav.mark_changed();
                     record_nav.notify(saved);
@@ -751,7 +767,8 @@ struct PersonPane {
 }
 
 /// The two commit callbacks a person's detail wires in: one-command collection edits (attach / assert
-/// / undo / restrictions) and the whole-record change-set save (the identity edit).
+/// / undo) and the whole-record change-set save (the identity edit, plus the restriction change that
+/// rides it — issue #315).
 #[derive(Clone, Copy)]
 struct PersonCallbacks {
     /// Commits one [`PersonEdit`] command.
@@ -772,9 +789,9 @@ struct PersonCallbacks {
     media_state: MediaTabState,
 }
 
-/// Renders a loaded person's detail container: header (avatar, vital subtitle, restriction toggles,
-/// Compare + the sticky-header record Edit/Cancel/Save), the tab strip, the active tab's content, and
-/// the collection-row side panel.
+/// Renders a loaded person's detail container: header (avatar, vital subtitle, the restrictions in
+/// force, Compare + the sticky-header record Edit/Cancel/Save), the tab strip, the active tab's
+/// content, and the collection-row side panel.
 fn person_detail(
     state: &AppState,
     nav: &NavState,
@@ -828,7 +845,7 @@ fn person_detail(
             id_label: Some(detail.human_id.clone()),
             badges: vec![detail.evidence_level_label.clone()],
             avatar: person_initials(detail),
-            extras: restriction_toggles(loc, detail, on_submit, human_id),
+            extras: restriction_display(loc, &detail.restrictions),
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
@@ -851,44 +868,6 @@ fn person_initials(detail: &PersonDetail) -> String {
         initials.push('?');
     }
     initials
-}
-
-/// The interactive privacy-restriction toggles shown in the detail header (the mockup `resn-set`).
-fn restriction_toggles(
-    loc: &Localizer,
-    detail: &PersonDetail,
-    on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        RestrictionSet {
-            choices,
-            selected: selected.clone(),
-            group_label: loc.restriction_group_label(),
-            ontoggle: move |kind: RestrictionKind| {
-                let mut next = selected.clone();
-                if let Some(position) = next.iter().position(|&k| k == kind) {
-                    next.remove(position);
-                } else {
-                    next.push(kind);
-                }
-                on_submit
-                    .call((
-                        PersonEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next },
-                        ProvenanceDraft::default(),
-                    ));
-            },
-        }
-    }
 }
 
 /// The content of one person detail tab, with its contextual add/edit affordances.

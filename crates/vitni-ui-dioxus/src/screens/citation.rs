@@ -265,6 +265,7 @@ pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                     },
                 }
                 {citation_evidence_record_fields(loc, record)}
+                {record_restrictions_field(loc, record)}
             }
         }
     }
@@ -687,7 +688,7 @@ fn citation_detail(
                 subtitle,
                 id_label: Some(detail.human_id.clone()),
                 avatar: "❝".to_owned(),
-                extras: citation_restriction_toggles(loc, detail, on_submit, human_id),
+                extras: restriction_display(loc, &detail.restrictions),
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
@@ -695,40 +696,6 @@ fn citation_detail(
             }
             {citation_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
-        }
-    }
-}
-
-/// The interactive privacy-restriction toggles for a citation (the mockup `resn-set`).
-fn citation_restriction_toggles(
-    loc: &Localizer,
-    detail: &CitationDetail,
-    on_submit: Callback<(CitationEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        RestrictionSet {
-            choices,
-            selected: selected.clone(),
-            group_label: loc.restriction_group_label(),
-            ontoggle: move |kind: RestrictionKind| {
-                let mut next = selected.clone();
-                if let Some(position) = next.iter().position(|&k| k == kind) {
-                    next.remove(position);
-                } else {
-                    next.push(kind);
-                }
-                on_submit.call((CitationEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
-            },
         }
     }
 }
