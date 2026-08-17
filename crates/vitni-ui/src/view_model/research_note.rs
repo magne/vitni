@@ -176,6 +176,9 @@ pub struct ResearchNoteDraft {
     pub language: String,
     /// The subjects the operator has named (create-only; must be non-empty to save).
     pub subjects: Vec<SubjectVm>,
+    /// The note's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl ResearchNoteDraft {
@@ -197,6 +200,7 @@ impl ResearchNoteDraft {
             body: detail.body.clone().unwrap_or_default(),
             language: detail.language.clone().unwrap_or_default(),
             subjects: Vec::new(),
+            restrictions: detail.restrictions.clone(),
         }
     }
 
@@ -233,20 +237,28 @@ impl ResearchNoteDraft {
 
     /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
     /// mode). The argument and its language commit together as one [`ResearchNoteEdit::SetBody`] (they
-    /// share a single `RichText`); nothing else on the scalar record is mutable.
+    /// share a single `RichText`); the restriction set is the only other mutable scalar (the aggregate
+    /// has no rename, so nothing re-keys the record afterwards).
     #[must_use]
     pub fn edits_against(&self, seed: &Self) -> Vec<ResearchNoteEdit> {
         let Some(human_id) = seed.existing_human_id.clone() else {
             return Vec::new();
         };
-        if self.body == seed.body && self.language == seed.language {
-            return Vec::new();
+        let mut edits = Vec::new();
+        if self.body != seed.body || self.language != seed.language {
+            edits.push(ResearchNoteEdit::SetBody {
+                human_id: human_id.clone(),
+                text: self.body.clone(),
+                language: non_blank(&self.language),
+            });
         }
-        vec![ResearchNoteEdit::SetBody {
-            human_id,
-            text: self.body.clone(),
-            language: non_blank(&self.language),
-        }]
+        if self.restrictions != seed.restrictions {
+            edits.push(ResearchNoteEdit::SetRestrictions {
+                human_id,
+                restrictions: self.restrictions.clone(),
+            });
+        }
+        edits
     }
 }
 
@@ -266,11 +278,20 @@ impl RecordDraft for ResearchNoteDraft {
     fn display_label(&self) -> Option<String> {
         line_label(&self.title).or_else(|| line_label(&self.body))
     }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
+    }
 }
 
 #[cfg(test)]
 mod research_note_tests {
     use crate::navigation::{Category, ResearchNoteEdit};
+    use crate::presentation::RestrictionKind;
     use crate::view_model::{
         RecordDraft, ResearchNoteDetail, ResearchNoteDraft, SubjectVm, research_note_row, research_note_tabs,
     };
@@ -283,6 +304,7 @@ mod research_note_tests {
             body: "The parish register agrees on the birth year.".to_owned(),
             language: "en".to_owned(),
             subjects: Vec::new(),
+            restrictions: vec![RestrictionKind::Confidential],
         }
     }
 
@@ -383,9 +405,54 @@ mod research_note_tests {
             language: Some("en".to_owned()),
             subjects: vec![subject(Category::People, "I0042")],
             tags: Vec::new(),
-            restrictions: Vec::new(),
+            restrictions: vec![RestrictionKind::Locked],
             history: Vec::new(),
         }
+    }
+
+    #[test]
+    fn a_changed_restriction_set_yields_one_restriction_edit() {
+        let draft = ResearchNoteDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            ResearchNoteEdit::SetRestrictions { restrictions, .. }
+                if restrictions == &[RestrictionKind::Confidential, RestrictionKind::Privacy]
+        ));
+    }
+
+    #[test]
+    fn an_unchanged_restriction_set_yields_no_restriction_edit() {
+        let draft = ResearchNoteDraft {
+            body: "Rewritten.".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert!(
+            !edits
+                .iter()
+                .any(|edit| matches!(edit, ResearchNoteEdit::SetRestrictions { .. }))
+        );
+    }
+
+    #[test]
+    fn from_detail_seeds_the_restrictions_and_offers_the_field() {
+        let draft = ResearchNoteDraft::from_detail(&detail());
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
+        assert_eq!(
+            draft.editable_restrictions(),
+            Some([RestrictionKind::Locked].as_slice()),
+            "a stored record offers the restriction field"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_offers_no_restriction_field() {
+        assert_eq!(ResearchNoteDraft::new().editable_restrictions(), None);
     }
 
     #[test]

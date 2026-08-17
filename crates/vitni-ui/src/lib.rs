@@ -108,7 +108,7 @@ pub use view_model::{
     parse_date_point, person_list_row, person_row, person_tabs, place_map_display_shape, place_row, place_tabs,
     plugin_grant_vm, rect_css, rect_from_drag, repository_row, repository_tabs, research_note_row, research_note_tabs,
     resolve_attach_save, resolve_geometry_as_of, shortcuts_vm, slugify, source_row, source_tabs, suggest_filename,
-    tag_row, tag_tabs, trust_store_vm,
+    tag_row, tag_tabs, toggled_restrictions, trust_store_vm,
 };
 pub use vocabulary::{
     Action, Field, Form, Panel, SelectOption, SubmitResult, Table, VocabularyError, parse, parse_submit_result,

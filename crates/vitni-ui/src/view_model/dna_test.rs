@@ -206,6 +206,9 @@ pub struct DnaTestDraft {
     pub genome_build: Option<vitni_app::DnaGenomeBuild>,
     /// The kit id.
     pub kit_id: String,
+    /// The test's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl DnaTestDraft {
@@ -232,6 +235,7 @@ impl DnaTestDraft {
             test_type: detail.test_type_kind,
             genome_build: detail.genome_build_kind,
             kit_id: detail.kit_id.clone().unwrap_or_default(),
+            restrictions: detail.restrictions.clone(),
         }
     }
 
@@ -265,7 +269,8 @@ impl DnaTestDraft {
     /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
     /// mode): one `Set*` per changed scalar (a cleared select emits nothing — there is no clear
     /// command), with `SetHumanId` last so the record is only re-keyed after every other field has
-    /// committed (a blank id regenerates).
+    /// committed (a blank id regenerates) — the restriction set included, so it too commits against the
+    /// id the record still has.
     #[must_use]
     pub fn edits_against(&self, seed: &Self) -> Vec<DnaTestEdit> {
         let Some(human_id) = seed.existing_human_id.clone() else {
@@ -302,6 +307,12 @@ impl DnaTestDraft {
                 kit_id: self.kit_id.clone(),
             });
         }
+        if self.restrictions != seed.restrictions {
+            edits.push(DnaTestEdit::SetRestrictions {
+                human_id: human_id.clone(),
+                restrictions: self.restrictions.clone(),
+            });
+        }
         if self.human_id.trim() != seed.human_id {
             edits.push(DnaTestEdit::SetHumanId {
                 human_id,
@@ -328,12 +339,21 @@ impl RecordDraft for DnaTestDraft {
     fn display_label(&self) -> Option<String> {
         None
     }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
+    }
 }
 
 #[cfg(test)]
 mod dna_test_draft_tests {
-    use super::{DnaTestDraft, RecordDraft};
+    use super::{DnaTestDetail, DnaTestDraft, RecordDraft};
     use crate::navigation::DnaTestEdit;
+    use crate::presentation::RestrictionKind;
     use vitni_app::{DnaProvider, DnaTestType};
 
     #[test]
@@ -368,7 +388,76 @@ mod dna_test_draft_tests {
             test_type: Some(DnaTestType::Autosomal),
             genome_build: None,
             kit_id: "AB-12".to_owned(),
+            restrictions: vec![RestrictionKind::Confidential],
         }
+    }
+
+    fn detail() -> DnaTestDetail {
+        DnaTestDetail {
+            human_id: "D0009".to_owned(),
+            id: "dna-test-uuid".to_owned(),
+            title: "AncestryDNA — Ada Lovelace".to_owned(),
+            provider: None,
+            provider_kind: Some(DnaProvider::AncestryDna),
+            test_type: None,
+            test_type_kind: Some(DnaTestType::Autosomal),
+            kit_id: None,
+            genome_build: None,
+            genome_build_kind: None,
+            person: None,
+            person_name: None,
+            haplogroups: Vec::new(),
+            matches: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: vec![RestrictionKind::Locked],
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_changed_restriction_set_yields_one_restriction_edit() {
+        let draft = DnaTestDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            DnaTestEdit::SetRestrictions { restrictions, .. }
+                if restrictions == &[RestrictionKind::Confidential, RestrictionKind::Privacy]
+        ));
+    }
+
+    #[test]
+    fn an_unchanged_restriction_set_yields_no_restriction_edit() {
+        let draft = DnaTestDraft {
+            kit_id: "XZ-99".to_owned(),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert!(
+            !edits
+                .iter()
+                .any(|edit| matches!(edit, DnaTestEdit::SetRestrictions { .. }))
+        );
+    }
+
+    #[test]
+    fn from_detail_seeds_the_restrictions_and_offers_the_field() {
+        let draft = DnaTestDraft::from_detail(&detail());
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
+        assert_eq!(
+            draft.editable_restrictions(),
+            Some([RestrictionKind::Locked].as_slice()),
+            "a stored record offers the restriction field"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_offers_no_restriction_field() {
+        assert_eq!(DnaTestDraft::new().editable_restrictions(), None);
     }
 
     #[test]

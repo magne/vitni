@@ -508,6 +508,9 @@ pub struct PlaceDraft {
     pub longitude: String,
     /// The place's code.
     pub code: String,
+    /// The place's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl Default for PlaceDraft {
@@ -520,6 +523,7 @@ impl Default for PlaceDraft {
             latitude: String::new(),
             longitude: String::new(),
             code: String::new(),
+            restrictions: Vec::new(),
         }
     }
 }
@@ -597,6 +601,7 @@ impl PlaceDraft {
             latitude,
             longitude,
             code: detail.code.clone().unwrap_or_default(),
+            restrictions: detail.restrictions.clone(),
         }
     }
 
@@ -622,7 +627,8 @@ impl PlaceDraft {
     /// mode). The latitude/longitude pair commits as one [`PlaceEdit::SetCoordinates`] only when it
     /// changed to a valid point (a blank/half-filled pair emits nothing — there is no clear command);
     /// `SetHumanId` is emitted last so the record is only re-keyed after every other field has
-    /// committed against its current id (a blank id regenerates).
+    /// committed against its current id (a blank id regenerates) — the restriction set included, so it
+    /// too commits against the id the record still has.
     #[must_use]
     pub fn edits_against(&self, seed: &Self) -> Vec<PlaceEdit> {
         let Some(human_id) = seed.existing_human_id.clone() else {
@@ -648,6 +654,12 @@ impl PlaceDraft {
                 code: self.code.clone(),
             });
         }
+        if self.restrictions != seed.restrictions {
+            edits.push(PlaceEdit::SetRestrictions {
+                human_id: human_id.clone(),
+                restrictions: self.restrictions.clone(),
+            });
+        }
         if self.human_id.trim() != seed.human_id {
             edits.push(PlaceEdit::SetHumanId {
                 human_id,
@@ -671,6 +683,14 @@ impl RecordDraft for PlaceDraft {
 
     fn display_label(&self) -> Option<String> {
         line_label(&self.name)
+    }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
     }
 }
 
@@ -723,8 +743,9 @@ mod map_point_tests {
 
 #[cfg(test)]
 mod place_draft_tests {
-    use super::PlaceDraft;
+    use super::{PlaceDetail, PlaceDraft, RecordDraft};
     use crate::navigation::PlaceEdit;
+    use crate::presentation::RestrictionKind;
     use vitni_app::PlaceType;
 
     fn seed() -> PlaceDraft {
@@ -736,7 +757,86 @@ mod place_draft_tests {
             latitude: "59.9".to_owned(),
             longitude: "10.7".to_owned(),
             code: "0301".to_owned(),
+            restrictions: vec![RestrictionKind::Confidential],
         }
+    }
+
+    fn detail() -> PlaceDetail {
+        PlaceDetail {
+            human_id: "P0090".to_owned(),
+            id: "place-uuid".to_owned(),
+            title: "Nordland".to_owned(),
+            place_type: Some(PlaceType::Country),
+            type_label: None,
+            coordinates: None,
+            map_point: None,
+            resolved_geometry: None,
+            geometries: Vec::new(),
+            coordinates_confidence: None,
+            coordinates_confidence_label: None,
+            coordinate_citations: Vec::new(),
+            code: None,
+            code_confidence: None,
+            code_confidence_label: None,
+            code_citations: Vec::new(),
+            names: Vec::new(),
+            hierarchy: Vec::new(),
+            predecessors: Vec::new(),
+            successors: Vec::new(),
+            events: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: vec![RestrictionKind::Locked],
+            research_notes: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_changed_restriction_set_yields_one_restriction_edit() {
+        let draft = PlaceDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            PlaceEdit::SetRestrictions { restrictions, .. }
+                if restrictions == &[RestrictionKind::Confidential, RestrictionKind::Privacy]
+        ));
+    }
+
+    #[test]
+    fn an_unchanged_restriction_set_yields_no_restriction_edit() {
+        let draft = PlaceDraft {
+            code: "4601".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert!(
+            !edits
+                .iter()
+                .any(|edit| matches!(edit, PlaceEdit::SetRestrictions { .. }))
+        );
+    }
+
+    #[test]
+    fn from_detail_seeds_the_restrictions_and_offers_the_field() {
+        let draft = PlaceDraft::from_detail(&detail());
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
+        assert_eq!(
+            draft.editable_restrictions(),
+            Some([RestrictionKind::Locked].as_slice()),
+            "a stored record offers the restriction field"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_offers_no_restriction_field() {
+        assert_eq!(PlaceDraft::new().editable_restrictions(), None);
     }
 
     #[test]

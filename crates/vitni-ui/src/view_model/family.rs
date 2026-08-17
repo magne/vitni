@@ -409,6 +409,9 @@ pub struct FamilyDraft {
     pub human_id: String,
     /// The partners the operator has added (capped at two; create-only), existing or inline-new.
     pub partners: Vec<PartnerInput>,
+    /// The family's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl FamilyDraft {
@@ -427,6 +430,7 @@ impl FamilyDraft {
             existing_human_id: Some(detail.human_id.clone()),
             human_id: detail.human_id.clone(),
             partners: Vec::new(),
+            restrictions: detail.restrictions.clone(),
         }
     }
 
@@ -475,20 +479,28 @@ impl FamilyDraft {
     }
 
     /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
-    /// mode): a family's only editable scalar is its id, so at most one [`FamilyEdit::SetHumanId`]
-    /// (a blank id regenerates on save).
+    /// mode): a family's only editable scalars are its restriction set and its id, with `SetHumanId`
+    /// emitted last so the restrictions commit against the id the record still has (a blank id
+    /// regenerates on save).
     #[must_use]
     pub fn edits_against(&self, seed: &Self) -> Vec<FamilyEdit> {
         let Some(human_id) = seed.existing_human_id.clone() else {
             return Vec::new();
         };
-        if self.human_id.trim() == seed.human_id {
-            return Vec::new();
+        let mut edits = Vec::new();
+        if self.restrictions != seed.restrictions {
+            edits.push(FamilyEdit::SetRestrictions {
+                human_id: human_id.clone(),
+                restrictions: self.restrictions.clone(),
+            });
         }
-        vec![FamilyEdit::SetHumanId {
-            human_id,
-            new_human_id: non_blank(&self.human_id),
-        }]
+        if self.human_id.trim() != seed.human_id {
+            edits.push(FamilyEdit::SetHumanId {
+                human_id,
+                new_human_id: non_blank(&self.human_id),
+            });
+        }
+        edits
     }
 }
 
@@ -534,13 +546,22 @@ impl RecordDraft for FamilyDraft {
         }
         line_label(&names.join(" & "))
     }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
+    }
 }
 
 #[cfg(test)]
 mod family_draft_tests {
-    use super::{FamilyDraft, NewPersonFields, PartnerInput, RecordDraft};
+    use super::{FamilyDetail, FamilyDraft, NewPersonFields, PartnerInput, RecordDraft};
     use crate::navigation::{FamilyEdit, PartnerRequest};
     use crate::picker::PickerSelection;
+    use crate::presentation::RestrictionKind;
 
     fn existing(human_id: &str) -> PickerSelection {
         PickerSelection {
@@ -574,7 +595,7 @@ mod family_draft_tests {
         let draft = FamilyDraft {
             existing_human_id: Some("F0001".to_owned()),
             human_id: "F0001".to_owned(),
-            partners: Vec::new(),
+            ..FamilyDraft::new()
         };
         assert!(draft.is_valid(), "an existing family edits partners per-row, not here");
     }
@@ -651,7 +672,72 @@ mod family_draft_tests {
             existing_human_id: Some("F0001".to_owned()),
             human_id: "F0001".to_owned(),
             partners: Vec::new(),
+            restrictions: vec![RestrictionKind::Confidential],
         }
+    }
+
+    fn detail() -> FamilyDetail {
+        FamilyDetail {
+            human_id: "F0009".to_owned(),
+            id: "family-uuid".to_owned(),
+            title: "Ada & Grace".to_owned(),
+            partners: Vec::new(),
+            marriage: None,
+            children: Vec::new(),
+            events: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: vec![RestrictionKind::Locked],
+            research_notes: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_changed_restriction_set_yields_one_restriction_edit() {
+        let draft = FamilyDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            FamilyEdit::SetRestrictions { restrictions, .. }
+                if restrictions == &[RestrictionKind::Confidential, RestrictionKind::Privacy]
+        ));
+    }
+
+    #[test]
+    fn an_unchanged_restriction_set_yields_no_restriction_edit() {
+        let draft = FamilyDraft {
+            human_id: "F0042".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert!(
+            !edits
+                .iter()
+                .any(|edit| matches!(edit, FamilyEdit::SetRestrictions { .. }))
+        );
+    }
+
+    #[test]
+    fn from_detail_seeds_the_restrictions_and_offers_the_field() {
+        let draft = FamilyDraft::from_detail(&detail());
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
+        assert_eq!(
+            draft.editable_restrictions(),
+            Some([RestrictionKind::Locked].as_slice()),
+            "a stored record offers the restriction field"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_offers_no_restriction_field() {
+        assert_eq!(FamilyDraft::new().editable_restrictions(), None);
     }
 
     #[test]

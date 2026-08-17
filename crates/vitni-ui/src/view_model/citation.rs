@@ -162,6 +162,9 @@ pub struct CitationDraft {
     pub information: Option<InformationKind>,
     /// The evidence-kind axis, if chosen.
     pub evidence_kind: Option<EvidenceKind>,
+    /// The citation's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl CitationDraft {
@@ -194,6 +197,7 @@ impl CitationDraft {
             source_quality: detail.source_quality,
             information: detail.information,
             evidence_kind: detail.evidence_kind,
+            restrictions: detail.restrictions.clone(),
         }
     }
 
@@ -208,7 +212,8 @@ impl CitationDraft {
     /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
     /// mode): a `SetPage`/`SetConfidence` per changed scalar, one `SetEvidenceAnalysis` only when all
     /// three axes are set and the triple changed (mirroring the create rule), and `SetHumanId` last so
-    /// the record is only re-keyed after every other field has committed (a blank id regenerates).
+    /// the record is only re-keyed after every other field has committed (a blank id regenerates) — the
+    /// restriction set included, so it too commits against the id the record still has.
     #[must_use]
     pub fn edits_against(&self, seed: &Self) -> Vec<CitationEdit> {
         let Some(human_id) = seed.existing_human_id.clone() else {
@@ -250,6 +255,12 @@ impl CitationDraft {
                     information,
                     evidence,
                 },
+            });
+        }
+        if self.restrictions != seed.restrictions {
+            edits.push(CitationEdit::SetRestrictions {
+                human_id: human_id.clone(),
+                restrictions: self.restrictions.clone(),
             });
         }
         if self.human_id.trim() != seed.human_id {
@@ -306,13 +317,22 @@ impl RecordDraft for CitationDraft {
     fn display_label(&self) -> Option<String> {
         None
     }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
+    }
 }
 
 #[cfg(test)]
 mod citation_draft_tests {
-    use super::{CitationDraft, DateDraft, NewSourceFields, RecordDraft, RecordLink};
+    use super::{CitationDetail, CitationDraft, DateDraft, NewSourceFields, RecordDraft, RecordLink};
     use crate::navigation::{CitationEdit, CitationSourceRequest};
     use crate::picker::PickerSelection;
+    use crate::presentation::RestrictionKind;
     use crate::view_model::{ConfidenceLevel, EvidenceKind, InformationKind, SourceQuality};
 
     #[test]
@@ -333,8 +353,76 @@ mod citation_draft_tests {
             }),
             page: "p. 42".to_owned(),
             confidence: Some(ConfidenceLevel::High),
+            restrictions: vec![RestrictionKind::Confidential],
             ..CitationDraft::new()
         }
+    }
+
+    fn detail() -> CitationDetail {
+        CitationDetail {
+            human_id: "C0009".to_owned(),
+            source: Some("S0001".to_owned()),
+            page: None,
+            date: None,
+            date_value: None,
+            confidence: None,
+            confidence_label: None,
+            source_quality: None,
+            information: None,
+            evidence_kind: None,
+            evidence_axes: Vec::new(),
+            restrictions: vec![RestrictionKind::Locked],
+            attributes: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_changed_restriction_set_yields_one_restriction_edit() {
+        let draft = CitationDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            CitationEdit::SetRestrictions { restrictions, .. }
+                if restrictions == &[RestrictionKind::Confidential, RestrictionKind::Privacy]
+        ));
+    }
+
+    #[test]
+    fn an_unchanged_restriction_set_yields_no_restriction_edit() {
+        let draft = CitationDraft {
+            page: "p. 7".to_owned(),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert!(
+            !edits
+                .iter()
+                .any(|edit| matches!(edit, CitationEdit::SetRestrictions { .. }))
+        );
+    }
+
+    #[test]
+    fn from_detail_seeds_the_restrictions_and_offers_the_field() {
+        let draft = CitationDraft::from_detail(&detail());
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
+        assert_eq!(
+            draft.editable_restrictions(),
+            Some([RestrictionKind::Locked].as_slice()),
+            "a stored record offers the restriction field"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_offers_no_restriction_field() {
+        assert_eq!(CitationDraft::new().editable_restrictions(), None);
     }
 
     #[test]

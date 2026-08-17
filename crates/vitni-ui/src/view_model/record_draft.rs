@@ -5,6 +5,8 @@
 //! [`Default::default`]. The renderer's `RecordEditState` is generic over this trait so one component
 //! drives create, view, and edit for every aggregate (`record-editing.html` §1–§7).
 
+use crate::presentation::RestrictionKind;
+
 /// A buffered, editable draft of one record's scalar fields.
 ///
 /// Implementors keep the raw field values a form binds to, plus enough identity to know whether Save
@@ -34,8 +36,39 @@ pub trait RecordDraft: Clone + PartialEq + Default + 'static {
     /// return `None` and their tabs keep the localized "New <entity>".
     fn display_label(&self) -> Option<String>;
 
+    /// The restriction set the shared restriction field binds to, or `None` when the record must not
+    /// offer the field at all.
+    ///
+    /// `None` is the create form of the twelve aggregates whose `*ChangeSetRequest` carries no
+    /// restrictions: offering the field there would silently drop what the operator toggled, so a
+    /// draft with no stored record behind it hides it and the restrictions become editable once the
+    /// record exists. `TagDraft` is the exception — `TagChangeSetRequest` does carry them, so its
+    /// create form offers the field too.
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]>;
+
+    /// Replaces the draft's restriction set (what the shared restriction field writes on a toggle).
+    /// The set rides the record's own Save, so nothing is committed until then.
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>);
+
     /// Whether the draft differs from its committed `seed` (an unsaved change).
     fn is_dirty_against(&self, seed: &Self) -> bool {
         self != seed
     }
+}
+
+/// `restrictions` with `kind` toggled on/off, kept in [`RestrictionKind::all`]'s canonical order
+/// regardless of toggle order — so an unchanged set compares equal (`PartialEq`) no matter which
+/// restriction was toggled last, keeping the Save-dirty and diff checks accurate.
+#[must_use]
+pub fn toggled_restrictions(restrictions: &[RestrictionKind], kind: RestrictionKind) -> Vec<RestrictionKind> {
+    let mut next = restrictions.to_vec();
+    if let Some(position) = next.iter().position(|&existing| existing == kind) {
+        next.remove(position);
+    } else {
+        next.push(kind);
+    }
+    RestrictionKind::all()
+        .into_iter()
+        .filter(|k| next.contains(k))
+        .collect()
 }

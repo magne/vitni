@@ -164,6 +164,9 @@ pub struct NoteDraft {
     pub text: String,
     /// The content's BCP-47 language.
     pub language: String,
+    /// The note's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl NoteDraft {
@@ -183,6 +186,7 @@ impl NoteDraft {
             note_type: detail.note_type.clone(),
             text: detail.text.clone().unwrap_or_default(),
             language: detail.language.clone().unwrap_or_default(),
+            restrictions: detail.restrictions.clone(),
         }
     }
 
@@ -200,7 +204,8 @@ impl NoteDraft {
     /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
     /// mode). The primary text and its language commit together as one [`NoteEdit::SetText`] (they
     /// share a single `RichText`); `SetHumanId` is emitted last so the record is only re-keyed after
-    /// every other field has committed against its current id (a blank id regenerates).
+    /// every other field has committed against its current id (a blank id regenerates) — the
+    /// restriction set included, so it too commits against the id the record still has.
     #[must_use]
     pub fn edits_against(&self, seed: &Self) -> Vec<NoteEdit> {
         let Some(human_id) = seed.existing_human_id.clone() else {
@@ -220,6 +225,12 @@ impl NoteDraft {
                 human_id: human_id.clone(),
                 text: self.text.clone(),
                 language: non_blank(&self.language),
+            });
+        }
+        if self.restrictions != seed.restrictions {
+            edits.push(NoteEdit::SetRestrictions {
+                human_id: human_id.clone(),
+                restrictions: self.restrictions.clone(),
             });
         }
         if self.human_id.trim() != seed.human_id {
@@ -246,12 +257,21 @@ impl RecordDraft for NoteDraft {
     fn display_label(&self) -> Option<String> {
         line_label(&self.text)
     }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
+    }
 }
 
 #[cfg(test)]
 mod note_draft_tests {
-    use super::NoteDraft;
+    use super::{NoteDetail, NoteDraft, RecordDraft};
     use crate::navigation::NoteEdit;
+    use crate::presentation::RestrictionKind;
     use vitni_app::NoteType;
 
     fn seed() -> NoteDraft {
@@ -261,7 +281,70 @@ mod note_draft_tests {
             note_type: Some(NoteType::Research),
             text: "An estate inventory".to_owned(),
             language: "en".to_owned(),
+            restrictions: vec![RestrictionKind::Confidential],
         }
+    }
+
+    fn detail() -> NoteDetail {
+        NoteDetail {
+            human_id: "N0009".to_owned(),
+            id: "note-uuid".to_owned(),
+            title: "An estate inventory".to_owned(),
+            note_type: Some(NoteType::Research),
+            note_type_label: None,
+            text: Some("An estate inventory".to_owned()),
+            language: Some("en".to_owned()),
+            translations: Vec::new(),
+            references: Vec::new(),
+            tags: Vec::new(),
+            restrictions: vec![RestrictionKind::Locked],
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_changed_restriction_set_yields_one_restriction_edit() {
+        let draft = NoteDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            NoteEdit::SetRestrictions { restrictions, .. }
+                if restrictions == &[RestrictionKind::Confidential, RestrictionKind::Privacy]
+        ));
+    }
+
+    #[test]
+    fn an_unchanged_restriction_set_yields_no_restriction_edit() {
+        let draft = NoteDraft {
+            language: "nb-NO".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert!(
+            !edits
+                .iter()
+                .any(|edit| matches!(edit, NoteEdit::SetRestrictions { .. }))
+        );
+    }
+
+    #[test]
+    fn from_detail_seeds_the_restrictions_and_offers_the_field() {
+        let draft = NoteDraft::from_detail(&detail());
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
+        assert_eq!(
+            draft.editable_restrictions(),
+            Some([RestrictionKind::Locked].as_slice()),
+            "a stored record offers the restriction field"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_offers_no_restriction_field() {
+        assert_eq!(NoteDraft::new().editable_restrictions(), None);
     }
 
     #[test]

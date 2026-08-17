@@ -186,6 +186,9 @@ pub struct RepositoryDraft {
     pub repository_type: Option<vitni_app::RepositoryType>,
     /// The repository name.
     pub name: String,
+    /// The repository's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl RepositoryDraft {
@@ -204,6 +207,7 @@ impl RepositoryDraft {
             human_id: detail.human_id.clone(),
             repository_type: detail.repository_type.clone(),
             name: detail.name.clone().unwrap_or_default(),
+            restrictions: detail.restrictions.clone(),
         }
     }
 
@@ -219,7 +223,8 @@ impl RepositoryDraft {
 
     /// The per-field edits that carry this draft from its committed `seed` to its current values (edit
     /// mode): one `Set*` per changed scalar, with `SetHumanId` emitted last so the record is only
-    /// re-keyed once every other field has committed against its current id (a blank id regenerates).
+    /// re-keyed once every other field has committed against its current id (a blank id regenerates) —
+    /// the restriction set included, so it too commits against the id the record still has.
     #[must_use]
     pub fn edits_against(&self, seed: &Self) -> Vec<RepositoryEdit> {
         let Some(human_id) = seed.existing_human_id.clone() else {
@@ -238,6 +243,12 @@ impl RepositoryDraft {
             edits.push(RepositoryEdit::SetName {
                 human_id: human_id.clone(),
                 name: self.name.clone(),
+            });
+        }
+        if self.restrictions != seed.restrictions {
+            edits.push(RepositoryEdit::SetRestrictions {
+                human_id: human_id.clone(),
+                restrictions: self.restrictions.clone(),
             });
         }
         if self.human_id.trim() != seed.human_id {
@@ -264,12 +275,21 @@ impl RecordDraft for RepositoryDraft {
     fn display_label(&self) -> Option<String> {
         line_label(&self.name)
     }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
+    }
 }
 
 #[cfg(test)]
 mod repository_draft_tests {
-    use super::{RepositoryDetail, RepositoryDraft};
+    use super::{RecordDraft, RepositoryDetail, RepositoryDraft};
     use crate::navigation::RepositoryEdit;
+    use crate::presentation::RestrictionKind;
     use vitni_app::RepositoryType;
 
     fn seed() -> RepositoryDraft {
@@ -278,7 +298,71 @@ mod repository_draft_tests {
             human_id: "R0001".to_owned(),
             repository_type: Some(RepositoryType::Library),
             name: "Public library".to_owned(),
+            restrictions: vec![RestrictionKind::Confidential],
         }
+    }
+
+    fn detail() -> RepositoryDetail {
+        RepositoryDetail {
+            human_id: "R0009".to_owned(),
+            id: "repository-uuid".to_owned(),
+            title: "Archive".to_owned(),
+            name: Some("Archive".to_owned()),
+            repository_type: Some(RepositoryType::Archive),
+            type_label: Some("Archive".to_owned()),
+            addresses: Vec::new(),
+            urls: Vec::new(),
+            sources: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: vec![RestrictionKind::Locked],
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_changed_restriction_set_yields_one_restriction_edit() {
+        let draft = RepositoryDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            RepositoryEdit::SetRestrictions { restrictions, .. }
+                if restrictions == &[RestrictionKind::Confidential, RestrictionKind::Privacy]
+        ));
+    }
+
+    #[test]
+    fn an_unchanged_restriction_set_yields_no_restriction_edit() {
+        let draft = RepositoryDraft {
+            name: "National library".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert!(
+            !edits
+                .iter()
+                .any(|edit| matches!(edit, RepositoryEdit::SetRestrictions { .. }))
+        );
+    }
+
+    #[test]
+    fn from_detail_seeds_the_restrictions_and_offers_the_field() {
+        let draft = RepositoryDraft::from_detail(&detail());
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
+        assert_eq!(
+            draft.editable_restrictions(),
+            Some([RestrictionKind::Locked].as_slice()),
+            "a stored record offers the restriction field"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_offers_no_restriction_field() {
+        assert_eq!(RepositoryDraft::new().editable_restrictions(), None);
     }
 
     #[test]
@@ -323,22 +407,7 @@ mod repository_draft_tests {
 
     #[test]
     fn seeding_from_a_detail_is_not_dirty_against_itself() {
-        let detail = RepositoryDetail {
-            human_id: "R0009".to_owned(),
-            id: "id".to_owned(),
-            title: "Archive".to_owned(),
-            name: Some("Archive".to_owned()),
-            repository_type: Some(RepositoryType::Archive),
-            type_label: Some("Archive".to_owned()),
-            addresses: Vec::new(),
-            urls: Vec::new(),
-            sources: Vec::new(),
-            notes: Vec::new(),
-            tags: Vec::new(),
-            restrictions: Vec::new(),
-            history: Vec::new(),
-        };
-        let seed = RepositoryDraft::from_detail(&detail);
+        let seed = RepositoryDraft::from_detail(&detail());
         assert!(seed.edits_against(&seed).is_empty());
     }
 }

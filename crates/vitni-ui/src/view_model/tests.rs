@@ -6,6 +6,7 @@ use super::{
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
 use crate::presentation::EvidenceAxis;
+use crate::presentation::RestrictionKind;
 use std::collections::BTreeSet;
 use vitni_app::{
     ActivityDetail, AssociationRole, AssociationSummary, Calendar, ChangeLogEntry, CitationSummary, Confidence,
@@ -321,6 +322,58 @@ fn edit_draft_seeds_from_the_summary_and_targets_the_existing_person() {
     let name = request.name.expect("a seeded name");
     assert_eq!(name.given.as_deref(), Some("Ada"));
     assert_eq!(name.surname.as_deref(), Some("Lovelace"));
+}
+
+#[test]
+fn a_person_edit_draft_seeds_the_restrictions_and_offers_the_field() {
+    let summary = PersonSummary {
+        restrictions: BTreeSet::from([Restriction::Privacy]),
+        ..summary()
+    };
+    let draft = PersonDraft::from_summary(&summary);
+    assert_eq!(draft.restrictions, vec![RestrictionKind::Privacy]);
+    assert_eq!(
+        draft.editable_restrictions(),
+        Some([RestrictionKind::Privacy].as_slice()),
+        "a stored person offers the restriction field"
+    );
+    assert_eq!(
+        PersonDraft::new().editable_restrictions(),
+        None,
+        "the create change-set carries no restrictions, so the create form hides the field"
+    );
+}
+
+#[test]
+fn a_person_draft_differing_only_in_restrictions_is_dirty_and_yields_one_edit() {
+    let seed = PersonDraft::from_summary(&summary());
+    let mut draft = seed.clone();
+    draft.set_restrictions(vec![RestrictionKind::Locked]);
+    assert!(
+        draft.is_dirty_against(&seed),
+        "a restriction change alone makes Save available"
+    );
+    let edit = draft.restriction_edit(&seed, "I0001").expect("a restriction edit");
+    assert_eq!(
+        edit,
+        crate::navigation::PersonEdit::SetRestrictions {
+            human_id: "I0001".to_owned(),
+            restrictions: vec![RestrictionKind::Locked],
+        }
+    );
+}
+
+#[test]
+fn an_unchanged_person_restriction_set_yields_no_edit() {
+    let seed = PersonDraft::from_summary(&summary());
+    let draft = PersonDraft {
+        given: "Augusta".to_owned(),
+        ..seed.clone()
+    };
+    assert!(
+        draft.restriction_edit(&seed, "I0001").is_none(),
+        "only a changed restriction set dispatches the follow-up edit"
+    );
 }
 
 #[test]

@@ -234,6 +234,9 @@ pub struct MediaDraft {
     /// request and asserted after the commit; on edit a change emits a `SetDate` on Save. A blank
     /// draft emits nothing.
     pub date: DateDraft,
+    /// The media object's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl MediaDraft {
@@ -258,6 +261,7 @@ impl MediaDraft {
             date: detail.date_value.as_ref().map_or_else(DateDraft::default, |value| {
                 DateDraft::from_value(value, detail.date.clone().unwrap_or_default())
             }),
+            restrictions: detail.restrictions.clone(),
         }
     }
 
@@ -275,7 +279,8 @@ impl MediaDraft {
 
     /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
     /// mode): one `Set*` per changed scalar, with `SetHumanId` emitted last so the record is only
-    /// re-keyed after every other field has committed against its current id (a blank id regenerates).
+    /// re-keyed after every other field has committed against its current id (a blank id regenerates) —
+    /// the restriction set included, so it too commits against the id the record still has.
     #[must_use]
     pub fn edits_against(&self, seed: &Self) -> Vec<MediaEdit> {
         let Some(human_id) = seed.existing_human_id.clone() else {
@@ -308,6 +313,12 @@ impl MediaDraft {
                 mime: self.mime.clone(),
             });
         }
+        if self.restrictions != seed.restrictions {
+            edits.push(MediaEdit::SetRestrictions {
+                human_id: human_id.clone(),
+                restrictions: self.restrictions.clone(),
+            });
+        }
         if self.human_id.trim() != seed.human_id {
             edits.push(MediaEdit::SetHumanId {
                 human_id,
@@ -332,12 +343,21 @@ impl RecordDraft for MediaDraft {
     fn display_label(&self) -> Option<String> {
         line_label(&file_basename(self.file_path.trim())).or_else(|| line_label(&self.web_path))
     }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
+    }
 }
 
 #[cfg(test)]
 mod media_draft_tests {
-    use super::{DateDraft, MediaDraft, RecordDraft};
+    use super::{DateDraft, MediaDetail, MediaDraft, RecordDraft};
     use crate::navigation::MediaEdit;
+    use crate::presentation::RestrictionKind;
 
     fn seed() -> MediaDraft {
         MediaDraft {
@@ -348,7 +368,75 @@ mod media_draft_tests {
             mime: "image/jpeg".to_owned(),
             checksum: "abc123".to_owned(),
             date: typed_date("1998"),
+            restrictions: vec![RestrictionKind::Confidential],
         }
+    }
+
+    fn detail() -> MediaDetail {
+        MediaDetail {
+            human_id: "O0009".to_owned(),
+            id: "media-uuid".to_owned(),
+            title: "ada.jpg".to_owned(),
+            path: Some("photos/ada.jpg".to_owned()),
+            file_path: Some("photos/ada.jpg".to_owned()),
+            web_path: None,
+            mime: Some("image/jpeg".to_owned()),
+            checksum: None,
+            date: None,
+            date_value: None,
+            attributes: Vec::new(),
+            citations: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            used_by: Vec::new(),
+            restrictions: vec![RestrictionKind::Locked],
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_changed_restriction_set_yields_one_restriction_edit() {
+        let draft = MediaDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            MediaEdit::SetRestrictions { restrictions, .. }
+                if restrictions == &[RestrictionKind::Confidential, RestrictionKind::Privacy]
+        ));
+    }
+
+    #[test]
+    fn an_unchanged_restriction_set_yields_no_restriction_edit() {
+        let draft = MediaDraft {
+            mime: "image/png".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert!(
+            !edits
+                .iter()
+                .any(|edit| matches!(edit, MediaEdit::SetRestrictions { .. }))
+        );
+    }
+
+    #[test]
+    fn from_detail_seeds_the_restrictions_and_offers_the_field() {
+        let draft = MediaDraft::from_detail(&detail());
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
+        assert_eq!(
+            draft.editable_restrictions(),
+            Some([RestrictionKind::Locked].as_slice()),
+            "a stored record offers the restriction field"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_offers_no_restriction_field() {
+        assert_eq!(MediaDraft::new().editable_restrictions(), None);
     }
 
     fn typed_date(text: &str) -> DateDraft {

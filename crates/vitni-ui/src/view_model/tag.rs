@@ -1,6 +1,6 @@
 use super::{
     DetailTab, HistoryEntryVm, Localizer, RecordDraft, RestrictionKind, RowVm, TagChangeSetRequest, UsingRecordVm,
-    line_label, using_record_vm,
+    line_label, toggled_restrictions, using_record_vm,
 };
 
 /// One object-type group on the Tag Usage tab: the localized kind, the count, and a few examples.
@@ -122,21 +122,11 @@ impl TagDraft {
         }
     }
 
-    /// This draft's restrictions with `kind` toggled on/off, kept in [`RestrictionKind::all`]'s
-    /// canonical order regardless of toggle order — so an unchanged set compares equal (`PartialEq`)
-    /// no matter which restriction was toggled last, keeping the Save-dirty and diff checks accurate.
+    /// This draft's restrictions with `kind` toggled on/off, in [`toggled_restrictions`]'s canonical
+    /// order.
     #[must_use]
     pub fn toggle_restriction(&self, kind: RestrictionKind) -> Vec<RestrictionKind> {
-        let mut next = self.restrictions.clone();
-        if let Some(position) = next.iter().position(|&existing| existing == kind) {
-            next.remove(position);
-        } else {
-            next.push(kind);
-        }
-        RestrictionKind::all()
-            .into_iter()
-            .filter(|k| next.contains(k))
-            .collect()
+        toggled_restrictions(&self.restrictions, kind)
     }
 
     /// The priority parsed from the spinner text, or `None` when empty / non-numeric (invalid).
@@ -208,6 +198,17 @@ impl RecordDraft for TagDraft {
     fn display_label(&self) -> Option<String> {
         line_label(&self.name)
     }
+
+    /// Always `Some`, create mode included: [`TagChangeSetRequest`] carries the restrictions, so a new
+    /// tag can be created restricted (`tag.html`) — unlike the twelve records whose change-set requests
+    /// would drop them.
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        Some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
+    }
 }
 
 /// Builds a list row from a [`TagSummary`](vitni_app::TagSummary): the name, a `priority N · X
@@ -246,7 +247,7 @@ pub fn tag_tabs(detail: &TagDetail, loc: &Localizer) -> Vec<DetailTab> {
 
 #[cfg(test)]
 mod tag_draft_tests {
-    use super::TagDraft;
+    use super::{RecordDraft, TagDraft};
     use crate::presentation::RestrictionKind;
 
     fn seed() -> TagDraft {
@@ -302,6 +303,26 @@ mod tag_draft_tests {
         let draft = seed();
         let toggled = draft.toggle_restriction(RestrictionKind::Confidential);
         assert!(toggled.is_empty());
+    }
+
+    #[test]
+    fn a_create_draft_still_offers_the_restriction_field() {
+        assert_eq!(
+            TagDraft::new().editable_restrictions(),
+            Some([].as_slice()),
+            "the tag change-set request carries restrictions, so create offers them"
+        );
+        assert_eq!(
+            seed().editable_restrictions(),
+            Some([RestrictionKind::Confidential].as_slice())
+        );
+    }
+
+    #[test]
+    fn set_restrictions_replaces_the_whole_set() {
+        let mut draft = seed();
+        draft.set_restrictions(vec![RestrictionKind::Locked]);
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
     }
 }
 
