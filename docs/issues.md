@@ -277,16 +277,6 @@ which is what makes them worth fixing in the shared code rather than per screen.
   its picker with `allow_new: false`, so every attach dialog was existing-only regardless. Fixed by
   routing every attach/link side panel through the find-or-create `use_attach_picker` +
   `attach_link_form` (issue #314). — #314
-- **Restriction toggles write an empty provenance and cannot be explained.** The three header toggles
-  submit `ProvenanceDraft::default()` on click (`screens/source.rs:499` and the same line in 11 other
-  screens), so *Confidential* / *Locked* / *Private* is the one class of change an operator can never
-  give a reason for, in a system whose whole point is that every assertion carries one; the untag chip
-  `×` (`person.rs:654-662`) has the identical gap. They are also hard to read as controls: they sit 8px
-  after the badges in the same `.wrap` (`components/master_detail.rs:277-286`) and share the base chip
-  rule with them. Wanted shape: the header keeps the read-only display, toggling moves into edit mode
-  on the model the Tag screen already uses (`screens/tag.rs:325`) so the change rides the record's own
-  save and its provenance block, and the badge group gains real separation from whatever controls
-  remain beside it. — #315
 - **A record's History tab describes an import in the Dashboard's words.** The collapsed
   software-agent run renders `dashboard-import-batch` — "{ $count } records imported"
   (`view_model/history.rs:47-69`, `i18n.rs:1883-1887`) — but on a record's own History tab the count is
@@ -310,24 +300,21 @@ which is what makes them worth fixing in the shared code rather than per screen.
   collection slices, the four `E` form variants, the `on_retract`/`on_tag_remove`/`on_undo` callbacks
   and the `MediaTabState` in one struct — returning `None` for a tab the screen owns itself, so each
   `*_tab_content` keeps only its entity-specific arms; plus `impl From<&DetailTab> for TabItem`. — #322
-- **The per-aggregate save path is written out 25 times in `services.rs` and again in every detail
-  pane.** `services.rs:261-608` holds 12 `save_*_edit` and 13 `commit_*_change_set` wrappers whose
-  bodies are the same four statements — `localizer()`, `open()`,
-  `Session::new(config.operator_agent())`, `vitni_ui::dispatch_*(…).map_err(|e| loc.error(&e))` —
-  differing only in the dispatch fn and its request type. The `vitni-ui` dispatchers they call do
-  genuinely differ per aggregate (each maps its own fields), so the duplication is confined to this
-  wrapper layer. Above them the detail panes repeat the same closures: `on_retract_confirm` in 10
-  screens is 23 lines byte-identical apart from `XEdit::UndoAssertion`/`save_x_edit`
-  (`place.rs:390-412` against `media.rs:267-289`), `on_tag_remove` in 12 (`place.rs:376-385` against
-  `media.rs:253-262`), `on_undo` in 13, `on_submit` in 12. That is also where #315 has to land —
-  `ProvenanceDraft::default()` is hardcoded in all 12 `on_tag_remove` copies and all 10 retract
-  confirms. Wanted: one `DetailAggregate` trait (associated `Edit` type, the `Category`, `tag`/`undo`
-  constructors, `save`) implemented once per aggregate, behind a `use_detail_commits::<A>()` hook
-  returning the four callbacks; the `services.rs` wrappers collapse into that `save` or into the
-  x-macro idiom the app layer and the CLI already use (`for_each_aggregate!` in
-  `vitni-app/src/aggregates.rs`, `for_each_cli_command!` in `vitni-cli/src/main.rs`). One
-  wrinkle to settle first: `save_edit` (person) returns `Result<(), String>` where the other twelve
-  return `Result<String, String>`.
+- **The change-set commit path is written out 14 times in `services.rs`.** `services.rs:283-497` holds
+  the 13 `commit_*_change_set` wrappers plus `commit_new_record`, whose bodies are the same four
+  statements — `localizer()`, `open()`, `Session::new(config.operator_agent())`,
+  `vitni_ui::dispatch_*(…).map_err(|e| loc.error(&e))` — differing only in the dispatch fn and its
+  request type. The `vitni-ui` dispatchers they call do genuinely differ per aggregate (each maps its
+  own fields), so the duplication is confined to this wrapper layer. The `save_*_edit` half of it is
+  gone: `detail_save_wrappers!` generates all 12 from `for_each_detail_aggregate!`
+  (`services.rs:260-281`, `detail_aggregates.rs`), and the four per-pane callbacks
+  (`on_submit`/`on_undo`/`on_tag_remove`/`on_retract_confirm`) now come from `use_detail_commits`
+  (`screens/detail_commits.rs`), leaving one hand-written confirm above the hook — `event.rs:506`,
+  because retracting a participation dispatches a `PersonEdit` against the person it belongs to.
+  Wanted: the same x-macro treatment for these 14, which needs a row carrying each aggregate's
+  `*ChangeSetRequest` type; `commit_new_record` has no aggregate row to sit on, and the per-wrapper doc
+  comments (what commits together, what the UI boundary parsed) would have to survive as macro
+  arguments rather than be dropped.
 - **Every detail pane spells out the 19 `IntentOutcome` variants it does not handle.** The terminal
   `match` of each pane ends in a catch-all arm naming every other variant so no wildcard is used — 21
   lines apiece at `note.rs:337-358`, `person.rs:781-802`, `tag.rs:165-186` and 11 more, 14 sites in

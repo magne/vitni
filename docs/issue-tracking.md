@@ -95,8 +95,8 @@ with the area H3 named as the fix.
 Two earn their place from the current backlog: **`test-gap`** (the zoom-interpolated marker radius has
 no witness in any test — a real class this repo produces, since the behaviour exists only inside
 `format!`-built JavaScript in a live webview) and **`design-question`** for the items the doc marks as
-needing a design or product call (the Attach-versus-Add model #314, the restriction-toggle model #315,
-the citation evidence field #316, saved searches, Repository media refs, column chooser).
+needing a design or product call (the Attach-versus-Add model #314, the citation evidence field #316,
+saved searches, Repository media refs, column chooser).
 
 ### `priority/*` — when
 
@@ -210,10 +210,9 @@ The fifteenth, #322, is the one **refactor** in the gate, and it is here on the 
 than on its own user-visible consequence: #303 and #304 both change the shared tab frame's shape, and
 with the arms written out on all 13 screens each of those lands as ~45 call-site edits instead of one.
 The other simplification findings from the same 2026-08-13 code read carry no milestone — they are
-cleanups whose absence changes nothing a user sees. Three **design questions** came out of the
-walkthrough too and are filed *without* a milestone, because each needs a call before it needs code: the
-Attach-versus-Add model (#314), the restriction-toggle model (#315), and whether a citation should carry
-evidence text at all (#316).
+cleanups whose absence changes nothing a user sees. The **design questions** that came out of the
+walkthrough are filed *without* a milestone, because each needs a call before it needs code: the
+Attach-versus-Add model (#314) and whether a citation should carry evidence text at all (#316).
 
 **The previous round closed in full** — #200, #201, #203–#209, #231–#233, #239, #240, #244, #247,
 #252–#261, #266, #279, #281–#285 — and their bullets left `issues.md` per §6. What those closures
