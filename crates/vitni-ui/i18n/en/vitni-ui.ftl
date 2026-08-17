@@ -9,6 +9,8 @@ no-value = -
 restriction-confidential = Confidential
 restriction-locked = Locked
 restriction-privacy = Privacy
+# The accessible name of a set of restriction pills (its `role="group"` label).
+restriction-group = Privacy restrictions
 
 # Sex labels
 sex-male = male

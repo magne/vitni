@@ -355,6 +355,7 @@ fn restriction_set(
         RestrictionSet {
             choices,
             selected: selected.to_vec(),
+            group_label: loc.restriction_group_label(),
             ontoggle,
         }
     }

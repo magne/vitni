@@ -96,31 +96,51 @@ pub struct RestrictionChoice {
     pub label: String,
 }
 
-/// A multi-select set of privacy restrictions (GEDCOM v7 `RESN`). Controlled: the selected set is a
-/// prop and toggles are forwarded via `ontoggle`. Built set-ready for PR4; not yet wired to a
-/// record (the core `Restriction` change is a prerequisite).
+/// A set of privacy restrictions (GEDCOM v7 `RESN`), as a named `role="group"`. Controlled: the
+/// selected set is a prop and toggles are forwarded via `ontoggle`.
+///
+/// `readonly` renders the same pills as inert `span`s (`resn-static`) instead of buttons — the detail
+/// header's display of what is in force, and the view-mode half of the record card's restriction
+/// field, where read and edit must lay out identically (`record-editing.html` §3). The state stays
+/// exposed either way: `data-kind` drives the per-kind colour and `aria-pressed` the reading.
 #[component]
 pub fn RestrictionSet(
     /// The available restrictions, in display order.
     choices: Vec<RestrictionChoice>,
     /// The currently selected kinds.
     selected: Vec<RestrictionKind>,
-    /// Fired with the kind whose toggle was activated.
+    /// The already-localized name of the group — what the pills belong to.
+    group_label: String,
+    /// Whether the pills are an inert display rather than live toggles.
+    #[props(default)]
+    readonly: bool,
+    /// Fired with the kind whose toggle was activated. Never called while `readonly`.
     ontoggle: EventHandler<RestrictionKind>,
 ) -> Element {
     rsx! {
-        div { class: "resn-set",
+        div { class: "resn-set", role: "group", aria_label: "{group_label}",
             for choice in choices.iter() {
                 {
                     let kind = choice.kind;
-                    let pressed = selected.contains(&kind);
-                    rsx! {
-                        button {
-                            class: "resn",
-                            "data-kind": kind.data_kind(),
-                            aria_pressed: if pressed { "true" } else { "false" },
-                            onclick: move |_| ontoggle.call(kind),
-                            "{choice.label}"
+                    let pressed = if selected.contains(&kind) { "true" } else { "false" };
+                    if readonly {
+                        rsx! {
+                            span {
+                                class: "resn resn-static",
+                                "data-kind": kind.data_kind(),
+                                aria_pressed: pressed,
+                                "{choice.label}"
+                            }
+                        }
+                    } else {
+                        rsx! {
+                            button {
+                                class: "resn",
+                                "data-kind": kind.data_kind(),
+                                aria_pressed: pressed,
+                                onclick: move |_| ontoggle.call(kind),
+                                "{choice.label}"
+                            }
                         }
                     }
                 }

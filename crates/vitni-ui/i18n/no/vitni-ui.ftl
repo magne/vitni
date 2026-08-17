@@ -9,6 +9,8 @@ no-value = -
 restriction-confidential = Konfidensiell
 restriction-locked = Låst
 restriction-privacy = Personvern
+# Tilgjengelig navn på en gruppe restriksjonsmerker (etiketten til `role="group"`).
+restriction-group = Personvernrestriksjoner
 
 # Kjønnsetiketter
 sex-male = mann

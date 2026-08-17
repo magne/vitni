@@ -719,6 +719,7 @@ fn citation_restriction_toggles(
         RestrictionSet {
             choices,
             selected: selected.clone(),
+            group_label: loc.restriction_group_label(),
             ontoggle: move |kind: RestrictionKind| {
                 let mut next = selected.clone();
                 if let Some(position) = next.iter().position(|&k| k == kind) {

@@ -488,6 +488,36 @@ pub fn tag_chips(loc: &Localizer, tags: &[TagRef]) -> Element {
     }
 }
 
+/// The detail header's privacy restrictions: an inert, named group of the kinds **in force**, and
+/// nothing at all when the record is unrestricted (issue #315).
+///
+/// Display only — the header shows what holds, and changing it is part of the record's own edit
+/// (`record_restrictions_field`), so the change rides the record's Save and its provenance block
+/// rather than committing the moment a chip is clicked. The kinds render in
+/// [`RestrictionKind::all`]'s canonical order, not the order the record happens to list them in.
+pub fn restriction_display(loc: &Localizer, restrictions: &[RestrictionKind]) -> Element {
+    if restrictions.is_empty() {
+        return rsx! {};
+    }
+    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
+        .into_iter()
+        .filter(|kind| restrictions.contains(kind))
+        .map(|kind| RestrictionChoice {
+            kind,
+            label: loc.restriction_label(kind),
+        })
+        .collect();
+    rsx! {
+        RestrictionSet {
+            choices,
+            selected: restrictions.to_vec(),
+            group_label: loc.restriction_group_label(),
+            readonly: true,
+            ontoggle: move |_| {},
+        }
+    }
+}
+
 /// Returns `None` for a blank field (so an absent field is not asserted), else the value as typed.
 #[must_use]
 pub fn non_empty(value: String) -> Option<String> {

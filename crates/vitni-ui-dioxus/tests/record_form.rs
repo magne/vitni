@@ -1,15 +1,16 @@
 //! SSR assertions for the shared record-form pieces (Phase 5 PR27): the no-reflow `DraftText` /
 //! `DraftSelect` fields, the sticky-header `record_head_actions`, the dirty-gated
-//! `record_edit_provenance`, and the create-frame header. Pure render-and-inspect — no window, no
-//! workspace — over `TagDraft` as a representative record draft.
+//! `record_edit_provenance`, the create-frame header, and the shared restriction display/field
+//! (issue #315). Pure render-and-inspect — no window, no workspace — over `TagDraft` as a
+//! representative record draft, and `SourceDraft` where a create-mode draft must hide a field.
 
 use dioxus::prelude::*;
 use vitni_ui::ActionLabel;
-use vitni_ui::{Localizer, ProvenanceDraft, TagDraft};
+use vitni_ui::{Localizer, ProvenanceDraft, RestrictionKind, SourceDraft, TagDraft};
 use vitni_ui_dioxus::components::{DraftSelect, DraftText, SelectChoice};
 use vitni_ui_dioxus::screens::{
     RecordActionLabels, RecordEditState, create_record_frame, create_record_header, record_edit_provenance,
-    record_head_actions,
+    record_head_actions, record_restrictions_field, restriction_display,
 };
 
 fn loc() -> Localizer {
@@ -226,6 +227,125 @@ fn a_clean_edit_disables_save_and_hides_the_provenance_block() {
     assert!(
         !html.contains(r#"role="group""#),
         "no provenance block while the record is pristine:\n{html}"
+    );
+}
+
+// ---- Restrictions --------------------------------------------------------------------------------
+
+/// A stored source carrying `restrictions` — a draft whose `editable_restrictions` is `Some`.
+fn stored_source(restrictions: Vec<RestrictionKind>) -> SourceDraft {
+    SourceDraft {
+        existing_human_id: Some("S0001".to_owned()),
+        human_id: "S0001".to_owned(),
+        title: "Parish register".to_owned(),
+        restrictions,
+        ..SourceDraft::new()
+    }
+}
+
+/// The edit state for `draft`, seeded from itself (pristine) in `editing` mode.
+fn source_record(editing: bool, draft: SourceDraft) -> RecordEditState<SourceDraft> {
+    let seed = draft.clone();
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal(move || seed),
+        draft: use_signal(move || draft),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
+fn restriction_field_view_mode() -> Element {
+    record_restrictions_field(
+        &loc(),
+        source_record(false, stored_source(vec![RestrictionKind::Privacy])),
+    )
+}
+
+fn restriction_field_edit_mode() -> Element {
+    record_restrictions_field(
+        &loc(),
+        source_record(true, stored_source(vec![RestrictionKind::Privacy])),
+    )
+}
+
+fn restriction_field_create_mode() -> Element {
+    record_restrictions_field(&loc(), source_record(true, SourceDraft::new()))
+}
+
+#[test]
+fn a_create_draft_renders_no_restriction_field() {
+    let html = render(restriction_field_create_mode);
+    assert!(
+        !html.contains("resn"),
+        "a draft with no stored record behind it offers no restriction field:\n{html}"
+    );
+}
+
+#[test]
+fn view_mode_restrictions_are_static_pills_over_every_kind() {
+    let html = render(restriction_field_view_mode);
+    assert!(html.contains(">Restrictions<"), "the field is labelled:\n{html}");
+    assert!(!html.contains("<button"), "view mode offers nothing to press:\n{html}");
+    for kind in ["confidential", "locked", "privacy"] {
+        assert!(
+            html.contains(&format!(r#"data-kind="{kind}""#)),
+            "all three kinds render, so edit mode reflows nothing:\n{html}"
+        );
+    }
+    assert_eq!(
+        html.matches("resn-static").count(),
+        3,
+        "every pill is static in view mode:\n{html}"
+    );
+}
+
+#[test]
+fn edit_mode_restrictions_are_live_toggles_seeded_from_the_draft() {
+    let html = render(restriction_field_edit_mode);
+    assert!(html.contains("<button"), "edit mode offers live toggles:\n{html}");
+    assert!(!html.contains("resn-static"), "no static pill in edit mode:\n{html}");
+    assert_eq!(
+        html.matches(r#"aria-pressed="true""#).count(),
+        1,
+        "only the draft's own restriction is pressed:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"aria-pressed="false""#).count(),
+        2,
+        "the other two read as off:\n{html}"
+    );
+}
+
+fn restriction_display_unrestricted() -> Element {
+    restriction_display(&loc(), &[])
+}
+
+fn restriction_display_privacy() -> Element {
+    restriction_display(&loc(), &[RestrictionKind::Privacy])
+}
+
+#[test]
+fn an_unrestricted_record_displays_no_restriction_chips() {
+    let html = render(restriction_display_unrestricted);
+    assert!(
+        !html.contains("resn"),
+        "nothing is in force, so the header shows nothing:\n{html}"
+    );
+}
+
+#[test]
+fn the_display_shows_only_the_restrictions_in_force() {
+    let html = render(restriction_display_privacy);
+    assert!(html.contains(r#"data-kind="privacy""#), "the set kind shows:\n{html}");
+    assert!(
+        !html.contains(r#"data-kind="locked""#) && !html.contains(r#"data-kind="confidential""#),
+        "an unset kind is not shown at all:\n{html}"
+    );
+    assert!(html.contains("resn-static"), "the header's chips are static:\n{html}");
+    assert!(!html.contains("<button"), "the header offers nothing to press:\n{html}");
+    assert!(
+        html.contains(r#"aria-label="Privacy restrictions""#),
+        "the group is named:\n{html}"
     );
 }
 

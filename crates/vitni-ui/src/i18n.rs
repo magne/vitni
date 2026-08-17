@@ -160,6 +160,13 @@ impl Localizer {
         }
     }
 
+    /// The accessible name of a set of privacy-restriction pills — the group they belong to, so a
+    /// screen reader announces the pills as one thing rather than three loose badges.
+    #[must_use]
+    pub fn restriction_group_label(&self) -> String {
+        fl!(self.loader, "restriction-group")
+    }
+
     /// The localized label for a detail tab, keyed by its stable id (`overview`, `citations`, …).
     #[must_use]
     pub fn tab_label(&self, id: &str) -> String {
