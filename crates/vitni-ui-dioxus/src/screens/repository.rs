@@ -720,7 +720,12 @@ fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<(Repository
     let mut media = use_signal(|| 0_usize);
     let prov = use_signal(ProvenanceDraft::default);
     let extra = rsx! {
-        Input { label: loc.field_label("call-number"), name: "call-number".to_owned(), oninput: move |event: FormEvent| call_number.set(event.value()) }
+        Input {
+            label: loc.field_label("call-number"),
+            name: "call-number".to_owned(),
+            value: Some(call_number()),
+            oninput: move |event: FormEvent| call_number.set(event.value()),
+        }
         Select {
             label: loc.field_label("media-type"),
             name: "media-type".to_owned(),

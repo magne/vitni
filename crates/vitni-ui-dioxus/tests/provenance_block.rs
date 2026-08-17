@@ -69,6 +69,33 @@ fn the_confidence_select_defaults_to_the_unset_option() {
     );
 }
 
+/// A draft whose rationale has already been typed, for the controlled-field assertion below.
+fn typed_reason_block() -> Element {
+    let draft = use_signal(|| ProvenanceDraft {
+        rationale: "gdpr audit".to_owned(),
+        ..ProvenanceDraft::default()
+    });
+    provenance_block(&loc(), draft)
+}
+
+#[test]
+fn the_reason_field_renders_the_draft_it_is_bound_to() {
+    let html = render(typed_reason_block);
+    // The rationale input must carry a `value` bound to the draft. An unbound one is not merely
+    // "uncontrolled": `value` is a volatile attribute, so a missing one is re-written to the live DOM
+    // as a removal on every diff, blanking the field — which is how a save once carried only the last
+    // character typed (`components/text_input.rs` header). SSR cannot type, but it can prove the
+    // binding is in the markup at all, which is exactly what was missing.
+    let field = html
+        .split('<')
+        .find(|tag| tag.contains(r#"name="prov-reason""#))
+        .unwrap_or_default();
+    assert!(
+        field.contains(r#"value="gdpr audit""#),
+        "the reason input is bound to the draft's rationale:\n{html}"
+    );
+}
+
 /// A Person/Family relationship-assertion block: additionally offers the DNA-match evidence picker.
 fn dna_block() -> Element {
     let draft = use_signal(ProvenanceDraft::default);

@@ -230,17 +230,6 @@ only the Overview and their entity-specific tables. So each item here lands on e
 which is what makes them worth fixing in the shared code rather than per screen. All came out of the
 2026-08-12 GUI walkthrough.
 
-- **The provenance "Reason for this change" field discards every keystroke.** Typing into it leaves it
-  empty, so no add or attach in the app can record *why*. One cause, one line: the `TextInput` at
-  `components/provenance.rs:78-82` is the only one in the app with no `value:` prop. `value` is a
-  *volatile* attribute in Dioxus, re-written on every diff of the element even when unchanged, and
-  `AttributeValue::None` is written as `remove_attribute`, whose `value` branch runs `node.value = ""`.
-  Each keystroke calls `draft.write()`, which dirties `ProvenanceBlock` (it reads the whole draft),
-  which re-renders the input, which wipes it — synchronously, within the same keystroke. Every attach
-  and add side panel routes through here (`screens/shared.rs:838`); the retract reason two hundred
-  lines away is correct precisely because it binds `value: "{rationale}"` (`shared.rs:894-900`). Guard
-  the fix with an SSR assertion that the rendered input carries a `value` attribute, since the failure
-  is the attribute's *absence*. — #299
 - **The shared tabs have no common layout contract.** `tab_with_add` (`screens/tabs.rs:140-151`) emits
   the action bar *before* the body, so the button precedes the explanation it should follow; the
   explanatory `div.section-note` exists on History (`tabs.rs:526`) and nowhere else among the shared
@@ -594,6 +583,15 @@ ADR 0022 out-of-scope tail:
 - `List`/detail descriptions + plugin-driven navigation.
 - Per-field validation vocabulary.
 - Plugin-prefilled field values.
+- **A plugin form's fields are uncontrolled.** `field_input` (`vocabulary_render.rs:95-179`) binds no
+  `value:` on Text, Textarea, Number or Date, so any re-render of the enclosing `FormView` blanks them
+  in the live webview (the volatile-`value` mechanism in `components/text_input.rs`'s header). Not
+  reachable today — `FormView` reads `values` only in `use_signal`'s initializer and in the action
+  button's `onclick`, so it subscribes to nothing the typing writes, and its props are identity-stable
+  under an outer re-render — but one added read makes every plugin field lose what was typed. Fixing it
+  is not the one-line binding the record pane needed: `values` holds the *parsed* JSON a plugin action
+  submits, and round-tripping `Number` through it fights the typist ("1." re-renders as "1.0"), so the
+  numeric field needs a raw-text buffer, and per-field hooks are ruled out by the dynamic field list.
 - The `query` capability for `ui-panel`.
 - Long-running / streaming actions.
 - Multi-panel pages.
