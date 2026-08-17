@@ -290,3 +290,24 @@ fn an_attached_note_renders_its_type_and_transcribed_text() {
         "the card keeps its row-scoped Detach:\n{html}"
     );
 }
+
+#[test]
+fn the_overview_names_each_evidence_axis_it_shows() {
+    // Issue #316: one row labelled "Evidence" held all three Evidence Explained axes, so the label
+    // named the third axis rather than the set. The card is the analysis; each row names its own axis
+    // (`docs/mockups/citation.html`).
+    let html = render(citation_view);
+    assert!(
+        html.contains(">Analysis<"),
+        "the card that holds the three axes is titled Analysis:\n{html}"
+    );
+    // Each axis label appears twice: once as a read box in the record card, once naming its chip row
+    // in the Analysis card. One occurrence would mean the analysis rows are still unlabelled.
+    for axis in ["Source quality", "Information kind", "Evidence kind"] {
+        assert_eq!(
+            html.matches(axis).count(),
+            2,
+            "`{axis}` labels both its read box and its chip row:\n{html}"
+        );
+    }
+}

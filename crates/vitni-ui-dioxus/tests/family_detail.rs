@@ -224,7 +224,8 @@ fn family_citations_tab_shows_the_canonical_shape_with_backs_and_detach() {
         ">Page<",
         ">Backs<",
         ">Confidence<",
-        ">Evidence<",
+        // The axis-chip column names the analysis, not the evidence text a citation never holds (#316).
+        ">Analysis<",
         "Trinity Church marriage register",
         "vol. 5, f. 18",
         ">3<",

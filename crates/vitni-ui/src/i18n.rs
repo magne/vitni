@@ -346,7 +346,7 @@ impl Localizer {
             "age-months" => fl!(self.loader, "field-age-months"),
             "age-days" => fl!(self.loader, "field-age-days"),
             "age-phrase" => fl!(self.loader, "field-age-phrase"),
-            "evidence" => fl!(self.loader, "field-evidence"),
+            "analysis" => fl!(self.loader, "field-analysis"),
             "born" => fl!(self.loader, "field-born"),
             "partner" => fl!(self.loader, "field-partner"),
             "child" => fl!(self.loader, "field-child"),

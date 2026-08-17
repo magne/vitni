@@ -49,8 +49,8 @@ pub fn ProvenanceBlock(
     reason_hint: String,
     /// The confidence select label / accessible name ("Confidence").
     confidence_label: String,
-    /// The evidence-row label ("Evidence").
-    evidence_label: String,
+    /// The analysis-row label ("Analysis") — the row holds all three axis selects, so it names the set.
+    analysis_label: String,
     /// The five confidence options, index-valued and aligned to [`ConfidenceLevel::all`].
     confidence_options: Vec<SelectChoice>,
     /// The three evidence-analysis axis selects, in display order.
@@ -91,7 +91,7 @@ pub fn ProvenanceBlock(
                 ProvenanceDnaMatches { draft }
             }
             div { class: "fact-row",
-                span { class: "field-label", style: "width:96px;margin:0", "{evidence_label}" }
+                span { class: "field-label", style: "width:96px;margin:0", "{analysis_label}" }
                 span { class: "grow wrap",
                     for axis in axes.iter() {
                         {axis_select(draft, axis)}

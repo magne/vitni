@@ -896,3 +896,21 @@ fn a_restriction_change_alone_makes_the_person_savable() {
         "and asks for the reason like any other change (issue #315):\n{html}"
     );
 }
+
+#[test]
+fn the_citations_tab_column_of_axis_chips_is_named_analysis() {
+    // Issue #316: the column was headed "Evidence", which promised the transcribed words of the source
+    // — a citation has none to give (they live in an attached Transcript note). The cell holds the
+    // three Evidence Explained axis chips, so the header names that.
+    let mut vdom = VirtualDom::new(person_evidence_tables);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains("<th>Analysis</th>"),
+        "the axis-chip column is headed Analysis:\n{html}"
+    );
+    assert!(
+        !html.contains("<th>Evidence</th>"),
+        "no column promises evidence text the citation does not hold:\n{html}"
+    );
+}

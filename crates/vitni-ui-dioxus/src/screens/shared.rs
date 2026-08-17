@@ -681,7 +681,7 @@ pub fn citation_table(loc: &Localizer, citations: &[CitationRefVm]) -> Element {
                 loc.field_label("source"),
                 loc.field_label("page"),
                 loc.field_label("confidence"),
-                loc.field_label("evidence"),
+                loc.field_label("analysis"),
             ],
             for citation in citations.iter() {
                 tr {
@@ -887,7 +887,7 @@ fn provenance_block_impl(loc: &Localizer, draft: Signal<ProvenanceDraft>, allow_
             reason_label: loc.provenance_reason_label(),
             reason_hint: loc.provenance_reason_hint(),
             confidence_label: loc.field_label("confidence"),
-            evidence_label: loc.field_label("evidence"),
+            analysis_label: loc.field_label("analysis"),
             confidence_options,
             axes,
             allow_dna_evidence,

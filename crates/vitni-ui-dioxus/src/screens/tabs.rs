@@ -29,7 +29,7 @@ pub fn citations_table<E: Clone + PartialEq + 'static>(
         headers.push(loc.field_label("backs"));
     }
     headers.push(loc.field_label("confidence"));
-    headers.push(loc.field_label("evidence"));
+    headers.push(loc.field_label("analysis"));
     headers.push(String::new());
     rsx! {
         Table {
