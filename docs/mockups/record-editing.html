@@ -333,9 +333,11 @@
     <b>create form</b> (recursive, as above — the whole tree commits with the root's Save), the
     <a href="design-system.html">provenance block</a>'s own “+ New citation” card, and an
     <a href="edit-patterns.html">attach side panel</a>'s link field (below). <b>No new aggregate persists
-    until the container's own Save commits it</b> — with one deliberate exception: the provenance block's
-    citation card commits on <b>Add</b>, not on the record's Save, because it isn't inside a record's own
-    Save at all.</p>
+    until the container's own Save commits it</b> — with two deliberate exceptions, both for the same
+    reason: the provenance block's citation card and the <a href="research-note.html">Research note</a>
+    Subjects field commit on <b>Add</b> rather than on any record's Save, because neither sits inside one.
+    A Research note's subjects are a flat list of ids with nowhere to hold an uncommitted draft, so a new
+    subject is created as it is added, exactly as a new citation is.</p>
   <div class="specimen">
     <div class="label">Person draft → new Citation card → new Source card (surfaces alternate)</div>
     <div class="card" style="margin-bottom:0">
@@ -370,8 +372,8 @@
       not one atomic transaction — the promise is only that nothing is written before you save the root.
       An attach side panel's own “+ New …” (below) follows the same order on its Save — create the
       support record, then attach it — and the same promise: nothing is written before you save the
-      panel. The one exception is the provenance block's “+ New citation” card, which commits on
-      <b>Add</b> rather than deferring to any outer Save.</div>
+      panel. The two exceptions are the provenance block's “+ New citation” card and the Research note
+      Subjects field, which commit on <b>Add</b> rather than deferring to any outer Save.</div>
   </div>
   <div class="specimen">
     <div class="label">Attach side panel — same “+ New …” card, seeded from the typed search, picker already collapsed</div>
