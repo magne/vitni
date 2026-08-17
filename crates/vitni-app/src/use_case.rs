@@ -90,7 +90,7 @@ pub(crate) struct NoteLookup {
     pub(crate) language: Option<String>,
 }
 
-/// Loads a `NoteId -> `[`NoteLookup`] map from the Note projection.
+/// Loads a `NoteId` → [`NoteLookup`] map from the Note projection.
 pub(crate) async fn note_lookups(store: &Store) -> Result<HashMap<NoteId, NoteLookup>, AppError> {
     let mut map = HashMap::new();
     for view in store.list_notes().await? {
