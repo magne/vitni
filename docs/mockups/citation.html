@@ -140,30 +140,22 @@
           </div>
 
           <div class="card">
-            <h3>Evidence analysis · Evidence Explained</h3>
-            <p class="muted" style="margin-top:0">Three independent axes classify the evidence. Selected value is highlighted; the others are dimmed.</p>
+            <h3>Analysis</h3>
+            <p class="muted" style="margin-top:0">Three independent <b>Evidence Explained</b> axes classify the evidence, each row naming
+              its own axis. An axis that was never graded reads <b>—</b>. The card names the analysis; no row promises the transcribed
+              words of the source, which are an attached <b>Transcript</b> note (see the Notes tab).</p>
             <div class="stack">
               <div class="fact-row">
-                <span class="field-label" style="width:110px;margin:0">Source</span>
-                <span class="wrap grow">
-                  <span class="ev source" style="opacity:.4">original</span>
-                  <span class="ev source" style="outline:2px solid var(--accent);outline-offset:2px">derivative</span>
-                </span>
+                <span class="field-label" style="width:110px;margin:0">Source quality</span>
+                <span class="wrap grow"><span class="ev source">derivative</span></span>
               </div>
               <div class="fact-row">
-                <span class="field-label" style="width:110px;margin:0">Information</span>
-                <span class="wrap grow">
-                  <span class="ev info" style="outline:2px solid var(--accent);outline-offset:2px">primary</span>
-                  <span class="ev info" style="opacity:.4">secondary</span>
-                </span>
+                <span class="field-label" style="width:110px;margin:0">Information kind</span>
+                <span class="wrap grow"><span class="ev info">primary</span></span>
               </div>
               <div class="fact-row">
-                <span class="field-label" style="width:110px;margin:0">Evidence</span>
-                <span class="wrap grow">
-                  <span class="ev evidence" style="opacity:.4">direct</span>
-                  <span class="ev evidence" style="outline:2px solid var(--accent);outline-offset:2px">indirect</span>
-                  <span class="ev evidence" style="opacity:.4">negative</span>
-                </span>
+                <span class="field-label" style="width:110px;margin:0">Evidence kind</span>
+                <span class="wrap grow"><span class="ev evidence">indirect</span></span>
               </div>
             </div>
           </div>
@@ -213,7 +205,7 @@
                 <select class="in" style="width:auto"><option>— (no judgment recorded)</option><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
               </div>
               <div class="fact-row">
-                <span class="field-label" style="width:110px;margin:0">Evidence</span>
+                <span class="field-label" style="width:110px;margin:0">Analysis</span>
                 <span class="grow wrap">
                   <select class="in" style="width:auto" aria-label="Source quality"><option>—</option><option>original</option><option selected>derivative</option></select>
                   <select class="in" style="width:auto" aria-label="Information kind"><option>—</option><option selected>primary</option><option>secondary</option></select>
@@ -263,7 +255,9 @@
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
           <div class="tab-actions"><button class="btn sm primary">+ Attach note</button></div>
-          <div class="card"><h3>Transcription · en <span class="row-actions" style="float:right"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this note — it stays in History">Retract</button></span></h3><p>"Smith, John — age 0, b. New York" in dwelling 88, line 14. Surname spelled "Smyth" by enumerator; corrected to Smith.</p></div>
+          <div class="stack">
+            <div class="card"><h3>N0004 · Transcript · en</h3><p>"Smith, John — age 0, b. New York" in dwelling 88, line 14. Surname spelled "Smyth" by enumerator; corrected to Smith.</p><div class="row-actions"><button class="btn sm ghost" title="Detach this note — the detachment is recorded in History" aria-label="Detach N0004">Detach</button></div></div>
+          </div>
         </div>
 
         <!-- TAGS -->

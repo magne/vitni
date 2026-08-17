@@ -2,7 +2,7 @@ use super::prelude::*;
 // The citation attribute row view-model (seeds the per-row attribute edit) and the record-link
 // view-model enum (citation source); the latter shadows the prelude's `RecordLink` link component,
 // which this screen does not use.
-use vitni_ui::{CitationAttributeVm, RecordLink};
+use vitni_ui::{CitationAttributeVm, EvidenceAxis, RecordLink};
 
 /// The create-mode citation record: an uncommitted [`CitationDraft`] rendered as the create form in
 /// the detail pane (`record-editing.html` §6). The source is required (§7); a "new source" selection
@@ -743,7 +743,7 @@ fn citation_tab_content(
             TabActionTarget::Form(editing, CitationEditForm::Note),
             None,
             rsx! {
-                {id_list(loc, &detail.notes, Some(on_retract))}
+                {note_cards(loc, &detail.notes, Some(on_retract))}
             },
         ),
         "tags" => tab_frame(
@@ -765,6 +765,9 @@ fn citation_tab_content(
 /// source · date · page · confidence · evidence axes) as read boxes, plus the Evidence Explained axis
 /// chips. Entering edit mode (via the sticky-header Edit) swaps the record fields to inputs and, while
 /// dirty, shows the provenance block; the axis-chip card is hidden in edit mode.
+///
+/// The chip card is one row per axis, each named for the axis it holds (`citation.html`) — a single row
+/// labelled "Evidence" named the third axis rather than the set of three (issue #316).
 pub fn citation_overview(
     loc: &Localizer,
     detail: &CitationDetail,
@@ -781,25 +784,33 @@ pub fn citation_overview(
         div { class: "section-note", "{loc.overview_note()}" }
         div { class: "grid-2",
             {citation_record_fields(loc, record)}
-            Card { title: loc.field_label("evidence"),
+            Card { title: loc.field_label("analysis"),
                 div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"evidence\")}" }
-                        span { class: "grow wrap",
-                            if detail.evidence_axes.is_empty() {
-                                "—"
-                            } else {
-                                for chip in detail.evidence_axes.iter() {
-                                    EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
-                                }
-                            }
-                        }
+                    for axis in [EvidenceAxis::Source, EvidenceAxis::Information, EvidenceAxis::Evidence] {
+                        {axis_chip_row(loc, detail, axis)}
                     }
                     if detail.source.is_none() {
                         div { class: "fact-row",
                             NoSourceFlag { label: loc.no_source() }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// One row of the Overview's Analysis card: the axis's own label and the chip recorded on it, or `—`
+/// when that axis was never graded.
+fn axis_chip_row(loc: &Localizer, detail: &CitationDetail, axis: EvidenceAxis) -> Element {
+    let chip = detail.evidence_axes.iter().find(|chip| chip.axis == axis);
+    rsx! {
+        div { class: "fact-row",
+            span { class: "field-label", style: "width:96px;margin:0", "{loc.evidence_axis_label(axis)}" }
+            span { class: "grow wrap",
+                match chip {
+                    Some(chip) => rsx! { EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() } },
+                    None => rsx! { "—" },
                 }
             }
         }

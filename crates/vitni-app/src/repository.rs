@@ -471,7 +471,7 @@ async fn resolve_repository_id(store: &Store, human_id: &str) -> Result<Reposito
 /// the other projections without a per-row query (the join lives in this layer).
 struct RepositoryLookups {
     sources_by_repository: HashMap<RepositoryId, Vec<SourceLinkRef>>,
-    notes: HashMap<NoteId, String>,
+    notes: HashMap<NoteId, use_case::NoteLookup>,
     tags: HashMap<TagId, TagRef>,
 }
 
@@ -509,7 +509,7 @@ impl RepositoryLookups {
         }
         Ok(Self {
             sources_by_repository,
-            notes: use_case::note_human_ids(store).await?,
+            notes: use_case::note_lookups(store).await?,
             tags: tag_refs(store).await?,
         })
     }
@@ -527,9 +527,12 @@ fn summarize(view: &RepositoryView, lookups: &RepositoryLookups) -> RepositorySu
         .notes_with_assertions()
         .iter()
         .filter_map(|attributed| {
-            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
-                human_id: human_id.clone(),
+            lookups.notes.get(&attributed.value).map(|note| AttachedRef {
+                human_id: note.human_id.clone(),
                 id: attributed.value.to_string(),
+                note_type: note.note_type.clone(),
+                text: note.text.clone(),
+                language: note.language.clone(),
                 assertion_id: attributed.assertion_id.to_string(),
             })
         })

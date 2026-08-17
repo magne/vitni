@@ -458,7 +458,7 @@ fn source_tab_content(
             TabActionTarget::Form(editing, SourceEditForm::Note),
             None,
             rsx! {
-                {id_list(loc, &detail.notes, Some(on_retract))}
+                {note_cards(loc, &detail.notes, Some(on_retract))}
             },
         ),
         "tags" => tab_frame(
@@ -581,7 +581,7 @@ pub fn source_citations_table(loc: &Localizer, citations: &[SourceCitationVm]) -
                 loc.field_label("page"),
                 loc.field_label("backs-record"),
                 loc.field_label("confidence"),
-                loc.field_label("evidence"),
+                loc.field_label("analysis"),
             ],
             for row in citations.iter() {
                 {

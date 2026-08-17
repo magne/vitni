@@ -943,7 +943,7 @@ fn person_tab_content(
             TabActionTarget::Form(editing, EditForm::Note),
             None,
             rsx! {
-                {id_list(loc, &detail.notes, Some(on_retract))}
+                {note_cards(loc, &detail.notes, Some(on_retract))}
             },
         ),
         "tags" => tab_frame(

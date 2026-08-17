@@ -366,7 +366,7 @@ struct DnaTestLookups {
     /// `PersonId string -> (human_id, display name)`.
     persons: HashMap<String, (String, Option<String>)>,
     /// `NoteId -> human_id`.
-    notes: HashMap<vitni_core::ids::NoteId, String>,
+    notes: HashMap<vitni_core::ids::NoteId, use_case::NoteLookup>,
     /// `TagId -> TagRef`.
     tags: HashMap<TagId, TagRef>,
     /// `DnaTestId string -> human_id`, for labelling the compared test of each match.
@@ -423,7 +423,7 @@ impl DnaTestLookups {
         }
         Ok(Self {
             persons,
-            notes: use_case::note_human_ids(store).await?,
+            notes: use_case::note_lookups(store).await?,
             tags: tag_refs(store).await?,
             tests,
             matches,
@@ -604,9 +604,12 @@ fn summarize(view: &DnaTestView, lookups: &DnaTestLookups) -> DnaTestSummary {
         .notes_with_assertions()
         .iter()
         .filter_map(|attributed| {
-            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
-                human_id: human_id.clone(),
+            lookups.notes.get(&attributed.value).map(|note| AttachedRef {
+                human_id: note.human_id.clone(),
                 id: attributed.value.to_string(),
+                note_type: note.note_type.clone(),
+                text: note.text.clone(),
+                language: note.language.clone(),
                 assertion_id: attributed.assertion_id.to_string(),
             })
         })

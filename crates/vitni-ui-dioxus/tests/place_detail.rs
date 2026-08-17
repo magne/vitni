@@ -12,9 +12,9 @@ use vitni_ui::{
 use vitni_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker, TabItem};
 use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
-    MediaTabState, PlaceEditForm, RecordActionLabels, RecordEditState, SuccessionFormState, citations_table, id_list,
-    media_gallery, media_tab, place_hierarchy_table, place_names_table, place_overview, place_succession_card,
-    place_succession_form_fields, record_head_actions, restriction_display, tags_panel,
+    MediaTabState, PlaceEditForm, RecordActionLabels, RecordEditState, SuccessionFormState, citations_table,
+    media_gallery, media_tab, note_cards, place_hierarchy_table, place_names_table, place_overview,
+    place_succession_card, place_succession_form_fields, record_head_actions, restriction_display, tags_panel,
 };
 
 /// A representative place detail: a city with High-confidence coordinates, two names (one sourced,
@@ -103,6 +103,10 @@ fn sample() -> PlaceDetail {
         media: sample_media(),
         notes: vec![AttachedRefVm {
             human_id: "N0004".to_owned(),
+            note_type: Some(vitni_app::NoteType::Research),
+            type_label: Some("Research".to_owned()),
+            text: Some("Boundary with Brooklyn shifted with the 1898 consolidation.".to_owned()),
+            language: Some("en".to_owned()),
             assertion_id: "0190-note-attach-1".to_owned(),
         }],
         tags: vec![TagRef {
@@ -222,7 +226,7 @@ fn place_view() -> Element {
         {place_succession_card(&loc, &detail, onedit, onretract)}
         {citations_table::<PlaceEditForm>(&loc, &detail.citations, false, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
-        {id_list(&loc, &detail.notes, Some(onretract))}
+        {note_cards(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
 }

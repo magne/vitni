@@ -31,8 +31,8 @@ fn sample_date() -> GenealogicalDate {
 use vitni_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use vitni_ui_dioxus::screens::{
     EventEditCtx, EventEditForm, MediaTabState, ParticipationSeed, RecordActionLabels, RecordEditState, address_cards,
-    citations_table, event_overview, event_participants_table, id_list, media_gallery, media_tab, participation_form,
-    record_head_actions, tags_panel,
+    citations_table, event_overview, event_participants_table, media_gallery, media_tab, note_cards,
+    participation_form, record_head_actions, tags_panel,
 };
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
@@ -141,10 +141,7 @@ fn sample() -> EventDetail {
             assertion_id: Some("0190-citation-attach-assertion".to_owned()),
         }],
         media: sample_media(),
-        notes: vec![AttachedRefVm {
-            human_id: "N0005".to_owned(),
-            assertion_id: "0190-note-attach-assertion".to_owned(),
-        }],
+        notes: sample_notes(),
         tags: vec![TagRef {
             id: "0190-secret-tag-id".to_owned(),
             name: "Verified event".to_owned(),
@@ -155,6 +152,22 @@ fn sample() -> EventDetail {
         research_notes: Vec::new(),
         history: Vec::new(),
     }
+}
+
+/// The event's attached notes: the register's transcribed entry, which is what the Notes tab renders
+/// as words rather than an id (issue #316).
+fn sample_notes() -> Vec<AttachedRefVm> {
+    vec![AttachedRefVm {
+        human_id: "N0005".to_owned(),
+        note_type: Some(vitni_app::NoteType::Transcript),
+        type_label: Some("Transcript".to_owned()),
+        text: Some(
+            "\"John Smith, carpenter, of this parish, and Mary Doe, spinster, married this 14th day of June 1876.\""
+                .to_owned(),
+        ),
+        language: Some("en".to_owned()),
+        assertion_id: "0190-note-attach-assertion".to_owned(),
+    }]
 }
 
 /// The event's attached media (one captioned image ref).
@@ -238,7 +251,7 @@ fn event_view() -> Element {
         {event_participants_table(&loc, &detail, on_edit_open, on_person_retract)}
         {citations_table::<EventEditForm>(&loc, &detail.citations, false, on_retract)}
         {media_gallery(&loc, &detail.media, Some(on_retract), None)}
-        {id_list(&loc, &detail.notes, Some(on_retract))}
+        {note_cards(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }

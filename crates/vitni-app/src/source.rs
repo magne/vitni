@@ -658,7 +658,7 @@ struct SourceLookups {
     citations: HashMap<CitationId, CitationRef>,
     citations_by_source: HashMap<SourceId, Vec<CitationId>>,
     media: HashMap<MediaId, MediaLookup>,
-    notes: HashMap<NoteId, String>,
+    notes: HashMap<NoteId, use_case::NoteLookup>,
     tags: HashMap<TagId, TagRef>,
     usage: CitationUsage,
 }
@@ -677,7 +677,7 @@ impl SourceLookups {
             citations: citation_refs(store).await?,
             citations_by_source,
             media: media_lookups(store).await?,
-            notes: use_case::note_human_ids(store).await?,
+            notes: use_case::note_lookups(store).await?,
             tags: tag_refs(store).await?,
             usage: CitationUsage::load(workspace).await?,
         })
@@ -752,9 +752,12 @@ fn summarize(view: &SourceView, lookups: &SourceLookups) -> SourceSummary {
         .notes_with_assertions()
         .iter()
         .filter_map(|attributed| {
-            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
-                human_id: human_id.clone(),
+            lookups.notes.get(&attributed.value).map(|note| AttachedRef {
+                human_id: note.human_id.clone(),
                 id: attributed.value.to_string(),
+                note_type: note.note_type.clone(),
+                text: note.text.clone(),
+                language: note.language.clone(),
                 assertion_id: attributed.assertion_id.to_string(),
             })
         })

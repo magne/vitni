@@ -210,25 +210,57 @@ pub struct AddressVm {
     pub assertion_id: String,
 }
 
-/// A record attached to an aggregate at the record level (a note, a media object), for a detail VM —
-/// its display `human_id` plus the attach `AssertionId` a Detach retracts (ADR 0004 §2). Replaces the
+/// A note attached to an aggregate at the record level, for a detail VM — its display `human_id`, the
+/// note's type and body, and the attach `AssertionId` a Detach retracts (ADR 0004 §2). Replaces the
 /// bare `Vec<String>` of `human_id`s so a row can carry a Detach affordance.
+///
+/// The type and body ride along because a source's transcribed evidence text is an attached
+/// `NoteType::Transcript` note rather than a Citation field (data-model §6), so the owner's Notes tab
+/// is where those words are read — an opaque id would leave them invisible (issue #316).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttachedRefVm {
-    /// The attached record's user-facing id (e.g. `N0001`), for display and navigation.
+    /// The attached note's user-facing id (e.g. `N0001`), for display and navigation.
     pub human_id: String,
+    /// The note's type, if set (kept alongside `type_label`, the display string).
+    pub note_type: Option<vitni_app::NoteType>,
+    /// The localized note-type label, if the note has a type.
+    pub type_label: Option<String>,
+    /// The note's body, if it has any.
+    pub text: Option<String>,
+    /// The body's language tag (e.g. `en`), if recorded.
+    pub language: Option<String>,
     /// The `AssertionId` (a UUID string) of the attach assertion — the Detach target. Never rendered.
     pub assertion_id: String,
 }
 
 impl AttachedRefVm {
-    /// Builds an [`AttachedRefVm`] from an app [`AttachedRef`](vitni_app::AttachedRef).
+    /// Builds an [`AttachedRefVm`] from an app [`AttachedRef`](vitni_app::AttachedRef), localizing the
+    /// note-type label (ADR 0003).
     #[must_use]
-    pub fn from_ref(reference: &vitni_app::AttachedRef) -> Self {
+    pub fn from_ref(reference: &vitni_app::AttachedRef, loc: &Localizer) -> Self {
         Self {
             human_id: reference.human_id.clone(),
+            note_type: reference.note_type.clone(),
+            type_label: reference.note_type.as_ref().map(|t| loc.note_type_label(t)),
+            text: reference.text.clone(),
+            language: reference.language.clone(),
             assertion_id: reference.assertion_id.clone(),
         }
+    }
+
+    /// The note card's heading: the present parts of `human_id · type · language`, joined — the same
+    /// `type · language` idiom the Notes list uses for a row's subtitle ([`note_row`](super::note_row)).
+    /// Degrades to the bare `human_id`, so an untyped, textless note is still identifiable.
+    #[must_use]
+    pub fn heading(&self) -> String {
+        let mut parts = vec![self.human_id.clone()];
+        if let Some(type_label) = &self.type_label {
+            parts.push(type_label.clone());
+        }
+        if let Some(language) = &self.language {
+            parts.push(language.clone());
+        }
+        parts.join(" · ")
     }
 }
 

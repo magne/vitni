@@ -9,7 +9,7 @@ use vitni_ui::{
     RestrictionKind, SourceHeldVm,
 };
 use vitni_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, RepositoryEditForm, address_cards, id_list, record_head_actions,
+    RecordActionLabels, RecordEditState, RepositoryEditForm, address_cards, note_cards, record_head_actions,
     repository_overview, repository_sources_table, repository_urls_table, tags_panel,
 };
 
@@ -64,6 +64,12 @@ fn sample() -> RepositoryDetail {
         ],
         notes: vec![AttachedRefVm {
             human_id: "N0004".to_owned(),
+            note_type: Some(vitni_app::NoteType::Research),
+            type_label: Some("Research".to_owned()),
+            text: Some(
+                "Microfilm copies of the NY federal census rolls are available at the New York branch.".to_owned(),
+            ),
+            language: Some("en".to_owned()),
             assertion_id: "0190-note-attach-1".to_owned(),
         }],
         tags: vec![TagRef {
@@ -115,7 +121,7 @@ fn overview_view() -> Element {
         {address_cards(&loc, &detail.addresses, onedit_address, onretract)}
         {repository_urls_table(&loc, &detail, onedit, onretract)}
         {repository_sources_table(&loc, &detail)}
-        {id_list(&loc, &detail.notes, Some(onretract))}
+        {note_cards(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
 }

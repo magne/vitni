@@ -962,7 +962,7 @@ struct FamilyLookups {
     events: HashMap<EventId, EventInfo>,
     citations: HashMap<CitationId, CitationRef>,
     media: HashMap<MediaId, MediaLookup>,
-    notes: HashMap<NoteId, String>,
+    notes: HashMap<NoteId, use_case::NoteLookup>,
     tags: HashMap<TagId, TagRef>,
 }
 
@@ -1014,7 +1014,7 @@ impl FamilyLookups {
             events,
             citations,
             media: crate::dto::media_lookups(store).await?,
-            notes: use_case::note_human_ids(store).await?,
+            notes: use_case::note_lookups(store).await?,
             tags: tag_labels(store).await?,
         })
     }
@@ -1092,9 +1092,12 @@ fn summarize(view: &FamilyView, lookups: &FamilyLookups) -> FamilySummary {
         .notes_with_assertions()
         .iter()
         .filter_map(|attributed| {
-            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
-                human_id: human_id.clone(),
+            lookups.notes.get(&attributed.value).map(|note| AttachedRef {
+                human_id: note.human_id.clone(),
                 id: attributed.value.to_string(),
+                note_type: note.note_type.clone(),
+                text: note.text.clone(),
+                language: note.language.clone(),
                 assertion_id: attributed.assertion_id.to_string(),
             })
         })

@@ -121,7 +121,7 @@ impl MediaDetail {
                 .iter()
                 .map(|c| citation_ref_from_ref(c, loc))
                 .collect(),
-            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
+            notes: summary.notes.iter().map(|n| AttachedRefVm::from_ref(n, loc)).collect(),
             tags: summary.tags.clone(),
             used_by: summary.used_by.iter().map(|u| using_record_vm(u, loc)).collect(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),

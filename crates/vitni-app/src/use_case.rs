@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 
 use uuid::Uuid;
+use vitni_core::enums::NoteType;
 use vitni_core::ids::{AssertionId, NoteId};
 use vitni_core::provenance::{Confidence, EvidenceAnalysis, EvidenceRef};
 use vitni_core::text::Rect;
@@ -73,12 +74,37 @@ where
     }
 }
 
-/// Loads a `NoteId -> human_id` lookup from the Note projection.
-pub(crate) async fn note_human_ids(store: &Store) -> Result<HashMap<NoteId, String>, AppError> {
+/// What an owner's attached-note row needs from the Note projection: the display id plus the type and
+/// body the owner's Notes tab renders. A citation's transcribed evidence text is an attached
+/// `NoteType::Transcript` note (data-model §6), so the text has to travel with the attach ref — a bare
+/// `human_id` is not something a researcher can read (issue #316).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct NoteLookup {
+    /// The note's user-facing identifier (e.g. `N0001`).
+    pub(crate) human_id: String,
+    /// The note's type, if set. Structured, so the frontend localizes it (ADR 0003).
+    pub(crate) note_type: Option<NoteType>,
+    /// The note's primary text content, if set.
+    pub(crate) text: Option<String>,
+    /// The primary content's language (a BCP-47 tag), if recorded.
+    pub(crate) language: Option<String>,
+}
+
+/// Loads a `NoteId` → [`NoteLookup`] map from the Note projection.
+pub(crate) async fn note_lookups(store: &Store) -> Result<HashMap<NoteId, NoteLookup>, AppError> {
     let mut map = HashMap::new();
     for view in store.list_notes().await? {
         if let (Some(id), Some(human_id)) = (view.note_id(), view.human_id()) {
-            map.insert(id, human_id.as_str().to_owned());
+            let text = view.text();
+            map.insert(
+                id,
+                NoteLookup {
+                    human_id: human_id.as_str().to_owned(),
+                    note_type: view.note_type().cloned(),
+                    text: text.map(|rich| rich.text.clone()),
+                    language: text.and_then(|rich| rich.language.as_ref().map(|l| l.as_str().to_owned())),
+                },
+            );
         }
     }
     Ok(map)

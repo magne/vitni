@@ -222,6 +222,14 @@ synthesis* derived from the log; none is edited directly.
 | **Note**       | Free or rich text.                                               | `id`, `human_id`, `note_type`, `RichText` (Markdown + language), tags, `restrictions` (a `Restriction` set).                                                                                                                                                                                        |
 | **Tag**        | A user-defined label (definition).                               | `id`, `name`, `color`, `priority`, `restrictions` (a `Restriction` set).                                                                                                                                                                                                                            |
 
+**A transcription is a Note, not a Citation field.** The transcribed words of a source — GEDCOM's
+`SOUR.DATA.TEXT` — are recorded as a `Note` of `NoteType::Transcript` attached to the Citation, not as a
+text field on `Citation` itself. Gramps does the same (its `Citation` carries page/date/confidence and a
+note list, no text of its own), so a transcription round-trips to either format without a construct that
+has no counterpart there. The Citation's own evidence fields stay *judgments* about the source —
+`confidence` and the three `evidence_analysis` axes — which is why the UI labels that column and that
+card **Analysis** rather than *Evidence*: a citation holds an analysis, never the evidence text.
+
 ## 7. Value-object catalog
 
 Value objects have no independent identity; they are immutable and embedded in event payloads (and
@@ -946,6 +954,7 @@ For import/export fidelity. "—" means no direct equivalent.
 | Repository                                             | Repository                        | `REPO`                                                                     | Agent / SourceDescription                |
 | Media                                                  | Media                             | `OBJE`                                                                     | SourceDescription (digital artifact)     |
 | Note (`RichText`)                                      | Note (`StyledText`)               | `SNOTE`/`NOTE` (text + `MIME` + `LANG`)                                    | Note (`textType`)                        |
+| Citation transcription (a `Transcript` Note)            | Citation note (same shape)        | `SOUR.DATA.TEXT`                                                           | SourceDescription (transcription)        |
 | Tag                                                    | Tag                               | — (`_UID`/extensions)                                                      | —                                        |
 | `EventContext`                                         | `change` timestamp (partial)      | `CHAN`, `_UID`                                                             | Attribution                              |
 | `Confidence`                                           | Citation confidence               | `QUAY`                                                                     | ConfidenceLevel                          |

@@ -106,7 +106,7 @@ impl CitationDetail {
                 })
                 .collect(),
             media: summary.media.iter().map(MediaRefVm::from_ref).collect(),
-            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
+            notes: summary.notes.iter().map(|n| AttachedRefVm::from_ref(n, loc)).collect(),
             tags: summary.tags.clone(),
             history: Vec::new(),
         }

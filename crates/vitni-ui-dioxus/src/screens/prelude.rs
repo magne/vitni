@@ -55,7 +55,7 @@ pub use super::record_form::{
 pub use super::research_note::ResearchNotesTab;
 pub use super::shared::{
     JumpButton, MediaTabState, RecordLink, RegisterFields, RetractSubject, RetractTarget, RowRetract, RowVerb,
-    attach_link_field, attach_link_form, create_record_frame, id_list, media_tab, non_empty, optional_enum_select,
+    attach_link_field, attach_link_form, create_record_frame, media_tab, non_empty, note_cards, optional_enum_select,
     picker_selection_id, provenance_block, provenance_block_dna, provenance_cue, record_enum_select,
     register_fields_form, restriction_display, retract_side_panel, row_actions_cell, source_cue,
     source_media_type_choices, use_attach_picker, use_attach_save, use_detail_tab, use_existing_picker,

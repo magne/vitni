@@ -4,8 +4,8 @@
 
 use dioxus::prelude::*;
 use vitni_app::{
-    Calendar, DateInput, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, Rect, TagRef,
-    build_genealogical_date,
+    Calendar, DateInput, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, NoteType, Rect,
+    TagRef, build_genealogical_date,
 };
 use vitni_ui::{
     AttachedRefVm, CitationAttributeVm, CitationDetail, CitationDraft, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm,
@@ -29,7 +29,7 @@ fn sample_date() -> GenealogicalDate {
 }
 use vitni_ui_dioxus::screens::{
     CitationEditForm, MediaTabState, RecordActionLabels, RecordEditState, citation_attributes_table, citation_overview,
-    id_list, media_gallery, media_tab, record_head_actions, tags_panel,
+    media_gallery, media_tab, note_cards, record_head_actions, tags_panel,
 };
 
 /// A representative citation detail: a cited source, High confidence, all three evidence axes, an
@@ -76,6 +76,10 @@ fn sample() -> CitationDetail {
         }],
         notes: vec![AttachedRefVm {
             human_id: "N0004".to_owned(),
+            note_type: Some(NoteType::Transcript),
+            type_label: Some("Transcript".to_owned()),
+            text: Some("\"Smith, John — age 0, b. New York\" in dwelling 88, line 14.".to_owned()),
+            language: Some("en".to_owned()),
             assertion_id: "0190-note-attach-1".to_owned(),
         }],
         tags: vec![TagRef {
@@ -125,7 +129,7 @@ fn citation_view() -> Element {
         {citation_overview(&loc, &detail, record)}
         {citation_attributes_table(&loc, &detail.attributes, onedit, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
-        {id_list(&loc, &detail.notes, Some(onretract))}
+        {note_cards(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }
@@ -266,4 +270,44 @@ fn media_tab_opens_the_crop_viewer_on_a_card_click() {
         html.contains("Set region") && html.contains("Clear region"),
         "the crop viewer overlay renders with its Set/Clear region actions:\n{html}"
     );
+}
+
+#[test]
+fn an_attached_note_renders_its_type_and_transcribed_text() {
+    // Issue #316: the transcribed evidence text of a source lives in an attached `Transcript` note, so
+    // the Notes tab has to render the words — an opaque `N0004` left them invisible.
+    let html = render(citation_view);
+    assert!(
+        html.contains("N0004 · Transcript · en"),
+        "the note card heading names the note — id · type · language:\n{html}"
+    );
+    assert!(
+        html.contains("in dwelling 88, line 14."),
+        "the note's body renders, which is what makes a transcription readable (#316):\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Detach N0004""#),
+        "the card keeps its row-scoped Detach:\n{html}"
+    );
+}
+
+#[test]
+fn the_overview_names_each_evidence_axis_it_shows() {
+    // Issue #316: one row labelled "Evidence" held all three Evidence Explained axes, so the label
+    // named the third axis rather than the set. The card is the analysis; each row names its own axis
+    // (`docs/mockups/citation.html`).
+    let html = render(citation_view);
+    assert!(
+        html.contains(">Analysis<"),
+        "the card that holds the three axes is titled Analysis:\n{html}"
+    );
+    // Each axis label appears twice: once as a read box in the record card, once naming its chip row
+    // in the Analysis card. One occurrence would mean the analysis rows are still unlabelled.
+    for axis in ["Source quality", "Information kind", "Evidence kind"] {
+        assert_eq!(
+            html.matches(axis).count(),
+            2,
+            "`{axis}` labels both its read box and its chip row:\n{html}"
+        );
+    }
 }

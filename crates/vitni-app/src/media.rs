@@ -424,7 +424,7 @@ pub async fn list_media(workspace: &Workspace) -> Result<Vec<MediaSummary>, AppE
 /// other projections without a per-row query (the cross-aggregate join lives here — the app/db layer).
 struct MediaLookups {
     citations: HashMap<CitationId, CitationRef>,
-    notes: HashMap<NoteId, String>,
+    notes: HashMap<NoteId, use_case::NoteLookup>,
     tags: HashMap<TagId, TagRef>,
     usage: MediaUsage,
 }
@@ -434,7 +434,7 @@ impl MediaLookups {
         let store = workspace.store();
         Ok(Self {
             citations: citation_refs(store).await?,
-            notes: use_case::note_human_ids(store).await?,
+            notes: use_case::note_lookups(store).await?,
             tags: tag_refs(store).await?,
             usage: MediaUsage::load(workspace).await?,
         })
@@ -638,9 +638,12 @@ fn summarize(view: &MediaView, lookups: &MediaLookups) -> MediaSummary {
         .notes_with_assertions()
         .iter()
         .filter_map(|attributed| {
-            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
-                human_id: human_id.clone(),
+            lookups.notes.get(&attributed.value).map(|note| AttachedRef {
+                human_id: note.human_id.clone(),
                 id: attributed.value.to_string(),
+                note_type: note.note_type.clone(),
+                text: note.text.clone(),
+                language: note.language.clone(),
                 assertion_id: attributed.assertion_id.to_string(),
             })
         })
