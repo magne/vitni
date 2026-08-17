@@ -61,6 +61,9 @@ pub fn ProvenanceBlock(
     allow_dna_evidence: bool,
 ) -> Element {
     let mut draft = draft;
+    // Read back for the controlled rationale input below: the block re-renders on every keystroke (it
+    // reads `draft()` here for the confidence index), and an unbound `value` would blank the live field.
+    let rationale = draft().rationale;
     let confidence_index = draft()
         .confidence
         .and_then(|level| ConfidenceLevel::all().iter().position(|l| *l == level))
@@ -79,6 +82,7 @@ pub fn ProvenanceBlock(
                 TextInput {
                     id: "prov-reason",
                     name: "prov-reason",
+                    value: "{rationale}",
                     oninput: move |event: FormEvent| draft.write().rationale = event.value(),
                 }
             }

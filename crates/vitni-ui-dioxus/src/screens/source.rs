@@ -114,6 +114,7 @@ pub fn source_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::S
                 {field("source-author", loc.field_label("author"), current.author.clone(), committed.author.clone(), |draft, value| draft.author = value, |draft| draft.author.clone())}
                 {field("source-publication", loc.field_label("publication"), current.publication.clone(), committed.publication.clone(), |draft, value| draft.publication = value, |draft| draft.publication.clone())}
                 {field("source-abbreviation", loc.field_label("abbreviation"), current.abbreviation.clone(), committed.abbreviation.clone(), |draft, value| draft.abbreviation = value, |draft| draft.abbreviation.clone())}
+                {record_restrictions_field(loc, record)}
             }
         }
     }
@@ -147,10 +148,19 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
     let nav = use_context::<NavState>();
     let mut label_nav = nav;
     let active = use_detail_tab(Category::Sources, &human_id);
-    let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<SourceEditForm>);
-    let mut retract = use_signal(|| None::<RetractTarget>);
-    let mut retract_reason = use_signal(String::new);
+    // The shared commit path (`screens/detail_commits.rs`): the reload counter, the retract panel's
+    // state, and the five callbacks every detail pane dispatches through.
+    let DetailCommits {
+        reload,
+        retract,
+        retract_reason,
+        on_submit,
+        on_undo,
+        on_tag_remove,
+        on_retract,
+        on_retract_confirm,
+    } = use_detail_commits::<SourceCommits, SourceEditForm>(&state, &human_id, editing);
     let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
@@ -184,75 +194,8 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
         );
     });
 
-    let submit_services = services.clone();
-    let submit_saved = saved_label.clone();
-    let mut editing_for_submit = editing;
-    let mut submit_nav = nav;
-    let on_submit = use_callback(move |(edit, prov): (SourceEdit, ProvenanceDraft)| {
-        let services = submit_services.clone();
-        let saved = submit_saved.clone();
-        spawn(async move {
-            match save_source_edit(services, edit, prov).await {
-                Ok(_) => {
-                    editing_for_submit.set(None);
-                    reload += 1;
-                    submit_nav.notify(saved);
-                }
-                Err(message) => submit_nav.notify_error(message),
-            }
-        });
-    });
-
-    // A per-row Retract/Unlink/Detach opens the shared retract panel; confirming dispatches an
-    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
-    let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
-        retract_reason.set(String::new());
-        retract.set(Some(RetractTarget {
-            assertion_id,
-            label,
-            detach,
-        }));
-    });
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: SourceEditForm| editing_for_open.set(Some(form)));
-    let source_tag_human = human_id.clone();
-    let on_tag_remove = use_callback(move |tag_id: String| {
-        on_submit.call((
-            SourceEdit::Tag {
-                human_id: source_tag_human.clone(),
-                tag_id,
-                remove: true,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
-    let retract_services = state.services().clone();
-    let retract_human = human_id.clone();
-    let retract_saved = saved_label.clone();
-    let mut retract_nav = nav;
-    let on_retract_confirm = use_callback(move |()| {
-        let Some(RetractTarget { assertion_id, .. }) = retract() else {
-            return;
-        };
-        let services = retract_services.clone();
-        let human_id = retract_human.clone();
-        let saved = retract_saved.clone();
-        let prov = ProvenanceDraft {
-            rationale: retract_reason(),
-            ..ProvenanceDraft::default()
-        };
-        spawn(async move {
-            let edit = SourceEdit::UndoAssertion { human_id, assertion_id };
-            match save_source_edit(services, edit, prov).await {
-                Ok(_) => {
-                    retract.set(None);
-                    reload += 1;
-                    retract_nav.notify(saved);
-                }
-                Err(message) => retract_nav.notify_error(message),
-            }
-        });
-    });
 
     let record_services = services.clone();
     let record_nav = nav;
@@ -275,16 +218,6 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
     });
     let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read() || retract.read().is_some());
     let undo_notice = chrome.kbd_nothing_to_undo();
-    let undo_human = human_id.clone();
-    let on_undo = use_callback(move |assertion_id: String| {
-        on_submit.call((
-            SourceEdit::UndoAssertion {
-                human_id: undo_human.clone(),
-                assertion_id,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
     use_record_undo(
         nav,
         Category::Sources,
@@ -412,8 +345,8 @@ struct SourceCallbacks {
     on_edit_open: Callback<SourceEditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
-    on_tag_remove: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
     /// The Media tab's viewer state + crop-supersede wiring.
     media_state: MediaTabState,
 }
@@ -458,7 +391,7 @@ fn source_detail(
             title: detail.title.clone(),
             id_label: Some(detail.human_id.clone()),
             avatar: "📚".to_owned(),
-            extras: source_restriction_toggles(loc, detail, on_submit, human_id),
+            extras: restriction_display(loc, &detail.restrictions),
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
@@ -466,39 +399,6 @@ fn source_detail(
         }
         {source_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
-    }
-}
-
-/// The interactive privacy-restriction toggles for a source (the mockup `resn-set`).
-fn source_restriction_toggles(
-    loc: &Localizer,
-    detail: &SourceDetail,
-    on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        RestrictionSet {
-            choices,
-            selected: selected.clone(),
-            ontoggle: move |kind: RestrictionKind| {
-                let mut next = selected.clone();
-                if let Some(position) = next.iter().position(|&k| k == kind) {
-                    next.remove(position);
-                } else {
-                    next.push(kind);
-                }
-                on_submit.call((SourceEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
-            },
-        }
     }
 }
 
@@ -516,7 +416,7 @@ fn source_tab_content(
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<SourceEditForm>,
     on_undo: Callback<String>,
-    on_tag_remove: Callback<String>,
+    on_tag_remove: Callback<(String, String)>,
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();

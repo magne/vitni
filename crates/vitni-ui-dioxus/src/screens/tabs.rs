@@ -80,12 +80,13 @@ pub fn citations_table<E: Clone + PartialEq + 'static>(
 }
 
 /// The Tags tab's chip rendering, shared by every aggregate that carries tags: the applied tags as
-/// name + colour-dot chips, each with a delete control that fires `on_remove` with the tag's id. Tags
-/// are referenced by name; their UUID is never rendered (data-model §9), and tags never retract — untag
-/// is the only removal. The "add tag" action is the caller's [`tab_frame`] bar, not this fn — the two
-/// used to be one fn with the add button baked in, which was the second `.tab-actions` code path this
-/// split exists to delete.
-pub fn tags_panel(loc: &Localizer, tags: &[TagRef], on_remove: Callback<String>) -> Element {
+/// name + colour-dot chips, each with a delete control that fires `on_remove` with `(tag id, tag
+/// name)`. The name rides along because the removal opens a panel that takes an operator rationale
+/// (issue #315) and that panel names the tag: tags are referenced by name; their UUID is never
+/// rendered (data-model §9), and tags never retract — untag is the only removal. The "add tag" action
+/// is the caller's [`tab_frame`] bar, not this fn — the two used to be one fn with the add button baked
+/// in, which was the second `.tab-actions` code path this split exists to delete.
+pub fn tags_panel(loc: &Localizer, tags: &[TagRef], on_remove: Callback<(String, String)>) -> Element {
     if tags.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -95,6 +96,7 @@ pub fn tags_panel(loc: &Localizer, tags: &[TagRef], on_remove: Callback<String>)
             for tag in tags.iter() {
                 {
                     let tag_id = tag.id.clone();
+                    let tag_name = tag.name.clone();
                     let untag_title = untag_title.clone();
                     rsx! {
                         Chip {
@@ -103,7 +105,7 @@ pub fn tags_panel(loc: &Localizer, tags: &[TagRef], on_remove: Callback<String>)
                             dot_color: tag.color.clone(),
                             delete_label: loc.action_remove_tag_named(&tag.name),
                             delete_title: untag_title,
-                            ondelete: move |()| on_remove.call(tag_id.clone()),
+                            ondelete: move |()| on_remove.call((tag_id.clone(), tag_name.clone())),
                         }
                     }
                 }

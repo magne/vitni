@@ -855,22 +855,24 @@ fn map_source_ref(reference: &DraftSourceRef) -> SourceRefInput {
     }
 }
 
-/// Dispatches a [`PersonEdit`] to its `vitni-app` command use-case.
+/// Dispatches a [`PersonEdit`] to its `vitni-app` command use-case, returning the person's
+/// `human_id` — the detail to reload afterwards.
 ///
 /// Unlike [`dispatch`] (a read), this mutates the workspace and is stamped with the session's
-/// operator/clock/id. The renderer reloads the affected person ([`PersonEdit::target`]) afterwards.
+/// operator/clock/id. The returned id is always [`PersonEdit::target`]: unlike the other eleven
+/// aggregates, `PersonEdit` has no `SetHumanId`, so nothing here can rename the person.
 ///
 /// # Errors
 ///
 /// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
 /// database failure).
-pub async fn dispatch_edit(
+pub async fn dispatch_person_edit(
     workspace: &Workspace,
     session: &Session,
     edit: &PersonEdit,
     prov: &ProvenanceDraft,
-) -> Result<(), AppError> {
-    match edit {
+) -> Result<String, AppError> {
+    let outcome = match edit {
         PersonEdit::AssertName { human_id, name } => {
             add_name(workspace, session, human_id, name.clone(), prov.meta()).await
         }
@@ -959,13 +961,14 @@ pub async fn dispatch_edit(
         PersonEdit::UndoAssertion { human_id, assertion_id } => {
             undo_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale).await
         }
-    }
+    };
+    outcome.map(|()| edit.target().to_owned())
 }
 
 /// Dispatches a [`CitationEdit`] to its `vitni-app` command use-case, mutating the workspace.
 ///
 /// The renderer reloads the affected citation ([`CitationEdit::target`]) afterwards. Mirrors
-/// [`dispatch_edit`].
+/// [`dispatch_person_edit`].
 ///
 /// # Errors
 ///
@@ -1075,7 +1078,7 @@ pub async fn dispatch_citation_edit(
 /// Dispatches a [`FamilyEdit`] to its `vitni-app` command use-case, mutating the workspace.
 ///
 /// The renderer reloads the affected family ([`FamilyEdit::target`]) afterwards. Mirrors
-/// [`dispatch_edit`].
+/// [`dispatch_person_edit`].
 ///
 /// # Errors
 ///

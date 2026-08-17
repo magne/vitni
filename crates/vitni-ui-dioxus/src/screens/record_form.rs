@@ -11,9 +11,9 @@ use std::future::Future;
 
 use dioxus::prelude::*;
 use vitni_ui::ActionLabel;
-use vitni_ui::{Category, Localizer, ProvenanceDraft, RecordDraft, RecordRef};
+use vitni_ui::{Category, Localizer, ProvenanceDraft, RecordDraft, RecordRef, RestrictionKind, toggled_restrictions};
 
-use crate::components::{Button, ButtonVariant};
+use crate::components::{Button, ButtonVariant, RestrictionChoice, RestrictionSet};
 use crate::screens::provenance_block;
 use crate::services::Services;
 use crate::shell::nav_state::{DraftId, EditKey, NavState, StashedEdit};
@@ -289,6 +289,51 @@ pub fn record_head_actions<D: RecordDraft>(
                     state.editing.set(false);
                 }
             },
+        }
+    }
+}
+
+/// The record card's privacy-restriction row: all three kinds, seeded from the draft (issue #315).
+/// Renders nothing when the draft offers no restriction field at all
+/// ([`RecordDraft::editable_restrictions`] is `None`, i.e. a create form whose change-set request
+/// carries no restrictions).
+///
+/// Static in view mode and live in edit mode, over the **same** three pills either way, so entering
+/// edit mode reflows nothing (`record-editing.html` §3) — and unlike the header's display
+/// ([`restriction_display`](crate::screens::restriction_display)) it always shows every kind, because
+/// an unset one has to be reachable to be set. A toggle writes the draft, so the change rides the
+/// record's own Save and carries its provenance.
+pub fn record_restrictions_field<D: RecordDraft>(loc: &Localizer, record: RecordEditState<D>) -> Element {
+    let selected = record
+        .draft
+        .read()
+        .editable_restrictions()
+        .map(<[RestrictionKind]>::to_vec);
+    let Some(selected) = selected else {
+        return rsx! {};
+    };
+    let mut draft = record.draft;
+    let editing = record.editing.read().to_owned();
+    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
+        .into_iter()
+        .map(|kind| RestrictionChoice {
+            kind,
+            label: loc.restriction_label(kind),
+        })
+        .collect();
+    rsx! {
+        div { class: "field",
+            label { "{loc.field_label(\"restrictions\")}" }
+            RestrictionSet {
+                choices,
+                selected,
+                group_label: loc.restriction_group_label(),
+                readonly: !editing,
+                ontoggle: move |kind: RestrictionKind| {
+                    let next = toggled_restrictions(draft.read().editable_restrictions().unwrap_or_default(), kind);
+                    draft.write().set_restrictions(next);
+                },
+            }
         }
     }
 }

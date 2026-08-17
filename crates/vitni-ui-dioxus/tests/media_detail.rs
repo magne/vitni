@@ -138,7 +138,7 @@ fn media_view() -> Element {
         {media_attributes_table(&loc, &detail.attributes, on_edit_open, on_retract)}
         {citations_table::<MediaEditForm>(&loc, &detail.citations, false, on_retract)}
         {id_list(&loc, &detail.notes, Some(on_retract))}
-        {tags_panel(&loc, &detail.tags, use_callback(|_: String| {}))}
+        {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
 }
 

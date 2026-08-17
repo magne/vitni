@@ -7,13 +7,14 @@ use vitni_app::{PlaceType, Rect, TagRef};
 use vitni_ui::{
     AttachedRefVm, Category, CitationRefVm, ConfidenceLevel, DateDraft, EvidenceAxis, EvidenceAxisVm, Localizer,
     MapPointVm, MarkerShapeVm, MediaRefVm, PickerSelection, PickerState, PlaceDetail, PlaceDraft, PlaceGeometryVm,
-    PlaceHierarchyVm, PlaceNameVm, PlaceSuccessionVm, ProvenanceDraft,
+    PlaceHierarchyVm, PlaceNameVm, PlaceSuccessionVm, ProvenanceDraft, RestrictionKind,
 };
-use vitni_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
+use vitni_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker, TabItem};
+use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
     MediaTabState, PlaceEditForm, RecordActionLabels, RecordEditState, SuccessionFormState, citations_table, id_list,
     media_gallery, media_tab, place_hierarchy_table, place_names_table, place_overview, place_succession_card,
-    place_succession_form_fields, record_head_actions, tags_panel,
+    place_succession_form_fields, record_head_actions, restriction_display, tags_panel,
 };
 
 /// A representative place detail: a city with High-confidence coordinates, two names (one sourced,
@@ -222,7 +223,7 @@ fn place_view() -> Element {
         {citations_table::<PlaceEditForm>(&loc, &detail.citations, false, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
         {id_list(&loc, &detail.notes, Some(onretract))}
-        {tags_panel(&loc, &detail.tags, use_callback(|_: String| {}))}
+        {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
 }
 
@@ -572,5 +573,142 @@ fn media_tab_opens_the_crop_viewer_on_a_card_click() {
     assert!(
         html.contains("Set region") && html.contains("Clear region"),
         "the crop viewer overlay renders with its Set/Clear region actions:\n{html}"
+    );
+}
+
+// ---- Restrictions (issue #315) --------------------------------------------------------------------
+
+/// The place detail header as `place_detail` builds it: the restrictions in force as a read-only
+/// display in the badge row — the header states them, it no longer changes them.
+fn place_header(loc: &Localizer, detail: &PlaceDetail) -> Element {
+    let active = use_signal(|| 0_usize);
+    rsx! {
+        DetailContainer {
+            title: detail.title.clone(),
+            id_label: Some(detail.human_id.clone()),
+            avatar: "📍".to_owned(),
+            extras: restriction_display(loc, &detail.restrictions),
+            actions: rsx! {},
+            tabs: Vec::<TabItem>::new(),
+            active,
+        }
+    }
+}
+
+fn place_header_with_locked() -> Element {
+    let mut detail = sample();
+    detail.restrictions = vec![RestrictionKind::Locked];
+    rsx! {
+        {place_header(&loc(), &detail)}
+    }
+}
+
+fn place_header_unrestricted() -> Element {
+    rsx! {
+        {place_header(&loc(), &sample())}
+    }
+}
+
+/// The place's edit state over a locked record, in `editing` mode.
+fn locked_state(editing: bool) -> RecordEditState<PlaceDraft> {
+    let mut detail = sample();
+    detail.restrictions = vec![RestrictionKind::Locked];
+    let seed = PlaceDraft::from_detail(&detail);
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
+fn locked_overview_view_mode() -> Element {
+    rsx! {
+        {place_overview(&loc(), &sample(), locked_state(false))}
+    }
+}
+
+fn locked_overview_edit_mode() -> Element {
+    rsx! {
+        {place_overview(&loc(), &sample(), locked_state(true))}
+    }
+}
+
+/// A place draft differing from its committed seed in nothing but its restriction set.
+fn place_restriction_change_only() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let seed = PlaceDraft::from_detail(&sample());
+    let mut draft = seed.clone();
+    draft.restrictions = vec![RestrictionKind::Privacy];
+    let record = RecordEditState {
+        editing: use_signal(|| true),
+        seed: use_signal(move || seed),
+        draft: use_signal(move || draft),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (PlaceDraft, ProvenanceDraft)| {}))}
+    }
+}
+
+#[test]
+fn the_header_states_only_the_restrictions_in_force() {
+    let html = render(place_header_with_locked);
+    assert!(html.contains(r#"data-kind="locked""#), "the set kind shows:\n{html}");
+    assert!(
+        !html.contains(r#"data-kind="confidential""#) && !html.contains(r#"data-kind="privacy""#),
+        "an unset kind is not shown in the header at all:\n{html}"
+    );
+    assert!(
+        !html.contains("<button"),
+        "the header's restrictions are a display, not toggles (issue #315):\n{html}"
+    );
+}
+
+#[test]
+fn an_unrestricted_place_shows_no_header_restrictions() {
+    let html = render(place_header_unrestricted);
+    assert!(
+        !html.contains("resn"),
+        "an unrestricted record's header carries no restriction group:\n{html}"
+    );
+}
+
+#[test]
+fn the_overview_card_states_every_restriction_in_view_mode() {
+    let html = render(locked_overview_view_mode);
+    assert!(html.contains(">Restrictions<"), "the card row is labelled:\n{html}");
+    assert_eq!(
+        html.matches("resn-static").count(),
+        3,
+        "all three kinds render, static, so entering edit mode reflows nothing:\n{html}"
+    );
+}
+
+#[test]
+fn the_overview_card_toggles_restrictions_in_edit_mode() {
+    let html = render(locked_overview_edit_mode);
+    assert!(!html.contains("resn-static"), "edit mode offers live toggles:\n{html}");
+    assert!(
+        html.contains(r#"data-kind="locked" aria-pressed="true""#),
+        "the toggles are seeded from the draft:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"aria-pressed="true""#).count(),
+        1,
+        "only the record's own restriction is pressed:\n{html}"
+    );
+}
+
+#[test]
+fn a_restriction_change_alone_makes_the_place_savable() {
+    let html = render(place_restriction_change_only);
+    assert!(
+        !html.contains("disabled"),
+        "a restriction change alone enables Save:\n{html}"
     );
 }

@@ -18,11 +18,12 @@
 #
 # The fixture seeds exactly one record (place Kristiansand); this scenario opens a second (Oslo) to
 # have two tabs to dock, following the same steps `docked-detail-tabs.toml` measured (its own header
-# comment covers the create-form field order). At 386px the header's badge row wraps, so this pane's
-# tab row paints ~24px lower than at 1800 wide: the `.tabs` box is y 257-291 here against 231-266
-# there, and the click aims at the painted label's centre, y=273.
+# comment covers the create-form field order). This pane's `.tabs` box is y 224-260, the painted label
+# centre y=242 — 31px above where this scenario first measured it, because #315 took the three
+# restriction toggles out of the header: an unrestricted record now renders no chips there at all, and at
+# 386px wide those chips were what wrapped the badge row onto a second line.
 #
-# The `differ` is scoped to the tab *body* (below the strip's border-bottom at y=292), never the whole
+# The `differ` is scoped to the tab *body* (below the strip's border-bottom at y=260), never the whole
 # pane. Before the #285 fix this click landed on `.tabs`' horizontal scrollbar and scrolled the strip
 # sideways without switching the tab — and a whole-pane region cannot tell those two apart, so the
 # assertion passed on the scroll alone.
@@ -88,7 +89,7 @@ name = "docked-narrow"
 
 [[step]]
 do = "click"
-at = [706, 273]
+at = [706, 242]
 label = "active pane (Kristiansand): Names tab, at the painted label's centre"
 
 [[step]]
@@ -104,7 +105,7 @@ because = "the docked pane is on screen at the app's own default window, not cli
 [[assert]]
 kind = "differ"
 shots = ["docked-narrow", "active-clicked"]
-region = [508, 295, 386, 500]
+region = [508, 263, 386, 500]
 tolerance = 0.02
 because = "the active pane's own tab strip is operable at the default window (#279, #285)"
 

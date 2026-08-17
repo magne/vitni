@@ -322,6 +322,9 @@ pub struct EventDraft {
     /// The place the event occurred (unset, an existing place, or a new place created inline — §6b).
     /// On edit only the existing link is honoured (there is no inline-create-on-edit command).
     pub place: RecordLink<NewPlaceFields>,
+    /// The event's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl Default for EventDraft {
@@ -333,6 +336,7 @@ impl Default for EventDraft {
             date: DateDraft::default(),
             description: String::new(),
             place: RecordLink::Empty,
+            restrictions: Vec::new(),
         }
     }
 }
@@ -364,6 +368,7 @@ impl EventDraft {
             }),
             description: detail.description.clone().unwrap_or_default(),
             place,
+            restrictions: detail.restrictions.clone(),
         }
     }
 
@@ -371,7 +376,8 @@ impl EventDraft {
     /// mode): one `Set*` per changed scalar, the place link as a [`EventEdit::LinkPlace`] when the
     /// existing-place id changed to a non-blank value (there is no unlink command), and `SetHumanId`
     /// last so the record is only re-keyed after every other field has committed (a blank id
-    /// regenerates).
+    /// regenerates) — the restriction set included, so it too commits against the id the record
+    /// still has.
     #[must_use]
     pub fn edits_against(&self, seed: &Self) -> Vec<EventEdit> {
         let Some(human_id) = seed.existing_human_id.clone() else {
@@ -404,6 +410,12 @@ impl EventDraft {
             edits.push(EventEdit::LinkPlace {
                 human_id: human_id.clone(),
                 place_id: place_id.to_owned(),
+            });
+        }
+        if self.restrictions != seed.restrictions {
+            edits.push(EventEdit::SetRestrictions {
+                human_id: human_id.clone(),
+                restrictions: self.restrictions.clone(),
             });
         }
         if self.human_id.trim() != seed.human_id {
@@ -450,6 +462,14 @@ impl RecordDraft for EventDraft {
     /// for — see [`RecordDraft::display_label`].
     fn display_label(&self) -> Option<String> {
         None
+    }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
     }
 }
 
@@ -525,9 +545,10 @@ mod event_detail_tests {
 
 #[cfg(test)]
 mod event_draft_tests {
-    use super::{DateDraft, EventDraft, NewPlaceFields, RecordDraft, RecordLink};
+    use super::{DateDraft, EventDetail, EventDraft, NewPlaceFields, RecordDraft, RecordLink};
     use crate::navigation::{EventEdit, EventPlaceRequest};
     use crate::picker::PickerSelection;
+    use crate::presentation::RestrictionKind;
     use vitni_app::{EventType, PlaceType};
 
     fn existing_place(human_id: &str) -> RecordLink<NewPlaceFields> {
@@ -567,8 +588,83 @@ mod event_draft_tests {
             event_type: EventType::Birth,
             description: "at home".to_owned(),
             place: existing_place("P0001"),
+            restrictions: vec![RestrictionKind::Confidential],
             ..EventDraft::new()
         }
+    }
+
+    fn detail() -> EventDetail {
+        EventDetail {
+            human_id: "E0009".to_owned(),
+            id: "event-uuid".to_owned(),
+            title: "Birth".to_owned(),
+            event_type: Some(EventType::Birth),
+            type_label: "Birth".to_owned(),
+            date: None,
+            date_value: None,
+            date_confidence: None,
+            date_confidence_label: None,
+            date_source_count: 0,
+            date_citations: Vec::new(),
+            place: None,
+            place_confidence: None,
+            place_confidence_label: None,
+            description: None,
+            addresses: Vec::new(),
+            participants: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: vec![RestrictionKind::Locked],
+            research_notes: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_changed_restriction_set_yields_one_restriction_edit() {
+        let draft = EventDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            EventEdit::SetRestrictions { restrictions, .. }
+                if restrictions == &[RestrictionKind::Confidential, RestrictionKind::Privacy]
+        ));
+    }
+
+    #[test]
+    fn an_unchanged_restriction_set_yields_no_restriction_edit() {
+        let draft = EventDraft {
+            description: "at church".to_owned(),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert!(
+            !edits
+                .iter()
+                .any(|edit| matches!(edit, EventEdit::SetRestrictions { .. }))
+        );
+    }
+
+    #[test]
+    fn from_detail_seeds_the_restrictions_and_offers_the_field() {
+        let draft = EventDraft::from_detail(&detail());
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
+        assert_eq!(
+            draft.editable_restrictions(),
+            Some([RestrictionKind::Locked].as_slice()),
+            "a stored record offers the restriction field"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_offers_no_restriction_field() {
+        assert_eq!(EventDraft::new().editable_restrictions(), None);
     }
 
     #[test]

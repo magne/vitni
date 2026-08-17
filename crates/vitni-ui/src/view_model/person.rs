@@ -2,7 +2,7 @@ use super::{
     ActionLabel, AssociationSummary, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab,
     DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactVm,
     FamilyVm, HistoryEntryVm, Localizer, MediaRefVm, NameSummary, NameType, NameVm, NewCitationFields,
-    PersonChangeSetRequest, PersonName, PersonNameParts, PersonRow, PersonSummary, RecordDraft, RecordLink,
+    PersonChangeSetRequest, PersonEdit, PersonName, PersonNameParts, PersonRow, PersonSummary, RecordDraft, RecordLink,
     RestrictionKind, RowVm, Sex, TagRef, citation_ref_from_ref, line_label,
 };
 
@@ -408,6 +408,9 @@ pub struct PersonDraft {
     /// The citation backing the preferred name: unset, an existing citation, or one created inline
     /// (which itself cites an existing or a nested new source — §6b, data-model §7).
     pub name_citation: RecordLink<NewCitationFields>,
+    /// The person's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl PersonDraft {
@@ -431,6 +434,7 @@ impl PersonDraft {
             sex: Sex::Unknown,
             tags: Vec::new(),
             name_citation: RecordLink::Empty,
+            restrictions: Vec::new(),
         }
     }
 
@@ -453,7 +457,26 @@ impl PersonDraft {
             sex: summary.sex.clone().unwrap_or(Sex::Unknown),
             tags: summary.tags.clone(),
             name_citation: RecordLink::Empty,
+            restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
         }
+    }
+
+    /// The [`PersonEdit::SetRestrictions`] carrying this draft's restriction set away from its committed
+    /// `seed`, or `None` when the set is unchanged.
+    ///
+    /// A person's whole-record Save is a change-set commit, not a per-field `edits_against` diff, so the
+    /// restriction change cannot ride the same list: the caller commits the change set first and then
+    /// dispatches this edit against the `human_id` that commit returns (which the change set may itself
+    /// have re-keyed), under the record's own provenance.
+    #[must_use]
+    pub fn restriction_edit(&self, seed: &Self, human_id: &str) -> Option<PersonEdit> {
+        if self.restrictions == seed.restrictions {
+            return None;
+        }
+        Some(PersonEdit::SetRestrictions {
+            human_id: human_id.to_owned(),
+            restrictions: self.restrictions.clone(),
+        })
     }
 
     /// The structured name parts the draft describes, or `None` when every part is blank.
@@ -548,6 +571,14 @@ impl RecordDraft for PersonDraft {
             .collect::<Vec<_>>()
             .join(" ");
         line_label(&name)
+    }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
     }
 }
 

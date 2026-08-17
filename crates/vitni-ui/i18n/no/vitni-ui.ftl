@@ -9,6 +9,8 @@ no-value = -
 restriction-confidential = Konfidensiell
 restriction-locked = Låst
 restriction-privacy = Personvern
+# Tilgjengelig navn på en gruppe restriksjonsmerker (etiketten til `role="group"`).
+restriction-group = Personvernrestriksjoner
 
 # Kjønnsetiketter
 sex-male = mann
@@ -1053,7 +1055,9 @@ panel-cite-fact = Siter faktum
 retract-panel-title = Trekk tilbake påstand
 detach-panel-title = Koble fra
 remove-child-panel-title = Fjern fra familien
+untag-panel-title = Fjern etikett
 retract-note = Tilbaketrekkingen registreres i historikken; ingenting slettes.
+untag-note = Fjerningen av etiketten registreres i historikken; ingenting slettes.
 remove-child-note = Fjerningen registreres i historikken; den opprinnelige påstanden og dokumentasjonen blir værende.
 detach-citation-title = Koble fra denne kilden — frakoblingen registreres i historikken
 action-remove-row = Fjern { $row }

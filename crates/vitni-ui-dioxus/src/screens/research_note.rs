@@ -185,6 +185,7 @@ pub fn research_note_record_fields(loc: &Localizer, record: RecordEditState<vitn
                         draft.write().language = value;
                     },
                 }
+                {record_restrictions_field(loc, record)}
             }
         }
     }
@@ -378,8 +379,21 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
     let nav = use_context::<NavState>();
     let mut label_nav = nav;
     let active = use_detail_tab(Category::ResearchNotes, &human_id);
-    let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<ResearchNoteEditForm>);
+    // The shared commit path (`screens/detail_commits.rs`). No *row* here retracts — removing a subject
+    // is a `RemoveSubject` edit that rides `on_submit`, not a retraction of the assertion that added it
+    // — but a tag chip's × arms the shared panel for its rationale (issue #315), so the panel's state
+    // and confirm are taken too.
+    let DetailCommits {
+        reload,
+        retract,
+        retract_reason,
+        on_submit,
+        on_undo,
+        on_tag_remove,
+        on_retract_confirm,
+        ..
+    } = use_detail_commits::<ResearchNoteCommits, ResearchNoteEditForm>(&state, &human_id, editing);
     let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
@@ -411,35 +425,6 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
         );
     });
 
-    let submit_services = services.clone();
-    let submit_saved = saved_label.clone();
-    let mut editing_for_submit = editing;
-    let mut submit_nav = nav;
-    let on_submit = use_callback(move |(edit, prov): (ResearchNoteEdit, ProvenanceDraft)| {
-        let services = submit_services.clone();
-        let saved = submit_saved.clone();
-        spawn(async move {
-            match save_research_note_edit(services, edit, prov).await {
-                Ok(_) => {
-                    editing_for_submit.set(None);
-                    reload += 1;
-                    submit_nav.notify(saved);
-                }
-                Err(message) => submit_nav.notify_error(message),
-            }
-        });
-    });
-    let tag_human = human_id.clone();
-    let on_tag_remove = use_callback(move |tag_id: String| {
-        on_submit.call((
-            ResearchNoteEdit::Tag {
-                human_id: tag_human.clone(),
-                tag_id,
-                remove: true,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
     let subject_human = human_id.clone();
     let on_subject_remove = use_callback(move |subject: SubjectVm| {
         on_submit.call((
@@ -470,18 +455,8 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::ResearchNoteDetail(detail))) => detail.history.clone(),
         _ => Vec::new(),
     });
-    let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read());
+    let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read() || retract.read().is_some());
     let undo_notice = chrome.kbd_nothing_to_undo();
-    let undo_human = human_id.clone();
-    let on_undo = use_callback(move |assertion_id: String| {
-        on_submit.call((
-            ResearchNoteEdit::UndoAssertion {
-                human_id: undo_human.clone(),
-                assertion_id,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
     use_record_undo(
         nav,
         Category::ResearchNotes,
@@ -514,10 +489,13 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
                 active,
                 side_edit: editing,
                 record,
+                retract,
+                retract_reason,
             },
             ResearchNoteCallbacks {
                 on_submit,
                 on_record_save,
+                on_retract_confirm,
                 on_undo,
                 on_tag_remove,
                 on_subject_remove,
@@ -558,6 +536,10 @@ struct ResearchNotePane {
     side_edit: Signal<Option<ResearchNoteEditForm>>,
     /// The whole-record (argument · language) edit state.
     record: RecordEditState<vitni_ui::ResearchNoteDraft>,
+    /// The tag being untagged, if the shared correction panel is open.
+    retract: Signal<Option<RetractTarget>>,
+    /// The rationale typed into the open correction panel.
+    retract_reason: Signal<String>,
 }
 
 /// The commit callbacks a research note's detail wires in.
@@ -571,10 +553,12 @@ struct ResearchNoteCallbacks {
     on_submit: Callback<(ResearchNoteEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a diff of `Set*` edits.
     on_record_save: Callback<(vitni_ui::ResearchNoteDraft, ProvenanceDraft)>,
+    /// Confirms the open untag panel — dispatches `Tag { remove: true }` with the typed rationale.
+    on_retract_confirm: Callback<()>,
     /// Retracts an assertion by id from the History tab.
     on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab.
-    on_tag_remove: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
     /// Stops naming a subject from the Subjects tab.
     on_subject_remove: Callback<SubjectVm>,
 }
@@ -593,6 +577,8 @@ fn research_note_detail(
         active,
         side_edit: editing,
         record,
+        retract,
+        retract_reason,
     } = pane;
     let on_submit = callbacks.on_submit;
     let tabs = research_note_tabs(detail, loc);
@@ -611,46 +597,16 @@ fn research_note_detail(
             title: detail.title.clone(),
             id_label: Some(detail.human_id.clone()),
             avatar: "🧾".to_owned(),
-            extras: research_note_restriction_toggles(loc, detail, on_submit, human_id),
+            extras: restriction_display(loc, &detail.restrictions),
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
             {research_note_tab_content(state, detail, &active_tab, editing, record, callbacks)}
         }
         {research_note_edit_panel(state, editing, on_submit, human_id)}
-    }
-}
-
-/// The interactive privacy-restriction toggles for a research note.
-fn research_note_restriction_toggles(
-    loc: &Localizer,
-    detail: &ResearchNoteDetail,
-    on_submit: Callback<(ResearchNoteEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        RestrictionSet {
-            choices,
-            selected: selected.clone(),
-            ontoggle: move |kind: RestrictionKind| {
-                let mut next = selected.clone();
-                if let Some(position) = next.iter().position(|&k| k == kind) {
-                    next.remove(position);
-                } else {
-                    next.push(kind);
-                }
-                on_submit.call((ResearchNoteEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
-            },
-        }
+        // Only ever armed for an untag here (no row on this pane retracts), so the Detach note id this
+        // takes is never read — the untag case carries its own.
+        {retract_side_panel(loc, retract, retract_reason, callbacks.on_retract_confirm, "detach-note")}
     }
 }
 

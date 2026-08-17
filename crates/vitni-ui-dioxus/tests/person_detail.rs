@@ -10,13 +10,16 @@ use vitni_app::TagRef;
 use vitni_app::{AssociationRole, Attribute, FactType, NameType, ParticipantRole, Sex};
 use vitni_ui::{
     ActionLabel, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EventRefVm, EvidenceAxis,
-    EvidenceAxisVm, FactVm, FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft, TimelineKind, TimelineRowVm,
+    EvidenceAxisVm, FactVm, FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft, RestrictionKind, TimelineKind,
+    TimelineRowVm,
 };
-use vitni_ui_dioxus::components::ButtonVariant;
+use vitni_ui_dioxus::components::{ButtonVariant, TabItem};
 use vitni_ui_dioxus::i18n::Chrome;
+use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
-    EditForm, RecordEditState, TabActionStyle, TabActionTarget, associations_table, citations_table, events_table,
-    facts_table, families_panel, id_list, names_table, person_record_fields, tab_frame, tags_panel, timeline_panel,
+    EditForm, RecordActionLabels, RecordEditState, TabActionStyle, TabActionTarget, associations_table,
+    citations_table, events_table, facts_table, families_panel, id_list, names_table, person_record_fields,
+    record_edit_provenance, record_head_actions, restriction_display, tab_frame, tags_panel, timeline_panel,
 };
 use vitni_ui_dioxus::shell::ChromeCtx;
 use vitni_ui_dioxus::shell::nav_state::NavState;
@@ -478,7 +481,7 @@ fn associations_and_citations_carry_evidence_cues() {
 fn person_tags() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<EditForm>);
-    let on_remove = use_callback(|_: String| {});
+    let on_remove = use_callback(|_: (String, String)| {});
     let tags = vec![TagRef {
         id: "0190a2b3-0000-7000-8000-0000000000ff".to_owned(),
         name: "Direct ancestor".to_owned(),
@@ -740,5 +743,152 @@ fn a_stored_other_sex_selects_other_and_prefills_the_free_text() {
     assert!(
         html.contains(r#"value="two-spirit""#),
         "the free-text is pre-filled with the stored value, not mislabelled as Unknown:\n{html}"
+    );
+}
+
+// ---- Restrictions (issue #315) --------------------------------------------------------------------
+
+/// The person detail header as `person_detail` builds it, over the restrictions in force: they render
+/// as a read-only display in the badge row — the header states them, it no longer changes them.
+fn person_header(loc: &Localizer, restrictions: &[RestrictionKind]) -> Element {
+    let active = use_signal(|| 0_usize);
+    rsx! {
+        DetailContainer {
+            title: "Ada Lovelace".to_owned(),
+            id_label: Some("I0001".to_owned()),
+            avatar: "AL".to_owned(),
+            extras: restriction_display(loc, restrictions),
+            actions: rsx! {},
+            tabs: Vec::<TabItem>::new(),
+            active,
+        }
+    }
+}
+
+fn person_header_with_privacy() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    rsx! {
+        {person_header(&loc, &[RestrictionKind::Privacy])}
+    }
+}
+
+fn person_header_unrestricted() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    rsx! {
+        {person_header(&loc, &[])}
+    }
+}
+
+/// A stored, locked person — the record card renders its restriction set from the draft.
+fn locked_person() -> PersonDraft {
+    let mut draft = seeded_person();
+    draft.restrictions = vec![RestrictionKind::Locked];
+    draft
+}
+
+fn locked_person_fields_view_mode() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let state = RecordEditState {
+        editing: use_signal(|| false),
+        seed: use_signal(locked_person),
+        draft: use_signal(locked_person),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    person_record_fields(&loc, state)
+}
+
+fn locked_person_fields_edit_mode() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let state = RecordEditState {
+        editing: use_signal(|| true),
+        seed: use_signal(locked_person),
+        draft: use_signal(locked_person),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    person_record_fields(&loc, state)
+}
+
+/// A person draft differing from its committed seed in nothing but its restriction set: Save is
+/// enabled and the provenance block asks for the reason the restriction changed (issue #315).
+fn person_restriction_change_only() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = RecordEditState {
+        editing: use_signal(|| true),
+        seed: use_signal(seeded_person),
+        draft: use_signal(locked_person),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (PersonDraft, ProvenanceDraft)| {}))}
+        {record_edit_provenance(&loc, record)}
+    }
+}
+
+fn render_html(view: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(view);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+#[test]
+fn the_header_states_only_the_restrictions_in_force() {
+    let html = render_html(person_header_with_privacy);
+    assert!(html.contains(r#"data-kind="privacy""#), "the set kind shows:\n{html}");
+    assert!(
+        !html.contains(r#"data-kind="locked""#) && !html.contains(r#"data-kind="confidential""#),
+        "an unset kind is not shown in the header at all:\n{html}"
+    );
+    assert!(
+        !html.contains("<button"),
+        "the header's restrictions are a display, not toggles (issue #315):\n{html}"
+    );
+}
+
+#[test]
+fn an_unrestricted_person_shows_no_header_restrictions() {
+    let html = render_html(person_header_unrestricted);
+    assert!(
+        !html.contains("resn"),
+        "an unrestricted record's header carries no restriction group:\n{html}"
+    );
+}
+
+#[test]
+fn the_record_card_states_every_restriction_in_view_mode() {
+    let html = render_html(locked_person_fields_view_mode);
+    assert!(html.contains(">Restrictions<"), "the card row is labelled:\n{html}");
+    assert_eq!(
+        html.matches("resn-static").count(),
+        3,
+        "all three kinds render, static, so entering edit mode reflows nothing:\n{html}"
+    );
+}
+
+#[test]
+fn the_record_card_toggles_restrictions_in_edit_mode() {
+    let html = render_html(locked_person_fields_edit_mode);
+    assert!(!html.contains("resn-static"), "edit mode offers live toggles:\n{html}");
+    assert!(
+        html.contains(r#"data-kind="locked" aria-pressed="true""#),
+        "the toggles are seeded from the draft:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"aria-pressed="true""#).count(),
+        1,
+        "only the record's own restriction is pressed:\n{html}"
+    );
+}
+
+#[test]
+fn a_restriction_change_alone_makes_the_person_savable() {
+    let html = render_html(person_restriction_change_only);
+    assert!(
+        !html.contains("disabled"),
+        "a restriction change alone enables Save:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="prov-reason""#),
+        "and asks for the reason like any other change (issue #315):\n{html}"
     );
 }

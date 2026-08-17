@@ -160,6 +160,13 @@ impl Localizer {
         }
     }
 
+    /// The accessible name of a set of privacy-restriction pills — the group they belong to, so a
+    /// screen reader announces the pills as one thing rather than three loose badges.
+    #[must_use]
+    pub fn restriction_group_label(&self) -> String {
+        fl!(self.loader, "restriction-group")
+    }
+
     /// The localized label for a detail tab, keyed by its stable id (`overview`, `citations`, …).
     #[must_use]
     pub fn tab_label(&self, id: &str) -> String {
@@ -1484,7 +1491,7 @@ impl Localizer {
     /// The title of a per-row edit/retract/detach side panel, keyed by id (`edit-name`, `edit-fact`,
     /// `edit-association`, `edit-participation`, `edit-child`, `edit-enclosing`, `edit-translation`,
     /// `edit-repository`, `edit-attribute`, `edit-haplogroup`, `edit-segment`, `edit-ancestor`, `edit-url`,
-    /// `retract`, `detach`, `remove-child`). Falls back to the retract-panel title.
+    /// `retract`, `detach`, `untag`, `remove-child`). Falls back to the retract-panel title.
     #[must_use]
     pub fn panel_title(&self, id: &str) -> String {
         match id {
@@ -1508,6 +1515,7 @@ impl Localizer {
             "cite-name" => fl!(self.loader, "panel-cite-name"),
             "cite-fact" => fl!(self.loader, "panel-cite-fact"),
             "detach" => fl!(self.loader, "detach-panel-title"),
+            "untag" => fl!(self.loader, "untag-panel-title"),
             "remove-child" => fl!(self.loader, "remove-child-panel-title"),
             _ => fl!(self.loader, "retract-panel-title"),
         }
@@ -1518,6 +1526,14 @@ impl Localizer {
     #[must_use]
     pub fn retract_note(&self) -> String {
         fl!(self.loader, "retract-note")
+    }
+
+    /// The note shown in the Tags tab's untag panel: removing a tag is recorded in History and nothing
+    /// is deleted (issue #315). Distinct from [`Self::retract_note`] because an untag withdraws no
+    /// assertion — it asserts that the tag no longer applies.
+    #[must_use]
+    pub fn untag_note(&self) -> String {
+        fl!(self.loader, "untag-note")
     }
 
     /// The note shown in the Children tab's Remove-from-family panel: the membership change is

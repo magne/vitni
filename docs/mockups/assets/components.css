@@ -478,6 +478,12 @@ select.in {
 .resn[aria-pressed="true"][data-kind="confidential"], .resn[aria-checked="true"][data-kind="confidential"] { color: var(--resn-confidential); border-color: var(--resn-confidential); background: color-mix(in srgb, var(--resn-confidential) 12%, transparent); }
 .resn[aria-pressed="true"][data-kind="locked"],       .resn[aria-checked="true"][data-kind="locked"]       { color: var(--resn-locked); border-color: var(--resn-locked); background: color-mix(in srgb, var(--resn-locked) 12%, transparent); }
 .resn[aria-pressed="true"][data-kind="privacy"],      .resn[aria-checked="true"][data-kind="privacy"]      { color: var(--resn-privacy); border-color: var(--resn-privacy); background: color-mix(in srgb, var(--resn-privacy) 12%, transparent); }
+/* The read-only variant: a pill that states a restriction rather than offering to change it, so it
+   drops the pressable affordances (the per-kind colour rules above still apply). */
+.resn-static { cursor: default; user-select: text; }
+/* In the detail header the group trails the badges inside one `.wrap`, where the shared pill metrics
+   made it read as three more badges. A rule sets the group apart as the record's privacy state. */
+.detail-head .resn-set { margin-left: var(--sp-1); padding-left: var(--sp-3); border-left: 1px solid var(--line); }
 
 /* Source link + no-source warning flag (differentiator cues) */
 .src-link { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--accent); cursor: pointer; }

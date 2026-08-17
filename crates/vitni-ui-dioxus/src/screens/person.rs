@@ -269,6 +269,7 @@ pub fn person_record_fields(loc: &Localizer, record: RecordEditState<PersonDraft
                 {person_name_type_field(loc, editing, record)}
                 {person_name_text_fields(loc, editing, record)}
                 {person_sex_field(loc, editing, record)}
+                {record_restrictions_field(loc, record)}
             }
         }
     }
@@ -567,11 +568,19 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     let mut label_nav = nav;
     let mut record_nav = nav;
     let active = use_detail_tab(Category::People, &human_id);
-    let mut reload = use_signal(|| 0_u32);
     let mut editing = use_signal(|| None::<EditForm>);
-    let mut retract = use_signal(|| None::<RetractTarget>);
-    let mut retract_reason = use_signal(String::new);
-    let saved_label = state.data_loc().action_label(ActionLabel::Saved);
+    // The shared commit path (`screens/detail_commits.rs`): the reload counter, the retract panel's
+    // state, and the five callbacks every detail pane dispatches through.
+    let DetailCommits {
+        mut reload,
+        retract,
+        retract_reason,
+        on_submit,
+        on_undo,
+        on_tag_remove,
+        on_retract,
+        on_retract_confirm,
+    } = use_detail_commits::<PersonCommits, EditForm>(&state, &human_id, editing);
 
     let id_for_resource = human_id.clone();
     let services_for_resource = services.clone();
@@ -606,30 +615,30 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     });
 
     let record_services = services.clone();
-    let mut submit_nav = nav;
-    let on_submit = use_callback(move |(edit, prov): (PersonEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
-        spawn(async move {
-            match save_edit(services, edit, prov).await {
-                Ok(()) => {
-                    editing.set(None);
-                    reload += 1;
-                    submit_nav.notify(saved);
-                }
-                Err(message) => submit_nav.notify_error(message),
-            }
-        });
-    });
     let saved_label_rec = state.data_loc().action_label(ActionLabel::Saved);
-    // The whole-record Save: the buffered draft becomes a change-set commit (the identity edit).
+    // The whole-record Save: the buffered draft becomes a change-set commit (the identity edit),
+    // followed by the restriction change if there is one. A person's request carries no restrictions
+    // (`PersonChangeSetRequest`), so they cannot ride the same commit the way the other twelve
+    // aggregates' `edits_against` diff carries them — but they are part of the *same* edit, so the
+    // follow-up command reuses this save's `ProvenanceDraft`: one reason covers the whole change
+    // (issue #315). It is keyed on the `human_id` the commit returns, which the change set may itself
+    // have re-keyed.
     let on_record_save = use_callback(move |(draft, prov): (PersonDraft, ProvenanceDraft)| {
         let services = record_services.clone();
         let saved = saved_label_rec.clone();
         let request = draft.to_request();
+        let seed = record.seed.read().clone();
         spawn(async move {
-            match commit_person_change_set(services, request, prov).await {
-                Ok(_) => {
+            let committed = commit_person_change_set(services.clone(), request, prov.clone()).await;
+            let outcome = match committed {
+                Ok(human_id) => match draft.restriction_edit(&seed, &human_id) {
+                    Some(edit) => save_person_edit(services, edit, prov).await.map(|_| ()),
+                    None => Ok(()),
+                },
+                Err(message) => Err(message),
+            };
+            match outcome {
+                Ok(()) => {
                     reload += 1;
                     record_nav.mark_changed();
                     record_nav.notify(saved);
@@ -639,59 +648,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
         });
     });
 
-    // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
-    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
-    let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
-        retract_reason.set(String::new());
-        retract.set(Some(RetractTarget {
-            assertion_id,
-            label,
-            detach,
-        }));
-    });
     let on_edit_open = use_callback(move |form: EditForm| editing.set(Some(form)));
-    let tag_human = human_id.clone();
-    let on_tag_remove = use_callback(move |tag_id: String| {
-        on_submit.call((
-            PersonEdit::Tag {
-                human_id: tag_human.clone(),
-                tag_id,
-                remove: true,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
-    let retract_services = state.services().clone();
-    let retract_human = human_id.clone();
-    let saved_label_retract = state.data_loc().action_label(ActionLabel::Saved);
-    let mut retract_nav = nav;
-    let on_retract_confirm = use_callback(move |()| {
-        let Some(target) = retract() else {
-            return;
-        };
-        let services = retract_services.clone();
-        let human_id = retract_human.clone();
-        let saved = saved_label_retract.clone();
-        let prov = ProvenanceDraft {
-            rationale: retract_reason(),
-            ..ProvenanceDraft::default()
-        };
-        spawn(async move {
-            let edit = PersonEdit::UndoAssertion {
-                human_id,
-                assertion_id: target.assertion_id,
-            };
-            let outcome = save_edit(services, edit, prov).await;
-            match outcome {
-                Ok(()) => {
-                    retract.set(None);
-                    reload += 1;
-                    retract_nav.notify(saved);
-                }
-                Err(message) => retract_nav.notify_error(message),
-            }
-        });
-    });
 
     // ⌘Z retracts the newest undoable assertion of this person's loaded change log (WP5).
     let undo_history = use_memo(move || match &*data.read() {
@@ -700,16 +657,6 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     });
     let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read() || retract.read().is_some());
     let undo_notice = chrome.kbd_nothing_to_undo();
-    let undo_human = human_id.clone();
-    let on_undo = use_callback(move |assertion_id: String| {
-        on_submit.call((
-            PersonEdit::UndoAssertion {
-                human_id: undo_human.clone(),
-                assertion_id,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
     use_record_undo(
         nav,
         Category::People,
@@ -820,7 +767,8 @@ struct PersonPane {
 }
 
 /// The two commit callbacks a person's detail wires in: one-command collection edits (attach / assert
-/// / undo / restrictions) and the whole-record change-set save (the identity edit).
+/// / undo) and the whole-record change-set save (the identity edit, plus the restriction change that
+/// rides it — issue #315).
 #[derive(Clone, Copy)]
 struct PersonCallbacks {
     /// Commits one [`PersonEdit`] command.
@@ -835,15 +783,15 @@ struct PersonCallbacks {
     on_edit_open: Callback<EditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
-    on_tag_remove: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
     /// The Media tab's viewer state + crop-supersede wiring.
     media_state: MediaTabState,
 }
 
-/// Renders a loaded person's detail container: header (avatar, vital subtitle, restriction toggles,
-/// Compare + the sticky-header record Edit/Cancel/Save), the tab strip, the active tab's content, and
-/// the collection-row side panel.
+/// Renders a loaded person's detail container: header (avatar, vital subtitle, the restrictions in
+/// force, Compare + the sticky-header record Edit/Cancel/Save), the tab strip, the active tab's
+/// content, and the collection-row side panel.
 fn person_detail(
     state: &AppState,
     nav: &NavState,
@@ -897,7 +845,7 @@ fn person_detail(
             id_label: Some(detail.human_id.clone()),
             badges: vec![detail.evidence_level_label.clone()],
             avatar: person_initials(detail),
-            extras: restriction_toggles(loc, detail, on_submit, human_id),
+            extras: restriction_display(loc, &detail.restrictions),
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
@@ -922,43 +870,6 @@ fn person_initials(detail: &PersonDetail) -> String {
     initials
 }
 
-/// The interactive privacy-restriction toggles shown in the detail header (the mockup `resn-set`).
-fn restriction_toggles(
-    loc: &Localizer,
-    detail: &PersonDetail,
-    on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        RestrictionSet {
-            choices,
-            selected: selected.clone(),
-            ontoggle: move |kind: RestrictionKind| {
-                let mut next = selected.clone();
-                if let Some(position) = next.iter().position(|&k| k == kind) {
-                    next.remove(position);
-                } else {
-                    next.push(kind);
-                }
-                on_submit
-                    .call((
-                        PersonEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next },
-                        ProvenanceDraft::default(),
-                    ));
-            },
-        }
-    }
-}
-
 /// The content of one person detail tab, with its contextual add/edit affordances.
 #[expect(
     clippy::too_many_arguments,
@@ -973,7 +884,7 @@ fn person_tab_content(
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<EditForm>,
     on_undo: Callback<String>,
-    on_tag_remove: Callback<String>,
+    on_tag_remove: Callback<(String, String)>,
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();

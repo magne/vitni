@@ -424,11 +424,24 @@
     (a new claim referencing the old one by its <span class="mono">AssertionId</span>) and
     <b>Retract</b> emits <span class="mono">AssertionRetracted</span> — the row disappears from the
     conclusion view but stays in History. Nothing is ever deleted.</p>
+  <p class="muted">A record's <b>privacy restrictions</b> are scalars like any other, so they are edited
+    the same way: the sticky header only <i>displays</i> the kinds in force (inert
+    <span class="mono">.resn-static</span> pills, and nothing at all when the record is unrestricted),
+    while the <b>Restrictions</b> row in the record card is the control — live toggles in edit mode over
+    all three kinds. A toggle writes the draft, nothing else: it makes the record dirty, brings up the
+    provenance block of §5b, and the change is committed by the record's own <b>Save</b> carrying that
+    reason and its citations. No restriction changes on click.</p>
   <p class="muted">A few collections carry a <b>Remove</b> verb <i>alongside</i> Retract — the
     <a href="family.html">Family</a> Children tab is the case in point. Remove is not a correction: it
     emits <span class="mono">ChildRemoved</span>, recording that a membership which once held has
     ended, and the claim that added the child keeps standing. Retract says that claim was a mistake in
     the first place. Both are logged; only the meaning differs, so the two never share a button.</p>
+  <p class="muted"><b>Retract</b>, <b>Detach</b> and the Tags tab's <b>Untag</b> (<i>×</i> on a tag chip)
+    all open the <i>same</i> side panel before anything is written: it names what is being removed, takes
+    an optional <b>reason</b> — the same field as §5b, recorded in History with the operator and the time
+    — and confirms with that one verb (<i>Retract assertion</i> · <i>Detach</i> · <i>Remove tag</i>).
+    The untag panel names the tag, never its UUID (data-model §9). A removal is therefore as explainable
+    as an edit; none of the three is a bare click.</p>
   <p class="muted">Every collection tab opens its row-editing form the same way: one
     <span class="mono">.tab-actions</span> bar, above the tab's own table or gallery, holding a single
     button. That button's verb is drawn from a closed set, never a free string, so a tab can never fall

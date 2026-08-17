@@ -34,26 +34,32 @@ pub use crate::services::{
     commit_event_change_set, commit_family_change_set, commit_media_change_set, commit_new_record,
     commit_note_change_set, commit_person_change_set, commit_place_change_set, commit_repository_change_set,
     commit_source_change_set, commit_tag_change_set, load_data_quality, load_picker_rows, load_plugin_panel,
-    load_screen, load_tags, merge_persons, save_citation_edit, save_dna_match_edit, save_dna_test_edit, save_edit,
-    save_event_edit, save_family_edit, save_media_edit, save_note_edit, save_place_edit, save_repository_edit,
-    save_source_edit, submit_plugin_panel,
+    load_screen, load_tags, merge_persons, save_citation_edit, save_dna_match_edit, save_dna_test_edit,
+    save_event_edit, save_family_edit, save_media_edit, save_note_edit, save_person_edit, save_place_edit,
+    save_repository_edit, save_source_edit, submit_plugin_panel,
 };
 pub use crate::shell::ChromeCtx;
 pub use crate::shell::nav_state::{DraftId, EditKey, NavState, data_version_ticket};
 pub use crate::vocabulary_render::{PanelAction, PanelView};
 
+pub use super::detail_commits::{
+    CitationCommits, DetailCommits, DnaMatchCommits, DnaTestCommits, EventCommits, FamilyCommits, MediaCommits,
+    NoteCommits, PersonCommits, PlaceCommits, RepositoryCommits, ResearchNoteCommits, SourceCommits,
+    use_detail_commits,
+};
 pub use super::record_form::{
     DraftCommit, RecordActionLabels, RecordEditState, apply_record_edits, finish_draft_commit, finish_record_save,
-    record_edit_provenance, record_head_actions, record_keydown, use_record_create, use_record_edit,
-    use_save_on_request,
+    record_edit_provenance, record_head_actions, record_keydown, record_restrictions_field, use_record_create,
+    use_record_edit, use_save_on_request,
 };
 pub use super::research_note::ResearchNotesTab;
 pub use super::shared::{
-    JumpButton, MediaTabState, RecordLink, RegisterFields, RetractTarget, RowRetract, RowVerb, attach_link_field,
-    attach_link_form, create_record_frame, id_list, media_tab, non_empty, optional_enum_select, picker_selection_id,
-    provenance_block, provenance_block_dna, provenance_cue, record_enum_select, register_fields_form,
-    retract_side_panel, row_actions_cell, source_cue, source_media_type_choices, use_attach_picker, use_attach_save,
-    use_detail_tab, use_existing_picker, use_record_undo,
+    JumpButton, MediaTabState, RecordLink, RegisterFields, RetractSubject, RetractTarget, RowRetract, RowVerb,
+    attach_link_field, attach_link_form, create_record_frame, id_list, media_tab, non_empty, optional_enum_select,
+    picker_selection_id, provenance_block, provenance_block_dna, provenance_cue, record_enum_select,
+    register_fields_form, restriction_display, retract_side_panel, row_actions_cell, source_cue,
+    source_media_type_choices, use_attach_picker, use_attach_save, use_detail_tab, use_existing_picker,
+    use_record_undo,
 };
 pub use super::tabs::{
     AddressForm, ParticipationForm, ParticipationSeed, TabActionStyle, TabActionTarget, address_cards, citations_table,

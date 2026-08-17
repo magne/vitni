@@ -275,6 +275,9 @@ pub struct DnaMatchDraft {
     pub segment_count: String,
     /// The provider's predicted relationship (optional; create-only).
     pub predicted_relationship: String,
+    /// The match's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl DnaMatchDraft {
@@ -293,13 +296,15 @@ impl DnaMatchDraft {
             existing_human_id: Some(detail.human_id.clone()),
             human_id: detail.human_id.clone(),
             status: detail.status_kind,
+            restrictions: detail.restrictions.clone(),
             ..Self::default()
         }
     }
 
     /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
     /// mode): the confirmation status (there is no command to return a match to undecided, so only a
-    /// change to confirmed/rejected commits) and, last, `SetHumanId` when the id changed (a blank id
+    /// change to confirmed/rejected commits), the restriction set, and, last, `SetHumanId` when the id
+    /// changed — so everything else commits against the id the record still has (a blank id
     /// regenerates).
     #[must_use]
     pub fn edits_against(&self, seed: &Self) -> Vec<DnaMatchEdit> {
@@ -313,6 +318,12 @@ impl DnaMatchDraft {
             edits.push(DnaMatchEdit::SetStatus {
                 human_id: human_id.clone(),
                 confirmed: status == vitni_app::MatchStatus::Confirmed,
+            });
+        }
+        if self.restrictions != seed.restrictions {
+            edits.push(DnaMatchEdit::SetRestrictions {
+                human_id: human_id.clone(),
+                restrictions: self.restrictions.clone(),
             });
         }
         if self.human_id.trim() != seed.human_id {
@@ -389,12 +400,21 @@ impl RecordDraft for DnaMatchDraft {
     fn display_label(&self) -> Option<String> {
         None
     }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
+    }
 }
 
 #[cfg(test)]
 mod dna_match_draft_tests {
-    use super::{DnaMatchDraft, RecordDraft};
+    use super::{DnaMatchDetail, DnaMatchDraft, RecordDraft};
     use crate::navigation::DnaMatchEdit;
+    use crate::presentation::RestrictionKind;
     use vitni_app::{DnaProvider, MatchStatus};
 
     fn seed() -> DnaMatchDraft {
@@ -420,8 +440,78 @@ mod dna_match_draft_tests {
             existing_human_id: Some("X0001".to_owned()),
             human_id: "X0001".to_owned(),
             status: None,
+            restrictions: vec![RestrictionKind::Confidential],
             ..DnaMatchDraft::new()
         }
+    }
+
+    fn detail() -> DnaMatchDetail {
+        DnaMatchDetail {
+            human_id: "X0009".to_owned(),
+            id: "dna-match-uuid".to_owned(),
+            title: "Ada ⟷ Grace".to_owned(),
+            test_a: None,
+            test_b: None,
+            provider: None,
+            shared_cm: None,
+            percent_shared: None,
+            largest_segment_cm: None,
+            predicted_relationship: None,
+            status: "Undecided".to_owned(),
+            status_kind: None,
+            segments: Vec::new(),
+            shared_ancestors: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: vec![RestrictionKind::Locked],
+            cited_by: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_changed_restriction_set_yields_one_restriction_edit() {
+        let draft = DnaMatchDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            DnaMatchEdit::SetRestrictions { restrictions, .. }
+                if restrictions == &[RestrictionKind::Confidential, RestrictionKind::Privacy]
+        ));
+    }
+
+    #[test]
+    fn an_unchanged_restriction_set_yields_no_restriction_edit() {
+        let draft = DnaMatchDraft {
+            status: Some(MatchStatus::Confirmed),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert!(
+            !edits
+                .iter()
+                .any(|edit| matches!(edit, DnaMatchEdit::SetRestrictions { .. }))
+        );
+    }
+
+    #[test]
+    fn from_detail_seeds_the_restrictions_and_offers_the_field() {
+        let draft = DnaMatchDraft::from_detail(&detail());
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
+        assert_eq!(
+            draft.editable_restrictions(),
+            Some([RestrictionKind::Locked].as_slice()),
+            "a stored record offers the restriction field"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_offers_no_restriction_field() {
+        assert_eq!(DnaMatchDraft::new().editable_restrictions(), None);
     }
 
     #[test]

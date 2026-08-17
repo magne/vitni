@@ -94,9 +94,9 @@
                 <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Priority</span><span class="grow"><span class="val">1</span></span></div>
                 <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Restrictions</span><span class="grow">
                   <span class="resn-set" role="group" aria-label="Privacy restrictions">
-                    <span class="resn" data-kind="confidential" role="button" tabindex="0" aria-pressed="false">Confidential</span>
-                    <span class="resn" data-kind="locked" role="button" tabindex="0" aria-pressed="false">Locked</span>
-                    <span class="resn" data-kind="privacy" role="button" tabindex="0" aria-pressed="false">Privacy</span>
+                    <span class="resn resn-static" data-kind="confidential" aria-pressed="false">Confidential</span>
+                    <span class="resn resn-static" data-kind="locked" aria-pressed="false">Locked</span>
+                    <span class="resn resn-static" data-kind="privacy" aria-pressed="false">Privacy</span>
                   </span>
                 </span></div>
               </div>
@@ -132,9 +132,9 @@
               <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Color</span><input class="in mono" style="width:110px" value="#e5534b"><span class="dot" style="width:20px;height:20px;border-radius:var(--r-sm);background:#e5534b;flex:none"></span></div>
               <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Restrictions</span>
                 <span class="resn-set" role="group" aria-label="Privacy restrictions">
-                  <span class="resn" data-kind="confidential" role="button" tabindex="0" aria-pressed="true">Confidential</span>
-                  <span class="resn" data-kind="locked" role="button" tabindex="0" aria-pressed="false">Locked</span>
-                  <span class="resn" data-kind="privacy" role="button" tabindex="0" aria-pressed="false">Privacy</span>
+                  <button class="resn" type="button" data-kind="confidential" aria-pressed="true">Confidential</button>
+                  <button class="resn" type="button" data-kind="locked" aria-pressed="false">Locked</button>
+                  <button class="resn" type="button" data-kind="privacy" aria-pressed="false">Privacy</button>
                 </span>
               </div>
             </div>

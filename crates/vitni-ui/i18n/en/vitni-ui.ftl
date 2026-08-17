@@ -9,6 +9,8 @@ no-value = -
 restriction-confidential = Confidential
 restriction-locked = Locked
 restriction-privacy = Privacy
+# The accessible name of a set of restriction pills (its `role="group"` label).
+restriction-group = Privacy restrictions
 
 # Sex labels
 sex-male = male
@@ -1053,7 +1055,9 @@ panel-cite-fact = Cite fact
 retract-panel-title = Retract assertion
 detach-panel-title = Detach
 remove-child-panel-title = Remove from family
+untag-panel-title = Remove tag
 retract-note = The retraction is recorded in History; nothing is deleted.
+untag-note = The tag removal is recorded in History; nothing is deleted.
 remove-child-note = The removal is recorded in History; the original claim and its evidence stay.
 detach-citation-title = Detach this citation — the detachment is recorded in History
 action-remove-row = Remove { $row }

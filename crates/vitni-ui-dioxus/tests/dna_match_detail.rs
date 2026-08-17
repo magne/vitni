@@ -144,7 +144,7 @@ fn dna_match_view() -> Element {
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
-    let on_remove = use_callback(|_: String| {});
+    let on_remove = use_callback(|_: (String, String)| {});
     let on_edit = use_callback(|_form: DnaMatchEditForm| {});
     let on_retract = use_callback(|_target: (String, String, bool)| {});
     let detail = sample();

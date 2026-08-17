@@ -275,6 +275,9 @@ pub struct SourceDraft {
     pub publication: String,
     /// The abbreviation.
     pub abbreviation: String,
+    /// The record's privacy restrictions (GEDCOM `RESN`); empty is unrestricted. Edit-only — the
+    /// change-set request carries none, so a create form does not offer the field.
+    pub restrictions: Vec<RestrictionKind>,
 }
 
 impl SourceDraft {
@@ -295,6 +298,7 @@ impl SourceDraft {
             author: detail.author.clone().unwrap_or_default(),
             publication: detail.pub_info.clone().unwrap_or_default(),
             abbreviation: detail.abbrev.clone().unwrap_or_default(),
+            restrictions: detail.restrictions.clone(),
         }
     }
 
@@ -313,7 +317,8 @@ impl SourceDraft {
 
     /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
     /// mode): one `Set*` per changed scalar, with `SetHumanId` emitted last so the record is only
-    /// re-keyed after every other field has committed against its current id (a blank id regenerates).
+    /// re-keyed after every other field has committed against its current id (a blank id regenerates)
+    /// — the restriction set included, so it too commits against the id the record still has.
     #[must_use]
     pub fn edits_against(&self, seed: &Self) -> Vec<SourceEdit> {
         let Some(human_id) = seed.existing_human_id.clone() else {
@@ -344,6 +349,12 @@ impl SourceDraft {
                 abbrev: self.abbreviation.clone(),
             });
         }
+        if self.restrictions != seed.restrictions {
+            edits.push(SourceEdit::SetRestrictions {
+                human_id: human_id.clone(),
+                restrictions: self.restrictions.clone(),
+            });
+        }
         if self.human_id.trim() != seed.human_id {
             edits.push(SourceEdit::SetHumanId {
                 human_id,
@@ -368,12 +379,21 @@ impl RecordDraft for SourceDraft {
     fn display_label(&self) -> Option<String> {
         line_label(&self.title)
     }
+
+    fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
+        self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
+        self.restrictions = restrictions;
+    }
 }
 
 #[cfg(test)]
 mod source_draft_tests {
-    use super::SourceDraft;
+    use super::{RecordDraft, SourceDetail, SourceDraft, SourceReliabilityVm};
     use crate::navigation::SourceEdit;
+    use crate::presentation::RestrictionKind;
 
     fn seed() -> SourceDraft {
         SourceDraft {
@@ -383,7 +403,91 @@ mod source_draft_tests {
             author: "Rev. Smith".to_owned(),
             publication: "vol. 3".to_owned(),
             abbreviation: "TCB".to_owned(),
+            restrictions: vec![RestrictionKind::Confidential],
         }
+    }
+
+    fn detail() -> SourceDetail {
+        SourceDetail {
+            human_id: "S0009".to_owned(),
+            id: "source-uuid".to_owned(),
+            title: "Trinity Church baptisms".to_owned(),
+            author: None,
+            pub_info: None,
+            abbrev: None,
+            repositories: Vec::new(),
+            citations: Vec::new(),
+            attributes: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            reliability: SourceReliabilityVm {
+                confidence: None,
+                confidence_label: None,
+                evidence_axes: Vec::new(),
+                citation_count: 0,
+                record_count: 0,
+            },
+            restrictions: vec![RestrictionKind::Locked],
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_changed_restriction_set_yields_one_restriction_edit() {
+        let draft = SourceDraft {
+            restrictions: vec![RestrictionKind::Confidential, RestrictionKind::Privacy],
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            SourceEdit::SetRestrictions { restrictions, .. }
+                if restrictions == &[RestrictionKind::Confidential, RestrictionKind::Privacy]
+        ));
+    }
+
+    #[test]
+    fn an_unchanged_restriction_set_yields_no_restriction_edit() {
+        let draft = SourceDraft {
+            author: "Rev. Jones".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert!(
+            !edits
+                .iter()
+                .any(|edit| matches!(edit, SourceEdit::SetRestrictions { .. }))
+        );
+    }
+
+    #[test]
+    fn a_draft_differing_only_in_restrictions_is_dirty() {
+        let draft = SourceDraft {
+            restrictions: Vec::new(),
+            ..seed()
+        };
+        assert!(
+            draft.is_dirty_against(&seed()),
+            "a restriction change alone makes Save available"
+        );
+    }
+
+    #[test]
+    fn from_detail_seeds_the_restrictions_and_offers_the_field() {
+        let draft = SourceDraft::from_detail(&detail());
+        assert_eq!(draft.restrictions, vec![RestrictionKind::Locked]);
+        assert_eq!(
+            draft.editable_restrictions(),
+            Some([RestrictionKind::Locked].as_slice()),
+            "a stored record offers the restriction field"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_offers_no_restriction_field() {
+        assert_eq!(SourceDraft::new().editable_restrictions(), None);
     }
 
     #[test]

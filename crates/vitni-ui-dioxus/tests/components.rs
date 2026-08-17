@@ -67,6 +67,7 @@ fn gallery() -> Element {
                 RestrictionChoice { kind: RestrictionKind::Locked, label: "Locked".to_owned() },
             ],
             selected: vec![RestrictionKind::Confidential],
+            group_label: "Privacy restrictions".to_owned(),
             ontoggle: move |_| {},
         }
         ProvenancePopover { title: "Why we believe this".to_owned(),
@@ -155,6 +156,9 @@ fn components_carry_their_aria_roles() {
         // A labelled Button can carry a hover tooltip and an accessible name (PR29 row actions).
         r#"aria-label="Retract Birth""#,
         r#"title="Retract this assertion — it stays in History""#,
+        // A restriction set is a named group, so a screen reader announces what the pills belong to.
+        r#"role="group""#,
+        r#"aria-label="Privacy restrictions""#,
         // Tabs use roving tabindex: the active tab is the stop, the rest are not.
         r#"tabindex="0""#,
         r#"tabindex="-1""#,
@@ -374,6 +378,68 @@ fn draft_date_view_mode_is_a_read_box_without_controls() {
     assert!(html.contains(r#"class="val""#), "view mode shows a read box:\n{html}");
     assert!(!html.contains("<select"), "view mode shows no selects:\n{html}");
     assert!(html.contains("1876"), "the display string shows:\n{html}");
+}
+
+/// The three restriction pills as a read-only display — the detail header's chips.
+fn readonly_restriction_set() -> Element {
+    rsx! {
+        RestrictionSet {
+            choices: vec![
+                RestrictionChoice { kind: RestrictionKind::Locked, label: "Locked".to_owned() },
+                RestrictionChoice { kind: RestrictionKind::Privacy, label: "Privacy".to_owned() },
+            ],
+            selected: vec![RestrictionKind::Privacy],
+            group_label: "Privacy restrictions".to_owned(),
+            readonly: true,
+            ontoggle: move |_| {},
+        }
+    }
+}
+
+/// The same pills as live toggles, for contrast with [`readonly_restriction_set`].
+fn interactive_restriction_set() -> Element {
+    rsx! {
+        RestrictionSet {
+            choices: vec![RestrictionChoice { kind: RestrictionKind::Privacy, label: "Privacy".to_owned() }],
+            selected: vec![RestrictionKind::Privacy],
+            group_label: "Privacy restrictions".to_owned(),
+            ontoggle: move |_| {},
+        }
+    }
+}
+
+#[test]
+fn a_readonly_restriction_set_renders_static_pills_not_buttons() {
+    let html = render_view(readonly_restriction_set);
+    assert!(!html.contains("<button"), "a display pill is not pressable:\n{html}");
+    assert!(!html.contains("tabindex"), "a display pill is not a tab stop:\n{html}");
+    assert!(
+        html.contains(r#"class="resn resn-static""#),
+        "the static variant carries its own class:\n{html}"
+    );
+    // The state stays exposed: `data-kind` drives the per-kind colour, `aria-pressed` the reading.
+    assert!(
+        html.contains(r#"data-kind="privacy""#),
+        "the kind token survives:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-pressed="true""#),
+        "a set restriction reads as on:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-pressed="false""#),
+        "an unset restriction reads as off:\n{html}"
+    );
+}
+
+#[test]
+fn an_interactive_restriction_set_still_renders_buttons() {
+    let html = render_view(interactive_restriction_set);
+    assert!(html.contains("<button"), "a live toggle is a real button:\n{html}");
+    assert!(
+        !html.contains("resn-static"),
+        "a live toggle is not the static variant:\n{html}"
+    );
 }
 
 fn deletable_chip() -> Element {

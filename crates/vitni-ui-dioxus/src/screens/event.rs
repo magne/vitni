@@ -197,6 +197,7 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                         draft.write().description = value;
                     },
                 }
+                {record_restrictions_field(loc, record)}
             }
         }
     }
@@ -379,13 +380,23 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     let nav = use_context::<NavState>();
     let mut label_nav = nav;
     let active = use_detail_tab(Category::Events, &human_id);
-    let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<EventEditForm>);
-    let mut retract = use_signal(|| None::<RetractTarget>);
+    // The shared commit path (`screens/detail_commits.rs`) — all of it but the retract confirm, which
+    // this pane owns (see `on_retract_confirm` below): a participation is person-canonical, so
+    // retracting one dispatches a `PersonEdit` against that person, not an `EventEdit`.
+    let DetailCommits {
+        mut reload,
+        mut retract,
+        mut retract_reason,
+        on_submit,
+        on_undo,
+        on_tag_remove,
+        on_retract: on_row_retract,
+        ..
+    } = use_detail_commits::<EventCommits, EventEditForm>(&state, &human_id, editing);
     // A canonical person-origin participant's retract targets the Person aggregate instead of this
     // event; set alongside `retract` only for that case (`on_person_retract`), cleared with it.
     let mut retract_person = use_signal(|| None::<String>);
-    let mut retract_reason = use_signal(String::new);
     let saved_label = state.data_loc().action_label(ActionLabel::Saved);
 
     let id_for_resource = human_id.clone();
@@ -440,25 +451,6 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
         );
     });
 
-    let submit_services = services.clone();
-    let submit_saved = saved_label.clone();
-    let mut editing_for_submit = editing;
-    let mut submit_nav = nav;
-    let on_submit = use_callback(move |(edit, prov): (EventEdit, ProvenanceDraft)| {
-        let services = submit_services.clone();
-        let saved = submit_saved.clone();
-        spawn(async move {
-            match save_event_edit(services, edit, prov).await {
-                Ok(_) => {
-                    editing_for_submit.set(None);
-                    reload += 1;
-                    submit_nav.notify(saved);
-                }
-                Err(message) => submit_nav.notify_error(message),
-            }
-        });
-    });
-
     let record_services = services.clone();
     let record_nav = nav;
     let current_id = human_id.clone();
@@ -482,17 +474,12 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
         });
     });
 
-    // A per-row Edit/Remove/Detach opens either a seeded form or the shared retract panel; confirming a
-    // retract dispatches an `UndoAssertion` carrying the typed rationale (the note stays in History —
-    // ADR 0004 §2).
-    let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
-        retract_reason.set(String::new());
+    // The shared arming (a per-row Edit/Remove/Detach opens either a seeded form or the retract panel),
+    // plus this pane's own step: clearing any person-canonical target a previous `on_person_retract`
+    // left armed, so the confirm below dispatches against the event.
+    let on_retract = use_callback(move |row: (String, String, bool)| {
         retract_person.set(None);
-        retract.set(Some(RetractTarget {
-            assertion_id,
-            label,
-            detach,
-        }));
+        on_row_retract.call(row);
     });
     // A canonical person-origin participant on the Participants tab retracts against the Person aggregate.
     let on_person_retract = use_callback(
@@ -500,31 +487,24 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
             retract_reason.set(String::new());
             retract_person.set(Some(person_human_id));
             retract.set(Some(RetractTarget {
-                assertion_id,
+                subject: RetractSubject::Assertion { assertion_id, detach },
                 label,
-                detach,
             }));
         },
     );
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: EventEditForm| editing_for_open.set(Some(form)));
-    let event_tag_human = human_id.clone();
-    let on_tag_remove = use_callback(move |tag_id: String| {
-        on_submit.call((
-            EventEdit::Tag {
-                human_id: event_tag_human.clone(),
-                tag_id,
-                remove: true,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
+
+    // This pane's own retract confirm, not the shared one: a participation is person-canonical
+    // (data-model §5), so retracting a canonical participant's row dispatches a `PersonEdit` against
+    // that person while every other row retracts against the event. An untag is never person-canonical,
+    // so it takes the same shape here as on the eleven panes the shared confirm serves (issue #315).
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let retract_saved = state.data_loc().action_label(ActionLabel::Saved);
     let mut retract_nav = nav;
     let on_retract_confirm = use_callback(move |()| {
-        let Some(target) = retract() else {
+        let Some(RetractTarget { subject, .. }) = retract() else {
             return;
         };
         let services = retract_services.clone();
@@ -536,21 +516,30 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
         };
         let person_human_id = retract_person();
         spawn(async move {
-            let outcome = if let Some(person_human_id) = person_human_id {
-                let edit = PersonEdit::UndoAssertion {
-                    human_id: person_human_id,
-                    assertion_id: target.assertion_id,
-                };
-                save_edit(services, edit, prov).await
-            } else {
-                let edit = EventEdit::UndoAssertion {
-                    human_id,
-                    assertion_id: target.assertion_id,
-                };
-                save_event_edit(services, edit, prov).await.map(|_| ())
+            let outcome = match subject {
+                RetractSubject::Assertion { assertion_id, .. } => {
+                    if let Some(person_human_id) = person_human_id {
+                        let edit = PersonEdit::UndoAssertion {
+                            human_id: person_human_id,
+                            assertion_id,
+                        };
+                        save_person_edit(services, edit, prov).await
+                    } else {
+                        let edit = EventEdit::UndoAssertion { human_id, assertion_id };
+                        save_event_edit(services, edit, prov).await
+                    }
+                }
+                RetractSubject::Tag { tag_id } => {
+                    let edit = EventEdit::Tag {
+                        human_id,
+                        tag_id,
+                        remove: true,
+                    };
+                    save_event_edit(services, edit, prov).await
+                }
             };
             match outcome {
-                Ok(()) => {
+                Ok(_) => {
                     retract.set(None);
                     retract_person.set(None);
                     reload += 1;
@@ -568,16 +557,6 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     });
     let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read() || retract.read().is_some());
     let undo_notice = chrome.kbd_nothing_to_undo();
-    let undo_human = human_id.clone();
-    let on_undo = use_callback(move |assertion_id: String| {
-        on_submit.call((
-            EventEdit::UndoAssertion {
-                human_id: undo_human.clone(),
-                assertion_id,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
     use_record_undo(
         nav,
         Category::Events,
@@ -733,8 +712,8 @@ struct EventCallbacks {
     on_edit_open: Callback<EventEditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
-    on_tag_remove: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
     /// The Media tab's viewer state + crop-supersede wiring.
     media_state: MediaTabState,
 }
@@ -783,7 +762,7 @@ fn event_detail(
                 title: detail.title.clone(),
                 id_label: Some(detail.human_id.clone()),
                 avatar: "📅".to_owned(),
-                extras: event_restriction_toggles(loc, detail, on_submit, human_id),
+                extras: restriction_display(loc, &detail.restrictions),
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
@@ -791,39 +770,6 @@ fn event_detail(
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
-        }
-    }
-}
-
-/// The interactive privacy-restriction toggles for an event (the mockup `resn-set`).
-fn event_restriction_toggles(
-    loc: &Localizer,
-    detail: &EventDetail,
-    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        RestrictionSet {
-            choices,
-            selected: selected.clone(),
-            ontoggle: move |kind: RestrictionKind| {
-                let mut next = selected.clone();
-                if let Some(position) = next.iter().position(|&k| k == kind) {
-                    next.remove(position);
-                } else {
-                    next.push(kind);
-                }
-                on_submit.call((EventEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
-            },
         }
     }
 }
@@ -843,7 +789,7 @@ fn event_tab_content(
     on_person_retract: Callback<(String, String, bool, String)>,
     on_edit_open: Callback<EventEditForm>,
     on_undo: Callback<String>,
-    on_tag_remove: Callback<String>,
+    on_tag_remove: Callback<(String, String)>,
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();

@@ -22,9 +22,10 @@ use crate::navigation::{
     Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DnaMatchChangeSetRequest, DnaMatchEdit,
     DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef,
     EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, MediaChangeSetRequest,
-    MediaEdit, NoteChangeSetRequest, NoteEdit, PartnerRequest, PersonChangeSetRequest, PlaceChangeSetRequest,
-    PlaceEdit, RecordRef, RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest, ResearchNoteEdit,
-    SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest,
+    MediaEdit, NoteChangeSetRequest, NoteEdit, PartnerRequest, PersonChangeSetRequest, PersonEdit,
+    PlaceChangeSetRequest, PlaceEdit, RecordRef, RepositoryChangeSetRequest, RepositoryEdit,
+    ResearchNoteChangeSetRequest, ResearchNoteEdit, SourceChangeSetRequest, SourceEdit, SubjectRequest,
+    TagChangeSetRequest,
 };
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 

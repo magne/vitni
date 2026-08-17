@@ -4,10 +4,12 @@
 
 use dioxus::prelude::*;
 use vitni_app::{NoteType, TagRef, UsingKind};
-use vitni_ui::{Localizer, NoteDetail, NoteDraft, ProvenanceDraft, TranslationVm, UsingRecordVm};
+use vitni_ui::{Localizer, NoteDetail, NoteDraft, ProvenanceDraft, RestrictionKind, TranslationVm, UsingRecordVm};
+use vitni_ui_dioxus::components::TabItem;
+use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
     NoteEditForm, RecordActionLabels, RecordEditState, note_content_tab, note_language_tab, note_references_table,
-    record_head_actions, tags_panel,
+    record_head_actions, restriction_display, tags_panel,
 };
 
 /// A representative note detail: a Research note in English with one Norwegian translation (by
@@ -87,7 +89,7 @@ fn note_view() -> Element {
         {note_content_tab(&loc, &detail, record)}
         {note_language_tab(&loc, &detail, use_callback(|_: NoteEditForm| {}), use_callback(|_: (String, String, bool)| {}))}
         {note_references_table(&loc, &detail.references)}
-        {tags_panel(&loc, &detail.tags, use_callback(|_: String| {}))}
+        {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
 }
 
@@ -207,5 +209,145 @@ fn the_reverse_index_references_table_has_no_row_actions() {
     assert!(
         !html.contains("row-actions") && !html.contains(">Edit<") && !html.contains(">Detach<"),
         "the reverse-index references table offers no per-row actions:\n{html}"
+    );
+}
+
+// ---- Restrictions (issue #315) --------------------------------------------------------------------
+
+/// The note detail header as `note_detail` builds it: the restrictions in force as a read-only display
+/// in the badge row — the header states them, it no longer changes them.
+fn note_header(loc: &Localizer, detail: &NoteDetail) -> Element {
+    let active = use_signal(|| 0_usize);
+    rsx! {
+        DetailContainer {
+            title: detail.title.clone(),
+            id_label: Some(detail.human_id.clone()),
+            avatar: "🗒".to_owned(),
+            extras: restriction_display(loc, &detail.restrictions),
+            actions: rsx! {},
+            tabs: Vec::<TabItem>::new(),
+            active,
+        }
+    }
+}
+
+fn note_header_with_confidential() -> Element {
+    let mut detail = sample();
+    detail.restrictions = vec![RestrictionKind::Confidential];
+    rsx! {
+        {note_header(&loc(), &detail)}
+    }
+}
+
+fn note_header_unrestricted() -> Element {
+    rsx! {
+        {note_header(&loc(), &sample())}
+    }
+}
+
+/// The note's edit state over a confidential record, in `editing` mode.
+fn confidential_state(editing: bool) -> RecordEditState<NoteDraft> {
+    let mut detail = sample();
+    detail.restrictions = vec![RestrictionKind::Confidential];
+    let seed = NoteDraft::from_detail(&detail);
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
+fn confidential_content_view_mode() -> Element {
+    rsx! {
+        {note_content_tab(&loc(), &sample(), confidential_state(false))}
+    }
+}
+
+fn confidential_content_edit_mode() -> Element {
+    rsx! {
+        {note_content_tab(&loc(), &sample(), confidential_state(true))}
+    }
+}
+
+/// A note draft differing from its committed seed in nothing but its restriction set.
+fn note_restriction_change_only() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let seed = NoteDraft::from_detail(&sample());
+    let mut draft = seed.clone();
+    draft.restrictions = vec![RestrictionKind::Privacy];
+    let record = RecordEditState {
+        editing: use_signal(|| true),
+        seed: use_signal(move || seed),
+        draft: use_signal(move || draft),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (NoteDraft, ProvenanceDraft)| {}))}
+    }
+}
+
+#[test]
+fn the_header_states_only_the_restrictions_in_force() {
+    let html = render(note_header_with_confidential);
+    assert!(
+        html.contains(r#"data-kind="confidential""#),
+        "the set kind shows:\n{html}"
+    );
+    assert!(
+        !html.contains(r#"data-kind="locked""#) && !html.contains(r#"data-kind="privacy""#),
+        "an unset kind is not shown in the header at all:\n{html}"
+    );
+    assert!(
+        !html.contains("<button"),
+        "the header's restrictions are a display, not toggles (issue #315):\n{html}"
+    );
+}
+
+#[test]
+fn an_unrestricted_note_shows_no_header_restrictions() {
+    let html = render(note_header_unrestricted);
+    assert!(
+        !html.contains("resn"),
+        "an unrestricted record's header carries no restriction group:\n{html}"
+    );
+}
+
+#[test]
+fn the_content_card_states_every_restriction_in_view_mode() {
+    let html = render(confidential_content_view_mode);
+    assert!(html.contains(">Restrictions<"), "the card row is labelled:\n{html}");
+    assert_eq!(
+        html.matches("resn-static").count(),
+        3,
+        "all three kinds render, static, so entering edit mode reflows nothing:\n{html}"
+    );
+}
+
+#[test]
+fn the_content_card_toggles_restrictions_in_edit_mode() {
+    let html = render(confidential_content_edit_mode);
+    assert!(!html.contains("resn-static"), "edit mode offers live toggles:\n{html}");
+    assert!(
+        html.contains(r#"data-kind="confidential" aria-pressed="true""#),
+        "the toggles are seeded from the draft:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"aria-pressed="true""#).count(),
+        1,
+        "only the record's own restriction is pressed:\n{html}"
+    );
+}
+
+#[test]
+fn a_restriction_change_alone_makes_the_note_savable() {
+    let html = render(note_restriction_change_only);
+    assert!(
+        !html.contains("disabled"),
+        "a restriction change alone enables Save:\n{html}"
     );
 }

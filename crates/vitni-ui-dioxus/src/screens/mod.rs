@@ -8,6 +8,7 @@
 mod bulk_import;
 mod citation;
 mod dashboard;
+mod detail_commits;
 mod dna_match;
 mod dna_test;
 mod event;
@@ -41,6 +42,11 @@ pub use bulk_import::{
 };
 pub use citation::{CitationEditForm, citation_attributes_table, citation_create_fields, citation_overview};
 pub use dashboard::{DashboardScreen, dashboard_view};
+pub use detail_commits::{
+    CitationCommits, DetailAggregate, DetailCommits, DnaMatchCommits, DnaTestCommits, EventCommits, FamilyCommits,
+    MediaCommits, NoteCommits, PersonCommits, PlaceCommits, RepositoryCommits, ResearchNoteCommits, SourceCommits,
+    use_detail_commits,
+};
 pub use dna_match::{
     DnaMatchEditForm, dna_match_ancestors_table, dna_match_create_fields, dna_match_overview, dna_match_record_fields,
     dna_match_segments_table,
@@ -90,8 +96,8 @@ pub use preferences::{
 pub use record_detail::{DockedRecordDetail, RecordDetail};
 pub use record_form::{
     DraftCommit, RecordActionLabels, RecordEditState, apply_record_edits, finish_draft_commit, finish_record_save,
-    record_edit_provenance, record_head_actions, record_keydown, use_record_create, use_record_edit,
-    use_save_on_request,
+    record_edit_provenance, record_head_actions, record_keydown, record_restrictions_field, use_record_create,
+    use_record_edit, use_save_on_request,
 };
 pub use repository::{
     RepositoryEditForm, repository_overview, repository_record_fields, repository_sources_table, repository_urls_table,
@@ -101,12 +107,13 @@ pub use research_note::{
     research_note_draft_subjects, research_note_record_fields, research_note_subjects_table, research_notes_table,
 };
 pub use shared::{
-    AttachLink, AttachPicker, CreateFormFocus, MediaTabState, RegisterFields, RetractTarget, RowRetract, RowVerb,
-    attach_link_field, attach_link_form, citation_table, create_record_frame, create_record_header,
-    finish_attach_create, id_list, media_gallery, media_tab, media_viewer_labels, non_empty, picker_selection_id,
-    provenance_block, provenance_block_dna, provenance_claim_row, provenance_cue, register_fields_form, retract_panel,
-    retract_side_panel, row_actions_cell, source_cue, source_media_type_choices, tag_chips, use_attach_picker,
-    use_attach_save, use_detail_tab, use_existing_picker, use_record_step, use_record_undo,
+    AttachLink, AttachPicker, CreateFormFocus, MediaTabState, RegisterFields, RetractSubject, RetractTarget,
+    RowRetract, RowVerb, attach_link_field, attach_link_form, citation_table, create_record_frame,
+    create_record_header, finish_attach_create, id_list, media_gallery, media_tab, media_viewer_labels, non_empty,
+    picker_selection_id, provenance_block, provenance_block_dna, provenance_claim_row, provenance_cue,
+    register_fields_form, restriction_display, retract_panel, retract_side_panel, row_actions_cell, source_cue,
+    source_media_type_choices, tag_chips, use_attach_picker, use_attach_save, use_detail_tab, use_existing_picker,
+    use_record_step, use_record_undo,
 };
 pub use source::{
     SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_record_fields,

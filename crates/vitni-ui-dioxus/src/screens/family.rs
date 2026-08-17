@@ -142,6 +142,7 @@ pub fn family_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::F
                         draft.write().human_id = value;
                     },
                 }
+                {record_restrictions_field(loc, record)}
             }
         }
     }
@@ -367,10 +368,20 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     let nav = use_context::<NavState>();
     let mut label_nav = nav;
     let active = use_detail_tab(Category::Families, &human_id);
-    let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<FamilyEditForm>);
-    let mut retract = use_signal(|| None::<RetractTarget>);
-    let mut retract_reason = use_signal(String::new);
+    // The shared commit path (`screens/detail_commits.rs`): the reload counter, the retract panel's
+    // state, and the five callbacks every detail pane dispatches through. The per-partner batch and the
+    // child-membership removal below are family's own, and reuse this `reload`.
+    let DetailCommits {
+        mut reload,
+        retract,
+        retract_reason,
+        on_submit,
+        on_undo,
+        on_tag_remove,
+        on_retract,
+        on_retract_confirm,
+    } = use_detail_commits::<FamilyCommits, FamilyEditForm>(&state, &human_id, editing);
     let mut removing_child = use_signal(|| None::<ChildRemoval>);
     let mut removal_reason = use_signal(String::new);
     let saved_label = state.data_loc().action_label(ActionLabel::Saved);
@@ -406,25 +417,6 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         );
     });
 
-    let submit_services = services.clone();
-    let submit_saved = saved_label.clone();
-    let mut editing_for_submit = editing;
-    let mut submit_nav = nav;
-    let on_submit = use_callback(move |(edit, prov): (FamilyEdit, ProvenanceDraft)| {
-        let services = submit_services.clone();
-        let saved = submit_saved.clone();
-        spawn(async move {
-            match save_family_edit(services, edit, prov).await {
-                Ok(_) => {
-                    editing_for_submit.set(None);
-                    reload += 1;
-                    submit_nav.notify(saved);
-                }
-                Err(message) => submit_nav.notify_error(message),
-            }
-        });
-    });
-
     let batch_services = services.clone();
     let batch_saved = saved_label.clone();
     let mut editing_for_batch = editing;
@@ -453,56 +445,8 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         });
     });
 
-    // A per-row Retract/Remove/Unlink/Detach opens the shared retract panel; confirming dispatches an
-    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
-    let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
-        retract_reason.set(String::new());
-        retract.set(Some(RetractTarget {
-            assertion_id,
-            label,
-            detach,
-        }));
-    });
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: FamilyEditForm| editing_for_open.set(Some(form)));
-    let family_tag_human = human_id.clone();
-    let on_tag_remove = use_callback(move |tag_id: String| {
-        on_submit.call((
-            FamilyEdit::Tag {
-                human_id: family_tag_human.clone(),
-                tag_id,
-                remove: true,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
-    let retract_services = state.services().clone();
-    let retract_human = human_id.clone();
-    let retract_saved = saved_label.clone();
-    let mut retract_nav = nav;
-    let on_retract_confirm = use_callback(move |()| {
-        let Some(RetractTarget { assertion_id, .. }) = retract() else {
-            return;
-        };
-        let services = retract_services.clone();
-        let human_id = retract_human.clone();
-        let saved = retract_saved.clone();
-        let prov = ProvenanceDraft {
-            rationale: retract_reason(),
-            ..ProvenanceDraft::default()
-        };
-        spawn(async move {
-            let edit = FamilyEdit::UndoAssertion { human_id, assertion_id };
-            match save_family_edit(services, edit, prov).await {
-                Ok(_) => {
-                    retract.set(None);
-                    reload += 1;
-                    retract_nav.notify(saved);
-                }
-                Err(message) => retract_nav.notify_error(message),
-            }
-        });
-    });
 
     // A child's Remove arms the membership-change panel; confirming dispatches `RemoveChild`, which
     // ends the membership while the claim that added the child keeps standing (data-model §10).
@@ -567,16 +511,6 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
             || removing_child.read().is_some()
     });
     let undo_notice = chrome.kbd_nothing_to_undo();
-    let undo_human = human_id.clone();
-    let on_undo = use_callback(move |assertion_id: String| {
-        on_submit.call((
-            FamilyEdit::UndoAssertion {
-                human_id: undo_human.clone(),
-                assertion_id,
-            },
-            ProvenanceDraft::default(),
-        ));
-    });
     use_record_undo(
         nav,
         Category::Families,
@@ -677,8 +611,6 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded family's detail container: header (title, restriction toggles), the tab strip,
-/// the active tab's content, and the editing side panel.
 /// The signals a family's detail threads to its tabs: the active tab, the collection-row side panel,
 /// and the whole-record edit state.
 #[derive(Clone, Copy)]
@@ -722,12 +654,15 @@ struct FamilyCallbacks {
     on_edit_open: Callback<FamilyEditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
-    on_tag_remove: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
     /// The Media tab's viewer state + crop-supersede wiring.
     media_state: MediaTabState,
 }
 
+/// Renders a loaded family's detail container: header (title, the restrictions in force, the
+/// sticky-header record Edit/Cancel/Save), the tab strip, the active tab's content, and the editing
+/// side panel.
 fn family_detail(
     state: &AppState,
     detail: &FamilyDetail,
@@ -773,7 +708,7 @@ fn family_detail(
                 title: detail.title.clone(),
                 id_label: Some(detail.human_id.clone()),
                 avatar: "👪".to_owned(),
-                extras: family_restriction_toggles(loc, detail, on_submit, human_id),
+                extras: restriction_display(loc, &detail.restrictions),
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
@@ -782,39 +717,6 @@ fn family_detail(
             {family_edit_panel(state, detail, editing, on_submit, on_submit_batch, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
             {child_removal_side_panel(loc, removing_child, removal_reason, on_child_remove_confirm)}
-        }
-    }
-}
-
-/// The interactive privacy-restriction toggles for a family (the mockup `resn-set`).
-fn family_restriction_toggles(
-    loc: &Localizer,
-    detail: &FamilyDetail,
-    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        RestrictionSet {
-            choices,
-            selected: selected.clone(),
-            ontoggle: move |kind: RestrictionKind| {
-                let mut next = selected.clone();
-                if let Some(position) = next.iter().position(|&k| k == kind) {
-                    next.remove(position);
-                } else {
-                    next.push(kind);
-                }
-                on_submit.call((FamilyEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
-            },
         }
     }
 }
@@ -831,8 +733,8 @@ struct FamilyTabCallbacks {
     on_edit_open: Callback<FamilyEditForm>,
     /// Retracts an assertion by id from the History tab.
     on_undo: Callback<String>,
-    /// Untags a tag by id from the Tags tab.
-    on_tag_remove: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
     /// The Media tab's viewer state + crop-supersede wiring.
     media_state: MediaTabState,
 }
@@ -1020,8 +922,8 @@ pub fn family_overview(
 
 /// A child whose removal from the family is armed, for [`child_removal_side_panel`]. Carries the
 /// child's `human_id` (the `RemoveChild` target) plus the display name the panel and its accessible
-/// name use. Distinct from [`RetractTarget`]: a removal ends a membership that held, so it names the
-/// child, not an assertion.
+/// name use. A subject [`RetractTarget`] deliberately does not carry: a removal ends a membership that
+/// held, with copy and an intent of its own (see [`child_removal_side_panel`]).
 #[derive(Clone, PartialEq, Eq)]
 pub struct ChildRemoval {
     /// The child's person `human_id`.

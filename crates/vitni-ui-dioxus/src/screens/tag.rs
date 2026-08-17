@@ -260,7 +260,7 @@ pub fn tag_overview(
         if edit.editing.read().to_owned() {
             {tag_record_fields(loc, edit, name_touched, picker_open, false)}
         } else {
-            {tag_read_rows(loc, detail)}
+            {tag_read_rows(loc, detail, edit)}
         }
     }
 }
@@ -280,7 +280,7 @@ fn tag_record_fields(
     let current = draft();
     rsx! {
         div { class: "grid-2",
-            {tag_edit_tag_card(loc, draft, &committed, name_touched, autofocus_name)}
+            {tag_edit_tag_card(loc, edit, name_touched, autofocus_name)}
             {tag_edit_colour_card(loc, draft, &committed, picker_open)}
         }
         {record_edit_provenance(loc, edit)}
@@ -303,8 +303,9 @@ fn tag_record_fields(
 
 /// The tag Overview read rows (view mode): Name · Priority · Colour as read text, matching the edit
 /// record's layout so toggling to edit moves no text (`record-editing.html` §3). Restrictions render
-/// with the shared, read-only toggle set (no `ontoggle` effect — view mode has no live commands).
-fn tag_read_rows(loc: &Localizer, detail: &TagDetail) -> Element {
+/// through the shared record field ([`record_restrictions_field`]), static here and live in edit mode
+/// over the same three pills.
+fn tag_read_rows(loc: &Localizer, detail: &TagDetail, edit: RecordEditState<TagDraft>) -> Element {
     let priority = detail
         .priority
         .map_or_else(String::new, |priority| priority.to_string());
@@ -321,10 +322,7 @@ fn tag_read_rows(loc: &Localizer, detail: &TagDetail) -> Element {
                         label { "{loc.field_label(\"priority\")}" }
                         div { class: "val", "{priority}" }
                     }
-                    div { class: "field",
-                        label { "{loc.field_label(\"restrictions\")}" }
-                        {restriction_set(loc, &detail.restrictions, |_| {})}
-                    }
+                    {record_restrictions_field(loc, edit)}
                 }
             }
             Card { title: loc.section_label("color"),
@@ -337,38 +335,17 @@ fn tag_read_rows(loc: &Localizer, detail: &TagDetail) -> Element {
     }
 }
 
-/// Builds a [`RestrictionSet`] from a selection, localizing every choice. Shared by the read rows (a
-/// no-op `ontoggle`) and the editable Tag card (writes the toggled set back into the draft).
-fn restriction_set(
-    loc: &Localizer,
-    selected: &[RestrictionKind],
-    ontoggle: impl FnMut(RestrictionKind) + 'static,
-) -> Element {
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    rsx! {
-        RestrictionSet {
-            choices,
-            selected: selected.to_vec(),
-            ontoggle,
-        }
-    }
-}
-
-/// The tag record's Tag card (Name + Priority inputs, with per-field revert). A pure fn (signals
-/// passed in) so both [`tag_record_fields`] and the SSR test render it without `AppCtx`.
+/// The tag record's Tag card (Name + Priority inputs with per-field revert, then the restriction
+/// field). A pure fn (the edit state's signals passed in) so both [`tag_record_fields`] and the SSR
+/// test render it without `AppCtx`.
 pub fn tag_edit_tag_card(
     loc: &Localizer,
-    mut draft: Signal<TagDraft>,
-    committed: &TagDraft,
+    edit: RecordEditState<TagDraft>,
     mut name_touched: Signal<bool>,
     autofocus_name: bool,
 ) -> Element {
+    let mut draft = edit.draft;
+    let committed = edit.seed.read().clone();
     let current = draft();
     let show_name_error = name_touched() && current.name_missing();
     let name_modified = current.name != committed.name;
@@ -431,15 +408,7 @@ pub fn tag_edit_tag_card(
                         }
                     }
                 }
-                div { class: "field",
-                    label { "{loc.field_label(\"restrictions\")}" }
-                    {
-                        restriction_set(loc, &current.restrictions, move |kind: RestrictionKind| {
-                            let toggled = draft.read().toggle_restriction(kind);
-                            draft.write().restrictions = toggled;
-                        })
-                    }
-                }
+                {record_restrictions_field(loc, edit)}
             }
         }
     }

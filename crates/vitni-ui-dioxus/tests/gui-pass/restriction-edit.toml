@@ -1,0 +1,185 @@
+# Issue #315: a restriction is changed inside the record's own edit, rides its Save, and carries the
+# operator's reason. SSR renders the header's static chips and the Overview card's interactive set, but
+# it fires no click at all — so it cannot show that a pill's `ontoggle` reaches the draft, that a
+# restriction change alone makes the record dirty (which is what raises the provenance block), that Save
+# commits it, or that Cancel drops it. Before #315 the pills were in the header and committed
+# immediately with `ProvenanceDraft::default()`; every SSR test passed either way.
+#
+# The record is Kristiansand, the fixture's one place: it starts unrestricted, so the header carries no
+# `.resn-set` group at all and the first chip appearing there is an unambiguous `differ`.
+#
+# The pointer is parked on empty list space before both view-mode reference shots (the trick
+# `save-shortcut.toml` uses): Save and Cancel are replaced by Edit under the cursor, and a hover state
+# left on one frame but not the other would show up in the `match` as a difference the app did not make.
+#
+# It also witnesses that the reason the operator types **stays in the field**. That cannot be an SSR
+# test: SSR renders markup once and never types, and every SSR test passed while the record pane's reason
+# input was blanked after each keystroke — `value` is a volatile attribute, so dioxus re-wrote the
+# unbound one to the live DOM as a removal (`node.value = ""`) on every re-render, and the block
+# re-renders on each keystroke because it reads the draft. Only a real webview shows that, and only after
+# more than one character has been typed: the field is blank either way after the first.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes; the three pills
+# were column-scanned (`convert <shot> -crop 260x1+530+798 +repage txt:-`) rather than eyeballed. So was
+# the reason field's interior: the box spans x 545..1763, the caret sits at x=558 and blinks, so the
+# region below starts at 566 — clear of it — and holds the second character onward.
+description = "A restriction change is part of the record's own edit, saved with its reason (#315)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "shot"
+name = "view-before"
+
+[[step]]
+do = "click"
+at = [1740, 145]
+label = "detail head: Edit"
+
+[[step]]
+do = "shot"
+name = "edit-open"
+
+[[step]]
+do = "click"
+at = [589, 798]
+label = "record card: the Confidential pill"
+
+[[step]]
+do = "shot"
+name = "toggled"
+
+[[step]]
+do = "click"
+at = [1150, 910]
+label = "provenance: the reason field"
+
+[[step]]
+do = "shot"
+name = "reason-empty"
+
+[[step]]
+do = "key"
+chord = "g"
+label = "type: g"
+
+[[step]]
+do = "key"
+chord = "d"
+label = "type: d"
+
+[[step]]
+do = "key"
+chord = "p"
+label = "type: p"
+
+[[step]]
+do = "key"
+chord = "r"
+label = "type: r"
+
+[[step]]
+do = "wait"
+seconds = 2
+label = "let every re-render the typing armed settle"
+
+[[step]]
+do = "shot"
+name = "reason-typed"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "detail head: Save"
+
+[[step]]
+do = "shot"
+name = "saved"
+
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "park the pointer on empty list space"
+
+[[step]]
+do = "shot"
+name = "restricted"
+
+[[step]]
+do = "click"
+at = [1740, 145]
+label = "detail head: Edit again"
+
+[[step]]
+do = "shot"
+name = "edit-again"
+
+[[step]]
+do = "click"
+at = [736, 798]
+label = "record card: the Privacy pill"
+
+[[step]]
+do = "shot"
+name = "toggled-again"
+
+[[step]]
+do = "click"
+at = [1689, 151]
+label = "detail head: Cancel"
+
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "park the pointer on empty list space"
+
+[[step]]
+do = "shot"
+name = "cancelled"
+
+[[assert]]
+kind = "differ"
+shots = ["edit-open", "toggled"]
+# The provenance block only, below the record card: a whole-window compare would also see the pill's own
+# highlight and the tabstrip's unsaved dot, and could not tell "the pill repainted" from "the record
+# became dirty and asked for a reason".
+region = [528, 852, 1252, 290]
+because = "toggling a pill must make the record dirty, which is what raises the provenance block (#315)"
+
+[[assert]]
+kind = "differ"
+shots = ["reason-empty", "reason-typed"]
+# The reason field's interior only, starting clear of the blinking caret at x=558 — so a run where the
+# field stayed empty compares two identical patches of input background and fails, whatever the caret is
+# doing. Four characters were typed; this region holds the second onward, which is the whole point: the
+# field used to be blanked after every keystroke, so it was empty here even mid-word.
+region = [566, 896, 140, 28]
+because = "the typed reason must accumulate in the field, or Save commits only the last character"
+
+[[assert]]
+kind = "differ"
+shots = ["view-before", "saved"]
+# The header's badge row alone, above the tabstrip.
+region = [528, 182, 700, 40]
+because = "Save must commit the restriction, so the header's read-only chip group appears (#315)"
+
+[[assert]]
+kind = "differ"
+shots = ["edit-again", "toggled-again"]
+region = [540, 780, 300, 40]
+because = "the second toggle must register, or the Cancel below would come back to an unchanged record"
+
+[[assert]]
+kind = "match"
+shots = ["restricted", "cancelled"]
+# Byte-identical when it works (RMSE 0.0000): the pointer is parked off the buttons in both frames.
+tolerance = 0.001
+because = "Cancel must drop the toggled restriction and return to the record as saved"

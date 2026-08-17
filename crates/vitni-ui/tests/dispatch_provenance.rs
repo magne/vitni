@@ -22,8 +22,8 @@ use vitni_app::{
 use vitni_ui::{
     CitationEdit, ConfidenceLevel, EventEdit, EvidenceKind, FamilyEdit, InformationKind, Localizer, MediaEdit,
     MergePersons, PersonEdit, PlaceEdit, ProvenanceDraft, SourceChangeSetRequest, SourceEdit, SourceQuality,
-    dispatch_citation_edit, dispatch_edit, dispatch_event_edit, dispatch_family_edit, dispatch_media_edit,
-    dispatch_merge, dispatch_place_edit, dispatch_source_change_set, dispatch_source_edit,
+    dispatch_citation_edit, dispatch_event_edit, dispatch_family_edit, dispatch_media_edit, dispatch_merge,
+    dispatch_person_edit, dispatch_place_edit, dispatch_source_change_set, dispatch_source_edit,
 };
 
 fn operator() -> OperatorConfig {
@@ -127,7 +127,7 @@ async fn an_edit_carries_the_drafts_provenance_into_the_change_log() {
     let citation = citation(&ws, &session).await;
     let draft = filled_draft(citation);
 
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::AssertName {
@@ -217,7 +217,7 @@ async fn an_attach_flow_carries_provenance() {
     .expect("note");
     let draft = filled_draft(citation);
 
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::AttachNote {
@@ -249,7 +249,7 @@ async fn an_edit_with_supersedes_replaces_the_fact_rather_than_appending() {
     let (ws, session, _dir) = setup().await;
     let person = person(&ws, &session).await;
 
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::AssertFact {
@@ -272,7 +272,7 @@ async fn an_edit_with_supersedes_replaces_the_fact_rather_than_appending() {
         .assertion_id
         .clone();
 
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::AssertFact {
@@ -314,7 +314,7 @@ async fn a_retract_carries_the_drafts_rationale() {
     )
     .await
     .expect("note");
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::AttachNote {
@@ -335,7 +335,7 @@ async fn a_retract_carries_the_drafts_rationale() {
         .assertion_id
         .clone();
 
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::UndoAssertion {
@@ -424,7 +424,7 @@ async fn tag_and_untag_round_trip_through_dispatch() {
         .await
         .expect("tag");
 
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::Tag {
@@ -442,7 +442,7 @@ async fn tag_and_untag_round_trip_through_dispatch() {
         "the tag is applied"
     );
 
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::Tag {
@@ -583,7 +583,7 @@ async fn assert_participation_dispatches() {
     .await
     .expect("note");
 
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::AssertParticipation {
@@ -657,7 +657,7 @@ async fn superseding_a_participation_preserves_age_attributes_and_notes() {
         attribute_type: "residence".to_owned(),
         value: "Bergen".to_owned(),
     }];
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::AssertParticipation {
@@ -684,7 +684,7 @@ async fn superseding_a_participation_preserves_age_attributes_and_notes() {
         .clone();
 
     // A role-only edit carries the full prefilled extras and supersedes the prior row.
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::AssertParticipation {
@@ -871,7 +871,7 @@ async fn set_media_region_supersedes_the_person_media_crop() {
     )
     .await
     .expect("media");
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::AttachMedia {
@@ -899,7 +899,7 @@ async fn set_media_region_supersedes_the_person_media_crop() {
         width: 30,
         height: 40,
     };
-    dispatch_edit(
+    dispatch_person_edit(
         &ws,
         &session,
         &PersonEdit::SetMediaRegion {

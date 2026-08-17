@@ -243,7 +243,7 @@ pub fn DetailContainer(
     /// colour swatch).
     #[props(default)]
     avatar_color: Option<String>,
-    /// Interactive header extras placed in the badge row (e.g. the restriction toggles).
+    /// Header extras placed in the badge row (e.g. the privacy restrictions in force).
     extras: Element,
     /// The right-aligned header actions (e.g. Edit / Compare).
     actions: Element,

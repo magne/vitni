@@ -4,9 +4,18 @@
 //! [`keep_typing_local`] is wired exactly once (fixing "global keys fire inside text controls"); the
 //! `input-guard` xtask lint forbids raw form elements anywhere else.
 //!
-//! Controlled: the call site owns the value and forwards edits through `oninput`. Search widgets that
-//! must handle `Arrow`/`Enter`/`Escape` first pass an `onkeydown_extra` handler — those are
-//! non-character keys, so it composes with the guard (which only swallows unmodified typing).
+//! **Controlled, and not optionally so: the call site owns the value and forwards edits through
+//! `oninput`.** Omitting `value` does not merely leave the field uncontrolled — it makes every
+//! re-render *erase what the operator has typed*. `value` is a **volatile** attribute in
+//! `dioxus-html`, so `dioxus-core` re-writes it to the DOM on every diff whether it changed or not,
+//! and a `None` value is written as a *removal* whose interpreter shim runs `node.value = ""`. A field
+//! whose parent re-renders while it has focus therefore loses its text, silently: the signal still
+//! holds the old string, so the next keystroke's `event.value()` is that one character alone and
+//! overwrites it. That is how the provenance reason field committed only the last character typed —
+//! the whole-record save path's one operator-supplied "why".
+//!
+//! Search widgets that must handle `Arrow`/`Enter`/`Escape` first pass an `onkeydown_extra` handler —
+//! those are non-character keys, so it composes with the guard (which only swallows unmodified typing).
 //! Presentational attributes (`role`, `aria-*`, `style`, `id`, `autofocus`, `inputmode`, …) flow
 //! through the `extends = GlobalAttributes` spread; the few input/textarea-specific attributes the
 //! call sites need (`name`, `placeholder`, `min`, `max`, `rows`) are typed props.
@@ -44,8 +53,8 @@ impl TextInputKind {
 /// The behavior core for every text/number/date field and textarea. Wires the typing guard once.
 #[component]
 pub fn TextInput(
-    /// The controlled value (omitted when `None`, leaving the field uncontrolled). Accepts a `String`
-    /// or an `Option<String>`.
+    /// The controlled value. Accepts a `String` or an `Option<String>`; `None` omits the attribute,
+    /// which **blanks the live field on every re-render** — see the module header before doing it.
     #[props(default, into)]
     value: Option<String>,
     /// Fired on each input event (omit for a display-only field).

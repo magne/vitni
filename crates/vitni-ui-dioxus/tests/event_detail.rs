@@ -224,7 +224,7 @@ fn event_view() -> Element {
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
-    let on_remove = use_callback(|_: String| {});
+    let on_remove = use_callback(|_: (String, String)| {});
     let on_edit_open = use_callback(|_: EventEditForm| {});
     let on_edit_address =
         use_callback(move |seed: AddressVm| on_edit_open.call(EventEditForm::Address(Some(Box::new(seed)))));
