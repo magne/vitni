@@ -3307,3 +3307,88 @@ async fn import_assert_sex_supersedes_the_live_value_when_the_file_is_newer() {
     let summary = show_person(&ws, &human_id).await.expect("show").expect("found");
     assert_eq!(summary.sex, Some(Sex::Male), "a fresher file supersedes the live value");
 }
+
+#[tokio::test]
+async fn an_attached_note_carries_its_type_and_text() {
+    // Issue #316: a citation's transcribed evidence text lives in an attached `NoteType::Transcript`
+    // note, so the attach ref has to carry the note's type and body — the owner's Notes tab renders
+    // them, and a bare `human_id` is not something a researcher can read.
+    use vitni_app::{attach_citation_note, set_note_type, show_citation};
+    use vitni_core::enums::NoteType;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("1850 U.S. Census".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source,
+            page: Some("p. 14".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create citation");
+    let note = create_note(
+        &ws,
+        &session,
+        NewNote {
+            human_id: None,
+            text: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create note");
+    set_note_type(&ws, &session, &note, NoteType::Transcript, MutationMeta::default())
+        .await
+        .expect("set note type");
+    set_note_text(
+        &ws,
+        &session,
+        &note,
+        "Smith, John — age 0, b. New York".to_owned(),
+        Some("en".to_owned()),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("set note text");
+    attach_citation_note(&ws, &session, &citation, &note, MutationMeta::default())
+        .await
+        .expect("attach note");
+
+    let summary = show_citation(&ws, &citation).await.expect("show").expect("citation");
+    let attached = summary.notes.first().expect("one attached note");
+    assert_eq!(attached.human_id, note, "the attach ref still resolves the human id");
+    assert_eq!(
+        attached.note_type,
+        Some(NoteType::Transcript),
+        "the attach ref carries the note's type, so the UI can label the card"
+    );
+    assert_eq!(
+        attached.text.as_deref(),
+        Some("Smith, John — age 0, b. New York"),
+        "the attach ref carries the note's body — the transcribed evidence text (#316)"
+    );
+    assert_eq!(
+        attached.language.as_deref(),
+        Some("en"),
+        "the attach ref carries the body's language"
+    );
+}

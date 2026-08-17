@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use vitni_core::date::GenealogicalDate;
-use vitni_core::enums::{AssociationRole, FactType, ParticipantRole, SourceMediaType};
+use vitni_core::enums::{AssociationRole, FactType, NoteType, ParticipantRole, SourceMediaType};
 use vitni_core::ids::{CitationId, MediaId, RepositoryId, TagId};
 use vitni_core::provenance::{Agent, AgentKind, Confidence, EvidenceAnalysis, Timestamp};
 use vitni_core::text::Rect;
@@ -54,12 +54,23 @@ pub struct MediaRefSummary {
 /// stable id (like [`AggRef`]) plus the `AssertionId` of the attach assertion so a Detach can
 /// retract exactly that attachment (ADR 0004 §2). Distinct from [`AggRef`], which references a
 /// related aggregate that carries no per-attach assertion (an association target, a merged persona).
+///
+/// The note's type and body are joined from the Note projection so the owner's Notes tab renders the
+/// words rather than an opaque id — how a citation's transcribed evidence text reaches the screen,
+/// since a transcription is an attached `NoteType::Transcript` note rather than a Citation field
+/// (data-model §6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttachedRef {
     /// The attached record's user-facing identifier (e.g. `N0001`).
     pub human_id: String,
     /// The attached record's stable id (a UUID string) — the join/navigation key.
     pub id: String,
+    /// The note's type, if set. Structured (not a label) so the frontend localizes it (ADR 0003).
+    pub note_type: Option<NoteType>,
+    /// The note's primary text content, if set.
+    pub text: Option<String>,
+    /// The primary content's language (a BCP-47 tag), if recorded.
+    pub language: Option<String>,
     /// The `AssertionId` (a UUID string) of the attach assertion — the Detach target. Never rendered.
     pub assertion_id: String,
 }

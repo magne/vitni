@@ -288,30 +288,45 @@ pub fn JumpButton(item: RecentItem) -> Element {
     }
 }
 
-/// A minimal list of related-item ids, or an empty-state when there are none. When `detach` is
-/// `Some`, each row carries a ghost Detach button that fires `(assertion_id, human_id, true)` — the
-/// attach `AssertionId` a Detach retracts (ADR 0004 §2), the row label, and the detach flag.
-pub fn id_list(loc: &Localizer, items: &[AttachedRefVm], detach: Option<Callback<(String, String, bool)>>) -> Element {
+/// A card per attached note — heading (`id · type · language`) and the note's body — or an empty-state
+/// when there are none (every record page's Notes pane in `docs/mockups/`). The body is what makes a
+/// citation's transcribed evidence text readable: a transcription is an attached `NoteType::Transcript`
+/// note rather than a Citation field (data-model §6), so this pane is where those words surface, and the
+/// id-only list it replaces left them invisible (issue #316).
+///
+/// When `detach` is `Some`, each card carries a ghost Detach button that fires
+/// `(assertion_id, human_id, true)` — the attach `AssertionId` a Detach retracts (ADR 0004 §2), the
+/// card label, and the detach flag. Detach is the only action here: the note's own text is edited on the
+/// Note record, not from the owner that attached it.
+pub fn note_cards(
+    loc: &Localizer,
+    items: &[AttachedRefVm],
+    detach: Option<Callback<(String, String, bool)>>,
+) -> Element {
     if items.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
-        ul { class: "id-list",
+        div { class: "stack",
             for item in items.iter() {
-                li {
-                    "{item.human_id}"
+                Card { key: "{item.assertion_id}", title: item.heading(),
+                    if let Some(text) = &item.text {
+                        p { "{text}" }
+                    }
                     if let Some(cb) = detach {
-                        Button {
-                            label: loc.action_button(ActionLabel::Detach),
-                            variant: ButtonVariant::Ghost,
-                            small: true,
-                            title: loc.action_title("detach-note"),
-                            aria_label: loc.action_detach_row(&item.human_id),
-                            onclick: {
-                                let assertion_id = item.assertion_id.clone();
-                                let human_id = item.human_id.clone();
-                                move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
-                            },
+                        div { class: "row-actions",
+                            Button {
+                                label: loc.action_button(ActionLabel::Detach),
+                                variant: ButtonVariant::Ghost,
+                                small: true,
+                                title: loc.action_title("detach-note"),
+                                aria_label: loc.action_detach_row(&item.human_id),
+                                onclick: {
+                                    let assertion_id = item.assertion_id.clone();
+                                    let human_id = item.human_id.clone();
+                                    move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
+                                },
+                            }
                         }
                     }
                 }

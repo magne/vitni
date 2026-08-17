@@ -894,7 +894,7 @@ struct Lookups {
     events: HashMap<EventId, EventJoin>,
     citations: HashMap<CitationId, crate::dto::CitationRef>,
     media: HashMap<MediaId, MediaLookup>,
-    notes: HashMap<NoteId, String>,
+    notes: HashMap<NoteId, use_case::NoteLookup>,
     tags: HashMap<TagId, crate::citation::TagRef>,
 }
 
@@ -921,7 +921,7 @@ impl Lookups {
             events: event_lookups(store).await?,
             citations,
             media: crate::dto::media_lookups(store).await?,
-            notes: use_case::note_human_ids(store).await?,
+            notes: use_case::note_lookups(store).await?,
             tags: tag_labels(store).await?,
         })
     }
@@ -1328,8 +1328,8 @@ fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<Participat
                     .notes
                     .iter()
                     .filter_map(|note_id| {
-                        lookups.notes.get(note_id).map(|human_id| AggRef {
-                            human_id: human_id.clone(),
+                        lookups.notes.get(note_id).map(|note| AggRef {
+                            human_id: note.human_id.clone(),
                             id: note_id.to_string(),
                         })
                     })
@@ -1402,9 +1402,12 @@ fn person_attachments(
         .notes_with_assertions()
         .iter()
         .filter_map(|attributed| {
-            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
-                human_id: human_id.clone(),
+            lookups.notes.get(&attributed.value).map(|note| AttachedRef {
+                human_id: note.human_id.clone(),
                 id: attributed.value.to_string(),
+                note_type: note.note_type.clone(),
+                text: note.text.clone(),
+                language: note.language.clone(),
                 assertion_id: attributed.assertion_id.to_string(),
             })
         })

@@ -11,7 +11,7 @@ use vitni_ui::{
 };
 use vitni_ui_dioxus::screens::{
     DnaMatchEditForm, RecordActionLabels, RecordEditState, dna_match_ancestors_table, dna_match_overview,
-    dna_match_segments_table, id_list, record_head_actions, tags_panel,
+    dna_match_segments_table, note_cards, record_head_actions, tags_panel,
 };
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
@@ -81,6 +81,10 @@ fn sample() -> DnaMatchDetail {
         }],
         notes: vec![AttachedRefVm {
             human_id: "N0004".to_owned(),
+            note_type: Some(vitni_app::NoteType::Research),
+            type_label: Some("Research".to_owned()),
+            text: Some("1,750 cM is ambiguous: half-sibling and aunt/niece overlap heavily at this level.".to_owned()),
+            language: Some("en".to_owned()),
             assertion_id: "01920000-0000-7000-8000-0000000000d4".to_owned(),
         }],
         tags: vec![TagRef {
@@ -153,7 +157,7 @@ fn dna_match_view() -> Element {
         {dna_match_overview(&loc, &detail, record)}
         {dna_match_segments_table(&loc, &segments_tab(), &detail.segments, on_edit, on_retract)}
         {dna_match_ancestors_table(&loc, &ancestors_tab(), &detail.shared_ancestors, on_edit, on_retract)}
-        {id_list(&loc, &detail.notes, Some(on_retract))}
+        {note_cards(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }

@@ -14,7 +14,7 @@ use vitni_ui::{ProvenanceDraft, RestrictionKind, SourceDraft};
 use vitni_ui_dioxus::components::TabItem;
 use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
-    MediaTabState, RecordActionLabels, RecordEditState, id_list, media_gallery, media_tab, record_edit_provenance,
+    MediaTabState, RecordActionLabels, RecordEditState, media_gallery, media_tab, note_cards, record_edit_provenance,
     record_head_actions, restriction_display, source_attributes_table, source_citations_table, source_overview,
     source_repositories_table, tags_panel,
 };
@@ -87,6 +87,10 @@ fn sample() -> SourceDetail {
         }],
         notes: vec![AttachedRefVm {
             human_id: "N0004".to_owned(),
+            note_type: Some(vitni_app::NoteType::Research),
+            type_label: Some("Research".to_owned()),
+            text: Some("1850 was the first U.S. census to name every household member individually.".to_owned()),
+            language: Some("en".to_owned()),
             assertion_id: "0190-note-attach-1".to_owned(),
         }],
         tags: vec![TagRef {
@@ -142,7 +146,7 @@ fn source_view() -> Element {
         {source_citations_table(&loc, &detail.citations)}
         {source_attributes_table(&loc, &detail, onedit, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
-        {id_list(&loc, &detail.notes, Some(onretract))}
+        {note_cards(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
 }

@@ -11,7 +11,7 @@ use vitni_ui::{
 };
 use vitni_ui_dioxus::screens::{
     ChildRemoval, FamilyEditForm, MediaTabState, RecordActionLabels, RecordEditState, child_removal_side_panel,
-    citations_table, family_children_table, family_events_table, family_overview, id_list, media_tab,
+    citations_table, family_children_table, family_events_table, family_overview, media_tab, note_cards,
     record_head_actions, tags_panel,
 };
 use vitni_ui_dioxus::shell::nav_state::NavState;
@@ -246,10 +246,14 @@ fn family_notes_detach() -> Element {
     let on_retract = use_callback(|_target: (String, String, bool)| {});
     let notes = vec![vitni_ui::AttachedRefVm {
         human_id: "N0007".to_owned(),
+        note_type: Some(vitni_app::NoteType::Research),
+        type_label: Some("Research".to_owned()),
+        text: Some("Marriage banns suggest a betrothal in late 1875; check the parish bulletin.".to_owned()),
+        language: Some("en".to_owned()),
         assertion_id: "01920000-0000-7000-8000-0000000000a7".to_owned(),
     }];
     rsx! {
-        {id_list(&loc, &notes, Some(on_retract))}
+        {note_cards(&loc, &notes, Some(on_retract))}
     }
 }
 

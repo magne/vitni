@@ -28,8 +28,8 @@ fn sample_date() -> GenealogicalDate {
     })
 }
 use vitni_ui_dioxus::screens::{
-    MediaEditForm, RecordActionLabels, RecordEditState, citations_table, id_list, media_attributes_table,
-    media_overview, record_head_actions, tags_panel,
+    MediaEditForm, RecordActionLabels, RecordEditState, citations_table, media_attributes_table, media_overview,
+    note_cards, record_head_actions, tags_panel,
 };
 
 /// A representative media detail: a portrait JPEG with file metadata, one backing citation (Normal
@@ -82,6 +82,10 @@ fn sample() -> MediaDetail {
         ],
         notes: vec![AttachedRefVm {
             human_id: "N0004".to_owned(),
+            note_type: Some(vitni_app::NoteType::General),
+            type_label: Some("General".to_owned()),
+            text: Some("Studio portrait of John Smith, seated, c.1900. Photographer's mark on the verso.".to_owned()),
+            language: Some("en".to_owned()),
             assertion_id: "0190-note-attach-id".to_owned(),
         }],
         tags: vec![TagRef {
@@ -137,7 +141,7 @@ fn media_view() -> Element {
         {media_overview(&loc, &detail, record)}
         {media_attributes_table(&loc, &detail.attributes, on_edit_open, on_retract)}
         {citations_table::<MediaEditForm>(&loc, &detail.citations, false, on_retract)}
-        {id_list(&loc, &detail.notes, Some(on_retract))}
+        {note_cards(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
 }

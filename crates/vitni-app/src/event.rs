@@ -730,7 +730,7 @@ struct EventLookups {
     places: HashMap<PlaceId, PlaceInfo>,
     citations: HashMap<CitationId, CitationRef>,
     media: HashMap<MediaId, MediaLookup>,
-    notes: HashMap<NoteId, String>,
+    notes: HashMap<NoteId, use_case::NoteLookup>,
     tags: HashMap<TagId, TagRef>,
     person_participations: HashMap<EventId, Vec<PersonSideParticipation>>,
 }
@@ -799,7 +799,7 @@ impl EventLookups {
             places,
             citations: citation_refs(store).await?,
             media: crate::dto::media_lookups(store).await?,
-            notes: use_case::note_human_ids(store).await?,
+            notes: use_case::note_lookups(store).await?,
             tags: tag_refs(store).await?,
             person_participations,
         })
@@ -1019,7 +1019,7 @@ fn merged_participants(view: &EventView, lookups: &EventLookups) -> Vec<Particip
             notes: participation
                 .notes
                 .iter()
-                .filter_map(|id| lookups.notes.get(id).cloned())
+                .filter_map(|id| lookups.notes.get(id).map(|note| note.human_id.clone()))
                 .collect(),
             confidence: participation.confidence,
             source_count: participation.source_count,
@@ -1078,9 +1078,12 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         .notes_with_assertions()
         .iter()
         .filter_map(|attributed| {
-            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
-                human_id: human_id.clone(),
+            lookups.notes.get(&attributed.value).map(|note| AttachedRef {
+                human_id: note.human_id.clone(),
                 id: attributed.value.to_string(),
+                note_type: note.note_type.clone(),
+                text: note.text.clone(),
+                language: note.language.clone(),
                 assertion_id: attributed.assertion_id.to_string(),
             })
         })

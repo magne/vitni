@@ -175,7 +175,7 @@ impl SourceDetail {
             citations,
             attributes,
             media: summary.media.iter().map(MediaRefVm::from_ref).collect(),
-            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
+            notes: summary.notes.iter().map(|n| AttachedRefVm::from_ref(n, loc)).collect(),
             tags: summary.tags.clone(),
             reliability: reliability_vm(&summary.reliability, loc),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),

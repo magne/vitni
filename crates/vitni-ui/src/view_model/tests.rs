@@ -253,11 +253,17 @@ fn summary() -> PersonSummary {
             vitni_app::AttachedRef {
                 human_id: "N0001".to_owned(),
                 id: "33333333-3333-7333-8333-333333333333".to_owned(),
+                note_type: None,
+                text: None,
+                language: None,
                 assertion_id: "aaaaaaaa-0000-7000-8000-000000000006".to_owned(),
             },
             vitni_app::AttachedRef {
                 human_id: "N0002".to_owned(),
                 id: "44444444-4444-7444-8444-444444444444".to_owned(),
+                note_type: None,
+                text: None,
+                language: None,
                 assertion_id: "aaaaaaaa-0000-7000-8000-000000000007".to_owned(),
             },
         ],
@@ -610,6 +616,9 @@ fn citation_summary() -> CitationSummary {
         notes: vec![vitni_app::AttachedRef {
             human_id: "N0001".to_owned(),
             id: "77777777-7777-7777-8777-777777777777".to_owned(),
+            note_type: Some(vitni_app::NoteType::Transcript),
+            text: Some("1850 was the first U.S. census to name every household member.".to_owned()),
+            language: Some("en".to_owned()),
             assertion_id: "aaaaaaaa-0000-7000-8000-00000000000c".to_owned(),
         }],
         tags: vec![TagRef {
@@ -651,6 +660,10 @@ fn citation_detail_maps_axes_confidence_and_attachments() {
         detail.notes,
         vec![AttachedRefVm {
             human_id: "N0001".to_owned(),
+            note_type: Some(vitni_app::NoteType::Transcript),
+            type_label: Some("Transcript".to_owned()),
+            text: Some("1850 was the first U.S. census to name every household member.".to_owned()),
+            language: Some("en".to_owned()),
             assertion_id: "aaaaaaaa-0000-7000-8000-00000000000c".to_owned(),
         }]
     );
@@ -1148,4 +1161,51 @@ fn citation_ref_from_ref_annotates_a_software_asserter() {
         asserted_by.contains("software agent"),
         "the asserted-by line annotates the software agent kind: {asserted_by}"
     );
+}
+
+#[test]
+fn attached_note_carries_its_localized_type_and_body() {
+    // Issue #316: the transcribed evidence text of a source is an attached `NoteType::Transcript`
+    // note, so an attach ref has to reach the screen as readable words — a localized type label, the
+    // body, and a heading that names the note.
+    let loc = Localizer::for_test("en");
+    let reference = vitni_app::AttachedRef {
+        human_id: "N0004".to_owned(),
+        id: "88888888-8888-7888-8888-888888888888".to_owned(),
+        note_type: Some(vitni_app::NoteType::Transcript),
+        text: Some("Smith, John — age 0, b. New York".to_owned()),
+        language: Some("en".to_owned()),
+        assertion_id: "aaaaaaaa-0000-7000-8000-00000000000d".to_owned(),
+    };
+    let vm = AttachedRefVm::from_ref(&reference, &loc);
+    assert_eq!(
+        vm.type_label.as_deref(),
+        Some("Transcript"),
+        "the type label is localized"
+    );
+    assert_eq!(vm.text.as_deref(), Some("Smith, John — age 0, b. New York"));
+    assert_eq!(
+        vm.heading(),
+        "N0004 · Transcript · en",
+        "the card heading names the note: id · type · language"
+    );
+}
+
+#[test]
+fn an_untyped_textless_note_still_renders_its_id() {
+    // The heading degrades to the bare id, so a note created with neither a type nor a body is still
+    // identifiable (and detachable) on the owner's Notes tab.
+    let loc = Localizer::for_test("en");
+    let reference = vitni_app::AttachedRef {
+        human_id: "N0009".to_owned(),
+        id: "99999999-9999-7999-8999-999999999999".to_owned(),
+        note_type: None,
+        text: None,
+        language: None,
+        assertion_id: "aaaaaaaa-0000-7000-8000-00000000000e".to_owned(),
+    };
+    let vm = AttachedRefVm::from_ref(&reference, &loc);
+    assert_eq!(vm.heading(), "N0009");
+    assert_eq!(vm.type_label, None);
+    assert_eq!(vm.text, None);
 }

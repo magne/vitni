@@ -11,7 +11,7 @@ use vitni_ui::{
 };
 use vitni_ui_dioxus::screens::{
     DnaTestEditForm, RecordActionLabels, RecordEditState, dna_test_haplogroups_table, dna_test_matches_table,
-    dna_test_overview, id_list, record_head_actions, tags_panel,
+    dna_test_overview, note_cards, record_head_actions, tags_panel,
 };
 
 /// A representative DNA test: `AncestryDNA` autosomal for John Smith, one haplogroup, one match, one tag.
@@ -60,6 +60,10 @@ fn sample() -> DnaTestDetail {
         }],
         notes: vec![AttachedRefVm {
             human_id: "N0003".to_owned(),
+            note_type: Some(vitni_app::NoteType::Research),
+            type_label: Some("Research".to_owned()),
+            text: Some("Kit transferred to GEDmatch for cross-platform matching.".to_owned()),
+            language: Some("en".to_owned()),
             assertion_id: "01920000-0000-7000-8000-0000000000d3".to_owned(),
         }],
         tags: vec![TagRef {
@@ -109,7 +113,7 @@ fn dna_test_view() -> Element {
         {dna_test_overview(&loc, &detail, record)}
         {dna_test_haplogroups_table(&loc, &detail.haplogroups, onedit, onretract)}
         {dna_test_matches_table(&loc, &detail.matches)}
-        {id_list(&loc, &detail.notes, Some(onretract))}
+        {note_cards(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }

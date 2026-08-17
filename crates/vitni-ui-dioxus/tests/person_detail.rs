@@ -18,7 +18,7 @@ use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
     EditForm, RecordActionLabels, RecordEditState, TabActionStyle, TabActionTarget, associations_table,
-    citations_table, events_table, facts_table, families_panel, id_list, names_table, person_record_fields,
+    citations_table, events_table, facts_table, families_panel, names_table, note_cards, person_record_fields,
     record_edit_provenance, record_head_actions, restriction_display, tab_frame, tags_panel, timeline_panel,
 };
 use vitni_ui_dioxus::shell::ChromeCtx;
@@ -536,10 +536,14 @@ fn person_notes_detachable() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let notes = vec![AttachedRefVm {
         human_id: "N0001".to_owned(),
+        note_type: Some(vitni_app::NoteType::Research),
+        type_label: Some("Research".to_owned()),
+        text: Some("Need to confirm immigration year — passenger lists for 1849–1851 not yet checked.".to_owned()),
+        language: Some("en".to_owned()),
         assertion_id: "0190a2b3-0000-7000-8000-0000000000n1".to_owned(),
     }];
     let ondetach = use_callback(|_| {});
-    id_list(&loc, &notes, Some(ondetach))
+    note_cards(&loc, &notes, Some(ondetach))
 }
 
 #[test]
