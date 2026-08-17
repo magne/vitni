@@ -70,11 +70,9 @@
           <div class="detail-sub"><a href="person.html">Mary Doe</a> &amp; <a href="person.html">John Smith</a> · married 1876 · 3 children</div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge">F0017</span>
-            <span class="resn-set">
-              <span class="resn" data-kind="confidential" aria-pressed="false">Confidential</span>
-              <span class="resn" data-kind="locked" aria-pressed="false">Locked</span>
-              <span class="resn" data-kind="privacy" aria-pressed="false">Privacy</span>
-            </span>
+            <!-- This family is unrestricted, so the header shows no restriction group at all. A
+                 restricted record shows the kinds in force as inert `.resn-static` pills; changing
+                 them is part of the record's own edit — the Restrictions row in the card below. -->
           </div>
         </div>
         <div class="head-actions">
@@ -124,6 +122,13 @@
                   <button class="btn sm ghost" title="Remove this partner — recorded in History">Remove</button>
                 </div>
                 <div class="row-actions"><button class="btn sm primary" title="Select an existing person or create a new one">+ Add partner</button></div>
+                <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Restrictions</span><span class="grow">
+                  <span class="resn-set" role="group" aria-label="Privacy restrictions">
+                    <span class="resn resn-static" data-kind="confidential" aria-pressed="false">Confidential</span>
+                    <span class="resn resn-static" data-kind="locked" aria-pressed="false">Locked</span>
+                    <span class="resn resn-static" data-kind="privacy" aria-pressed="false">Privacy</span>
+                  </span>
+                </span></div>
               </div>
             </div>
             <div class="card">

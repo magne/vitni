@@ -64,11 +64,9 @@
             <span class="badge">C0123</span>
             <span class="badge" title="Source this citation cites">source: <a href="source.html">S0003</a></span>
             <span class="conf" data-level="high"><span class="dot"></span>High</span>
-            <span class="resn-set" role="group" aria-label="Privacy restrictions">
-              <span class="resn" data-kind="confidential" role="button" tabindex="0" aria-pressed="false">Confidential</span>
-              <span class="resn" data-kind="locked" role="button" tabindex="0" aria-pressed="false">Locked</span>
-              <span class="resn" data-kind="privacy" role="button" tabindex="0" aria-pressed="false">Privacy</span>
-            </span>
+            <!-- This citation is unrestricted, so the header shows no restriction group at all. A
+                 restricted record shows the kinds in force as inert `.resn-static` pills; changing
+                 them is part of the record's own edit — the Restrictions row in the card below. -->
           </div>
         </div>
         <div class="head-actions">
@@ -118,6 +116,13 @@
                   <span class="field-label" style="width:80px;margin:0">Backs</span>
                   <span class="grow"><a class="chip" href="person.html">Birth</a> <a class="chip" href="person.html">Residence</a></span>
                 </div>
+                <div class="fact-row"><span class="field-label" style="width:80px;margin:0">Restrictions</span><span class="grow">
+                  <span class="resn-set" role="group" aria-label="Privacy restrictions">
+                    <span class="resn resn-static" data-kind="confidential" aria-pressed="false">Confidential</span>
+                    <span class="resn resn-static" data-kind="locked" aria-pressed="false">Locked</span>
+                    <span class="resn resn-static" data-kind="privacy" aria-pressed="false">Privacy</span>
+                  </span>
+                </span></div>
               </div>
             </div>
 
@@ -214,6 +219,14 @@
                   <select class="in" style="width:auto" aria-label="Information kind"><option>—</option><option selected>primary</option><option>secondary</option></select>
                   <select class="in" style="width:auto" aria-label="Evidence kind"><option>—</option><option>direct</option><option selected>indirect</option><option>negative</option></select>
                 </span>
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:110px;margin:0">Restrictions</span>
+                <span class="grow"><span class="resn-set" role="group" aria-label="Privacy restrictions">
+                  <button class="resn" type="button" data-kind="confidential" aria-pressed="false">Confidential</button>
+                  <button class="resn" type="button" data-kind="locked" aria-pressed="false">Locked</button>
+                  <button class="resn" type="button" data-kind="privacy" aria-pressed="false">Privacy</button>
+                </span></span>
               </div>
             </div>
             <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">

@@ -73,10 +73,10 @@
           <div class="wrap" style="margin-top:8px">
             <span class="badge">I0042</span>
             <span class="badge" title="This is a conclusion person built from 2 evidence personas">conclusion · 2 personas</span>
+            <!-- Display only: the restrictions in force, never a toggle. Changing them is part of
+                 the record's own edit — the Restrictions row in the card below. -->
             <span class="resn-set" role="group" aria-label="Privacy restrictions">
-              <span class="resn" data-kind="confidential" role="button" tabindex="0" aria-pressed="false">Confidential</span>
-              <span class="resn" data-kind="locked" role="button" tabindex="0" aria-pressed="false">Locked</span>
-              <span class="resn" data-kind="privacy" role="button" tabindex="0" aria-pressed="true">Privacy</span>
+              <span class="resn resn-static" data-kind="privacy" aria-pressed="true">Privacy</span>
             </span>
           </div>
         </div>
@@ -203,6 +203,14 @@
                   <button class="btn ghost" aria-label="Reset Occupation to original value" title="Reset to original value" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:24px;height:24px;padding:0">↺</button>
                 </span>
                 <select class="in" style="width:auto" aria-label="Confidence"><option>— (no judgment recorded)</option><option>Very low</option><option selected>Low</option><option>Normal</option><option>High</option><option>Very high</option></select>
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:96px;margin:0">Restrictions</span>
+                <span class="grow"><span class="resn-set" role="group" aria-label="Privacy restrictions">
+                  <button class="resn" type="button" data-kind="confidential" aria-pressed="false">Confidential</button>
+                  <button class="resn" type="button" data-kind="locked" aria-pressed="false">Locked</button>
+                  <button class="resn" type="button" data-kind="privacy" aria-pressed="true">Privacy</button>
+                </span></span>
               </div>
             </div>
             <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">

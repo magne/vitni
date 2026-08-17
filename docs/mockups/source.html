@@ -71,10 +71,10 @@
           <div class="wrap" style="margin-top:8px">
             <span class="badge">S0003</span>
             <span class="badge" title="Cited by 42 citations">42 citations</span>
-            <span class="resn-set">
-              <span class="resn" data-kind="confidential" aria-pressed="false">Confidential</span>
-              <span class="resn" data-kind="locked" aria-pressed="true">Locked</span>
-              <span class="resn" data-kind="privacy" aria-pressed="false">Privacy</span>
+            <!-- Display only: the restrictions in force, never a toggle. Changing them is part of
+                 the record's own edit — the Restrictions row in the card below. -->
+            <span class="resn-set" role="group" aria-label="Privacy restrictions">
+              <span class="resn resn-static" data-kind="locked" aria-pressed="true">Locked</span>
             </span>
           </div>
         </div>
@@ -113,6 +113,13 @@
                 <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Author</span><span class="grow">U.S. Census Bureau</span></div>
                 <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Publication</span><span class="grow">NARA microfilm M432, roll 552 (1850)</span></div>
                 <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Abbreviation</span><span class="grow mono">1850-CEN-NY</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Restrictions</span><span class="grow">
+                  <span class="resn-set" role="group" aria-label="Privacy restrictions">
+                    <span class="resn resn-static" data-kind="confidential" aria-pressed="false">Confidential</span>
+                    <span class="resn resn-static" data-kind="locked" aria-pressed="true">Locked</span>
+                    <span class="resn resn-static" data-kind="privacy" aria-pressed="false">Privacy</span>
+                  </span>
+                </span></div>
               </div>
             </div>
             <div class="card">
@@ -146,6 +153,13 @@
               <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Author</span><input class="in" style="flex:1;min-width:120px" value="U.S. Census Bureau"></div>
               <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Publication</span><input class="in" style="flex:1;min-width:120px" value="NARA microfilm M432, roll 552 (1850)"></div>
               <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Abbreviation</span><input class="in mono" style="flex:1;min-width:120px" value="1850-CEN-NY"></div>
+              <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Restrictions</span><span class="grow">
+                <span class="resn-set" role="group" aria-label="Privacy restrictions">
+                  <button class="resn" type="button" data-kind="confidential" aria-pressed="false">Confidential</button>
+                  <button class="resn" type="button" data-kind="locked" aria-pressed="true">Locked</button>
+                  <button class="resn" type="button" data-kind="privacy" aria-pressed="false">Privacy</button>
+                </span>
+              </span></div>
             </div>
             <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
               <div class="field" style="margin-bottom:0">

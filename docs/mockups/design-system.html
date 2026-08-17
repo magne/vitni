@@ -53,11 +53,25 @@
     </div>
   </div>
   <div class="specimen">
-    <div class="label">Restriction set (GEDCOM v7 RESN) — multi-select, not a toggle</div>
-    <div class="resn-set">
-      <span class="resn" data-kind="confidential" aria-pressed="true">Confidential</span>
-      <span class="resn" data-kind="locked" aria-pressed="false">Locked</span>
-      <span class="resn" data-kind="privacy" aria-pressed="true">Privacy</span>
+    <div class="label">Restriction set (GEDCOM v7 RESN) — multi-select, not a toggle; a named group either way</div>
+    <div class="stack">
+      <div class="fact-row">
+        <span class="field-label" style="width:96px;margin:0">Control</span>
+        <span class="resn-set" role="group" aria-label="Privacy restrictions">
+          <button class="resn" type="button" data-kind="confidential" aria-pressed="true">Confidential</button>
+          <button class="resn" type="button" data-kind="locked" aria-pressed="false">Locked</button>
+          <button class="resn" type="button" data-kind="privacy" aria-pressed="true">Privacy</button>
+        </span>
+        <span class="muted" style="font-size:var(--fs-sm)">Real buttons over <b>all three</b> kinds — the record card's Restrictions row in <b>edit</b> mode, the one place a restriction is changed. A click writes the draft, so the change rides the record's Save and its provenance block.</span>
+      </div>
+      <div class="fact-row">
+        <span class="field-label" style="width:96px;margin:0">Display</span>
+        <span class="resn-set" role="group" aria-label="Privacy restrictions">
+          <span class="resn resn-static" data-kind="confidential" aria-pressed="true">Confidential</span>
+          <span class="resn resn-static" data-kind="privacy" aria-pressed="true">Privacy</span>
+        </span>
+        <span class="muted" style="font-size:var(--fs-sm)">Inert <span class="mono">.resn-static</span> pills — the detail header's statement of what is <b>in force</b>: only the set kinds, and no group at all when the record is unrestricted. The same variant fills the card's row in <b>view</b> mode, there over all three kinds so entering edit reflows nothing.</span>
+      </div>
     </div>
   </div>
   <div class="specimen">

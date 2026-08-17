@@ -62,11 +62,9 @@
           <div class="detail-sub">Research note · argues about 2 records · en</div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge" title="Aggregate id: 0192-4c8e-7a05-9f1e-2c9d8b7a6453 (internal)">A0001</span>
-            <span class="resn-set" role="group" aria-label="Privacy restrictions">
-              <span class="resn" data-kind="confidential" role="button" tabindex="0" aria-pressed="false">Confidential</span>
-              <span class="resn" data-kind="locked" role="button" tabindex="0" aria-pressed="false">Locked</span>
-              <span class="resn" data-kind="privacy" role="button" tabindex="0" aria-pressed="false">Privacy</span>
-            </span>
+            <!-- This research note is unrestricted, so the header shows no restriction group at all.
+                 A restricted record shows the kinds in force as inert `.resn-static` pills; changing
+                 them is part of the record's own edit — the Restrictions row in the card below. -->
           </div>
         </div>
         <div class="head-actions">
@@ -104,6 +102,13 @@
             </ul>
             <p>Against: the census spells the surname <i>Smyth</i>, and no probate links the two.</p>
             <blockquote style="border-left:3px solid var(--line-2);margin:8px 0;padding-left:12px" class="muted">Conclusion: same person, <b>Normal</b> confidence. Cited from the <a href="citation.html">parish register</a>; a probate record would raise it.</blockquote>
+            <div class="fact-row" style="margin-top:12px"><span class="field-label" style="width:90px;margin:0">Restrictions</span><span class="grow">
+              <span class="resn-set" role="group" aria-label="Privacy restrictions">
+                <span class="resn resn-static" data-kind="confidential" aria-pressed="false">Confidential</span>
+                <span class="resn resn-static" data-kind="locked" aria-pressed="false">Locked</span>
+                <span class="resn resn-static" data-kind="privacy" aria-pressed="false">Privacy</span>
+              </span>
+            </span></div>
           </div>
 
           <!-- Edit-mode specimen -->
@@ -127,6 +132,13 @@
 
 Against: the census spells the surname *Smyth*.</textarea>
               </div>
+              <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Restrictions</span><span class="grow">
+                <span class="resn-set" role="group" aria-label="Privacy restrictions">
+                  <button class="resn" type="button" data-kind="confidential" aria-pressed="false">Confidential</button>
+                  <button class="resn" type="button" data-kind="locked" aria-pressed="false">Locked</button>
+                  <button class="resn" type="button" data-kind="privacy" aria-pressed="false">Privacy</button>
+                </span>
+              </span></div>
             </div>
             <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
               <div class="field" style="margin-bottom:0">

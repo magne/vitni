@@ -71,11 +71,9 @@
           <div class="wrap" style="margin-top:8px">
             <span class="badge">E0101</span>
             <span class="badge" title="Event type">marriage</span>
-            <span class="resn-set">
-              <span class="resn" data-kind="confidential" aria-pressed="false">Confidential</span>
-              <span class="resn" data-kind="locked" aria-pressed="false">Locked</span>
-              <span class="resn" data-kind="privacy" aria-pressed="false">Privacy</span>
-            </span>
+            <!-- This event is unrestricted, so the header shows no restriction group at all. A
+                 restricted record shows the kinds in force as inert `.resn-static` pills; changing
+                 them is part of the record's own edit — the Restrictions row in the card below. -->
           </div>
         </div>
         <div class="head-actions">
@@ -134,6 +132,13 @@
                   <a class="grow" href="place.html">Trinity Church, New York</a>
                   <span class="conf" data-level="high"><span class="dot"></span>High</span>
                 </div>
+                <div class="fact-row"><span class="field-label" style="width:80px;margin:0">Restrictions</span><span class="grow">
+                  <span class="resn-set" role="group" aria-label="Privacy restrictions">
+                    <span class="resn resn-static" data-kind="confidential" aria-pressed="false">Confidential</span>
+                    <span class="resn resn-static" data-kind="locked" aria-pressed="false">Locked</span>
+                    <span class="resn resn-static" data-kind="privacy" aria-pressed="false">Privacy</span>
+                  </span>
+                </span></div>
               </div>
             </div>
             <div class="card">
@@ -196,6 +201,14 @@
               <div class="fact-row">
                 <span class="field-label" style="width:80px;margin:0">Description</span>
                 <input class="in" style="flex:1;min-width:120px" value="Marriage of John Smith and Mary Doe">
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Restrictions</span>
+                <span class="grow"><span class="resn-set" role="group" aria-label="Privacy restrictions">
+                  <button class="resn" type="button" data-kind="confidential" aria-pressed="false">Confidential</button>
+                  <button class="resn" type="button" data-kind="locked" aria-pressed="false">Locked</button>
+                  <button class="resn" type="button" data-kind="privacy" aria-pressed="false">Privacy</button>
+                </span></span>
               </div>
             </div>
             <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
