@@ -1385,6 +1385,7 @@ fn overlay_probe(nav: &NavState) -> Element {
         Overlay::None => "NONE",
         Overlay::Palette => "PALETTE",
         Overlay::Help => "HELP",
+        Overlay::NewRecord => "NEW_RECORD",
     };
     rsx! {
         div { "OVERLAY:{overlay}" }

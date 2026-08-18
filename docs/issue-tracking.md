@@ -162,7 +162,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: `⌘N` silently doing nothing on half the destinations (#300), a save run that hangs when its target leaves the strip (#302), and the shared record tabs having no common layout contract (#303). |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: a save run that hangs when its target leaves the strip (#302), and the shared record tabs having no common layout contract (#303). |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end on the first real tag, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
@@ -178,7 +178,7 @@ arithmetic.
 The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
 point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (14 open)
+### `0.9 — UI stabilization` (13 open)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended, and the 2026-08-12
 walkthrough is the proof.** Every issue in the previous round closed, leaving the milestone empty — and
@@ -188,7 +188,6 @@ stylesheet or the webview rather than what the view logic decided. Treat the cou
 
 | Item | Why it gates a release |
 | --- | --- |
-| [`⌘N` is silent on half the app](https://github.com/magne/vitni/issues/300) | A `Global` chord advertised as "context-aware" no-ops with no notice on the Dashboard and every tool destination |
 | [A save run whose target leaves the strip hangs](https://github.com/magne/vitni/issues/302) | Save all can wedge the quit/close path with no way out and no message |
 | [The shared record tabs have no common layout contract](https://github.com/magne/vitni/issues/303) | Explanations below buttons, gone entirely when empty, and an add bar with no CSS rule at all — on all 13 screens |
 | [Attached records have four different presentations](https://github.com/magne/vitni/issues/304) | An attached note can be neither read nor opened from the record that references it |

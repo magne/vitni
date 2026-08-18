@@ -76,6 +76,7 @@ status-theme-system = system ({ $resolved })
 status-theme-light = lyst
 status-theme-dark = mørkt
 new-tab-label = Opprett en ny post
+new-record-picker-title = Ny post
 draft-tab-label = Ny { $entity }
 # Et andre (tredje, …) fortsatt navnløst utkast i samme kategori, slik at to nye poster aldri deler
 # tilgjengelig navn. Det første nummereres ikke.

@@ -16,6 +16,7 @@ use crate::shell::explorer::Explorer;
 use crate::shell::help_overlay::HelpOverlay;
 use crate::shell::keyboard::{ShellNotices, dispatch, use_keyboard_dispatch};
 use crate::shell::nav_state::{NavState, Overlay, entity_category};
+use crate::shell::new_record_picker::NewRecordPicker;
 use crate::shell::palette::CommandPalette;
 use crate::shell::quit_manager::QuitManager;
 use crate::shell::rail::Rail;
@@ -86,11 +87,12 @@ pub fn Shell() -> Element {
     let active_category = entity_category(*nav.active.read());
     let is_entity = active_category.is_some();
     let app_class = if is_entity { "app has-explorer" } else { "app" };
-    // While a modal layer (command palette / help sheet / the close-quit confirm) is open the
-    // background shell is made inert so Tab and assistive tech cannot reach behind it (ARIA APG modal
-    // pattern, U3) — the confirm is armed through `pending_close` rather than `overlay`, so it needs
-    // its own clause. All three are siblings of `.app`, never descendants, so inerting `.app` cannot
-    // disable them. `inert`/`aria-hidden` are emitted via `then_some` (present only when open): `inert`
+    // While a modal layer (command palette / help sheet / the new-record picker / the close-quit
+    // confirm) is open the background shell is made inert so Tab and assistive tech cannot reach
+    // behind it (ARIA APG modal pattern, U3) — the confirm is armed through `pending_close` rather
+    // than `overlay`, so it needs its own clause. All four are siblings of `.app`, never descendants,
+    // so inerting `.app` cannot disable them. `inert`/`aria-hidden` are emitted via `then_some`
+    // (present only when open): `inert`
     // is a boolean HTML attribute, so on the live renderer a bare `inert: false` still renders the
     // attribute and freezes the whole app — it must be omitted, not set to false. (SSR omits false
     // bools, so this divergence is not caught by the SSR tests.)
@@ -133,6 +135,7 @@ pub fn Shell() -> Element {
         CommandPalette {}
         HelpOverlay {}
         CloseConfirmDialog {}
+        NewRecordPicker {}
     }
 }
 

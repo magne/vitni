@@ -253,6 +253,11 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 }
 .menu-item:hover, .menu-item:focus-visible { background: var(--accent-soft); }
 
+/* The from-anywhere new-record picker's category grid (`NewRecordPicker`, issue #300): a two-column
+   layout of `.menu-item` buttons inside the shared `.modal`'s `.m-body`, so it needs no scrim/anchor
+   positioning of its own — the `Modal` component already supplies those. */
+.new-record-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-1); }
+
 /* ====================================================================
    Workarea: master-detail
    ==================================================================== */

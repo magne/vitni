@@ -65,6 +65,9 @@ pub enum Overlay {
     Palette,
     /// The keyboard-shortcuts help sheet (`?`).
     Help,
+    /// The from-anywhere new-record category picker (`⌘N` while [`entity_category`] is `None`) —
+    /// see [`NavState::request_new`].
+    NewRecord,
 }
 
 /// A close/quit operation armed behind the confirm dialog because it would discard unsaved work —
@@ -631,17 +634,18 @@ impl NavState {
         next
     }
 
-    /// Requests context-aware creation of a new record on the active screen (the top-bar `New` and
-    /// `⌘N`) by opening a draft tab ([`Self::open_create`]). A no-op unless the active destination is
-    /// an aggregate category (not the Dashboard, and not a tool).
+    /// Requests context-aware creation of a new record (the top-bar `New` and `⌘N`): opens a draft
+    /// tab in place ([`Self::open_create`]) when the active destination is an aggregate category
+    /// ([`entity_category`]), otherwise raises the from-anywhere category picker
+    /// ([`Overlay::NewRecord`]) — the Dashboard, Help, and every tool have no category to create in.
     pub fn request_new(&mut self) {
-        let Destination::Category(category) = *self.active.peek() else {
-            return;
-        };
-        if category == Category::Dashboard {
-            return;
+        let category = entity_category(*self.active.peek());
+        match category {
+            Some(category) => {
+                self.open_create(category);
+            }
+            None => self.overlay.set(Overlay::NewRecord),
         }
-        self.open_create(category);
     }
 
     /// Reveals `category` and opens a draft tab there (the tabstrip's new-record menu, the command

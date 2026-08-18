@@ -19,6 +19,7 @@ pub mod focus_trap;
 pub mod help_overlay;
 pub mod keyboard;
 pub mod nav_state;
+pub mod new_record_picker;
 pub mod palette;
 pub mod quit_manager;
 pub mod rail;
