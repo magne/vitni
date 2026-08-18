@@ -8,7 +8,15 @@
 
 mod wcag;
 
-use wcag::{composite, contrast, rgb};
+use wcag::{contrast, rgb};
+
+/// Alpha-composites `fg` over opaque `bg` at `alpha` (0..1). Models a `color-mix(.. transparent)` wash.
+/// Only `chip_bg` below needs this, so it stays local instead of moving into `wcag` — a shared
+/// helper only one consumer calls is dead code in every other consumer.
+fn composite(fg: (f64, f64, f64), bg: (f64, f64, f64), alpha: f64) -> (f64, f64, f64) {
+    let mix = |f: f64, b: f64| f * alpha + b * (1.0 - alpha);
+    (mix(fg.0, bg.0), mix(fg.1, bg.1), mix(fg.2, bg.2))
+}
 
 /// Effective background of a chip: the hue washed over the panel behind it at the 12% tint the CSS uses.
 fn chip_bg(hue: &str, panel: &str) -> (f64, f64, f64) {

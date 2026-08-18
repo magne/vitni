@@ -1,7 +1,9 @@
 //! WCAG 2.x relative-luminance / contrast-ratio helpers (Phase 5 PR40, findings U46-U48).
 //!
 //! A pure-Rust port of the WCAG formula (no deps), shared by every CSS gate under
-//! `crates/vitni-ui-dioxus/tests/` that needs to compare two resolved colors.
+//! `crates/vitni-ui-dioxus/tests/` that needs to compare two resolved colors. `composite` (the
+//! alpha-blend used for a chip's 12%-tint background) stays local to `contrast.rs`, the only
+//! consumer that needs it — every function here is used by every consumer.
 
 /// Parses a `#rrggbb` string into linear-independent 0-255 channels.
 pub fn rgb(hex: &str) -> (f64, f64, f64) {
@@ -34,10 +36,4 @@ pub fn contrast(a: (f64, f64, f64), b: (f64, f64, f64)) -> f64 {
     let lb = luminance(b);
     let (hi, lo) = if la >= lb { (la, lb) } else { (lb, la) };
     (hi + 0.05) / (lo + 0.05)
-}
-
-/// Alpha-composites `fg` over opaque `bg` at `alpha` (0..1). Models a `color-mix(.. transparent)` wash.
-pub fn composite(fg: (f64, f64, f64), bg: (f64, f64, f64), alpha: f64) -> (f64, f64, f64) {
-    let mix = |f: f64, b: f64| f * alpha + b * (1.0 - alpha);
-    (mix(fg.0, bg.0), mix(fg.1, bg.1), mix(fg.2, bg.2))
 }
