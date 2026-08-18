@@ -216,12 +216,6 @@ only the Overview and their entity-specific tables. So each item here lands on e
 which is what makes them worth fixing in the shared code rather than per screen. All came out of the
 2026-08-12 GUI walkthrough.
 
-- **A ghost row action disappears on the row the pointer is on.** `.btn.ghost:hover` and
-  `table.tbl tr:hover td` both resolve to `--panel-2` (`components.css:439-440,572`) and ghost paints a
-  transparent border, so Detach/Remove — `row_actions_cell` (`shared.rs:984`) on every tab table — has
-  no boundary and no hover feedback at exactly the moment it is being aimed at. Text contrast is fine;
-  the button is invisible *as a button*. The mockup sheet carries the identical pair of rules, so both
-  change together. — #305
 - **A record tab cannot create the record it wants to attach.** The labels already split by capability
   — `action-attach-citation/-media/-note` versus `action-add-*` — and there is no split-button or
   menu-button primitive in `components/` to offer both. The cheaper answer than a split button is that

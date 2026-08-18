@@ -366,7 +366,13 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .btn.primary:hover { filter: brightness(1.06); }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
-.btn.ghost:hover { background: var(--panel-2); }
+/* #305: a ghost row action must read as a control on the row being aimed at — the row's own hover
+   tint is --panel-2, so the hover fill steps to --panel-3 and the boundary comes back at a
+   contrast that clears the 3:1 non-text floor on every surface a ghost button sits on. */
+.btn.ghost:hover { background: var(--panel-3); border-color: var(--muted); }
+/* Every action in the hovered row shows its boundary, not only the one under the pointer. */
+table.tbl tr:hover .btn.ghost,
+.row:hover .btn.ghost { border-color: var(--line-2); }
 .btn.danger { background: transparent; border-color: var(--err); color: var(--err); }
 .btn.danger:hover { background: var(--err-soft); }
 .btn.sm { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-sm); }
