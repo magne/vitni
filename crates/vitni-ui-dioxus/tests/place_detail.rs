@@ -13,9 +13,10 @@ use vitni_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, 
 use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
     MediaTabState, PlaceEditForm, RecordActionLabels, RecordEditState, SuccessionFormState, citations_table,
-    media_gallery, media_tab, note_cards, place_hierarchy_table, place_names_table, place_overview,
+    media_gallery, media_tab, notes_table, place_hierarchy_table, place_names_table, place_overview,
     place_succession_card, place_succession_form_fields, record_head_actions, restriction_display, tags_panel,
 };
+use vitni_ui_dioxus::shell::nav_state::NavState;
 
 /// A representative place detail: a city with High-confidence coordinates, two names (one sourced,
 /// one not), a two-level jurisdiction chain, and one tag.
@@ -212,6 +213,8 @@ fn state(editing: bool) -> RecordEditState<PlaceDraft> {
 }
 
 fn place_view() -> Element {
+    // The Notes rows are `RecordLink`s (#304), which resolve `NavState` from context.
+    use_context_provider(NavState::new);
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
@@ -226,7 +229,7 @@ fn place_view() -> Element {
         {place_succession_card(&loc, &detail, onedit, onretract)}
         {citations_table::<PlaceEditForm>(&loc, &detail.citations, false, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
-        {note_cards(&loc, &detail.notes, Some(onretract))}
+        {notes_table(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
 }

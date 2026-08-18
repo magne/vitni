@@ -1,0 +1,94 @@
+# An attached note can be opened from the record that references it (issue #304). SSR proves the row's
+# leading cell renders a `RecordLink` (`citation_detail.rs`), but a `RecordLink` is a `button` whose
+# `onclick` calls `NavState::reveal_record` — SSR fires no clicks, so it cannot prove the handler is on
+# the cell an operator aims at, nor that activating it actually opens the note in the editor. That is
+# exactly the defect #304 fixes: the note text was readable before this change and the note still could
+# not be reached.
+#
+# The note is created *by the scenario*, not seeded: `attach-creates-and-links.toml` and
+# `attach-new-row-keyboard.toml` both depend on the fixture place having zero notes (their pickers must
+# start genuinely empty, and the rail's Notes count must go 0 → 1), so seeding one in
+# `xtask/src/gui_pass.rs` would break them. The attach flow here is `attach-creates-and-links.toml`'s,
+# with its coordinates; the new ground this scenario covers starts at the `row-before` shot.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "An attached note's row opens the note record from the record that references it (#304)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "click"
+at = [1121, 248]
+label = "detail tab: Notes"
+
+[[step]]
+do = "click"
+at = [1727, 357]
+label = "Attach note"
+
+[[step]]
+do = "click"
+at = [1608, 242]
+label = "picker: click the search input"
+
+[[step]]
+do = "key"
+chord = "a"
+label = "picker: type a"
+
+[[step]]
+do = "click"
+at = [1608, 349]
+label = "picker: + New note \"a\"…"
+
+[[step]]
+do = "click"
+at = [1467, 819]
+label = "new note card: Save — commits N0001 and attaches it to the place"
+
+# The Save raises the shell's "Saved" toast, which auto-dismisses after 6s. Without this wait the toast
+# would still be up in `row-before` and gone from `note-open`, and a whole-window `differ` would pass on
+# the toast alone whether or not the click did anything.
+[[step]]
+do = "wait"
+seconds = 8
+label = "wait past the Saved toast's 6s auto-dismiss"
+
+[[step]]
+do = "shot"
+name = "row-before"
+
+# The row's leading cell, not the row: the link is a 22x25 `button.src-link` at the left of the Note
+# column, and the first coordinate tried here (mid-row, in the empty part of the Content column) still
+# produced a whole-window `differ` — off the link entirely. Column-scanned off `01-row-before.png`
+# (`convert <shot> -crop 60x1+520+445 +repage txt:-`), the chip spans x 540..562, y 433..458.
+[[step]]
+do = "click"
+at = [551, 445]
+label = "notes table: the note link in the row's leading cell"
+
+[[step]]
+do = "shot"
+name = "note-open"
+
+[[assert]]
+kind = "differ"
+shots = ["row-before", "note-open"]
+because = "clicking the note row's link must open the note record in the editor"
+
+[[assert]]
+kind = "differ"
+shots = ["row-before", "note-open"]
+# Scoped to the record header — the avatar, the title and the id pill. The whole-window assertion above
+# would also pass on a repaint anywhere in the window; this one only passes if the editor is showing a
+# *different record* than the place the click started from.
+region = [520, 128, 700, 90]
+because = "the editor must now hold the note, not the place that referenced it"

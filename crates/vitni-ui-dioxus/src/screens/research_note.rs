@@ -669,47 +669,46 @@ pub fn research_note_subjects_table(loc: &Localizer, subjects: &[SubjectVm], onr
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     let remove_title = loc.action_title("remove-subject");
-    rsx! {
-        div { class: "section-note", "{loc.research_note_subjects_note()}" }
-        Table {
-            caption: loc.tab_label("subjects"),
-            headers: vec![
-                loc.field_label("object"),
-                loc.field_label("type"),
-                loc.field_label("id"),
-                String::new(),
-            ],
-            for subject in subjects.iter() {
-                tr {
-                    td {
-                        RecordLink {
-                            category: subject.category,
-                            human_id: subject.human_id.clone(),
-                            label: subject.human_id.clone(),
-                        }
-                    }
-                    td { Chip { label: subject.kind_label.clone() } }
-                    td { class: "muted mono", "{subject.human_id}" }
-                    td { class: "row-actions",
-                        {
-                            let row = subject.clone();
-                            let label = subject.human_id.clone();
-                            let remove_title = remove_title.clone();
-                            rsx! {
-                                Button {
-                                    label: loc.action_button(ActionLabel::Remove),
-                                    variant: ButtonVariant::Ghost,
-                                    small: true,
-                                    title: remove_title,
-                                    aria_label: loc.action_remove_row(&label),
-                                    onclick: move |_| onremove.call(row.clone()),
-                                }
-                            }
-                        }
+    let headers = vec![
+        loc.field_label("object"),
+        loc.field_label("type"),
+        loc.field_label("id"),
+        String::new(),
+    ];
+    let mut rows = Vec::with_capacity(subjects.len());
+    for subject in subjects {
+        let row = subject.clone();
+        let label = subject.human_id.clone();
+        let remove_title = remove_title.clone();
+        rows.push(AttachedRow {
+            link: Ok(AttachedLink {
+                category: subject.category,
+                human_id: subject.human_id.clone(),
+                label: subject.human_id.clone(),
+            }),
+            cells: rsx! {
+                td { Chip { label: subject.kind_label.clone() } }
+                td { class: "muted mono", "{subject.human_id}" }
+            },
+            // Not `row_actions_cell`: Remove here carries the whole `SubjectVm` (the core refuses the
+            // last subject, so the panel names the one being dropped), not an `AssertionId`.
+            actions: rsx! {
+                td { class: "row-actions",
+                    Button {
+                        label: loc.action_button(ActionLabel::Remove),
+                        variant: ButtonVariant::Ghost,
+                        small: true,
+                        title: remove_title,
+                        aria_label: loc.action_remove_row(&label),
+                        onclick: move |_| onremove.call(row.clone()),
                     }
                 }
-            }
-        }
+            },
+        });
+    }
+    rsx! {
+        div { class: "section-note", "{loc.research_note_subjects_note()}" }
+        {attached_table(loc, loc.tab_label("subjects"), headers, rows)}
     }
 }
 
@@ -746,28 +745,24 @@ pub fn ResearchNotesTab(tab: DetailTab, category: Category, human_id: String, ro
 /// The reverse-lookup tab's table: one row per argument written about the record, linking to its detail.
 /// A pure fn so the SSR tests render it without `AppCtx`.
 pub fn research_notes_table(loc: &Localizer, rows: &[RowVm]) -> Element {
+    let headers = vec![loc.field_label("title"), loc.field_label("id")];
+    let mut table_rows = Vec::with_capacity(rows.len());
+    for row in rows {
+        table_rows.push(AttachedRow {
+            link: Ok(AttachedLink {
+                category: Category::ResearchNotes,
+                human_id: row.id.clone(),
+                label: row.title.clone(),
+            }),
+            cells: rsx! {
+                td { class: "muted mono", "{row.id}" }
+            },
+            actions: rsx! {},
+        });
+    }
     rsx! {
         div { class: "section-note", "{loc.research_notes_about_note()}" }
-        if rows.is_empty() {
-            EmptyState { message: loc.tab_empty() }
-        } else {
-            Table {
-                caption: loc.tab_label("research-notes"),
-                headers: vec![loc.field_label("title"), loc.field_label("id")],
-                for row in rows.iter() {
-                    tr {
-                        td {
-                            RecordLink {
-                                category: Category::ResearchNotes,
-                                human_id: row.id.clone(),
-                                label: row.title.clone(),
-                            }
-                        }
-                        td { class: "muted mono", "{row.id}" }
-                    }
-                }
-            }
-        }
+        {attached_table(loc, loc.tab_label("research-notes"), headers, table_rows)}
     }
 }
 

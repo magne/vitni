@@ -29,8 +29,9 @@ fn sample_date() -> GenealogicalDate {
 }
 use vitni_ui_dioxus::screens::{
     CitationEditForm, MediaTabState, RecordActionLabels, RecordEditState, citation_attributes_table, citation_overview,
-    media_gallery, media_tab, note_cards, record_head_actions, tags_panel,
+    media_gallery, media_tab, notes_table, record_head_actions, tags_panel,
 };
+use vitni_ui_dioxus::shell::nav_state::NavState;
 
 /// A representative citation detail: a cited source, High confidence, all three evidence axes, an
 /// attribute, and one applied tag (name + colour + a hidden id).
@@ -117,6 +118,8 @@ fn state(editing: bool) -> RecordEditState<CitationDraft> {
 }
 
 fn citation_view() -> Element {
+    // The Notes rows are `RecordLink`s (#304), which resolve `NavState` from context.
+    use_context_provider(NavState::new);
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
@@ -129,7 +132,7 @@ fn citation_view() -> Element {
         {citation_overview(&loc, &detail, record)}
         {citation_attributes_table(&loc, &detail.attributes, onedit, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
-        {note_cards(&loc, &detail.notes, Some(onretract))}
+        {notes_table(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }
@@ -275,19 +278,44 @@ fn media_tab_opens_the_crop_viewer_on_a_card_click() {
 #[test]
 fn an_attached_note_renders_its_type_and_transcribed_text() {
     // Issue #316: the transcribed evidence text of a source lives in an attached `Transcript` note, so
-    // the Notes tab has to render the words — an opaque `N0004` left them invisible.
+    // the Notes tab has to render the words — an opaque `N0004` left them invisible. Issue #304 moved
+    // the pane from cards to the shared attached-records table, so the heading's `id · type · language`
+    // is now three columns and the body a normally-wrapping cell — the words still have to be there.
     let html = render(citation_view);
     assert!(
-        html.contains("N0004 · Transcript · en"),
-        "the note card heading names the note — id · type · language:\n{html}"
+        html.contains(r#"<table class="tbl">"#),
+        "the Notes pane renders the shared attached-records table (#304):\n{html}"
     );
+    for header in ["Note", "Type", "Language", "Content"] {
+        assert!(
+            html.contains(&format!("<th>{header}</th>")),
+            "the notes table names its `{header}` column:\n{html}"
+        );
+    }
+    assert!(
+        html.contains(r#"<span class="chip">Transcript</span>"#),
+        "the note's type is a chip, the shape every attached-records table uses:\n{html}"
+    );
+    assert!(html.contains("N0004"), "the row names the note:\n{html}");
     assert!(
         html.contains("in dwelling 88, line 14."),
         "the note's body renders, which is what makes a transcription readable (#316):\n{html}"
     );
     assert!(
         html.contains(r#"aria-label="Detach N0004""#),
-        "the card keeps its row-scoped Detach:\n{html}"
+        "the row keeps its row-scoped Detach:\n{html}"
+    );
+}
+
+#[test]
+fn an_attached_note_row_links_to_the_note_record() {
+    // Issue #304's actual defect: an attached note could be read but not *opened* from the record that
+    // referenced it, on every screen with a Notes tab. The row's leading cell is a `RecordLink` — the
+    // same `button.src-link` the citations table's source cell has always been.
+    let html = render(citation_view);
+    assert!(
+        html.contains(r#"<button class="src-link" type="button">N0004</button>"#),
+        "the note row opens the note record (#304):\n{html}"
     );
 }
 

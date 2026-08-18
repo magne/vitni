@@ -11,7 +11,7 @@ use vitni_ui::{
 };
 use vitni_ui_dioxus::screens::{
     ChildRemoval, FamilyEditForm, MediaTabState, RecordActionLabels, RecordEditState, child_removal_side_panel,
-    citations_table, family_children_table, family_events_table, family_overview, media_tab, note_cards,
+    citations_table, family_children_table, family_events_table, family_overview, media_tab, notes_table,
     record_head_actions, tags_panel,
 };
 use vitni_ui_dioxus::shell::nav_state::NavState;
@@ -254,7 +254,7 @@ fn family_notes_detach() -> Element {
         assertion_id: "01920000-0000-7000-8000-0000000000a7".to_owned(),
     }];
     rsx! {
-        {note_cards(&loc, &notes, Some(on_retract))}
+        {notes_table(&loc, &notes, Some(on_retract))}
     }
 }
 

@@ -76,7 +76,7 @@ pub use import::{
     RecordsStage, SaveStage, SourceLabels, SourceStage, SummaryLabels, SummaryStage, WizardLabels,
 };
 pub use map_shared::{DrawTool, MapControlLabels, MapDraft, MapZoomReadout, MovedCamera, effective_date_choice};
-pub use media::{MediaEditForm, media_attributes_table, media_overview, media_record_fields};
+pub use media::{MediaEditForm, media_attributes_table, media_overview, media_record_fields, media_used_by};
 pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen, merge_blocked_card, merge_wizard_foot};
 pub use note::{NoteEditForm, note_content_tab, note_language_tab, note_record_fields, note_references_table};
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
@@ -108,19 +108,20 @@ pub use research_note::{
 };
 pub use shared::{
     AttachLink, AttachPicker, CreateFormFocus, MediaTabState, RegisterFields, RetractSubject, RetractTarget,
-    RowRetract, RowVerb, attach_link_field, attach_link_form, citation_table, create_record_frame,
-    create_record_header, finish_attach_create, media_gallery, media_tab, media_viewer_labels, non_empty, note_cards,
-    picker_selection_id, provenance_block, provenance_block_dna, provenance_claim_row, provenance_cue,
-    register_fields_form, restriction_display, retract_panel, retract_side_panel, row_actions_cell, source_cue,
-    source_media_type_choices, tag_chips, use_attach_picker, use_attach_save, use_detail_tab, use_existing_picker,
-    use_record_step, use_record_undo,
+    RowRetract, RowVerb, attach_link_field, attach_link_form, create_record_frame, create_record_header,
+    finish_attach_create, media_gallery, media_tab, media_viewer_labels, non_empty, picker_selection_id,
+    provenance_block, provenance_block_dna, provenance_claim_row, provenance_cue, register_fields_form,
+    restriction_display, retract_panel, retract_side_panel, row_actions_cell, source_cue, source_media_type_choices,
+    tag_chips, use_attach_picker, use_attach_save, use_detail_tab, use_existing_picker, use_record_step,
+    use_record_undo,
 };
 pub use source::{
     SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_record_fields,
     source_repositories_table,
 };
 pub use tabs::{
-    AddressForm, ParticipationForm, ParticipationSeed, TabActionStyle, TabActionTarget, address_cards, address_form,
-    citations_table, history_panel, participation_form, tab_frame, tags_panel,
+    AddressForm, AttachedLink, AttachedRow, ParticipationForm, ParticipationSeed, TabActionStyle, TabActionTarget,
+    address_cards, address_form, attached_table, citations_table, history_panel, notes_table, participation_form,
+    tab_frame, tags_panel,
 };
 pub use tag::{tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_usage_tab};

@@ -8,6 +8,137 @@ use vitni_ui::{CitationRefVm, HistoryEntryVm};
 
 use super::prelude::*;
 
+/// The record an [`AttachedRow`] is about, rendered as the row's leading link cell.
+pub struct AttachedLink {
+    /// The record's entity category — where the link navigates.
+    pub category: Category,
+    /// The record's user-facing id (e.g. `N0001`) — the link target.
+    pub human_id: String,
+    /// The placeholder link text until [`RecordLink`] resolves the record's current name through the
+    /// shared name cache (and the sole text under bare SSR, where no cache is present).
+    pub label: String,
+}
+
+/// One row of the shared attached-records table ([`attached_table`]).
+pub struct AttachedRow {
+    /// The leading cell: `Ok` renders a [`RecordLink`] to the row's record, `Err` renders the carried
+    /// label as plain text — for the one row that names a record the projection cannot resolve (a
+    /// citation with no cited source), where a link would have nothing to open.
+    pub link: Result<AttachedLink, String>,
+    /// The domain columns between the link and the actions cell, already `<td>`s. The caller owns
+    /// these *and* the headers naming them, so the two counts cannot drift apart.
+    pub cells: Element,
+    /// The row-actions `<td>` ([`row_actions_cell`]), or `rsx! {}` for a read-only table — which then
+    /// passes no trailing empty header either.
+    pub actions: Element,
+}
+
+/// The shared attached-records table: every "records attached to (or referencing) this record" tab
+/// renders through this one spine (issue #304) — the leading link cell, the caller's middle columns,
+/// the caller's actions cell, and the empty state a collection tab shows when it holds nothing.
+///
+/// The spine owns only what every such table has in common, which is exactly the part that used to be
+/// answered four different ways: the notes pane rendered cards with an unclickable heading, the two
+/// reverse-lookup tables rendered no link at all, and an attached note could therefore not be opened
+/// from the record that referenced it. The chips, mono ids and extra columns stay *caller* cells, so
+/// the header count is always the call site's own decision rather than a flag this fn interprets.
+///
+/// The media **grid** is the deliberate exception and does not come through here: a thumbnail is the
+/// point of that tab, not a row.
+pub fn attached_table(loc: &Localizer, caption: String, headers: Vec<String>, rows: Vec<AttachedRow>) -> Element {
+    if rows.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    rsx! {
+        Table { caption, headers,
+            for row in rows {
+                tr {
+                    td {
+                        {match row.link {
+                            Ok(link) => rsx! {
+                                RecordLink { category: link.category, human_id: link.human_id, label: link.label }
+                            },
+                            Err(label) => rsx! { "{label}" },
+                        }}
+                    }
+                    {row.cells}
+                    {row.actions}
+                }
+            }
+        }
+    }
+}
+
+/// The Notes tab shared by every record that carries record-level notes: note (a link to the note's
+/// own record) · type · language · content · a Detach action.
+///
+/// The note's type, language and body are columns rather than a card heading because the body is what
+/// makes a citation's transcribed evidence readable — a transcription is an attached
+/// `NoteType::Transcript` note rather than a Citation field (data-model §6), so this pane is where
+/// those words surface (issue #316) — and the link is what makes the note *openable* from the record
+/// that references it (issue #304). The content cell wraps normally, so a long transcription still
+/// reads as prose.
+///
+/// When `detach` is `Some`, each row carries a Detach that fires `(assertion_id, human_id, true)` —
+/// the attach `AssertionId` a Detach retracts (ADR 0004 §2), the row label, and the detach flag.
+/// Detach is the only action here: the note's own text is edited on the Note record, not from the
+/// owner that attached it.
+pub fn notes_table(
+    loc: &Localizer,
+    notes: &[AttachedRefVm],
+    detach: Option<Callback<(String, String, bool)>>,
+) -> Element {
+    let mut headers = vec![
+        loc.field_label("note"),
+        loc.field_label("type"),
+        loc.field_label("language"),
+        loc.field_label("content"),
+    ];
+    if detach.is_some() {
+        headers.push(String::new());
+    }
+    let mut rows = Vec::with_capacity(notes.len());
+    for note in notes {
+        let actions = match detach {
+            Some(onretract) => row_actions_cell::<()>(
+                loc,
+                &note.human_id,
+                None,
+                None,
+                Some(RowRetract {
+                    assertion_id: note.assertion_id.clone(),
+                    button_label: RowVerb::Detach,
+                    title: "detach-note",
+                    detach: true,
+                }),
+                None,
+                onretract,
+            ),
+            None => rsx! {},
+        };
+        rows.push(AttachedRow {
+            link: Ok(AttachedLink {
+                category: Category::Notes,
+                human_id: note.human_id.clone(),
+                label: note.human_id.clone(),
+            }),
+            cells: rsx! {
+                td {
+                    if let Some(label) = note.type_label.clone() {
+                        Chip { label }
+                    } else {
+                        span { class: "muted", "—" }
+                    }
+                }
+                td { class: "muted", {note.language.clone().unwrap_or_else(|| "—".to_owned())} }
+                td { {note.text.clone().unwrap_or_else(|| "—".to_owned())} }
+            },
+            actions,
+        });
+    }
+    attached_table(loc, loc.tab_label("notes"), headers, rows)
+}
+
 /// The Citations tab shared by every record's Citations tab: source (a link to the citation's source
 /// when known) · page · [Backs] · confidence · evidence axes · a Detach action (ui-review Appendix A).
 /// Generic over the screen's edit-form enum `E` for the actions cell (mirrors `row_actions_cell<E>`).
@@ -21,9 +152,6 @@ pub fn citations_table<E: Clone + PartialEq + 'static>(
     show_backs: bool,
     onretract: Callback<(String, String, bool)>,
 ) -> Element {
-    if citations.is_empty() {
-        return rsx! { EmptyState { message: loc.tab_empty() } };
-    }
     let mut headers = vec![loc.field_label("source"), loc.field_label("page")];
     if show_backs {
         headers.push(loc.field_label("backs"));
@@ -31,52 +159,52 @@ pub fn citations_table<E: Clone + PartialEq + 'static>(
     headers.push(loc.field_label("confidence"));
     headers.push(loc.field_label("analysis"));
     headers.push(String::new());
-    rsx! {
-        Table {
-            caption: loc.tab_label("citations"),
-            headers,
-            for citation in citations.iter() {
-                tr {
-                    td {
-                        if let Some(source_id) = &citation.source_id {
-                            RecordLink {
-                                category: Category::Sources,
-                                human_id: source_id.clone(),
-                                label: citation.source.clone().unwrap_or_else(|| source_id.clone()),
-                            }
-                        } else {
-                            {citation.source.clone().unwrap_or_else(|| citation.human_id.clone())}
-                        }
-                    }
-                    td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
-                    if show_backs {
-                        td { class: "muted", "{citation.backs_count}" }
-                    }
-                    td {
-                        if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
-                            ConfidenceBadge { level, label }
-                        } else {
-                            span { class: "muted", "—" }
-                        }
-                    }
-                    td { class: "wrap",
-                        for chip in citation.evidence_axes.iter() {
-                            EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
-                        }
-                    }
-                    {row_actions_cell::<E>(
-                        loc,
-                        &citation.human_id,
-                        None,
-                        None,
-                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: RowVerb::Detach, title: "detach-citation", detach: true }),
-                        None,
-                        onretract,
-                    )}
+    let mut rows = Vec::with_capacity(citations.len());
+    for citation in citations {
+        rows.push(AttachedRow {
+            link: match &citation.source_id {
+                Some(source_id) => Ok(AttachedLink {
+                    category: Category::Sources,
+                    human_id: source_id.clone(),
+                    label: citation.source.clone().unwrap_or_else(|| source_id.clone()),
+                }),
+                None => Err(citation.source.clone().unwrap_or_else(|| citation.human_id.clone())),
+            },
+            cells: rsx! {
+                td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
+                if show_backs {
+                    td { class: "muted", "{citation.backs_count}" }
                 }
-            }
-        }
+                td {
+                    if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
+                        ConfidenceBadge { level, label }
+                    } else {
+                        span { class: "muted", "—" }
+                    }
+                }
+                td { class: "wrap",
+                    for chip in citation.evidence_axes.iter() {
+                        EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
+                    }
+                }
+            },
+            actions: row_actions_cell::<E>(
+                loc,
+                &citation.human_id,
+                None,
+                None,
+                citation.assertion_id.clone().map(|id| RowRetract {
+                    assertion_id: id,
+                    button_label: RowVerb::Detach,
+                    title: "detach-citation",
+                    detach: true,
+                }),
+                None,
+                onretract,
+            ),
+        });
     }
+    attached_table(loc, loc.tab_label("citations"), headers, rows)
 }
 
 /// The Tags tab's chip rendering, shared by every aggregate that carries tags: the applied tags as

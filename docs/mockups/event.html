@@ -343,9 +343,13 @@
         <div class="tab-pane" data-pane="notes">
           <div class="section-note">Free-text research attached to this record. A note is a record of its own and can be attached to several records, so editing its text changes it everywhere it is attached.</div>
           <div class="tab-actions"><button class="btn sm primary">+ Attach note</button></div>
-          <div class="stack">
-            <div class="card"><h3>N0005 · Transcript · en</h3><p>"John Smith, carpenter, of this parish, and Mary Doe, spinster, married this 14th day of June 1876."</p><div class="row-actions"><button class="btn sm ghost" title="Detach this note — the detachment is recorded in History" aria-label="Detach N0005">Detach</button></div></div>
-          </div>
+          <table class="tbl">
+            <caption class="sr-only">Notes</caption>
+            <thead><tr><th>Note</th><th>Type</th><th>Language</th><th>Content</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody>
+              <tr><td><a href="note.html">N0005</a></td><td><span class="chip">Transcript</span></td><td class="muted">en</td><td>"John Smith, carpenter, of this parish, and Mary Doe, spinster, married this 14th day of June 1876."</td><td class="row-actions"><button class="btn sm ghost" title="Detach this note — the detachment is recorded in History" aria-label="Detach N0005">Detach</button></td></tr>
+            </tbody>
+          </table>
         </div>
         <!-- RESEARCH NOTES (reverse index: arguments written about this record) -->
         <div class="tab-pane" data-pane="research-notes">

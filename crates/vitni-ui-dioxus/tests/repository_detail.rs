@@ -9,9 +9,10 @@ use vitni_ui::{
     RestrictionKind, SourceHeldVm,
 };
 use vitni_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, RepositoryEditForm, address_cards, note_cards, record_head_actions,
+    RecordActionLabels, RecordEditState, RepositoryEditForm, address_cards, notes_table, record_head_actions,
     repository_overview, repository_sources_table, repository_urls_table, tags_panel,
 };
+use vitni_ui_dioxus::shell::nav_state::NavState;
 
 /// A representative repository detail: an archive with one address, two URLs, two held sources (one
 /// cited, one not), and one tag.
@@ -108,6 +109,8 @@ fn state(editing: bool) -> RecordEditState<RepositoryDraft> {
 }
 
 fn overview_view() -> Element {
+    // The Notes rows are `RecordLink`s (#304), which resolve `NavState` from context.
+    use_context_provider(NavState::new);
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
@@ -121,7 +124,7 @@ fn overview_view() -> Element {
         {address_cards(&loc, &detail.addresses, onedit_address, onretract)}
         {repository_urls_table(&loc, &detail, onedit, onretract)}
         {repository_sources_table(&loc, &detail)}
-        {note_cards(&loc, &detail.notes, Some(onretract))}
+        {notes_table(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
 }

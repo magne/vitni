@@ -456,7 +456,7 @@ fn media_tab_content(
             TabActionTarget::Form(editing, MediaEditForm::Note),
             None,
             rsx! {
-                {note_cards(loc, &detail.notes, Some(on_retract))}
+                {notes_table(loc, &detail.notes, Some(on_retract))}
             },
         ),
         "tags" => tab_frame(
@@ -544,22 +544,31 @@ pub fn media_overview(loc: &Localizer, detail: &MediaDetail, record: RecordEditS
     }
 }
 
-/// The "Used by" card body: a row per referencing record (kind chip + label), or an empty state.
-fn media_used_by(loc: &Localizer, used_by: &[UsingRecordVm]) -> Element {
-    if used_by.is_empty() {
-        return rsx! { EmptyState { message: loc.tab_empty() } };
+/// The "Used by" card body: a row per referencing record (object · kind · id), each opening that
+/// record — the reverse lookup of what uses this media object (issue #304). Read-only: a use is
+/// asserted on the referencing record, so it is detached there, not here.
+pub fn media_used_by(loc: &Localizer, used_by: &[UsingRecordVm]) -> Element {
+    let headers = vec![
+        loc.field_label("object"),
+        loc.field_label("type"),
+        loc.field_label("id"),
+    ];
+    let mut rows = Vec::with_capacity(used_by.len());
+    for record in used_by {
+        rows.push(AttachedRow {
+            link: Ok(AttachedLink {
+                category: Category::from_using_kind(record.kind),
+                human_id: record.human_id.clone(),
+                label: record.label.clone(),
+            }),
+            cells: rsx! {
+                td { Chip { label: record.kind_label.clone() } }
+                td { class: "muted mono", "{record.human_id}" }
+            },
+            actions: rsx! {},
+        });
     }
-    rsx! {
-        div { class: "stack",
-            for record in used_by.iter() {
-                div { class: "fact-row",
-                    Chip { label: record.kind_label.clone() }
-                    span { class: "grow", "{record.label}" }
-                    span { class: "muted mono", "{record.human_id}" }
-                }
-            }
-        }
-    }
+    attached_table(loc, loc.field_label("used-by"), headers, rows)
 }
 
 /// The media editing side panel: renders the form for the open [`MediaEditForm`], or nothing.

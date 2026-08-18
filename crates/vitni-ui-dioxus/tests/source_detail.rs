@@ -14,10 +14,11 @@ use vitni_ui::{ProvenanceDraft, RestrictionKind, SourceDraft};
 use vitni_ui_dioxus::components::TabItem;
 use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
-    MediaTabState, RecordActionLabels, RecordEditState, media_gallery, media_tab, note_cards, record_edit_provenance,
+    MediaTabState, RecordActionLabels, RecordEditState, media_gallery, media_tab, notes_table, record_edit_provenance,
     record_head_actions, restriction_display, source_attributes_table, source_citations_table, source_overview,
     source_repositories_table, tags_panel,
 };
+use vitni_ui_dioxus::shell::nav_state::NavState;
 
 /// A representative source detail: an 1850 census with a Normal typical surety, one repository link
 /// (microfilm, High surety), a citation backing a person's Birth fact, two attributes, and one tag.
@@ -133,6 +134,8 @@ fn state(editing: bool) -> RecordEditState<SourceDraft> {
 
 /// Renders the overview, repositories, citations, attributes, and tags tabs together.
 fn source_view() -> Element {
+    // The Notes rows are `RecordLink`s (#304), which resolve `NavState` from context.
+    use_context_provider(NavState::new);
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
@@ -146,7 +149,7 @@ fn source_view() -> Element {
         {source_citations_table(&loc, &detail.citations)}
         {source_attributes_table(&loc, &detail, onedit, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
-        {note_cards(&loc, &detail.notes, Some(onretract))}
+        {notes_table(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
 }

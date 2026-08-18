@@ -542,28 +542,32 @@ pub fn note_language_tab(
     }
 }
 
-/// The References tab: a row per record that references this note (object · kind · id).
+/// The References tab: a row per record that references this note (object · kind · id), each opening
+/// that record — notes are shared, so this reverse lookup is the only way back from a note to the
+/// person, family or event that uses it (issue #304). Read-only: a reference is asserted on the
+/// referencing record, so it is detached there, not here.
 pub fn note_references_table(loc: &Localizer, references: &[UsingRecordVm]) -> Element {
-    if references.is_empty() {
-        return rsx! { EmptyState { message: loc.tab_empty() } };
+    let headers = vec![
+        loc.field_label("object"),
+        loc.field_label("type"),
+        loc.field_label("id"),
+    ];
+    let mut rows = Vec::with_capacity(references.len());
+    for record in references {
+        rows.push(AttachedRow {
+            link: Ok(AttachedLink {
+                category: Category::from_using_kind(record.kind),
+                human_id: record.human_id.clone(),
+                label: record.label.clone(),
+            }),
+            cells: rsx! {
+                td { Chip { label: record.kind_label.clone() } }
+                td { class: "muted mono", "{record.human_id}" }
+            },
+            actions: rsx! {},
+        });
     }
-    rsx! {
-        Table {
-            caption: loc.tab_label("references"),
-            headers: vec![
-                loc.field_label("object"),
-                loc.field_label("type"),
-                loc.field_label("id"),
-            ],
-            for record in references.iter() {
-                tr {
-                    td { "{record.label}" }
-                    td { Chip { label: record.kind_label.clone() } }
-                    td { class: "muted mono", "{record.human_id}" }
-                }
-            }
-        }
-    }
+    attached_table(loc, loc.tab_label("references"), headers, rows)
 }
 
 /// The note collection-row editing side panel: renders the form for the open [`NoteEditForm`]

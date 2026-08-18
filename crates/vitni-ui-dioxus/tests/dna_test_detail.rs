@@ -11,8 +11,9 @@ use vitni_ui::{
 };
 use vitni_ui_dioxus::screens::{
     DnaTestEditForm, RecordActionLabels, RecordEditState, dna_test_haplogroups_table, dna_test_matches_table,
-    dna_test_overview, note_cards, record_head_actions, tags_panel,
+    dna_test_overview, notes_table, record_head_actions, tags_panel,
 };
+use vitni_ui_dioxus::shell::nav_state::NavState;
 
 /// A representative DNA test: `AncestryDNA` autosomal for John Smith, one haplogroup, one match, one tag.
 fn sample() -> DnaTestDetail {
@@ -101,6 +102,8 @@ fn state(editing: bool) -> RecordEditState<DnaTestDraft> {
 }
 
 fn dna_test_view() -> Element {
+    // The Notes rows are `RecordLink`s (#304), which resolve `NavState` from context.
+    use_context_provider(NavState::new);
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
@@ -113,7 +116,7 @@ fn dna_test_view() -> Element {
         {dna_test_overview(&loc, &detail, record)}
         {dna_test_haplogroups_table(&loc, &detail.haplogroups, onedit, onretract)}
         {dna_test_matches_table(&loc, &detail.matches)}
-        {note_cards(&loc, &detail.notes, Some(onretract))}
+        {notes_table(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }

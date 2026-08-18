@@ -29,8 +29,9 @@ fn sample_date() -> GenealogicalDate {
 }
 use vitni_ui_dioxus::screens::{
     MediaEditForm, RecordActionLabels, RecordEditState, citations_table, media_attributes_table, media_overview,
-    note_cards, record_head_actions, tags_panel,
+    media_used_by, notes_table, record_head_actions, tags_panel,
 };
+use vitni_ui_dioxus::shell::nav_state::NavState;
 
 /// A representative media detail: a portrait JPEG with file metadata, one backing citation (Normal
 /// surety, an Original evidence axis), one referencing record (a person), and one tag.
@@ -130,6 +131,9 @@ fn state(editing: bool) -> RecordEditState<MediaDraft> {
 }
 
 fn media_view() -> Element {
+    // The Overview's "Used by" rows and the Notes table are `RecordLink`s (#304), which resolve
+    // `NavState` from context.
+    use_context_provider(NavState::new);
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
@@ -141,7 +145,7 @@ fn media_view() -> Element {
         {media_overview(&loc, &detail, record)}
         {media_attributes_table(&loc, &detail.attributes, on_edit_open, on_retract)}
         {citations_table::<MediaEditForm>(&loc, &detail.citations, false, on_retract)}
-        {note_cards(&loc, &detail.notes, Some(on_retract))}
+        {notes_table(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
 }
@@ -160,6 +164,7 @@ fn media_edit() -> Element {
 /// The Overview of a record with no recorded MIME — the state every record the CLI creates is in, since
 /// `vitni media` has no way to set one (#301 cause 1).
 fn media_view_without_mime() -> Element {
+    use_context_provider(NavState::new);
     let loc = loc();
     let record = state(false);
     let detail = MediaDetail { mime: None, ..sample() };
@@ -171,6 +176,7 @@ fn media_view_without_mime() -> Element {
 /// The Overview of a record whose file lives outside the workspace, stored absolute — legitimate, but
 /// not something the media-root asset handler will serve.
 fn media_view_outside_the_workspace() -> Element {
+    use_context_provider(NavState::new);
     let loc = loc();
     let record = state(false);
     let detail = MediaDetail {
@@ -185,6 +191,7 @@ fn media_view_outside_the_workspace() -> Element {
 /// The Overview of a record named the way the app's own conventions name one: `slugify` keeps `æøå`
 /// (`media_save.rs`) and an operator's own file may carry a space, so the stored path is not ASCII.
 fn media_view_with_a_nordic_filename() -> Element {
+    use_context_provider(NavState::new);
     let loc = loc();
     let record = state(false);
     let detail = MediaDetail {
@@ -383,6 +390,37 @@ fn an_evidence_only_citation_has_no_detach() {
     assert!(
         !html.contains("Detach"),
         "a citation with no attach assertion shows no Detach:\n{html}"
+    );
+}
+
+/// The Overview's "Used by" card body on its own — the reverse lookup of what references this object.
+fn media_used_by_only() -> Element {
+    // `RecordLink` resolves `NavState` from context; the bare SSR harness must supply it.
+    use_context_provider(NavState::new);
+    let loc = loc();
+    let detail = sample();
+    rsx! { {media_used_by(&loc, &detail.used_by)} }
+}
+
+#[test]
+fn each_used_by_row_opens_the_record_that_uses_the_object() {
+    // Issue #304: "Used by" was a `.stack` of inert fact-rows, so a media object could not be navigated
+    // back from. It is now the shared attached-records table, with the row's category resolved by
+    // `Category::from_using_kind`.
+    let html = render(media_used_by_only);
+    assert!(
+        html.contains(r#"<button class="src-link" type="button">John Smith</button>"#),
+        "the row opens the person that uses this object:\n{html}"
+    );
+    for header in ["Object", "Type", "ID"] {
+        assert!(
+            html.contains(&format!("<th>{header}</th>")),
+            "the used-by table names its `{header}` column:\n{html}"
+        );
+    }
+    assert!(
+        !html.contains("0190-person-42"),
+        "the referencing record's aggregate id must never be rendered:\n{html}"
     );
 }
 

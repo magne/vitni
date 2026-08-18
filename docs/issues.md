@@ -210,19 +210,12 @@ long-standing "DNA match views in the UI" item is closed.
 
 ### Record detail & shared tabs
 
-The 13 detail screens share their tab **bodies** — `screens/tabs.rs` (citations, tags, addresses,
-history) and `screens/shared.rs` (notes, media, the retract and attach side panels) — and re-implement
+The 13 detail screens share their tab **bodies** — `screens/tabs.rs` (citations, notes, tags,
+addresses, history) and `screens/shared.rs` (media, the retract and attach side panels) — and re-implement
 only the Overview and their entity-specific tables. So each item here lands on every aggregate at once,
 which is what makes them worth fixing in the shared code rather than per screen. All came out of the
 2026-08-12 GUI walkthrough.
 
-- **Attached records have four different presentations across the tabs.** Notes are a bare `ul.id-list`
-  of raw `human_id` strings with no `RecordLink` and no note text at all (`shared.rs:293-305`);
-  research-note subjects are a full table with a link, a kind chip and row actions
-  (`screens/research_note.rs:676-710`); citations are a richer table again (`tabs.rs:33-77`); media are
-  a card grid (`shared.rs:374`). Converge on the citations shape — link, kind, mono id, row actions —
-  and let the media grid stay the deliberate exception. Notes is the one that is actually broken: an
-  attached note can be neither read nor opened from the record that references it. — #304
 - **A ghost row action disappears on the row the pointer is on.** `.btn.ghost:hover` and
   `table.tbl tr:hover td` both resolve to `--panel-2` (`components.css:439-440,572`) and ghost paints a
   transparent border, so Detach/Remove — `row_actions_cell` (`shared.rs:984`) on every tab table — has
@@ -256,12 +249,12 @@ which is what makes them worth fixing in the shared code rather than per screen.
   character-identical across screens apart from the screen's own edit-form variant — `place.rs:703-729`
   against `event.rs:882-908` is 27 lines the same but for `PlaceEditForm::`/`EventEditForm::` — and the
   `DetailTab` → `TabItem` mapping above them is repeated verbatim in all 13 `*_detail` fns
-  (`source.rs:446-453`). So a change to the shared frame's *shape* rather than its body is 13 edits, as
-  #304's convergence on one attached-records table has to be repeated per screen to come out consistent.
-  #303 turned out not to need it: because `DetailTab` already carries the tab's identity and its action
-  (issue #314), the per-tab explanation resolves from `tab.id` inside `tab_frame` itself, which was one
-  edit plus routing the 13 `"history" =>` arms through the frame — so the arms are still 13 copies, but
-  the *bodies* they reach are not what varies.
+  (`source.rs:446-453`). Neither #303 nor #304 turned out to need it, for the same reason: what varies
+  across the 13 screens is the arm, not the body it reaches. #303's per-tab explanation resolves from
+  `tab.id` inside `tab_frame` because `DetailTab` already carries the tab's identity and its action
+  (issue #314), and #304's convergence landed as one `attached_table` in `tabs.rs` that the six
+  attached-records tables call — one edit each, not 13. So the case for the struct is the arms'
+  duplication on its own, not a shape change blocked behind it.
   Wanted: `shared_tab<E>(loc, tab_id, &SharedTabCtx<E>) -> Option<Element>` in `tabs.rs` — the
   collection slices, the four `E` form variants, the `on_retract`/`on_tag_remove`/`on_undo` callbacks
   and the `MediaTabState` in one struct — returning `None` for a tab the screen owns itself, so each
@@ -302,11 +295,6 @@ which is what makes them worth fixing in the shared code rather than per screen.
   before #312, whose fix is to render the panel into a sibling layer of `.app` the way
   `shell/root.rs:132-135` mounts the overlays — a change that reaches every construction site, since
   the overlay layer is a root-mounted component reading a signal rather than a portal.
-- **A dead second citations table.** `shared.rs:627-670`'s `citation_table` is a 44-line copy of
-  `tabs.rs:18-80`'s `citations_table` minus the Backs column and the row-actions cell, and nothing
-  calls it — not a screen, not a test; only the `pub use` at `screens/mod.rs:104` keeps it compiling.
-  Delete it as part of #304's convergence on the citations shape rather than leave a second answer to
-  the question that item is settling.
 - **There is no label/value row primitive, so `.fact-row` is hand-rolled 39 times.** Every read-mode
   row is written out as `div.fact-row` + `span.field-label` carrying an inline
   `style: "width:NNpx;margin:0"` + a `span.grow` — 39 sites across 11 files, 8 of them in
