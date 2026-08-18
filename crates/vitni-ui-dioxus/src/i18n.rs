@@ -500,6 +500,13 @@ impl Chrome {
         fl!(self.loader, "kbd-nothing-to-save")
     }
 
+    /// The notice raised when a Save all/quit run ends with work still unsaved (#302): a queued target
+    /// dropped from the run left its tab open, or its own tab could not be closed without discarding it.
+    #[must_use]
+    pub fn save_run_incomplete(&self) -> String {
+        fl!(self.loader, "save-run-incomplete")
+    }
+
     /// The accessible label for the shell notice's dismiss control.
     #[must_use]
     pub fn notice_dismiss(&self) -> String {
