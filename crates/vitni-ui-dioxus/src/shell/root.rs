@@ -81,6 +81,15 @@ pub fn Shell() -> Element {
         redo_unavailable: chrome.0.kbd_redo_unavailable(),
         nothing_to_save: chrome.0.kbd_nothing_to_save(),
     };
+    // `NavState` carries no localizer of its own, so the shell seeds the already-localized save-run
+    // notice here (#302). `ChromeCtx` is provided once per app mount and never changes under a running
+    // shell, so this seeds once — the same lifetime as `notices` above, which is read straight from
+    // `chrome` on every render for the same reason.
+    let mut save_incomplete_notice = nav.save_incomplete_notice;
+    let save_run_incomplete_chrome = chrome.0.clone();
+    use_effect(move || {
+        save_incomplete_notice.set(Some(save_run_incomplete_chrome.save_run_incomplete()));
+    });
     // Two shell shapes (see `entity_category`): an entity category shows `rail | Explorer | editor`
     // (the record tabstrip + editor host mount); a tool/Dashboard/Help destination shows
     // `rail | screen` (no Explorer, no tabstrip — the screen fills the area right of the rail).

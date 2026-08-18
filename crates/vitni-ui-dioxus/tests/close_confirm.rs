@@ -116,9 +116,10 @@ fn key_id(key: &EditKey) -> String {
 }
 
 /// The marker block: open-tab count, whether the confirm is armed, the quit ticket value, the keys
-/// currently holding a parked in-progress edit (`category/human_id`), and the save run — the editor
+/// currently holding a parked in-progress edit (`category/human_id`), the save run — the editor
 /// whose save is armed right now, the queue waiting behind it, and which tab is active (a run
-/// activates each record in turn so its pane is mounted to save it).
+/// activates each record in turn so its pane is mounted to save it) — and the shell notice, if one
+/// is showing (e.g. the #302 incomplete-run notice).
 fn probe(nav: &NavState) -> Element {
     let tabs = nav.records.read().len();
     let pending = if nav.pending_close.read().is_some() {
@@ -138,6 +139,11 @@ fn probe(nav: &NavState) -> Element {
         .active_record
         .read()
         .map_or_else(|| "-".to_owned(), |index| index.to_string());
+    let notice = nav
+        .notice
+        .read()
+        .as_ref()
+        .map_or_else(|| "NONE".to_owned(), |notice| notice.message.clone());
     rsx! {
         div { "TABS:{tabs}" }
         div { "PENDING:{pending}" }
@@ -146,6 +152,7 @@ fn probe(nav: &NavState) -> Element {
         div { "SAVING:{saving}" }
         div { "QUEUE:[{queue}]" }
         div { "ACTIVE:{active}" }
+        div { "NOTICE:{notice}" }
     }
 }
 
@@ -1860,5 +1867,180 @@ fn the_strip_and_the_confirm_name_a_tab_identically() {
         html.matches("<li>New People (2)</li>").count(),
         1,
         "and the dialog agrees on its number:\n{html}"
+    );
+}
+
+// ---- A save run whose target leaves the strip mid-run (issue #302) --------------------------------
+
+/// Seeds the already-localized incomplete-run notice the shell seeds at mount (`NavState` carries no
+/// localizer of its own) — every probe below that expects `save_incomplete_notice` to fire has to set
+/// this up itself, exactly as `root.rs` does from `ChromeCtx`.
+fn seed_incomplete_notice(nav: &mut NavState) {
+    nav.save_incomplete_notice.set(Some("incomplete".to_owned()));
+}
+
+fn save_all_with_a_queued_tab_closed_mid_run() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        nav.open_record(record("I0003", "Cy"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty(&mut nav, Category::People, "I0002");
+        mark_dirty(&mut nav, Category::People, "I0003");
+        nav.request_quit();
+        nav.save_all_then_quit();
+        // Ada's save lands, which arms Bob's — Cy's is still only queued behind it.
+        finish_armed(&mut nav, true);
+        // Cy's tab closes mid-run (the tabstrip ✕, a cancel) and takes his own unsaved work with it.
+        nav.close_record(2);
+        // Bob's save lands too, draining the queue.
+        finish_armed(&mut nav, true);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_save_run_does_not_hang_when_a_queued_target_closes_mid_run() {
+    // The issue's regression case: once every *remaining* target has actually saved the run still
+    // quits, rather than waiting forever on a target that can no longer report back.
+    let html = render(save_all_with_a_queued_tab_closed_mid_run);
+    assert!(html.contains("QUIT:1"), "the run still quits:\n{html}");
+    assert!(html.contains("SAVING:NONE"), "and nothing is left armed:\n{html}");
+    assert!(html.contains("QUEUE:[]"), "with the queue drained:\n{html}");
+    assert!(
+        html.contains("TABS:2"),
+        "Cy's closed tab is gone, Ada's and Bob's saved ones remain:\n{html}"
+    );
+    assert!(html.contains("DIRTY:[]"), "every remaining edit was saved:\n{html}");
+}
+
+fn save_all_where_the_queued_target_goes_invalid() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty(&mut nav, Category::People, "I0002");
+        seed_incomplete_notice(&mut nav);
+        nav.request_quit();
+        nav.save_all_then_quit();
+        // Bob's parked edit turns invalid while Ada's save is still in flight — still open, still
+        // dirty, just no longer savable.
+        mark_dirty_invalid(&mut nav, Category::People, "I0002");
+        finish_armed(&mut nav, true);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_queued_target_that_stops_being_savable_is_dropped_and_the_run_ends_without_quitting() {
+    let html = render(save_all_where_the_queued_target_goes_invalid);
+    assert!(
+        html.contains("QUIT:0"),
+        "Bob's unsaved work remains, so the quit does not fire:\n{html}"
+    );
+    assert!(html.contains("SAVING:NONE"), "the run is over:\n{html}");
+    assert!(html.contains("QUEUE:[]"), "and nothing is left queued:\n{html}");
+    assert!(html.contains("TABS:2"), "both tabs stay open:\n{html}");
+    assert!(
+        html.contains("DIRTY:[people/I0002]"),
+        "Bob's now-invalid edit is still parked, unsaved — only Ada's was spent:\n{html}"
+    );
+    assert!(
+        html.contains("NOTICE:incomplete"),
+        "the incomplete-run notice is raised instead of hanging:\n{html}"
+    );
+}
+
+fn closing_the_armed_tab_advances_the_run() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty(&mut nav, Category::People, "I0002");
+        nav.request_quit();
+        nav.save_all_then_quit();
+        // Ada's tab — the one currently armed — closes directly (a cancel, or the tabstrip ✕) before
+        // her save ever reports back.
+        nav.close_record(0);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn closing_the_armed_target_directly_advances_the_run_instead_of_hanging() {
+    let html = render(closing_the_armed_tab_advances_the_run);
+    assert!(
+        html.contains("SAVING:people/I0002"),
+        "the run moves on to the next queued target:\n{html}"
+    );
+    assert!(html.contains("QUEUE:[]"), "which was the last one queued:\n{html}");
+    assert!(html.contains("TABS:1"), "Ada's tab is gone:\n{html}");
+}
+
+fn note_unsavable_on_the_armed_key() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        mark_dirty(&mut nav, Category::People, "I0002");
+        nav.request_quit();
+        nav.save_all_then_quit();
+        // Ada's own pane found her parked edit no longer passes `can_save()` before attempting a save
+        // at all (`use_save_on_request`'s `else` branch).
+        nav.note_save_unsavable(&EditKey::saved(Category::People, "I0001"));
+    });
+    probe(&nav)
+}
+
+#[test]
+fn note_save_unsavable_drops_the_armed_target_and_advances_the_run() {
+    let html = render(note_unsavable_on_the_armed_key);
+    assert!(
+        html.contains("SAVING:people/I0002"),
+        "the run moves on to the next queued target:\n{html}"
+    );
+    assert!(
+        html.contains("TABS:2"),
+        "Ada's own tab stays open — she was dropped from the run, not closed:\n{html}"
+    );
+    assert!(
+        html.contains("DIRTY:[people/I0001,people/I0002]"),
+        "and her unsaved edit is untouched:\n{html}"
+    );
+}
+
+fn close_tab_target_goes_unsavable_before_it_saves() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        mark_dirty(&mut nav, Category::People, "I0001");
+        seed_incomplete_notice(&mut nav);
+        nav.request_close_tab(0);
+        nav.save_then_close(0);
+        // Ada's own pane found her edit no longer savable before it could save.
+        nav.note_save_unsavable(&EditKey::saved(Category::People, "I0001"));
+    });
+    probe(&nav)
+}
+
+#[test]
+fn a_close_tab_run_whose_target_goes_unsavable_leaves_the_tab_open_and_notifies() {
+    let html = render(close_tab_target_goes_unsavable_before_it_saves);
+    assert!(
+        html.contains("TABS:1"),
+        "the tab stays open — its work was never actually saved:\n{html}"
+    );
+    assert!(html.contains("SAVING:NONE"), "the run is over:\n{html}");
+    assert!(
+        html.contains("DIRTY:[people/I0001]"),
+        "and its unsaved edit is untouched:\n{html}"
+    );
+    assert!(
+        html.contains("NOTICE:incomplete"),
+        "closing would have discarded unsaved work, so the notice fires instead:\n{html}"
     );
 }

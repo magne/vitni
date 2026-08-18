@@ -192,12 +192,6 @@ long-standing "DNA match views in the UI" item is closed.
   can now hold four drafts makes it easier to notice. `NavLocation` lives in `vitni-ui`
   (framework-neutral, ADR 0008) and a history entry naming a draft goes dead when the draft is cancelled
   *or* committed, so the variant needs a rule for that first. — #313
-- **A save run whose target leaves the strip hangs.** `advance_save_run` arms the next queued `EditKey`
-  and waits for `note_save_finished` to report it; nothing reports if that tab was closed or cancelled
-  while armed, or if the record was saved by hand and then failed its own `can_save()` gate, so
-  `save_request` stays set and the run's quit/close never fires. Pre-existing — a rename and a committed
-  draft are both re-keyed (`rekey_save_run`), which covers the two identity changes, not disappearance.
-  Several drafts per category (#260) make a long queue, and so a lost target, more reachable. — #302
 - **A draft tab and the `+` menu read "New People" while the pane heading reads "New person".** The
   tab label (`shell/tab_label.rs:66`) and every item of the `+` `NewRecordMenu` (`shell/tabstrip.rs:190`)
   feed the *rail* label — `nav-people`, plural, shared with the rail and the Explorer — into

@@ -196,8 +196,10 @@ fn use_edit_write_through<D: RecordDraft>(key: EditKey, state: RecordEditState<D
 /// record and finally close the tab or quit.
 ///
 /// Fires **once per armed request** (the `ran` latch, peeked so writing it cannot re-trigger the
-/// effect). A record queued for saving whose draft turns out not to be savable is reported as a
-/// failure rather than left hanging — the run stops and every tab stays open.
+/// effect). A record armed for saving whose draft turns out not to be savable is dropped from the run
+/// (`nav.note_save_unsavable`, #302) rather than left hanging — the queue was built from
+/// `NavState::tab_is_savable` at queue time, so this is that target going stale in between (its edit
+/// changed, or the field went invalid) and the run moves on to the rest instead of stopping outright.
 ///
 /// Returns to view mode after `save` runs (`state.editing.set(false)`), the same as the pane's own
 /// Save button (`record_head_actions`): without it a shell-driven save (the close/quit confirm's
@@ -222,7 +224,7 @@ pub fn use_save_on_request<D: RecordDraft>(key: EditKey, mut state: RecordEditSt
             save.call(());
             state.editing.set(false);
         } else {
-            nav.note_save_finished(&key, false);
+            nav.note_save_unsavable(&key);
         }
     });
 }

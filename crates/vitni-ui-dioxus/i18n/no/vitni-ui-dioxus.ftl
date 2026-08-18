@@ -110,6 +110,7 @@ palette-hint-anywhere = { $chord } fra hvor som helst
 kbd-nothing-to-undo = Ingenting å angre
 kbd-redo-unavailable = Gjenta er ikke tilgjengelig — loggen er kun tilføyelig; utfør endringen på nytt fra Historikk-fanen.
 kbd-nothing-to-save = Ingenting å lagre
+save-run-incomplete = Noen poster er fortsatt ulagret — programmet forble åpent.
 notice-dismiss = Lukk
 
 help-title = Hurtigtaster

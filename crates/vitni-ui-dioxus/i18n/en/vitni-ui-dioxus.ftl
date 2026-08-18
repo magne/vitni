@@ -110,6 +110,7 @@ palette-hint-anywhere = { $chord } from anywhere
 kbd-nothing-to-undo = Nothing to undo
 kbd-redo-unavailable = Redo isn't available — the log is append-only; re-apply the change from the History tab.
 kbd-nothing-to-save = Nothing to save
+save-run-incomplete = Some records are still unsaved — the app stayed open.
 notice-dismiss = Dismiss
 
 help-title = Keyboard shortcuts

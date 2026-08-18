@@ -500,6 +500,10 @@ pub struct NavState {
     /// requested with nothing unsaved). The desktop-only `QuitManager` observes it and closes the
     /// native window; it is a no-op under SSR, which mounts no window.
     pub quit_requested: Signal<u32>,
+    /// The already-localized notice raised when a save run ends with work still unsaved (#302). The
+    /// shell seeds it at mount because `NavState` carries no localizer; `None` under a bare SSR mount,
+    /// where the run then ends silently rather than with an English literal (ADR 0003).
+    pub save_incomplete_notice: Signal<Option<String>>,
 }
 
 impl Default for NavState {
@@ -552,6 +556,7 @@ impl NavState {
             save_queue: Signal::new(Vec::new()),
             next_draft: Signal::new(1),
             quit_requested: Signal::new(0),
+            save_incomplete_notice: Signal::new(None),
         }
     }
 
@@ -832,6 +837,11 @@ impl NavState {
     /// active record when none remain. Does not change the rail's [`Self::active`] destination. Any
     /// edit parked for the closed tab is dropped with it — the edit is gone (the caller confirmed that
     /// via [`Self::request_close_tab`]), so leaving the entry would block later closes.
+    ///
+    /// Runs [`Self::drop_armed_if`] last (#302): a save run may be waiting on exactly this tab (it was
+    /// cancelled or closed while its save was armed), and that check can itself activate a different
+    /// tab ([`Self::advance_save_run`] arming the next queued target) — it must not have that overwritten
+    /// by the plain neighbour-fallback active-record logic above it.
     pub fn close_record(&mut self, index: usize) {
         if index >= self.records.read().len() {
             return;
@@ -859,6 +869,7 @@ impl NavState {
         if docked_gone {
             self.docked_record.set(None);
         }
+        self.drop_armed_if(&closed.edit_key());
     }
 
     /// Parks `edit` under `key`, replacing whatever was there — `use_record_edit` writes the buffer
@@ -1021,6 +1032,15 @@ impl NavState {
             .is_some_and(|edit| edit.valid)
     }
 
+    /// Whether `key` still names an open tab whose parked edit can be saved — the queued-target check a
+    /// save run makes before arming its next candidate (#302): a target whose tab closed, or whose edit
+    /// stopped passing `can_save()`, while it waited in the queue would otherwise be armed and then
+    /// never report back, hanging the run.
+    fn key_is_savable(&self, key: &EditKey) -> bool {
+        let index = self.records.peek().iter().position(|tab| tab.edit_key() == *key);
+        index.is_some_and(|index| self.tab_is_savable(index))
+    }
+
     /// Saves the open tab at `index` and then closes it (the close confirm's **Save**): activates the
     /// tab so its pane is mounted, arms the save, and dismisses the confirm. Nothing closes until the
     /// record's screen reports the save finished ([`Self::note_save_finished`]).
@@ -1108,9 +1128,10 @@ impl NavState {
         true
     }
 
-    /// Reports the outcome of the save the shell asked for: `reported` names the editor that saved, `ok`
-    /// whether it succeeded. A no-op unless it names the armed request exactly, so neither a Save the
-    /// user clicked themselves nor a sibling draft of the same category ever resolves a run.
+    /// Reports the outcome of a save the shell asked for and *attempted*: `reported` names the editor
+    /// that saved, `ok` whether it succeeded. A no-op unless it names the armed request exactly, so
+    /// neither a Save the user clicked themselves nor a sibling draft of the same category ever resolves
+    /// a run.
     ///
     /// A *committed* draft reports under the key of the record it stored, not the draft key the run was
     /// armed with — [`Self::commit_draft`] re-keys the run to match on its way through. A **failed**
@@ -1118,7 +1139,10 @@ impl NavState {
     ///
     /// On success the record's parked edit is dropped and the next queued record is armed; once the
     /// queue empties the run's [`SaveThen`] terminus is applied. On failure the whole run is abandoned
-    /// with every tab left open — the screen has already reported the error.
+    /// with every tab left open, silently — [`finish_record_save`](crate::screens::finish_record_save) /
+    /// [`finish_draft_commit`](crate::screens::finish_draft_commit) have already shown the real error as
+    /// a toast, and a second notice here would replace it. Distinct from [`Self::note_save_unsavable`],
+    /// which means no save was even attempted.
     pub fn note_save_finished(&mut self, reported: &EditKey, ok: bool) {
         let Some(request) = self.save_request.peek().clone() else {
             return;
@@ -1132,6 +1156,20 @@ impl NavState {
         }
         self.drop_edit(&request.key);
         self.advance_save_run(&request);
+    }
+
+    /// Reports that the armed target `reported` failed its own `can_save()` gate before a save was even
+    /// attempted (`use_save_on_request`'s `else` branch) — distinct from [`Self::note_save_finished`]
+    /// with `ok = false`, which means a save *was* attempted and failed. A no-op unless `reported` names
+    /// the armed request, for the same reason [`Self::note_save_finished`] checks it.
+    ///
+    /// The run was armed on the strength of [`Self::tab_is_savable`] at queue time, so this is the
+    /// target going stale in between (#302) rather than the ordinary case — but arming it anyway would
+    /// call into a pane that has nothing to save and never reports back, hanging the run exactly as a
+    /// closed/cancelled target would. Drops the target and advances the run ([`Self::drop_armed_if`])
+    /// rather than abandoning every other queued record over the one that was never going to save.
+    pub fn note_save_unsavable(&mut self, reported: &EditKey) {
+        self.drop_armed_if(reported);
     }
 
     /// Arms `key`'s save for the run ending in `then`, activating its tab first: a save target's pane
@@ -1155,34 +1193,81 @@ impl NavState {
         }
     }
 
-    /// Arms the next queued record, or — with the queue drained — applies the run's [`SaveThen`]
-    /// terminus. `saved` is the request that just finished.
+    /// Arms the next still-savable queued record, or — with the queue drained — applies the run's
+    /// [`SaveThen`] terminus. `saved` is the request that just finished (or, via
+    /// [`Self::drop_armed_if`], the one just dropped).
+    ///
+    /// A queued target that no longer names an open, savable tab is dropped rather than armed (#302):
+    /// its tab closed or was cancelled while it waited, or its parked edit stopped passing `can_save()`.
+    /// Nothing would ever report such a target finishing, so arming it would hang the run forever — the
+    /// loop below steps past every dropped target until it finds one still savable, or the queue empties.
     fn advance_save_run(&mut self, saved: &SaveRequest) {
-        let next = if self.save_queue.peek().is_empty() {
-            None
-        } else {
-            Some(self.save_queue.write().remove(0))
-        };
-        if let Some(next) = next {
-            self.begin_save(next, saved.then);
-            return;
+        while !self.save_queue.peek().is_empty() {
+            let next = self.save_queue.write().remove(0);
+            if self.key_is_savable(&next) {
+                self.begin_save(next, saved.then);
+                return;
+            }
         }
         self.save_request.set(None);
+        self.finish_save_run(saved);
+    }
+
+    /// Applies a drained run's terminus. A target dropped along the way can leave unsaved work behind,
+    /// so the terminus is derived from the state rather than assumed (#302): `Quit` fires only once
+    /// [`Self::has_unsaved_work`] is false, and `CloseTab` closes its tab only when that tab's own work
+    /// was actually saved ([`Self::tab_has_unsaved`]) — closing it otherwise would discard exactly the
+    /// work the run was asked to save. Either shortfall raises [`Self::save_incomplete_notice`] instead
+    /// of silently not doing what the operator asked. `StayOpen` needed no such check: that run was
+    /// already *chosen* to be partial ([`Self::save_all_then_quit`]), and the confirm said so before it
+    /// began.
+    fn finish_save_run(&mut self, saved: &SaveRequest) {
         match saved.then {
-            SaveThen::CloseTab(index) => {
-                if let Some(index) = self.save_close_index(index, &saved.key) {
-                    self.close_record(index);
-                }
-            }
+            SaveThen::CloseTab(index) => match self.save_close_index(index, &saved.key) {
+                Some(index) if !self.tab_has_unsaved(index) => self.close_record(index),
+                Some(_) => self.raise_incomplete_notice(),
+                None => (),
+            },
+            SaveThen::Quit if self.has_unsaved_work() => self.raise_incomplete_notice(),
             SaveThen::Quit => self.quit_now(),
             SaveThen::StayOpen => (),
         }
+    }
+
+    /// Raises [`Self::save_incomplete_notice`] as a sticky error toast, if the shell has seeded one —
+    /// `None` under a bare SSR mount, where a run that cannot complete simply ends rather than raising an
+    /// English literal (ADR 0003).
+    fn raise_incomplete_notice(&mut self) {
+        let Some(message) = self.save_incomplete_notice.peek().clone() else {
+            return;
+        };
+        self.notify_error(message);
     }
 
     /// Abandons the run in flight, leaving every tab open and every remaining edit parked.
     fn abandon_save_run(&mut self) {
         self.save_request.set(None);
         self.save_queue.set(Vec::new());
+    }
+
+    /// Drops the armed save target named `key` and advances the run — but only when `key` is in fact the
+    /// one armed; a no-op otherwise (a different tab closing, or a stray unsavable report from an
+    /// unrelated editor). What [`Self::close_record`] and [`Self::note_save_unsavable`] both call when
+    /// their target disappears mid-save (#302), so the run moves on rather than waiting forever on a
+    /// target that will never report back.
+    ///
+    /// Inert while no run is armed at all — in particular, [`Self::finish_save_run`]'s own `CloseTab`
+    /// terminus calls [`Self::close_record`], but by then `save_request` is already `None`, so this
+    /// nested call finds nothing to drop.
+    fn drop_armed_if(&mut self, key: &EditKey) {
+        let Some(request) = self.save_request.peek().clone() else {
+            return;
+        };
+        if request.key != *key {
+            return;
+        }
+        self.save_request.set(None);
+        self.advance_save_run(&request);
     }
 
     /// The strip index a finished [`CloseRequest::Tab`] should close: the armed `index` when it still
