@@ -1166,8 +1166,8 @@ fn citation_ref_from_ref_annotates_a_software_asserter() {
 #[test]
 fn attached_note_carries_its_localized_type_and_body() {
     // Issue #316: the transcribed evidence text of a source is an attached `NoteType::Transcript`
-    // note, so an attach ref has to reach the screen as readable words — a localized type label, the
-    // body, and a heading that names the note.
+    // note, so an attach ref has to reach the screen as readable words — a localized type label and
+    // the body, each its own column of the shared attached-records table (issue #304).
     let loc = Localizer::for_test("en");
     let reference = vitni_app::AttachedRef {
         human_id: "N0004".to_owned(),
@@ -1184,17 +1184,14 @@ fn attached_note_carries_its_localized_type_and_body() {
         "the type label is localized"
     );
     assert_eq!(vm.text.as_deref(), Some("Smith, John — age 0, b. New York"));
-    assert_eq!(
-        vm.heading(),
-        "N0004 · Transcript · en",
-        "the card heading names the note: id · type · language"
-    );
+    assert_eq!(vm.language.as_deref(), Some("en"), "the body's language rides along");
+    assert_eq!(vm.human_id, "N0004", "the row's link target and label");
 }
 
 #[test]
 fn an_untyped_textless_note_still_renders_its_id() {
-    // The heading degrades to the bare id, so a note created with neither a type nor a body is still
-    // identifiable (and detachable) on the owner's Notes tab.
+    // Every column but the id can be absent, so a note created with neither a type nor a body is still
+    // identifiable (and detachable) on the owner's Notes tab through its `human_id` link.
     let loc = Localizer::for_test("en");
     let reference = vitni_app::AttachedRef {
         human_id: "N0009".to_owned(),
@@ -1205,7 +1202,8 @@ fn an_untyped_textless_note_still_renders_its_id() {
         assertion_id: "aaaaaaaa-0000-7000-8000-00000000000e".to_owned(),
     };
     let vm = AttachedRefVm::from_ref(&reference, &loc);
-    assert_eq!(vm.heading(), "N0009");
+    assert_eq!(vm.human_id, "N0009");
     assert_eq!(vm.type_label, None);
     assert_eq!(vm.text, None);
+    assert_eq!(vm.language, None);
 }

@@ -31,7 +31,7 @@ fn sample_date() -> GenealogicalDate {
 use vitni_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use vitni_ui_dioxus::screens::{
     EventEditCtx, EventEditForm, MediaTabState, ParticipationSeed, RecordActionLabels, RecordEditState, address_cards,
-    citations_table, event_overview, event_participants_table, media_gallery, media_tab, note_cards,
+    citations_table, event_overview, event_participants_table, media_gallery, media_tab, notes_table,
     participation_form, record_head_actions, tags_panel,
 };
 use vitni_ui_dioxus::shell::nav_state::NavState;
@@ -251,7 +251,7 @@ fn event_view() -> Element {
         {event_participants_table(&loc, &detail, on_edit_open, on_person_retract)}
         {citations_table::<EventEditForm>(&loc, &detail.citations, false, on_retract)}
         {media_gallery(&loc, &detail.media, Some(on_retract), None)}
-        {note_cards(&loc, &detail.notes, Some(on_retract))}
+        {notes_table(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }

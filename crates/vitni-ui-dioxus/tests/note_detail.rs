@@ -11,6 +11,7 @@ use vitni_ui_dioxus::screens::{
     NoteEditForm, RecordActionLabels, RecordEditState, note_content_tab, note_language_tab, note_references_table,
     record_head_actions, restriction_display, tags_panel,
 };
+use vitni_ui_dioxus::shell::nav_state::NavState;
 
 /// A representative note detail: a Research note in English with one Norwegian translation (by
 /// magne), referenced by a person and an event, and one tag.
@@ -80,6 +81,8 @@ fn state(editing: bool) -> RecordEditState<NoteDraft> {
 }
 
 fn note_view() -> Element {
+    // The References rows are `RecordLink`s (#304), which resolve `NavState` from context.
+    use_context_provider(NavState::new);
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
@@ -197,6 +200,8 @@ fn the_translation_row_never_renders_the_text_assertion_id() {
 }
 
 fn references_only() -> Element {
+    // `RecordLink` resolves `NavState` from context; the bare SSR harness must supply it.
+    use_context_provider(NavState::new);
     let loc = loc();
     let detail = sample();
     rsx! { {note_references_table(&loc, &detail.references)} }
@@ -209,6 +214,22 @@ fn the_reverse_index_references_table_has_no_row_actions() {
     assert!(
         !html.contains("row-actions") && !html.contains(">Edit<") && !html.contains(">Detach<"),
         "the reverse-index references table offers no per-row actions:\n{html}"
+    );
+}
+
+#[test]
+fn each_reference_row_opens_the_record_that_references_the_note() {
+    // Issue #304: this table rendered the referencing record's name as inert text, so a note could not
+    // be navigated back from. The category comes from `Category::from_using_kind`, so a Person row goes
+    // to People and an Event row to Events.
+    let html = render(references_only);
+    assert!(
+        html.contains(r#"<button class="src-link" type="button">John Smith</button>"#),
+        "the Person reference opens that person:\n{html}"
+    );
+    assert!(
+        html.contains(r#"<button class="src-link" type="button">Marriage</button>"#),
+        "the Event reference opens that event:\n{html}"
     );
 }
 

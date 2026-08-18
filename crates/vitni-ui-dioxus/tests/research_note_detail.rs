@@ -162,6 +162,24 @@ fn subjects_list_every_named_record_with_its_kind_and_a_remove() {
 }
 
 #[test]
+fn subject_rows_keep_their_link_on_the_shared_attached_records_table() {
+    // Issue #304 routed this table through `attached_table`; the leading link cell is the whole point
+    // of the convergence, so it is pinned here rather than left to the id assertion above (which the
+    // mono-id column would satisfy on its own).
+    let html = render(subjects_tab);
+    assert!(
+        html.contains(r#"<button class="src-link" type="button">I0042</button>"#),
+        "each subject row opens its record:\n{html}"
+    );
+    for header in ["Object", "Type", "ID"] {
+        assert!(
+            html.contains(&format!("<th>{header}</th>")),
+            "the subjects table names its `{header}` column:\n{html}"
+        );
+    }
+}
+
+#[test]
 fn tags_show_name_and_colour_never_the_id() {
     let html = render(view_mode);
     assert!(html.contains("Needs sources"), "tag name shown:\n{html}");
@@ -199,6 +217,10 @@ fn the_reverse_lookup_table_links_each_argument_by_its_id() {
         "the argument's title is the link text:\n{html}"
     );
     assert!(html.contains("A0001"), "its id is shown:\n{html}");
+    assert!(
+        html.contains(r#"class="src-link""#),
+        "the title cell is a link that opens the argument (#304):\n{html}"
+    );
 }
 
 #[test]

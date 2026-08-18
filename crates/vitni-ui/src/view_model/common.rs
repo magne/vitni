@@ -247,21 +247,6 @@ impl AttachedRefVm {
             assertion_id: reference.assertion_id.clone(),
         }
     }
-
-    /// The note card's heading: the present parts of `human_id · type · language`, joined — the same
-    /// `type · language` idiom the Notes list uses for a row's subtitle ([`note_row`](super::note_row)).
-    /// Degrades to the bare `human_id`, so an untyped, textless note is still identifiable.
-    #[must_use]
-    pub fn heading(&self) -> String {
-        let mut parts = vec![self.human_id.clone()];
-        if let Some(type_label) = &self.type_label {
-            parts.push(type_label.clone());
-        }
-        if let Some(language) = &self.language {
-            parts.push(language.clone());
-        }
-        parts.join(" · ")
-    }
 }
 
 /// A media object attached to an aggregate (a Media gallery card), carrying everything a gallery or

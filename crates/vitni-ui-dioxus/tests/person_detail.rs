@@ -18,7 +18,7 @@ use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
     EditForm, RecordActionLabels, RecordEditState, TabActionStyle, TabActionTarget, associations_table,
-    citations_table, events_table, facts_table, families_panel, names_table, note_cards, person_record_fields,
+    citations_table, events_table, facts_table, families_panel, names_table, notes_table, person_record_fields,
     record_edit_provenance, record_head_actions, restriction_display, tab_frame, tags_panel, timeline_panel,
 };
 use vitni_ui_dioxus::shell::ChromeCtx;
@@ -533,6 +533,8 @@ fn person_tags_panel_offers_add_and_a_named_untag_chip_without_the_tag_uuid() {
 
 /// Renders the notes list with a detach callback (the person Notes tab), then read-only (no callback).
 fn person_notes_detachable() -> Element {
+    // The Notes rows are `RecordLink`s (#304), which resolve `NavState` from context.
+    use_context_provider(NavState::new);
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let notes = vec![AttachedRefVm {
         human_id: "N0001".to_owned(),
@@ -543,7 +545,7 @@ fn person_notes_detachable() -> Element {
         assertion_id: "0190a2b3-0000-7000-8000-0000000000n1".to_owned(),
     }];
     let ondetach = use_callback(|_| {});
-    note_cards(&loc, &notes, Some(ondetach))
+    notes_table(&loc, &notes, Some(ondetach))
 }
 
 #[test]

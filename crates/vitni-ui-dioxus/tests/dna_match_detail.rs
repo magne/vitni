@@ -11,7 +11,7 @@ use vitni_ui::{
 };
 use vitni_ui_dioxus::screens::{
     DnaMatchEditForm, RecordActionLabels, RecordEditState, dna_match_ancestors_table, dna_match_overview,
-    dna_match_segments_table, note_cards, record_head_actions, tags_panel,
+    dna_match_segments_table, notes_table, record_head_actions, tags_panel,
 };
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
@@ -157,7 +157,7 @@ fn dna_match_view() -> Element {
         {dna_match_overview(&loc, &detail, record)}
         {dna_match_segments_table(&loc, &segments_tab(), &detail.segments, on_edit, on_retract)}
         {dna_match_ancestors_table(&loc, &ancestors_tab(), &detail.shared_ancestors, on_edit, on_retract)}
-        {note_cards(&loc, &detail.notes, Some(on_retract))}
+        {notes_table(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, on_remove)}
     }
 }

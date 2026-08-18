@@ -288,53 +288,6 @@ pub fn JumpButton(item: RecentItem) -> Element {
     }
 }
 
-/// A card per attached note — heading (`id · type · language`) and the note's body — or an empty-state
-/// when there are none (every record page's Notes pane in `docs/mockups/`). The body is what makes a
-/// citation's transcribed evidence text readable: a transcription is an attached `NoteType::Transcript`
-/// note rather than a Citation field (data-model §6), so this pane is where those words surface, and the
-/// id-only list it replaces left them invisible (issue #316).
-///
-/// When `detach` is `Some`, each card carries a ghost Detach button that fires
-/// `(assertion_id, human_id, true)` — the attach `AssertionId` a Detach retracts (ADR 0004 §2), the
-/// card label, and the detach flag. Detach is the only action here: the note's own text is edited on the
-/// Note record, not from the owner that attached it.
-pub fn note_cards(
-    loc: &Localizer,
-    items: &[AttachedRefVm],
-    detach: Option<Callback<(String, String, bool)>>,
-) -> Element {
-    if items.is_empty() {
-        return rsx! { EmptyState { message: loc.tab_empty() } };
-    }
-    rsx! {
-        div { class: "stack",
-            for item in items.iter() {
-                Card { key: "{item.assertion_id}", title: item.heading(),
-                    if let Some(text) = &item.text {
-                        p { "{text}" }
-                    }
-                    if let Some(cb) = detach {
-                        div { class: "row-actions",
-                            Button {
-                                label: loc.action_button(ActionLabel::Detach),
-                                variant: ButtonVariant::Ghost,
-                                small: true,
-                                title: loc.action_title("detach-note"),
-                                aria_label: loc.action_detach_row(&item.human_id),
-                                onclick: {
-                                    let assertion_id = item.assertion_id.clone();
-                                    let human_id = item.human_id.clone();
-                                    move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
-                                },
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 /// The wiring a screen's Media tab needs beyond the gallery: the shared viewer's open state, the
 /// callback that opens it for a card, and the callback that supersedes a media reference's crop when
 /// the viewer commits (Set/Clear region → the owner's `SetMediaRegion` intent, carrying
@@ -666,52 +619,6 @@ pub fn source_cue(loc: &Localizer, source_count: usize) -> Element {
         rsx! { SourceLink { label: loc.source_count(source_count), onclick: move |_| {} } }
     } else {
         rsx! { NoSourceFlag { label: loc.no_source() } }
-    }
-}
-
-/// A shared citations table (Event/Place Citations tab): source · page · surety · evidence axes.
-pub fn citation_table(loc: &Localizer, citations: &[CitationRefVm]) -> Element {
-    if citations.is_empty() {
-        return rsx! { EmptyState { message: loc.tab_empty() } };
-    }
-    rsx! {
-        Table {
-            caption: loc.tab_label("citations"),
-            headers: vec![
-                loc.field_label("source"),
-                loc.field_label("page"),
-                loc.field_label("confidence"),
-                loc.field_label("analysis"),
-            ],
-            for citation in citations.iter() {
-                tr {
-                    td {
-                        if let Some(source_id) = &citation.source_id {
-                            RecordLink {
-                                category: Category::Sources,
-                                human_id: source_id.clone(),
-                                label: citation.source.clone().unwrap_or_else(|| source_id.clone()),
-                            }
-                        } else {
-                            {citation.source.clone().unwrap_or_else(|| citation.human_id.clone())}
-                        }
-                    }
-                    td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
-                    td {
-                        if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
-                            ConfidenceBadge { level, label }
-                        } else {
-                            span { class: "muted", "—" }
-                        }
-                    }
-                    td { class: "wrap",
-                        for chip in citation.evidence_axes.iter() {
-                            EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
