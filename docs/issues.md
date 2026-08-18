@@ -216,18 +216,6 @@ only the Overview and their entity-specific tables. So each item here lands on e
 which is what makes them worth fixing in the shared code rather than per screen. All came out of the
 2026-08-12 GUI walkthrough.
 
-- **The shared tabs have no common layout contract.** `tab_with_add` (`screens/tabs.rs:140-151`) emits
-  the action bar *before* the body, so the button precedes the explanation it should follow; the
-  explanatory `div.section-note` exists on History (`tabs.rs:526`) and nowhere else among the shared
-  tabs; each body early-returns its `EmptyState` *before* its own note (`tabs.rs:24`, `shared.rs:295`,
-  `shared.rs:360`), so the explanation vanishes exactly when a new operator has nothing to infer from;
-  `.tab-actions` has **no rule at all** in either stylesheet, making the add bar an unstyled block; and
-  the action labels mix a literal `+` (`action-add-segment = + Add segment`) with none
-  (`action-add-tag`). Wanted shape, once, in the shared frame: explanation first, then a right-aligned
-  action bar whose every label carries a `+` icon, then the content or the empty state, on one padding
-  scale — with `.tab-actions` added to `mockups/assets/components.css` in the same change so the app
-  sheet stays a subset. The Tags tab's chips should read a size larger while that frame is being
-  built. — #303
 - **Attached records have four different presentations across the tabs.** Notes are a bare `ul.id-list`
   of raw `human_id` strings with no `RecordLink` and no note text at all (`shared.rs:293-305`);
   research-note subjects are a full table with a link, a kind chip and row actions
@@ -268,9 +256,12 @@ which is what makes them worth fixing in the shared code rather than per screen.
   character-identical across screens apart from the screen's own edit-form variant — `place.rs:703-729`
   against `event.rs:882-908` is 27 lines the same but for `PlaceEditForm::`/`EventEditForm::` — and the
   `DetailTab` → `TabItem` mapping above them is repeated verbatim in all 13 `*_detail` fns
-  (`source.rs:446-453`). So a change to the shared frame's *shape* rather than its body is 13 edits:
-  #303's wanted shape needs an explanation string per shared tab, which today has to be threaded
-  through ~45 call sites, and #304's convergence has to be repeated per screen to come out consistent.
+  (`source.rs:446-453`). So a change to the shared frame's *shape* rather than its body is 13 edits, as
+  #304's convergence on one attached-records table has to be repeated per screen to come out consistent.
+  #303 turned out not to need it: because `DetailTab` already carries the tab's identity and its action
+  (issue #314), the per-tab explanation resolves from `tab.id` inside `tab_frame` itself, which was one
+  edit plus routing the 13 `"history" =>` arms through the frame — so the arms are still 13 copies, but
+  the *bodies* they reach are not what varies.
   Wanted: `shared_tab<E>(loc, tab_id, &SharedTabCtx<E>) -> Option<Element>` in `tabs.rs` — the
   collection slices, the four `E` form variants, the `on_retract`/`on_tag_remove`/`on_undo` callbacks
   and the `MediaTabState` in one struct — returning `None` for a tab the screen owns itself, so each
