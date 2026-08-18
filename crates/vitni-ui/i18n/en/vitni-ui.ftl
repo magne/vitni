@@ -53,6 +53,15 @@ tab-attributes = Attributes
 tab-timeline = Timeline
 tab-history = History
 tab-empty = Nothing here yet.
+
+# Shared-tab explanations — the six tabs every aggregate renders the same way, explained by the
+# shared tab frame above its action bar (`history-note` below serves the History tab).
+tab-note-citations = Each row is a claim that a source page backs assertions on this record. The confidence and the evidence axes are your judgment of the source, not the source's own words — a citation can be attached and still be weak.
+tab-note-media = The images, scans and recordings attached to this record. Each media object is a record of its own, so detaching it here leaves the object, and its other attachments, intact.
+tab-note-notes = Free-text research attached to this record. A note is a record of its own and can be attached to several records, so editing its text changes it everywhere it is attached.
+tab-note-tags = Tags are your own classification of this record, not evidence about it — nothing here is asserted about the person, place or event. A tag is referenced by name, and untagging is recorded in History like any other change.
+tab-note-addresses = The postal addresses recorded for this record. Each is an assertion with its own provenance: an edit supersedes the previous one, and a retraction leaves it in History rather than deleting it.
+
 timeline-note = The genealogical life story, built from this person's facts and event participations in date order. This is the derived narrative — not the History tab, which is the who/when/why audit trail of every change.
 timeline-kind-fact = Fact
 timeline-kind-event = Event

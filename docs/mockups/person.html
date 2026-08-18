@@ -333,6 +333,7 @@
 
         <!-- CITATIONS -->
         <div class="tab-pane" data-pane="citations">
+          <div class="section-note">Each row is a claim that a source page backs assertions on this record. The confidence and the evidence axes are your judgment of the source, not the source's own words — a citation can be attached and still be weak.</div>
           <div class="tab-actions"><button class="btn sm primary">+ Attach citation</button></div>
           <table class="tbl">
             <caption class="sr-only">Citations</caption>
@@ -346,6 +347,7 @@
 
         <!-- MEDIA -->
         <div class="tab-pane" data-pane="media">
+          <div class="section-note">The images, scans and recordings attached to this record. Each media object is a record of its own, so detaching it here leaves the object, and its other attachments, intact.</div>
           <div class="tab-actions"><button class="btn sm primary">+ Attach media</button></div>
           <div class="muted" style="font-size:var(--fs-xs);margin-bottom:8px">Each card opens the shared crop viewer (<a href="media.html">Set/Clear region</a>, ADR 0017 §GUI).</div>
           <div class="grid-3">
@@ -357,6 +359,7 @@
 
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
+          <div class="section-note">Free-text research attached to this record. A note is a record of its own and can be attached to several records, so editing its text changes it everywhere it is attached.</div>
           <div class="tab-actions"><button class="btn sm primary">+ Attach note</button></div>
           <div class="stack">
             <div class="card"><h3>N0001 · Research · en</h3><p>Need to confirm immigration year — passenger lists for 1849–1851 not yet checked. Conflicting age in 1860 census (10 vs expected 10).</p><div class="row-actions"><button class="btn sm ghost" title="Detach this note — the detachment is recorded in History" aria-label="Detach N0001">Detach</button></div></div>
@@ -380,8 +383,9 @@
 
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
+          <div class="section-note">Tags are your own classification of this record, not evidence about it — nothing here is asserted about the person, place or event. A tag is referenced by name, and untagging is recorded in History like any other change.</div>
           <div class="tab-actions"><button class="btn sm ghost">+ Add tag</button></div>
-          <div class="wrap"><span class="chip"><span class="dot" style="background:#e5534b"></span>Direct ancestor <button class="btn sm ghost" aria-label="Remove tag Direct ancestor" title="Untag — recorded in History" style="padding:0 4px">×</button></span></div>
+          <div class="wrap tag-chips"><span class="chip"><span class="dot" style="background:#e5534b"></span>Direct ancestor <button class="btn sm ghost" aria-label="Remove tag Direct ancestor" title="Untag — recorded in History" style="padding:0 4px">×</button></span></div>
         </div>
 
         <!-- TIMELINE (life story — facts + events merged, distinct from History) -->

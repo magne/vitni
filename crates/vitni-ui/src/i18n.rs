@@ -1706,10 +1706,25 @@ impl Localizer {
         fl!(self.loader, "history-empty")
     }
 
-    /// The History tab's explanatory note (the audit-trail differentiator).
+    /// A shared record tab's explanatory note, keyed by the tab's stable id — what the tab asserts
+    /// and the evidence rule that governs it, rendered by the shared tab frame above the tab's
+    /// action bar (issue #303).
+    ///
+    /// `None` for a tab a screen owns itself: an explanation there would be a claim about that one
+    /// entity rather than the vocabulary all 13 aggregates share, so those tabs stay unexplained
+    /// until they earn their own wording. Adding one is a Fluent key plus an arm here.
     #[must_use]
-    pub fn history_note(&self) -> String {
-        fl!(self.loader, "history-note")
+    pub fn tab_note(&self, id: &str) -> Option<String> {
+        let note = match id {
+            "citations" => fl!(self.loader, "tab-note-citations"),
+            "media" => fl!(self.loader, "tab-note-media"),
+            "notes" => fl!(self.loader, "tab-note-notes"),
+            "tags" => fl!(self.loader, "tab-note-tags"),
+            "addresses" => fl!(self.loader, "tab-note-addresses"),
+            "history" => fl!(self.loader, "history-note"),
+            _ => return None,
+        };
+        Some(note)
     }
 
     /// The Timeline tab's explanatory note — the genealogical life story derived from facts and
@@ -3547,6 +3562,80 @@ mod tests {
             assert!(
                 !loc.action_label(*action).is_empty(),
                 "{action:?} has no Norwegian label"
+            );
+        }
+    }
+
+    /// The tabs every aggregate renders the same way, and which therefore resolve their explanation
+    /// through the shared frame (issue #303).
+    const SHARED_TAB_IDS: &[&str] = &["citations", "media", "notes", "tags", "addresses", "history"];
+
+    /// Every add/attach/link button carries its `+` from the component, never from the Fluent string
+    /// (issue #303) — the mockups specify one on all 24 of them. The English verb is the oracle: a
+    /// button that reads "Add …" / "Attach …" / "Link …" / "New …" is a create-or-reference
+    /// affordance, and nothing else may claim the glyph.
+    #[test]
+    fn every_add_attach_and_link_action_carries_the_plus_glyph() {
+        use crate::action::ALL;
+
+        let loc = Localizer::for_test("en");
+        for action in ALL {
+            let label = loc.action_label(*action);
+            let button = loc.action_button(*action);
+            let creates = ["Add ", "Attach ", "Link ", "New "]
+                .iter()
+                .any(|verb| label.starts_with(verb));
+            if creates {
+                assert_eq!(
+                    button,
+                    format!("+ {label}"),
+                    "{action:?} reads {label:?} and must carry the + glyph"
+                );
+            } else {
+                assert!(
+                    !button.starts_with('+'),
+                    "{action:?} reads {label:?} — not an add/attach/link action, so no + glyph"
+                );
+            }
+        }
+    }
+
+    /// Each shared tab explains what it asserts, in its own words; a screen-owned tab explains
+    /// nothing, so the shared frame stays the only note site.
+    #[test]
+    fn every_shared_tab_has_its_own_explanation() {
+        let loc = Localizer::for_test("en");
+        let mut seen: Vec<String> = Vec::new();
+        for id in SHARED_TAB_IDS {
+            let note = loc.tab_note(id).unwrap_or_default();
+            assert!(!note.trim().is_empty(), "{id} has no explanation");
+            assert!(!seen.contains(&note), "{id} repeats another tab's explanation: {note}");
+            seen.push(note);
+        }
+    }
+
+    #[test]
+    fn a_screen_owned_tab_has_no_explanation() {
+        let loc = Localizer::for_test("en");
+        for id in ["names", "facts", "overview", "participants", "segments", "nonsense"] {
+            assert!(
+                loc.tab_note(id).is_none(),
+                "{id} is not a shared tab and must carry no explanation"
+            );
+        }
+    }
+
+    #[test]
+    fn every_shared_tab_explanation_resolves_in_norwegian_too() {
+        let loc = Localizer::for_test("no");
+        let english = Localizer::for_test("en");
+        for id in SHARED_TAB_IDS {
+            let note = loc.tab_note(id).unwrap_or_default();
+            assert!(!note.trim().is_empty(), "{id} has no Norwegian explanation");
+            assert_ne!(
+                Some(note),
+                english.tab_note(id),
+                "{id}'s Norwegian explanation is still the English string"
             );
         }
     }

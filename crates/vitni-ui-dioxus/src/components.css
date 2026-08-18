@@ -739,12 +739,17 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .mono { font-family: var(--font-mono); }
 .row-actions { display: flex; gap: var(--sp-2); align-items: center; }
 /* A collection tab's action bar (`record-editing.html` §8): the single "Attach …" / "Add …"
-   button that opens the tab's side panel, above the tab's own table or gallery. */
-.tab-actions { display: flex; gap: var(--sp-2); align-items: center; margin-bottom: var(--sp-3); }
+   button that opens the tab's side panel, between the tab's `.section-note` explanation and its
+   own table or gallery. Right-aligned, and on `.section-note`'s own `--sp-4` step, so the frame's
+   three parts read as one rhythm rather than two. */
+.tab-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); align-items: center; margin-bottom: var(--sp-4); }
 .spacer { flex: 1; }
 .stack > * + * { margin-top: var(--sp-3); }
 .inline { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .wrap { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+/* The Tags tab's chips are the tab's whole content and carry a control, not a label inside a table
+   row, so they read a size larger than `.chip`'s table default. */
+.tag-chips .chip { font-size: var(--fs-sm); padding: 4px var(--sp-3); }
 /* Flex utility classes (`.wrap` chips, `.row-actions` buttons) on a `<td>` drop that cell from the
    table row's height sharing, so an empty/short cell collapses and the row divider misaligns. Keep
    such cells real table cells and space their now-inline children with margins in place of the

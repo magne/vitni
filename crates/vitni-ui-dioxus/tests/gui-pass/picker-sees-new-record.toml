@@ -32,7 +32,7 @@ label = "detail tab: Hierarchy"
 
 [[step]]
 do = "click"
-at = [606, 607]
+at = [1698, 610]
 label = "Hierarchy: Add succession"
 
 [[step]]

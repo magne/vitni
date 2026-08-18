@@ -442,16 +442,27 @@
     — and confirms with that one verb (<i>Retract assertion</i> · <i>Detach</i> · <i>Remove tag</i>).
     The untag panel names the tag, never its UUID (data-model §9). A removal is therefore as explainable
     as an edit; none of the three is a bare click.</p>
-  <p class="muted">Every collection tab opens its row-editing form the same way: one
-    <span class="mono">.tab-actions</span> bar, above the tab's own table or gallery, holding a single
-    button. That button's verb is drawn from a closed set, never a free string, so a tab can never fall
-    back to a generic "Save": <b>Attach</b> references an existing record (a citation, a media object, a
-    note), <b>Add</b> creates a sub-record the tab itself owns (a name, a fact, a DNA segment), and
-    <b>Link</b> creates a bidirectional association between two existing records (a family's linked
-    event). The bar is the only place in a screen that emits <span class="mono">.tab-actions</span> — a
-    read-only tab (History) renders no bar at all.</p>
+  <p class="muted">Every collection tab is framed the same way, in three parts: the tab's
+    <b>explanation</b> (<span class="mono">.section-note</span>), then a right-aligned
+    <span class="mono">.tab-actions</span> bar holding a single button, then the tab's own table or
+    gallery. The explanation comes first because it says what pressing that button asserts, and it is
+    emitted <i>outside</i> the tab's body, so it survives the empty state — the moment a new operator has
+    nothing else to infer the tab's meaning from. All three sit on one <span class="mono">--sp-4</span>
+    step.</p>
+  <p class="muted">The six tabs every aggregate renders the same way (<b>Citations</b>, <b>Media</b>,
+    <b>Notes</b>, <b>Tags</b>, <b>Addresses</b>, <b>History</b>) are explained by the frame itself, once,
+    rather than per screen; a tab a screen owns alone (Names, Facts, Segments) carries no explanation from
+    the frame, because a note there would be a claim about that one entity rather than the vocabulary all
+    13 aggregates share. The button's verb is drawn from a closed set, never a free string, so a tab can
+    never fall back to a generic "Save": <b>Attach</b> references an existing record (a citation, a media
+    object, a note), <b>Add</b> creates a sub-record the tab itself owns (a name, a fact, a DNA segment),
+    and <b>Link</b> creates a bidirectional association between two existing records (a family's linked
+    event). The frame is the only place in a screen that emits
+    <span class="mono">.tab-actions</span> — a read-only tab (History) renders its explanation and its
+    body with no bar between them.</p>
   <div class="specimen">
-    <div class="label">Collection tab action bar (Attach / Add / Link — never "Save")</div>
+    <div class="label">Collection tab frame — explanation, then the bar (Attach / Add / Link — never "Save"), then the body</div>
+    <div class="section-note">Each row is a claim that a source page backs assertions on this record. The confidence and the evidence axes are your judgment of the source, not the source's own words — a citation can be attached and still be weak.</div>
     <div class="tab-actions"><button class="btn sm primary">+ Attach citation</button></div>
   </div>
   <div class="specimen">

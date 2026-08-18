@@ -53,6 +53,15 @@ tab-attributes = Attributter
 tab-timeline = Tidslinje
 tab-history = Historikk
 tab-empty = Ingenting her ennå.
+
+# Forklaringer til fellesfanene — de seks fanene hver aggregat viser på samme måte, forklart av den
+# felles fanerammen over handlingslinjen (`history-note` nedenfor dekker Historikk-fanen).
+tab-note-citations = Hver rad er en påstand om at en kildeside støtter opplysninger på denne posten. Sikkerheten og bevisaksene er din vurdering av kilden, ikke kildens egne ord — en kilde kan være knyttet til og likevel være svak.
+tab-note-media = Bildene, skanningene og opptakene som er knyttet til denne posten. Hvert medieobjekt er en egen post, så å løsne det her lar objektet, og de øvrige tilknytningene til det, stå urørt.
+tab-note-notes = Fritekstforskning knyttet til denne posten. Et notat er en egen post og kan være knyttet til flere poster, så endrer du teksten, endres den overalt notatet er knyttet til.
+tab-note-tags = Etiketter er din egen klassifisering av denne posten, ikke bevis om den — ingenting her fastslås om personen, stedet eller hendelsen. En etikett vises ved navn, og å fjerne den registreres i Historikk som enhver annen endring.
+tab-note-addresses = Postadressene som er registrert for denne posten. Hver av dem er en påstand med sin egen opphavsinformasjon: en endring erstatter den forrige, og en tilbaketrekking lar den stå i Historikk i stedet for å slette den.
+
 timeline-note = Den genealogiske livshistorien, satt sammen av personens fakta og hendelsesdeltakelser i datorekkefølge. Dette er den avledede fortellingen — ikke Historikk-fanen, som er revisjonssporet over hvem, når og hvorfor for hver endring.
 timeline-kind-fact = Faktum
 timeline-kind-event = Hendelse

@@ -965,7 +965,13 @@ fn person_tab_content(
             }
         },
         "timeline" => timeline_panel(loc, &detail.timeline),
-        "history" => history_panel(loc, &detail.history, Some(on_undo)),
+        "history" => tab_frame::<()>(
+            loc,
+            tab,
+            TabActionTarget::None,
+            None,
+            history_panel(loc, &detail.history, Some(on_undo)),
+        ),
         _ => person_overview(loc, detail, record),
     }
 }

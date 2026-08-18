@@ -86,13 +86,16 @@ pub fn citations_table<E: Clone + PartialEq + 'static>(
 /// rendered (data-model §9), and tags never retract — untag is the only removal. The "add tag" action
 /// is the caller's [`tab_frame`] bar, not this fn — the two used to be one fn with the add button baked
 /// in, which was the second `.tab-actions` code path this split exists to delete.
+///
+/// `.tag-chips` on the container reads these chips a size larger than the chips inside a table cell
+/// (issue #303): here a chip is the tab's whole content and carries a control, not a label in a row.
 pub fn tags_panel(loc: &Localizer, tags: &[TagRef], on_remove: Callback<(String, String)>) -> Element {
     if tags.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     let untag_title = loc.action_title("untag");
     rsx! {
-        div { class: "wrap",
+        div { class: "wrap tag-chips",
             for tag in tags.iter() {
                 {
                     let tag_id = tag.id.clone();
@@ -138,12 +141,22 @@ pub struct TabActionStyle {
     pub title: Option<String>,
 }
 
-/// A collection tab's action bar (`record-editing.html` §8): the single button that opens or runs the
-/// tab's one action, above the tab's own `body` — the only fn in the crate that emits `.tab-actions`,
-/// so every tab resolves its label through the [`ActionLabel`] its own [`DetailTab::action`] declares
-/// (issue #314 slice 3), instead of a bare `ActionLabel` picked independently at each call site — the
-/// drift that once left six labels wrong. `tab.action: None` or `target: TabActionTarget::None`
-/// renders `body` alone, for a read-only tab.
+/// The shared record-tab frame (`record-editing.html` §8): the tab's explanation, then the single
+/// button that opens or runs its one action, then the tab's own `body` — the three-part shape every
+/// one of the 13 detail screens gets from one fn (issue #303).
+///
+/// The explanation comes from [`Localizer::tab_note`] keyed by [`DetailTab::id`], so the six tabs
+/// every aggregate renders the same way are explained once here rather than per screen, and — being
+/// emitted *outside* `body` — it survives the `EmptyState` each body early-returns, which is exactly
+/// when a new operator has nothing else to infer the tab's meaning from. A tab a screen owns itself
+/// resolves no note and renders none.
+///
+/// This is also the only fn in the crate that emits a *tab's* `.tab-actions` (an address card's own
+/// Edit/Retract pair in [`address_cards`] is the one other user of the class), so every tab resolves
+/// its label through the [`ActionLabel`] its own [`DetailTab::action`] declares (issue #314 slice 3)
+/// instead of a bare `ActionLabel` picked independently at each call site — the drift that once left
+/// six labels wrong. `tab.action: None` or `target: TabActionTarget::None` renders the explanation and
+/// `body` with no bar between them, for a read-only tab such as History.
 pub fn tab_frame<E: Clone + PartialEq + 'static>(
     loc: &Localizer,
     tab: &DetailTab,
@@ -151,14 +164,33 @@ pub fn tab_frame<E: Clone + PartialEq + 'static>(
     style: Option<TabActionStyle>,
     body: Element,
 ) -> Element {
+    let note = loc.tab_note(tab.id);
+    let bar = tab_action_bar(loc, tab, target, style);
+    rsx! {
+        if let Some(note) = note {
+            div { class: "section-note", "{note}" }
+        }
+        {bar}
+        {body}
+    }
+}
+
+/// The frame's action bar, or nothing for a read-only tab — split out of [`tab_frame`] so the frame
+/// reads as its three parts and neither part can early-return past the other.
+fn tab_action_bar<E: Clone + PartialEq + 'static>(
+    loc: &Localizer,
+    tab: &DetailTab,
+    target: TabActionTarget<E>,
+    style: Option<TabActionStyle>,
+) -> Element {
     let Some(action) = tab.action else {
-        return body;
+        return rsx! {};
     };
     let style = style.unwrap_or_default();
     let variant = style.emphasis.unwrap_or(ButtonVariant::Primary);
     let label = loc.action_button(action);
-    let bar = match target {
-        TabActionTarget::None => return body,
+    let button = match target {
+        TabActionTarget::None => return rsx! {},
         TabActionTarget::Form(mut editing, form) => rsx! {
             Button {
                 label,
@@ -179,8 +211,7 @@ pub fn tab_frame<E: Clone + PartialEq + 'static>(
         },
     };
     rsx! {
-        div { class: "tab-actions", {bar} }
-        {body}
+        div { class: "tab-actions", {button} }
     }
 }
 
@@ -551,6 +582,9 @@ pub fn ParticipationForm(
 /// The History tab: the per-record audit timeline (who/when/why), each undoable entry carrying an
 /// undo control. `on_undo` dispatches the pane's `XEdit::UndoAssertion` for an assertion id; pass
 /// `None` for an aggregate with no retraction (Tag), which renders the timeline read-only.
+///
+/// The tab's explanation is [`tab_frame`]'s, not this fn's — it used to be emitted here, below the
+/// empty-state early return, so a record with no changes yet was told nothing at all (issue #303).
 pub fn history_panel(loc: &Localizer, entries: &[HistoryEntryVm], on_undo: Option<Callback<String>>) -> Element {
     if entries.is_empty() {
         return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
@@ -570,7 +604,6 @@ pub fn history_panel(loc: &Localizer, entries: &[HistoryEntryVm], on_undo: Optio
         })
         .collect();
     rsx! {
-        div { class: "section-note", "{loc.history_note()}" }
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {

@@ -154,9 +154,11 @@ pub const ALL: &[ActionLabel] = &[
 ];
 
 /// What kind of affordance an [`ActionLabel`] represents, so a button knows whether to prefix its label
-/// with a glyph. `Create`/`Attach`/`Link` are reserved for the actions whose Fluent string carries a
-/// glyph today (`Cite` carries its own); most add/attach/link actions are `Chrome` — issue #303 tracks
-/// giving the rest a `+` uniformly.
+/// with a glyph. `Create`/`Attach`/`Link` all take the `+` the mockups specify on every add/attach/link
+/// button, and `Cite` its own `❝`; the glyph is the component's, never part of a Fluent string, so no
+/// catalogue can drift out of the convention (issue #303). The three stay distinct because they mean
+/// different things — create a sub-record, reference an existing record, link two records both ways —
+/// and a future design may well glyph them apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Affordance {
     /// Creates a new record or sub-record — prefixed with `+`.
@@ -169,7 +171,7 @@ pub enum Affordance {
     Cite,
     /// A per-row action (edit, retract, remove, unlink, detach) — no prefix.
     Row,
-    /// A generic chrome action (save, cancel, confirm, most add/attach/link buttons) — no prefix.
+    /// A generic chrome action (save, cancel, confirm, dismiss, a removal's own verb) — no prefix.
     Chrome,
 }
 
@@ -179,11 +181,27 @@ impl ActionLabel {
     #[must_use]
     pub fn affordance(self) -> Affordance {
         match self {
-            Self::AddSegment
-            | Self::AddSharedAncestor
+            Self::AddName
+            | Self::AddFact
+            | Self::AddSource
+            | Self::AddTag
+            | Self::AddAssociation
+            | Self::AddAttribute
+            | Self::AddSegment
+            | Self::AddTranslation
+            | Self::AddHaplogroup
+            | Self::AddPartner
+            | Self::AddChild
+            | Self::AddParticipant
+            | Self::AddAddress
+            | Self::AddUrl
+            | Self::AddEnclosing
+            | Self::AddSuccession
             | Self::AddSubject
             | Self::NewResearchNote
             | Self::NewCitation => Affordance::Create,
+            Self::AttachCitation | Self::AttachMedia | Self::AttachNote => Affordance::Attach,
+            Self::LinkEvent | Self::LinkSource | Self::LinkRepository | Self::AddSharedAncestor => Affordance::Link,
             Self::Cite => Affordance::Cite,
             Self::Compare
             | Self::DetachCitation
@@ -193,21 +211,7 @@ impl ActionLabel {
             | Self::Unlink
             | Self::Detach
             | Self::Edit => Affordance::Row,
-            Self::AddName
-            | Self::AddFact
-            | Self::AddSource
-            | Self::AttachCitation
-            | Self::AttachMedia
-            | Self::AttachNote
-            | Self::AddTag
-            | Self::RemoveTag
-            | Self::AddAssociation
-            | Self::AddAttribute
-            | Self::AddTranslation
-            | Self::AddHaplogroup
-            | Self::AddPartner
-            | Self::AddChild
-            | Self::LinkEvent
+            Self::RemoveTag
             | Self::Confirm
             | Self::Reject
             | Self::Cancel
@@ -215,14 +219,7 @@ impl ActionLabel {
             | Self::Created
             | Self::Dismiss
             | Self::Close
-            | Self::Save
-            | Self::AddAddress
-            | Self::AddUrl
-            | Self::AddParticipant
-            | Self::AddEnclosing
-            | Self::LinkSource
-            | Self::LinkRepository
-            | Self::AddSuccession => Affordance::Chrome,
+            | Self::Save => Affordance::Chrome,
         }
     }
 }
@@ -368,5 +365,29 @@ mod tests {
         assert_eq!(ActionLabel::Cite.affordance(), Affordance::Cite);
         assert_eq!(ActionLabel::AddSegment.affordance(), Affordance::Create);
         assert_eq!(ActionLabel::Retract.affordance(), Affordance::Row);
+        assert_eq!(ActionLabel::AttachNote.affordance(), Affordance::Attach);
+        assert_eq!(ActionLabel::LinkSource.affordance(), Affordance::Link);
+    }
+
+    /// The three glyph-bearing affordances are distinguished by what the action does to the *other*
+    /// record: `Create` makes one, `Attach` references an existing one, `Link` relates two both ways.
+    /// A removal never bears the glyph, whichever side it acts on (issue #303).
+    #[test]
+    fn a_removal_is_never_a_create_attach_or_link() {
+        for action in [
+            ActionLabel::RemoveTag,
+            ActionLabel::Remove,
+            ActionLabel::Unlink,
+            ActionLabel::Detach,
+            ActionLabel::DetachCitation,
+            ActionLabel::DetachDnaMatch,
+            ActionLabel::Retract,
+        ] {
+            let affordance = action.affordance();
+            assert!(
+                affordance == Affordance::Row || affordance == Affordance::Chrome,
+                "{action:?} removes something and must not read as a create/attach/link"
+            );
+        }
     }
 }
