@@ -16,6 +16,11 @@ use std::fs;
 
 const APP_SHEET: &str = "crates/vitni-ui-dioxus/src/components.css";
 const MOCKUP_SHEET: &str = "docs/mockups/assets/components.css";
+/// Each sheet is measured against **its own** sibling `tokens.css`: the two files carry the same
+/// palette today, but resolving the mockup sheet against the crate's tokens would hide a retuned
+/// mockup token behind the app's value.
+const APP_TOKENS: &str = "src/tokens.css";
+const MOCKUP_TOKENS: &str = "../../docs/mockups/assets/tokens.css";
 const DARK_THEME: &str = "dark";
 const LIGHT_THEME: &str = "light";
 const DARK_SELECTOR: &str = "[data-theme=\"dark\"]";
@@ -203,18 +208,24 @@ fn assert_row_reveals_ghost_boundary(sheet: &str, sheet_name: &str, theme_name: 
 #[test]
 fn ghost_row_action_hover_is_distinguishable() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let tokens_css = fs::read_to_string(format!("{manifest_dir}/src/tokens.css")).expect("crate tokens.css must exist");
     let app_css =
         fs::read_to_string(format!("{manifest_dir}/src/components.css")).expect("crate components.css must exist");
+    let app_tokens_css =
+        fs::read_to_string(format!("{manifest_dir}/{APP_TOKENS}")).expect("crate tokens.css must exist");
     let mockup_css = fs::read_to_string(format!("{manifest_dir}/../../docs/mockups/assets/components.css"))
         .expect("mockup components.css must exist");
+    let mockup_tokens_css =
+        fs::read_to_string(format!("{manifest_dir}/{MOCKUP_TOKENS}")).expect("mockup tokens.css must exist");
 
-    let sheets = [(APP_SHEET, app_css.as_str()), (MOCKUP_SHEET, mockup_css.as_str())];
+    let sheets = [
+        (APP_SHEET, app_css.as_str(), app_tokens_css.as_str()),
+        (MOCKUP_SHEET, mockup_css.as_str(), mockup_tokens_css.as_str()),
+    ];
     let themes = [(DARK_THEME, DARK_SELECTOR), (LIGHT_THEME, LIGHT_SELECTOR)];
 
-    for (sheet_name, sheet) in sheets {
+    for (sheet_name, sheet, tokens_css) in sheets {
         for (theme_name, theme_selector) in themes {
-            let tokens = theme_tokens(&tokens_css, theme_selector);
+            let tokens = theme_tokens(tokens_css, theme_selector);
             assert_ghost_hover_border_clears_contrast(sheet, sheet_name, theme_name, &tokens);
             assert_ghost_hover_background_differs_from_row_hover(sheet, sheet_name, theme_name, &tokens);
             assert_row_reveals_ghost_boundary(sheet, sheet_name, theme_name);
