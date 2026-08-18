@@ -570,6 +570,19 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 /* The dialog paints above its own scrim (a positioned sibling), and slides in with it. */
 .overlay > .modal { position: relative; animation: slide-in-down 140ms ease-out; }
 
+/* ---- Menu item (the tabstrip "+" dropdown, and the new-record picker's grid) ---- */
+.menu-item {
+  display: flex; align-items: center; gap: var(--sp-3);
+  width: 100%; padding: var(--sp-2) var(--sp-3);
+  border: 0; background: none; color: var(--ink); font-size: var(--fs-md);
+  text-align: left; cursor: pointer; border-radius: var(--r-sm);
+}
+.menu-item:hover, .menu-item:focus-visible { background: var(--accent-soft); }
+
+/* The from-anywhere new-record picker's category grid (`NewRecordPicker`, issue #300): a two-column
+   layout of `.menu-item` buttons inside the shared `.modal`'s `.m-body`. */
+.new-record-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-1); }
+
 /* Focus guards: the pair of offscreen tab stops bracketing a trapped dialog's content. Tabbing onto
    one sends focus to the opposite end of the dialog, so focus cycles inside it; it never rests here,
    so it needs no focus ring. */

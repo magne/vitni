@@ -337,6 +337,13 @@ impl Chrome {
         fl!(self.loader, "new-tab-label")
     }
 
+    /// The from-anywhere new-record category picker's dialog title (`⌘N` outside an entity
+    /// category — issue #300).
+    #[must_use]
+    pub fn new_record_picker_title(&self) -> String {
+        fl!(self.loader, "new-record-picker-title")
+    }
+
     /// The label of an unsaved draft record tab (e.g. "New Person"); `entity` is the record's
     /// already-localized category name.
     #[must_use]

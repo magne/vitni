@@ -1,0 +1,73 @@
+# ⌘N raises the from-anywhere new-record picker on destinations with no category to create in
+# (issue #300): the fixture starts on the Dashboard, where the tabstrip (and its own `+` menu) never
+# mounts at all. Coordinates are window pixels at 1800x1200, read off this scenario's own shots.
+#
+# A chord that reaches no focused element reaches no dispatcher either (`unsaved-quit-confirm.toml`),
+# so the first step clicks the already-active Dashboard rail item purely to plant keyboard focus in the
+# webview — a mouse click does not raise `:focus-visible`, so it leaves the "before" shot unchanged.
+description = "⌘N raises the new-record picker on the Dashboard and on a tool destination (#300)"
+
+[[step]]
+do = "click"
+at = [85, 135]
+label = "rail: Dashboard (plant keyboard focus)"
+
+[[step]]
+do = "shot"
+name = "before-picker"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "Dashboard: ⌘N"
+
+[[step]]
+do = "shot"
+name = "picker-open"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "picker: Esc"
+
+[[step]]
+do = "shot"
+name = "after-esc"
+
+[[step]]
+do = "click"
+at = [85, 953]
+label = "rail: Preferences"
+
+[[step]]
+do = "shot"
+name = "before-tool-picker"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "Preferences: ⌘N"
+
+[[step]]
+do = "shot"
+name = "tool-picker-open"
+
+[[assert]]
+kind = "differ"
+shots = ["before-picker", "picker-open"]
+# The picker covers a meaningful share of the window, so this is a large difference; the tolerance is
+# raised above the default only to keep a *focus ring* from passing as an opened modal (the trap
+# `overlay-dismiss.toml` documents).
+tolerance = 0.04
+because = "⌘N must open the new-record picker from the Dashboard"
+
+[[assert]]
+kind = "match"
+shots = ["before-picker", "after-esc"]
+because = "Esc must dismiss the new-record picker"
+
+[[assert]]
+kind = "differ"
+shots = ["before-tool-picker", "tool-picker-open"]
+tolerance = 0.04
+because = "⌘N must open the new-record picker from a tool destination (Preferences)"

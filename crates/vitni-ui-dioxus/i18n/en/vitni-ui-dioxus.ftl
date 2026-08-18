@@ -76,6 +76,7 @@ status-theme-system = system ({ $resolved })
 status-theme-light = light
 status-theme-dark = dark
 new-tab-label = Create a new record
+new-record-picker-title = New record
 draft-tab-label = New { $entity }
 # A second (third, …) still-untitled draft of the same category, so two new records never share
 # an accessible name. The first one is never numbered.

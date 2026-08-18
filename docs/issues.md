@@ -361,18 +361,6 @@ which is what makes them worth fixing in the shared code rather than per screen.
 Residuals from the shortcuts work (ADR 0030); see
 [`archive/completed-work.md`](archive/completed-work.md). Deliberate non-goals are under *Decided*.
 
-- **`⌘N` is silent on half the app.** Its help text says "New (context-aware)", but
-  `NavState::request_new` (`shell/nav_state.rs:637-645`) early-returns with no toast and no dialog
-  whenever the active destination is not `Destination::Category(_)` or is the Dashboard — so on the
-  Dashboard, Help, and every `Destination::Tool` (Import, Export, Merge, Pedigree, Geography,
-  Preferences) the chord does nothing at all, while the sibling arms beside it in the same dispatch
-  `match` do notify (`shell/keyboard.rs:245,261`). There is no record-selection dialog to fall back to:
-  the only category picker is `NewRecordMenu`, whose open state is local to `RecordTabstrip`
-  (`shell/tabstrip.rs:31`), and the tabstrip mounts only for entity destinations. `⌘N` is dead under
-  any overlay too, since `.app` is `inert` while one is up (`shell/root.rs:97-108`). Shape: raise a
-  category picker from anywhere — the palette already has that path (`PaletteCommand::Create`,
-  `shell/palette.rs:288`) — or at minimum say why nothing happened. Typing focus is *not* involved: a
-  primary-modifier chord bubbles out of a focused field by design, which is a *Decided* entry below. — #300
 - **Chord entry is a typed canonical string, not live key capture.** `keydown` is inert under SSR and
   `cargo xtask input-guard` forbids a raw form element outside the primitives, so the Preferences
   rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.
@@ -762,6 +750,10 @@ decision, not a gap.
 - **`⌘S` targets the active record, falling back to the docked one, never both.** With a split open,
   `NavState::request_save_active` saves whichever of the two has something savable — the active pane
   first, the docked pane only when the active one has nothing to save. It never saves both at once.
+- **`⌘N` stays inert while the palette / help sheet / close-quit confirm is open.** `.app` carries the
+  keydown dispatcher and is `inert` under any of those (`shell/root.rs`, the ARIA APG modal pattern), so
+  no `Global` chord reaches it — deliberate, and the palette already offers `Create` commands as a
+  from-under-a-modal path (#300).
 
 ### Model & interchange
 

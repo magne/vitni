@@ -216,6 +216,46 @@
       </div>
     </div>
 
+    <!-- New from anywhere — the ⌘N picker (issue #300) -->
+    <h2 style="border:0;margin:var(--sp-6) 0 12px;font-size:21px">New from anywhere — the ⌘N picker</h2>
+    <p class="muted"><kbd>⌘</kbd><kbd>N</kbd> is context-aware: on an entity category (People, Places,
+      Tags, …) it opens a new draft there, in place, exactly as before. Everywhere else — the Dashboard,
+      a tool (Import, Pedigree, Preferences, …), or Help — there is no category to create in, so it
+      raises this picker instead of doing nothing. Picking a category reveals it and opens a draft there,
+      the same as the tabstrip's own <span class="mono">+</span> menu; <b>Esc</b> or a click on the scrim
+      dismisses it without creating anything.</p>
+    <div class="specimen" style="justify-content:center">
+      <div class="overlay" style="position:relative;inset:auto;height:auto;display:block;background:none">
+        <div class="modal" style="position:relative;width:min(560px,92vw)" role="dialog" aria-modal="true" aria-label="New record">
+          <div class="m-head">New record</div>
+          <div class="m-body">
+            <div class="new-record-grid">
+              <button class="menu-item" type="button"><span aria-hidden="true">👤</span>People</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">👪</span>Families</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">📅</span>Events</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">📍</span>Places</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">📚</span>Sources</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">❝</span>Citations</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🏛</span>Repositories</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🖼</span>Media</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🗒</span>Notes</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🧾</span>Research notes</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🏷</span>Tags</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🧬</span>DNA tests</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🔗</span>DNA matches</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="stack">
+        <div class="fact-row"><span class="badge">rule</span><span class="grow">An entity category → a draft opens in place, unchanged. The Dashboard, a tool, or Help → this picker, since <span class="mono">entity_category</span> already resolves each of those to "no category to create in".</span></div>
+        <div class="fact-row"><span class="badge">reuse</span><span class="grow">Built on the same <span class="mono">Modal</span> the close/quit confirm uses, so the scrim, focus trap, and <kbd>Esc</kbd> dismissal come for free; picking a category is the same <span class="mono">request_new_for</span> the tabstrip's <span class="mono">+</span> menu calls.</span></div>
+        <div class="fact-row"><span class="badge">not this</span><span class="grow">While the command palette, help sheet, or close/quit confirm is already open, <kbd>⌘</kbd><kbd>N</kbd> reaches no handler at all — <span class="mono">.app</span> is <span class="mono">inert</span> under a modal (ARIA APG pattern), and the palette already offers <span class="mono">Create</span> commands.</span></div>
+      </div>
+    </div>
+
     <!-- Feedback — the toast layer (#208): one shell-owned notice channel, not a per-screen toast -->
     <h2 style="border:0;margin:var(--sp-6) 0 12px;font-size:21px">Feedback — the toast layer</h2>
     <p class="muted">Every save/undo/error confirmation goes through <b>one shell-owned notice</b>,
