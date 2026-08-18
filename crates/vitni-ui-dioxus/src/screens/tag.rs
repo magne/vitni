@@ -210,7 +210,7 @@ fn tag_detail(
             count: tab.count,
         })
         .collect();
-    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let priority = detail.priority.unwrap_or(DEFAULT_TAG_PRIORITY);
     let color = detail.color.clone().unwrap_or_else(|| DEFAULT_TAG_COLOR.to_owned());
     let labels = RecordActionLabels::resolve(loc);
@@ -224,7 +224,7 @@ fn tag_detail(
             actions: record_head_actions(&labels, edit, rsx! {}, on_save),
             tabs: tab_items,
             active,
-            {tag_tab_content(loc, detail, active_id, edit, name_touched, picker_open)}
+            {tag_tab_content(loc, detail, &active_tab, edit, name_touched, picker_open)}
         }
     }
 }
@@ -233,14 +233,20 @@ fn tag_detail(
 fn tag_tab_content(
     loc: &Localizer,
     detail: &TagDetail,
-    tab_id: &str,
+    tab: &DetailTab,
     edit: RecordEditState<TagDraft>,
     name_touched: Signal<bool>,
     picker_open: Signal<bool>,
 ) -> Element {
-    match tab_id {
+    match tab.id {
         "usage" => tag_usage_tab(loc, detail),
-        "history" => history_panel(loc, &detail.history, None),
+        "history" => tab_frame::<()>(
+            loc,
+            tab,
+            TabActionTarget::None,
+            None,
+            history_panel(loc, &detail.history, None),
+        ),
         _ => tag_overview(loc, detail, edit, name_touched, picker_open),
     }
 }

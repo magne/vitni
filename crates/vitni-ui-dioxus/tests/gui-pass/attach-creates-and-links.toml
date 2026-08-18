@@ -14,7 +14,9 @@
 # the only way to show the discard left no trace, in the UI or (by construction, since nothing but the
 # UI could have written it) on disk.
 #
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The Notes tab's
+# `+ Attach note` moved with the shared tab frame (#303): the tab's explanation pushed the bar down, and
+# the bar right-aligns its button, so it sits at the pane's right edge.
 description = "A collection tab's Attach panel creates the record it wants to attach, writing nothing until Save (#314)"
 
 [[step]]
@@ -38,7 +40,7 @@ name = "tab-before"
 
 [[step]]
 do = "click"
-at = [572, 300]
+at = [1727, 357]
 label = "Attach note"
 
 [[step]]
@@ -79,7 +81,7 @@ name = "tab-after-discard"
 
 [[step]]
 do = "click"
-at = [572, 300]
+at = [1727, 357]
 label = "Attach note — again"
 
 [[step]]

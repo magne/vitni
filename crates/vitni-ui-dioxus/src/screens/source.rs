@@ -471,7 +471,13 @@ fn source_tab_content(
             }),
             tags_panel(loc, &detail.tags, on_tag_remove),
         ),
-        "history" => history_panel(loc, &detail.history, Some(on_undo)),
+        "history" => tab_frame::<()>(
+            loc,
+            tab,
+            TabActionTarget::None,
+            None,
+            history_panel(loc, &detail.history, Some(on_undo)),
+        ),
         _ => source_overview(loc, detail, record),
     }
 }

@@ -821,7 +821,13 @@ fn family_tab_content(
                 rows: detail.research_notes.clone(),
             }
         },
-        "history" => history_panel(loc, &detail.history, Some(on_undo)),
+        "history" => tab_frame::<()>(
+            loc,
+            tab,
+            TabActionTarget::None,
+            None,
+            history_panel(loc, &detail.history, Some(on_undo)),
+        ),
         _ => family_overview(loc, detail, editing, record, on_retract),
     }
 }
