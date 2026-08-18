@@ -460,6 +460,15 @@
     event). The frame is the only place in a screen that emits
     <span class="mono">.tab-actions</span> — a read-only tab (History) renders its explanation and its
     body with no bar between them.</p>
+  <p class="muted">Every tab that lists <b>records attached to (or referencing) this record</b> renders
+    one shape: a <span class="mono">table.tbl</span> whose <i>first</i> column is a link opening that
+    record, then the columns that tab is about, then the row's actions. That covers Citations, Notes, a
+    research note's Subjects, the reverse-lookup tabs (a note's <b>References</b>, a media object's
+    <b>Used by</b>, the <b>Research notes</b> written about a record) — so an attached record can always
+    be opened from the record that references it, and a reverse lookup is a way back rather than a dead
+    list. The <a href="media.html">Media</a> <b>gallery</b> is the one deliberate exception: a thumbnail
+    is the point of that tab, not a row. A reverse-lookup table carries no row actions at all — the
+    reference is asserted on the <i>other</i> record, so it is detached there.</p>
   <div class="specimen">
     <div class="label">Collection tab frame — explanation, then the bar (Attach / Add / Link — never "Save"), then the body</div>
     <div class="section-note">Each row is a claim that a source page backs assertions on this record. The confidence and the evidence axes are your judgment of the source, not the source's own words — a citation can be attached and still be weak.</div>
