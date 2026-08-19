@@ -1,4 +1,4 @@
-use super::{Category, ChangeLogEntry, HashMap, Localizer, OperatorKind, RecordRef};
+use super::{Category, ChangeLogEntry, HashMap, Localizer, RecordRef};
 
 /// One change-log entry, for the History tab — who changed what, when, and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,11 +19,14 @@ pub struct HistoryEntryVm {
 
 impl HistoryEntryVm {
     /// Builds a history view-model from an app [`ChangeLogEntry`], localizing the summary + operator.
+    ///
+    /// Uses [`Localizer::history_summary`], not `change_summary` directly: a collapsed import run
+    /// reads by its origin on the History tab, not by the dashboard's record count (issue #306).
     #[must_use]
     pub fn from_entry(entry: &ChangeLogEntry, loc: &Localizer) -> Self {
         Self {
             when: friendly_timestamp(&entry.occurred_at),
-            what: loc.change_summary(entry),
+            what: loc.history_summary(entry),
             who: loc.operator_line(entry),
             why: entry.rationale.clone(),
             assertion_id: entry.assertion_id.clone(),
@@ -33,57 +36,25 @@ impl HistoryEntryVm {
 }
 
 /// The newest undoable entry of a record's change log (the `⌘Z` target), or `None` when nothing can
-/// be undone. Change logs are newest-first, so this is the first entry with `can_undo` — a collapsed
-/// import run (`can_undo == false`) or an already-retracted assertion is skipped.
+/// be undone. Change logs are newest-first, so this is the first entry with `can_undo` — an
+/// already-retracted assertion is skipped, but a collapsed import run is not: it carries its run's
+/// newest assertion's `can_undo`, so `⌘Z` retracts that assertion rather than jumping past the run
+/// (issue #306).
 #[must_use]
 pub fn first_undoable(entries: &[HistoryEntryVm]) -> Option<&HistoryEntryVm> {
     entries.iter().find(|entry| entry.can_undo)
 }
 
 /// Builds the History-tab rows, collapsing consecutive same-software-agent runs (e.g. an import) into
-/// one `"N records imported"` entry — the same grouping as the dashboard activity feed. A collapsed
-/// run is not individually undoable (it stands for many assertions), so it carries no undo control.
+/// one row via the shared [`vitni_app::collapse_runs`] — the same grouping [`ActivityVm::from_entry`]
+/// uses for the dashboard activity feed. The collapsed row is stamped from the run's newest entry, so
+/// it stays undoable like any other entry, rather than always carrying no undo control.
 #[must_use]
 pub fn collapse_history(entries: &[ChangeLogEntry], loc: &Localizer) -> Vec<HistoryEntryVm> {
-    let mut rows = Vec::new();
-    let mut index = 0;
-    while index < entries.len() {
-        let entry = &entries[index];
-        let run = software_run_len(entries, index);
-        if run >= 2 {
-            rows.push(HistoryEntryVm {
-                when: friendly_timestamp(&entry.occurred_at),
-                what: loc.activity_import_batch(run),
-                who: loc.operator_line(entry),
-                why: None,
-                assertion_id: String::new(),
-                can_undo: false,
-            });
-            index += run;
-        } else {
-            rows.push(HistoryEntryVm::from_entry(entry, loc));
-            index += 1;
-        }
-    }
-    rows
-}
-
-/// The length of the run of consecutive software-agent events starting at `start` that share the
-/// same operator; `1` (or `0` past the end) for a non-software or lone entry.
-fn software_run_len(entries: &[ChangeLogEntry], start: usize) -> usize {
-    let Some(first) = entries.get(start) else {
-        return 0;
-    };
-    if first.operator_kind != OperatorKind::Software {
-        return 1;
-    }
-    let mut end = start + 1;
-    while entries.get(end).is_some_and(|next| {
-        next.operator_kind == OperatorKind::Software && next.operator_display == first.operator_display
-    }) {
-        end += 1;
-    }
-    end - start
+    vitni_app::collapse_runs(entries)
+        .iter()
+        .map(|entry| HistoryEntryVm::from_entry(entry, loc))
+        .collect()
 }
 
 /// Shortens an RFC 3339 timestamp to `YYYY-MM-DD HH:MM` for display, or returns it unchanged when it

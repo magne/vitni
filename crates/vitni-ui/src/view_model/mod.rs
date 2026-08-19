@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use vitni_app::{
     AssociationSummary, ChangeLogEntry, ChildParentRelationship, CitationSummary, EventRow, EventType,
     EvidenceAnalysis, EvidenceKind, EvidenceLevel, FactSummary, FamilyForPerson, FamilyRow, FamilySummary,
-    GenealogicalDate, InformationKind, MutationMeta, NameSummary, NameType, OperatorKind, PersonFamilyRole, PersonName,
+    GenealogicalDate, InformationKind, MutationMeta, NameSummary, NameType, PersonFamilyRole, PersonName,
     PersonNameParts, PersonRow, PersonSummary, Provenance, Sex, SourceQuality, TagRef, WorkspaceCounts,
 };
 

@@ -244,7 +244,12 @@ async fn build_entries(store: &Store, events: &[StoredEvent]) -> Result<Vec<Chan
 
 /// Collapses runs of consecutive events by the same software agent (an import) into one synthetic
 /// [`ActivityDetail::ImportBatch`] row, so a bulk import reads as a single line rather than N rows.
-fn collapse_runs(entries: &[ChangeLogEntry]) -> Vec<ChangeLogEntry> {
+///
+/// The one implementation shared by the Dashboard's workspace-wide activity feed
+/// ([`recent_activity`]) and each record's History tab (`vitni_ui::collapse_history`) — they differ
+/// only in how they phrase the resulting row, not in how they group entries into one.
+#[must_use]
+pub fn collapse_runs(entries: &[ChangeLogEntry]) -> Vec<ChangeLogEntry> {
     let mut rows = Vec::new();
     let mut index = 0;
     while index < entries.len() {
@@ -279,25 +284,29 @@ fn software_run_len(entries: &[ChangeLogEntry], start: usize) -> usize {
 }
 
 /// Builds the synthetic collapsed-import row for a run of `count` software-agent events, stamped from
-/// the run's newest entry. It links no record and cannot be undone.
-fn import_batch_entry(first: &ChangeLogEntry, count: usize) -> ChangeLogEntry {
+/// the run's newest entry. It links no record, but carries that entry's `assertion_id` and `can_undo`
+/// so the row stays undoable: `⌘Z` on a record whose newest history is an import run retracts the
+/// newest assertion in it rather than skipping past the whole run (issue #306). The Dashboard's
+/// activity rows are display-only (`build_entries` passes `can_undo: false` for every entry), so this
+/// carries no undo control there regardless.
+fn import_batch_entry(newest: &ChangeLogEntry, count: usize) -> ChangeLogEntry {
     ChangeLogEntry {
         aggregate_kind: String::new(),
         aggregate_human_id: None,
-        assertion_id: String::new(),
-        sequence: first.sequence,
+        assertion_id: newest.assertion_id.clone(),
+        sequence: newest.sequence,
         event_type: "ImportBatch".to_owned(),
-        occurred_at: first.occurred_at.clone(),
-        operator_display: first.operator_display.clone(),
+        occurred_at: newest.occurred_at.clone(),
+        operator_display: newest.operator_display.clone(),
         operator_kind: OperatorKind::Software,
-        confidence: first.confidence,
+        confidence: newest.confidence,
         rationale: None,
         citations: Vec::new(),
         evidence_analysis: None,
         detail: Some(ActivityDetail::ImportBatch {
             count: u32::try_from(count).unwrap_or(u32::MAX),
         }),
-        can_undo: false,
+        can_undo: newest.can_undo,
     }
 }
 
@@ -1203,7 +1212,8 @@ async fn resolve_dna_match_id(store: &Store, human_id: &str) -> Result<vitni_cor
 #[cfg(test)]
 mod tests {
     use super::{
-        ActivityDetail, OperatorKind, change_log_for_person, recent_activity, undo_assertion, workspace_counts,
+        ActivityDetail, ChangeLogEntry, OperatorKind, change_log_for_person, collapse_runs, recent_activity,
+        undo_assertion, workspace_counts,
     };
     use super::{change_log_for_research_note, undo_research_note_assertion};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
@@ -1310,6 +1320,72 @@ mod tests {
             .await
             .expect("sex");
         human_id
+    }
+
+    /// A synthetic change-log entry for exercising [`collapse_runs`] without a workspace.
+    fn synthetic_entry(
+        assertion_id: &str,
+        operator_kind: OperatorKind,
+        operator_display: &str,
+        can_undo: bool,
+    ) -> ChangeLogEntry {
+        ChangeLogEntry {
+            aggregate_kind: "person".to_owned(),
+            aggregate_human_id: Some("I0001".to_owned()),
+            assertion_id: assertion_id.to_owned(),
+            sequence: 1,
+            event_type: "NameAsserted".to_owned(),
+            occurred_at: "2026-06-22T14:35:00Z".to_owned(),
+            operator_display: Some(operator_display.to_owned()),
+            operator_kind,
+            confidence: None,
+            rationale: None,
+            citations: Vec::new(),
+            evidence_analysis: None,
+            detail: None,
+            can_undo,
+        }
+    }
+
+    #[test]
+    fn collapse_runs_stamps_the_synthetic_row_from_the_runs_newest_entry() {
+        // Newest-first order: "b" (undoable) is newer than "a" (already retracted, not undoable).
+        let entries = vec![
+            synthetic_entry("b", OperatorKind::Software, "gedcom-import", true),
+            synthetic_entry("a", OperatorKind::Software, "gedcom-import", false),
+        ];
+        let rows = collapse_runs(&entries);
+        assert_eq!(rows.len(), 1, "the run of 2 collapses into one row");
+        assert_eq!(
+            rows[0].detail,
+            Some(ActivityDetail::ImportBatch { count: 2 }),
+            "the row records how many events it collapsed"
+        );
+        assert_eq!(
+            rows[0].assertion_id, "b",
+            "the collapsed row carries the newest entry's assertion id"
+        );
+        assert!(
+            rows[0].can_undo,
+            "the collapsed row carries the newest entry's can_undo, so it stays undoable"
+        );
+    }
+
+    #[test]
+    fn collapse_runs_leaves_a_lone_software_entry_uncollapsed() {
+        let entries = vec![synthetic_entry("a", OperatorKind::Software, "gedcom-import", true)];
+        let rows = collapse_runs(&entries);
+        assert_eq!(rows, entries, "a lone software entry is not a run");
+    }
+
+    #[test]
+    fn collapse_runs_does_not_merge_different_software_operators() {
+        let entries = vec![
+            synthetic_entry("b", OperatorKind::Software, "gedcom-import", true),
+            synthetic_entry("a", OperatorKind::Software, "dna-match-engine", true),
+        ];
+        let rows = collapse_runs(&entries);
+        assert_eq!(rows, entries, "different operators never collapse into one row");
     }
 
     #[tokio::test]

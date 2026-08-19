@@ -414,7 +414,7 @@
 
         <!-- HISTORY (audit trail — free from the event log) -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone. A run of consecutive changes from the same software agent (an import) collapses into one row, named by where it came from — not by how many changes it left on this record.</div>
           <div class="timeline">
             <div class="tl-item">
               <div class="tl-when">2026-06-22 14:35</div>
@@ -435,8 +435,9 @@
             </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-10 11:02</div>
-              <div class="tl-what">Person created</div>
+              <div class="tl-what">Imported from gedcom-import</div>
               <div class="tl-who">gedcom-import (software agent)</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
             </div>
           </div>
         </div>
