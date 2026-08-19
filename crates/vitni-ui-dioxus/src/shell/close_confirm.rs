@@ -11,11 +11,14 @@
 //! **Save all** hands the record to its own screen ([`NavState::save_then_close`] /
 //! [`NavState::save_all_then_quit`]), **Discard** applies the close as it stands, **Cancel** backs out.
 //!
-//! A single-tab close gates Save on that one record: an invalid edit, or a create tab with nothing
-//! typed into it, gets a disabled button and a line in the body saying why. **Save all** is gated over
-//! the whole set instead (issue #261) — it runs whenever *any* record at stake can be saved, saves
-//! those, and marks the rest in the list as records it leaves open. Only a set where nothing can be
-//! saved disables it, so one untouched `⌘N` draft cannot speak for the records beside it.
+//! A single-tab close gates Save on that one record: an edit still missing a required field gets a
+//! disabled button and a line in the body saying why. **Save all** is gated over the whole set instead
+//! (issue #261) — it runs whenever *any* record at stake can be saved, saves those, and marks the rest
+//! in the list as records it leaves open. Only a set where nothing can be saved disables it, so one
+//! unsavable record cannot speak for the records beside it.
+//!
+//! Only tabs that actually hold work are at stake: a `⌘N` draft nobody typed into is neither listed nor
+//! reason enough to raise the dialog at all (issue #307).
 //!
 //! Unsaved work comes in two shapes and the body has to be truthful about which: an unsaved **draft**
 //! (nothing stored — closing discards the record) or an in-progress **edit** of a stored record
@@ -154,8 +157,10 @@ fn tab_confirm_copy(nav: &NavState, chrome: &Chrome, index: usize) -> ConfirmCop
 /// reason is the one shown.
 fn quit_confirm_copy(nav: &NavState, chrome: &Chrome) -> ConfirmCopy {
     // A quit can be armed by either shape at once; the draft copy is the stronger warning (a whole
-    // record is lost, not just an edit), so an open draft wins.
-    let any_draft = nav.records.read().iter().any(OpenTab::is_draft);
+    // record is lost, not just an edit), so an open draft wins — but only a draft that actually holds
+    // work, since a pristine one is not at stake at all (issue #307).
+    let any_draft = (0..nav.records.read().len())
+        .any(|index| nav.tab_has_unsaved(index) && nav.records.read().get(index).is_some_and(OpenTab::is_draft));
     let body = if any_draft {
         chrome.quit_confirm_body()
     } else {
@@ -196,8 +201,8 @@ fn quit_confirm_copy(nav: &NavState, chrome: &Chrome) -> ConfirmCopy {
 }
 
 /// Why the tab at `index` cannot be saved from the confirm, or `None` when it can: a parked edit that
-/// is invalid names the record, and a tab with no parked buffer at all (a create form nothing has been
-/// typed into) has nothing to save.
+/// is invalid names the record. A tab with no parked buffer at all has nothing to save — since #307 no
+/// close or quit arms the dialog over one, so that line only shows if the work went while it was open.
 fn save_blocked(nav: &NavState, chrome: &Chrome, index: usize, label: &str) -> Option<String> {
     if nav.tab_is_savable(index) {
         return None;

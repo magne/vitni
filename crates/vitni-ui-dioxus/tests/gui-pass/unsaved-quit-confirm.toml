@@ -1,12 +1,14 @@
-# The other half of #244: the quit confirm, and the state where Save is *blocked*. A `⌘N` draft counts
-# as unsaved the moment it opens, but nothing has been filled in, so the confirm renders its Save
-# disabled with the reason under the body — and a disabled button is not a tab stop, which turns the
-# usual three-button ring into a two-button one. That is the sharpest thing a screenshot can say about
-# the footer, so it is what this scenario asserts.
+# The other half of #244: the quit confirm, and the state where Save is *blocked*. The draft is typed
+# into — a latitude with no longitude, which is the one edit that makes a `PlaceDraft` hold unsaved work
+# and still fail its own Save gate (`view_model/place.rs`: a half-filled coordinate pair is
+# `Coordinates::Invalid`). So the confirm renders its Save disabled with the reason under the body — and
+# a disabled button is not a tab stop, which turns the usual three-button ring into a two-button one.
+# That is the sharpest thing a screenshot can say about the footer, so it is what this scenario asserts.
+# A draft nobody had typed into would not raise the dialog at all since #307, which is `draft-close-confirm`.
 #
-# `⌘Q` then raises the quit confirm over two unsaved tabs (the untouched draft and a dirtied
+# `⌘Q` then raises the quit confirm over two unsaved tabs (the unsavable draft and a dirtied
 # Kristiansand), which is the only way to see the `ul.stack` list of records at stake under WebKitGTK.
-# Its **Save all** is live even though the draft can never be saved (#261), so the run is clicked here:
+# Its **Save all** is live even though the draft cannot be saved (#261), so the run is clicked here:
 # it saves Kristiansand, leaves the draft open, and does *not* quit — which is what makes the click
 # screenshottable at all. The window still standing in `after-save-all` is half the assertion; the other
 # half is the tabstrip, where Kristiansand's `●` is gone and the draft's is not.
@@ -33,13 +35,28 @@ chord = "ctrl+n"
 label = "⌘N: a new Place draft"
 
 [[step]]
+do = "click"
+at = [1150, 495]
+label = "field: Latitude"
+
+[[step]]
+do = "key"
+chord = "5"
+label = "type: 5"
+
+[[step]]
+do = "key"
+chord = "9"
+label = "type: 9 — a latitude with no longitude: unsaved work that cannot be saved"
+
+[[step]]
 do = "shot"
 name = "draft-open"
 
 [[step]]
 do = "key"
 chord = "ctrl+w"
-label = "⌘W on the untouched draft"
+label = "⌘W on the draft, which holds work Save cannot take"
 
 [[step]]
 do = "shot"

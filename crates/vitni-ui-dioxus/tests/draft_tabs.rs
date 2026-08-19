@@ -395,7 +395,7 @@ fn every_tab_holding_an_unsaved_edit_carries_the_marker_not_just_the_active_one(
     );
 }
 
-/// The tabstrip with a single draft tab open (nothing saved yet).
+/// The tabstrip with a single draft tab open, nothing typed into it.
 fn tabstrip_with_draft_only() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
@@ -406,13 +406,45 @@ fn tabstrip_with_draft_only() -> Element {
 }
 
 #[test]
-fn a_draft_tab_carries_the_unsaved_marker_too() {
+fn a_pristine_draft_tab_carries_no_unsaved_marker() {
+    // Issue #307: an untouched ⌘N holds nothing to discard, so marking it unsaved would promise a
+    // decision the operator never has to make.
     let html = render(tabstrip_with_draft_only);
     assert!(
+        html.contains(r#"class="rtab active draft""#),
+        "the tab is a draft and nothing more:\n{html}"
+    );
+    assert!(
+        !html.contains("unsaved"),
+        "no unsaved class, glyph or accessible name on an untouched draft:\n{html}"
+    );
+}
+
+/// The tabstrip with one draft that has a name typed into it.
+fn tabstrip_with_a_typed_draft_only() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        name_draft(&mut nav, Category::People, draft, "Ada Lovelace");
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn a_draft_tab_typed_into_carries_the_unsaved_marker() {
+    let html = render(tabstrip_with_a_typed_draft_only);
+    assert!(
         html.contains(r#"class="rtab active draft unsaved""#),
-        "a draft is unsaved by definition and gets the same marker:\n{html}"
+        "typing into a draft is unsaved work, and marked as such:\n{html}"
     );
     assert!(html.contains("unsaved-dot"), "the draft tab shows the glyph:\n{html}");
+    assert!(
+        html.contains(r#"aria-label="Ada Lovelace — unsaved changes""#),
+        "and says so in its accessible name:\n{html}"
+    );
 }
 
 #[test]

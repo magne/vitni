@@ -7,9 +7,10 @@
 //! it onto the detail pane docks the record side-by-side (`.master-detail.split-2`); `⌘⇧1…9` is the
 //! keyboard equivalent. The tab currently docked carries the `docked` class.
 //!
-//! A tab holding unsaved work — a draft, or a saved record mid-edit
+//! A tab holding unsaved work — a draft or a saved record with typed-in work
 //! ([`NavState::tab_has_unsaved`]) — carries the `unsaved` class, a dot glyph, and an "unsaved
-//! changes" accessible name, so `⌘W`'s confirm is never a surprise.
+//! changes" accessible name, so `⌘W`'s confirm is never a surprise. A create form nobody has typed
+//! into holds nothing and carries no marker (issue #307).
 
 use dioxus::prelude::*;
 use vitni_ui::Category;

@@ -1,0 +1,171 @@
+# #307: a `⌘N` draft nobody typed into is not unsaved work, so `⌘W` closes it outright — and the first
+# thing typed into it makes it work worth confirming over. SSR cannot cover either half: the confirm is
+# a live-webview dialog raised by a real chord, and what the tabstrip shows after `⌘W` depends on
+# whether that chord reached the dispatcher at all. Before the fix the first `⌘W` here raised the
+# "Close tab? … Closing this tab discards it" dialog over an empty form, with its Save dead.
+#
+# Three phases, in one draft's lifetime:
+#
+# 1. `⌘N`, then `⌘W` — the tabstrip comes back to exactly the state it had before the draft existed.
+#    Scoped to the strip, because a dialog raised instead would leave the tab in place *and* paint over
+#    the pane, which a whole-window compare could report either way.
+# 2. `⌘N`, type a name, `⌘W` — the confirm rises this time.
+# 3. Backspace the name away again, `⌘W` — the draft is back to holding nothing, so the tab closes with
+#    no dialog, the same frame as phase 1's.
+#
+# The click on the Name field before each typing run is also what gives the webview a focused element:
+# a chord that reaches nothing focused reaches no dispatcher either.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The tabstrip
+# region is column-scanned (`convert <shot> -crop 400x1+520+92 +repage txt:-`), not eyeballed.
+description = "⌘W closes a draft nobody typed into, and confirms once something has been (#307)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "shot"
+name = "before"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Place draft"
+
+[[step]]
+do = "shot"
+name = "draft-open"
+
+[[step]]
+do = "key"
+chord = "ctrl+w"
+label = "⌘W on the untouched draft"
+
+[[step]]
+do = "shot"
+name = "closed"
+
+[[step]]
+do = "click"
+at = [300, 1100]
+label = "empty list space: put keyboard focus back in the app — the closed tab took it with it"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: another Place draft, this one to type into"
+
+[[step]]
+do = "click"
+at = [1150, 737]
+label = "field: Name"
+
+[[step]]
+do = "key"
+chord = "shift+o"
+label = "type: O"
+
+[[step]]
+do = "key"
+chord = "s"
+label = "type: s"
+
+[[step]]
+do = "key"
+chord = "l"
+label = "type: l"
+
+[[step]]
+do = "key"
+chord = "o"
+label = "type: o — the draft names itself Oslo"
+
+[[step]]
+do = "shot"
+name = "typed"
+
+[[step]]
+do = "key"
+chord = "ctrl+w"
+label = "⌘W on the draft that now holds work"
+
+[[step]]
+do = "shot"
+name = "confirm"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "confirm: Esc — the draft and its text stay"
+
+[[step]]
+do = "click"
+at = [1150, 737]
+label = "field: Name again — and focus back into the webview after Esc"
+
+[[step]]
+do = "key"
+chord = "BackSpace"
+label = "clear: o"
+
+[[step]]
+do = "key"
+chord = "BackSpace"
+label = "clear: l"
+
+[[step]]
+do = "key"
+chord = "BackSpace"
+label = "clear: s"
+
+[[step]]
+do = "key"
+chord = "BackSpace"
+label = "clear: O — the draft holds nothing again"
+
+[[step]]
+do = "shot"
+name = "cleared"
+
+[[step]]
+do = "key"
+chord = "ctrl+w"
+label = "⌘W on the draft that is empty again"
+
+[[step]]
+do = "shot"
+name = "closed-again"
+
+[[assert]]
+kind = "differ"
+shots = ["before", "draft-open"]
+because = "⌘N must open a draft tab and its create form"
+
+[[assert]]
+kind = "match"
+# The tabstrip alone: the tab is gone rather than sitting behind a dialog.
+region = [508, 80, 1292, 45]
+shots = ["before", "closed"]
+tolerance = 0.001
+because = "⌘W on a draft nobody typed into must close it, with no confirm to answer (#307)"
+
+[[assert]]
+kind = "differ"
+# The tabstrip alone, again: what typing changed there is the tab's own name and its ● marker.
+region = [508, 80, 1292, 45]
+shots = ["draft-open", "typed"]
+because = "typing into a draft names its tab and marks it unsaved"
+
+[[assert]]
+kind = "differ"
+shots = ["typed", "confirm"]
+because = "⌘W on a draft holding typed-in work must raise the close confirm instead of discarding it"
+
+[[assert]]
+kind = "match"
+region = [508, 80, 1292, 45]
+shots = ["closed", "closed-again"]
+tolerance = 0.001
+because = "backspacing the work away makes the draft closable with no confirm again — the marker follows the buffer both ways"

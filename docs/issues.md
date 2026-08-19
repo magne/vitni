@@ -200,13 +200,6 @@ long-standing "DNA match views in the UI" item is closed.
   Personer" instead of "Ny person", which is not merely inconsistent but ungrammatical for every
   category. One fix from three sides: 13 singular entity keys, used by the tab and the menu; the pane
   heading already reads correctly. — #308
-- **Closing a pristine draft tab still raises the unsaved-work confirm.** `tab_has_unsaved`
-  (`shell/nav_state.rs:948-956`) answers `true` for `OpenTab::Draft(_, _)` unconditionally — documented
-  at `:944-946` as "nothing about it is stored yet, whether or not anything has been typed" — so `⌘W`
-  or the tab `✕` on a `⌘N` nobody typed into asks whether to discard nothing. The same predicate drives
-  the strip's `●` dot and `has_unsaved_work()`, so an untouched draft also makes `⌘Q` claim unsaved
-  work. Dirtiness is already knowable: `draft_label(&tab.edit_key())` (`tab_label.rs:63`) is `Some`
-  only once something naming the record has been typed, and `edit_drafts` is keyed per `EditKey`. — #307
 
 ### Record detail & shared tabs
 

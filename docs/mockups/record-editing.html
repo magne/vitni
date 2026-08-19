@@ -177,6 +177,11 @@
     <kbd>⌘</kbd><kbd>Q</kbd> raise a confirm rather than discarding the draft silently. The record's tab
     also carries an <b>●</b> unsaved marker (see <a href="app-shell.html">App shell</a>), so pending work
     is visible without opening the tab.</p>
+  <p class="muted">What counts is <b>typed-in work</b>, not the tab's kind: a create form nobody has
+    typed into holds nothing, so <kbd>⌘</kbd><kbd>W</kbd> (or its <b>✕</b>) closes it with <b>no</b>
+    dialog, it carries no <b>●</b> marker, and it does not make <kbd>⌘</kbd><kbd>Q</kbd> claim there is
+    unsaved work. The first thing typed into it makes it a draft with work, and everything below applies;
+    backspacing over that again makes it closable without a prompt once more.</p>
   <div class="specimen">
     <div class="label">Tab marker — unsaved edits to a stored record</div>
     <div class="tabstrip" role="tablist" aria-label="Open records">
@@ -212,10 +217,10 @@
   </div>
   <div class="card">
     <div class="stack">
-      <div class="fact-row"><span class="badge">draft</span><span class="grow">Nothing is stored: “New person” <b>hasn't been saved yet. Closing this tab discards it.</b> The discard action reads <b>Discard draft</b> — the whole record goes, not just an edit. Quit reads “One or more open tabs haven't been saved yet.”</span></div>
+      <div class="fact-row"><span class="badge">draft</span><span class="grow">A draft with typed-in work: nothing is stored, so “New person” <b>hasn't been saved yet. Closing this tab discards it.</b> The discard action reads <b>Discard draft</b> — the whole record goes, not just an edit. Quit reads “One or more open tabs haven't been saved yet.” A draft nobody has typed into raises no dialog at all, and never picks that wording for the records beside it.</span></div>
       <div class="fact-row"><span class="badge">Cancel</span><span class="grow">Leaves the tab open with the edit intact — the next <kbd>⌘</kbd><kbd>W</kbd> asks again.</span></div>
       <div class="fact-row"><span class="badge">Save</span><span class="grow">Commits the record, then closes the tab. Saving from the record itself clears the marker and the confirm the same way: the draft matches what is stored again, so the tab closes with no prompt. So does <b>Cancel</b> on the record (§5), which reverts the draft.</span></div>
-      <div class="fact-row"><span class="badge">disabled</span><span class="grow">Save is offered only for work that can be saved. A draft missing a required field, or a create form nothing has been typed into (“Nothing has been filled in for “New person” yet, so there is nothing to save.”), gets a <b>disabled</b> Save and the reason in the body — never a button that silently does nothing.</span></div>
+      <div class="fact-row"><span class="badge">disabled</span><span class="grow">Save is offered only for work that can be saved. A draft missing a required field gets a <b>disabled</b> Save and the reason in the body — never a button that silently does nothing.</span></div>
       <div class="fact-row"><span class="badge">failed</span><span class="grow">A save that fails leaves every tab open with its edit parked and the shell's error toast showing, staying until dismissed. Nothing closes and nothing quits on a failure.</span></div>
     </div>
   </div>
@@ -508,7 +513,7 @@
       <tr><td><kbd>Enter</kbd></td><td>Edit: commit the current field to the draft.</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Cancel the current field edit; if no field is actively editing, cancel the record.</td></tr>
       <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd><kbd>S</kbd></td><td>Global, rebindable (ADR 0030) — not owned by this card. Saves the active record if it is dirty and valid, falling back to a docked one in a split.</td></tr>
-      <tr><td><kbd>⌘</kbd><kbd>W</kbd> / <kbd>⌘</kbd><kbd>Q</kbd></td><td>Close the tab / quit — but with unsaved work open (a draft <i>or</i> an edit of a stored record) a confirm asks first, offering Save / Discard / Cancel (§5a).</td></tr>
+      <tr><td><kbd>⌘</kbd><kbd>W</kbd> / <kbd>⌘</kbd><kbd>Q</kbd></td><td>Close the tab / quit — but with unsaved work open (a draft typed into, <i>or</i> an edit of a stored record) a confirm asks first, offering Save / Discard / Cancel (§5a).</td></tr>
     </tbody>
   </table>
   <div class="card" style="margin-top:var(--sp-4)">
