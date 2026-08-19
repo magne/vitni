@@ -118,21 +118,39 @@ fn data_quality_reports_zero_counts_with_no_findings() {
 
 #[test]
 fn history_collapses_consecutive_import_events() {
-    use super::collapse_history;
+    use super::{collapse_history, first_undoable};
     let loc = Localizer::for_test("en");
+    // Newest-first order: "newest" is the more recent import, "older" the one behind it.
+    let mut newest_import = log_entry("person", Some("I0001"), OperatorKind::Software, "gedcom-import");
+    newest_import.assertion_id = "newest".to_owned();
+    newest_import.can_undo = true;
+    let mut older_import = log_entry("person", Some("I0001"), OperatorKind::Software, "gedcom-import");
+    older_import.assertion_id = "older".to_owned();
+    older_import.can_undo = true;
     let entries = vec![
         log_entry("person", Some("I0001"), OperatorKind::Human, "magne"),
-        log_entry("person", Some("I0001"), OperatorKind::Software, "gedcom-import"),
-        log_entry("person", Some("I0001"), OperatorKind::Software, "gedcom-import"),
+        newest_import,
+        older_import,
     ];
     let rows = collapse_history(&entries, &loc);
     assert_eq!(rows.len(), 2, "the two import events collapse into one");
     assert_eq!(rows[0].what, "Person created", "the human edit stays an individual row");
-    assert_eq!(rows[1].what, "2 records imported");
-    assert!(!rows[1].can_undo, "a collapsed import run is not undoable");
+    assert_eq!(
+        rows[1].what, "Imported from gedcom-import",
+        "the record tab describes the run by origin, not by record count"
+    );
     assert!(
-        rows[1].assertion_id.is_empty(),
-        "a collapsed run has no single undo target"
+        rows[1].can_undo,
+        "the collapsed row carries the newest entry's can_undo, so it stays undoable"
+    );
+    assert_eq!(
+        rows[1].assertion_id, "newest",
+        "the collapsed row carries the newest entry's assertion id as its undo target"
+    );
+    assert_eq!(
+        first_undoable(&rows).map(|entry| entry.assertion_id.as_str()),
+        Some("newest"),
+        "⌘Z retracts the newest assertion of the run, not an older entry buried behind it"
     );
 }
 

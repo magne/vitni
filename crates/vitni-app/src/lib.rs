@@ -135,7 +135,7 @@ pub use history::{
     ActivityDetail, ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_dna_match,
     change_log_for_dna_test, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
     change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_research_note,
-    change_log_for_source, change_log_for_tag, recent_activity, undo_assertion, undo_citation_assertion,
+    change_log_for_source, change_log_for_tag, collapse_runs, recent_activity, undo_assertion, undo_citation_assertion,
     undo_dna_match_assertion, undo_dna_test_assertion, undo_event_assertion, undo_family_assertion,
     undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion,
     undo_research_note_assertion, undo_source_assertion, workspace_counts,

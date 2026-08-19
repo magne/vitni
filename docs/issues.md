@@ -227,15 +227,6 @@ which is what makes them worth fixing in the shared code rather than per screen.
   its picker with `allow_new: false`, so every attach dialog was existing-only regardless. Fixed by
   routing every attach/link side panel through the find-or-create `use_attach_picker` +
   `attach_link_form` (issue #314). — #314
-- **A record's History tab describes an import in the Dashboard's words.** The collapsed
-  software-agent run renders `dashboard-import-batch` — "{ $count } records imported"
-  (`view_model/history.rs:47-69`, `i18n.rs:1883-1887`) — but on a record's own History tab the count is
-  of *assertions on that one record*, so a single person claims several records were imported;
-  `view_model/tests.rs:119-135` pins that wording today. It needs its own key naming the run's origin
-  ("Imported from Digitalarkivet"), which means the origin has to reach the view-model. Two things to
-  fix alongside: the collapse is implemented twice, once in `vitni-app/src/history.rs:247-302` and
-  once in the view-model, and the collapsed row is stripped of its `assertion_id` so `⌘Z` silently
-  skips the whole run. — #306
 - **The 13 detail screens re-implement the shared tab arms instead of calling one shared frame.**
   `screens/tabs.rs` and `screens/shared.rs` hold the tab *bodies*, but each screen still spells out the
   arm that reaches them: `"history" =>` in 13 screens, `"tags" =>` in 12, `"notes" =>` in 10, `"media"

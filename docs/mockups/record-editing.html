@@ -460,6 +460,15 @@
     event). The frame is the only place in a screen that emits
     <span class="mono">.tab-actions</span> — a read-only tab (History) renders its explanation and its
     body with no bar between them.</p>
+  <p class="muted">A record's <b>History</b> tab collapses a run of consecutive changes from the same
+    software agent — an import, typically — into one row, so a bulk import reads as a single line
+    rather than N. That row names the run by its <b>origin</b> (<i>Imported from gedcom-import</i>),
+    never by a count of records: the count on one record's own history is of assertions on that single
+    record, not of distinct records imported, so the Dashboard's <i>N records imported</i> wording — its
+    own activity-feed phrase for the same run, by record count — does not belong here. The collapsed row
+    is stamped from the run's <i>newest</i> entry, so it still carries an <b>↩ Undo</b> control:
+    <span class="mono">⌘Z</span> retracts that assertion rather than skipping past the whole run to an
+    older entry behind it.</p>
   <p class="muted">Every tab that lists <b>records attached to (or referencing) this record</b> renders
     one shape: a <span class="mono">table.tbl</span> whose <i>first</i> column is a link opening that
     record, then the columns that tab is about, then the row's actions. That covers Citations, Notes, a

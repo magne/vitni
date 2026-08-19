@@ -146,6 +146,11 @@ history-description-set = Description set
 history-place-linked = Place linked
 history-generic = Recorded a change
 
+# The record History tab's own phrase for a collapsed import run — by origin, not by how many
+# assertions the run left on this one record (issue #306). `dashboard-import-batch` below is the
+# Dashboard's activity-feed phrase for the same run, by record count.
+history-import-run = Imported from { $origin }
+
 # Change-log operator line
 history-operator-human = { $name } · { $confidence }
 history-operator-agent = { $name } ({ $kind })

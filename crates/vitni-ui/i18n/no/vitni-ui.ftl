@@ -146,6 +146,11 @@ history-description-set = Beskrivelse satt
 history-place-linked = Sted koblet
 history-generic = Registrerte en endring
 
+# Postens Historikk-fane sin egen frase for en samlet importkjøring — etter opphav, ikke etter hvor
+# mange påstander kjøringen la på denne ene posten (sak #306). `dashboard-import-batch` under er
+# Dashbordets aktivitetsstrøm-frase for samme kjøring, etter postantall.
+history-import-run = Importert fra { $origin }
+
 # Endringslogg-operatørlinje
 history-operator-human = { $name } · { $confidence }
 history-operator-agent = { $name } ({ $kind })
