@@ -712,6 +712,10 @@ fn a_typed_create_form_records_the_label_its_draft_names_itself_with() {
         "the write-through carries the draft's own label:\n{html}"
     );
     assert!(html.contains("DIRTY:[tags/#1]"), "alongside the buffer itself:\n{html}");
+    assert!(
+        html.contains("UNSAVED:Y"),
+        "so the draft's tab reports unsaved work:\n{html}"
+    );
 }
 
 fn create_pane_types_then_clears() -> Element {
@@ -725,6 +729,26 @@ fn a_name_typed_and_cleared_again_leaves_no_label() {
     let html = render_settled(create_pane_types_then_clears);
     assert!(html.contains("LABEL:NONE"), "no label survives the clear:\n{html}");
     assert!(html.contains("DIRTY:[]"), "because nothing stays parked:\n{html}");
+    assert!(
+        html.contains("UNSAVED:N"),
+        "and the tab reports no unsaved work again:\n{html}"
+    );
+}
+
+fn create_pane_touches_nothing() -> Element {
+    create_pane_label(PaneAction::Report)
+}
+
+#[test]
+fn a_create_form_nothing_has_been_typed_into_reports_no_unsaved_work() {
+    // Issue #307, against the real write-through rather than a hand-parked buffer: a mounted create
+    // form that has not been typed into parks nothing, so its tab has nothing to discard.
+    let html = render_settled(create_pane_touches_nothing);
+    assert!(html.contains("DIRTY:[]"), "nothing is parked:\n{html}");
+    assert!(
+        html.contains("UNSAVED:N"),
+        "so the tab reports no unsaved work:\n{html}"
+    );
 }
 
 fn create_pane_types_outside_the_name() -> Element {

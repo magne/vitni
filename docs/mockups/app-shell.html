@@ -80,13 +80,13 @@
       full-width and has none. A tab is a record you have open; drag one onto the detail pane (or press
       <kbd>⌘⇧</kbd><kbd>1…9</kbd>) to dock it side-by-side.</p>
     <div class="specimen">
-      <div class="label">Tabstrip — clean, unsaved, two drafts, docked</div>
+      <div class="label">Tabstrip — clean, unsaved, a typed draft, an untouched draft, docked</div>
       <div class="tabstrip" role="tablist" aria-label="Open records">
         <div class="tabs-scroll">
           <div class="rtab active" role="tab" tabindex="0" aria-selected="true"><span>John Smith</span><span class="close" role="button" tabindex="0" aria-label="Close John Smith">✕</span></div>
           <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="Mary Doe — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>Mary Doe</span><span class="close" role="button" tabindex="0" aria-label="Close Mary Doe">✕</span></div>
           <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="Anna Berg — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>Anna Berg</span><span class="close" role="button" tabindex="0" aria-label="Close Anna Berg">✕</span></div>
-          <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="New People (2) — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>New People (2)</span><span class="close" role="button" tabindex="0" aria-label="Close New People (2)">✕</span></div>
+          <div class="rtab" role="tab" tabindex="-1" aria-selected="false"><span>New People (2)</span><span class="close" role="button" tabindex="0" aria-label="Close New People (2)">✕</span></div>
           <div class="rtab docked" role="tab" tabindex="-1" aria-selected="false"><span>Trinity Church</span><span class="close" role="button" tabindex="0" aria-label="Close Trinity Church">✕</span></div>
         </div>
         <div class="rtab add" role="button" tabindex="0" aria-label="Create a new record">+</div>
@@ -98,10 +98,13 @@
         carries an ordinal (“New People (2)”), so two new records of one kind never share a name or an
         accessible name. <kbd>⌘</kbd><kbd>N</kbd> always starts <b>another</b> draft; several can be open
         at once.<br><br>The <b>●</b> marker means
-        the tab holds <b>unsaved work</b> — either an <b>unsaved draft</b> (nothing stored yet, as with
-        the two above) or <b>unsaved edits</b> to an already-saved record (“Mary Doe”). Both make
-        <kbd>⌘</kbd><kbd>W</kbd> and <kbd>⌘</kbd><kbd>Q</kbd> ask before discarding — see
-        <a href="record-editing.html">Record editing</a>. <b>Every</b> tab holding unsaved work carries
+        the tab holds <b>unsaved work</b> — either a <b>draft that has been typed into</b> (nothing
+        stored yet, as with “Anna Berg”) or <b>unsaved edits</b> to an already-saved record (“Mary Doe”).
+        Both make <kbd>⌘</kbd><kbd>W</kbd> and <kbd>⌘</kbd><kbd>Q</kbd> ask before discarding — see
+        <a href="record-editing.html">Record editing</a>. A create form <b>nobody has typed into</b>
+        (“New People (2)”) holds nothing to discard, so it carries <b>no</b> marker and closes without a
+        dialog; typing anything into it raises the marker, and backspacing over it again clears it.
+        <b>Every</b> tab holding unsaved work carries
         the marker, not just the active one: an in-progress edit is parked per record in shell state, so
         it outlives its editor and stays visible from the strip while another record is on screen. The
         marker is a glyph plus an “unsaved changes” accessible name, not colour alone (WCAG 1.4.1); the
@@ -178,7 +181,9 @@
       it <b>lists every record at stake</b> by its tab name — a stored record by its own label, a draft by
       whatever has been typed into it, falling back to “New &lt;entity&gt;” with an ordinal from the second
       empty draft of a category — so the choice is made over the actual list, not over “one or more”, and
-      two unnamed drafts are never one indistinguishable pair of entries.
+      two unnamed drafts are never one indistinguishable pair of entries. A create form nobody has typed
+      into is <b>not</b> at stake and is not listed; with nothing else unsaved, <kbd>⌘</kbd><kbd>Q</kbd>
+      quits without a dialog even with such a draft open.
       <b>Save all</b> walks the records it <i>can</i> save in strip order, activating each and running
       that record's own Save, and quits once the last one lands — but only when that was every record
       listed. A record it cannot save yet is marked in the list and simply <b>left open</b>, with the
@@ -189,11 +194,11 @@
       immediately. Per-tab closing is <a href="record-editing.html">Record editing</a> §5a.</p>
     <div class="specimen grid-2">
       <div class="card" style="margin-bottom:0">
-        <h3>Quit? — four records mid-edit</h3>
+        <h3>Quit? — three records mid-edit</h3>
         <p class="muted" style="margin-top:var(--sp-2)">One or more open tabs haven't been saved yet.
           Quitting discards them.</p>
         <p class="muted" style="margin-top:var(--sp-2)">Records with unsaved work:</p>
-        <ul class="stack" style="margin:0"><li>John Smith</li><li>Mary Doe</li><li>Anna Berg</li><li>New People (2)</li></ul>
+        <ul class="stack" style="margin:0"><li>John Smith</li><li>Mary Doe</li><li>Anna Berg</li></ul>
         <div class="inline" style="justify-content:flex-end"><button class="btn sm ghost">Cancel</button><button class="btn sm">Discard all</button><button class="btn sm primary">Save all</button></div>
       </div>
       <div class="card" style="margin-bottom:0">
@@ -210,7 +215,7 @@
     <div class="card">
       <div class="stack">
         <div class="fact-row"><span class="badge">order</span><span class="grow">One record saves at a time: only the active tab's editor is mounted, so the run activates each in turn. A record whose save fails stops the run — the remaining tabs keep their edits and the app does not quit.</span></div>
-        <div class="fact-row"><span class="badge">left open</span><span class="grow">A listed record that cannot be saved yet — an invalid edit, or a <kbd>⌘</kbd><kbd>N</kbd> draft nothing has been typed into — is marked in the list and left open when <b>Save all</b> runs. The run saves the rest and the app keeps running, so the quit waits until that work is dealt with.</span></div>
+        <div class="fact-row"><span class="badge">left open</span><span class="grow">A listed record that cannot be saved yet — an invalid edit, or a draft still missing a required field — is marked in the list and left open when <b>Save all</b> runs. The run saves the rest and the app keeps running, so the quit waits until that work is dealt with.</span></div>
         <div class="fact-row"><span class="badge">blocked</span><span class="grow"><b>Save all</b> is disabled only when <i>no</i> listed record can be saved; then the body names the first one standing in the way. One unsavable record never speaks for the ones beside it. Discard all and Cancel stay available either way.</span></div>
         <div class="fact-row"><span class="badge">target gone</span><span class="grow">A record still waiting its turn in the run — queued, or the one currently being saved — can disappear before it saves: its tab closes or its create draft is cancelled, or its parked edit stops passing the Save gate. Either way it is dropped from the run, which then moves on to whatever is left rather than waiting on a report that will never come. If that leaves no unsaved work at all — the disappearing tab took its own work with it — <b>Save all</b> still quits normally. If unsaved work remains, the quit does not fire and a notice says so instead of the app silently staying open with no explanation.</span></div>
         <div class="fact-row"><span class="badge">window ✕</span><span class="grow">A close the app did not start — the titlebar <b>✕</b>, a session logout, <span class="mono">wmctrl -c</span> — is held back and raises this same dialog, so the one close path reached with the mouse cannot discard an edit either. <b>Cancel</b> leaves the app running with every tab and edit intact; <b>Discard all</b> quits. With nothing unsaved the close is not held back at all and the window closes immediately.</span></div>

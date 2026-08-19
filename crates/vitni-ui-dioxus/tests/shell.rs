@@ -13,11 +13,11 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 use unic_langid::LanguageIdentifier;
 use vitni_app::RecentItem;
-use vitni_ui::{Category, Destination, RecordRef, Tool};
+use vitni_ui::{Category, Destination, ProvenanceDraft, RecordRef, TagDraft, Tool};
 use vitni_ui_dioxus::app::AppCtx;
 use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::shell::help_overlay::HelpOverlay;
-use vitni_ui_dioxus::shell::nav_state::{NavState, Overlay};
+use vitni_ui_dioxus::shell::nav_state::{EditKey, NavState, Overlay, StashedEdit};
 use vitni_ui_dioxus::shell::palette::CommandPalette;
 use vitni_ui_dioxus::shell::statusbar::ShellStatusbar;
 use vitni_ui_dioxus::shell::tabstrip::{NewRecordMenu, RecordTabstrip};
@@ -76,14 +76,26 @@ fn shell_with_overlay_open() -> Element {
     }
 }
 
-/// The full shell with the close confirm armed over an unsaved draft (via an injected `NavState`), so
-/// the background `.app` should be inert and hidden from assistive tech just as an overlay makes it.
+/// The full shell with the close confirm armed over a draft that has been typed into (via an injected
+/// `NavState`), so the background `.app` should be inert and hidden from assistive tech just as an
+/// overlay makes it. The draft has to hold work: `⌘W` on a pristine one closes it outright (#307).
 fn shell_with_pending_close() -> Element {
     use_context_provider(|| AppCtx::Failed("test".to_owned()));
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
+        nav.stash_edit(
+            EditKey::draft(Category::People, draft),
+            StashedEdit::new(
+                TagDraft {
+                    name: "Ada".to_owned(),
+                    ..TagDraft::new()
+                },
+                TagDraft::new(),
+                ProvenanceDraft::default(),
+            ),
+        );
         nav.request_close_tab(0);
     });
     rsx! {

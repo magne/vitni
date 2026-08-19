@@ -1,7 +1,8 @@
 //! SSR-probe assertions for the close-tab/quit confirm flow on [`NavState`] (PR1 §1.4): closing a
-//! *clean* saved tab is immediate; closing one that holds unsaved work — a draft, or a saved record
-//! with an in-progress edit parked in [`NavState::edit_drafts`] (issue #200) — arms the confirm dialog
-//! instead of discarding it silently. The same holds for the close the *window manager* starts — the
+//! *clean* tab is immediate, a pristine `⌘N` draft included (issue #307); closing one that holds unsaved
+//! work — a draft typed into, or a saved record with an in-progress edit parked in
+//! [`NavState::edit_drafts`] (issue #200) — arms the confirm dialog instead of discarding it silently.
+//! The same holds for the close the *window manager* starts — the
 //! titlebar ✕, a session logout, `wmctrl -c` (issue #281) — which arrives as
 //! [`NavState::request_window_close`] and answers whether the caller must stop it. Like `dock.rs`, each
 //! probe drives `NavState` in `use_hook` and renders a small marker the test inspects.
@@ -15,7 +16,9 @@ use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::screens::{use_record_edit, use_save_on_request};
 use vitni_ui_dioxus::shell::ChromeCtx;
 use vitni_ui_dioxus::shell::close_confirm::CloseConfirmDialog;
-use vitni_ui_dioxus::shell::nav_state::{DraftId, EditKey, NavState, Overlay, SaveRequest, SaveThen, StashedEdit};
+use vitni_ui_dioxus::shell::nav_state::{
+    CloseRequest, DraftId, EditKey, NavState, Overlay, SaveRequest, SaveThen, StashedEdit,
+};
 use vitni_ui_dioxus::shell::tabstrip::RecordTabstrip;
 
 /// A chrome localizer for a single explicit language (deterministic for tests).
@@ -60,6 +63,19 @@ fn mark_draft_dirty(nav: &mut NavState, draft: DraftId) {
     nav.stash_edit(
         EditKey::draft(Category::People, draft),
         StashedEdit::new(edited(), TagDraft::new(), ProvenanceDraft::default()),
+    );
+}
+
+/// Parks a buffer for `draft` that is dirty but names nothing (a tag's priority typed, its name still
+/// blank), so the draft holds unsaved work while its tab keeps the localized "New <entity>" label.
+fn mark_draft_dirty_unnamed(nav: &mut NavState, draft: DraftId) {
+    let typed = TagDraft {
+        priority: "7".to_owned(),
+        ..TagDraft::new()
+    };
+    nav.stash_edit(
+        EditKey::draft(Category::People, draft),
+        StashedEdit::new(typed, TagDraft::new(), ProvenanceDraft::default()),
     );
 }
 
@@ -196,7 +212,7 @@ fn closing_a_saved_tab_is_immediate_with_no_confirm() {
     );
 }
 
-fn close_draft_tab_arms_confirm() -> Element {
+fn close_pristine_draft_tab_is_immediate() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_create(Category::People);
@@ -206,8 +222,27 @@ fn close_draft_tab_arms_confirm() -> Element {
 }
 
 #[test]
-fn closing_a_draft_tab_arms_the_confirm_instead_of_discarding() {
-    let html = render(close_draft_tab_arms_confirm);
+fn closing_a_pristine_draft_tab_is_immediate_with_no_confirm() {
+    // Issue #307: a ⌘N nobody typed into holds nothing, so asking whether to discard it is a decision
+    // about nothing — with Save dead, since there is nothing to save either.
+    let html = render(close_pristine_draft_tab_is_immediate);
+    assert!(html.contains("TABS:0"), "the untouched draft just closes:\n{html}");
+    assert!(html.contains("PENDING:NONE"), "with no confirm to answer:\n{html}");
+}
+
+fn close_typed_draft_tab_arms_confirm() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, draft);
+        nav.request_close_tab(0);
+    });
+    probe(&nav)
+}
+
+#[test]
+fn closing_a_draft_that_has_been_typed_into_arms_the_confirm_instead_of_discarding() {
+    let html = render(close_typed_draft_tab_arms_confirm);
     assert!(html.contains("TABS:1"), "the draft survives until confirmed:\n{html}");
     assert!(html.contains("PENDING:SOME"), "the confirm dialog is armed:\n{html}");
 }
@@ -215,7 +250,8 @@ fn closing_a_draft_tab_arms_the_confirm_instead_of_discarding() {
 fn confirm_closes_the_pending_draft() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, draft);
         nav.request_close_tab(0);
         nav.confirm_close();
     });
@@ -235,7 +271,8 @@ fn confirming_closes_the_pending_draft() {
 fn cancel_keeps_the_pending_draft() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, draft);
         nav.request_close_tab(0);
         nav.cancel_close();
     });
@@ -268,7 +305,7 @@ fn quitting_with_nothing_unsaved_quits_immediately() {
     );
 }
 
-fn quit_with_draft_arms_confirm() -> Element {
+fn quit_with_pristine_draft_quits_immediately() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_create(Category::People);
@@ -278,7 +315,25 @@ fn quit_with_draft_arms_confirm() -> Element {
 }
 
 #[test]
-fn quitting_with_an_open_draft_arms_the_confirm() {
+fn quitting_with_only_a_pristine_draft_open_quits_immediately() {
+    // Issue #307: an untouched ⌘N is not unsaved work, so ⌘Q must not claim there is any.
+    let html = render(quit_with_pristine_draft_quits_immediately);
+    assert!(html.contains("QUIT:1"), "quit fires with nothing to lose:\n{html}");
+    assert!(html.contains("PENDING:NONE"), "and asks nothing first:\n{html}");
+}
+
+fn quit_with_draft_arms_confirm() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, draft);
+        nav.request_quit();
+    });
+    probe(&nav)
+}
+
+#[test]
+fn quitting_with_a_draft_typed_into_arms_the_confirm() {
     let html = render(quit_with_draft_arms_confirm);
     assert!(html.contains("QUIT:0"), "quit does not fire until confirmed:\n{html}");
     assert!(html.contains("PENDING:SOME"), "the confirm dialog is armed:\n{html}");
@@ -287,7 +342,8 @@ fn quitting_with_an_open_draft_arms_the_confirm() {
 fn quit_confirmed_after_draft() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, draft);
         nav.request_quit();
         nav.confirm_close();
     });
@@ -340,7 +396,7 @@ fn a_window_close_with_nothing_unsaved_is_let_through() {
     );
 }
 
-fn window_close_with_an_open_draft() -> Element {
+fn window_close_with_a_pristine_draft() -> Element {
     let mut nav = use_context_provider(NavState::new);
     let mut blocked = use_signal(|| false);
     use_hook(move || {
@@ -351,7 +407,30 @@ fn window_close_with_an_open_draft() -> Element {
 }
 
 #[test]
-fn a_window_close_over_an_open_draft_is_blocked_and_confirms() {
+fn a_window_close_over_a_pristine_draft_is_let_through() {
+    // Issue #307: the same predicate answers the WM's close, so an untouched ⌘N must not stop a logout.
+    let html = render(window_close_with_a_pristine_draft);
+    assert!(html.contains("BLOCKED:false"), "the native close is allowed:\n{html}");
+    assert!(html.contains("PENDING:NONE"), "no confirm armed:\n{html}");
+    assert!(
+        html.contains("QUIT:0"),
+        "no quit ticket is spent on a close dioxus performs itself:\n{html}"
+    );
+}
+
+fn window_close_with_an_open_draft() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    let mut blocked = use_signal(|| false);
+    use_hook(move || {
+        let draft = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, draft);
+        blocked.set(nav.request_window_close());
+    });
+    window_close_probe(&nav, blocked)
+}
+
+#[test]
+fn a_window_close_over_a_draft_typed_into_is_blocked_and_confirms() {
     let html = render(window_close_with_an_open_draft);
     assert!(
         html.contains("BLOCKED:true"),
@@ -904,7 +983,8 @@ fn dialog_open_for_draft() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, draft);
         nav.request_close_tab(0);
     });
     rsx! {
@@ -925,7 +1005,8 @@ fn dialog_open_for_quit() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, draft);
         nav.request_quit();
     });
     rsx! {
@@ -1066,8 +1147,34 @@ fn an_invalid_edit_disables_save_and_says_why() {
     );
 }
 
-/// The close-tab confirm over a draft tab with nothing typed into it — there is no buffer to save.
-fn dialog_for_untouched_draft() -> Element {
+/// The close confirm showing over a tab that holds no buffer at all. `request_close_tab` no longer
+/// arms one for a pristine draft (#307), so the request is armed directly: this is the state the
+/// dialog can still be caught in — a confirm raised over work that is gone by the time it renders.
+fn dialog_for_a_tab_with_no_buffer() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.pending_close.set(Some(CloseRequest::Tab(0)));
+    });
+    rsx! {
+        CloseConfirmDialog {}
+    }
+}
+
+#[test]
+fn a_tab_with_nothing_to_save_disables_save_and_says_so() {
+    let html = render(dialog_for_a_tab_with_no_buffer);
+    assert!(html.contains("disabled"), "Save is disabled:\n{html}");
+    assert!(
+        html.contains("nothing to save"),
+        "the body says why rather than leaving a dead button:\n{html}"
+    );
+    assert!(html.contains("Discard draft"), "a draft is discarded whole:\n{html}");
+}
+
+/// The close confirm after `⌘W` on a draft nobody typed into.
+fn dialog_after_closing_a_pristine_draft() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
@@ -1080,14 +1187,12 @@ fn dialog_for_untouched_draft() -> Element {
 }
 
 #[test]
-fn a_draft_with_nothing_typed_has_nothing_to_save() {
-    let html = render(dialog_for_untouched_draft);
-    assert!(html.contains("disabled"), "Save is disabled:\n{html}");
+fn closing_a_pristine_draft_raises_no_dialog_at_all() {
+    let html = render(dialog_after_closing_a_pristine_draft);
     assert!(
-        html.contains("nothing to save"),
-        "the body says why rather than leaving a dead button:\n{html}"
+        html.trim().is_empty(),
+        "the tab closed, so there is nothing to confirm:\n{html}"
     );
-    assert!(html.contains("Discard draft"), "a draft is discarded whole:\n{html}");
 }
 
 /// The quit confirm with three dirty records open: two stored, one draft.
@@ -1172,7 +1277,8 @@ fn save_all_runs_when_any_unsaved_record_is_savable() {
     );
 }
 
-/// The quit confirm where nothing unsaved can be saved: an invalid edit beside an untouched draft.
+/// The quit confirm where nothing unsaved can be saved: an invalid edit beside a pristine draft, which
+/// is not at stake at all (#307) and so cannot be what keeps Save all alive either.
 fn quit_dialog_with_nothing_savable() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
@@ -1200,7 +1306,7 @@ fn save_all_is_disabled_when_no_unsaved_record_is_savable() {
     );
 }
 
-/// The quit confirm from issue #261: a valid edit of a stored record beside an untouched `⌘N` draft.
+/// The quit confirm over a valid edit of a stored record beside an untouched `⌘N` draft.
 fn quit_dialog_with_a_valid_record_and_an_untouched_draft() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
@@ -1216,21 +1322,30 @@ fn quit_dialog_with_a_valid_record_and_an_untouched_draft() -> Element {
 }
 
 #[test]
-fn an_untouched_draft_does_not_block_save_all_for_a_valid_record() {
-    // A `⌘N` draft is unsaved by definition and savable never, so gating on it would mean no ⌘Q over an
-    // open draft could ever save anything.
+fn an_untouched_draft_is_not_listed_among_the_work_a_quit_would_discard() {
+    // Issue #307: the draft holds nothing, so it is neither at stake nor a reason to soften the copy —
+    // the wording is the stored record's ("unsaved changes"), and Save all covers the record beside it.
     let html = render(quit_dialog_with_a_valid_record_and_an_untouched_draft);
     assert!(
         !button_markup(&html, "Save all").contains("disabled"),
-        "an untouched draft does not speak for the records beside it:\n{html}"
-    );
-    assert!(
-        html.contains("<li>New People — can"),
-        "the draft is the entry marked as staying open:\n{html}"
+        "the record that can be saved is savable:\n{html}"
     );
     assert!(
         html.contains("<li>Ada</li>"),
-        "the valid record is listed plainly:\n{html}"
+        "the record with unsaved edits is listed:\n{html}"
+    );
+    assert!(
+        !html.contains("New People"),
+        "and the untouched draft is not listed at all:\n{html}"
+    );
+    assert!(
+        html.contains("unsaved changes"),
+        "the body describes the edits at stake:\n{html}"
+    );
+    assert!(
+        // The apostrophe in "haven't" renders HTML-escaped, so the assertion starts after it.
+        !html.contains("t been saved yet"),
+        "the draft copy would be untrue with no draft holding anything:\n{html}"
     );
 }
 
@@ -1238,10 +1353,15 @@ fn save_all_over_a_mixed_strip() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_record(record("I0001", "Ada"));
-        nav.open_create(Category::Tags);
+        let draft = nav.open_create(Category::Tags);
         nav.open_record(record("I0003", "Cecil"));
         mark_dirty(&mut nav, Category::People, "I0001");
         mark_dirty(&mut nav, Category::People, "I0003");
+        // A draft typed into but still missing its required name: unsaved, and unsavable.
+        nav.stash_edit(
+            EditKey::draft(Category::Tags, draft),
+            StashedEdit::new(TagDraft::new(), TagDraft::new(), ProvenanceDraft::default()),
+        );
         nav.request_quit();
         nav.save_all_then_quit();
     });
@@ -1250,7 +1370,7 @@ fn save_all_over_a_mixed_strip() -> Element {
 
 #[test]
 fn save_all_queues_only_the_savable_records() {
-    // Queueing by "unsaved" instead would put the untouched draft in the run, where it fails its own
+    // Queueing by "unsaved" instead would put the unsavable draft in the run, where it fails its own
     // `can_save()` gate and aborts the run with Ada already saved.
     let html = render(save_all_over_a_mixed_strip);
     assert!(
@@ -1259,7 +1379,7 @@ fn save_all_queues_only_the_savable_records() {
     );
     assert!(
         html.contains("QUEUE:[people/I0003]"),
-        "the untouched draft is not part of the run:\n{html}"
+        "the unsavable draft is not part of the run:\n{html}"
     );
 }
 
@@ -1428,7 +1548,8 @@ fn escape_cancels_a_pending_close_without_discarding_the_tab() {
 fn escape_with_a_pending_quit() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, draft);
         nav.request_quit();
         nav.dismiss_topmost();
     });
@@ -1467,7 +1588,8 @@ fn escape_on_the_confirm_abandons_an_armed_save_run() {
 fn escape_with_a_pending_close_leaves_the_overlay_alone() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
+        let draft = nav.open_create(Category::People);
+        mark_draft_dirty(&mut nav, draft);
         nav.overlay.set(Overlay::Help);
         nav.request_close_tab(0);
         nav.dismiss_topmost();
@@ -1723,13 +1845,16 @@ fn a_failed_draft_commit_abandons_the_run_and_keeps_both_drafts() {
 
 // ---- The confirm names a tab exactly as the strip does (issue #260) -------------------------------
 
-/// The quit confirm over two People drafts, neither typed into.
+/// The quit confirm over two People drafts, both dirty but neither named — so both are at stake and
+/// both are listed by their fallback label.
 fn quit_dialog_over_two_empty_drafts() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
-        nav.open_create(Category::People);
+        let first = nav.open_create(Category::People);
+        let second = nav.open_create(Category::People);
+        mark_draft_dirty_unnamed(&mut nav, first);
+        mark_draft_dirty_unnamed(&mut nav, second);
         nav.request_quit();
     });
     rsx! {
@@ -1805,13 +1930,15 @@ fn the_close_confirm_names_a_typed_draft_by_its_name() {
     assert!(html.contains("Discard draft"), "and it is still a draft:\n{html}");
 }
 
-/// The close confirm for the *second* of two untyped drafts.
+/// The close confirm for the *second* of two drafts, neither of them named — the second holds work, so
+/// closing it confirms, and its ordinal counts drafts in the strip rather than dirty ones.
 fn close_dialog_over_the_second_empty_draft() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
         nav.open_create(Category::People);
-        nav.open_create(Category::People);
+        let second = nav.open_create(Category::People);
+        mark_draft_dirty_unnamed(&mut nav, second);
         nav.request_close_tab(1);
     });
     rsx! {
@@ -1828,13 +1955,15 @@ fn the_close_confirm_names_the_second_empty_draft_by_its_ordinal() {
     );
 }
 
-/// Both the record strip and the confirm, over one strip of two untyped drafts.
+/// Both the record strip and the confirm, over one strip of two unnamed drafts holding work.
 fn tabstrip_and_dialog_over_two_empty_drafts() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.open_create(Category::People);
-        nav.open_create(Category::People);
+        let first = nav.open_create(Category::People);
+        let second = nav.open_create(Category::People);
+        mark_draft_dirty_unnamed(&mut nav, first);
+        mark_draft_dirty_unnamed(&mut nav, second);
         nav.request_quit();
     });
     rsx! {

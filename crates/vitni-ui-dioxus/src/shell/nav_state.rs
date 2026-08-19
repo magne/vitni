@@ -956,18 +956,16 @@ impl NavState {
         self.edit_drafts.read().contains_key(key)
     }
 
-    /// Whether the open tab at `index` holds work that closing it would discard: an unsaved draft, or
-    /// a saved record with an in-progress edit parked in [`Self::edit_drafts`]. A draft tab always
-    /// counts — nothing about it is stored yet, whether or not anything has been typed.
+    /// Whether the open tab at `index` holds work that closing it would discard — one question for both
+    /// tab kinds: is an edit parked under its editor key in [`Self::edit_drafts`]? The keyset *is* the
+    /// dirty set, so a draft counts from the first thing typed into it (and stops counting again if that
+    /// is undone), while a create form nobody has touched holds nothing to discard (issue #307).
     #[must_use]
     pub fn tab_has_unsaved(&self, index: usize) -> bool {
         let Some(tab) = self.records.read().get(index).cloned() else {
             return false;
         };
-        match tab {
-            OpenTab::Draft(_, _) => true,
-            OpenTab::Saved(_) => self.has_unsaved(&tab.edit_key()),
-        }
+        self.has_unsaved(&tab.edit_key())
     }
 
     /// Requests closing the record tab at `index` (`⌘W`, the tabstrip `✕`): closes it immediately
@@ -1057,10 +1055,10 @@ impl NavState {
     /// quits (the quit confirm's **Save all**): queues them and arms the first.
     ///
     /// The exception the name does not carry: the run quits only when it covered every tab holding
-    /// unsaved work. A record that cannot be saved yet — an invalid edit, an untouched `⌘N` draft — is
-    /// neither saved nor discarded; it stays open with its work intact and the app keeps running, so
-    /// the run ends in [`SaveThen::StayOpen`] instead. With nothing savable at all the confirm is
-    /// simply dismissed, unless nothing is unsaved either, in which case the quit fires.
+    /// unsaved work. A record that cannot be saved yet — an invalid edit, a draft still missing a
+    /// required field — is neither saved nor discarded; it stays open with its work intact and the app
+    /// keeps running, so the run ends in [`SaveThen::StayOpen`] instead. With nothing savable at all the
+    /// confirm is simply dismissed, unless nothing is unsaved either, in which case the quit fires.
     pub fn save_all_then_quit(&mut self) {
         let tabs = self.records.peek().clone();
         let mut queue = Vec::new();
