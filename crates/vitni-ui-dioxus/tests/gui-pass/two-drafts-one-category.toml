@@ -7,8 +7,10 @@
 # 2. **Where the caret goes.** The second `⌘N` destroys the input the caret was in. Before
 #    `CreateFormFocus` focus fell to `<body>`, and the next keystroke reached the *shell* dispatcher
 #    instead of the new form — which is why typing into draft 2 is asserted over the form region while
-#    the tabstrip is asserted *unchanged*: an overlay opening instead (`?` is one keystroke away there)
-#    would repaint both.
+#    the tabstrip's **history controls** are asserted *unchanged*: an overlay opening instead (`?` is one
+#    keystroke away there) would repaint both. The controls rather than the whole strip, because since
+#    #307 the first keystroke into a draft also raises its tab's `●` — a change inside the tabs that says
+#    nothing about which element took the key.
 # 3. **The live buffers.** Each tab must come back to its own text, from the shell's parked buffer, after
 #    its pane has been unmounted and rebuilt.
 #
@@ -22,9 +24,10 @@
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The two draft
 # tabs are **column-scanned**, not eyeballed, and re-scanned on the shot immediately before each click,
-# because a draft tab resizes as it is typed into: with both tabs still reading "New People" the boxes
-# are 588-730 and 736-901, but once they read "Ada" and "Bob" they are 588-677 and 683-772 — so the
-# x 659 that was tab 1's label before typing is its close ✕ after. The clicks below aim at the label
+# because a draft tab resizes as it is typed into — the text changes and the `●` appears: while draft 2
+# still reads "New People" the boxes are 588-677 and 683-831, but once the two read "Ada" and "Bob" they
+# are 588-677 and 683-772 — so the x 800 that was tab 2's label before typing is past it after. The
+# clicks below aim at the label
 # glyphs on row y 103 (`convert <shot> -crop 400x1+520+92 +repage txt:-` for the boxes,
 # `-crop 1x60+610+70` for the row).
 description = "A second ⌘N opens another draft of one category, with its own form, caret and buffer (#260)"
@@ -166,12 +169,15 @@ because = "the caret must be inside the new form, or the keystroke reaches the s
 [[assert]]
 kind = "match"
 shots = ["two-fresh", "two-id"]
-region = [508, 80, 1292, 45]
-# Byte-identical when it works (RMSE 0.0000): a field took the keystroke, so nothing outside the form
-# repainted. An overlay opening instead — `?` is one keystroke away from an unfocused shell — paints over
-# the tabstrip as well, and the `differ` above alone could not tell the two apart.
+# The strip's ‹ › history controls, left of the first tab at x 588 — the part of the shell chrome the
+# keystroke may not touch. The tabs themselves are excluded on purpose: the key lands in draft 2's ID,
+# which marks that draft unsaved and paints its `●` (#307).
+region = [508, 80, 78, 45]
+# Byte-identical when it works (RMSE 0.0000): a field took the keystroke, so no shell chrome repainted.
+# An overlay opening instead — `?` is one keystroke away from an unfocused shell — paints over the whole
+# strip, controls included, and the `differ` above alone could not tell the two apart.
 tolerance = 0.001
-because = "and it must be a *field* that took it, not the shell — an overlay would repaint the tabstrip too"
+because = "and it must be a *field* that took it, not the shell — an overlay would repaint the strip's controls too"
 
 [[assert]]
 kind = "differ"
