@@ -614,16 +614,6 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 The `area/docs` label already existed with no `###` home; this is it.
 
-- **The mockups' record-picker specimen pins itself to the viewport's top-left.** Every mockup that
-  includes a `.picker-results` list — `design-system.html:327-332`, `family.html:178`,
-  `citation.html:193` — renders it as a floating box over the top-left corner of the page, which is
-  where the walkthrough found an unexplained "Berg, Anna / Lovelace, Anna / + New person" dropdown.
-  `mockups/assets/components.css:832-840` gives the class `position: fixed` at `--pk-top`/`--pk-left`,
-  custom properties **only the renderer sets** (from `getBoundingClientRect`), so in a static page they
-  default to 0. Introduced by `9e9c983`, which made the app's picker a floating dropdown and updated
-  the shared sheet without the pages that use it; the specimen's own prose still promises "an in-flow
-  result list (never a floater…)" (`design-system.html:319-322`), so the mockup now contradicts both
-  the app and itself. The app rule at `components.css:997-1006` is correct and unaffected. — #311
 - **The mockup sheet is only partly the superset it is documented to be.** [`CLAUDE.md`](../CLAUDE.md)
   states that `docs/mockups/assets/components.css` is the superset — "the app sheet must not introduce a
   rule the mockups lack" — and nothing checks the sheet as a whole, so it does not hold.
