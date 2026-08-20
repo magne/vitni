@@ -22,6 +22,14 @@
 # reference taken with the caret in Given name would compare a ring in one field against a ring in
 # another. The `I` typed into draft 2's ID is backspaced away again for the same reason.
 #
+# The form's own field coordinates were re-measured for #310, which put every record row's label and
+# value on one line: the Person create form's rows now sit 50px apart, ID at y 298-333 (centre 316) and
+# Given name at y 468-503 (centre 486), column-scanned at x=1150. The old y=336 was on ID's focus ring
+# and y=564 was in the gap below Nickname, so the "park the caret in ID" steps were landing on a border
+# and the typing went nowhere. The Given-name `differ` region moved with it, and to x=660 rather than the
+# old 546: with a 96px label column, 546 is on the label — identical in both frames, so including it
+# would only dilute the three glyphs the assertion is about.
+#
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The two draft
 # tabs are **column-scanned**, not eyeballed, and re-scanned on the shot immediately before each click,
 # because a draft tab resizes as it is typed into — the text changes and the `●` appears: while draft 2
@@ -44,7 +52,7 @@ label = "⌘N: the first Person draft"
 
 [[step]]
 do = "click"
-at = [1150, 564]
+at = [1150, 486]
 label = "field: Given name"
 
 [[step]]
@@ -64,7 +72,7 @@ label = "type: a — draft 1 names itself Ada"
 
 [[step]]
 do = "click"
-at = [1150, 336]
+at = [1150, 316]
 label = "field: ID — park the caret where a remount would autofocus it"
 
 [[step]]
@@ -73,7 +81,7 @@ name = "one-parked"
 
 [[step]]
 do = "click"
-at = [1150, 564]
+at = [1150, 486]
 label = "field: Given name again — the caret is in a field the next ⌘N destroys"
 
 [[step]]
@@ -105,7 +113,7 @@ label = "clear it again, so the ID is empty for the reference frames below"
 
 [[step]]
 do = "click"
-at = [1150, 564]
+at = [1150, 486]
 label = "field: Given name"
 
 [[step]]
@@ -129,7 +137,7 @@ name = "two-typed"
 
 [[step]]
 do = "click"
-at = [1150, 336]
+at = [1150, 316]
 label = "field: ID — park the caret for the reference frame"
 
 [[step]]
@@ -189,7 +197,7 @@ because = "typing a name into a draft renames its own tab, live (#260)"
 kind = "match"
 shots = ["one-parked", "back-to-one"]
 region = [508, 130, 1292, 1040]
-# RMSE 0.0017 — the residue is the remount's own repaint (the per-field reset ↺ on the restored,
+# RMSE 0.0019 — the residue is the remount's own repaint (the per-field reset ↺ on the restored,
 # modified input), not the text: over the Given name field alone the two frames are identical.
 because = "returning to draft 1 must restore draft 1's own buffer, from the shell, after its pane was torn down"
 
@@ -204,5 +212,5 @@ kind = "differ"
 shots = ["back-to-one", "back-to-two"]
 # The Given name input alone. Three glyphs are 0.0044 of the whole form pane — under any tolerance that
 # would still call the two restore frames above a match — and 0.0521 of the field they sit in.
-region = [546, 548, 300, 32]
+region = [660, 471, 300, 32]
 because = "the two restored forms must not be the same form — one buffer shared between the drafts is the defect (#260)"
