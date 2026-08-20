@@ -395,10 +395,13 @@ table.tbl tr:hover .btn.ghost,
   text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px;
 }
 /* A read value is an input with a transparent border, so toggling read↔edit moves no text
-   (record-editing.html §3). */
-.field .val {
+   (record-editing.html §3). Both placements: the stacked `.field > .val`, and the one-line
+   `.fact-row .grow > span.field.val` a record row draws (record-editing.html:49) — which also has to
+   drop `.field`'s own bottom margin, or a read row would stand taller than the input row it toggles
+   into. */
+.field .val, .field.val {
   display: block; padding: var(--sp-2) var(--sp-3); border: 1px solid transparent;
-  border-radius: var(--r-md); font: var(--fs-md)/1.4 var(--font-sans);
+  border-radius: var(--r-md); font: var(--fs-md)/1.4 var(--font-sans); margin-bottom: 0;
 }
 .field input, .field select, .field textarea, input.in, select.in, textarea.in {
   width: 100%; background: var(--bg); border: 1px solid var(--line-2);
@@ -416,18 +419,79 @@ select.in {
 .field input:disabled, input.in:disabled, select.in:disabled, textarea.in:disabled {
   opacity: 0.6; cursor: not-allowed; background: var(--panel-2);
 }
+
+/* These four clusters are scoped to the *control*, not to a `.field` wrapper: a record row is a
+   one-line `.fact-row` (record-editing.html:47-99, tag.html:133-142) with no `.field` ancestor at
+   all, while a settings form still stacks inside one (preferences.html:181-193). One selector per
+   rule covers both shapes; `.field .in` / `input.in` above already work the same way. */
+
 /* A modified field (draft differs from its original) is tinted with the accent wash; a select keeps
    the chevron so it gets the accent border only (record-editing.html §4, design-system.html). The
    `.invalid` rule follows so a validation error wins the border colour. */
-.field input.in.modified, .field textarea.in.modified, .field .number-stepper.modified {
+input.in.modified, textarea.in.modified, .number-stepper.modified {
   background: var(--accent-soft); border-color: var(--accent);
 }
-.field select.in.modified { border-color: var(--accent); }
+select.in.modified { border-color: var(--accent); }
 
 /* Field-level validation: a red ring + a message. */
-.field .in.invalid, .field .in[aria-invalid="true"] { border-color: var(--err); }
-.field .field-error { color: var(--err); font-size: var(--fs-xs); margin-top: 2px; }
-.field .field-hint { color: var(--muted); font-size: var(--fs-xs); margin-top: 2px; }
+.in.invalid, .in[aria-invalid="true"] { border-color: var(--err); }
+.field-error { color: var(--err); font-size: var(--fs-xs); margin-top: 2px; }
+.field-hint { color: var(--muted); font-size: var(--fs-xs); margin-top: 2px; }
+
+/* The revert-to-saved icon sits *inside* the field, overlaid at the right edge (text fields). */
+.field-with-revert { position: relative; display: flex; align-items: center; }
+.field-with-revert .in { flex: 1; padding-right: 30px; }
+.field-with-revert .icon-btn {
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px;
+}
+/* A select keeps its chevron (right 10px); shift its reset control left of the chevron so the two
+   don't overlap (record-editing.html §4 — reset sits left of any dropdown arrow). */
+.field-with-revert select.in { padding-right: 56px; }
+.field-with-revert select.in ~ .icon-btn { right: 28px; }
+/* Custom number stepper: one bordered control laid out as [ value | revert | ▲▼ ], so the revert sits
+   inside the field (left of the arrows, right of the value) and the arrows are ours to place (native
+   `<input type=number>` arrows can't be reordered). */
+.number-stepper {
+  display: inline-flex; align-items: center; width: 120px;
+  background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r-md);
+}
+.number-stepper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.number-stepper.invalid { border-color: var(--err); }
+.number-stepper .stepper-value {
+  flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink);
+  padding: var(--sp-2) var(--sp-3); font: var(--fs-md)/1.4 var(--font-sans); outline: none;
+}
+.number-stepper .icon-btn { width: 24px; height: 24px; flex: none; }
+.number-stepper .stepper-arrows { display: flex; flex-direction: column; flex: none; padding-right: 4px; }
+.number-stepper .stepper-arrow {
+  appearance: none; border: 0; background: none; color: var(--muted);
+  cursor: pointer; line-height: 1; font-size: 9px; padding: 0 3px; height: 13px;
+}
+.number-stepper .stepper-arrow:hover { color: var(--ink); }
+
+/* ---- Colour swatches & the colour picker (tag.html) ---- */
+
+/* Preset swatch button in the colour picker grid. */
+.swatch-btn {
+  appearance: none; background: none; border: 1px solid transparent;
+  border-radius: var(--r-md); padding: 2px; cursor: pointer; line-height: 0;
+  /* Flex container so the child colour dot (an inline <span>) honours its width/height instead of
+     collapsing to a thin line. */
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.swatch-btn:hover { border-color: var(--line); }
+/* Selection is an inset ring (not a border) so it never changes the box size or clashes with the
+   focus outline; the focus ring matches the swatch's own rounding. */
+.swatch-btn.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.swatch-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-md); }
+
+/* The colour-picker preset grid (WebAwesome-style swatches). */
+.color-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: var(--sp-2); }
+
+/* Colour dots that carry an arbitrary tag colour (list avatar, header avatar, swatch) need a
+   border so a near-background colour (e.g. the default #1a2129 ≈ --panel) still reads as a circle. */
+.row .avatar .dot, .detail-head .avatar-lg .dot, .swatch-dot { border: 1px solid var(--line-2); }
 
 /* ---- Badges & chips ---- */
 .badge {
@@ -511,6 +575,19 @@ table.tbl tr:hover td { background: var(--panel-2); }
 table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .fact-row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
 .fact-row .grow { flex: 1; min-width: 0; }
+/* The page's label column is a floor, not a cage. A flex row places its items by their *used* width,
+   so a label longer than the column does not push the value along — it overflows and draws on top of
+   it (RESTRICTIONS renders 92px wide and the tag column was 72). Floor the cell at the column width and let
+   the content raise it, which also covers a translation longer than the English label the column was
+   measured against. */
+.fact-row > .field-label { min-width: max-content; }
+/* A read row and the edit row it toggles into must stand the same height, or every row below the pair
+   shifts (record-editing.html §3). They share a padding and a `1.4` line-height, but that lands each box
+   on a fractional pixel, and a blockified `<span>` and a form control whose inner line box the engine
+   lays out itself do not round it the same way — 37px against 38px, which is invisible on one row and a
+   whole pixel of drift by the third. Pinned here, scoped to a record row, so the settings forms' stacked
+   fields and the multi-line textareas keep their own metrics. */
+.fact-row .field.val, .fact-row input.in, .fact-row select.in, .fact-row .number-stepper { min-height: 38px; }
 
 /* ---- History / audit timeline ---- */
 .timeline { position: relative; padding-left: var(--sp-5); }

@@ -13,7 +13,12 @@
 # The fixture seeds exactly one record (place Kristiansand); this scenario opens a second (Oslo) to
 # have two tabs to dock. The Place create form's first field is the ID (not autofocused for a name), so
 # the click into Name is required — there is no text step, one `key` per character (as
-# `create-appears-in-list.toml` does).
+# `create-appears-in-list.toml` does). That click was re-measured for #310, which put every record row's
+# label and value on one line: each row lost the ~50px its stacked label took, so the Name card's input
+# rose from y 737 to y 608-645 (column-scanned at x=1150, `convert <shot> -crop 1x120+1150+560 +repage
+# txt:-`), and the click at 737 was landing on empty card background. Nothing downstream of it moved —
+# Save, the tab rows and the post-dock regions below all measure where they did — because the create
+# form is the only part of this scenario made of record rows.
 #
 # Single-pane half (#209): Oslo opens on Overview; clicking its Names tab changes it; opening
 # Kristiansand as a second tab unmounts Oslo's pane (only the active tab's pane is mounted); switching
@@ -47,7 +52,7 @@ label = "⌘N: a new Place draft"
 
 [[step]]
 do = "click"
-at = [1150, 737]
+at = [1150, 627]
 label = "field: Name"
 
 [[step]]

@@ -256,6 +256,12 @@ fn person_new_source_body(loc: &Localizer, mut draft: Signal<PersonDraft>) -> El
 /// choice (index [`SEX_OTHER_INDEX`]) for a free-text [`Sex::Other`] value.
 const SEXES: [Sex; 4] = [Sex::Female, Sex::Male, Sex::Unknown, Sex::Intersex];
 
+/// The label column width of every person record row (`docs/mockups/person.html:185-208`). The widest
+/// column any record card uses, because the surname-prefix row's Norwegian label is
+/// `ETTERNAVNSPREFIKS` at 135px — 26px past the English `SURNAME PREFIX`, which itself overflows the
+/// shared record floor.
+const PERSON_LABEL_WIDTH: u32 = 140;
+
 /// The person record's scalar identity fields (name type · the six name parts · sex), rendered
 /// read-first: read boxes in view mode, inputs with per-field reset in edit mode
 /// (`record-editing.html` §2/§3). A pure fn (the edit state's signals passed in) so the create pane
@@ -269,7 +275,7 @@ pub fn person_record_fields(loc: &Localizer, record: RecordEditState<PersonDraft
                 {person_name_type_field(loc, editing, record)}
                 {person_name_text_fields(loc, editing, record)}
                 {person_sex_field(loc, editing, record)}
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, PERSON_LABEL_WIDTH)}
             }
         }
     }
@@ -285,6 +291,7 @@ fn person_human_id_field(loc: &Localizer, editing: bool, record: RecordEditState
         DraftText {
             label: loc.field_label("id"),
             name: "human-id".to_owned(),
+            label_width: PERSON_LABEL_WIDTH,
             editing,
             value,
             original,
@@ -320,6 +327,7 @@ fn person_name_type_field(loc: &Localizer, editing: bool, record: RecordEditStat
         DraftSelect {
             label: loc.field_label("name-type"),
             name: "name-type".to_owned(),
+            label_width: PERSON_LABEL_WIDTH,
             editing,
             value,
             original,
@@ -345,32 +353,32 @@ fn person_name_text_fields(loc: &Localizer, editing: bool, record: RecordEditSta
     let current = draft();
     let original = seed.read().clone();
     rsx! {
-        DraftText { label: loc.field_label("prefix"), name: "prefix".to_owned(), editing,
+        DraftText { label: loc.field_label("prefix"), name: "prefix".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.prefix.clone(), original: original.prefix.clone(),
             reset_label: loc.action_reset_field(&loc.field_label("prefix")),
             oninput: move |value: String| draft.write().prefix = value,
             onreset: move |()| { let value = seed.read().prefix.clone(); draft.write().prefix = value; } }
-        DraftText { label: loc.label_given(), name: "given".to_owned(), editing,
+        DraftText { label: loc.label_given(), name: "given".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.given.clone(), original: original.given.clone(),
             reset_label: loc.action_reset_field(&loc.label_given()),
             oninput: move |value: String| draft.write().given = value,
             onreset: move |()| { let value = seed.read().given.clone(); draft.write().given = value; } }
-        DraftText { label: loc.field_label("nickname"), name: "nickname".to_owned(), editing,
+        DraftText { label: loc.field_label("nickname"), name: "nickname".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.nickname.clone(), original: original.nickname.clone(),
             reset_label: loc.action_reset_field(&loc.field_label("nickname")),
             oninput: move |value: String| draft.write().nickname = value,
             onreset: move |()| { let value = seed.read().nickname.clone(); draft.write().nickname = value; } }
-        DraftText { label: loc.field_surname_prefix(), name: "surname-prefix".to_owned(), editing,
+        DraftText { label: loc.field_surname_prefix(), name: "surname-prefix".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.surname_prefix.clone(), original: original.surname_prefix.clone(),
             reset_label: loc.action_reset_field(&loc.field_surname_prefix()),
             oninput: move |value: String| draft.write().surname_prefix = value,
             onreset: move |()| { let value = seed.read().surname_prefix.clone(); draft.write().surname_prefix = value; } }
-        DraftText { label: loc.label_surname(), name: "surname".to_owned(), editing,
+        DraftText { label: loc.label_surname(), name: "surname".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.surname.clone(), original: original.surname.clone(),
             reset_label: loc.action_reset_field(&loc.label_surname()),
             oninput: move |value: String| draft.write().surname = value,
             onreset: move |()| { let value = seed.read().surname.clone(); draft.write().surname = value; } }
-        DraftText { label: loc.field_label("suffix"), name: "suffix".to_owned(), editing,
+        DraftText { label: loc.field_label("suffix"), name: "suffix".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.suffix.clone(), original: original.suffix.clone(),
             reset_label: loc.action_reset_field(&loc.field_label("suffix")),
             oninput: move |value: String| draft.write().suffix = value,
@@ -421,6 +429,7 @@ fn person_sex_field(loc: &Localizer, editing: bool, record: RecordEditState<Pers
         DraftSelect {
             label: loc.label_sex(),
             name: "sex".to_owned(),
+            label_width: PERSON_LABEL_WIDTH,
             editing,
             value,
             original,
@@ -843,7 +852,7 @@ fn person_detail(
             title: detail.name.clone(),
             subtitle,
             id_label: Some(detail.human_id.clone()),
-            badges: vec![detail.evidence_level_label.clone()],
+            badges: vec![BadgeSpec::text(detail.evidence_level_label.clone())],
             avatar: person_initials(detail),
             extras: restriction_display(loc, &detail.restrictions),
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
@@ -1006,8 +1015,7 @@ pub fn overview_tab(loc: &Localizer, detail: &PersonDetail) -> Element {
                 } else {
                     div { class: "stack",
                         for fact in detail.facts.iter() {
-                            div { class: "fact-row",
-                                span { class: "field-label", style: "width:96px;margin:0", "{fact.type_label}" }
+                            FactRow { label: fact.type_label.clone(),
                                 span { class: "grow", {fact_value_date(fact)} }
                                 ConfidenceBadge { level: fact.confidence, label: fact.confidence_label.clone() }
                                 {provenance_cue(loc, loc.provenance_title_claim(&fact.type_label), &fact.citations)}
@@ -1173,8 +1181,8 @@ pub fn facts_table(
                                 }
                             },
                             td { "{fact.type_label}" }
-                            td { class: "muted", {fact.date.clone().unwrap_or_else(|| "—".to_owned())} }
-                            td { {fact.value.clone().unwrap_or_else(|| "—".to_owned())} }
+                            td { class: "muted", {or_dash(fact.date.clone())} }
+                            td { {or_dash(fact.value.clone())} }
                             td {
                                 ConfidenceBadge { level: fact.confidence, label: fact.confidence_label.clone() }
                             }
@@ -1255,9 +1263,9 @@ fn events_row(
                 }
             }
             td { Chip { label: event.role_label.clone() } }
-            td { class: "muted", {event.age_label.clone().unwrap_or_else(|| "—".to_owned())} }
+            td { class: "muted", {or_dash(event.age_label.clone())} }
             td { class: "muted",
-                {event.date.clone().unwrap_or_else(|| "—".to_owned())}
+                {or_dash(event.date.clone())}
                 for attribute in event.attributes.iter() {
                     div { class: "muted", "{attribute.attribute_type}: {attribute.value}" }
                 }
@@ -1265,7 +1273,7 @@ fn events_row(
                     Chip { label: note.clone() }
                 }
             }
-            td { class: "muted", {event.place.clone().unwrap_or_else(|| "—".to_owned())} }
+            td { class: "muted", {or_dash(event.place.clone())} }
             td {
                 if let Some(level) = event.confidence {
                     ConfidenceBadge { level, label: event.confidence_label.clone() }
@@ -1424,7 +1432,7 @@ pub fn timeline_panel(loc: &Localizer, rows: &[TimelineRowVm]) -> Element {
 fn timeline_row(loc: &Localizer, row: &TimelineRowVm) -> Element {
     rsx! {
         tr {
-            td { class: "muted", {row.date.clone().unwrap_or_else(|| "—".to_owned())} }
+            td { class: "muted", {or_dash(row.date.clone())} }
             td {
                 Chip { label: row.kind_label.clone() }
             }
@@ -1712,10 +1720,9 @@ fn CiteFactForm(human_id: String, fact: FactVm, onsubmit: EventHandler<(PersonEd
     });
     let fact_type = fact.fact_type.clone();
     let value = fact.value.clone();
-    let display = fact.value.clone().unwrap_or_else(|| "—".to_owned());
+    let display = or_dash(fact.value.clone());
     rsx! {
-        div { class: "fact-row",
-            span { class: "field-label", style: "width:96px;margin:0", "{fact.type_label}" }
+        FactRow { label: fact.type_label.clone(),
             span { class: "grow", "{display}" }
         }
         {provenance_block_dna(loc, prov)}

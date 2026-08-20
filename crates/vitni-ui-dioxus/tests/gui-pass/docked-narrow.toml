@@ -29,7 +29,10 @@
 # assertion passed on the scroll alone.
 #
 # Regions and coordinates were read off this scenario's own `docked-narrow` shot, never carried over from
-# `docked-detail-tabs.toml`'s 1800x1200 ones — a narrower window is a different layout, not a crop.
+# `docked-detail-tabs.toml`'s 1800x1200 ones — a narrower window is a different layout, not a crop. The
+# click into Name is the exception that proves it: #310's one-line record rows moved it in both windows,
+# but to y=620 here (the input spans 603-638, column-scanned at x=700) against y=627 there — measured
+# separately, because a narrow pane reflows the rows above it rather than cropping them.
 description = "The default 1280x840 window keeps a docked split as two columns, not a clipped single one (#279)"
 window = [1280, 840]
 
@@ -45,7 +48,7 @@ label = "⌘N: a new Place draft"
 
 [[step]]
 do = "click"
-at = [630, 737]
+at = [630, 620]
 label = "field: Name"
 
 [[step]]

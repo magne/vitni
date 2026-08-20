@@ -11,6 +11,7 @@ mod color_picker;
 mod data;
 mod draft_field;
 mod evidence;
+mod fact_row;
 mod feedback;
 mod forms;
 mod history;
@@ -28,14 +29,15 @@ mod toggle;
 
 pub use button::{Button, ButtonVariant, IconButton};
 pub use color_picker::ColorPicker;
-pub use data::{Badge, Chip, ListRow, Table};
+pub use data::{Badge, BadgeSpec, Chip, ListRow, Table};
 pub use draft_field::{
-    DraftDate, DraftSelect, DraftText, date_calendar_options, date_draft_field, date_field_error,
+    DateFieldBinding, DraftDate, DraftSelect, DraftText, date_calendar_options, date_draft_field, date_field_error,
     date_modifier_options, date_quality_options,
 };
 pub use evidence::{
     ConfidenceBadge, EvidenceAxisChip, NoSourceFlag, ProvenancePopover, RestrictionChoice, RestrictionSet, SourceLink,
 };
+pub use fact_row::{DEFAULT_LABEL_WIDTH, FactRow, RECORD_LABEL_WIDTH, or_dash};
 pub use feedback::{Toast, ToastKind};
 pub use forms::{Checkbox, DateInput, DatePicker, Input, LabeledValue, NumberInput, Select, Textarea};
 pub use history::{HistoryEntry, HistoryTimeline};

@@ -20,9 +20,17 @@
 # more than one character has been typed: the field is blank either way after the first.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes; the three pills
-# were column-scanned (`convert <shot> -crop 260x1+530+798 +repage txt:-`) rather than eyeballed. So was
-# the reason field's interior: the box spans x 545..1763, the caret sits at x=558 and blinks, so the
-# region below starts at 566 — clear of it — and holds the second character onward.
+# were column-scanned (`convert <shot> -crop 300x1+620+670 +repage txt:-`) rather than eyeballed. So was
+# the reason field's interior: the box spans x 545..1765 and y 761..798, the caret sits at x=558 and
+# blinks, so the region below starts at 566 — clear of it — and holds the second character onward.
+#
+# Every coordinate here was re-measured for #310, which put the Restrictions row's label beside its pills
+# instead of above them, and again when the place record card's label column went 96px to 110px: the
+# pills all moved 14px right with it, so the boxes are now Confidential x 667-755, Locked x 760-822 and
+# Privacy x 827-888, on a row at y 667-690 (671-694 once the header carries the saved chip group, which
+# is why y=678 is the click for both — inside both boxes). Both clicks aim at the box centre; the old
+# 697/843 still landed inside, but only by the pill's own width. The rows above shortened with the
+# one-line row change, lifting the provenance block from y 852 to 725 and its reason input to 761-798.
 description = "A restriction change is part of the record's own edit, saved with its reason (#315)"
 
 [[step]]
@@ -50,7 +58,7 @@ name = "edit-open"
 
 [[step]]
 do = "click"
-at = [589, 798]
+at = [711, 678]
 label = "record card: the Confidential pill"
 
 [[step]]
@@ -59,7 +67,7 @@ name = "toggled"
 
 [[step]]
 do = "click"
-at = [1150, 910]
+at = [1150, 780]
 label = "provenance: the reason field"
 
 [[step]]
@@ -124,7 +132,7 @@ name = "edit-again"
 
 [[step]]
 do = "click"
-at = [736, 798]
+at = [857, 678]
 label = "record card: the Privacy pill"
 
 [[step]]
@@ -151,7 +159,7 @@ shots = ["edit-open", "toggled"]
 # The provenance block only, below the record card: a whole-window compare would also see the pill's own
 # highlight and the tabstrip's unsaved dot, and could not tell "the pill repainted" from "the record
 # became dirty and asked for a reason".
-region = [528, 852, 1252, 290]
+region = [528, 725, 1252, 275]
 because = "toggling a pill must make the record dirty, which is what raises the provenance block (#315)"
 
 [[assert]]
@@ -161,7 +169,7 @@ shots = ["reason-empty", "reason-typed"]
 # field stayed empty compares two identical patches of input background and fails, whatever the caret is
 # doing. Four characters were typed; this region holds the second onward, which is the whole point: the
 # field used to be blanked after every keystroke, so it was empty here even mid-word.
-region = [566, 896, 140, 28]
+region = [566, 766, 140, 26]
 because = "the typed reason must accumulate in the field, or Save commits only the last character"
 
 [[assert]]
@@ -174,7 +182,7 @@ because = "Save must commit the restriction, so the header's read-only chip grou
 [[assert]]
 kind = "differ"
 shots = ["edit-again", "toggled-again"]
-region = [540, 780, 300, 40]
+region = [645, 665, 300, 35]
 because = "the second toggle must register, or the Cancel below would come back to an unchanged record"
 
 [[assert]]

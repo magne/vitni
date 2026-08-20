@@ -130,8 +130,8 @@ pub fn notes_table(
                         span { class: "muted", "—" }
                     }
                 }
-                td { class: "muted", {note.language.clone().unwrap_or_else(|| "—".to_owned())} }
-                td { {note.text.clone().unwrap_or_else(|| "—".to_owned())} }
+                td { class: "muted", {or_dash(note.language.clone())} }
+                td { {or_dash(note.text.clone())} }
             },
             actions,
         });
@@ -171,7 +171,7 @@ pub fn citations_table<E: Clone + PartialEq + 'static>(
                 None => Err(citation.source.clone().unwrap_or_else(|| citation.human_id.clone())),
             },
             cells: rsx! {
-                td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
+                td { class: "muted", {or_dash(citation.page.clone())} }
                 if show_backs {
                     td { class: "muted", "{citation.backs_count}" }
                 }
@@ -357,6 +357,11 @@ pub fn fallback_tab(id: &'static str) -> DetailTab {
     }
 }
 
+/// The label column of an address card's rows (`docs/mockups/repository.html:163-185`,
+/// `event.html:239-246`). The canonical [`DEFAULT_LABEL_WIDTH`]: the 90px both mockups drew is 1px
+/// short of `POSTNUMMER`, which took that row's value out of line with the card's others.
+const ADDRESS_LABEL_WIDTH: u32 = DEFAULT_LABEL_WIDTH;
+
 /// The Addresses tab, shared by every aggregate that carries postal addresses (Repository, Event):
 /// one card per recorded address — street · region · postal · country · phone · email · fax · www,
 /// plus a per-card Edit (opens the row's form pre-filled via `onedit`, which the caller wraps into its
@@ -401,36 +406,28 @@ pub fn address_cards(
                                 }
                             }
                             div { class: "stack",
-                                div { class: "fact-row",
-                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"street\")}" }
+                                FactRow { label: loc.field_label("street"), label_width: ADDRESS_LABEL_WIDTH,
                                     span { class: "grow", {address.lines.join(", ")} }
                                 }
-                                div { class: "fact-row",
-                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"region\")}" }
-                                    span { class: "grow", {address.region.clone().unwrap_or_else(|| "—".to_owned())} }
+                                FactRow { label: loc.field_label("region"), label_width: ADDRESS_LABEL_WIDTH,
+                                    span { class: "grow", {or_dash(address.region.clone())} }
                                 }
-                                div { class: "fact-row",
-                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"postal-code\")}" }
-                                    span { class: "grow mono", {address.postal_code.clone().unwrap_or_else(|| "—".to_owned())} }
+                                FactRow { label: loc.field_label("postal-code"), label_width: ADDRESS_LABEL_WIDTH,
+                                    span { class: "grow mono", {or_dash(address.postal_code.clone())} }
                                 }
-                                div { class: "fact-row",
-                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"country\")}" }
-                                    span { class: "grow", {address.country.clone().unwrap_or_else(|| "—".to_owned())} }
+                                FactRow { label: loc.field_label("country"), label_width: ADDRESS_LABEL_WIDTH,
+                                    span { class: "grow", {or_dash(address.country.clone())} }
                                 }
-                                div { class: "fact-row",
-                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"phone\")}" }
-                                    span { class: "grow mono", {address.phone.clone().unwrap_or_else(|| "—".to_owned())} }
+                                FactRow { label: loc.field_label("phone"), label_width: ADDRESS_LABEL_WIDTH,
+                                    span { class: "grow mono", {or_dash(address.phone.clone())} }
                                 }
-                                div { class: "fact-row",
-                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"email\")}" }
-                                    span { class: "grow", {address.email.clone().unwrap_or_else(|| "—".to_owned())} }
+                                FactRow { label: loc.field_label("email"), label_width: ADDRESS_LABEL_WIDTH,
+                                    span { class: "grow", {or_dash(address.email.clone())} }
                                 }
-                                div { class: "fact-row",
-                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"fax\")}" }
-                                    span { class: "grow mono", {address.fax.clone().unwrap_or_else(|| "—".to_owned())} }
+                                FactRow { label: loc.field_label("fax"), label_width: ADDRESS_LABEL_WIDTH,
+                                    span { class: "grow mono", {or_dash(address.fax.clone())} }
                                 }
-                                div { class: "fact-row",
-                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"www\")}" }
+                                FactRow { label: loc.field_label("www"), label_width: ADDRESS_LABEL_WIDTH,
                                     if let Some(www) = address.www.clone() {
                                         a { class: "grow", href: "{www}", "{www}" }
                                     } else {

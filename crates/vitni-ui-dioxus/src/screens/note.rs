@@ -1,5 +1,10 @@
 use super::prelude::*;
 
+/// The label column width of every note record row (`docs/mockups/note.html:105`, `:126`, `:137`).
+/// The shared record floor: the page's own labels are short, but `RESTRIKSJONER` renders 102px, so the
+/// 90px the mockup drew left the Restrictions pills out of line with the card's other values.
+const NOTE_LABEL_WIDTH: u32 = RECORD_LABEL_WIDTH;
+
 /// The selectable note types for the type-edit form, in display order.
 fn note_type_choices() -> [NoteType; 4] {
     [
@@ -104,6 +109,7 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Not
                 DraftText {
                     label: loc.field_label("id"),
                     name: "note-id".to_owned(),
+                    label_width: NOTE_LABEL_WIDTH,
                     editing,
                     value: id_value,
                     original: id_original,
@@ -119,6 +125,7 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Not
                 DraftSelect {
                     label: loc.field_label("type"),
                     name: "note-type".to_owned(),
+                    label_width: NOTE_LABEL_WIDTH,
                     editing,
                     value: type_value,
                     original: type_original,
@@ -136,6 +143,7 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Not
                 DraftText {
                     label: loc.field_label("content"),
                     name: "note-content".to_owned(),
+                    label_width: NOTE_LABEL_WIDTH,
                     editing,
                     value: text_value,
                     original: text_original,
@@ -150,6 +158,7 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Not
                 DraftText {
                     label: loc.field_label("language"),
                     name: "note-language".to_owned(),
+                    label_width: NOTE_LABEL_WIDTH,
                     editing,
                     value: language_value,
                     original: language_original,
@@ -160,7 +169,7 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Not
                         draft.write().language = value;
                     },
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, NOTE_LABEL_WIDTH)}
             }
         }
     }
@@ -507,9 +516,8 @@ pub fn note_language_tab(
 ) -> Element {
     rsx! {
         Card { title: loc.section_label("primary-language"),
-            div { class: "fact-row",
-                span { class: "field-label", style: "width:120px;margin:0", "{loc.field_label(\"language\")}" }
-                span { class: "grow", {detail.language.clone().unwrap_or_else(|| "—".to_owned())} }
+            FactRow { label: loc.field_label("language"), label_width: 120,
+                span { class: "grow", {or_dash(detail.language.clone())} }
             }
         }
         if detail.translations.is_empty() {
@@ -525,9 +533,9 @@ pub fn note_language_tab(
                 ],
                 for translation in detail.translations.iter() {
                     tr {
-                        td { Chip { label: translation.language.clone().unwrap_or_else(|| "—".to_owned()) } }
+                        td { Chip { label: or_dash(translation.language.clone()) } }
                         td { "{translation.text}" }
-                        td { class: "muted", {translation.translator.clone().unwrap_or_else(|| "—".to_owned())} }
+                        td { class: "muted", {or_dash(translation.translator.clone())} }
                         {row_actions_cell::<NoteEditForm>(
                             loc,
                             &translation.language.clone().unwrap_or_else(|| translation.text.clone()),

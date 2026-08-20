@@ -12,7 +12,19 @@
 # the picker, which would move the floating result list ~24px and make a region compare differ for the
 # layout rather than for the rows. Detaching restores the geometry exactly; the citation record stays.
 #
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+# The panel is scrolled to the bottom of its body **once**, before anything is clicked, and every
+# coordinate below is read there. #310's one-line record rows shortened the succession form above the
+# provenance block, but the Date editor stacks four controls in one row's value cell, so the block still
+# runs past the window: before the scroll the new-citation card's Add button was off screen entirely.
+# Scrolling once and never again is what keeps the two picker shots comparable — the `differ` below is
+# over a region, and a second scroll between them would move the floating list for the scroll rather than
+# for the row it is asserting on, the same trap the chip detach below avoids.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes, and were
+# re-measured for #310: with the panel scrolled, the citations picker input is y 803-840 (click 821), its
+# floating list y 858-950 with "+ New citation" on 916-942 (click 929), the card's Source input y 939-972
+# (click 955), that picker's "+ New source" row y 1052-1078 (click 1065 — its centre, not the y=1047 top
+# edge the old coordinate happened to still hit) and Add citation y 1070-1095 (click 1082).
 description = "An open picker sees a record created beside it, and the create updates the rail count (#266)"
 
 [[step]]
@@ -36,8 +48,14 @@ at = [1698, 610]
 label = "Hierarchy: Add succession"
 
 [[step]]
+do = "wheel"
+at = [1663, 700]
+clicks = -15
+label = "panel: scroll its body to the bottom, once — every coordinate below is read there"
+
+[[step]]
 do = "click"
-at = [1663, 806]
+at = [1670, 821]
 label = "provenance: open the citations picker"
 
 [[step]]
@@ -46,12 +64,12 @@ name = "picker-before"
 
 [[step]]
 do = "click"
-at = [1632, 912]
+at = [1630, 929]
 label = "citations picker: + New citation"
 
 [[step]]
 do = "click"
-at = [1673, 940]
+at = [1675, 955]
 label = "new citation card: the source picker"
 
 [[step]]
@@ -61,7 +79,7 @@ label = "type: s"
 
 [[step]]
 do = "click"
-at = [1680, 1047]
+at = [1680, 1065]
 label = "source picker: + New source \"s\""
 
 [[step]]
@@ -70,7 +88,7 @@ name = "rail-before"
 
 [[step]]
 do = "click"
-at = [1646, 1065]
+at = [1650, 1082]
 label = "new citation card: Add citation — commits S0001 + C0001"
 
 [[step]]
@@ -84,7 +102,7 @@ label = "detach the C0001 chip, restoring the picker's on-screen position"
 
 [[step]]
 do = "click"
-at = [1663, 806]
+at = [1670, 821]
 label = "provenance: reopen the citations picker"
 
 [[step]]
@@ -97,7 +115,7 @@ shots = ["picker-before", "picker-after"]
 because = "the reopened picker must list the citation created in it, not 'No matches' (#266)"
 # The floating result list only — the panel around it repaints for the detach either way, and the list
 # is where "No matches" becomes a C0001 row.
-region = [1560, 830, 220, 110]
+region = [1560, 860, 210, 88]
 
 [[assert]]
 kind = "differ"

@@ -17,7 +17,11 @@
 # a chord that reaches nothing focused reaches no dispatcher either.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The tabstrip
-# region is column-scanned (`convert <shot> -crop 400x1+520+92 +repage txt:-`), not eyeballed.
+# region is column-scanned (`convert <shot> -crop 400x1+520+92 +repage txt:-`), not eyeballed. The two
+# clicks into Name were re-measured for #310, which put every record row's label and value on one line:
+# the Place create form's Name input rose from y 737 to y 608-645, so the old coordinate landed on card
+# background and typed nothing — which made phase 2's confirm never rise and phase 3's `match` compare
+# two untouched drafts.
 description = "⌘W closes a draft nobody typed into, and confirms once something has been (#307)"
 
 [[step]]
@@ -59,7 +63,7 @@ label = "⌘N: another Place draft, this one to type into"
 
 [[step]]
 do = "click"
-at = [1150, 737]
+at = [1150, 627]
 label = "field: Name"
 
 [[step]]
@@ -102,7 +106,7 @@ label = "confirm: Esc — the draft and its text stay"
 
 [[step]]
 do = "click"
-at = [1150, 737]
+at = [1150, 627]
 label = "field: Name again — and focus back into the webview after Esc"
 
 [[step]]

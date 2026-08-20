@@ -3,6 +3,10 @@
 //! `record_edit_provenance`, the create-frame header, and the shared restriction display/field
 //! (issue #315). Pure render-and-inspect — no window, no workspace — over `TagDraft` as a
 //! representative record draft, and `SourceDraft` where a create-mode draft must hide a field.
+//!
+//! The row *shape* is asserted here too (issue #310): a record row is one `.fact-row` with the label
+//! in a fixed-width column beside the value in **both** modes, and a `multiline` field is the one
+//! exception that stays stacked.
 
 use dioxus::prelude::*;
 use vitni_ui::ActionLabel;
@@ -13,8 +17,21 @@ use vitni_ui_dioxus::screens::{
     record_head_actions, record_restrictions_field, restriction_display,
 };
 
+/// The source record page's own label column width (`docs/mockups/source.html:112-116`) — the shared
+/// record floor, which every whole-record card starts at.
+const SOURCE_LABEL_WIDTH: u32 = 110;
+
+/// The note record page's own label column width (`docs/mockups/note.html:105`, `:126`, `:137`), which
+/// the `multiline` and select-row shapes below are measured at.
+const NOTE_LABEL_WIDTH: u32 = 110;
+
 fn loc() -> Localizer {
     Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+/// The `.field-label` a row at `width` must carry, inline style and all.
+fn label_column(width: u32) -> String {
+    format!(r#"class="field-label" style="width:{width}px;margin:0""#)
 }
 
 fn render(view: fn() -> Element) -> String {
@@ -73,7 +90,10 @@ fn draft_text_edit_modified() -> Element {
 #[test]
 fn draft_text_view_mode_is_a_read_box_without_an_input() {
     let html = render(draft_text_view);
-    assert!(html.contains(r#"class="val""#), "view mode renders a read box:\n{html}");
+    assert!(
+        html.contains(r#"class="field val""#),
+        "view mode renders a read box:\n{html}"
+    );
     assert!(html.contains("John"), "the value is shown as read text:\n{html}");
     assert!(!html.contains("<input"), "view mode has no live input:\n{html}");
 }
@@ -109,6 +129,189 @@ fn a_modified_draft_text_is_tinted_and_offers_a_labelled_reset() {
     );
 }
 
+// ---- Row shape (issue #310) ----------------------------------------------------------------------
+
+/// The same field at the source page's own label width, in each mode, plus the invalid/hinted and
+/// `multiline` variants — the four shapes the row assertions below measure.
+fn row_view() -> Element {
+    rsx! {
+        DraftText {
+            label: "Title".to_owned(),
+            name: "source-title".to_owned(),
+            label_width: SOURCE_LABEL_WIDTH,
+            editing: false,
+            value: "Parish register".to_owned(),
+            original: "Parish register".to_owned(),
+            reset_label: "Reset Title".to_owned(),
+            oninput: move |_: String| {},
+            onreset: move |()| {},
+        }
+    }
+}
+
+fn row_edit() -> Element {
+    rsx! {
+        DraftText {
+            label: "Title".to_owned(),
+            name: "source-title".to_owned(),
+            label_width: SOURCE_LABEL_WIDTH,
+            editing: true,
+            value: "Parish register".to_owned(),
+            original: "Parish register".to_owned(),
+            reset_label: "Reset Title".to_owned(),
+            oninput: move |_: String| {},
+            onreset: move |()| {},
+        }
+    }
+}
+
+fn row_edit_with_error_and_hint() -> Element {
+    rsx! {
+        DraftText {
+            label: "Id".to_owned(),
+            name: "source-id".to_owned(),
+            label_width: SOURCE_LABEL_WIDTH,
+            editing: true,
+            value: String::new(),
+            original: "S0001".to_owned(),
+            reset_label: "Reset Id".to_owned(),
+            error: Some("An id is required.".to_owned()),
+            hint: Some("Leave empty to generate one.".to_owned()),
+            oninput: move |_: String| {},
+            onreset: move |()| {},
+        }
+    }
+}
+
+fn multiline_view() -> Element {
+    rsx! {
+        DraftText {
+            label: "Content".to_owned(),
+            name: "note-content".to_owned(),
+            label_width: NOTE_LABEL_WIDTH,
+            editing: false,
+            value: "# Heading".to_owned(),
+            original: "# Heading".to_owned(),
+            reset_label: "Reset Content".to_owned(),
+            multiline: true,
+            oninput: move |_: String| {},
+            onreset: move |()| {},
+        }
+    }
+}
+
+fn multiline_edit() -> Element {
+    rsx! {
+        DraftText {
+            label: "Content".to_owned(),
+            name: "note-content".to_owned(),
+            label_width: NOTE_LABEL_WIDTH,
+            editing: true,
+            value: "# Heading".to_owned(),
+            original: "# Heading".to_owned(),
+            reset_label: "Reset Content".to_owned(),
+            multiline: true,
+            oninput: move |_: String| {},
+            onreset: move |()| {},
+        }
+    }
+}
+
+fn select_row_edit() -> Element {
+    rsx! {
+        DraftSelect {
+            label: "Type".to_owned(),
+            name: "note-type".to_owned(),
+            label_width: NOTE_LABEL_WIDTH,
+            editing: true,
+            value: "1".to_owned(),
+            original: "1".to_owned(),
+            reset_label: "Reset Type".to_owned(),
+            options: vec![
+                SelectChoice { value: "0".to_owned(), label: "General".to_owned() },
+                SelectChoice { value: "1".to_owned(), label: "Research".to_owned() },
+            ],
+            onchange: move |_: String| {},
+            onreset: move |()| {},
+        }
+    }
+}
+
+#[test]
+fn a_record_row_puts_its_label_beside_the_value_in_both_modes() {
+    for (mode, view) in [
+        ("view", row_view as fn() -> Element),
+        ("edit", row_edit as fn() -> Element),
+    ] {
+        let html = render(view);
+        assert!(
+            html.contains(r#"class="fact-row""#),
+            "{mode} mode is one .fact-row (record-editing.html:47-99):\n{html}"
+        );
+        assert!(
+            html.contains(&label_column(SOURCE_LABEL_WIDTH)),
+            "{mode} mode labels the row in the page's own {SOURCE_LABEL_WIDTH}px column:\n{html}"
+        );
+        assert!(
+            !html.contains(r#"<div class="field">"#),
+            "{mode} mode no longer stacks the label above the value:\n{html}"
+        );
+    }
+}
+
+#[test]
+fn a_select_row_is_one_line_too() {
+    let html = render(select_row_edit);
+    assert!(
+        html.contains(r#"class="fact-row""#),
+        "a select row is a .fact-row:\n{html}"
+    );
+    assert!(
+        html.contains(&label_column(NOTE_LABEL_WIDTH)),
+        "and takes the page's label width:\n{html}"
+    );
+    assert!(html.contains("<select"), "the control is still a live select:\n{html}");
+}
+
+#[test]
+fn a_multiline_row_stays_stacked_in_both_modes() {
+    for (mode, view) in [
+        ("view", multiline_view as fn() -> Element),
+        ("edit", multiline_edit as fn() -> Element),
+    ] {
+        let html = render(view);
+        assert!(
+            html.contains(r#"<div class="field">"#),
+            "{mode} mode keeps the label above a Markdown body (note.html:131-136):\n{html}"
+        );
+        assert!(!html.contains("fact-row"), "a stacked field is not a row:\n{html}");
+    }
+}
+
+#[test]
+fn a_rows_error_and_hint_sit_under_the_input_not_beside_it() {
+    let html = render(row_edit_with_error_and_hint);
+    let grow = html.find(r#"class="grow""#);
+    let input = html.find("<input");
+    let error = html.find(r#"class="field-error""#);
+    let hint = html.find(r#"class="field-hint""#);
+    assert!(
+        grow.is_some_and(|grow| input.is_some_and(|input| grow < input)),
+        "the control is wrapped in the row's .grow cell:\n{html}"
+    );
+    assert!(
+        input.is_some_and(|input| error.is_some_and(|error| input < error))
+            && error.is_some_and(|error| hint.is_some_and(|hint| error < hint)),
+        "the message and hint follow the input inside that cell, so .fact-row's wrap cannot put them \
+         beside it:\n{html}"
+    );
+    assert_eq!(
+        html.matches("fact-row").count(),
+        1,
+        "and the row itself is still one row:\n{html}"
+    );
+}
+
 // ---- DraftSelect ---------------------------------------------------------------------------------
 
 fn draft_select_view() -> Element {
@@ -133,7 +336,10 @@ fn draft_select_view() -> Element {
 #[test]
 fn draft_select_view_mode_shows_the_selected_option_label() {
     let html = render(draft_select_view);
-    assert!(html.contains(r#"class="val""#), "view mode renders a read box:\n{html}");
+    assert!(
+        html.contains(r#"class="field val""#),
+        "view mode renders a read box:\n{html}"
+    );
     assert!(html.contains("Male"), "the selected option's label is shown:\n{html}");
     assert!(!html.contains("<select"), "view mode has no live select:\n{html}");
 }
@@ -258,6 +464,7 @@ fn restriction_field_view_mode() -> Element {
     record_restrictions_field(
         &loc(),
         source_record(false, stored_source(vec![RestrictionKind::Privacy])),
+        SOURCE_LABEL_WIDTH,
     )
 }
 
@@ -265,11 +472,12 @@ fn restriction_field_edit_mode() -> Element {
     record_restrictions_field(
         &loc(),
         source_record(true, stored_source(vec![RestrictionKind::Privacy])),
+        SOURCE_LABEL_WIDTH,
     )
 }
 
 fn restriction_field_create_mode() -> Element {
-    record_restrictions_field(&loc(), source_record(true, SourceDraft::new()))
+    record_restrictions_field(&loc(), source_record(true, SourceDraft::new()), SOURCE_LABEL_WIDTH)
 }
 
 #[test]

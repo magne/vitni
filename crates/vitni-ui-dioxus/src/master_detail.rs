@@ -10,7 +10,7 @@
 use dioxus::prelude::*;
 use vitni_ui::{ListQuery, RowSort, RowVm, visible_rows};
 
-use crate::components::{Badge, ListRow, TabItem, Tabs, TextInput};
+use crate::components::{Badge, BadgeSpec, ListRow, TabItem, Tabs, TextInput};
 use crate::screens::DockedRecordDetail;
 use crate::shell::nav_state::{NavState, PaneRole};
 use crate::shell::roving::roving_vertical;
@@ -233,9 +233,9 @@ pub fn DetailContainer(
     /// id to show (a Tag never renders its UUID — data-model §9).
     #[props(default)]
     id_label: Option<String>,
-    /// Extra already-localized string badges (e.g. a privacy tag).
+    /// Extra badges (e.g. a privacy tag, or a Tag's colour with its swatch dot).
     #[props(default)]
-    badges: Vec<String>,
+    badges: Vec<BadgeSpec>,
     /// An optional short avatar text (e.g. initials).
     #[props(default)]
     avatar: Option<String>,
@@ -280,7 +280,7 @@ pub fn DetailContainer(
                         Badge { label: id_label }
                     }
                     for badge in badges {
-                        Badge { label: badge }
+                        Badge { label: badge.label, dot_color: badge.dot_color }
                     }
                     {extras}
                 }

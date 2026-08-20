@@ -2,6 +2,11 @@ use super::prelude::*;
 // The media attribute row view-model (seeds the per-row attribute edit).
 use vitni_ui::MediaAttributeVm;
 
+/// The label column width of every media record row (`docs/mockups/media.html:120-125`, `:218-222`).
+/// The shared record floor: `KONTROLLSUM` (96px) and `RESTRIKSJONER` (102px) both overflowed the 90px
+/// the mockup drew, taking those two rows' values out of line with the card's others.
+const MEDIA_LABEL_WIDTH: u32 = RECORD_LABEL_WIDTH;
+
 /// The create-mode media record: an uncommitted [`MediaDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). Save commits the whole media object; Cancel discards.
 #[component]
@@ -73,6 +78,7 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
                 DraftText {
                     label: loc.field_label("id"),
                     name: "media-id".to_owned(),
+                    label_width: MEDIA_LABEL_WIDTH,
                     editing,
                     value: current.human_id.clone(),
                     original: committed.human_id.clone(),
@@ -88,6 +94,7 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
                 DraftText {
                     label: loc.field_label("file-path"),
                     name: "media-file-path".to_owned(),
+                    label_width: MEDIA_LABEL_WIDTH,
                     editing,
                     value: current.file_path.clone(),
                     original: committed.file_path.clone(),
@@ -102,6 +109,7 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
                 DraftText {
                     label: loc.field_label("web-path"),
                     name: "media-web-path".to_owned(),
+                    label_width: MEDIA_LABEL_WIDTH,
                     editing,
                     value: current.web_path.clone(),
                     original: committed.web_path.clone(),
@@ -115,6 +123,7 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
                 DraftText {
                     label: loc.field_label("mime"),
                     name: "media-mime".to_owned(),
+                    label_width: MEDIA_LABEL_WIDTH,
                     editing,
                     value: current.mime.clone(),
                     original: committed.mime.clone(),
@@ -128,6 +137,7 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
                 DraftText {
                     label: loc.field_label("checksum"),
                     name: "media-checksum".to_owned(),
+                    label_width: MEDIA_LABEL_WIDTH,
                     editing,
                     value: current.checksum.clone(),
                     original: committed.checksum.clone(),
@@ -141,15 +151,18 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
                     loc,
                     "media-date",
                     editing,
-                    current.date.clone(),
-                    committed.date.clone(),
-                    Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
-                    Callback::new(move |()| {
-                        let value = seed.read().date.clone();
-                        draft.write().date = value;
-                    }),
+                    MEDIA_LABEL_WIDTH,
+                    DateFieldBinding {
+                        value: current.date.clone(),
+                        original: committed.date.clone(),
+                        onchange: Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
+                        onreset: Callback::new(move |()| {
+                            let value = seed.read().date.clone();
+                            draft.write().date = value;
+                        }),
+                    },
                 )}
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, MEDIA_LABEL_WIDTH)}
             }
         }
     }

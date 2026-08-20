@@ -93,10 +93,15 @@ pub fn CitationCreateRecord(draft_id: DraftId) -> Element {
     )
 }
 
-/// The citation's evidence record fields (confidence + the three Evidence Explained axes), factored out
-/// of [`citation_record_fields`] to stay under the length cap. Each is an optional-enum [`DraftSelect`]
-/// over the [`record_enum_select`] parts; the three axes are the citation's own analysis.
-fn citation_evidence_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::CitationDraft>) -> Element {
+/// The label column width of every citation record row (`docs/mockups/citation.html:201-216`). Wider
+/// than the shared record floor because the three Evidence Explained axes are the card's longest
+/// labels: `INFORMATION KIND` renders 123px and its Norwegian `INFORMASJONSTYPE` 133px.
+const CITATION_LABEL_WIDTH: u32 = 140;
+
+/// The citation's record-level confidence row — the whole claim's surety, distinct from the three
+/// Evidence Explained axes below it ([`citation_evidence_axis_fields`]). An optional-enum
+/// [`DraftSelect`] over the [`record_enum_select`] parts.
+fn citation_confidence_record_field(loc: &Localizer, record: RecordEditState<vitni_ui::CitationDraft>) -> Element {
     let editing = record.editing.read().to_owned();
     let mut draft = record.draft;
     let seed = record.seed;
@@ -107,6 +112,35 @@ fn citation_evidence_record_fields(loc: &Localizer, record: RecordEditState<vitn
         seed.read().confidence.as_ref(),
         |level| loc.confidence_label(*level),
     );
+    rsx! {
+        DraftSelect {
+            label: loc.field_label("confidence"),
+            name: "citation-confidence".to_owned(),
+            label_width: CITATION_LABEL_WIDTH,
+            editing,
+            value: confidence_value,
+            original: confidence_original,
+            reset_label: loc.action_reset_field(&loc.field_label("confidence")),
+            options: confidence_options,
+            onchange: move |value: String| {
+                let levels = ConfidenceLevel::all();
+                draft.write().confidence = value.parse::<usize>().ok().and_then(|index| levels.get(index).copied());
+            },
+            onreset: move |()| {
+                let value = seed.read().confidence;
+                draft.write().confidence = value;
+            },
+        }
+    }
+}
+
+/// The citation's three Evidence Explained axes (source quality · information kind · evidence kind) —
+/// the citation's own analysis, factored out of [`citation_record_fields`] to stay under the length
+/// cap. Each is an optional-enum [`DraftSelect`] over the [`record_enum_select`] parts.
+fn citation_evidence_axis_fields(loc: &Localizer, record: RecordEditState<vitni_ui::CitationDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
     let (source_options, source_value, source_original) = record_enum_select(
         loc.record_unset(),
         &vitni_ui::SOURCE_QUALITIES,
@@ -130,25 +164,9 @@ fn citation_evidence_record_fields(loc: &Localizer, record: RecordEditState<vitn
     );
     rsx! {
         DraftSelect {
-            label: loc.field_label("confidence"),
-            name: "citation-confidence".to_owned(),
-            editing,
-            value: confidence_value,
-            original: confidence_original,
-            reset_label: loc.action_reset_field(&loc.field_label("confidence")),
-            options: confidence_options,
-            onchange: move |value: String| {
-                let levels = ConfidenceLevel::all();
-                draft.write().confidence = value.parse::<usize>().ok().and_then(|index| levels.get(index).copied());
-            },
-            onreset: move |()| {
-                let value = seed.read().confidence;
-                draft.write().confidence = value;
-            },
-        }
-        DraftSelect {
             label: loc.evidence_axis_label(vitni_ui::EvidenceAxis::Source),
             name: "citation-source-quality".to_owned(),
+            label_width: CITATION_LABEL_WIDTH,
             editing,
             value: source_value,
             original: source_original,
@@ -165,6 +183,7 @@ fn citation_evidence_record_fields(loc: &Localizer, record: RecordEditState<vitn
         DraftSelect {
             label: loc.evidence_axis_label(vitni_ui::EvidenceAxis::Information),
             name: "citation-information".to_owned(),
+            label_width: CITATION_LABEL_WIDTH,
             editing,
             value: info_value,
             original: info_original,
@@ -181,6 +200,7 @@ fn citation_evidence_record_fields(loc: &Localizer, record: RecordEditState<vitn
         DraftSelect {
             label: loc.evidence_axis_label(vitni_ui::EvidenceAxis::Evidence),
             name: "citation-evidence-kind".to_owned(),
+            label_width: CITATION_LABEL_WIDTH,
             editing,
             value: kind_value,
             original: kind_original,
@@ -215,6 +235,7 @@ pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                 DraftText {
                     label: loc.field_label("id"),
                     name: "citation-id".to_owned(),
+                    label_width: CITATION_LABEL_WIDTH,
                     editing,
                     value: current.human_id.clone(),
                     original: committed.human_id.clone(),
@@ -230,6 +251,7 @@ pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                 DraftText {
                     label: loc.field_label("source"),
                     name: "citation-source".to_owned(),
+                    label_width: CITATION_LABEL_WIDTH,
                     editing,
                     value: source_display,
                     original: source_original,
@@ -243,17 +265,21 @@ pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                     loc,
                     "citation-date",
                     editing,
-                    current.date.clone(),
-                    committed.date.clone(),
-                    Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
-                    Callback::new(move |()| {
-                        let value = seed.read().date.clone();
-                        draft.write().date = value;
-                    }),
+                    CITATION_LABEL_WIDTH,
+                    DateFieldBinding {
+                        value: current.date.clone(),
+                        original: committed.date.clone(),
+                        onchange: Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
+                        onreset: Callback::new(move |()| {
+                            let value = seed.read().date.clone();
+                            draft.write().date = value;
+                        }),
+                    },
                 )}
                 DraftText {
                     label: loc.field_label("page"),
                     name: "citation-page".to_owned(),
+                    label_width: CITATION_LABEL_WIDTH,
                     editing,
                     value: current.page.clone(),
                     original: committed.page.clone(),
@@ -264,8 +290,9 @@ pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                         draft.write().page = value;
                     },
                 }
-                {citation_evidence_record_fields(loc, record)}
-                {record_restrictions_field(loc, record)}
+                {citation_confidence_record_field(loc, record)}
+                {citation_evidence_axis_fields(loc, record)}
+                {record_restrictions_field(loc, record, CITATION_LABEL_WIDTH)}
             }
         }
     }
@@ -398,10 +425,13 @@ pub fn citation_create_fields(
                     loc,
                     "citation-date",
                     true,
-                    draft().date.clone(),
-                    vitni_ui::DateDraft::default(),
-                    Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
-                    Callback::new(move |()| draft.write().date = vitni_ui::DateDraft::default()),
+                    DEFAULT_LABEL_WIDTH,
+                    DateFieldBinding {
+                        value: draft().date.clone(),
+                        original: vitni_ui::DateDraft::default(),
+                        onchange: Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
+                        onreset: Callback::new(move |()| draft.write().date = vitni_ui::DateDraft::default()),
+                    },
                 )}
                 Input {
                     label: loc.field_label("page"),
@@ -811,8 +841,7 @@ pub fn citation_overview(
 fn axis_chip_row(loc: &Localizer, detail: &CitationDetail, axis: EvidenceAxis) -> Element {
     let chip = detail.evidence_axes.iter().find(|chip| chip.axis == axis);
     rsx! {
-        div { class: "fact-row",
-            span { class: "field-label", style: "width:96px;margin:0", "{loc.evidence_axis_label(axis)}" }
+        FactRow { label: loc.evidence_axis_label(axis),
             span { class: "grow wrap",
                 match chip {
                     Some(chip) => rsx! { EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() } },

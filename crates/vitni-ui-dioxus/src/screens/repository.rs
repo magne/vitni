@@ -97,6 +97,7 @@ pub fn repository_record_fields(loc: &Localizer, record: RecordEditState<vitni_u
                 DraftText {
                     label: loc.field_label("id"),
                     name: "repository-id".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: id_value,
                     original: id_original,
@@ -112,6 +113,7 @@ pub fn repository_record_fields(loc: &Localizer, record: RecordEditState<vitni_u
                 DraftSelect {
                     label: loc.field_label("type"),
                     name: "repository-type".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: type_value,
                     original: type_original,
@@ -129,6 +131,7 @@ pub fn repository_record_fields(loc: &Localizer, record: RecordEditState<vitni_u
                 DraftText {
                     label: loc.field_label("name"),
                     name: "repository-name".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: name_value,
                     original: name_original,
@@ -139,7 +142,7 @@ pub fn repository_record_fields(loc: &Localizer, record: RecordEditState<vitni_u
                         draft.write().name = value;
                     },
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, RECORD_LABEL_WIDTH)}
             }
         }
     }
@@ -509,21 +512,17 @@ pub fn repository_overview(
             Card { title: loc.section_label("contact"),
                 if let Some(address) = primary {
                     div { class: "stack",
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"street\")}" }
-                            span { class: "grow", {address.lines.first().cloned().unwrap_or_else(|| "—".to_owned())} }
+                        FactRow { label: loc.field_label("street"), label_width: 80,
+                            span { class: "grow", {or_dash(address.lines.first().cloned())} }
                         }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"locality\")}" }
-                            span { class: "grow", {address.locality.clone().unwrap_or_else(|| "—".to_owned())} }
+                        FactRow { label: loc.field_label("locality"), label_width: 80,
+                            span { class: "grow", {or_dash(address.locality.clone())} }
                         }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"phone\")}" }
-                            span { class: "grow mono", {address.phone.clone().unwrap_or_else(|| "—".to_owned())} }
+                        FactRow { label: loc.field_label("phone"), label_width: 80,
+                            span { class: "grow mono", {or_dash(address.phone.clone())} }
                         }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"email\")}" }
-                            span { class: "grow", {address.email.clone().unwrap_or_else(|| "—".to_owned())} }
+                        FactRow { label: loc.field_label("email"), label_width: 80,
+                            span { class: "grow", {or_dash(address.email.clone())} }
                         }
                     }
                 } else {
@@ -564,7 +563,7 @@ pub fn repository_urls_table(
                         }
                     }
                     td { a { href: "{url.href}", "{url.href}" } }
-                    td { class: "muted", {url.description.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td { class: "muted", {or_dash(url.description.clone())} }
                     {row_actions_cell(
                         loc,
                         &url.href,
@@ -595,7 +594,7 @@ pub fn repository_sources_table(loc: &Localizer, detail: &RepositoryDetail) -> E
             for held in detail.sources.iter() {
                 tr {
                     td { "{held.title}" }
-                    td { class: "mono", {held.call_number.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td { class: "mono", {or_dash(held.call_number.clone())} }
                     td { Chip { label: held.media_type_label.clone() } }
                     td { {source_cue(loc, held.citation_count)} }
                 }

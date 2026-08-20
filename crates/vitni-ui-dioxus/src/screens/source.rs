@@ -3,6 +3,15 @@ use vitni_ui::{RepositoryLinkVm, SourceAttributeVm};
 
 use super::prelude::*;
 
+/// The label column width of every source record row (`docs/mockups/source.html:112-116`, `:152-156`)
+/// — already the shared record floor, which `RESTRIKSJONER` (102px) and `ABBREVIATION` (93px) both fit.
+const SOURCE_LABEL_WIDTH: u32 = RECORD_LABEL_WIDTH;
+
+/// The label column of the Reliability card (`docs/mockups/source.html:129-136`). Wider than every
+/// other card on the page because `TYPICAL CONFIDENCE` renders 139px — the longest label the app draws
+/// in a `.fact-row` anywhere.
+const SOURCE_RELIABILITY_LABEL_WIDTH: u32 = 140;
+
 /// The create-mode source record: an uncommitted [`SourceDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). Save commits the whole source through the change-set;
 /// Cancel drops the draft. The provenance block above Save carries the operator's why/confidence/
@@ -78,6 +87,7 @@ pub fn source_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::S
             DraftText {
                 label: label.clone(),
                 name: name.to_owned(),
+                label_width: SOURCE_LABEL_WIDTH,
                 editing,
                 value,
                 original,
@@ -98,6 +108,7 @@ pub fn source_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::S
                 DraftText {
                     label: loc.field_label("id"),
                     name: "source-id".to_owned(),
+                    label_width: SOURCE_LABEL_WIDTH,
                     editing,
                     value: current.human_id.clone(),
                     original: committed.human_id.clone(),
@@ -114,7 +125,7 @@ pub fn source_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::S
                 {field("source-author", loc.field_label("author"), current.author.clone(), committed.author.clone(), |draft, value| draft.author = value, |draft| draft.author.clone())}
                 {field("source-publication", loc.field_label("publication"), current.publication.clone(), committed.publication.clone(), |draft, value| draft.publication = value, |draft| draft.publication.clone())}
                 {field("source-abbreviation", loc.field_label("abbreviation"), current.abbreviation.clone(), committed.abbreviation.clone(), |draft, value| draft.abbreviation = value, |draft| draft.abbreviation.clone())}
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, SOURCE_LABEL_WIDTH)}
             }
         }
     }
@@ -505,24 +516,21 @@ pub fn source_overview(
             {source_record_fields(loc, record)}
             Card { title: loc.section_label("reliability"),
                 div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"typical-confidence\")}" }
+                    FactRow { label: loc.field_label("typical-confidence"), label_width: SOURCE_RELIABILITY_LABEL_WIDTH,
                         if let (Some(level), Some(label)) = (reliability.confidence, reliability.confidence_label.clone()) {
                             span { class: "grow", ConfidenceBadge { level, label } }
                         } else {
                             span { class: "grow muted", "—" }
                         }
                     }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"evidence\")}" }
+                    FactRow { label: loc.field_label("evidence"), label_width: SOURCE_RELIABILITY_LABEL_WIDTH,
                         span { class: "grow wrap",
                             for chip in reliability.evidence_axes.iter() {
                                 EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
                             }
                         }
                     }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"used-by\")}" }
+                    FactRow { label: loc.field_label("used-by"), label_width: SOURCE_RELIABILITY_LABEL_WIDTH,
                         span { class: "grow", "{loc.record_count(reliability.record_count)}" }
                     }
                 }
@@ -556,7 +564,7 @@ pub fn source_repositories_table(
             for link in detail.repositories.iter() {
                 tr {
                     td { "{link.name}" }
-                    td { class: "mono", {link.call_number.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td { class: "mono", {or_dash(link.call_number.clone())} }
                     td { Chip { label: link.media_type_label.clone() } }
                     td {
                         ConfidenceBadge { level: link.confidence, label: link.confidence_label.clone() }
@@ -603,7 +611,7 @@ pub fn source_citations_table(loc: &Localizer, citations: &[SourceCitationVm]) -
                                 let citation = citation.clone();
                                 rsx! {
                                     tr {
-                                        td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
+                                        td { class: "muted", {or_dash(citation.page.clone())} }
                                         td { {backs_record_label(backer.as_ref())} }
                                         td {
                                             if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {

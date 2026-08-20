@@ -6,7 +6,7 @@
 
 use dioxus::prelude::*;
 use vitni_ui::{ListQuery, RowVm};
-use vitni_ui_dioxus::components::TabItem;
+use vitni_ui_dioxus::components::{BadgeSpec, TabItem};
 use vitni_ui_dioxus::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail, SortChrome};
 
 fn sort_chrome() -> SortChrome {
@@ -61,7 +61,7 @@ fn screen() -> Element {
                     title: "Ada Lovelace".to_owned(),
                     subtitle: "female".to_owned(),
                     id_label: "I0002".to_owned(),
-                    badges: vec!["(private)".to_owned()],
+                    badges: vec![BadgeSpec::text("(private)".to_owned())],
                     avatar: "AL".to_owned(),
                     extras: rsx! {},
                     actions: rsx! { button { "Edit" } },

@@ -133,6 +133,7 @@ pub fn research_note_record_fields(loc: &Localizer, record: RecordEditState<vitn
                 DraftText {
                     label: loc.field_label("id"),
                     name: "research-note-id".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing: fixed_editing,
                     value: id_value,
                     original: id_original,
@@ -148,6 +149,7 @@ pub fn research_note_record_fields(loc: &Localizer, record: RecordEditState<vitn
                 DraftText {
                     label: loc.field_label("title"),
                     name: "research-note-title".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing: fixed_editing,
                     value: title_value,
                     original: title_original,
@@ -161,6 +163,7 @@ pub fn research_note_record_fields(loc: &Localizer, record: RecordEditState<vitn
                 DraftText {
                     label: loc.field_label("argument"),
                     name: "research-note-body".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: body_value,
                     original: body_original,
@@ -175,6 +178,7 @@ pub fn research_note_record_fields(loc: &Localizer, record: RecordEditState<vitn
                 DraftText {
                     label: loc.field_label("language"),
                     name: "research-note-language".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: language_value,
                     original: language_original,
@@ -185,7 +189,7 @@ pub fn research_note_record_fields(loc: &Localizer, record: RecordEditState<vitn
                         draft.write().language = value;
                     },
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, RECORD_LABEL_WIDTH)}
             }
         }
     }

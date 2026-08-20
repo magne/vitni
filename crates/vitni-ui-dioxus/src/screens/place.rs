@@ -116,6 +116,7 @@ pub fn place_record_fields(
                 DraftText {
                     label: loc.field_label("id"),
                     name: "place-id".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: current.human_id.clone(),
                     original: committed.human_id.clone(),
@@ -131,6 +132,7 @@ pub fn place_record_fields(
                 DraftSelect {
                     label: loc.field_label("type"),
                     name: "place-type".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: index_of(&current.place_type),
                     original: index_of(&committed.place_type),
@@ -151,6 +153,7 @@ pub fn place_record_fields(
                 DraftText {
                     label: loc.field_label("code"),
                     name: "place-code".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: current.code.clone(),
                     original: committed.code.clone(),
@@ -169,7 +172,7 @@ pub fn place_record_fields(
                         }
                     }
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, RECORD_LABEL_WIDTH)}
             }
         }
     }
@@ -202,6 +205,7 @@ fn place_coordinate_fields(
         DraftText {
             label: loc.field_label("latitude"),
             name: "place-latitude".to_owned(),
+            label_width: RECORD_LABEL_WIDTH,
             editing,
             value: latitude_value,
             original: committed.latitude.clone(),
@@ -216,6 +220,7 @@ fn place_coordinate_fields(
         DraftText {
             label: loc.field_label("longitude"),
             name: "place-longitude".to_owned(),
+            label_width: RECORD_LABEL_WIDTH,
             editing,
             value: longitude_value,
             original: committed.longitude.clone(),
@@ -249,8 +254,7 @@ fn scalar_provenance_row(
     citations: &[CitationRefVm],
 ) -> Element {
     rsx! {
-        div { class: "fact-row",
-            span { class: "field-label", style: "width:96px;margin:0", "{label}" }
+        FactRow { label: label.to_owned(), label_width: RECORD_LABEL_WIDTH,
             span { class: "grow" }
             if let (Some(level), Some(confidence_label)) = (confidence, confidence_label) {
                 ConfidenceBadge { level, label: confidence_label }
@@ -971,7 +975,7 @@ pub fn place_geometry_table(
                 for geometry in geometries.iter() {
                     tr {
                         td { Chip { label: geometry.kind_label.clone() } }
-                        td { class: "muted", {geometry.date.clone().unwrap_or_else(|| "—".to_owned())} }
+                        td { class: "muted", {or_dash(geometry.date.clone())} }
                         td { class: "mono", "{geometry_detail_text(loc, &geometry.shape)}" }
                         td { ConfidenceBadge { level: geometry.confidence, label: geometry.confidence_label.clone() } }
                         td { {source_cue(loc, geometry.source_count)} }
@@ -1024,8 +1028,8 @@ pub fn place_names_table(
             for name in detail.names.iter() {
                 tr {
                     td { b { "{name.text}" } }
-                    td { class: "muted", {name.language.clone().unwrap_or_else(|| "—".to_owned())} }
-                    td { {name.date.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td { class: "muted", {or_dash(name.language.clone())} }
+                    td { {or_dash(name.date.clone())} }
                     td { ConfidenceBadge { level: name.confidence, label: name.confidence_label.clone() } }
                     td { {source_cue(loc, name.source_count)} }
                     {row_actions_cell(
@@ -1080,7 +1084,7 @@ pub fn place_hierarchy_table(
                             span { class: "muted", "—" }
                         }
                     }
-                    td { class: "muted", {enclosing.date.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td { class: "muted", {or_dash(enclosing.date.clone())} }
                     td { ConfidenceBadge { level: enclosing.confidence, label: enclosing.confidence_label.clone() } }
                     {row_actions_cell(
                         loc,
@@ -1385,10 +1389,13 @@ pub fn place_succession_form_fields(
             loc,
             "succession-date",
             true,
-            date(),
-            DateDraft::default(),
-            Callback::new(move |value: DateDraft| date.set(value)),
-            Callback::new(move |()| date.set(DateDraft::default())),
+            DEFAULT_LABEL_WIDTH,
+            DateFieldBinding {
+                value: date(),
+                original: DateDraft::default(),
+                onchange: Callback::new(move |value: DateDraft| date.set(value)),
+                onreset: Callback::new(move |()| date.set(DateDraft::default())),
+            },
         )}
     }
 }

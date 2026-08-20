@@ -140,6 +140,7 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                 DraftText {
                     label: loc.field_label("id"),
                     name: "event-id".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: current.human_id.clone(),
                     original: committed.human_id.clone(),
@@ -155,6 +156,7 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                 DraftSelect {
                     label: loc.field_label("type"),
                     name: "event-type".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: index_of(&current.event_type),
                     original: index_of(&committed.event_type),
@@ -175,18 +177,22 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                     loc,
                     "event-date",
                     editing,
-                    current.date.clone(),
-                    committed.date.clone(),
-                    Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
-                    Callback::new(move |()| {
-                        let value = seed.read().date.clone();
-                        draft.write().date = value;
-                    }),
+                    RECORD_LABEL_WIDTH,
+                    DateFieldBinding {
+                        value: current.date.clone(),
+                        original: committed.date.clone(),
+                        onchange: Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
+                        onreset: Callback::new(move |()| {
+                            let value = seed.read().date.clone();
+                            draft.write().date = value;
+                        }),
+                    },
                 )}
                 {event_place_edit_field(loc, ctx)}
                 DraftText {
                     label: loc.field_label("description"),
                     name: "event-description".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: current.description.clone(),
                     original: committed.description.clone(),
@@ -197,7 +203,7 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                         draft.write().description = value;
                     },
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, RECORD_LABEL_WIDTH)}
             }
         }
     }
@@ -268,10 +274,13 @@ pub fn event_create_fields(loc: &Localizer, mut draft: Signal<vitni_ui::EventDra
                     loc,
                     "event-date",
                     true,
-                    draft().date.clone(),
-                    vitni_ui::DateDraft::default(),
-                    Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
-                    Callback::new(move |()| draft.write().date = vitni_ui::DateDraft::default()),
+                    DEFAULT_LABEL_WIDTH,
+                    DateFieldBinding {
+                        value: draft().date.clone(),
+                        original: vitni_ui::DateDraft::default(),
+                        onchange: Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
+                        onreset: Callback::new(move |()| draft.write().date = vitni_ui::DateDraft::default()),
+                    },
                 )}
                 {event_place_create_field(loc, draft, place)}
                 Input {
@@ -957,7 +966,7 @@ fn event_participant_row(
         tr {
             td { "{participant.name}" }
             td { Chip { label: participant.role_label.clone() } }
-            td { class: "muted", {participant.age_label.clone().unwrap_or_else(|| "—".to_owned())} }
+            td { class: "muted", {or_dash(participant.age_label.clone())} }
             td { ConfidenceBadge { level: participant.confidence, label: participant.confidence_label.clone() } }
             td { {source_cue(loc, participant.source_count)} }
             {row_actions_cell(

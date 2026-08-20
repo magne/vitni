@@ -28,7 +28,7 @@ use dioxus::prelude::*;
 use vitni_ui::ActionLabel;
 use vitni_ui::{ActiveMove, Localizer, PickerSelection, PickerState, RowVm, next_active, picker_rows};
 
-use crate::components::{IconButton, ListRow, TextInput};
+use crate::components::{IconButton, ListRow, TextInput, or_dash};
 use crate::shell::focus_trap::refocus_dialog_start;
 
 /// The already-localized configuration of one picker: its field label, the element-id base, the entity
@@ -139,10 +139,7 @@ pub fn draft_picker_field(
     onreset: Callback<()>,
 ) -> Element {
     if !view.editing {
-        let display = view
-            .selection
-            .as_ref()
-            .map_or_else(|| "—".to_owned(), PickerSelection::display);
+        let display = or_dash(view.selection.as_ref().map(PickerSelection::display));
         return rsx! {
             div { class: "field",
                 label { r#for: "{picker.config.name}", "{picker.config.label}" }
