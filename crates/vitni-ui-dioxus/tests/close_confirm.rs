@@ -1050,7 +1050,7 @@ fn dialog_body_describes_unsaved_edits_not_a_draft() {
         "the draft-only copy would be untrue for a stored record:\n{html}"
     );
     assert!(
-        !html.contains("New People"),
+        !html.contains("New person"),
         "a saved record is never labelled as a new draft:\n{html}"
     );
 }
@@ -1335,7 +1335,7 @@ fn an_untouched_draft_is_not_listed_among_the_work_a_quit_would_discard() {
         "the record with unsaved edits is listed:\n{html}"
     );
     assert!(
-        !html.contains("New People"),
+        !html.contains("New person"),
         "and the untouched draft is not listed at all:\n{html}"
     );
     assert!(
@@ -1868,12 +1868,12 @@ fn the_quit_dialog_names_two_empty_drafts_apart() {
     // the same thing would make the choice unanswerable.
     let html = render(quit_dialog_over_two_empty_drafts);
     assert_eq!(
-        html.matches("<li>New People</li>").count(),
+        html.matches("<li>New person</li>").count(),
         1,
         "one entry is the unnumbered draft:\n{html}"
     );
     assert_eq!(
-        html.matches("<li>New People (2)</li>").count(),
+        html.matches("<li>New person (2)</li>").count(),
         1,
         "and the other carries its ordinal:\n{html}"
     );
@@ -1901,7 +1901,7 @@ fn the_quit_dialog_names_a_typed_draft_by_its_name() {
         "the draft is listed by what was typed into it:\n{html}"
     );
     assert!(
-        !html.contains("New People"),
+        !html.contains("New person"),
         "and not also by the generic new-record label:\n{html}"
     );
 }
@@ -1950,7 +1950,7 @@ fn close_dialog_over_the_second_empty_draft() -> Element {
 fn the_close_confirm_names_the_second_empty_draft_by_its_ordinal() {
     let html = render(close_dialog_over_the_second_empty_draft);
     assert!(
-        html.contains("New People (2)"),
+        html.contains("New person (2)"),
         "the confirm says which of the two drafts it is about:\n{html}"
     );
 }
@@ -1978,22 +1978,22 @@ fn the_strip_and_the_confirm_name_a_tab_identically() {
     // rendered over one `NavState`, and each tab has to read the same in both.
     let html = render(tabstrip_and_dialog_over_two_empty_drafts);
     assert_eq!(
-        html.matches(r#"aria-label="Close New People""#).count(),
+        html.matches(r#"aria-label="Close New person""#).count(),
         1,
-        "the strip has exactly one unnumbered New People tab:\n{html}"
+        "the strip has exactly one unnumbered New person tab:\n{html}"
     );
     assert_eq!(
-        html.matches("<li>New People</li>").count(),
+        html.matches("<li>New person</li>").count(),
         1,
         "and the dialog lists it under the same name:\n{html}"
     );
     assert_eq!(
-        html.matches(r#"aria-label="Close New People (2)""#).count(),
+        html.matches(r#"aria-label="Close New person (2)""#).count(),
         1,
         "the numbered tab likewise:\n{html}"
     );
     assert_eq!(
-        html.matches("<li>New People (2)</li>").count(),
+        html.matches("<li>New person (2)</li>").count(),
         1,
         "and the dialog agrees on its number:\n{html}"
     );

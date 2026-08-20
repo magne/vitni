@@ -800,7 +800,7 @@ mod event_display_label_tests {
     fn a_fully_populated_event_draft_still_has_no_label() {
         // Deliberate: an event is titled by its *localized* type ("Birth", "Fødsel"), and the trait takes
         // no `Localizer`. The description is not a title — it is the free-text detail. So the tab falls
-        // back to "New Events" and the ordinal, rather than to a half-right name.
+        // back to "New event" and the ordinal, rather than to a half-right name.
         let draft = EventDraft {
             human_id: "E0001".to_owned(),
             event_type: EventType::Baptism,

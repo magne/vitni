@@ -124,7 +124,7 @@ fn a_draft_tab_renders_its_own_chrome() {
         "with nothing typed into it, it is not flagged unsaved:\n{html}"
     );
     assert!(
-        html.contains("New People"),
+        html.contains("New person"),
         "the draft tab shows its localized label:\n{html}"
     );
     assert!(

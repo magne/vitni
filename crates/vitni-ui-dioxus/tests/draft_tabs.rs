@@ -12,16 +12,22 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use unic_langid::LanguageIdentifier;
-use vitni_ui::{Category, Destination, NoteDraft, ProvenanceDraft, RecordRef, TagDraft, Tool};
+use vitni_ui::{Category, Destination, Localizer, NoteDraft, ProvenanceDraft, RecordRef, TagDraft, Tool};
 use vitni_ui_dioxus::i18n::Chrome;
-use vitni_ui_dioxus::shell::ChromeCtx;
 use vitni_ui_dioxus::shell::nav_state::{DraftId, EditKey, NavState, OpenTab, StashedEdit};
 use vitni_ui_dioxus::shell::tabstrip::RecordTabstrip;
+use vitni_ui_dioxus::shell::{ChromeCtx, DataLocCtx};
 
 /// A chrome localizer for a single explicit language (deterministic for tests).
 fn chrome(tag: &str) -> Rc<Chrome> {
     let language = tag.parse::<LanguageIdentifier>().unwrap_or_default();
     Rc::new(Chrome::with_languages(None, &[language]))
+}
+
+/// A data localizer for a single explicit language — what names an unnamed draft tab.
+fn data_localizer(tag: &str) -> Rc<Localizer> {
+    let language = tag.parse::<LanguageIdentifier>().unwrap_or_default();
+    Rc::new(Localizer::with_languages(None, &[language]))
 }
 
 fn record(category: Category, human_id: &str, label: &str) -> RecordRef {
@@ -517,7 +523,7 @@ fn a_draft_tab_shows_the_name_typed_into_it() {
         "and so does the close control's:\n{html}"
     );
     assert!(
-        !html.contains("New People"),
+        !html.contains("New person"),
         "a named draft never also reads as the generic new record:\n{html}"
     );
 }
@@ -540,7 +546,7 @@ fn a_draft_dirty_outside_its_name_keeps_the_localized_fallback() {
     // Dirtiness is not a name: this draft has unsaved work but nothing to be titled by, so the tab reads
     // as a new record rather than as an empty string.
     let html = render(tabstrip_with_a_dirty_unnamed_draft);
-    assert!(html.contains(">New People<"), "the fallback label shows:\n{html}");
+    assert!(html.contains(">New person<"), "the fallback label shows:\n{html}");
     assert!(html.contains("unsaved-dot"), "and it is still marked unsaved:\n{html}");
 }
 
@@ -560,15 +566,15 @@ fn tabstrip_with_two_empty_drafts() -> Element {
 #[test]
 fn two_empty_drafts_of_one_category_are_named_apart() {
     // Two tabs with one accessible name is the a11y defect the ordinal exists for. The count has to be
-    // exact: `"New People (2)"` *contains* `"New People"`, so a bare `contains` proves nothing.
+    // exact: `"New person (2)"` *contains* `"New person"`, so a bare `contains` proves nothing.
     let html = render(tabstrip_with_two_empty_drafts);
     assert_eq!(
-        html.matches(r#"aria-label="Close New People""#).count(),
+        html.matches(r#"aria-label="Close New person""#).count(),
         1,
-        "exactly one tab is the unnumbered New People:\n{html}"
+        "exactly one tab is the unnumbered New person:\n{html}"
     );
     assert_eq!(
-        html.matches(r#"aria-label="Close New People (2)""#).count(),
+        html.matches(r#"aria-label="Close New person (2)""#).count(),
         1,
         "and the second carries its ordinal:\n{html}"
     );
@@ -599,7 +605,7 @@ fn typing_into_one_draft_does_not_renumber_its_neighbour() {
         "draft 1 is titled by its name:\n{html}"
     );
     assert!(
-        html.contains(">New People (2)<"),
+        html.contains(">New person (2)<"),
         "and draft 2 keeps the ordinal it had:\n{html}"
     );
 }
@@ -622,11 +628,45 @@ fn categories_do_not_share_an_ordinal() {
     // The ordinal counts within a category: a lone draft in each of two categories is already named
     // apart by the entity, so numbering either would be noise.
     let html = render(tabstrip_with_a_draft_in_two_categories);
-    assert!(html.contains(">New People<"), "the People draft is unnumbered:\n{html}");
-    assert!(html.contains(">New Tags<"), "and so is the Tags draft:\n{html}");
+    assert!(html.contains(">New person<"), "the People draft is unnumbered:\n{html}");
+    assert!(html.contains(">New tag<"), "and so is the Tags draft:\n{html}");
     assert!(
         !html.contains("(2)"),
         "no ordinal is spent on drafts of different categories:\n{html}"
+    );
+}
+
+/// Two People drafts, neither typed into, with both localizers set to Norwegian.
+fn tabstrip_with_two_empty_drafts_no() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("no")));
+    use_context_provider(|| DataLocCtx(data_localizer("no")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_create(Category::People);
+        nav.open_create(Category::People);
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn an_unnamed_draft_tab_reads_as_one_new_record_in_norwegian_too() {
+    // The whole point of naming the tab by the create pane's own title: "Ny Personer" was
+    // ungrammatical, and no single `Ny { $entity }` pattern can be right for all 13 categories.
+    let html = render(tabstrip_with_two_empty_drafts_no);
+    assert!(
+        html.contains(">Ny person<"),
+        "the Norwegian fallback label shows:\n{html}"
+    );
+    assert!(
+        !html.contains("Ny Personer"),
+        "and never the plural rail label:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"aria-label="Lukk Ny person (2)""#).count(),
+        1,
+        "the ordinal wraps the Norwegian title:\n{html}"
     );
 }
 

@@ -13,7 +13,7 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 use unic_langid::LanguageIdentifier;
 use vitni_app::RecentItem;
-use vitni_ui::{Category, Destination, ProvenanceDraft, RecordRef, TagDraft, Tool};
+use vitni_ui::{Category, Destination, Localizer, ProvenanceDraft, RecordRef, TagDraft, Tool};
 use vitni_ui_dioxus::app::AppCtx;
 use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::shell::help_overlay::HelpOverlay;
@@ -22,7 +22,7 @@ use vitni_ui_dioxus::shell::palette::CommandPalette;
 use vitni_ui_dioxus::shell::statusbar::ShellStatusbar;
 use vitni_ui_dioxus::shell::tabstrip::{NewRecordMenu, RecordTabstrip};
 use vitni_ui_dioxus::shell::topbar::Topbar;
-use vitni_ui_dioxus::shell::{ChromeCtx, Shell, ShortcutsCtx};
+use vitni_ui_dioxus::shell::{ChromeCtx, DataLocCtx, Shell, ShortcutsCtx};
 
 /// Opens a person record, then leaves the active destination at the given category.
 fn person_record() -> RecordRef {
@@ -37,6 +37,12 @@ fn person_record() -> RecordRef {
 fn chrome(tag: &str) -> Rc<Chrome> {
     let language = tag.parse::<LanguageIdentifier>().unwrap_or_default();
     Rc::new(Chrome::with_languages(None, &[language]))
+}
+
+/// A data localizer for a single explicit language — what names the create commands and menu items.
+fn data_localizer(tag: &str) -> Rc<Localizer> {
+    let language = tag.parse::<LanguageIdentifier>().unwrap_or_default();
+    Rc::new(Localizer::with_languages(None, &[language]))
 }
 
 /// Renders a component to an HTML string.
@@ -159,6 +165,7 @@ fn palette_with_recent() -> Element {
 /// The command palette, forced open, localized to Norwegian.
 fn palette_open_no() -> Element {
     use_context_provider(|| ChromeCtx(chrome("no")));
+    use_context_provider(|| DataLocCtx(data_localizer("no")));
     let mut nav = use_context_provider(NavState::new);
     use_hook(|| nav.overlay.set(Overlay::Palette));
     rsx! {
@@ -519,6 +526,10 @@ fn palette_renders_as_a_modal_dialog() {
     // Commands render even host-free (no workspace); the Commands group heading is present and the
     // first option is selected.
     assert!(html.contains("Commands"), "the Commands group heading:\n{html}");
+    // The create commands take the singular noun: the verb needs no agreement, and "Create People…"
+    // named a list rather than a record.
+    assert!(html.contains("Create person…"), "the create-a-person command:\n{html}");
+    assert!(!html.contains("Create People…"), "never the plural rail label:\n{html}");
     assert!(html.contains(r#"role="option""#), "at least one option:\n{html}");
     assert!(html.contains(r#"id="palette-opt-0""#), "the first option id:\n{html}");
     assert!(
@@ -547,6 +558,14 @@ fn palette_localizes_commands_to_norwegian() {
     assert!(
         html.contains(r#"placeholder="Skriv en kommando eller søk…""#),
         "the Norwegian placeholder:\n{html}"
+    );
+    assert!(
+        html.contains("Opprett person…"),
+        "the create command takes the Norwegian singular noun:\n{html}"
+    );
+    assert!(
+        !html.contains("Opprett Personer…"),
+        "never the plural rail label:\n{html}"
     );
 }
 
@@ -597,10 +616,18 @@ fn new_record_menu_lists_every_creatable_category() {
         13,
         "one menuitem per creatable category:\n{html}"
     );
-    for label in ["People", "Families", "Research notes", "DNA tests", "DNA matches"] {
+    // Each item is named by the record it creates, not by the plural rail label of the list it lands
+    // in — the same string the create pane it opens is headed by.
+    for label in [
+        "New person",
+        "New family",
+        "New research note",
+        "New DNA test",
+        "New DNA match",
+    ] {
         assert!(
             html.contains(&format!(">{label}<")),
-            "expected category label {label:?}:\n{html}"
+            "expected create label {label:?}:\n{html}"
         );
     }
 }

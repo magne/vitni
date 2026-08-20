@@ -15,20 +15,21 @@
 use dioxus::prelude::*;
 use vitni_ui::Category;
 
-use crate::shell::ChromeCtx;
 use crate::shell::nav_state::NavState;
 use crate::shell::tab_label::tab_labels;
+use crate::shell::{ChromeCtx, data_loc};
 
 /// The open-records tab strip.
 #[component]
 pub fn RecordTabstrip() -> Element {
     let chrome = use_context::<ChromeCtx>();
+    let loc = data_loc();
     let mut nav = use_context::<NavState>();
     let records = nav.records.read().clone();
     let active = *nav.active_record.read();
     // One pass for the whole strip, hoisted above the loop: a draft's ordinal is its position among its
     // category's drafts, which no single tab knows.
-    let labels = tab_labels(&nav, &chrome.0);
+    let labels = tab_labels(&nav, &chrome.0, &loc);
     let mut menu_open = use_signal(|| false);
     rsx! {
         div { class: "tabstrip", role: "tablist", aria_label: "{chrome.0.aria_open_records()}",
@@ -161,6 +162,7 @@ pub fn NewRecordMenu(open: Signal<bool>) -> Element {
     if !open() {
         return rsx! {};
     }
+    let loc = data_loc();
     rsx! {
         button {
             class: "menu-scrim",
@@ -188,7 +190,7 @@ pub fn NewRecordMenu(open: Signal<bool>) -> Element {
                         open.set(false);
                     },
                     span { aria_hidden: "true", "{category.icon()}" }
-                    "{chrome.0.rail_label(category.label_id())}"
+                    "{loc.category_new_title(category)}"
                 }
             }
         }

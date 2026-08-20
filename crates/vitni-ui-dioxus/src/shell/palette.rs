@@ -10,16 +10,16 @@
 use dioxus::prelude::*;
 use vitni_app::RecentItem;
 use vitni_ui::{
-    Category, Destination, PaletteAction, PaletteCommand, PaletteCommandVm, PaletteEntry, PaletteGroupKind, RecordRef,
-    Tool, activate, move_active, palette_commands, palette_groups,
+    Category, Destination, Localizer, PaletteAction, PaletteCommand, PaletteCommandVm, PaletteEntry, PaletteGroupKind,
+    RecordRef, Tool, activate, move_active, palette_commands, palette_groups,
 };
 
 use crate::app::AppCtx;
 use crate::components::TextInput;
 use crate::services::load_palette_rows;
-use crate::shell::ChromeCtx;
 use crate::shell::focus_trap::{dismiss_on_escape, trap_tab};
 use crate::shell::nav_state::{NavState, Overlay, data_version_ticket};
+use crate::shell::{ChromeCtx, data_loc};
 
 /// One rendered palette option: its flat index (for `aria-activedescendant`), decorative icon,
 /// already-localized label + kind badge, and the entry to activate.
@@ -76,7 +76,7 @@ pub fn CommandPalette() -> Element {
     }
 
     let records = rows.read_unchecked().clone().unwrap_or_default();
-    let commands = command_vms(&chrome);
+    let commands = command_vms(&chrome, &data_loc());
     let recent = recent_entries(&nav);
     let query_text = query();
     let groups = palette_groups(&records, &commands, &recent, &query_text);
@@ -182,14 +182,16 @@ pub fn CommandPalette() -> Element {
 }
 
 /// Builds the localized command list (a `PaletteCommandVm` per default [`palette_commands`] entry).
-fn command_vms(chrome: &ChromeCtx) -> Vec<PaletteCommandVm> {
+///
+/// `Create {entity}…` takes the **singular** noun from the data localizer — the verb needs no
+/// agreement, so the bare noun is enough, and it must not read "Create People…". Everything else here
+/// names a destination, which is genuinely plural, so it keeps the rail label.
+fn command_vms(chrome: &ChromeCtx, loc: &Localizer) -> Vec<PaletteCommandVm> {
     palette_commands()
         .into_iter()
         .map(|command| {
             let label = match &command {
-                PaletteCommand::Create(category) => {
-                    chrome.0.palette_cmd_create(&chrome.0.rail_label(category.label_id()))
-                }
+                PaletteCommand::Create(category) => chrome.0.palette_cmd_create(&loc.picker_entity(*category)),
                 PaletteCommand::FindDuplicates => chrome.0.palette_cmd_find_duplicates(),
                 PaletteCommand::OpenTool(tool) => chrome.0.palette_cmd_open(&chrome.0.rail_label(tool.label_id())),
                 PaletteCommand::OpenHelp => chrome.0.palette_cmd_open(&chrome.0.rail_label("nav-help")),

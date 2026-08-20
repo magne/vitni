@@ -77,10 +77,10 @@ status-theme-light = light
 status-theme-dark = dark
 new-tab-label = Create a new record
 new-record-picker-title = New record
-draft-tab-label = New { $entity }
 # A second (third, …) still-untitled draft of the same category, so two new records never share
-# an accessible name. The first one is never numbered.
-draft-tab-label-nth = New { $entity } ({ $ordinal })
+# an accessible name. The first one is never numbered. `$label` is the create pane's own
+# "New <entity>" title, which the data catalogue owns — this pattern only adds the number.
+draft-tab-label-nth = { $label } ({ $ordinal })
 close-tab-label = Close record
 close-tab-named = Close { $name }
 # A record tab holding unsaved work carries a dot glyph; this is its accessible name, so the state

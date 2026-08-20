@@ -15,8 +15,8 @@ use dioxus::prelude::*;
 use vitni_ui::Category;
 
 use crate::components::Modal;
-use crate::shell::ChromeCtx;
 use crate::shell::nav_state::{NavState, Overlay};
+use crate::shell::{ChromeCtx, data_loc};
 
 /// The from-anywhere new-record category picker, rendered only while [`Overlay::NewRecord`] is open.
 #[component]
@@ -26,6 +26,7 @@ pub fn NewRecordPicker() -> Element {
     if *nav.overlay.read() != Overlay::NewRecord {
         return rsx! {};
     }
+    let loc = data_loc();
     rsx! {
         Modal {
             title: chrome.0.new_record_picker_title(),
@@ -43,7 +44,7 @@ pub fn NewRecordPicker() -> Element {
                             nav.close_overlay();
                         },
                         span { aria_hidden: "true", "{category.icon()}" }
-                        "{chrome.0.rail_label(category.label_id())}"
+                        "{loc.category_new_title(category)}"
                     }
                 }
             }

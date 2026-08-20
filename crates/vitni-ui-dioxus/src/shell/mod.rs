@@ -3,13 +3,15 @@
 //!
 //! Shell regions share one [`NavState`](nav_state::NavState) via context and read localized chrome
 //! through [`ChromeCtx`] (provided by the root [`App`](crate::app::App), or by tests directly), so
-//! the regions render host-free in SSR tests.
+//! the regions render host-free in SSR tests. The few regions that name a *record* rather than a
+//! chrome control — a draft tab, the two create menus — read [`DataLocCtx`] beside it.
 
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use dioxus::prelude::{ReadableExt, Resource, Signal, try_consume_context};
 use vitni_app::{ShortcutConfig, WorkspaceCounts};
+use vitni_ui::Localizer;
 
 use crate::i18n::Chrome;
 
@@ -39,6 +41,22 @@ pub use root::Shell;
 /// full application state (which an SSR test does not build).
 #[derive(Clone)]
 pub struct ChromeCtx(pub Rc<Chrome>);
+
+/// The data localizer, provided as context beside [`ChromeCtx`] so a shell region can name a
+/// *record* — `Chrome` is chrome-only by design (ADR 0008 §3) and the create titles are data
+/// strings, owned by the `vitni-ui` catalogue the record panes read.
+#[derive(Clone)]
+pub struct DataLocCtx(pub Rc<Localizer>);
+
+/// The data localizer for a shell region: the provided [`DataLocCtx`], or a default-locale
+/// [`Localizer`] when nothing provided one, so a bare SSR probe still renders (in English).
+#[must_use]
+pub fn data_loc() -> Rc<Localizer> {
+    match try_consume_context::<DataLocCtx>() {
+        Some(DataLocCtx(loc)) => loc,
+        None => Rc::new(Localizer::with_languages(None, &[])),
+    }
+}
 
 /// The workspace per-aggregate counts, provided as context for the rail count badges. The resource
 /// refetches when [`NavState::data_version`](nav_state::NavState::data_version) bumps; the outer

@@ -86,7 +86,7 @@
           <div class="rtab active" role="tab" tabindex="0" aria-selected="true"><span>John Smith</span><span class="close" role="button" tabindex="0" aria-label="Close John Smith">✕</span></div>
           <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="Mary Doe — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>Mary Doe</span><span class="close" role="button" tabindex="0" aria-label="Close Mary Doe">✕</span></div>
           <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="Anna Berg — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>Anna Berg</span><span class="close" role="button" tabindex="0" aria-label="Close Anna Berg">✕</span></div>
-          <div class="rtab" role="tab" tabindex="-1" aria-selected="false"><span>New People (2)</span><span class="close" role="button" tabindex="0" aria-label="Close New People (2)">✕</span></div>
+          <div class="rtab" role="tab" tabindex="-1" aria-selected="false"><span>New person (2)</span><span class="close" role="button" tabindex="0" aria-label="Close New person (2)">✕</span></div>
           <div class="rtab docked" role="tab" tabindex="-1" aria-selected="false"><span>Trinity Church</span><span class="close" role="button" tabindex="0" aria-label="Close Trinity Church">✕</span></div>
         </div>
         <div class="rtab add" role="button" tabindex="0" aria-label="Create a new record">+</div>
@@ -94,15 +94,16 @@
       <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">A <b>draft tab names
         itself by what has been typed into it</b> — “Anna Berg” above — and that is <b>the same label the
         record is stored with</b>, so a tab never renames itself on Save. A draft with nothing that names
-        it yet reads “New &lt;entity&gt;”, and from the <b>second</b> such draft of a category onwards it
-        carries an ordinal (“New People (2)”), so two new records of one kind never share a name or an
-        accessible name. <kbd>⌘</kbd><kbd>N</kbd> always starts <b>another</b> draft; several can be open
+        it yet is named by <b>the create pane it opens</b> — “New person”, the pane’s own heading, so a
+        tab and the form under it can never disagree — and from the <b>second</b> such draft of a category
+        onwards it carries an ordinal (“New person (2)”), so two new records of one kind never share a name
+        or an accessible name. <kbd>⌘</kbd><kbd>N</kbd> always starts <b>another</b> draft; several can be open
         at once.<br><br>The <b>●</b> marker means
         the tab holds <b>unsaved work</b> — either a <b>draft that has been typed into</b> (nothing
         stored yet, as with “Anna Berg”) or <b>unsaved edits</b> to an already-saved record (“Mary Doe”).
         Both make <kbd>⌘</kbd><kbd>W</kbd> and <kbd>⌘</kbd><kbd>Q</kbd> ask before discarding — see
         <a href="record-editing.html">Record editing</a>. A create form <b>nobody has typed into</b>
-        (“New People (2)”) holds nothing to discard, so it carries <b>no</b> marker and closes without a
+        (“New person (2)”) holds nothing to discard, so it carries <b>no</b> marker and closes without a
         dialog; typing anything into it raises the marker, and backspacing over it again clears it.
         <b>Every</b> tab holding unsaved work carries
         the marker, not just the active one: an in-progress edit is parked per record in shell state, so
@@ -236,19 +237,19 @@
           <div class="m-head">New record</div>
           <div class="m-body">
             <div class="new-record-grid">
-              <button class="menu-item" type="button"><span aria-hidden="true">👤</span>People</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">👪</span>Families</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">📅</span>Events</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">📍</span>Places</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">📚</span>Sources</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">❝</span>Citations</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">🏛</span>Repositories</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">🖼</span>Media</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">🗒</span>Notes</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">🧾</span>Research notes</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">🏷</span>Tags</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">🧬</span>DNA tests</button>
-              <button class="menu-item" type="button"><span aria-hidden="true">🔗</span>DNA matches</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">👤</span>New person</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">👪</span>New family</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">📅</span>New event</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">📍</span>New place</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">📚</span>New source</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">❝</span>New citation</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🏛</span>New repository</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🖼</span>New media</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🗒</span>New note</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🧾</span>New research note</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🏷</span>New tag</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🧬</span>New DNA test</button>
+              <button class="menu-item" type="button"><span aria-hidden="true">🔗</span>New DNA match</button>
             </div>
           </div>
         </div>

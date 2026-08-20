@@ -2214,14 +2214,15 @@ impl Localizer {
         fl!(self.loader, "picker-clear")
     }
 
-    /// The localized entity noun a picker searches for, e.g. `person` for [`Category::People`]. Only
-    /// the pick-target categories are localized; the non-target categories (Dashboard, Families, Tags,
-    /// DNA matches — never picked by id) fall back to their stable id token, which the picker never
-    /// renders.
+    /// The localized singular entity noun for `category`, e.g. `person` for [`Category::People`] —
+    /// what a picker searches for, and what the palette's `Create { $entity }…` command is named by.
+    /// Only [`Category::Dashboard`], which creates nothing and is picked by nobody, falls back to its
+    /// stable id token.
     #[must_use]
     pub fn picker_entity(&self, category: Category) -> String {
         match category {
             Category::People => fl!(self.loader, "picker-entity-person"),
+            Category::Families => fl!(self.loader, "picker-entity-family"),
             Category::Places => fl!(self.loader, "picker-entity-place"),
             Category::Sources => fl!(self.loader, "picker-entity-source"),
             Category::Citations => fl!(self.loader, "picker-entity-citation"),
@@ -2230,9 +2231,35 @@ impl Localizer {
             Category::Notes => fl!(self.loader, "picker-entity-note"),
             Category::ResearchNotes => fl!(self.loader, "picker-entity-research-note"),
             Category::Repositories => fl!(self.loader, "picker-entity-repository"),
+            Category::Tags => fl!(self.loader, "picker-entity-tag"),
             Category::DnaTests => fl!(self.loader, "picker-entity-dna-test"),
             Category::DnaMatches => fl!(self.loader, "picker-entity-dna-match"),
-            Category::Dashboard | Category::Families | Category::Tags => category.id().to_owned(),
+            Category::Dashboard => category.id().to_owned(),
+        }
+    }
+
+    /// The "New <entity>" title for `category` — the very string that category's create pane is
+    /// headed by, so a draft tab and the form it opens can never disagree about what is being made.
+    ///
+    /// Per entity rather than one interpolated prefix because the prefix carries grammatical gender:
+    /// `Ny person` but `Nytt arkiv`. [`Category::Dashboard`] creates nothing and falls back to its id.
+    #[must_use]
+    pub fn category_new_title(&self, category: Category) -> String {
+        match category {
+            Category::People => self.person_new_title(),
+            Category::Families => self.family_new_title(),
+            Category::Events => self.event_new_title(),
+            Category::Places => self.place_new_title(),
+            Category::Sources => self.source_new_title(),
+            Category::Citations => self.citation_new_title(),
+            Category::Repositories => self.repository_new_title(),
+            Category::Media => self.media_new_title(),
+            Category::Notes => self.note_new_title(),
+            Category::ResearchNotes => self.research_note_new_title(),
+            Category::Tags => self.tag_new_title(),
+            Category::DnaTests => self.dna_test_new_title(),
+            Category::DnaMatches => self.dna_match_new_title(),
+            Category::Dashboard => category.id().to_owned(),
         }
     }
 
@@ -3057,7 +3084,7 @@ fn resolve_field(field: &Field, loader: &FluentLanguageLoader) -> Field {
 
 #[cfg(test)]
 mod tests {
-    use super::{Localizer, resolve_panel, resolve_submit_result};
+    use super::{Category, Localizer, resolve_panel, resolve_submit_result};
     use crate::presentation::ConfidenceLevel;
     use vitni_app::{AppError, ChangeLogEntry, Confidence, DbError, OperatorKind, Sex};
 
@@ -3654,5 +3681,46 @@ mod tests {
                 "{id}'s Norwegian explanation is still the English string"
             );
         }
+    }
+
+    #[test]
+    fn a_categorys_new_title_is_the_string_its_create_pane_is_headed_by() {
+        let en = Localizer::for_test("en");
+        assert_eq!(en.category_new_title(Category::People), en.person_new_title());
+        assert_eq!(en.category_new_title(Category::People), "New person");
+        assert_eq!(en.category_new_title(Category::ResearchNotes), "New research note");
+        let no = Localizer::for_test("no");
+        assert_eq!(no.category_new_title(Category::People), "Ny person");
+    }
+
+    #[test]
+    fn a_new_title_carries_the_norwegian_gender_a_shared_prefix_cannot() {
+        // `Ny { $entity }` is wrong for a neuter noun, which is why the tab renders the per-entity
+        // title instead of interpolating one prefix over all 13.
+        let no = Localizer::for_test("no");
+        assert_eq!(no.category_new_title(Category::Repositories), "Nytt arkiv");
+        assert_eq!(no.category_new_title(Category::Notes), "Nytt notat");
+        assert_eq!(no.category_new_title(Category::People), "Ny person");
+    }
+
+    #[test]
+    fn every_creatable_category_has_a_new_title_in_both_languages() {
+        for loc in [Localizer::for_test("en"), Localizer::for_test("no")] {
+            for category in Category::creatable() {
+                let title = loc.category_new_title(category);
+                assert_ne!(title, category.id(), "{category:?} falls back to its raw id");
+                assert!(!title.trim().is_empty(), "{category:?} has no title");
+            }
+        }
+    }
+
+    #[test]
+    fn families_and_tags_have_a_singular_picker_noun_too() {
+        let en = Localizer::for_test("en");
+        assert_eq!(en.picker_entity(Category::Families), "family");
+        assert_eq!(en.picker_entity(Category::Tags), "tag");
+        let no = Localizer::for_test("no");
+        assert_eq!(no.picker_entity(Category::Families), "familie");
+        assert_eq!(no.picker_entity(Category::Tags), "etikett");
     }
 }
