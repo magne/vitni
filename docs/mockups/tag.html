@@ -118,24 +118,52 @@
             model.</p>
 
           <!-- Edit-mode specimen -->
-          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft:</div>
-          <div class="card" style="margin-top:4px">
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft (<a href="record-editing.html">record editing</a>); the Tag / Color card split is the same as view mode, so entering edit reflows nothing:</div>
+          <div style="margin-top:4px">
             <div class="fact-row" style="margin-bottom:12px">
               <h3 style="text-transform:none;letter-spacing:0;margin:0">Direct ancestor</h3>
               <span class="spacer"></span>
               <button class="btn sm">Cancel</button>
               <button class="btn sm primary">Save</button>
             </div>
-            <div class="stack">
-              <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Name</span><input class="in" style="flex:1;min-width:120px" value="Direct ancestor"></div>
-              <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Priority</span><input class="in" type="number" style="width:90px" value="1"></div>
-              <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Color</span><input class="in mono" style="width:110px" value="#e5534b"><span class="dot" style="width:20px;height:20px;border-radius:var(--r-sm);background:#e5534b;flex:none"></span></div>
-              <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Restrictions</span>
-                <span class="resn-set" role="group" aria-label="Privacy restrictions">
-                  <button class="resn" type="button" data-kind="confidential" aria-pressed="true">Confidential</button>
-                  <button class="resn" type="button" data-kind="locked" aria-pressed="false">Locked</button>
-                  <button class="resn" type="button" data-kind="privacy" aria-pressed="false">Privacy</button>
-                </span>
+            <div class="grid-2">
+              <div class="card">
+                <h3>Tag</h3>
+                <div class="stack">
+                  <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Name</span><input class="in" style="flex:1;min-width:120px" value="Direct ancestor"></div>
+                  <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Priority</span>
+                    <div class="number-stepper">
+                      <input class="stepper-value" inputmode="numeric" value="1">
+                      <div class="stepper-arrows">
+                        <button class="stepper-arrow" type="button" aria-label="Increase" title="Increase">▲</button>
+                        <button class="stepper-arrow" type="button" aria-label="Decrease" title="Decrease">▼</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Restrictions</span><span class="grow">
+                    <span class="resn-set" role="group" aria-label="Privacy restrictions">
+                      <button class="resn" type="button" data-kind="confidential" aria-pressed="true">Confidential</button>
+                      <button class="resn" type="button" data-kind="locked" aria-pressed="false">Locked</button>
+                      <button class="resn" type="button" data-kind="privacy" aria-pressed="false">Privacy</button>
+                    </span>
+                  </span></div>
+                </div>
+              </div>
+              <div class="card">
+                <h3>Color</h3>
+                <div class="stack">
+                  <div class="fact-row">
+                    <span class="field-label" style="width:72px;margin:0">Swatch</span>
+                    <button class="swatch-btn" type="button" aria-label="Choose a color" title="Choose a color">
+                      <span class="dot swatch-dot" style="width:36px;height:36px;border-radius:var(--r-md);background:#e5534b;flex:none"></span>
+                    </button>
+                    <span style="position:relative;display:flex;flex:1;max-width:160px">
+                      <input class="in mono" style="width:100%;padding-right:30px" value="#e5534b">
+                      <button class="icon-btn" type="button" aria-label="Revert to saved value" title="Revert to saved value" style="position:absolute;right:2px;top:50%;transform:translateY(-50%);width:26px;height:26px">↺</button>
+                    </span>
+                  </div>
+                  <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Preview</span><span class="chip"><span class="dot" style="background:#e5534b"></span>Direct ancestor</span></div>
+                </div>
               </div>
             </div>
             <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
@@ -145,6 +173,53 @@
               </div>
             </div>
           </div>
+
+          <!-- Colour-picker specimen -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Color-picker specimen — the dialog the Swatch button opens; no native <span class="mono">&lt;input type=color&gt;</span> (its chrome is unstyleable), so presets and a hex field carry it:</div>
+          <div class="overlay" style="position:relative;inset:auto;display:block;background:transparent;padding:0;margin-top:4px">
+            <div class="modal" style="width:min(480px,96vw)" role="dialog" aria-modal="true" aria-label="Choose a color">
+              <div class="m-head">Choose a color</div>
+              <div class="m-body">
+                <div class="stack">
+                  <div class="fact-row">
+                    <span class="dot swatch-dot" style="width:40px;height:40px;border-radius:var(--r-md);background:#e5534b;flex:none"></span>
+                    <input class="in mono" style="max-width:180px" value="#e5534b" aria-label="Hex">
+                  </div>
+                  <div class="field">
+                    <label>Presets</label>
+                    <div class="color-grid" role="listbox" aria-label="Presets">
+                      <button class="swatch-btn sel" type="button" role="option" aria-selected="true" aria-label="#e5534b" title="#e5534b"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#e5534b;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#e0884a" title="#e0884a"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#e0884a;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#e0c84a" title="#e0c84a"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#e0c84a;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#8a6d3b" title="#8a6d3b"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#8a6d3b;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#2faa6a" title="#2faa6a"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#2faa6a;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#4aa3e0" title="#4aa3e0"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#4aa3e0;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#6cb6ff" title="#6cb6ff"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#6cb6ff;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#b07cf0" title="#b07cf0"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#b07cf0;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#d6409f" title="#d6409f"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#d6409f;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#f78166" title="#f78166"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#f78166;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#57ab5a" title="#57ab5a"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#57ab5a;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#d6b32e" title="#d6b32e"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#d6b32e;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#8a94a6" title="#8a94a6"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#8a94a6;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#c2ccd6" title="#c2ccd6"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#c2ccd6;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#e6edf3" title="#e6edf3"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#e6edf3;flex:none"></span></button>
+                      <button class="swatch-btn" type="button" role="option" aria-selected="false" aria-label="#1a2129" title="#1a2129"><span class="dot swatch-dot" style="width:32px;height:32px;border-radius:var(--r-md);background:#1a2129;flex:none"></span></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="m-foot">
+                <button class="btn ghost">Cancel</button>
+                <button class="btn primary">Save</button>
+              </div>
+            </div>
+          </div>
+          <p class="muted">The grid is <span class="mono">.color-grid</span> — eight columns of
+            <span class="mono">.swatch-btn</span>, the current colour carrying <span class="mono">.sel</span>
+            (an inset accent ring, so selecting never resizes the swatch). Selection is
+            <span class="mono">role="listbox"</span>/<span class="mono">option</span>; the hex field takes
+            any colour the presets don't cover, and Save writes it into the record draft — the picker
+            commits nothing on its own.</p>
         </div>
 
         <!-- USAGE -->
