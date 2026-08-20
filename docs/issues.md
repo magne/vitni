@@ -384,17 +384,6 @@ Residuals from the shortcuts work (ADR 0030); see
   real-world address to a coordinate stays deferred. A WASM `map-provider` world supplying geocoding
   \+ custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
   never pixels).
-- **The map view opens pre-fitted, and three `gui-pass` scenarios have failed since 2026-08-11.**
-  `map-view`, `map-zoom` and `map-repaint` fail identically on `main` against the same fixture
-  (re-confirmed 2026-08-12 while closing #301, and again 2026-08-13): `map-view` at RMSE 0.0032 for
-  `01-map.png` vs `02-fitted.png`, `map-repaint` at 0.0268 twice, `map-zoom` at 0.0000 over the
-  readout region — so the suite cannot be green, and every unrelated change has to re-establish that
-  these three are not its fault. Not a tile failure: `map-view`'s first shot shows a fully painted OSM
-  basemap already framed on the fixture's one place at z4.0, so **Fit has nothing left to change**, and
-  neither `workspace.toml` nor the seeded config carries a camera — this is the map view's initial
-  camera, not fixture state. The other two are separate symptoms on the same screen: the zoom readout
-  does not follow the camera after a `NavigationControl` `+`, and clicking the already-active tool
-  repaints the window when `map-repaint` asserts it changes nothing.
 
 ### GUI ⇄ CLI parity
 
