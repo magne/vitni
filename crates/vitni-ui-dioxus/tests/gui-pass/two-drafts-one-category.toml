@@ -25,7 +25,7 @@
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The two draft
 # tabs are **column-scanned**, not eyeballed, and re-scanned on the shot immediately before each click,
 # because a draft tab resizes as it is typed into — the text changes and the `●` appears: while draft 2
-# still reads "New People" the boxes are 588-677 and 683-831, but once the two read "Ada" and "Bob" they
+# still reads "New person (2)" the boxes are 588-677 and 683-831, but once the two read "Ada" and "Bob" they
 # are 588-677 and 683-772 — so the x 800 that was tab 2's label before typing is past it after. The
 # clicks below aim at the label
 # glyphs on row y 103 (`convert <shot> -crop 400x1+520+92 +repage txt:-` for the boxes,
