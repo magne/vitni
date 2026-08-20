@@ -577,7 +577,7 @@ mod research_note_display_label_tests {
     #[test]
     fn the_body_names_a_draft_with_no_title_yet() {
         // The list row already falls back to the argument's first line; a tab that did not would read
-        // "New Research notes" beside a form with a paragraph typed into it.
+        // "New research note" beside a form with a paragraph typed into it.
         let draft = ResearchNoteDraft {
             body: "## The parish register agrees\n\nMore.".to_owned(),
             ..ResearchNoteDraft::new()

@@ -192,14 +192,6 @@ long-standing "DNA match views in the UI" item is closed.
   can now hold four drafts makes it easier to notice. `NavLocation` lives in `vitni-ui`
   (framework-neutral, ADR 0008) and a history entry naming a draft goes dead when the draft is cancelled
   *or* committed, so the variant needs a rule for that first. — #313
-- **A draft tab and the `+` menu read "New People" while the pane heading reads "New person".** The
-  tab label (`shell/tab_label.rs:66`) and every item of the `+` `NewRecordMenu` (`shell/tabstrip.rs:190`)
-  feed the *rail* label — `nav-people`, plural, shared with the rail and the Explorer — into
-  `draft-tab-label = New { $entity }`, while the create pane takes `person-new-title` (singular), so one
-  screen shows both forms of the same thing. The same substitution makes the Norwegian read "Ny
-  Personer" instead of "Ny person", which is not merely inconsistent but ungrammatical for every
-  category. One fix from three sides: 13 singular entity keys, used by the tab and the menu; the pane
-  heading already reads correctly. — #308
 
 ### Record detail & shared tabs
 

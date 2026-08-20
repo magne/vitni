@@ -77,10 +77,10 @@ status-theme-light = lyst
 status-theme-dark = mørkt
 new-tab-label = Opprett en ny post
 new-record-picker-title = Ny post
-draft-tab-label = Ny { $entity }
 # Et andre (tredje, …) fortsatt navnløst utkast i samme kategori, slik at to nye poster aldri deler
-# tilgjengelig navn. Det første nummereres ikke.
-draft-tab-label-nth = Ny { $entity } ({ $ordinal })
+# tilgjengelig navn. Det første nummereres ikke. `$label` er opprettingsrutens egen «Ny <entitet>»-
+# tittel, som datakatalogen eier — dette mønsteret legger bare til nummeret.
+draft-tab-label-nth = { $label } ({ $ordinal })
 close-tab-label = Lukk post
 close-tab-named = Lukk { $name }
 # En postfane med ulagret arbeid får en prikk-glyf; dette er dens tilgjengelige navn, slik at

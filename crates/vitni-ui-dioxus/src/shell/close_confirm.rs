@@ -27,10 +27,12 @@
 use dioxus::prelude::*;
 
 use crate::components::{Button, ButtonVariant, Modal};
+use vitni_ui::Localizer;
+
 use crate::i18n::Chrome;
-use crate::shell::ChromeCtx;
 use crate::shell::nav_state::{CloseRequest, NavState, OpenTab};
 use crate::shell::tab_label::tab_label;
+use crate::shell::{ChromeCtx, data_loc};
 
 /// The resolved copy of one confirm: the heading, the body, the records at stake (the quit confirm
 /// lists them; a single-tab close names its one record in the body instead), the three action labels,
@@ -64,9 +66,10 @@ pub fn CloseConfirmDialog() -> Element {
     let Some(request) = *nav.pending_close.read() else {
         return rsx! {};
     };
+    let loc = data_loc();
     let copy = match request {
-        CloseRequest::Tab(index) => tab_confirm_copy(&nav, &chrome.0, index),
-        CloseRequest::Quit => quit_confirm_copy(&nav, &chrome.0),
+        CloseRequest::Tab(index) => tab_confirm_copy(&nav, &chrome.0, &loc, index),
+        CloseRequest::Quit => quit_confirm_copy(&nav, &chrome.0, &loc),
     };
     let blocked = copy.blocked.is_some();
     let reason = match copy.blocked.or(copy.note) {
@@ -123,9 +126,9 @@ pub fn CloseConfirmDialog() -> Element {
 
 /// The copy for closing the single tab at `index`: the body names that record, and the discard label
 /// follows the tab kind — a draft is discarded whole, a stored record only loses its changes.
-fn tab_confirm_copy(nav: &NavState, chrome: &Chrome, index: usize) -> ConfirmCopy {
+fn tab_confirm_copy(nav: &NavState, chrome: &Chrome, loc: &Localizer, index: usize) -> ConfirmCopy {
     let is_draft = nav.records.read().get(index).is_some_and(OpenTab::is_draft);
-    let label = tab_label(nav, chrome, index);
+    let label = tab_label(nav, chrome, loc, index);
     let body = if is_draft {
         chrome.close_tab_confirm_body(&label)
     } else {
@@ -155,7 +158,7 @@ fn tab_confirm_copy(nav: &NavState, chrome: &Chrome, index: usize) -> ConfirmCop
 /// can be saved the button runs: the records it cannot save are marked in the list and the note says
 /// they are left open. Only a set where nothing can be saved blocks it, and then the first record's
 /// reason is the one shown.
-fn quit_confirm_copy(nav: &NavState, chrome: &Chrome) -> ConfirmCopy {
+fn quit_confirm_copy(nav: &NavState, chrome: &Chrome, loc: &Localizer) -> ConfirmCopy {
     // A quit can be armed by either shape at once; the draft copy is the stronger warning (a whole
     // record is lost, not just an edit), so an open draft wins — but only a draft that actually holds
     // work, since a pristine one is not at stake at all (issue #307).
@@ -169,7 +172,7 @@ fn quit_confirm_copy(nav: &NavState, chrome: &Chrome) -> ConfirmCopy {
     let mut unsaved = Vec::new();
     for index in 0..nav.records.read().len() {
         if nav.tab_has_unsaved(index) {
-            unsaved.push((index, tab_label(nav, chrome, index), nav.tab_is_savable(index)));
+            unsaved.push((index, tab_label(nav, chrome, loc, index), nav.tab_is_savable(index)));
         }
     }
     let any_savable = unsaved.iter().any(|(_, _, savable)| *savable);

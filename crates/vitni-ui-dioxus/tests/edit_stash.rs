@@ -725,7 +725,7 @@ fn create_pane_types_then_clears() -> Element {
 #[test]
 fn a_name_typed_and_cleared_again_leaves_no_label() {
     // Backspacing over everything leaves the draft clean, and a clean draft parks nothing — so the tab
-    // goes back to "New Tags" rather than keeping the name that is no longer in the form.
+    // goes back to "New tag" rather than keeping the name that is no longer in the form.
     let html = render_settled(create_pane_types_then_clears);
     assert!(html.contains("LABEL:NONE"), "no label survives the clear:\n{html}");
     assert!(html.contains("DIRTY:[]"), "because nothing stays parked:\n{html}");

@@ -19,7 +19,7 @@ use crate::components::EmptyState;
 use crate::i18n::Chrome;
 use crate::services::{DataQualityCache, Services};
 use crate::shell::nav_state::{Theme, resolve_theme};
-use crate::shell::{ChromeCtx, Shell};
+use crate::shell::{ChromeCtx, DataLocCtx, Shell};
 
 /// The design-system tokens (light + dark via `[data-theme]`; default dark) and component styles
 /// (`docs/mockups/assets/`), embedded at compile time. These files are a verbatim copy of the mockup
@@ -135,7 +135,7 @@ pub struct AppState {
 
 struct Ready {
     services: Services,
-    data_loc: Localizer,
+    data_loc: Rc<Localizer>,
     chrome: Rc<Chrome>,
 }
 
@@ -162,6 +162,12 @@ impl AppState {
     #[must_use]
     pub fn chrome_rc(&self) -> Rc<Chrome> {
         Rc::clone(&self.inner.chrome)
+    }
+
+    /// A shared handle to the data localizer, for providing it as context.
+    #[must_use]
+    pub fn data_loc_rc(&self) -> Rc<Localizer> {
+        Rc::clone(&self.inner.data_loc)
     }
 }
 
@@ -253,13 +259,14 @@ fn AppInner() -> Element {
     }
 }
 
-/// Provides the chrome localizer as context, then renders the application [`Shell`].
+/// Provides the chrome and data localizers as context, then renders the application [`Shell`].
 #[component]
 fn ReadyShell() -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     use_context_provider(|| ChromeCtx(state.chrome_rc()));
+    use_context_provider(|| DataLocCtx(state.data_loc_rc()));
     rsx! {
         Shell {}
     }
@@ -292,8 +299,10 @@ fn build_state() -> Result<AppState, String> {
     let host = PluginHost::new().map_err(|error| error.to_string())?;
     let config_ui_language = read_resolved_locale(&dir, &config.workspace_defaults).ui_language;
     let chrome = Rc::new(Chrome::for_workspace(&dir, config_ui_language.as_ref()));
-    let data_loc = Localizer::for_workspace(&dir, config_ui_language.as_ref())
-        .with_surety_overrides(read_resolved_surety_labels(&dir, &config.workspace_defaults));
+    let data_loc = Rc::new(
+        Localizer::for_workspace(&dir, config_ui_language.as_ref())
+            .with_surety_overrides(read_resolved_surety_labels(&dir, &config.workspace_defaults)),
+    );
     let services = Services {
         config,
         dir,

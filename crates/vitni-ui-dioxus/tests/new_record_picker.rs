@@ -5,10 +5,10 @@
 //! since [`NewRecordPicker`] reuses the same `Category::creatable()` listing over the shared `Modal`.
 
 use dioxus::prelude::*;
-use vitni_ui::{Category, Destination, Tool};
-use vitni_ui_dioxus::shell::ChromeCtx;
+use vitni_ui::{Category, Destination, Localizer, Tool};
 use vitni_ui_dioxus::shell::nav_state::{NavState, Overlay};
 use vitni_ui_dioxus::shell::new_record_picker::NewRecordPicker;
+use vitni_ui_dioxus::shell::{ChromeCtx, DataLocCtx};
 
 use std::rc::Rc;
 use unic_langid::LanguageIdentifier;
@@ -18,6 +18,12 @@ use vitni_ui_dioxus::i18n::Chrome;
 fn chrome(tag: &str) -> Rc<Chrome> {
     let language = tag.parse::<LanguageIdentifier>().unwrap_or_default();
     Rc::new(Chrome::with_languages(None, &[language]))
+}
+
+/// A data localizer for a single explicit language — what names the picker's create items.
+fn data_localizer(tag: &str) -> Rc<Localizer> {
+    let language = tag.parse::<LanguageIdentifier>().unwrap_or_default();
+    Rc::new(Localizer::with_languages(None, &[language]))
 }
 
 /// Renders a component to an HTML string.
@@ -150,10 +156,17 @@ fn the_open_picker_is_a_modal_dialog_listing_every_creatable_category() {
         13,
         "one item per creatable category:\n{html}"
     );
-    for label in ["People", "Families", "Research notes", "DNA tests", "DNA matches"] {
+    // Named by the record each item creates, so the picker and the pane it opens read the same.
+    for label in [
+        "New person",
+        "New family",
+        "New research note",
+        "New DNA test",
+        "New DNA match",
+    ] {
         assert!(
             html.contains(&format!(">{label}<")),
-            "expected category label {label:?}:\n{html}"
+            "expected create label {label:?}:\n{html}"
         );
     }
 }
@@ -186,6 +199,7 @@ fn picking_a_category_opens_a_draft_there_and_closes_the_picker() {
 /// The picker forced open, localized to Norwegian.
 fn picker_open_no() -> Element {
     use_context_provider(|| ChromeCtx(chrome("no")));
+    use_context_provider(|| DataLocCtx(data_localizer("no")));
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || nav.overlay.set(Overlay::NewRecord));
     rsx! {
@@ -199,5 +213,13 @@ fn the_picker_localizes_its_title_to_norwegian() {
     assert!(
         html.contains(r#"aria-label="Ny post""#),
         "a missing `no` key must fail this, not render the English fallback:\n{html}"
+    );
+    assert!(
+        html.contains(">Ny person<"),
+        "and the items name the record they create, with its Norwegian gender:\n{html}"
+    );
+    assert!(
+        html.contains(">Nytt arkiv<"),
+        "a neuter noun takes `Nytt`, which one shared prefix could never give it:\n{html}"
     );
 }
