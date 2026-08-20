@@ -357,6 +357,11 @@ pub fn fallback_tab(id: &'static str) -> DetailTab {
     }
 }
 
+/// The label column of an address card's rows (`docs/mockups/repository.html:163-185`,
+/// `event.html:239-246`). The canonical [`DEFAULT_LABEL_WIDTH`]: the 90px both mockups drew is 1px
+/// short of `POSTNUMMER`, which took that row's value out of line with the card's others.
+const ADDRESS_LABEL_WIDTH: u32 = DEFAULT_LABEL_WIDTH;
+
 /// The Addresses tab, shared by every aggregate that carries postal addresses (Repository, Event):
 /// one card per recorded address — street · region · postal · country · phone · email · fax · www,
 /// plus a per-card Edit (opens the row's form pre-filled via `onedit`, which the caller wraps into its
@@ -401,28 +406,28 @@ pub fn address_cards(
                                 }
                             }
                             div { class: "stack",
-                                FactRow { label: loc.field_label("street"), label_width: 90,
+                                FactRow { label: loc.field_label("street"), label_width: ADDRESS_LABEL_WIDTH,
                                     span { class: "grow", {address.lines.join(", ")} }
                                 }
-                                FactRow { label: loc.field_label("region"), label_width: 90,
+                                FactRow { label: loc.field_label("region"), label_width: ADDRESS_LABEL_WIDTH,
                                     span { class: "grow", {or_dash(address.region.clone())} }
                                 }
-                                FactRow { label: loc.field_label("postal-code"), label_width: 90,
+                                FactRow { label: loc.field_label("postal-code"), label_width: ADDRESS_LABEL_WIDTH,
                                     span { class: "grow mono", {or_dash(address.postal_code.clone())} }
                                 }
-                                FactRow { label: loc.field_label("country"), label_width: 90,
+                                FactRow { label: loc.field_label("country"), label_width: ADDRESS_LABEL_WIDTH,
                                     span { class: "grow", {or_dash(address.country.clone())} }
                                 }
-                                FactRow { label: loc.field_label("phone"), label_width: 90,
+                                FactRow { label: loc.field_label("phone"), label_width: ADDRESS_LABEL_WIDTH,
                                     span { class: "grow mono", {or_dash(address.phone.clone())} }
                                 }
-                                FactRow { label: loc.field_label("email"), label_width: 90,
+                                FactRow { label: loc.field_label("email"), label_width: ADDRESS_LABEL_WIDTH,
                                     span { class: "grow", {or_dash(address.email.clone())} }
                                 }
-                                FactRow { label: loc.field_label("fax"), label_width: 90,
+                                FactRow { label: loc.field_label("fax"), label_width: ADDRESS_LABEL_WIDTH,
                                     span { class: "grow mono", {or_dash(address.fax.clone())} }
                                 }
-                                FactRow { label: loc.field_label("www"), label_width: 90,
+                                FactRow { label: loc.field_label("www"), label_width: ADDRESS_LABEL_WIDTH,
                                     if let Some(www) = address.www.clone() {
                                         a { class: "grow", href: "{www}", "{www}" }
                                     } else {

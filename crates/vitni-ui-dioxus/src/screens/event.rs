@@ -140,6 +140,7 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                 DraftText {
                     label: loc.field_label("id"),
                     name: "event-id".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: current.human_id.clone(),
                     original: committed.human_id.clone(),
@@ -155,6 +156,7 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                 DraftSelect {
                     label: loc.field_label("type"),
                     name: "event-type".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: index_of(&current.event_type),
                     original: index_of(&committed.event_type),
@@ -175,7 +177,7 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                     loc,
                     "event-date",
                     editing,
-                    DEFAULT_LABEL_WIDTH,
+                    RECORD_LABEL_WIDTH,
                     DateFieldBinding {
                         value: current.date.clone(),
                         original: committed.date.clone(),
@@ -190,6 +192,7 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                 DraftText {
                     label: loc.field_label("description"),
                     name: "event-description".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: current.description.clone(),
                     original: committed.description.clone(),
@@ -200,7 +203,7 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                         draft.write().description = value;
                     },
                 }
-                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
+                {record_restrictions_field(loc, record, RECORD_LABEL_WIDTH)}
             }
         }
     }

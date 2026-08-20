@@ -37,7 +37,7 @@ pub use draft_field::{
 pub use evidence::{
     ConfidenceBadge, EvidenceAxisChip, NoSourceFlag, ProvenancePopover, RestrictionChoice, RestrictionSet, SourceLink,
 };
-pub use fact_row::{DEFAULT_LABEL_WIDTH, FactRow, or_dash};
+pub use fact_row::{DEFAULT_LABEL_WIDTH, FactRow, RECORD_LABEL_WIDTH, or_dash};
 pub use feedback::{Toast, ToastKind};
 pub use forms::{Checkbox, DateInput, DatePicker, Input, LabeledValue, NumberInput, Select, Textarea};
 pub use history::{HistoryEntry, HistoryTimeline};

@@ -3,8 +3,14 @@ use vitni_ui::{RepositoryLinkVm, SourceAttributeVm};
 
 use super::prelude::*;
 
-/// The label column width of every source record row (`docs/mockups/source.html:112-116`, `:152-156`).
-const SOURCE_LABEL_WIDTH: u32 = 110;
+/// The label column width of every source record row (`docs/mockups/source.html:112-116`, `:152-156`)
+/// — already the shared record floor, which `RESTRIKSJONER` (102px) and `ABBREVIATION` (93px) both fit.
+const SOURCE_LABEL_WIDTH: u32 = RECORD_LABEL_WIDTH;
+
+/// The label column of the Reliability card (`docs/mockups/source.html:129-136`). Wider than every
+/// other card on the page because `TYPICAL CONFIDENCE` renders 139px — the longest label the app draws
+/// in a `.fact-row` anywhere.
+const SOURCE_RELIABILITY_LABEL_WIDTH: u32 = 140;
 
 /// The create-mode source record: an uncommitted [`SourceDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). Save commits the whole source through the change-set;
@@ -510,21 +516,21 @@ pub fn source_overview(
             {source_record_fields(loc, record)}
             Card { title: loc.section_label("reliability"),
                 div { class: "stack",
-                    FactRow { label: loc.field_label("typical-confidence"), label_width: 110,
+                    FactRow { label: loc.field_label("typical-confidence"), label_width: SOURCE_RELIABILITY_LABEL_WIDTH,
                         if let (Some(level), Some(label)) = (reliability.confidence, reliability.confidence_label.clone()) {
                             span { class: "grow", ConfidenceBadge { level, label } }
                         } else {
                             span { class: "grow muted", "—" }
                         }
                     }
-                    FactRow { label: loc.field_label("evidence"), label_width: 110,
+                    FactRow { label: loc.field_label("evidence"), label_width: SOURCE_RELIABILITY_LABEL_WIDTH,
                         span { class: "grow wrap",
                             for chip in reliability.evidence_axes.iter() {
                                 EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
                             }
                         }
                     }
-                    FactRow { label: loc.field_label("used-by"), label_width: 110,
+                    FactRow { label: loc.field_label("used-by"), label_width: SOURCE_RELIABILITY_LABEL_WIDTH,
                         span { class: "grow", "{loc.record_count(reliability.record_count)}" }
                     }
                 }

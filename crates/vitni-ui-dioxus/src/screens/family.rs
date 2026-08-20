@@ -130,6 +130,7 @@ pub fn family_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::F
                 DraftText {
                     label: loc.field_label("id"),
                     name: "family-id".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: draft().human_id.clone(),
                     original: seed.read().human_id.clone(),
@@ -142,7 +143,7 @@ pub fn family_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::F
                         draft.write().human_id = value;
                     },
                 }
-                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
+                {record_restrictions_field(loc, record, RECORD_LABEL_WIDTH)}
             }
         }
     }

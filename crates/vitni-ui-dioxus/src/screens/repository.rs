@@ -97,6 +97,7 @@ pub fn repository_record_fields(loc: &Localizer, record: RecordEditState<vitni_u
                 DraftText {
                     label: loc.field_label("id"),
                     name: "repository-id".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: id_value,
                     original: id_original,
@@ -112,6 +113,7 @@ pub fn repository_record_fields(loc: &Localizer, record: RecordEditState<vitni_u
                 DraftSelect {
                     label: loc.field_label("type"),
                     name: "repository-type".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: type_value,
                     original: type_original,
@@ -129,6 +131,7 @@ pub fn repository_record_fields(loc: &Localizer, record: RecordEditState<vitni_u
                 DraftText {
                     label: loc.field_label("name"),
                     name: "repository-name".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: name_value,
                     original: name_original,
@@ -139,7 +142,7 @@ pub fn repository_record_fields(loc: &Localizer, record: RecordEditState<vitni_u
                         draft.write().name = value;
                     },
                 }
-                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
+                {record_restrictions_field(loc, record, RECORD_LABEL_WIDTH)}
             }
         }
     }

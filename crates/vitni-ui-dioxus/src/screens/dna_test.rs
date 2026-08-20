@@ -130,6 +130,7 @@ fn dna_test_select_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Dna
         DraftSelect {
             label: loc.field_label("provider"),
             name: "dna-test-provider".to_owned(),
+            label_width: RECORD_LABEL_WIDTH,
             editing,
             value: provider_value,
             original: provider_original,
@@ -147,6 +148,7 @@ fn dna_test_select_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Dna
         DraftSelect {
             label: loc.field_label("test-type"),
             name: "dna-test-type".to_owned(),
+            label_width: RECORD_LABEL_WIDTH,
             editing,
             value: type_value,
             original: type_original,
@@ -164,6 +166,7 @@ fn dna_test_select_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Dna
         DraftSelect {
             label: loc.field_label("genome-build"),
             name: "dna-test-genome-build".to_owned(),
+            label_width: RECORD_LABEL_WIDTH,
             editing,
             value: build_value,
             original: build_original,
@@ -197,6 +200,7 @@ pub fn dna_test_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                 DraftText {
                     label: loc.field_label("id"),
                     name: "dna-test-id".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: current.human_id.clone(),
                     original: committed.human_id.clone(),
@@ -212,6 +216,7 @@ pub fn dna_test_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                 DraftText {
                     label: loc.field_label("person"),
                     name: "dna-test-person".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: current.person.clone(),
                     original: committed.person.clone(),
@@ -225,6 +230,7 @@ pub fn dna_test_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                 DraftText {
                     label: loc.field_label("kit-id"),
                     name: "dna-test-kit-id".to_owned(),
+                    label_width: RECORD_LABEL_WIDTH,
                     editing,
                     value: current.kit_id.clone(),
                     original: committed.kit_id.clone(),
@@ -235,7 +241,7 @@ pub fn dna_test_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                         draft.write().kit_id = value;
                     },
                 }
-                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
+                {record_restrictions_field(loc, record, RECORD_LABEL_WIDTH)}
             }
         }
     }

@@ -12,17 +12,19 @@
 #
 # What the assertions encode:
 #
-# * **The label column is a column.** The Tag card's label strip (`region` = 96px wide plus the gap,
-#   over the three rows) must be *identical* between read mode and edit mode. That is the no-reflow
-#   property (`record-editing.html` §3) — and it is exactly what breaks when a row stacks in one mode
-#   but not the other, because a stacked label sits at a different y than a one-line one.
+# * **The label column is a column.** The Tag card's label strip (`region` = the leading 110px of the
+#   page's 130px label column, over the three rows) must be *identical* between read mode and edit
+#   mode. That is the no-reflow property (`record-editing.html` §3) — and it is exactly what breaks
+#   when a row stacks in one mode but not the other, because a stacked label sits at a different y
+#   than a one-line one.
 # * **The values change, the labels do not.** The same rows' value strip must `differ` between the two
 #   modes: read text is replaced by inputs and a stepper.
 # * **The Colour card is drawn, not blank.** `painted` over the read Colour card proves the swatch and
 #   the preview chip actually composite — the criterion #310 is about is that the read view of a record
 #   whose content *is* a colour showed no colour at all.
 #
-# The Restrictions row is the one that overflowed, so the label strip's region deliberately spans it.
+# The Restrictions row is the one that overflowed, so the label strip's region deliberately spans it. At
+# the page's 130px column its label ink runs x 546-634 and the pills begin at 697, clear by 63px.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "A tag record's rows are one-line and non-overlapping in both modes (#310)"

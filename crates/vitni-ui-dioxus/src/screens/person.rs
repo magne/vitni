@@ -256,6 +256,12 @@ fn person_new_source_body(loc: &Localizer, mut draft: Signal<PersonDraft>) -> El
 /// choice (index [`SEX_OTHER_INDEX`]) for a free-text [`Sex::Other`] value.
 const SEXES: [Sex; 4] = [Sex::Female, Sex::Male, Sex::Unknown, Sex::Intersex];
 
+/// The label column width of every person record row (`docs/mockups/person.html:185-208`). The widest
+/// column any record card uses, because the surname-prefix row's Norwegian label is
+/// `ETTERNAVNSPREFIKS` at 135px — 26px past the English `SURNAME PREFIX`, which itself overflows the
+/// shared record floor.
+const PERSON_LABEL_WIDTH: u32 = 140;
+
 /// The person record's scalar identity fields (name type · the six name parts · sex), rendered
 /// read-first: read boxes in view mode, inputs with per-field reset in edit mode
 /// (`record-editing.html` §2/§3). A pure fn (the edit state's signals passed in) so the create pane
@@ -269,7 +275,7 @@ pub fn person_record_fields(loc: &Localizer, record: RecordEditState<PersonDraft
                 {person_name_type_field(loc, editing, record)}
                 {person_name_text_fields(loc, editing, record)}
                 {person_sex_field(loc, editing, record)}
-                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
+                {record_restrictions_field(loc, record, PERSON_LABEL_WIDTH)}
             }
         }
     }
@@ -285,6 +291,7 @@ fn person_human_id_field(loc: &Localizer, editing: bool, record: RecordEditState
         DraftText {
             label: loc.field_label("id"),
             name: "human-id".to_owned(),
+            label_width: PERSON_LABEL_WIDTH,
             editing,
             value,
             original,
@@ -320,6 +327,7 @@ fn person_name_type_field(loc: &Localizer, editing: bool, record: RecordEditStat
         DraftSelect {
             label: loc.field_label("name-type"),
             name: "name-type".to_owned(),
+            label_width: PERSON_LABEL_WIDTH,
             editing,
             value,
             original,
@@ -345,32 +353,32 @@ fn person_name_text_fields(loc: &Localizer, editing: bool, record: RecordEditSta
     let current = draft();
     let original = seed.read().clone();
     rsx! {
-        DraftText { label: loc.field_label("prefix"), name: "prefix".to_owned(), editing,
+        DraftText { label: loc.field_label("prefix"), name: "prefix".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.prefix.clone(), original: original.prefix.clone(),
             reset_label: loc.action_reset_field(&loc.field_label("prefix")),
             oninput: move |value: String| draft.write().prefix = value,
             onreset: move |()| { let value = seed.read().prefix.clone(); draft.write().prefix = value; } }
-        DraftText { label: loc.label_given(), name: "given".to_owned(), editing,
+        DraftText { label: loc.label_given(), name: "given".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.given.clone(), original: original.given.clone(),
             reset_label: loc.action_reset_field(&loc.label_given()),
             oninput: move |value: String| draft.write().given = value,
             onreset: move |()| { let value = seed.read().given.clone(); draft.write().given = value; } }
-        DraftText { label: loc.field_label("nickname"), name: "nickname".to_owned(), editing,
+        DraftText { label: loc.field_label("nickname"), name: "nickname".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.nickname.clone(), original: original.nickname.clone(),
             reset_label: loc.action_reset_field(&loc.field_label("nickname")),
             oninput: move |value: String| draft.write().nickname = value,
             onreset: move |()| { let value = seed.read().nickname.clone(); draft.write().nickname = value; } }
-        DraftText { label: loc.field_surname_prefix(), name: "surname-prefix".to_owned(), editing,
+        DraftText { label: loc.field_surname_prefix(), name: "surname-prefix".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.surname_prefix.clone(), original: original.surname_prefix.clone(),
             reset_label: loc.action_reset_field(&loc.field_surname_prefix()),
             oninput: move |value: String| draft.write().surname_prefix = value,
             onreset: move |()| { let value = seed.read().surname_prefix.clone(); draft.write().surname_prefix = value; } }
-        DraftText { label: loc.label_surname(), name: "surname".to_owned(), editing,
+        DraftText { label: loc.label_surname(), name: "surname".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.surname.clone(), original: original.surname.clone(),
             reset_label: loc.action_reset_field(&loc.label_surname()),
             oninput: move |value: String| draft.write().surname = value,
             onreset: move |()| { let value = seed.read().surname.clone(); draft.write().surname = value; } }
-        DraftText { label: loc.field_label("suffix"), name: "suffix".to_owned(), editing,
+        DraftText { label: loc.field_label("suffix"), name: "suffix".to_owned(), label_width: PERSON_LABEL_WIDTH, editing,
             value: current.suffix.clone(), original: original.suffix.clone(),
             reset_label: loc.action_reset_field(&loc.field_label("suffix")),
             oninput: move |value: String| draft.write().suffix = value,
@@ -421,6 +429,7 @@ fn person_sex_field(loc: &Localizer, editing: bool, record: RecordEditState<Pers
         DraftSelect {
             label: loc.label_sex(),
             name: "sex".to_owned(),
+            label_width: PERSON_LABEL_WIDTH,
             editing,
             value,
             original,

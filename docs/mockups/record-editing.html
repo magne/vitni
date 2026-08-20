@@ -124,6 +124,18 @@
   </div>
   <p class="muted">Locked (non-editable) fields keep the read box and, in edit mode, render as a
     <span class="mono">disabled</span> input rather than jumping to text.</p>
+  <p class="muted"><b>The label column belongs to the card, not the page, and it has to clear the card's
+    own longest label.</b> <span class="mono">.fact-row &gt; .field-label</span> is
+    <span class="mono">min-width: max-content</span>, so a label wider than the declared width raises
+    that one row's floor instead of overlapping its value — readable, but with that row's value out of
+    line with the rest of the card. Size the column to the longest label the card renders
+    <b>in every shipped locale</b>: Norwegian is routinely the longer one
+    (<span class="mono">RESTRIKSJONER</span> 102px against <span class="mono">RESTRICTIONS</span> 92px).
+    The 96px this page draws is the canonical width for a card of ordinary fact rows; a
+    <b>whole-record</b> card starts at <b>110px</b>, because every record carries the Restrictions row.
+    Four pages need more still — person and citation 140, DNA match 140, tag 130. Read and edit
+    specimens of the same card must draw the <b>same</b> width, or the app reflows on the mode
+    toggle.</p>
 
   <!-- 4 · Draft & reset -->
   <h2>4 · Draft state, per-field commit &amp; Reset</h2>

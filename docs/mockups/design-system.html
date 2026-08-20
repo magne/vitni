@@ -161,12 +161,16 @@
     </div>
   </div>
   <p class="muted">A value the record does not carry reads as an em dash, never as an empty row.
-    96px is the default (<a href="record-editing.html">Record editing</a>); a page overrides it where
-    its own longest label needs more or less room — 72px on <a href="tag.html">Tag</a>, 80px on
-    <a href="event.html">Event</a>, 90px on <a href="media.html">Media</a> and
-    <a href="note.html">Note</a>, 110px on <a href="source.html">Source</a>, 130px on
-    <a href="dna-match.html">DNA match</a>. The width is a call-site decision, not a token: the rows
-    of one screen's cards line up with each other, not across screens.</p>
+    96px is the default for a card of ordinary fact rows, and 110px the floor for a
+    <b>whole-record</b> card, which always carries a Restrictions row
+    (<a href="record-editing.html">Record editing</a> §3). A card overrides both where its own longest
+    label needs more room — 140px on <a href="person.html">Person</a>,
+    <a href="citation.html">Citation</a>, <a href="dna-match.html">DNA match</a> and the
+    <a href="source.html">Source</a> Reliability card, 130px on <a href="tag.html">Tag</a>; and less
+    where it can, 64px on the <a href="family.html">Family</a> marriage rows, 80px on the
+    <a href="repository.html">Repository</a> contact card. The width is a call-site decision, not a
+    token: the rows of one card line up with each other, not across cards — so it is sized against the
+    longest label that card renders, <b>in every shipped locale</b>, never against this specimen.</p>
 
   <h2>Inputs</h2>
   <div class="specimen grid-2">

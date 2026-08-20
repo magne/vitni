@@ -40,7 +40,9 @@ pub use bulk_import::{
     BulkConfirmLabels, BulkImportBody, BulkImportWizardLabels, BulkRunningLabels, BulkRunningStage, BulkSourceLabels,
     BulkSourceStage, BulkSummaryLabels, BulkSummaryStage,
 };
-pub use citation::{CitationEditForm, citation_attributes_table, citation_create_fields, citation_overview};
+pub use citation::{
+    CitationEditForm, citation_attributes_table, citation_create_fields, citation_overview, citation_record_fields,
+};
 pub use dashboard::{DashboardScreen, dashboard_view};
 pub use detail_commits::{
     CitationCommits, DetailAggregate, DetailCommits, DnaMatchCommits, DnaTestCommits, EventCommits, FamilyCommits,

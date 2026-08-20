@@ -1,7 +1,9 @@
 use super::prelude::*;
 
 /// The label column width of every note record row (`docs/mockups/note.html:105`, `:126`, `:137`).
-const NOTE_LABEL_WIDTH: u32 = 90;
+/// The shared record floor: the page's own labels are short, but `RESTRIKSJONER` renders 102px, so the
+/// 90px the mockup drew left the Restrictions pills out of line with the card's other values.
+const NOTE_LABEL_WIDTH: u32 = RECORD_LABEL_WIDTH;
 
 /// The selectable note types for the type-edit form, in display order.
 fn note_type_choices() -> [NoteType; 4] {

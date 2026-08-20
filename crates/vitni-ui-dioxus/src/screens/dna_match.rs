@@ -127,6 +127,12 @@ pub fn DnaMatchCreateRecord(draft_id: DraftId) -> Element {
     )
 }
 
+/// The label column width of every DNA-match record row (`docs/mockups/dna-match.html:121-140`,
+/// `:178-184`). The app draws the sharing observations in the same card as the identity rows, so the
+/// column has to clear the longest of the lot: `LARGEST SEGMENT` renders 123px and the Norwegian
+/// `ANTALL SEGMENTER` 130px, both past the mockup's 130px Shared-DNA column.
+const DNA_MATCH_LABEL_WIDTH: u32 = 140;
+
 /// A DNA match's locked observation fields (§3, disabled inputs): the two compared tests, provider,
 /// and the observed shared-DNA totals are the provider's observation, never edited here — shown
 /// read-only from the record. Factored out of [`dna_match_record_fields`] to stay under the length cap.
@@ -136,6 +142,7 @@ fn dna_match_locked_fields(loc: &Localizer, editing: bool, detail: &DnaMatchDeta
             DraftText {
                 label,
                 name: name.to_owned(),
+                label_width: DNA_MATCH_LABEL_WIDTH,
                 editing,
                 value: value.clone(),
                 original: value,
@@ -187,6 +194,7 @@ pub fn dna_match_record_fields(
                 DraftText {
                     label: loc.field_label("id"),
                     name: "dna-match-id".to_owned(),
+                    label_width: DNA_MATCH_LABEL_WIDTH,
                     editing,
                     value: id_value,
                     original: id_original,
@@ -203,6 +211,7 @@ pub fn dna_match_record_fields(
                 DraftSelect {
                     label: loc.field_label("status"),
                     name: "dna-match-status".to_owned(),
+                    label_width: DNA_MATCH_LABEL_WIDTH,
                     editing,
                     value: status_value,
                     original: status_original,
@@ -217,7 +226,7 @@ pub fn dna_match_record_fields(
                         draft.write().status = value;
                     },
                 }
-                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
+                {record_restrictions_field(loc, record, DNA_MATCH_LABEL_WIDTH)}
             }
         }
     }

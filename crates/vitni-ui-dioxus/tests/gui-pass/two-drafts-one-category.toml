@@ -27,7 +27,8 @@
 # Given name at y 468-503 (centre 486), column-scanned at x=1150. The old y=336 was on ID's focus ring
 # and y=564 was in the gap below Nickname, so the "park the caret in ID" steps were landing on a border
 # and the typing went nowhere. The Given-name `differ` region moved with it, and to x=660 rather than the
-# old 546: with a 96px label column, 546 is on the label — identical in both frames, so including it
+# old 546: the person card's label column is 140px, so its label ink runs x 546-616 and the input's own
+# text starts at 693 — 546 is on the label, identical in both frames, so including it
 # would only dilute the three glyphs the assertion is about.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The two draft

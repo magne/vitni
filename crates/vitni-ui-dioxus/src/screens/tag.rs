@@ -3,11 +3,11 @@ use vitni_ui::{DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY};
 use super::prelude::*;
 use crate::components::{ColorPicker, IconButton};
 
-/// The label column width of every tag record row (`docs/mockups/tag.html:93-95`, `:133-143`). The
-/// canonical [`DEFAULT_LABEL_WIDTH`]: the page's own labels are short enough for the 72px the mockup
-/// drew before Restrictions joined them (#315), but `RESTRICTIONS` renders 92px wide, and a column
-/// narrower than its longest label leaves that row's value out of line with the others.
-const TAG_LABEL_WIDTH: u32 = DEFAULT_LABEL_WIDTH;
+/// The label column width of every tag record row (`docs/mockups/tag.html:93-95`, `:133-143`) — one
+/// value across the `.grid-2` pair, so the Tag card and the Colour card beside it line their values up
+/// on the same column. Wider than the shared record floor because the Colour card's Preview row is
+/// `FORHÅNDSVISNING`, 122px; the Tag card's own longest is `RESTRIKSJONER` at 102px.
+const TAG_LABEL_WIDTH: u32 = 130;
 
 /// The create-mode tag record: an uncommitted [`TagDraft`] rendered as the editable record in the
 /// detail pane (Name focused). Save commits the whole tag; Cancel drops the draft.

@@ -3,7 +3,9 @@ use super::prelude::*;
 use vitni_ui::MediaAttributeVm;
 
 /// The label column width of every media record row (`docs/mockups/media.html:120-125`, `:218-222`).
-const MEDIA_LABEL_WIDTH: u32 = 90;
+/// The shared record floor: `KONTROLLSUM` (96px) and `RESTRIKSJONER` (102px) both overflowed the 90px
+/// the mockup drew, taking those two rows' values out of line with the card's others.
+const MEDIA_LABEL_WIDTH: u32 = RECORD_LABEL_WIDTH;
 
 /// The create-mode media record: an uncommitted [`MediaDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). Save commits the whole media object; Cancel discards.

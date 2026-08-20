@@ -17,8 +17,13 @@ use vitni_ui_dioxus::screens::{
     record_head_actions, record_restrictions_field, restriction_display,
 };
 
-/// The source record page's own label column width (`docs/mockups/source.html:112-116`).
+/// The source record page's own label column width (`docs/mockups/source.html:112-116`) — the shared
+/// record floor, which every whole-record card starts at.
 const SOURCE_LABEL_WIDTH: u32 = 110;
+
+/// The note record page's own label column width (`docs/mockups/note.html:105`, `:126`, `:137`), which
+/// the `multiline` and select-row shapes below are measured at.
+const NOTE_LABEL_WIDTH: u32 = 110;
 
 fn loc() -> Localizer {
     Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
@@ -183,7 +188,7 @@ fn multiline_view() -> Element {
         DraftText {
             label: "Content".to_owned(),
             name: "note-content".to_owned(),
-            label_width: 90,
+            label_width: NOTE_LABEL_WIDTH,
             editing: false,
             value: "# Heading".to_owned(),
             original: "# Heading".to_owned(),
@@ -200,7 +205,7 @@ fn multiline_edit() -> Element {
         DraftText {
             label: "Content".to_owned(),
             name: "note-content".to_owned(),
-            label_width: 90,
+            label_width: NOTE_LABEL_WIDTH,
             editing: true,
             value: "# Heading".to_owned(),
             original: "# Heading".to_owned(),
@@ -217,7 +222,7 @@ fn select_row_edit() -> Element {
         DraftSelect {
             label: "Type".to_owned(),
             name: "note-type".to_owned(),
-            label_width: 90,
+            label_width: NOTE_LABEL_WIDTH,
             editing: true,
             value: "1".to_owned(),
             original: "1".to_owned(),
@@ -262,7 +267,7 @@ fn a_select_row_is_one_line_too() {
         "a select row is a .fact-row:\n{html}"
     );
     assert!(
-        html.contains(&label_column(90)),
+        html.contains(&label_column(NOTE_LABEL_WIDTH)),
         "and takes the page's label width:\n{html}"
     );
     assert!(html.contains("<select"), "the control is still a live select:\n{html}");
