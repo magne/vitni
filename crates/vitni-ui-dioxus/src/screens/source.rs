@@ -505,24 +505,21 @@ pub fn source_overview(
             {source_record_fields(loc, record)}
             Card { title: loc.section_label("reliability"),
                 div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"typical-confidence\")}" }
+                    FactRow { label: loc.field_label("typical-confidence"), label_width: 110,
                         if let (Some(level), Some(label)) = (reliability.confidence, reliability.confidence_label.clone()) {
                             span { class: "grow", ConfidenceBadge { level, label } }
                         } else {
                             span { class: "grow muted", "—" }
                         }
                     }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"evidence\")}" }
+                    FactRow { label: loc.field_label("evidence"), label_width: 110,
                         span { class: "grow wrap",
                             for chip in reliability.evidence_axes.iter() {
                                 EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
                             }
                         }
                     }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"used-by\")}" }
+                    FactRow { label: loc.field_label("used-by"), label_width: 110,
                         span { class: "grow", "{loc.record_count(reliability.record_count)}" }
                     }
                 }
@@ -556,7 +553,7 @@ pub fn source_repositories_table(
             for link in detail.repositories.iter() {
                 tr {
                     td { "{link.name}" }
-                    td { class: "mono", {link.call_number.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td { class: "mono", {or_dash(link.call_number.clone())} }
                     td { Chip { label: link.media_type_label.clone() } }
                     td {
                         ConfidenceBadge { level: link.confidence, label: link.confidence_label.clone() }
@@ -603,7 +600,7 @@ pub fn source_citations_table(loc: &Localizer, citations: &[SourceCitationVm]) -
                                 let citation = citation.clone();
                                 rsx! {
                                     tr {
-                                        td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
+                                        td { class: "muted", {or_dash(citation.page.clone())} }
                                         td { {backs_record_label(backer.as_ref())} }
                                         td {
                                             if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {

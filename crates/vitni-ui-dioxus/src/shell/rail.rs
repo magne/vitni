@@ -5,6 +5,7 @@ use dioxus::prelude::*;
 use vitni_app::WorkspaceCounts;
 use vitni_ui::{Category, Destination, RailGroup, RailItem, rail_items};
 
+use crate::components::or_dash;
 use crate::shell::nav_state::NavState;
 use crate::shell::roving::roving_vertical;
 use crate::shell::{ChromeCtx, CountsCtx};
@@ -124,7 +125,7 @@ fn RailItemView(
     };
     // Fold the count into the accessible name so it is announced; the badge itself is decorative.
     let aria_label = count.map(|n| chrome.0.rail_item_count(&label, n));
-    let count_text = count.map_or_else(|| "—".to_owned(), |n| n.to_string());
+    let count_text = or_dash(count.map(|n| n.to_string()));
     rsx! {
         a {
             role: "listitem",

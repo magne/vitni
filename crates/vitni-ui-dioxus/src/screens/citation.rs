@@ -811,8 +811,7 @@ pub fn citation_overview(
 fn axis_chip_row(loc: &Localizer, detail: &CitationDetail, axis: EvidenceAxis) -> Element {
     let chip = detail.evidence_axes.iter().find(|chip| chip.axis == axis);
     rsx! {
-        div { class: "fact-row",
-            span { class: "field-label", style: "width:96px;margin:0", "{loc.evidence_axis_label(axis)}" }
+        FactRow { label: loc.evidence_axis_label(axis),
             span { class: "grow wrap",
                 match chip {
                     Some(chip) => rsx! { EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() } },

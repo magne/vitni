@@ -654,22 +654,19 @@ pub fn dna_test_overview(
             {record_edit_provenance(loc, record)}
         };
     }
-    let dash = "—".to_owned();
     rsx! {
         div { class: "section-note", "{loc.dna_test_overview_note()}" }
         div { class: "grid-2",
             {dna_test_record_fields(loc, record)}
             Card { title: loc.section_label("tested-person"),
                 div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"person\")}" }
-                        span { class: "grow", {detail.person_name.clone().unwrap_or_else(|| dash.clone())} }
+                    FactRow { label: loc.field_label("person"), label_width: 110,
+                        span { class: "grow", {or_dash(detail.person_name.clone())} }
                         if let Some(person) = &detail.person {
                             span { class: "muted mono", "{person.human_id}" }
                         }
                     }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.tab_label(\"matches\")}" }
+                    FactRow { label: loc.tab_label("matches"), label_width: 110,
                         span { class: "grow", "{detail.matches.len()}" }
                     }
                 }
@@ -718,7 +715,6 @@ pub fn dna_test_matches_table(loc: &Localizer, matches: &[DnaTestMatchVm]) -> El
     if matches.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
-    let dash = "—".to_owned();
     rsx! {
         Table {
             caption: loc.tab_label("matches"),
@@ -732,9 +728,9 @@ pub fn dna_test_matches_table(loc: &Localizer, matches: &[DnaTestMatchVm]) -> El
             for row in matches.iter() {
                 tr {
                     td { "{row.match_ref.human_id}" }
-                    td { class: "muted mono", {row.compared_test.as_ref().map_or_else(|| dash.clone(), |t| t.human_id.clone())} }
-                    td { b { {row.shared_cm.clone().unwrap_or_else(|| dash.clone())} } }
-                    td { {row.percent_shared.clone().unwrap_or_else(|| dash.clone())} }
+                    td { class: "muted mono", {or_dash(row.compared_test.as_ref().map(|t| t.human_id.clone()))} }
+                    td { b { {or_dash(row.shared_cm.clone())} } }
+                    td { {or_dash(row.percent_shared.clone())} }
                     td { if let Some(predicted) = row.predicted.clone() { Chip { label: predicted } } }
                 }
             }

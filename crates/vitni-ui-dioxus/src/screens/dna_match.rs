@@ -131,7 +131,6 @@ pub fn DnaMatchCreateRecord(draft_id: DraftId) -> Element {
 /// and the observed shared-DNA totals are the provider's observation, never edited here — shown
 /// read-only from the record. Factored out of [`dna_match_record_fields`] to stay under the length cap.
 fn dna_match_locked_fields(loc: &Localizer, editing: bool, detail: &DnaMatchDetail) -> Element {
-    let dash = "—".to_owned();
     let locked = |name: &'static str, label: String, value: String| {
         rsx! {
             DraftText {
@@ -147,17 +146,17 @@ fn dna_match_locked_fields(loc: &Localizer, editing: bool, detail: &DnaMatchDeta
             }
         }
     };
-    let test_a = detail.test_a.as_ref().map_or_else(|| dash.clone(), |t| t.label.clone());
-    let test_b = detail.test_b.as_ref().map_or_else(|| dash.clone(), |t| t.label.clone());
+    let test_a = or_dash(detail.test_a.as_ref().map(|t| t.label.clone()));
+    let test_b = or_dash(detail.test_b.as_ref().map(|t| t.label.clone()));
     rsx! {
         {locked("dna-match-test-a", loc.field_label("test-a"), test_a)}
         {locked("dna-match-test-b", loc.field_label("test-b"), test_b)}
-        {locked("dna-match-provider", loc.field_label("provider"), detail.provider.clone().unwrap_or_else(|| dash.clone()))}
-        {locked("dna-match-shared-cm", loc.field_label("shared-cm"), detail.shared_cm.clone().unwrap_or_else(|| dash.clone()))}
-        {locked("dna-match-percent", loc.field_label("percent-shared"), detail.percent_shared.clone().unwrap_or_else(|| dash.clone()))}
-        {locked("dna-match-largest", loc.field_label("largest-segment"), detail.largest_segment_cm.clone().unwrap_or_else(|| dash.clone()))}
+        {locked("dna-match-provider", loc.field_label("provider"), or_dash(detail.provider.clone()))}
+        {locked("dna-match-shared-cm", loc.field_label("shared-cm"), or_dash(detail.shared_cm.clone()))}
+        {locked("dna-match-percent", loc.field_label("percent-shared"), or_dash(detail.percent_shared.clone()))}
+        {locked("dna-match-largest", loc.field_label("largest-segment"), or_dash(detail.largest_segment_cm.clone()))}
         {locked("dna-match-segments", loc.field_label("segment-count"), detail.segments.len().to_string())}
-        {locked("dna-match-predicted", loc.field_label("predicted"), detail.predicted_relationship.clone().unwrap_or_else(|| dash.clone()))}
+        {locked("dna-match-predicted", loc.field_label("predicted"), or_dash(detail.predicted_relationship.clone()))}
     }
 }
 
@@ -661,7 +660,6 @@ pub fn dna_match_overview(
             {record_edit_provenance(loc, record)}
         };
     }
-    let dash = "—".to_owned();
     rsx! {
         div { class: "section-note", "{loc.dna_match_overview_note()}" }
         div { class: "grid-2",
@@ -669,7 +667,7 @@ pub fn dna_match_overview(
             Card { title: loc.section_label("inferred-relationship"),
                 div { class: "section-note", style: "margin:0 0 8px", "{loc.dna_match_overview_note()}" }
                 div { class: "fact-row",
-                    span { class: "grow", {detail.predicted_relationship.clone().unwrap_or_else(|| dash.clone())} }
+                    span { class: "grow", {or_dash(detail.predicted_relationship.clone())} }
                     Chip { label: detail.status.clone() }
                 }
                 {dna_match_cited_inferences(loc, &detail.cited_by)}
@@ -745,7 +743,6 @@ fn dna_match_segments_rows(
     onedit: Callback<DnaMatchEditForm>,
     onretract: Callback<(String, String, bool)>,
 ) -> Element {
-    let dash = "—".to_owned();
     rsx! {
         div { class: "section-note", "{loc.dna_match_segments_note()}" }
         Table {
@@ -765,7 +762,7 @@ fn dna_match_segments_rows(
                     td { class: "mono", "{segment.start}" }
                     td { class: "mono", "{segment.end}" }
                     td { b { "{segment.centimorgans}" } }
-                    td { {segment.snps.clone().unwrap_or_else(|| dash.clone())} }
+                    td { {or_dash(segment.snps.clone())} }
                     td { Chip { label: segment.side.clone() } }
                     {row_actions_cell(
                         loc,
@@ -815,7 +812,6 @@ fn dna_match_ancestors_rows(
     onedit: Callback<DnaMatchEditForm>,
     onretract: Callback<(String, String, bool)>,
 ) -> Element {
-    let dash = "—".to_owned();
     rsx! {
         div { class: "section-note", "{loc.dna_match_ancestors_note()}" }
         Table {
@@ -823,16 +819,17 @@ fn dna_match_ancestors_rows(
             headers: vec![loc.field_label("ancestor"), loc.field_label("note"), String::new()],
             for ancestor in ancestors.iter() {
                 {
-                    let label = ancestor
-                        .person
-                        .as_ref()
-                        .map(|p| p.label.clone())
-                        .or_else(|| ancestor.note.clone())
-                        .unwrap_or_else(|| dash.clone());
+                    let label = or_dash(
+                        ancestor
+                            .person
+                            .as_ref()
+                            .map(|p| p.label.clone())
+                            .or_else(|| ancestor.note.clone()),
+                    );
                     rsx! {
                         tr {
-                            td { {ancestor.person.as_ref().map_or_else(|| dash.clone(), |p| p.label.clone())} }
-                            td { class: "muted", {ancestor.note.clone().unwrap_or_else(|| dash.clone())} }
+                            td { {or_dash(ancestor.person.as_ref().map(|p| p.label.clone()))} }
+                            td { class: "muted", {or_dash(ancestor.note.clone())} }
                             {row_actions_cell(
                                 loc,
                                 &label,

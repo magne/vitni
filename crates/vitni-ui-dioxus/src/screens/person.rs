@@ -1006,8 +1006,7 @@ pub fn overview_tab(loc: &Localizer, detail: &PersonDetail) -> Element {
                 } else {
                     div { class: "stack",
                         for fact in detail.facts.iter() {
-                            div { class: "fact-row",
-                                span { class: "field-label", style: "width:96px;margin:0", "{fact.type_label}" }
+                            FactRow { label: fact.type_label.clone(),
                                 span { class: "grow", {fact_value_date(fact)} }
                                 ConfidenceBadge { level: fact.confidence, label: fact.confidence_label.clone() }
                                 {provenance_cue(loc, loc.provenance_title_claim(&fact.type_label), &fact.citations)}
@@ -1173,8 +1172,8 @@ pub fn facts_table(
                                 }
                             },
                             td { "{fact.type_label}" }
-                            td { class: "muted", {fact.date.clone().unwrap_or_else(|| "—".to_owned())} }
-                            td { {fact.value.clone().unwrap_or_else(|| "—".to_owned())} }
+                            td { class: "muted", {or_dash(fact.date.clone())} }
+                            td { {or_dash(fact.value.clone())} }
                             td {
                                 ConfidenceBadge { level: fact.confidence, label: fact.confidence_label.clone() }
                             }
@@ -1255,9 +1254,9 @@ fn events_row(
                 }
             }
             td { Chip { label: event.role_label.clone() } }
-            td { class: "muted", {event.age_label.clone().unwrap_or_else(|| "—".to_owned())} }
+            td { class: "muted", {or_dash(event.age_label.clone())} }
             td { class: "muted",
-                {event.date.clone().unwrap_or_else(|| "—".to_owned())}
+                {or_dash(event.date.clone())}
                 for attribute in event.attributes.iter() {
                     div { class: "muted", "{attribute.attribute_type}: {attribute.value}" }
                 }
@@ -1265,7 +1264,7 @@ fn events_row(
                     Chip { label: note.clone() }
                 }
             }
-            td { class: "muted", {event.place.clone().unwrap_or_else(|| "—".to_owned())} }
+            td { class: "muted", {or_dash(event.place.clone())} }
             td {
                 if let Some(level) = event.confidence {
                     ConfidenceBadge { level, label: event.confidence_label.clone() }
@@ -1424,7 +1423,7 @@ pub fn timeline_panel(loc: &Localizer, rows: &[TimelineRowVm]) -> Element {
 fn timeline_row(loc: &Localizer, row: &TimelineRowVm) -> Element {
     rsx! {
         tr {
-            td { class: "muted", {row.date.clone().unwrap_or_else(|| "—".to_owned())} }
+            td { class: "muted", {or_dash(row.date.clone())} }
             td {
                 Chip { label: row.kind_label.clone() }
             }
@@ -1712,10 +1711,9 @@ fn CiteFactForm(human_id: String, fact: FactVm, onsubmit: EventHandler<(PersonEd
     });
     let fact_type = fact.fact_type.clone();
     let value = fact.value.clone();
-    let display = fact.value.clone().unwrap_or_else(|| "—".to_owned());
+    let display = or_dash(fact.value.clone());
     rsx! {
-        div { class: "fact-row",
-            span { class: "field-label", style: "width:96px;margin:0", "{fact.type_label}" }
+        FactRow { label: fact.type_label.clone(),
             span { class: "grow", "{display}" }
         }
         {provenance_block_dna(loc, prov)}

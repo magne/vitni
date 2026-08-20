@@ -957,7 +957,7 @@ fn event_participant_row(
         tr {
             td { "{participant.name}" }
             td { Chip { label: participant.role_label.clone() } }
-            td { class: "muted", {participant.age_label.clone().unwrap_or_else(|| "—".to_owned())} }
+            td { class: "muted", {or_dash(participant.age_label.clone())} }
             td { ConfidenceBadge { level: participant.confidence, label: participant.confidence_label.clone() } }
             td { {source_cue(loc, participant.source_count)} }
             {row_actions_cell(

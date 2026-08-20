@@ -509,21 +509,17 @@ pub fn repository_overview(
             Card { title: loc.section_label("contact"),
                 if let Some(address) = primary {
                     div { class: "stack",
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"street\")}" }
-                            span { class: "grow", {address.lines.first().cloned().unwrap_or_else(|| "—".to_owned())} }
+                        FactRow { label: loc.field_label("street"), label_width: 80,
+                            span { class: "grow", {or_dash(address.lines.first().cloned())} }
                         }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"locality\")}" }
-                            span { class: "grow", {address.locality.clone().unwrap_or_else(|| "—".to_owned())} }
+                        FactRow { label: loc.field_label("locality"), label_width: 80,
+                            span { class: "grow", {or_dash(address.locality.clone())} }
                         }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"phone\")}" }
-                            span { class: "grow mono", {address.phone.clone().unwrap_or_else(|| "—".to_owned())} }
+                        FactRow { label: loc.field_label("phone"), label_width: 80,
+                            span { class: "grow mono", {or_dash(address.phone.clone())} }
                         }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"email\")}" }
-                            span { class: "grow", {address.email.clone().unwrap_or_else(|| "—".to_owned())} }
+                        FactRow { label: loc.field_label("email"), label_width: 80,
+                            span { class: "grow", {or_dash(address.email.clone())} }
                         }
                     }
                 } else {
@@ -564,7 +560,7 @@ pub fn repository_urls_table(
                         }
                     }
                     td { a { href: "{url.href}", "{url.href}" } }
-                    td { class: "muted", {url.description.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td { class: "muted", {or_dash(url.description.clone())} }
                     {row_actions_cell(
                         loc,
                         &url.href,
@@ -595,7 +591,7 @@ pub fn repository_sources_table(loc: &Localizer, detail: &RepositoryDetail) -> E
             for held in detail.sources.iter() {
                 tr {
                     td { "{held.title}" }
-                    td { class: "mono", {held.call_number.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td { class: "mono", {or_dash(held.call_number.clone())} }
                     td { Chip { label: held.media_type_label.clone() } }
                     td { {source_cue(loc, held.citation_count)} }
                 }

@@ -16,7 +16,7 @@ use crate::app::AppCtx;
 use crate::components::record_picker::{
     PickerCallbacks, PickerConfig, RecordPicker, draft_card, picker_options, record_picker,
 };
-use crate::components::{Chip, SelectChoice, SelectInput, TextInput};
+use crate::components::{Chip, FactRow, SelectChoice, SelectInput, TextInput};
 use crate::services::{Services, commit_citation_change_set, load_picker_rows};
 use crate::shell::nav_state::{NavState, data_version_ticket};
 
@@ -90,16 +90,14 @@ pub fn ProvenanceBlock(
             if allow_dna_evidence {
                 ProvenanceDnaMatches { draft }
             }
-            div { class: "fact-row",
-                span { class: "field-label", style: "width:96px;margin:0", "{analysis_label}" }
+            FactRow { label: analysis_label,
                 span { class: "grow wrap",
                     for axis in axes.iter() {
                         {axis_select(draft, axis)}
                     }
                 }
             }
-            div { class: "fact-row",
-                span { class: "field-label", style: "width:96px;margin:0", "{confidence_label}" }
+            FactRow { label: confidence_label.clone(),
                 SelectInput {
                     style: "width:auto",
                     aria_label: "{confidence_label}",
@@ -217,8 +215,7 @@ fn ProvenanceCitations(draft: Signal<ProvenanceDraft>) -> Element {
         callbacks: PickerCallbacks { onpick, onclear, onnew },
     };
     rsx! {
-        div { class: "fact-row",
-            span { class: "field-label", style: "width:96px;margin:0", "{citations_label}" }
+        FactRow { label: citations_label,
             span { class: "grow",
                 span { class: "wrap",
                     for (index , cid) in citations.iter().enumerate() {
@@ -296,8 +293,7 @@ fn ProvenanceDnaMatches(draft: Signal<ProvenanceDraft>) -> Element {
         callbacks: PickerCallbacks { onpick, onclear, onnew },
     };
     rsx! {
-        div { class: "fact-row",
-            span { class: "field-label", style: "width:96px;margin:0", "{label}" }
+        FactRow { label,
             span { class: "grow",
                 span { class: "wrap",
                     for (index , mid) in dna_matches.iter().enumerate() {

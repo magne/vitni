@@ -231,20 +231,17 @@ fn render_timeline_specimen() -> Element {
 fn render_fact_rows_specimen() -> Element {
     rsx! {
         div { class: "stack",
-            div { class: "fact-row",
-                span { class: "field-label", style: "width:84px;margin:0", "Birth" }
+            FactRow { label: "Birth".to_owned(), label_width: 84,
                 span { class: "grow", "12 Apr 1850 · New York, USA" }
                 ConfidenceBadge { level: ConfidenceLevel::High, label: "High".to_owned() }
                 span { class: "src-link", "❝ 2 sources" }
             }
-            div { class: "fact-row",
-                span { class: "field-label", style: "width:84px;margin:0", "Death" }
+            FactRow { label: "Death".to_owned(), label_width: 84,
                 span { class: "grow", "3 Nov 1920 · Brooklyn, NY" }
                 ConfidenceBadge { level: ConfidenceLevel::VeryHigh, label: "Very high".to_owned() }
                 span { class: "src-link", "❝ 1 source" }
             }
-            div { class: "fact-row",
-                span { class: "field-label", style: "width:84px;margin:0", "Occupation" }
+            FactRow { label: "Occupation".to_owned(), label_width: 84,
                 span { class: "grow", "Carpenter" }
                 ConfidenceBadge { level: ConfidenceLevel::Low, label: "Low".to_owned() }
                 NoSourceFlag { label: "no source".to_owned() }
@@ -256,24 +253,21 @@ fn render_fact_rows_specimen() -> Element {
 fn render_evidence_axes_specimen() -> Element {
     rsx! {
         div { class: "stack",
-            div { class: "fact-row",
-                span { class: "field-label", style: "width:96px;margin:0", "Source" }
+            FactRow { label: "Source".to_owned(),
                 span { class: "grow muted", "Is it the record itself or a copy?" }
                 span { class: "wrap",
                     EvidenceAxisChip { axis: EvidenceAxis::Source, label: "original".to_owned() }
                     EvidenceAxisChip { axis: EvidenceAxis::Source, label: "derivative".to_owned() }
                 }
             }
-            div { class: "fact-row",
-                span { class: "field-label", style: "width:96px;margin:0", "Information" }
+            FactRow { label: "Information".to_owned(),
                 span { class: "grow muted", "First-hand knowledge, or hearsay?" }
                 span { class: "wrap",
                     EvidenceAxisChip { axis: EvidenceAxis::Information, label: "primary".to_owned() }
                     EvidenceAxisChip { axis: EvidenceAxis::Information, label: "secondary".to_owned() }
                 }
             }
-            div { class: "fact-row",
-                span { class: "field-label", style: "width:96px;margin:0", "Evidence" }
+            FactRow { label: "Evidence".to_owned(),
                 span { class: "grow muted", "Does it answer directly, or by inference?" }
                 span { class: "wrap",
                     EvidenceAxisChip { axis: EvidenceAxis::Evidence, label: "direct".to_owned() }

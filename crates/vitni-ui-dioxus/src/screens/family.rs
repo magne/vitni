@@ -903,18 +903,15 @@ pub fn family_overview(
             Card { title: loc.section_label("marriage"),
                 if let Some(marriage) = detail.marriage.as_ref() {
                     div { class: "stack",
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:64px;margin:0", "{loc.field_label(\"date\")}" }
-                            span { class: "grow", {marriage.date.clone().unwrap_or_else(|| "—".to_owned())} }
+                        FactRow { label: loc.field_label("date"), label_width: 64,
+                            span { class: "grow", {or_dash(marriage.date.clone())} }
                             ConfidenceBadge { level: marriage.confidence, label: marriage.confidence_label.clone() }
                             {provenance_cue(loc, loc.provenance_title_claim(&marriage.type_label), &marriage.citations)}
                         }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:64px;margin:0", "{loc.field_label(\"place\")}" }
-                            span { class: "grow", {marriage.place.clone().unwrap_or_else(|| "—".to_owned())} }
+                        FactRow { label: loc.field_label("place"), label_width: 64,
+                            span { class: "grow", {or_dash(marriage.place.clone())} }
                         }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:64px;margin:0", "{loc.field_label(\"attribute-type\")}" }
+                        FactRow { label: loc.field_label("attribute-type"), label_width: 64,
                             span { class: "grow", Chip { label: marriage.type_label.clone() } }
                         }
                     }
@@ -1057,7 +1054,7 @@ pub fn family_children_table(
             for child in detail.children.iter() {
                 tr {
                     td { "{child.name}" }
-                    td { class: "muted", {child.born.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td { class: "muted", {or_dash(child.born.clone())} }
                     for partner_id in partner_ids.iter() {
                         td {
                             {
@@ -1100,8 +1097,8 @@ pub fn family_events_table(
             for event in events.iter() {
                 tr {
                     td { "{event.type_label}" }
-                    td { class: "muted", {event.date.clone().unwrap_or_else(|| "—".to_owned())} }
-                    td { {event.place.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td { class: "muted", {or_dash(event.date.clone())} }
+                    td { {or_dash(event.place.clone())} }
                     td { ConfidenceBadge { level: event.confidence, label: event.confidence_label.clone() } }
                     td { {source_cue(loc, event.source_count)} }
                     {row_actions_cell::<FamilyEditForm>(
