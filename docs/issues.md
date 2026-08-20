@@ -22,8 +22,8 @@ affects, plus `type/bug`, and sits under that area's `###` heading. `cargo xtask
 bullet placed directly here as misplaced.
 
 The **2026-08-12 GUI walkthrough** is where most of the currently-open defects came from, and it filled
-several areas at once — *Record detail & shared tabs* (new, and the largest), *Media*, *Tags*, *Shell,
-tabs & notifications*, *Keyboard & shortcuts* and *Docs & repo tooling*. Walking the real GUI is still
+several areas at once — *Record detail & shared tabs* (new, and the largest), *Media*, *Shell, tabs &
+notifications*, *Keyboard & shortcuts* and *Docs & repo tooling*. Walking the real GUI is still
 the only thing that finds this class: every one of them passed the SSR suite.
 
 ## Records & data model
@@ -91,19 +91,8 @@ none needs an event rewrite — and the first three are gated by an unwritten **
 
 ### Tags
 
-The `area/records/tags` label has existed since the taxonomy was applied; this is its first `###` home.
-
-- **The Tag screen diverges from `mockups/tag.html` in four places** — the header's colour badge is
-  text-only (`screens/tag.rs:222`; `Badge` carries no dot, `components/data.rs:125-132`) where the
-  mockup shows the swatch inside the badge (`tag.html:64`); the read-only overview stacks label above
-  value (`tag.rs:312-337`, `.field label`/`.field .val` are `display:block`, `components.css:461-470`)
-  where the mockup puts them on one line (`.fact-row`, `tag.html:93-95`); and the read-only colour
-  section renders the hex string with neither swatch nor preview chip (`tag.rs:330-335` vs
-  `tag.html:108-112`), though edit mode has both (`tag_edit_colour_card`, `tag.rs:467-508`). Edit mode
-  should also put label and input on one line while **keeping** the Tag/Colour card split the mockup
-  does not draw — so `tag.html`'s edit state is updated in the same change, per the mockup rule in
-  [`CLAUDE.md`](../CLAUDE.md). The same stacked-`.field` divergence is on the Media record, under
-  *Media*; fixing it once in `components/draft_field.rs` covers both. — #310
+No open items. The area keeps its heading so `area/records/tags` stays a live label and the issues
+already filed against it keep resolving their [`#tags`](#tags) anchor.
 
 ### Media
 
@@ -129,11 +118,13 @@ The `area/records/tags` label has existed since the taxonomy was applied; this i
   configured set of readable roots, or an explicit "copy into the workspace" action reusing the media
   save dialog. Neither is designed.
 - **The Media record diverges from `mockups/media.html`** — the File card repeats the human id the
-  header already shows (`media.rs:71-87` vs `:471`, and the mockup's File card starts at *File path*,
-  `media.html:105-111`); `DraftText` stacks label above value where the mockup uses same-line
-  `.fact-row` rows; the header passes no subtitle and no MIME badge (`media.rs:469-477` vs
-  `media.html:61,64`); and the "Used by" rows are `.fact-row` divs whose columns do not line up
-  (`media.rs:637-652`). Shares its label/value half with the Tag bullet under *Tags*. — #309
+  header already shows (`media.rs:76-91` vs `:415`, and the mockup's File card starts at *File path*,
+  `media.html:118-120`); and the header passes no subtitle and no MIME badge (`media.rs:412-421` vs
+  `media.html:62,65`). Two of the four halves this bullet opened with are closed: `DraftText` now
+  renders the mockup's same-line `.fact-row` (#310 migrated every record row, `components/draft_field.rs`
+  at the media mockup's 90px label column), and the "Used by" card is a real `table.tbl` with the
+  mockup's three headers rather than misaligned `.fact-row` divs — `247b6fb` routed it through
+  `attached_table`, so its columns line up by construction. — #309
 - **Media edit mode cannot check, fetch, or type a file** — *File path* is a plain `DraftText`
   (`media.rs:88-101`) with no existence check, and any check added must **flag, never block**: a
   record for a file that is not on this machine is legitimate. There is no download when *Web path*
@@ -265,15 +256,19 @@ which is what makes them worth fixing in the shared code rather than per screen.
   before #312, whose fix is to render the panel into a sibling layer of `.app` the way
   `shell/root.rs:132-135` mounts the overlays — a change that reaches every construction site, since
   the overlay layer is a root-mounted component reading a signal rather than a portal.
-- **There is no label/value row primitive, so `.fact-row` is hand-rolled 39 times.** Every read-mode
-  row is written out as `div.fact-row` + `span.field-label` carrying an inline
-  `style: "width:NNpx;margin:0"` + a `span.grow` — 39 sites across 11 files, 8 of them in
-  `tabs.rs:198-233` alone — with the `unwrap_or_else(|| "—".to_owned())` empty-value fallback repeated
-  36 times beside them. The per-site width is *not* the defect: `docs/mockups` uses nine different
-  label widths across 169 specimens, so the width is a call-site decision by design. The gap is that
-  there is no `FactRow { label, label_width, children }` component to make that decision *in*, which is
-  also why #309/#310 have nowhere to land their shared half — the `components/draft_field.rs` change
-  from stacked `.field` to same-line `.fact-row`.
+- **A date row's four controls stack instead of sitting on one line.** `DatePicker`
+  (`components/forms.rs:164-203`) emits exactly the row `event.html:186-192` draws — modifier select,
+  date input, quality select, calendar select, each `width:auto` inside a `.fact-row` — but
+  `DraftDate` wraps it in `.field-with-revert` to hang the per-field reset off it, and
+  `.field-with-revert .in { flex: 1 }` (`components.css:979`) then overrides every one of those widths.
+  `.fact-row` is `flex-wrap`, so four controls each claiming the full line become four lines: the app
+  draws a 5-row block where the mockup draws one row plus a separate *Original text* row
+  (`event.html:193-196`). Pre-existing, not introduced by #310 — the same rule applied through
+  `div.field` before the row migration — and reaching it means giving the revert wrapper a rule that
+  does not flatten a multi-control row, which is a CSS decision on all 13 record screens rather than a
+  local fix. Found while re-measuring `picker-sees-new-record` for #310: the succession form's
+  provenance block runs past a 1200px window because of it, so that scenario now scrolls its panel
+  before clicking.
 - **Collection history nodes cannot be expanded and show no count.** `collapse_runs`
   (`vitni-app/src/history.rs:247-302`) folds a software run into one synthetic
   `ActivityDetail::ImportBatch { count }` row and **discards the children**, and `ActivityVm`
@@ -640,6 +635,29 @@ The `area/docs` label already existed with no `###` home; this is it.
   the shared sheet without the pages that use it; the specimen's own prose still promises "an in-flow
   result list (never a floater…)" (`design-system.html:319-322`), so the mockup now contradicts both
   the app and itself. The app rule at `components.css:997-1006` is correct and unaffected. — #311
+- **The mockup sheet is only partly the superset it is documented to be.** [`CLAUDE.md`](../CLAUDE.md)
+  states that `docs/mockups/assets/components.css` is the superset — "the app sheet must not introduce a
+  rule the mockups lack" — and nothing checks the sheet as a whole, so it does not hold.
+  `cargo xtask css-check` polices hex colour literals only; `tests/hover_affordance.rs` and (since #310)
+  `tests/record_row_css.rs` do compare both sheets rule-for-rule, but each over a *named list* — the
+  ghost-row rules and the record-row rules — so everything outside those two lists is ungated. Measured
+  by stripping comments from both sheets, descending into their `@media` blocks and comparing rules by
+  selector: **30 app rules have no mockup counterpart**, spanning 37 distinct selectors. Whole components
+  are absent — `.switch` (+ `[aria-checked="true"]`), `.menu-anchor`/`.menu-scrim`/`.new-record-menu`
+  (the mockup sheet names `.menu-scrim` only in a comment), `.help-browser`,
+  `.prov-anchor`/`.prov-backdrop`, the seven-rule `.media-card`/`.media-open`/`.media-thumb`/
+  `.media-full`/`.media-caption`/`.media-preview`/`.media-save-preview` set, `.crop-capture` —
+  alongside single rules a static page had no need for (`.shell > .topbar|.tabstrip|.workarea|.statusbar`'s
+  grid rows, `.detail-slot`, `.detail-id`, `.card.blocked` + `> h3`, `.conf.conf-unset`,
+  `.list-toolbar .sort`, `.doc p .help-link` + `:hover`, `.specimen .prov`) and the app's `text-box-trim`
+  half-leading rule, whose whole 17-selector list is missing. A second class the same comparison surfaces
+  but does not count: **19 of the 343 selectors present in both sheets carry different declarations**,
+  the sharpest being `.prov` — an anchored popover in the app, an in-flow card in the mockup, so the two
+  sheets disagree about what the component *is*. Some of the 19 are legitimate (a static page's `.shell`
+  is not the app's grid), which is why closing this needs a decided rule and a gate over the whole sheet,
+  not a diff someone reads once. One method trap for whoever writes that gate: comparing selector *text*
+  produces false positives — six `.rail .nav-item*` rules read as missing until you notice the mockup
+  groups each with `.subnav .nav-item`, so it has to compare selector atoms, not selector lists.
 - **`gui-pass` occasionally grabs a blank first shot.** Once in roughly a dozen runs the first `shot` of
   a scenario comes back uniform (`… is blank (standard deviation 0) — the webview painted nothing`) and
   the run aborts, passing on a re-run with nothing changed. The startup handshake in
