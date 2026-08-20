@@ -666,8 +666,12 @@ The `area/docs` label already existed with no `###` home; this is it.
   making the first assertion of every scenario flaky. A second flake class was observed on 2026-08-04:
   `map-polygon` failed its "a second vertex must draw the ring's first segment" `differ` at RMSE 0.0000
   during a full-suite run and passed on an immediate re-run of the same scenario — a draw that had not
-  reached the canvas within the 4 s settle. Both classes are the same missing capability: the harness
-  waits a fixed time instead of waiting for the paint it is about to assert on.
+  reached the canvas within the 4 s settle. A third class was observed on 2026-08-20, twice in the same
+  full-suite run: `note-row-opens-record` aborted on `xdotool windowfocus <id> failed with exit status:
+  1`, and `overlay-dismiss` failed its first `differ` at RMSE 0.0000 because `⌘K` opened no palette —
+  both passed on an immediate re-run of the scenario alone, so the window was not yet focusable when the
+  harness aimed at it. All three are the same missing capability: the harness waits a fixed time instead
+  of waiting for the thing it is about to assert on — a paint, or a window that will take input.
 - **`main` is protected without required status checks, and that is a choice.** `ci.yml` filters
   `docs/**`, `*.md` and `LICENSE*` out of its triggers, so a documentation-only pull request starts no
   run at all — a required context would sit unfulfilled forever on exactly the changes this repository
