@@ -5,7 +5,7 @@
 use dioxus::prelude::*;
 use vitni_app::{TagRef, UsingKind};
 use vitni_ui::{Category, Localizer, RestrictionKind, TagDetail, TagDraft, TagUsageGroupVm, UsingRecordVm};
-use vitni_ui_dioxus::components::TabItem;
+use vitni_ui_dioxus::components::{BadgeSpec, TabItem};
 use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
     RecordActionLabels, RecordEditState, record_edit_provenance, record_head_actions, tag_chips, tag_edit_colour_card,
@@ -25,7 +25,10 @@ fn tag_header(loc: &Localizer, detail: &TagDetail) -> Element {
             title: detail.title.clone(),
             subtitle: loc.tag_header_subtitle(priority, detail.total),
             avatar_color: color.clone(),
-            badges: vec![color, loc.tag_priority_badge(priority)],
+            badges: vec![
+                BadgeSpec::with_dot(color.clone(), color),
+                BadgeSpec::text(loc.tag_priority_badge(priority)),
+            ],
             extras: rsx! {},
             actions: rsx! {},
             tabs: Vec::<TabItem>::new(),
@@ -276,6 +279,99 @@ fn header_shows_name_colour_and_priority_never_the_uuid() {
     assert!(
         html.contains("applied to 5 objects"),
         "subtitle carries the count:\n{html}"
+    );
+}
+
+/// The 8px colour dot the header badge carries (`docs/mockups/tag.html:64`).
+const BADGE_DOT: &str =
+    r#"<span class="dot" style="width:8px;height:8px;border-radius:var(--r-pill);background:#e5534b"></span>"#;
+
+#[test]
+fn the_header_colour_badge_carries_a_dot_of_the_tags_colour() {
+    let html = render(header_view);
+    assert!(
+        html.contains(&format!(r#"<span class="badge">{BADGE_DOT}#e5534b</span>"#)),
+        "the swatch is a dot *inside* the colour badge (tag.html:64):\n{html}"
+    );
+    assert!(
+        html.contains(r#"<span class="badge">priority 1</span>"#),
+        "a badge with no colour stays plain text:\n{html}"
+    );
+}
+
+#[test]
+fn read_rows_are_one_line_fact_rows_at_the_tag_label_width() {
+    let html = render(overview_view_mode);
+    for label in ["Name", "Priority", "Restrictions", "Swatch", "Preview"] {
+        assert!(
+            html.contains(&format!(
+                r#"<span class="field-label" style="width:72px;margin:0">{label}</span>"#
+            )),
+            "the {label} row is a 72px-label fact-row (tag.html:93-112):\n{html}"
+        );
+    }
+    assert_eq!(
+        html.matches(r#"<div class="fact-row">"#).count(),
+        5,
+        "five read rows, all one-line:\n{html}"
+    );
+    assert!(
+        !html.contains(r#"<div class="field">"#),
+        "no read row stacks its label above its value any more:\n{html}"
+    );
+}
+
+#[test]
+fn the_read_colour_card_shows_a_swatch_and_a_preview_chip() {
+    let html = render(overview_view_mode);
+    assert!(
+        html.contains(
+            r#"<span class="dot swatch-dot" style="width:28px;height:28px;border-radius:var(--r-md);background:#e5534b;flex:none"></span>"#
+        ),
+        "the read Colour card draws the 28px swatch (tag.html:109):\n{html}"
+    );
+    assert!(
+        html.contains(r#"<span class="field val mono">#e5534b</span>"#),
+        "beside the hex in the monospace face:\n{html}"
+    );
+    assert!(
+        html.contains(r#"<span class="chip"><span class="dot" style="background:#e5534b"></span>Direct ancestor"#),
+        "and a preview chip carrying the colour dot (tag.html:112):\n{html}"
+    );
+}
+
+#[test]
+fn edit_mode_keeps_the_two_cards_and_puts_every_row_on_one_line() {
+    let html = render(overview_edit_mode);
+    assert_eq!(
+        html.matches(r#"<div class="card">"#).count(),
+        2,
+        "the Tag and Colour cards stay separate in edit mode:\n{html}"
+    );
+    assert!(
+        html.contains(r#"<label for="tag-color" class="field-label" style="width:72px;margin:0">Swatch</label>"#),
+        "the Swatch row labels the hex input on one line at the tag width:\n{html}"
+    );
+    assert!(
+        html.contains(r#"<span class="field-label" style="width:72px;margin:0">Preview</span>"#),
+        "and the preview chip sits in a fact-row of its own (tag.html:165):\n{html}"
+    );
+    assert!(
+        !html.contains(r#"<div class="field">"#),
+        "no edit row stacks its label above its control:\n{html}"
+    );
+}
+
+#[test]
+fn the_edit_swatch_row_keeps_the_picker_button_and_the_revert_control() {
+    let html = render(overview_edit_mode);
+    assert!(
+        html.contains(r#"class="swatch-btn""#),
+        "the swatch button still opens the colour picker:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="field-with-revert" style="flex:1;max-width:160px""#),
+        "the hex input keeps its bounded revert container (tag.html:160):\n{html}"
     );
 }
 

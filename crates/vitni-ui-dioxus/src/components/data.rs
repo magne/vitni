@@ -120,14 +120,50 @@ pub fn ListRow(
     }
 }
 
-/// A small inline label.
+/// One header badge: its text, and the colour of a leading dot when the badge *is* about a colour.
+/// [`DetailContainer`](crate::master_detail::DetailContainer) takes these rather than bare strings so
+/// a screen can ask for the dot (a Tag's colour badge — `docs/mockups/tag.html:64`).
+#[derive(Clone, PartialEq, Eq)]
+pub struct BadgeSpec {
+    /// The already-localized text.
+    pub label: String,
+    /// An optional CSS colour for the leading dot.
+    pub dot_color: Option<String>,
+}
+
+impl BadgeSpec {
+    /// A text-only badge.
+    #[must_use]
+    pub fn text(label: String) -> Self {
+        Self { label, dot_color: None }
+    }
+
+    /// A badge with a leading dot in `dot_color`.
+    #[must_use]
+    pub fn with_dot(label: String, dot_color: String) -> Self {
+        Self {
+            label,
+            dot_color: Some(dot_color),
+        }
+    }
+}
+
+/// A small inline label, optionally with a leading colour dot.
 #[component]
 pub fn Badge(
     /// The already-localized text.
     label: String,
+    /// An optional CSS colour for a leading 8px dot (`docs/mockups/tag.html:64`).
+    #[props(default)]
+    dot_color: Option<String>,
 ) -> Element {
     rsx! {
-        span { class: "badge", "{label}" }
+        span { class: "badge",
+            if let Some(dot_color) = dot_color {
+                span { class: "dot", style: "width:8px;height:8px;border-radius:var(--r-pill);background:{dot_color}" }
+            }
+            "{label}"
+        }
     }
 }
 

@@ -222,7 +222,10 @@ fn tag_detail(
             title: detail.title.clone(),
             subtitle: loc.tag_header_subtitle(priority, detail.total),
             avatar_color: color.clone(),
-            badges: vec![color, loc.tag_priority_badge(priority)],
+            badges: vec![
+                BadgeSpec::with_dot(color.clone(), color),
+                BadgeSpec::text(loc.tag_priority_badge(priority)),
+            ],
             extras: rsx! {},
             actions: record_head_actions(&labels, edit, rsx! {}, on_save),
             tabs: tab_items,
@@ -310,34 +313,61 @@ fn tag_record_fields(
     }
 }
 
-/// The tag Overview read rows (view mode): Name · Priority · Colour as read text, matching the edit
-/// record's layout so toggling to edit moves no text (`record-editing.html` §3). Restrictions render
-/// through the shared record field ([`record_restrictions_field`]), static here and live in edit mode
-/// over the same three pills.
+/// A rounded-square colour swatch of `size` pixels — the tag's colour as a shape, drawn identically in
+/// the read Colour card (28px, `docs/mockups/tag.html:109`) and inside edit mode's picker button (36px,
+/// `:158`) so the two never drift apart.
+fn swatch_dot(color: &str, size: u32) -> Element {
+    rsx! {
+        span {
+            class: "dot swatch-dot",
+            style: "width:{size}px;height:{size}px;border-radius:var(--r-md);background:{color};flex:none",
+        }
+    }
+}
+
+/// The tag Overview read rows (view mode): the same Tag | Colour card split edit mode draws, every row
+/// a one-line [`FactRow`] at [`TAG_LABEL_WIDTH`], so toggling to edit moves no text
+/// (`record-editing.html` §3, `docs/mockups/tag.html:89-115`). The Colour card carries the swatch and
+/// the preview chip — a record whose content *is* a colour has to show it (issue #310). Restrictions
+/// render through the shared record field ([`record_restrictions_field`]), static here and live in edit
+/// mode over the same three pills.
 fn tag_read_rows(loc: &Localizer, detail: &TagDetail, edit: RecordEditState<TagDraft>) -> Element {
     let priority = detail
         .priority
         .map_or_else(String::new, |priority| priority.to_string());
     let color = detail.color.clone().unwrap_or_default();
+    let name = detail.name.clone().unwrap_or_default();
+    let preview_name = if name.is_empty() {
+        loc.display_name(None)
+    } else {
+        name.clone()
+    };
     rsx! {
         div { class: "grid-2",
             Card { title: loc.section_label("tag"),
                 div { class: "stack",
-                    div { class: "field",
-                        label { "{loc.field_label(\"name\")}" }
-                        div { class: "val", {detail.name.clone().unwrap_or_default()} }
+                    FactRow { label: loc.field_label("name"), label_width: TAG_LABEL_WIDTH,
+                        span { class: "grow",
+                            span { class: "field val", "{name}" }
+                        }
                     }
-                    div { class: "field",
-                        label { "{loc.field_label(\"priority\")}" }
-                        div { class: "val", "{priority}" }
+                    FactRow { label: loc.field_label("priority"), label_width: TAG_LABEL_WIDTH,
+                        span { class: "grow",
+                            span { class: "field val", "{priority}" }
+                        }
                     }
                     {record_restrictions_field(loc, edit, TAG_LABEL_WIDTH)}
                 }
             }
             Card { title: loc.section_label("color"),
-                div { class: "field",
-                    label { "{loc.field_label(\"swatch\")}" }
-                    div { class: "val", style: "font-family:var(--font-mono)", "{color}" }
+                div { class: "stack",
+                    FactRow { label: loc.field_label("swatch"), label_width: TAG_LABEL_WIDTH,
+                        {swatch_dot(&color, 28)}
+                        span { class: "field val mono", "{color}" }
+                    }
+                    FactRow { label: loc.tag_preview_label(), label_width: TAG_LABEL_WIDTH,
+                        Chip { label: preview_name, dot_color: Some(color) }
+                    }
                 }
             }
         }
@@ -425,8 +455,10 @@ pub fn tag_edit_tag_card(
     }
 }
 
-/// The tag record's Colour card (swatch button, hex input with revert, live preview chip). A pure fn
-/// so both [`TagRecordEditor`] and the SSR test render it without `AppCtx`.
+/// The tag record's Colour card (`docs/mockups/tag.html:152-167`): a Swatch row carrying the
+/// picker button, the mono hex input and its revert, then the live preview chip — the same two
+/// [`FactRow`]s the read card draws, so entering edit mode reflows nothing. A pure fn so both
+/// [`tag_record_fields`] and the SSR test render it without `AppCtx`.
 pub fn tag_edit_colour_card(
     loc: &Localizer,
     mut draft: Signal<TagDraft>,
@@ -446,25 +478,24 @@ pub fn tag_edit_colour_card(
     };
     rsx! {
         Card { title: loc.section_label("color"),
-            div { class: "field",
-                label { "{loc.field_label(\"swatch\")}" }
-                div { class: "fact-row",
+            div { class: "stack",
+                FactRow {
+                    label: loc.field_label("swatch"),
+                    label_width: TAG_LABEL_WIDTH,
+                    name: "tag-color".to_owned(),
                     button {
                         r#type: "button",
                         class: "swatch-btn",
                         aria_label: loc.color_picker_title(),
                         title: loc.color_picker_title(),
                         onclick: move |_| picker_open.set(true),
-                        span {
-                            class: "dot swatch-dot",
-                            style: "width:36px;height:36px;border-radius:var(--r-md);background:{color};flex:none",
-                        }
+                        {swatch_dot(&color, 36)}
                     }
-                    div { class: "field-with-revert", style: "max-width:160px",
+                    div { class: "field-with-revert", style: "flex:1;max-width:160px",
                         TextInput {
                             id: "tag-color",
                             name: "tag-color",
-                            style: "font-family:var(--font-mono)",
+                            class: "in mono",
                             value: "{current.color}",
                             invalid: color_empty,
                             oninput: move |event: FormEvent| draft.write().color = event.value(),
@@ -479,10 +510,9 @@ pub fn tag_edit_colour_card(
                         }
                     }
                 }
-            }
-            p { class: "muted", style: "margin-bottom:0",
-                "{loc.tag_preview_label()}: "
-                Chip { label: preview_name, dot_color: Some(current.color.clone()) }
+                FactRow { label: loc.tag_preview_label(), label_width: TAG_LABEL_WIDTH,
+                    Chip { label: preview_name, dot_color: Some(current.color.clone()) }
+                }
             }
         }
     }

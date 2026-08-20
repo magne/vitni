@@ -843,7 +843,7 @@ fn person_detail(
             title: detail.name.clone(),
             subtitle,
             id_label: Some(detail.human_id.clone()),
-            badges: vec![detail.evidence_level_label.clone()],
+            badges: vec![BadgeSpec::text(detail.evidence_level_label.clone())],
             avatar: person_initials(detail),
             extras: restriction_display(loc, &detail.restrictions),
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
