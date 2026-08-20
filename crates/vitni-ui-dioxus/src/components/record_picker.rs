@@ -1,10 +1,11 @@
 //! The record picker and nested draft card (`record-editing.html` §6b, `design-system.html`).
 //!
 //! A record link is a find-or-create control: [`record_picker`] draws a search input over the
-//! already-loaded options ([`PickerOptions`]), a floating result list of reused [`ListRow`]s (a
-//! `position:fixed` overlay measured from the input's on-screen box, so it escapes the `.detail`
-//! scroll pane's `overflow:hidden` clip rather than pushing siblings down), a trailing "+ New …" row,
-//! and a collapsed [`.picker-value`](picker_value) chip once a record is picked. Picking "+ New" flips
+//! already-loaded options ([`PickerOptions`]), a floating result list of reused [`ListRow`]s (marked
+//! `.picker-results-viewport`, the sheet's variant that re-places the list `position:fixed` at the
+//! input's measured on-screen box, so it escapes the `.detail` scroll pane's `overflow:hidden` clip
+//! rather than pushing siblings down), a trailing "+ New …" row, and a collapsed
+//! [`.picker-value`](picker_value) chip once a record is picked. Picking "+ New" flips
 //! the call site's [`RecordLink`](vitni_ui::RecordLink) to `New(..)`, which renders a [`draft_card`]
 //! whose body may hold another picker (a citation → source cascade); discarding the card resets the
 //! link to `Empty`.
@@ -298,17 +299,18 @@ fn picker_search(loc: &Localizer, picker: &RecordPicker) -> Element {
 /// owns hooks (see the module doc): it measures the anchor's on-screen box via `onmounted` +
 /// `MountedData::get_client_rect`, and republishes the result as CSS custom properties
 /// (`--pk-top`/`--pk-left`/`--pk-min-width`, `components.css`) on the `.picker-anchor` wrapper, which
-/// the still-pure [`picker_results`] reads via `var()` for its `position:fixed` placement — so a
-/// pure fn, not this component, still owns the `.picker-results` markup. Re-measures whenever `state`
-/// changes while open (typing, focus); a capture-phase `scroll`/`resize` listener armed once at mount
-/// (`document::eval` — window-level, since the scrolling `.tab-body`/`.detail` ancestor isn't reachable
-/// from here) closes the list on pane scroll rather than tracking a live reposition. Closes on scrim
+/// the `.picker-results-viewport` variant the still-pure [`picker_results`] emits reads via `var()`
+/// for its `position:fixed` placement — so a pure fn, not this component, still owns the
+/// `.picker-results` markup. Re-measures whenever `state` changes while open (typing, focus); a
+/// capture-phase `scroll`/`resize` listener armed once at mount (`document::eval` — window-level,
+/// since the scrolling `.tab-body`/`.detail` ancestor isn't reachable from here) closes the list on
+/// pane scroll rather than tracking a live reposition. Closes on scrim
 /// click, on `Esc` (via `TextInput`'s `onkeydown_extra`), and on focus leaving the anchor
 /// (`onfocusout`, which bubbles). `WebKitGTK` focuses a `<button>` on pointer-down, which would blur the
 /// input and close the list *before* a row's own click lands — every row, the "+ New" row, and the
 /// scrim call `event.prevent_default()` on `onmousedown` to suppress that focus shift. Under SSR
-/// `onmounted` never fires, so the measured style stays unset and `.picker-results` still renders
-/// (unpositioned, like the provenance popover's SSR fallback).
+/// `onmounted` never fires, so the measured style stays unset and the list renders at the variant's
+/// `0,0` fallback — markup only, no geometry to assert, like the provenance popover's SSR fallback.
 ///
 /// `active` is the highlighted-option index — ephemeral, Dioxus-local `use_signal` state (not
 /// `PickerState`, which stays a plain data struct with no rendering concerns): reset to `0` whenever
@@ -525,8 +527,11 @@ fn unwatch_scroll_close(key: &str) {
 /// row (highlighted instead once `nav.active` reaches it) when the picker allows it. The listbox and
 /// each option carry the ids [`PickerSearch`]'s `aria-activedescendant` wiring points at
 /// (`"{nav.name}-listbox"`, `"{nav.name}-opt-{index}"`, the "+ New" row using `index == matched.len()`).
-/// Positioned by `.picker-results`' own CSS (`components.css`), reading the `--pk-*` custom
-/// properties [`PickerSearch`] sets on the ancestor `.picker-anchor` — this fn stays pure.
+/// Positioned by `.picker-results`' own CSS (`components.css`). The list opts into the
+/// `.picker-results-viewport` variant, which re-places it with `position:fixed` at the `--pk-*` custom
+/// properties [`PickerSearch`] sets on the ancestor `.picker-anchor`, so it escapes the `.detail`
+/// scroll pane's `overflow:hidden` clip; the bare class is the anchored dropdown a static mockup page
+/// draws with nothing to measure it. Either way this fn stays pure.
 fn picker_results(
     view: &PickerResultsView,
     nav: &PickerNav<'_>,
@@ -538,7 +543,7 @@ fn picker_results(
         PickerResultsView::Hidden => return rsx! {},
         PickerResultsView::Failed(message) => {
             return rsx! {
-                div { class: "picker-results", id: "{nav.name}-listbox", role: "listbox",
+                div { class: "picker-results picker-results-viewport", id: "{nav.name}-listbox", role: "listbox",
                     p { class: "picker-empty", "{message}" }
                 }
             };
@@ -552,7 +557,7 @@ fn picker_results(
     let query = nav.query.to_owned();
     let active = nav.active;
     rsx! {
-        div { class: "picker-results", id: "{nav.name}-listbox", role: "listbox",
+        div { class: "picker-results picker-results-viewport", id: "{nav.name}-listbox", role: "listbox",
             for (index , row) in matched.iter().cloned().enumerate() {
                 ListRow {
                     key: "{row.id}",

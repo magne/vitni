@@ -371,19 +371,25 @@
   <p class="muted">A record link is a find-or-create <b>picker</b> wherever it appears — a create form, the
     provenance block, an attach side panel — over reused <span class="mono">.row</span> markup, a trailing
     <span class="mono">.picker-new</span> row, and a collapsed <span class="mono">.picker-value</span> once
-    a record is picked. The result list is <span class="mono">position: fixed</span>, measured off the
-    input's own on-screen box (<span class="mono">components.css</span> <span class="mono">.picker-results</span>),
-    so it floats free of whatever scroll container the field sits in rather than being clipped by it.
+    a record is picked. The result list floats: <span class="mono">.picker-results</span>
+    (<span class="mono">components.css</span>) is an absolute dropdown hanging off the
+    <span class="mono">.picker-anchor</span> that wraps the input — which is what the specimen below draws,
+    with no renderer to measure anything. In the app the renderer adds
+    <span class="mono">.picker-results-viewport</span>, which re-places the same list
+    <span class="mono">position: fixed</span> at the anchor's measured on-screen box, so it floats free of
+    whatever scroll container the field sits in rather than being clipped by it.
     “+ New …” opens a <span class="mono">.draft-card</span> nested in its container; surfaces alternate as
     cards nest.</p>
   <div class="specimen wrap" style="align-items:flex-start">
     <div class="field" style="width:280px">
       <label>Partner</label>
-      <input class="in" value="ann">
-      <div class="picker-results" role="listbox">
-        <div class="row" role="option"><div class="avatar">AB</div><div class="row-main"><div class="row-title">Berg, Anna</div><div class="row-sub">1850 – 1921</div></div><div class="row-id">I0042</div></div>
-        <div class="row" role="option"><div class="avatar">AL</div><div class="row-main"><div class="row-title">Lovelace, Anna</div><div class="row-sub">1815 – 1852</div></div><div class="row-id">I0088</div></div>
-        <button class="picker-new">+ New person "ann"…</button>
+      <div class="picker-anchor">
+        <input class="in" value="ann">
+        <div class="picker-results" role="listbox">
+          <div class="row" role="option"><div class="avatar">AB</div><div class="row-main"><div class="row-title">Berg, Anna</div><div class="row-sub">1850 – 1921</div></div><div class="row-id">I0042</div></div>
+          <div class="row" role="option"><div class="avatar">AL</div><div class="row-main"><div class="row-title">Lovelace, Anna</div><div class="row-sub">1815 – 1852</div></div><div class="row-id">I0088</div></div>
+          <button class="picker-new">+ New person "ann"…</button>
+        </div>
       </div>
     </div>
     <div class="field" style="width:280px">
