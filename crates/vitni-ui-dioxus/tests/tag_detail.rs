@@ -305,9 +305,9 @@ fn read_rows_are_one_line_fact_rows_at_the_tag_label_width() {
     for label in ["Name", "Priority", "Restrictions", "Swatch", "Preview"] {
         assert!(
             html.contains(&format!(
-                r#"<span class="field-label" style="width:72px;margin:0">{label}</span>"#
+                r#"<span class="field-label" style="width:96px;margin:0">{label}</span>"#
             )),
-            "the {label} row is a 72px-label fact-row (tag.html:93-112):\n{html}"
+            "the {label} row is a 96px-label fact-row (tag.html:93-112):\n{html}"
         );
     }
     assert_eq!(
@@ -349,11 +349,11 @@ fn edit_mode_keeps_the_two_cards_and_puts_every_row_on_one_line() {
         "the Tag and Colour cards stay separate in edit mode:\n{html}"
     );
     assert!(
-        html.contains(r#"<label for="tag-color" class="field-label" style="width:72px;margin:0">Swatch</label>"#),
+        html.contains(r#"<label for="tag-color" class="field-label" style="width:96px;margin:0">Swatch</label>"#),
         "the Swatch row labels the hex input on one line at the tag width:\n{html}"
     );
     assert!(
-        html.contains(r#"<span class="field-label" style="width:72px;margin:0">Preview</span>"#),
+        html.contains(r#"<span class="field-label" style="width:96px;margin:0">Preview</span>"#),
         "and the preview chip sits in a fact-row of its own (tag.html:165):\n{html}"
     );
     assert!(

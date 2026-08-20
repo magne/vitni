@@ -575,6 +575,19 @@ table.tbl tr:hover td { background: var(--panel-2); }
 table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .fact-row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
 .fact-row .grow { flex: 1; min-width: 0; }
+/* The page's label column is a floor, not a cage. A flex row places its items by their *used* width,
+   so a label longer than the column does not push the value along — it overflows and draws on top of
+   it (RESTRICTIONS renders 92px wide and the tag column was 72). Floor the cell at the column width and let
+   the content raise it, which also covers a translation longer than the English label the column was
+   measured against. */
+.fact-row > .field-label { min-width: max-content; }
+/* A read row and the edit row it toggles into must stand the same height, or every row below the pair
+   shifts (record-editing.html §3). They share a padding and a `1.4` line-height, but that lands each box
+   on a fractional pixel, and a blockified `<span>` and a form control whose inner line box the engine
+   lays out itself do not round it the same way — 37px against 38px, which is invisible on one row and a
+   whole pixel of drift by the third. Pinned here, scoped to a record row, so the settings forms' stacked
+   fields and the multi-line textareas keep their own metrics. */
+.fact-row .field.val, .fact-row input.in, .fact-row select.in, .fact-row .number-stepper { min-height: 38px; }
 
 /* ---- History / audit timeline ---- */
 .timeline { position: relative; padding-left: var(--sp-5); }

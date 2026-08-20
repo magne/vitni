@@ -1,0 +1,98 @@
+# Issue #310: a tag record's rows must be one-line — label column, then the value — in *both* modes, and
+# nothing may overlap. SSR cannot see either property. A `.fact-row` renders its label and value as one
+# `<div>` in the markup whether the CSS lays them out side by side or stacked, so every substring
+# assertion in `tests/tag_detail.rs` passed while the shipped screen stacked them; and a flex row places
+# its items by their *used* width, so a label longer than the page's column overflows and draws on top of
+# the control beside it — which is what `RESTRICTIONS` (84px) did to the tag column's original 72px, and
+# which no markup assertion can ever see.
+#
+# The fixture seeds no tags, so the record is created here: ⌘N opens a Tag draft with Name autofocused,
+# then one `key` per character (the schema has no text-entry step) and a Save click, exactly as
+# `create-appears-in-list.toml` does. Save leaves the new tag selected and in read mode.
+#
+# What the assertions encode:
+#
+# * **The label column is a column.** The Tag card's label strip (`region` = 96px wide plus the gap,
+#   over the three rows) must be *identical* between read mode and edit mode. That is the no-reflow
+#   property (`record-editing.html` §3) — and it is exactly what breaks when a row stacks in one mode
+#   but not the other, because a stacked label sits at a different y than a one-line one.
+# * **The values change, the labels do not.** The same rows' value strip must `differ` between the two
+#   modes: read text is replaced by inputs and a stepper.
+# * **The Colour card is drawn, not blank.** `painted` over the read Colour card proves the swatch and
+#   the preview chip actually composite — the criterion #310 is about is that the read view of a record
+#   whose content *is* a colour showed no colour at all.
+#
+# The Restrictions row is the one that overflowed, so the label strip's region deliberately spans it.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "A tag record's rows are one-line and non-overlapping in both modes (#310)"
+
+[[step]]
+do = "click"
+at = [85, 564]
+label = "rail: Tags"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Tag draft, Name autofocused"
+
+[[step]]
+do = "key"
+chord = "shift+t"
+label = "type: T"
+
+[[step]]
+do = "key"
+chord = "e"
+label = "type: e"
+
+[[step]]
+do = "key"
+chord = "s"
+label = "type: s"
+
+[[step]]
+do = "key"
+chord = "t"
+label = "type: t"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New tag: Save"
+
+[[step]]
+do = "shot"
+name = "read-view"
+
+[[step]]
+do = "click"
+at = [1758, 151]
+label = "detail head: Edit"
+
+[[step]]
+do = "shot"
+name = "edit-view"
+
+# The label column holds still across the mode switch: same labels, same x, same y. A row that stacked
+# in either mode would move its label off this strip and fail.
+[[assert]]
+kind = "match"
+shots = ["read-view", "edit-view"]
+because = "a read row and the edit row it toggles into share one label column (record-editing.html §3)"
+region = [540, 415, 110, 130]
+
+# …while the value column beside it is what actually swaps.
+[[assert]]
+kind = "differ"
+shots = ["read-view", "edit-view"]
+because = "edit mode replaces the read values with inputs, in the same rows"
+region = [655, 415, 480, 130]
+
+# The read Colour card carries the swatch and the preview chip, so it cannot be flat panel colour.
+[[assert]]
+kind = "painted"
+shot = "read-view"
+because = "the read view of a record whose content is a colour must show that colour (#310)"
+region = [1180, 415, 400, 90]

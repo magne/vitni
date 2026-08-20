@@ -3,8 +3,11 @@ use vitni_ui::{DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY};
 use super::prelude::*;
 use crate::components::{ColorPicker, IconButton};
 
-/// The label column width of every tag record row (`docs/mockups/tag.html:93-95`, `:133-143`).
-const TAG_LABEL_WIDTH: u32 = 72;
+/// The label column width of every tag record row (`docs/mockups/tag.html:93-95`, `:133-143`). The
+/// canonical [`DEFAULT_LABEL_WIDTH`]: the page's own labels are short enough for the 72px the mockup
+/// drew before Restrictions joined them (#315), but `RESTRICTIONS` renders 92px wide, and a column
+/// narrower than its longest label leaves that row's value out of line with the others.
+const TAG_LABEL_WIDTH: u32 = DEFAULT_LABEL_WIDTH;
 
 /// The create-mode tag record: an uncommitted [`TagDraft`] rendered as the editable record in the
 /// detail pane (Name focused). Save commits the whole tag; Cancel drops the draft.

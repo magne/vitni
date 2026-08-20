@@ -21,7 +21,12 @@ use css_sheet::top_level_rules;
 
 /// Every selector list a record row's styling now hangs off. Each must exist in **both** sheets, with
 /// the same declarations, and none may be scoped under `.field` — the shape a `.fact-row` row lacks.
-const ROW_SELECTORS: [&str; 17] = [
+const ROW_SELECTORS: [&str; 22] = [
+    ".fact-row > .field-label",
+    ".fact-row .field.val",
+    ".fact-row input.in",
+    ".fact-row select.in",
+    ".fact-row .number-stepper",
     "input.in.modified",
     "textarea.in.modified",
     ".number-stepper.modified",
@@ -44,6 +49,48 @@ const ROW_SELECTORS: [&str; 17] = [
 /// The read-value rule covers both placements: the stacked `.field > .val` a settings form draws and
 /// the one-line `span.field.val` a record row draws (`record-editing.html:49`).
 const READ_VALUE_SELECTORS: [&str; 2] = [".field .val", ".field.val"];
+
+/// The read value and every control that replaces it must be pinned to one height. Measured in the
+/// real webview (`tests/gui-pass/tag-record-rows.toml`): unpinned they came out 37px and 38px, which is
+/// invisible on one row and a whole pixel of drift by the third.
+#[test]
+fn a_read_value_and_the_control_it_toggles_into_are_pinned_to_one_height() {
+    let (app, mockup) = sheets();
+    for (name, sheet) in [
+        ("src/components.css", &app),
+        ("docs/mockups/assets/components.css", &mockup),
+    ] {
+        for selector in [
+            ".fact-row .field.val",
+            ".fact-row input.in",
+            ".fact-row select.in",
+            ".fact-row .number-stepper",
+        ] {
+            let declarations = rule_declarations(sheet, selector).unwrap_or_default();
+            assert!(
+                declarations.iter().any(|d| d == "min-height: 38px"),
+                "{name}: `{selector}` must stand the same height as the box it toggles into, or every \
+                 row below the pair shifts (record-editing.html §3); found {declarations:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_label_column_is_a_floor_the_content_can_raise() {
+    let (app, mockup) = sheets();
+    for (name, sheet) in [
+        ("src/components.css", &app),
+        ("docs/mockups/assets/components.css", &mockup),
+    ] {
+        let declarations = rule_declarations(sheet, ".fact-row > .field-label").unwrap_or_default();
+        assert!(
+            declarations.iter().any(|d| d == "min-width: max-content"),
+            "{name}: a label wider than the page's column must widen its own cell, or it overflows \
+             and draws on top of the value beside it (RESTRICTIONS renders 92px); found {declarations:?}"
+        );
+    }
+}
 
 /// The declarations of the first top-level rule whose selector list contains `selector` verbatim,
 /// normalized to a comparable `property: value` list.
