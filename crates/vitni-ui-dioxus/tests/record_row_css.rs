@@ -17,7 +17,7 @@ mod css_sheet;
 
 use std::fs;
 
-use css_sheet::top_level_rules;
+use css_sheet::{rule_declarations, top_level_rules};
 
 /// Every selector list a record row's styling now hangs off. Each must exist in **both** sheets, with
 /// the same declarations, and none may be scoped under `.field` — the shape a `.fact-row` row lacks.
@@ -90,29 +90,6 @@ fn a_label_column_is_a_floor_the_content_can_raise() {
              and draws on top of the value beside it (RESTRICTIONS renders 92px); found {declarations:?}"
         );
     }
-}
-
-/// The declarations of the first top-level rule whose selector list contains `selector` verbatim,
-/// normalized to a comparable `property: value` list.
-fn rule_declarations(sheet: &str, selector: &str) -> Option<Vec<String>> {
-    for rule in top_level_rules(sheet) {
-        if !rule.selectors.iter().any(|candidate| candidate == selector) {
-            continue;
-        }
-        let mut declarations = Vec::new();
-        for declaration in rule.body.split(';') {
-            let Some((name, value)) = declaration.split_once(':') else {
-                continue;
-            };
-            declarations.push(format!(
-                "{}: {}",
-                name.trim(),
-                value.split_whitespace().collect::<Vec<_>>().join(" ")
-            ));
-        }
-        return Some(declarations);
-    }
-    None
 }
 
 fn sheets() -> (String, String) {

@@ -15,7 +15,7 @@ mod wcag;
 use std::collections::HashMap;
 use std::fs;
 
-use css_sheet::top_level_rules;
+use css_sheet::{rule_declarations, top_level_rules};
 
 const APP_SHEET: &str = "crates/vitni-ui-dioxus/src/components.css";
 const MOCKUP_SHEET: &str = "docs/mockups/assets/components.css";
@@ -33,17 +33,11 @@ const AA_NON_TEXT: f64 = 3.0;
 /// The raw (unresolved) value of `property` on the first top-level rule whose selector list
 /// contains `selector` verbatim, or `None` if no such rule/property exists.
 fn declaration(sheet: &str, selector: &str, property: &str) -> Option<String> {
-    for rule in top_level_rules(sheet) {
-        if !rule.selectors.iter().any(|s| s == selector) {
-            continue;
-        }
-        for decl in rule.body.split(';') {
-            let Some((name, value)) = decl.split_once(':') else {
-                continue;
-            };
-            if name.trim() == property {
-                return Some(value.trim().to_string());
-            }
+    let prefix = format!("{property}: ");
+    let declarations = rule_declarations(sheet, selector)?;
+    for declaration in &declarations {
+        if let Some(value) = declaration.strip_prefix(&prefix) {
+            return Some(value.to_string());
         }
     }
     None

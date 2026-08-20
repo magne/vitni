@@ -26,6 +26,29 @@ fn strip_comments(css: &str) -> String {
     out
 }
 
+/// The declarations of the first top-level rule whose selector list contains `selector` verbatim,
+/// normalized to a comparable `property: value` list.
+pub fn rule_declarations(sheet: &str, selector: &str) -> Option<Vec<String>> {
+    for rule in top_level_rules(sheet) {
+        if !rule.selectors.iter().any(|candidate| candidate == selector) {
+            continue;
+        }
+        let mut declarations = Vec::new();
+        for declaration in rule.body.split(';') {
+            let Some((name, value)) = declaration.split_once(':') else {
+                continue;
+            };
+            declarations.push(format!(
+                "{}: {}",
+                name.trim(),
+                value.split_whitespace().collect::<Vec<_>>().join(" ")
+            ));
+        }
+        return Some(declarations);
+    }
+    None
+}
+
 /// Splits a stylesheet into its top-level rules, skipping `@media` (see module docs) by treating its
 /// nested braces as opaque.
 pub fn top_level_rules(css: &str) -> Vec<Rule> {
