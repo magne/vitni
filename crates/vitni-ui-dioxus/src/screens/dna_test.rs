@@ -235,7 +235,7 @@ pub fn dna_test_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                         draft.write().kit_id = value;
                     },
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
             }
         }
     }

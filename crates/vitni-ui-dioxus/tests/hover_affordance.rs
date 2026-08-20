@@ -9,10 +9,13 @@
     reason = "fixtures are the repo's own CSS on disk; a missing declaration is a real test failure"
 )]
 
+mod css_sheet;
 mod wcag;
 
 use std::collections::HashMap;
 use std::fs;
+
+use css_sheet::top_level_rules;
 
 const APP_SHEET: &str = "crates/vitni-ui-dioxus/src/components.css";
 const MOCKUP_SHEET: &str = "docs/mockups/assets/components.css";
@@ -26,67 +29,6 @@ const LIGHT_THEME: &str = "light";
 const DARK_SELECTOR: &str = "[data-theme=\"dark\"]";
 const LIGHT_SELECTOR: &str = "[data-theme=\"light\"]";
 const AA_NON_TEXT: f64 = 3.0;
-
-/// One CSS rule: its comma-separated, whitespace-normalized selectors and its raw declaration body.
-struct Rule {
-    selectors: Vec<String>,
-    body: String,
-}
-
-/// Strips `/* ... */` comments; none of the sheets under test put braces inside a comment.
-fn strip_comments(css: &str) -> String {
-    let mut out = String::new();
-    let mut rest = css;
-    while let Some(start) = rest.find("/*") {
-        out.push_str(&rest[..start]);
-        rest = match rest[start..].find("*/") {
-            Some(end) => &rest[start + end + 2..],
-            None => "",
-        };
-    }
-    out.push_str(rest);
-    out
-}
-
-/// Splits a stylesheet into its top-level rules, skipping `@media` (none of the selectors this gate
-/// checks live inside one) by treating its nested braces as opaque.
-fn top_level_rules(css: &str) -> Vec<Rule> {
-    let css = strip_comments(css);
-    let bytes = css.as_bytes();
-    let mut rules = Vec::new();
-    let mut selector_start = 0usize;
-    let mut i = 0usize;
-    while i < bytes.len() {
-        if bytes[i] != b'{' {
-            i += 1;
-            continue;
-        }
-        let selector_text = css[selector_start..i].trim();
-        let mut depth = 1i32;
-        let mut j = i + 1;
-        while j < bytes.len() && depth > 0 {
-            match bytes[j] {
-                b'{' => depth += 1,
-                b'}' => depth -= 1,
-                _ => {}
-            }
-            j += 1;
-        }
-        if !selector_text.starts_with('@') {
-            let selectors = selector_text
-                .split(',')
-                .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
-                .collect();
-            rules.push(Rule {
-                selectors,
-                body: css[i + 1..j - 1].to_string(),
-            });
-        }
-        selector_start = j;
-        i = j;
-    }
-    rules
-}
 
 /// The raw (unresolved) value of `property` on the first top-level rule whose selector list
 /// contains `selector` verbatim, or `None` if no such rule/property exists.

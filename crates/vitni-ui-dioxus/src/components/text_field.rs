@@ -3,11 +3,17 @@
 //! optional validation error and hint, and an adornment `children` slot for trailing controls (e.g.
 //! the number stepper's ▲/▼). The bespoke record-ish fields (tag name/priority, DNA shared-cM) share
 //! this so their `.field` + `.field-with-revert` / `.number-stepper` markup lives in one place.
+//!
+//! Two shapes, chosen by `label_width`: unset (the default) is the stacked `div.field` with the label
+//! above the control, which is what the settings forms draw (`preferences.html:181-193`); set is the
+//! one-line [`FactRow`] every *record* page draws (`record-editing.html:47-99`, `tag.html:133`). The
+//! knob is opt-in rather than defaulted because this field serves both, and a record page's label
+//! column width is its own (see [`FactRow`]).
 
 use dioxus::prelude::*;
 
-use crate::components::IconButton;
 use crate::components::text_input::{TextInput, TextInputKind};
+use crate::components::{FactRow, IconButton};
 
 /// A label associated to a form control by id.
 #[component]
@@ -49,6 +55,10 @@ pub fn TextField(
     label: String,
     /// The control's machine name / element id (label association).
     name: String,
+    /// The label column's width in pixels, which also picks the shape: `Some` renders the one-line
+    /// [`FactRow`] a record page draws, `None` the stacked `div.field` a settings form draws.
+    #[props(default)]
+    label_width: Option<u32>,
     /// The controlled value.
     value: String,
     /// Fired on each input event, with the form event.
@@ -144,15 +154,25 @@ pub fn TextField(
     if invalid {
         container.push_str(" invalid");
     }
-    rsx! {
-        div { class: "field",
-            InputLabel { label, name: name.clone() }
-            div { class: "{container}",
-                {field}
-                {revert}
-                {children}
+    let control = rsx! {
+        div { class: "{container}",
+            {field}
+            {revert}
+            {children}
+        }
+        FieldMessage { error, hint }
+    };
+    let Some(label_width) = label_width else {
+        return rsx! {
+            div { class: "field",
+                InputLabel { label, name: name.clone() }
+                {control}
             }
-            FieldMessage { error, hint }
+        };
+    };
+    rsx! {
+        FactRow { label, label_width, name: name.clone(),
+            div { class: "grow", {control} }
         }
     }
 }

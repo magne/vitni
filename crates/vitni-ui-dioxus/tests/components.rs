@@ -375,9 +375,16 @@ fn draft_date_invalid_marks_the_input_and_shows_the_error() {
 #[test]
 fn draft_date_view_mode_is_a_read_box_without_controls() {
     let html = render_view(draft_date_view);
-    assert!(html.contains(r#"class="val""#), "view mode shows a read box:\n{html}");
+    assert!(
+        html.contains(r#"class="field val""#),
+        "view mode shows a read box:\n{html}"
+    );
     assert!(!html.contains("<select"), "view mode shows no selects:\n{html}");
     assert!(html.contains("1876"), "the display string shows:\n{html}");
+    assert!(
+        html.contains(r#"class="fact-row""#) && html.contains(r#"style="width:96px;margin:0""#),
+        "and the label sits beside it in the row's label column (record-editing.html:47):\n{html}"
+    );
 }
 
 /// The three restriction pills as a read-only display — the detail header's chips.

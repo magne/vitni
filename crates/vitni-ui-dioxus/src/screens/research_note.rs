@@ -185,7 +185,7 @@ pub fn research_note_record_fields(loc: &Localizer, record: RecordEditState<vitn
                         draft.write().language = value;
                     },
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
             }
         }
     }

@@ -3,6 +3,9 @@ use vitni_ui::{DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY};
 use super::prelude::*;
 use crate::components::{ColorPicker, IconButton};
 
+/// The label column width of every tag record row (`docs/mockups/tag.html:93-95`, `:133-143`).
+const TAG_LABEL_WIDTH: u32 = 72;
+
 /// The create-mode tag record: an uncommitted [`TagDraft`] rendered as the editable record in the
 /// detail pane (Name focused). Save commits the whole tag; Cancel drops the draft.
 #[component]
@@ -328,7 +331,7 @@ fn tag_read_rows(loc: &Localizer, detail: &TagDetail, edit: RecordEditState<TagD
                         label { "{loc.field_label(\"priority\")}" }
                         div { class: "val", "{priority}" }
                     }
-                    {record_restrictions_field(loc, edit)}
+                    {record_restrictions_field(loc, edit, TAG_LABEL_WIDTH)}
                 }
             }
             Card { title: loc.section_label("color"),
@@ -365,6 +368,7 @@ pub fn tag_edit_tag_card(
                 TextField {
                     label: loc.field_label("name"),
                     name: "tag-name".to_owned(),
+                    label_width: Some(TAG_LABEL_WIDTH),
                     value: current.name.clone(),
                     autofocus: autofocus_name,
                     invalid: show_name_error,
@@ -378,6 +382,7 @@ pub fn tag_edit_tag_card(
                 TextField {
                     label: loc.field_label("priority"),
                     name: "tag-priority".to_owned(),
+                    label_width: Some(TAG_LABEL_WIDTH),
                     value: current.priority.clone(),
                     invalid: priority_invalid,
                     inputmode: "numeric",
@@ -414,7 +419,7 @@ pub fn tag_edit_tag_card(
                         }
                     }
                 }
-                {record_restrictions_field(loc, edit)}
+                {record_restrictions_field(loc, edit, TAG_LABEL_WIDTH)}
             }
         }
     }

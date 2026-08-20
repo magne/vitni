@@ -142,7 +142,7 @@ pub fn family_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::F
                         draft.write().human_id = value;
                     },
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
             }
         }
     }

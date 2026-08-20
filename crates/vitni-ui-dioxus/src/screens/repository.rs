@@ -139,7 +139,7 @@ pub fn repository_record_fields(loc: &Localizer, record: RecordEditState<vitni_u
                         draft.write().name = value;
                     },
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
             }
         }
     }

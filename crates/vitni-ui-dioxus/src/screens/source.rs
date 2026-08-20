@@ -3,6 +3,9 @@ use vitni_ui::{RepositoryLinkVm, SourceAttributeVm};
 
 use super::prelude::*;
 
+/// The label column width of every source record row (`docs/mockups/source.html:112-116`, `:152-156`).
+const SOURCE_LABEL_WIDTH: u32 = 110;
+
 /// The create-mode source record: an uncommitted [`SourceDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). Save commits the whole source through the change-set;
 /// Cancel drops the draft. The provenance block above Save carries the operator's why/confidence/
@@ -78,6 +81,7 @@ pub fn source_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::S
             DraftText {
                 label: label.clone(),
                 name: name.to_owned(),
+                label_width: SOURCE_LABEL_WIDTH,
                 editing,
                 value,
                 original,
@@ -98,6 +102,7 @@ pub fn source_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::S
                 DraftText {
                     label: loc.field_label("id"),
                     name: "source-id".to_owned(),
+                    label_width: SOURCE_LABEL_WIDTH,
                     editing,
                     value: current.human_id.clone(),
                     original: committed.human_id.clone(),
@@ -114,7 +119,7 @@ pub fn source_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::S
                 {field("source-author", loc.field_label("author"), current.author.clone(), committed.author.clone(), |draft, value| draft.author = value, |draft| draft.author.clone())}
                 {field("source-publication", loc.field_label("publication"), current.publication.clone(), committed.publication.clone(), |draft, value| draft.publication = value, |draft| draft.publication.clone())}
                 {field("source-abbreviation", loc.field_label("abbreviation"), current.abbreviation.clone(), committed.abbreviation.clone(), |draft, value| draft.abbreviation = value, |draft| draft.abbreviation.clone())}
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, SOURCE_LABEL_WIDTH)}
             }
         }
     }

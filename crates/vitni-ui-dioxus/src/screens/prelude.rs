@@ -22,11 +22,11 @@ pub use vitni_ui::{
 
 pub use crate::app::{AppCtx, AppState};
 pub use crate::components::{
-    Button, ButtonVariant, Card, Chip, ConfidenceBadge, DraftPickerView, DraftSelect, DraftText, EmptyState,
-    EvidenceAxisChip, FactRow, HistoryEntry, HistoryTimeline, Input, NewRecordCard, NoSourceFlag, PickerCallbacks,
-    PickerConfig, ProvenancePopover, RadioChoice, RadioGroup, RecordPicker, RestrictionChoice, RestrictionSet, Select,
-    SelectChoice, SidePanel, SourceLink, Switch, TabItem, Table, TextField, TextInput, TextInputKind, date_draft_field,
-    draft_card, draft_picker_field, or_dash, picker_options, record_picker,
+    Button, ButtonVariant, Card, Chip, ConfidenceBadge, DEFAULT_LABEL_WIDTH, DateFieldBinding, DraftPickerView,
+    DraftSelect, DraftText, EmptyState, EvidenceAxisChip, FactRow, HistoryEntry, HistoryTimeline, Input, NewRecordCard,
+    NoSourceFlag, PickerCallbacks, PickerConfig, ProvenancePopover, RadioChoice, RadioGroup, RecordPicker,
+    RestrictionChoice, RestrictionSet, Select, SelectChoice, SidePanel, SourceLink, Switch, TabItem, Table, TextField,
+    TextInput, TextInputKind, date_draft_field, draft_card, draft_picker_field, or_dash, picker_options, record_picker,
 };
 pub use crate::master_detail::{DetailContainer, ListChrome, ListPane, SortChrome};
 pub use crate::services::{

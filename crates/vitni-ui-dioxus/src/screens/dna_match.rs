@@ -217,7 +217,7 @@ pub fn dna_match_record_fields(
                         draft.write().status = value;
                     },
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
             }
         }
     }

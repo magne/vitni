@@ -6,11 +6,18 @@
 //! event handlers, so the call site's draft owns the state. A field whose `value` differs from its
 //! `original` is *modified* — tinted and showing a reset control; a `locked` field renders a disabled
 //! input rather than jumping to read text.
+//!
+//! **Every row is a [`FactRow`]** — label and value on one line, at the page's own `label_width`
+//! (`record-editing.html:47-99`, and every record mockup beside it). The control sits in a `.grow`
+//! wrapper rather than directly in the row because `.fact-row` wraps: a bare `.field-error` would land
+//! *beside* the input instead of under it. The one exception is `multiline`, which stays a stacked
+//! `div.field` with the label above the textarea — that is what `note.html:131-136` draws for a
+//! Markdown body, and no label column is worth a five-line text area's width.
 
 use dioxus::prelude::*;
 use vitni_ui::{DATE_CALENDARS, DATE_QUALITIES, DateDraft, DateModifierKind, Localizer};
 
-use crate::components::{DatePicker, IconButton, SelectChoice, SelectInput, TextInput};
+use crate::components::{DEFAULT_LABEL_WIDTH, DatePicker, FactRow, IconButton, SelectChoice, SelectInput, TextInput};
 
 /// The modifier-select options for the given kind (index-valued, localized labels): the nine offered
 /// options, plus Interpreted when the current kind is Interpreted (a seeded value).
@@ -66,23 +73,43 @@ pub fn date_field_error(loc: &Localizer, date: &DateDraft) -> Option<String> {
     })
 }
 
+/// What a date row binds to in the call site's draft: the live `value`, the committed `original` it
+/// reverts to and is diffed against, and the two handlers that write them back. Bundled so
+/// [`date_draft_field`] stays within the positional-parameter budget once it also takes the page's
+/// label width.
+pub struct DateFieldBinding {
+    /// The draft's current date.
+    pub value: DateDraft,
+    /// The committed date the field reverts to.
+    pub original: DateDraft,
+    /// Fired with the updated draft on any sub-control edit.
+    pub onchange: Callback<DateDraft>,
+    /// Fired when the reset control is pressed.
+    pub onreset: Callback<()>,
+}
+
 /// The whole-record date field wired to a draft: builds the localized options/labels and renders the
-/// [`DraftDate`] editor, forwarding an updated [`DateDraft`] through `onchange` and the revert through
-/// `onreset`. The three record screens share this so the ~20-prop wiring lives once.
+/// [`DraftDate`] editor, forwarding an updated [`DateDraft`] through `binding.onchange` and the revert
+/// through `binding.onreset`. The record screens share this so the ~20-prop wiring lives once.
 pub fn date_draft_field(
     loc: &Localizer,
     name: &str,
     editing: bool,
-    value: DateDraft,
-    original: DateDraft,
-    onchange: Callback<DateDraft>,
-    onreset: Callback<()>,
+    label_width: u32,
+    binding: DateFieldBinding,
 ) -> Element {
+    let DateFieldBinding {
+        value,
+        original,
+        onchange,
+        onreset,
+    } = binding;
     let error = date_field_error(loc, &value);
     rsx! {
         DraftDate {
             label: loc.field_label("date"),
             name: name.to_owned(),
+            label_width,
             editing,
             modifier_options: date_modifier_options(loc, value.kind),
             quality_options: date_quality_options(loc),
@@ -111,6 +138,9 @@ pub fn DraftText(
     label: String,
     /// The field's machine name / element id.
     name: String,
+    /// The label column's width in pixels — the record page's own (see [`FactRow`]).
+    #[props(default = DEFAULT_LABEL_WIDTH)]
+    label_width: u32,
     /// Whether the record is in edit mode (inputs) or view mode (read box).
     editing: bool,
     /// The draft's current value.
@@ -142,10 +172,19 @@ pub fn DraftText(
     let modified = value != original;
     let mono_style = if mono { "font-family:var(--font-mono)" } else { "" };
     if !editing {
+        if multiline {
+            return rsx! {
+                div { class: "field",
+                    label { r#for: "{name}", "{label}" }
+                    span { class: "val", style: "{mono_style}", "{value}" }
+                }
+            };
+        }
         return rsx! {
-            div { class: "field",
-                label { r#for: "{name}", "{label}" }
-                span { class: "val", style: "{mono_style}", "{value}" }
+            FactRow { label, label_width, name: name.clone(),
+                span { class: "grow",
+                    span { class: "field val", style: "{mono_style}", "{value}" }
+                }
             }
         };
     }
@@ -154,37 +193,47 @@ pub fn DraftText(
         input_class.push_str(" modified");
     }
     let rows = if multiline { Some("5".to_owned()) } else { None };
+    let control = rsx! {
+        div { class: "field-with-revert",
+            TextInput {
+                id: "{name}",
+                name: "{name}",
+                class: input_class,
+                style: "{mono_style}",
+                multiline,
+                rows,
+                value: Some(value.clone()),
+                disabled: locked,
+                invalid: error.is_some(),
+                oninput: move |event: FormEvent| oninput.call(event.value()),
+            }
+            if modified && !locked {
+                IconButton {
+                    icon: "↺".to_owned(),
+                    label: reset_label.clone(),
+                    title: reset_label.clone(),
+                    onclick: move |_| onreset.call(()),
+                }
+            }
+        }
+        if let Some(message) = error {
+            div { class: "field-error", "{message}" }
+        }
+        if let Some(hint) = hint {
+            div { class: "field-hint", "{hint}" }
+        }
+    };
+    if multiline {
+        return rsx! {
+            div { class: "field",
+                label { r#for: "{name}", "{label}" }
+                {control}
+            }
+        };
+    }
     rsx! {
-        div { class: "field",
-            label { r#for: "{name}", "{label}" }
-            div { class: "field-with-revert",
-                TextInput {
-                    id: "{name}",
-                    name: "{name}",
-                    class: input_class,
-                    style: "{mono_style}",
-                    multiline,
-                    rows,
-                    value: Some(value.clone()),
-                    disabled: locked,
-                    invalid: error.is_some(),
-                    oninput: move |event: FormEvent| oninput.call(event.value()),
-                }
-                if modified && !locked {
-                    IconButton {
-                        icon: "↺".to_owned(),
-                        label: reset_label.clone(),
-                        title: reset_label.clone(),
-                        onclick: move |_| onreset.call(()),
-                    }
-                }
-            }
-            if let Some(message) = error {
-                div { class: "field-error", "{message}" }
-            }
-            if let Some(hint) = hint {
-                div { class: "field-hint", "{hint}" }
-            }
+        FactRow { label, label_width, name: name.clone(),
+            div { class: "grow", {control} }
         }
     }
 }
@@ -196,6 +245,9 @@ pub fn DraftSelect(
     label: String,
     /// The field's machine name / element id.
     name: String,
+    /// The label column's width in pixels — the record page's own (see [`FactRow`]).
+    #[props(default = DEFAULT_LABEL_WIDTH)]
+    label_width: u32,
     /// Whether the record is in edit mode (a select) or view mode (read box).
     editing: bool,
     /// The currently-selected option value.
@@ -222,32 +274,34 @@ pub fn DraftSelect(
         .unwrap_or_default();
     if !editing {
         return rsx! {
-            div { class: "field",
-                label { r#for: "{name}", "{label}" }
-                span { class: "val", "{selected_label}" }
+            FactRow { label, label_width, name: name.clone(),
+                span { class: "grow",
+                    span { class: "field val", "{selected_label}" }
+                }
             }
         };
     }
     let select_class = if modified { "in modified" } else { "in" };
     rsx! {
-        div { class: "field",
-            label { r#for: "{name}", "{label}" }
-            div { class: "field-with-revert",
-                SelectInput {
-                    id: "{name}",
-                    name: "{name}",
-                    class: select_class,
-                    selected: value.clone(),
-                    disabled: locked,
-                    options,
-                    onchange: move |event: FormEvent| onchange.call(event.value()),
-                }
-                if modified && !locked {
-                    IconButton {
-                        icon: "↺".to_owned(),
-                        label: reset_label.clone(),
-                        title: reset_label.clone(),
-                        onclick: move |_| onreset.call(()),
+        FactRow { label, label_width, name: name.clone(),
+            div { class: "grow",
+                div { class: "field-with-revert",
+                    SelectInput {
+                        id: "{name}",
+                        name: "{name}",
+                        class: select_class,
+                        selected: value.clone(),
+                        disabled: locked,
+                        options,
+                        onchange: move |event: FormEvent| onchange.call(event.value()),
+                    }
+                    if modified && !locked {
+                        IconButton {
+                            icon: "↺".to_owned(),
+                            label: reset_label.clone(),
+                            title: reset_label.clone(),
+                            onclick: move |_| onreset.call(()),
+                        }
                     }
                 }
             }
@@ -268,6 +322,9 @@ pub fn DraftDate(
     label: String,
     /// The field's machine name / element id.
     name: String,
+    /// The label column's width in pixels — the record page's own (see [`FactRow`]).
+    #[props(default = DEFAULT_LABEL_WIDTH)]
+    label_width: u32,
     /// Whether the record is in edit mode (the control cluster) or view mode (read box).
     editing: bool,
     /// The draft's current date.
@@ -306,9 +363,10 @@ pub fn DraftDate(
 ) -> Element {
     if !editing {
         return rsx! {
-            div { class: "field",
-                label { r#for: "{name}", "{label}" }
-                span { class: "val", "{value.display}" }
+            FactRow { label, label_width, name: name.clone(),
+                span { class: "grow",
+                    span { class: "field val", "{value.display}" }
+                }
             }
         };
     }
@@ -335,101 +393,103 @@ pub fn DraftDate(
         "field-with-revert"
     };
     let error_present = error.is_some();
-    rsx! {
-        div { class: "field",
-            label { r#for: "{name}", "{label}" }
-            div { class: "{revert_class}",
-                DatePicker {
-                    modifier_label,
-                    date_label,
-                    quality_label,
-                    calendar_label,
-                    end_label,
-                    modifier_options,
-                    modifier_value,
-                    quality_options,
-                    quality_value,
-                    calendar_options,
-                    calendar_value,
-                    start_value: value.start.clone(),
-                    end_value: value.end.clone(),
-                    show_end: value.kind.uses_end(),
-                    show_date_inputs: value.kind != DateModifierKind::TextOnly,
-                    invalid: error_present,
-                    onmodifier: {
-                        let value = value.clone();
-                        let choices = choices.clone();
-                        move |index: String| {
-                            if let Some(kind) = index.parse::<usize>().ok().and_then(|index| choices.get(index)) {
-                                let mut draft = value.clone();
-                                draft.kind = *kind;
-                                onchange.call(draft);
-                            }
-                        }
-                    },
-                    onstart: {
-                        let value = value.clone();
-                        move |text: String| {
-                            let mut draft = value.clone();
-                            draft.start = text;
-                            onchange.call(draft);
-                        }
-                    },
-                    onend: {
-                        let value = value.clone();
-                        move |text: String| {
-                            let mut draft = value.clone();
-                            draft.end = text;
-                            onchange.call(draft);
-                        }
-                    },
-                    onquality: {
-                        let value = value.clone();
-                        move |index: String| {
-                            if let Some(quality) = index.parse::<usize>().ok().and_then(|index| DATE_QUALITIES.get(index)) {
-                                let mut draft = value.clone();
-                                draft.quality = *quality;
-                                onchange.call(draft);
-                            }
-                        }
-                    },
-                    oncalendar: {
-                        let value = value.clone();
-                        move |index: String| {
-                            if let Some(calendar) = index.parse::<usize>().ok().and_then(|index| DATE_CALENDARS.get(index)) {
-                                let mut draft = value.clone();
-                                draft.calendar = *calendar;
-                                onchange.call(draft);
-                            }
-                        }
-                    },
-                }
-                if modified {
-                    IconButton {
-                        icon: "↺".to_owned(),
-                        label: reset_label.clone(),
-                        title: reset_label.clone(),
-                        onclick: move |_| onreset.call(()),
-                    }
-                }
-            }
-            TextInput {
-                id: "{name}-original",
-                aria_label: "{original_label}",
-                value: Some(value.original_text.clone()),
-                oninput: {
+    let control = rsx! {
+        div { class: "{revert_class}",
+            DatePicker {
+                modifier_label,
+                date_label,
+                quality_label,
+                calendar_label,
+                end_label,
+                modifier_options,
+                modifier_value,
+                quality_options,
+                quality_value,
+                calendar_options,
+                calendar_value,
+                start_value: value.start.clone(),
+                end_value: value.end.clone(),
+                show_end: value.kind.uses_end(),
+                show_date_inputs: value.kind != DateModifierKind::TextOnly,
+                invalid: error_present,
+                onmodifier: {
                     let value = value.clone();
-                    move |event: FormEvent| {
+                    let choices = choices.clone();
+                    move |index: String| {
+                        if let Some(kind) = index.parse::<usize>().ok().and_then(|index| choices.get(index)) {
+                            let mut draft = value.clone();
+                            draft.kind = *kind;
+                            onchange.call(draft);
+                        }
+                    }
+                },
+                onstart: {
+                    let value = value.clone();
+                    move |text: String| {
                         let mut draft = value.clone();
-                        draft.original_text = event.value();
+                        draft.start = text;
                         onchange.call(draft);
                     }
                 },
+                onend: {
+                    let value = value.clone();
+                    move |text: String| {
+                        let mut draft = value.clone();
+                        draft.end = text;
+                        onchange.call(draft);
+                    }
+                },
+                onquality: {
+                    let value = value.clone();
+                    move |index: String| {
+                        if let Some(quality) = index.parse::<usize>().ok().and_then(|index| DATE_QUALITIES.get(index)) {
+                            let mut draft = value.clone();
+                            draft.quality = *quality;
+                            onchange.call(draft);
+                        }
+                    }
+                },
+                oncalendar: {
+                    let value = value.clone();
+                    move |index: String| {
+                        if let Some(calendar) = index.parse::<usize>().ok().and_then(|index| DATE_CALENDARS.get(index)) {
+                            let mut draft = value.clone();
+                            draft.calendar = *calendar;
+                            onchange.call(draft);
+                        }
+                    }
+                },
             }
-            div { class: "field-hint", "{original_hint}" }
-            if let Some(message) = error {
-                div { class: "field-error", "{message}" }
+            if modified {
+                IconButton {
+                    icon: "↺".to_owned(),
+                    label: reset_label.clone(),
+                    title: reset_label.clone(),
+                    onclick: move |_| onreset.call(()),
+                }
             }
+        }
+        TextInput {
+            id: "{name}-original",
+            aria_label: "{original_label}",
+            value: Some(value.original_text.clone()),
+            oninput: {
+                let value = value.clone();
+                move |event: FormEvent| {
+                    let mut draft = value.clone();
+                    draft.original_text = event.value();
+                    onchange.call(draft);
+                }
+            },
+        }
+        div { class: "field-hint", "{original_hint}" }
+        if let Some(message) = error {
+            div { class: "field-error", "{message}" }
+        }
+    };
+    rsx! {
+        FactRow { label, label_width, name: name.clone(),
+            div { class: "grow", {control} }
         }
     }
 }

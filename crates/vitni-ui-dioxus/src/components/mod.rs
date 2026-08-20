@@ -31,7 +31,7 @@ pub use button::{Button, ButtonVariant, IconButton};
 pub use color_picker::ColorPicker;
 pub use data::{Badge, Chip, ListRow, Table};
 pub use draft_field::{
-    DraftDate, DraftSelect, DraftText, date_calendar_options, date_draft_field, date_field_error,
+    DateFieldBinding, DraftDate, DraftSelect, DraftText, date_calendar_options, date_draft_field, date_field_error,
     date_modifier_options, date_quality_options,
 };
 pub use evidence::{

@@ -169,7 +169,7 @@ pub fn place_record_fields(
                         }
                     }
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
             }
         }
     }
@@ -1384,10 +1384,13 @@ pub fn place_succession_form_fields(
             loc,
             "succession-date",
             true,
-            date(),
-            DateDraft::default(),
-            Callback::new(move |value: DateDraft| date.set(value)),
-            Callback::new(move |()| date.set(DateDraft::default())),
+            DEFAULT_LABEL_WIDTH,
+            DateFieldBinding {
+                value: date(),
+                original: DateDraft::default(),
+                onchange: Callback::new(move |value: DateDraft| date.set(value)),
+                onreset: Callback::new(move |()| date.set(DateDraft::default())),
+            },
         )}
     }
 }

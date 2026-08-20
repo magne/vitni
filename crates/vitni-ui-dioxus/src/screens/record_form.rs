@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 use vitni_ui::ActionLabel;
 use vitni_ui::{Category, Localizer, ProvenanceDraft, RecordDraft, RecordRef, RestrictionKind, toggled_restrictions};
 
-use crate::components::{Button, ButtonVariant, RestrictionChoice, RestrictionSet};
+use crate::components::{Button, ButtonVariant, FactRow, RestrictionChoice, RestrictionSet};
 use crate::screens::provenance_block;
 use crate::services::Services;
 use crate::shell::nav_state::{DraftId, EditKey, NavState, StashedEdit};
@@ -305,7 +305,14 @@ pub fn record_head_actions<D: RecordDraft>(
 /// ([`restriction_display`](crate::screens::restriction_display)) it always shows every kind, because
 /// an unset one has to be reachable to be set. A toggle writes the draft, so the change rides the
 /// record's own Save and carries its provenance.
-pub fn record_restrictions_field<D: RecordDraft>(loc: &Localizer, record: RecordEditState<D>) -> Element {
+///
+/// A one-line [`FactRow`] at the page's own `label_width`, which is how every record mockup draws
+/// Restrictions (`note.html:137`, `tag.html:143`, `source.html:156`, `media.html:222`).
+pub fn record_restrictions_field<D: RecordDraft>(
+    loc: &Localizer,
+    record: RecordEditState<D>,
+    label_width: u32,
+) -> Element {
     let selected = record
         .draft
         .read()
@@ -324,17 +331,18 @@ pub fn record_restrictions_field<D: RecordDraft>(loc: &Localizer, record: Record
         })
         .collect();
     rsx! {
-        div { class: "field",
-            label { "{loc.field_label(\"restrictions\")}" }
-            RestrictionSet {
-                choices,
-                selected,
-                group_label: loc.restriction_group_label(),
-                readonly: !editing,
-                ontoggle: move |kind: RestrictionKind| {
-                    let next = toggled_restrictions(draft.read().editable_restrictions().unwrap_or_default(), kind);
-                    draft.write().set_restrictions(next);
-                },
+        FactRow { label: loc.field_label("restrictions"), label_width,
+            div { class: "grow",
+                RestrictionSet {
+                    choices,
+                    selected,
+                    group_label: loc.restriction_group_label(),
+                    readonly: !editing,
+                    ontoggle: move |kind: RestrictionKind| {
+                        let next = toggled_restrictions(draft.read().editable_restrictions().unwrap_or_default(), kind);
+                        draft.write().set_restrictions(next);
+                    },
+                }
             }
         }
     }

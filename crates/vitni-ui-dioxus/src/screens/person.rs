@@ -269,7 +269,7 @@ pub fn person_record_fields(loc: &Localizer, record: RecordEditState<PersonDraft
                 {person_name_type_field(loc, editing, record)}
                 {person_name_text_fields(loc, editing, record)}
                 {person_sex_field(loc, editing, record)}
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
             }
         }
     }

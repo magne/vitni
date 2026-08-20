@@ -1,5 +1,8 @@
 use super::prelude::*;
 
+/// The label column width of every note record row (`docs/mockups/note.html:105`, `:126`, `:137`).
+const NOTE_LABEL_WIDTH: u32 = 90;
+
 /// The selectable note types for the type-edit form, in display order.
 fn note_type_choices() -> [NoteType; 4] {
     [
@@ -104,6 +107,7 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Not
                 DraftText {
                     label: loc.field_label("id"),
                     name: "note-id".to_owned(),
+                    label_width: NOTE_LABEL_WIDTH,
                     editing,
                     value: id_value,
                     original: id_original,
@@ -119,6 +123,7 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Not
                 DraftSelect {
                     label: loc.field_label("type"),
                     name: "note-type".to_owned(),
+                    label_width: NOTE_LABEL_WIDTH,
                     editing,
                     value: type_value,
                     original: type_original,
@@ -136,6 +141,7 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Not
                 DraftText {
                     label: loc.field_label("content"),
                     name: "note-content".to_owned(),
+                    label_width: NOTE_LABEL_WIDTH,
                     editing,
                     value: text_value,
                     original: text_original,
@@ -150,6 +156,7 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Not
                 DraftText {
                     label: loc.field_label("language"),
                     name: "note-language".to_owned(),
+                    label_width: NOTE_LABEL_WIDTH,
                     editing,
                     value: language_value,
                     original: language_original,
@@ -160,7 +167,7 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Not
                         draft.write().language = value;
                     },
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, NOTE_LABEL_WIDTH)}
             }
         }
     }

@@ -175,13 +175,16 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                     loc,
                     "event-date",
                     editing,
-                    current.date.clone(),
-                    committed.date.clone(),
-                    Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
-                    Callback::new(move |()| {
-                        let value = seed.read().date.clone();
-                        draft.write().date = value;
-                    }),
+                    DEFAULT_LABEL_WIDTH,
+                    DateFieldBinding {
+                        value: current.date.clone(),
+                        original: committed.date.clone(),
+                        onchange: Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
+                        onreset: Callback::new(move |()| {
+                            let value = seed.read().date.clone();
+                            draft.write().date = value;
+                        }),
+                    },
                 )}
                 {event_place_edit_field(loc, ctx)}
                 DraftText {
@@ -197,7 +200,7 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                         draft.write().description = value;
                     },
                 }
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
             }
         }
     }
@@ -268,10 +271,13 @@ pub fn event_create_fields(loc: &Localizer, mut draft: Signal<vitni_ui::EventDra
                     loc,
                     "event-date",
                     true,
-                    draft().date.clone(),
-                    vitni_ui::DateDraft::default(),
-                    Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
-                    Callback::new(move |()| draft.write().date = vitni_ui::DateDraft::default()),
+                    DEFAULT_LABEL_WIDTH,
+                    DateFieldBinding {
+                        value: draft().date.clone(),
+                        original: vitni_ui::DateDraft::default(),
+                        onchange: Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
+                        onreset: Callback::new(move |()| draft.write().date = vitni_ui::DateDraft::default()),
+                    },
                 )}
                 {event_place_create_field(loc, draft, place)}
                 Input {

@@ -243,13 +243,16 @@ pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                     loc,
                     "citation-date",
                     editing,
-                    current.date.clone(),
-                    committed.date.clone(),
-                    Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
-                    Callback::new(move |()| {
-                        let value = seed.read().date.clone();
-                        draft.write().date = value;
-                    }),
+                    DEFAULT_LABEL_WIDTH,
+                    DateFieldBinding {
+                        value: current.date.clone(),
+                        original: committed.date.clone(),
+                        onchange: Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
+                        onreset: Callback::new(move |()| {
+                            let value = seed.read().date.clone();
+                            draft.write().date = value;
+                        }),
+                    },
                 )}
                 DraftText {
                     label: loc.field_label("page"),
@@ -265,7 +268,7 @@ pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui:
                     },
                 }
                 {citation_evidence_record_fields(loc, record)}
-                {record_restrictions_field(loc, record)}
+                {record_restrictions_field(loc, record, DEFAULT_LABEL_WIDTH)}
             }
         }
     }
@@ -398,10 +401,13 @@ pub fn citation_create_fields(
                     loc,
                     "citation-date",
                     true,
-                    draft().date.clone(),
-                    vitni_ui::DateDraft::default(),
-                    Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
-                    Callback::new(move |()| draft.write().date = vitni_ui::DateDraft::default()),
+                    DEFAULT_LABEL_WIDTH,
+                    DateFieldBinding {
+                        value: draft().date.clone(),
+                        original: vitni_ui::DateDraft::default(),
+                        onchange: Callback::new(move |value: vitni_ui::DateDraft| draft.write().date = value),
+                        onreset: Callback::new(move |()| draft.write().date = vitni_ui::DateDraft::default()),
+                    },
                 )}
                 Input {
                     label: loc.field_label("page"),
