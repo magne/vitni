@@ -136,6 +136,9 @@ fn crop_actions(tools: Option<&MediaCropTools>, mut region: Signal<Option<Rect>>
             label: tools.labels.clear_region.clone(),
             variant: ButtonVariant::Ghost,
             small: true,
+            // Clearing nothing is not a change: `onclear` fires the caller's `SetMediaRegion(None)`,
+            // which would write an event asserting the region a record already does not have.
+            disabled: region().is_none(),
             onclick: move |_| {
                 region.set(None);
                 onclear.call(());

@@ -189,6 +189,28 @@ fn viewer_view() -> Element {
     }
 }
 
+/// The crop viewer over an image that carries no region yet — the state every media reference starts
+/// in, and the one both region actions have to be inert in.
+fn viewer_view_no_region() -> Element {
+    let loc = loc();
+    let item = MediaRefVm {
+        crop: None,
+        ..image_ref()
+    };
+    rsx! {
+        MediaViewer {
+            item,
+            labels: media_viewer_labels(&loc),
+            crop: Some(MediaCropTools {
+                labels: media_crop_labels(&loc),
+                onset: EventHandler::new(|_: Rect| {}),
+                onclear: EventHandler::new(|()| {}),
+            }),
+            onclose: |()| {},
+        }
+    }
+}
+
 /// The viewer without crop tools — the Media record's own preview dialog, which is only for looking.
 fn viewer_view_zoom_only() -> Element {
     let loc = loc();
@@ -226,6 +248,44 @@ fn viewer_renders_image_zoom_controls_readout_and_actions() {
     // The region actions.
     assert!(html.contains("Set region"), "set region action: {html}");
     assert!(html.contains("Clear region"), "clear region action: {html}");
+}
+
+/// The `<button …>` opening tag carrying `label`, so a test can read the attributes on it rather than
+/// searching the whole document for a `disabled` that may belong to any other control.
+fn button_tag(html: &str, label: &str) -> String {
+    let Some(end) = html.find(&format!(">{label}<")) else {
+        return String::new();
+    };
+    let Some(start) = html[..end].rfind("<button") else {
+        return String::new();
+    };
+    html[start..end].to_owned()
+}
+
+#[test]
+fn both_region_actions_are_inert_until_there_is_a_region_to_act_on() {
+    // Clear had no `disabled:` at all, so pressing it with nothing selected called `onclear` — and the
+    // caller's `SetMediaRegion(None)` wrote an event for a no-op change.
+    let html = render(viewer_view_no_region);
+    for label in ["Set region", "Clear region"] {
+        assert!(
+            button_tag(&html, label).contains("disabled"),
+            "{label:?} is disabled with no region set: {html}"
+        );
+    }
+}
+
+#[test]
+fn both_region_actions_are_live_once_a_region_exists() {
+    let html = render(viewer_view);
+    for label in ["Set region", "Clear region"] {
+        let tag = button_tag(&html, label);
+        assert!(!tag.is_empty(), "{label:?} renders as a button at all: {html}");
+        assert!(
+            !tag.contains("disabled"),
+            "{label:?} is live once a region is set: {html}"
+        );
+    }
 }
 
 #[test]
