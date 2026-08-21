@@ -1,0 +1,127 @@
+# `Set region` was permanently disabled, so no crop could ever be recorded — the whole point of the
+# crop tool. SSR could not see it: the button's `disabled` is bound to a signal that only a *drag* over
+# the capture layer sets, and SSR fires no pointer events at all.
+#
+# The cause was a measurement race, not the button. `frame_size` starts `(0,0)` and was filled by
+# `get_client_rect()` in a `spawn`ed future — once at mount, when the frame still wrapped an image that
+# had not laid out, and again at `onpointerdown`, which resolves *after* the `onpointermove` that
+# follows it. So the move read `(0,0)`, `rect_from_drag` rejected a zero-area frame, and no region was
+# ever set. A `ResizeObserver` (`onresize`) replaces both: it reports the frame's box whenever it
+# actually changes — first layout, image load, zoom change — so the size is already right when a drag
+# starts.
+#
+# The surface is the fixture's one place, Kristiansand, whose Media tab starts empty: the scenario
+# attaches the seeded `portrait.png` through the GUI (picker → Save), which is what gives it a gallery
+# card to open the crop viewer from. Nothing is seeded for this; the attach is part of the test.
+#
+# Coordinates are window pixels at 1800x1200, read off this scenario's own shots. At Fit the image
+# paints x 546-1026 / y 673-1152, so the drag stays well inside it. The three `differ` regions are the
+# toolbar's `Set region` button, the readout beside the zoom group, and a rectangle inside the image —
+# each changes only if a region was actually recorded.
+description = "A drag over the crop layer records a region and enables Set region (#309 follow-up)"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: the seeded place row"
+
+[[step]]
+do = "click"
+at = [1030, 244]
+label = "place: the Media tab"
+
+[[step]]
+do = "click"
+at = [1723, 358]
+label = "media tab: + Attach media"
+
+[[step]]
+do = "click"
+at = [1610, 241]
+label = "attach panel: the media picker"
+
+[[step]]
+do = "key"
+chord = "p"
+label = "picker: type p"
+
+[[step]]
+do = "click"
+at = [1530, 290]
+label = "picker: portrait.png"
+
+[[step]]
+do = "click"
+at = [1468, 717]
+label = "attach panel: Save"
+
+[[step]]
+do = "click"
+at = [675, 465]
+label = "gallery: the attached card"
+
+[[step]]
+do = "shot"
+name = "viewer-open"
+
+[[step]]
+do = "drag"
+from = [650, 750]
+by = [260, 240]
+label = "crop layer: drag a region"
+
+[[step]]
+do = "shot"
+name = "region-drawn"
+
+[[step]]
+do = "click"
+at = [663, 648]
+label = "viewer: 150%"
+
+[[step]]
+do = "drag"
+from = [650, 750]
+by = [260, 240]
+label = "crop layer: the same drag at 150%"
+
+[[step]]
+do = "shot"
+name = "region-at-150"
+
+[[assert]]
+kind = "differ"
+shots = ["viewer-open", "region-drawn"]
+# The `Set region` button: dimmed with no region, live with one.
+region = [1505, 636, 95, 26]
+because = "a drag must enable Set region — it was disabled forever, so no crop could be recorded"
+
+[[assert]]
+kind = "differ"
+shots = ["viewer-open", "region-drawn"]
+# The readout beside the zoom group: "no region set" becomes "region · l,t → r,b %".
+region = [755, 638, 220, 22]
+because = "the readout must report the dragged region's percentages, so the drag reached rect_from_drag"
+
+[[assert]]
+kind = "differ"
+shots = ["viewer-open", "region-drawn"]
+# Inside the image: `.crop-rect` draws its border and dims everything outside it.
+region = [700, 800, 200, 120]
+because = "the region rectangle must be drawn over the image, with its dimming mask"
+
+[[assert]]
+kind = "differ"
+shots = ["region-drawn", "region-at-150"]
+# The readout. The same pixel drag is a different *fraction* of a frame that has grown by half, so the
+# percentages must change: at Fit the frame is the image's 480px box and the drag reads
+# `22,16 → 76,66 %`; at 150% the frame is 1845px and the same drag reads `6,4 → 20,17 %`. Identical
+# readouts would mean the frame's box was measured once and never again after it was resized — the
+# stale-measurement gap the `ResizeObserver` closes.
+region = [755, 638, 220, 22]
+because = "the frame is re-measured when a zoom step resizes it, so a drag's percentages describe the frame it was drawn on"

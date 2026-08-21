@@ -150,17 +150,6 @@ pub struct MediaCropTools {
     pub onclear: EventHandler<()>,
 }
 
-/// Reads the crop frame's on-screen box into `frame_size` (a no-op under SSR, where `get_client_rect`
-/// returns `MountedError::NotSupported`). Called at mount and again at drag start, since the frame
-/// shrink-wraps an image that lays out after mount.
-fn measure_frame(node: MountedEvent, mut frame_size: Signal<(f64, f64)>) {
-    spawn(async move {
-        if let Ok(rect) = node.get_client_rect().await {
-            frame_size.set((rect.size.width, rect.size.height));
-        }
-    });
-}
-
 /// The percent readout for a region (e.g. `region · 22,18 → 61,44 %`), or the no-region text.
 fn readout(labels: &MediaCropLabels, region: Option<Rect>) -> String {
     match region {
@@ -212,12 +201,16 @@ fn crop_actions(tools: Option<&MediaCropTools>, mut region: Signal<Option<Rect>>
 
 /// The drag-to-draw layer over the frame plus the region rectangle it draws. Renders nothing for a
 /// look-only viewer, so a plain preview has no invisible capture layer over its image.
+///
+/// `frame_size` is the frame's observed box (see the `onresize` on the frame itself), never measured
+/// from here: a measurement started at `onpointerdown` resolves *after* the `onpointermove` that
+/// follows it, so the first move of a drag would read the size the frame had before it was ever
+/// measured — `(0.0, 0.0)`, which [`rect_from_drag`] rejects.
 fn crop_overlay(
     active: bool,
     mut region: Signal<Option<Rect>>,
     mut drag_start: Signal<Option<(f64, f64)>>,
     frame_size: Signal<(f64, f64)>,
-    frame_el: Signal<Option<MountedEvent>>,
 ) -> Element {
     if !active {
         return rsx! {};
@@ -227,11 +220,6 @@ fn crop_overlay(
             class: "crop-capture",
             style: "position:absolute;inset:0",
             onpointerdown: move |event: PointerEvent| {
-                // Re-measure at drag time: by now the image has laid out, so the frame's
-                // box is its true size (the `onmounted` measure ran before load).
-                if let Some(frame) = frame_el() {
-                    measure_frame(frame, frame_size);
-                }
                 let point = event.element_coordinates();
                 drag_start.set(Some((point.x, point.y)));
             },
@@ -267,10 +255,7 @@ pub fn MediaViewer(
     let mut zoom = use_signal(|| Zoom::Fit);
     let region = use_signal(|| item.crop);
     let drag_start = use_signal(|| None::<(f64, f64)>);
-    let frame_size = use_signal(|| (0.0_f64, 0.0_f64));
-    // The crop frame's mounted element, kept so the drag can re-measure it: the frame shrink-wraps the
-    // image, which lays out *after* `onmounted` fires, so the initial measure is stale/zero.
-    let mut frame_el = use_signal(|| None::<MountedEvent>);
+    let mut frame_size = use_signal(|| (0.0_f64, 0.0_f64));
 
     let src = item.src();
     let is_image = item.is_image();
@@ -313,9 +298,16 @@ pub fn MediaViewer(
             div { class: "mv-canvas",
                 div {
                     class: zoom().frame_class(),
-                    onmounted: move |event: MountedEvent| {
-                        frame_el.set(Some(event.clone()));
-                        measure_frame(event, frame_size);
+                    // The crop overlay's coordinate space, observed rather than measured: the frame's
+                    // box changes when the image lays out and again on every zoom step, and a
+                    // `ResizeObserver` reports each change as it happens. `get_client_rect()` could
+                    // only be read at a moment someone chose, and the moments available — mount
+                    // (before the image has laid out) and drag start (after the first move is
+                    // handled) — are both the wrong one.
+                    onresize: move |event: ResizeEvent| {
+                        if let Ok(size) = event.get_border_box_size() {
+                            frame_size.set((size.width, size.height));
+                        }
                     },
                     if is_image {
                         if let Some(src) = src.clone() {
@@ -324,7 +316,7 @@ pub fn MediaViewer(
                     } else {
                         div { class: "img-glyph", aria_hidden: "true", "🗎" }
                     }
-                    {crop_overlay(crop.is_some(), region, drag_start, frame_size, frame_el)}
+                    {crop_overlay(crop.is_some(), region, drag_start, frame_size)}
                 }
             }
         }
