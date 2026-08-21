@@ -384,6 +384,31 @@ fn the_checksum_is_locked_and_the_date_is_a_structured_editor() {
 }
 
 #[test]
+fn a_stored_records_file_card_never_repeats_the_id_the_header_shows() {
+    // `media.html:120` starts the File card at File path: the header's id badge already names the
+    // record. The row survives in create mode only (`media_create.rs`), where there is no badge yet.
+    for view in [media_view as fn() -> Element, media_edit as fn() -> Element] {
+        let html = render(view);
+        assert!(
+            !html.contains("media-id"),
+            "no ID row on a stored record's File card:\n{html}"
+        );
+    }
+}
+
+#[test]
+fn the_file_card_orders_date_above_checksum() {
+    // `media.html:123-124` draws Date then Checksum; the code drew them the other way round.
+    let html = render(media_view);
+    let date = html.find("media-date").expect("the Date row renders");
+    let checksum = html.find("media-checksum").expect("the Checksum row renders");
+    assert!(
+        date < checksum,
+        "Date precedes Checksum (date at {date}, checksum at {checksum}):\n{html}"
+    );
+}
+
+#[test]
 fn citations_carry_source_page_and_evidence() {
     let html = render(media_view);
     for needle in [

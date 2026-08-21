@@ -3,8 +3,8 @@ use super::prelude::*;
 use vitni_ui::MediaAttributeVm;
 
 /// The label column width of every media record row (`docs/mockups/media.html:120-125`, `:218-222`).
-/// The shared record floor: `KONTROLLSUM` (96px) and `RESTRIKSJONER` (102px) both overflowed the 90px
-/// the mockup drew, taking those two rows' values out of line with the card's others.
+/// The shared record floor is exactly the 110px the mockup draws, and it clears the card's longest
+/// Norwegian labels — `KONTROLLSUM` (96px) and `RESTRIKSJONER` (102px) — so no page override is needed.
 const MEDIA_LABEL_WIDTH: u32 = RECORD_LABEL_WIDTH;
 
 /// The create-mode media record: an uncommitted [`MediaDraft`] rendered as the create form in the
@@ -62,10 +62,42 @@ pub fn MediaCreateRecord(draft_id: DraftId) -> Element {
     )
 }
 
-/// The media object's scalar record fields (id · file path · web path · MIME), read-first: read boxes
-/// in view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). Checksum is
-/// locked (§3, disabled); the date is the structured `DraftDate` editor. A pure fn (the edit state's
-/// signals passed in) so the create pane and SSR tests render it without `AppCtx`.
+/// The File card's user-facing id row — create mode only. A stored record's id is already the header's
+/// badge, and `media.html:120` starts its File card at File path; in create mode there is no header
+/// badge yet (the pane draws a "draft · not saved" one), so this row is the only way to assign an id.
+fn media_id_field(loc: &Localizer, record: RecordEditState<vitni_ui::MediaDraft>, editing: bool) -> Element {
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let committed = seed.read().clone();
+    if committed.existing_human_id.is_some() {
+        return rsx! {};
+    }
+    rsx! {
+        DraftText {
+            label: loc.field_label("id"),
+            name: "media-id".to_owned(),
+            label_width: MEDIA_LABEL_WIDTH,
+            editing,
+            value: draft().human_id.clone(),
+            original: committed.human_id.clone(),
+            reset_label: loc.action_reset_field(&loc.field_label("id")),
+            mono: true,
+            hint: Some(loc.field_human_id_hint()),
+            oninput: move |value: String| draft.write().human_id = value,
+            onreset: move |()| {
+                let value = seed.read().human_id.clone();
+                draft.write().human_id = value;
+            },
+        }
+    }
+}
+
+/// The media object's scalar record fields (file path · web path · MIME · date · checksum), read-first:
+/// read boxes in view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3).
+/// Checksum is locked (§3, disabled); the date is the structured `DraftDate` editor. The user-facing id
+/// row is create-only — a stored record's id is already in the header badge (`media.html:120`), so the
+/// File card starts at File path. A pure fn (the edit state's signals passed in) so the create pane and
+/// SSR tests render it without `AppCtx`.
 pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::MediaDraft>) -> Element {
     let editing = record.editing.read().to_owned();
     let mut draft = record.draft;
@@ -75,22 +107,7 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
     rsx! {
         Card { title: loc.section_label("file"),
             div { class: "stack",
-                DraftText {
-                    label: loc.field_label("id"),
-                    name: "media-id".to_owned(),
-                    label_width: MEDIA_LABEL_WIDTH,
-                    editing,
-                    value: current.human_id.clone(),
-                    original: committed.human_id.clone(),
-                    reset_label: loc.action_reset_field(&loc.field_label("id")),
-                    mono: true,
-                    hint: Some(loc.field_human_id_hint()),
-                    oninput: move |value: String| draft.write().human_id = value,
-                    onreset: move |()| {
-                        let value = seed.read().human_id.clone();
-                        draft.write().human_id = value;
-                    },
-                }
+                {media_id_field(loc, record, editing)}
                 DraftText {
                     label: loc.field_label("file-path"),
                     name: "media-file-path".to_owned(),
@@ -134,19 +151,6 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
                         draft.write().mime = value;
                     },
                 }
-                DraftText {
-                    label: loc.field_label("checksum"),
-                    name: "media-checksum".to_owned(),
-                    label_width: MEDIA_LABEL_WIDTH,
-                    editing,
-                    value: current.checksum.clone(),
-                    original: committed.checksum.clone(),
-                    reset_label: loc.action_reset_field(&loc.field_label("checksum")),
-                    mono: true,
-                    locked: true,
-                    oninput: move |_: String| {},
-                    onreset: move |()| {},
-                }
                 {date_draft_field(
                     loc,
                     "media-date",
@@ -162,6 +166,19 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
                         }),
                     },
                 )}
+                DraftText {
+                    label: loc.field_label("checksum"),
+                    name: "media-checksum".to_owned(),
+                    label_width: MEDIA_LABEL_WIDTH,
+                    editing,
+                    value: current.checksum.clone(),
+                    original: committed.checksum.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("checksum")),
+                    mono: true,
+                    locked: true,
+                    oninput: move |_: String| {},
+                    onreset: move |()| {},
+                }
                 {record_restrictions_field(loc, record, MEDIA_LABEL_WIDTH)}
             }
         }

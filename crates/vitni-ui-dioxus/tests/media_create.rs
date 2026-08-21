@@ -43,6 +43,9 @@ fn create_pane_shows_the_draft_badge_and_labelled_fields() {
         "Web path",
         "MIME",
         r#"id="media-file-path""#,
+        // The id row is create-only: a stored record shows its id in the header badge, so the File
+        // card starts at File path there (`media.html:120`). This is the gate on that split — the
+        // create pane is the only place the id can be assigned.
         r#"id="media-id""#,
         r#"for="media-date""#,
     ] {
