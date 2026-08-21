@@ -147,10 +147,28 @@ impl MediaDetail {
         media_asset_src(self.file_path.as_deref())
     }
 
+    /// The `mime · date` line the detail header shows under the title (`media.html:62`) — the same
+    /// line the master-list row carries, so the two cannot drift.
+    #[must_use]
+    pub fn header_subtitle(&self) -> Option<String> {
+        media_subtitle(self.mime.clone(), self.date.clone())
+    }
+
     /// The object's location, whichever kind it has — the path a MIME is inferred from when the record
     /// carries none.
     fn location(&self) -> Option<&str> {
         self.file_path.as_deref().or(self.web_path.as_deref())
+    }
+}
+
+/// The `mime · date` line the master-list row and the detail header both show (`media.html:25`,
+/// `:62`): whichever of the two is present, separated when both are.
+fn media_subtitle(mime: Option<String>, date: Option<String>) -> Option<String> {
+    match (mime, date) {
+        (Some(mime), Some(date)) => Some(format!("{mime} · {date}")),
+        (Some(mime), None) => Some(mime),
+        (None, Some(date)) => Some(date),
+        (None, None) => None,
     }
 }
 
@@ -170,12 +188,7 @@ pub fn media_row(summary: &vitni_app::MediaSummary, loc: &Localizer) -> RowVm {
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| summary.human_id.clone());
     let date = summary.date.as_ref().map(|date| loc.date(date));
-    let subtitle = match (summary.mime.clone(), date) {
-        (Some(mime), Some(date)) => Some(format!("{mime} · {date}")),
-        (Some(mime), None) => Some(mime),
-        (None, Some(date)) => Some(date),
-        (None, None) => None,
-    };
+    let subtitle = media_subtitle(summary.mime.clone(), date);
     RowVm {
         id: summary.human_id.clone(),
         title,
@@ -605,6 +618,64 @@ mod media_preview_tests {
     #[test]
     fn a_recorded_non_image_mime_beats_the_extension() {
         assert!(!detail(Some("media/scans/deed.jpg"), None, Some("application/pdf")).is_image());
+    }
+}
+
+#[cfg(test)]
+mod media_subtitle_tests {
+    use super::MediaDetail;
+
+    /// A detail carrying only the two fields the subtitle reads.
+    fn detail(mime: Option<&str>, date: Option<&str>) -> MediaDetail {
+        MediaDetail {
+            human_id: "O0001".to_owned(),
+            id: "0190-media-id".to_owned(),
+            title: "ada.jpg".to_owned(),
+            path: None,
+            file_path: None,
+            web_path: None,
+            mime: mime.map(str::to_owned),
+            checksum: None,
+            date: date.map(str::to_owned),
+            date_value: None,
+            attributes: Vec::new(),
+            citations: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            used_by: Vec::new(),
+            restrictions: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_mime_and_a_date_are_joined_by_a_separator() {
+        assert_eq!(
+            detail(Some("image/jpeg"), Some("c. 1900")).header_subtitle().as_deref(),
+            Some("image/jpeg · c. 1900")
+        );
+    }
+
+    #[test]
+    fn a_mime_alone_is_the_whole_subtitle() {
+        assert_eq!(
+            detail(Some("image/jpeg"), None).header_subtitle().as_deref(),
+            Some("image/jpeg")
+        );
+    }
+
+    #[test]
+    fn a_date_alone_is_the_whole_subtitle() {
+        // The common case: nothing infers a MIME, so most records carry none (#301).
+        assert_eq!(
+            detail(None, Some("c. 1900")).header_subtitle().as_deref(),
+            Some("c. 1900")
+        );
+    }
+
+    #[test]
+    fn neither_yields_no_subtitle_line() {
+        assert_eq!(detail(None, None).header_subtitle(), None);
     }
 }
 
