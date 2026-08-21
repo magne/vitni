@@ -142,8 +142,21 @@ fn media_ref_input(crop: Option<types::MediaCrop>, caption: Option<String>) -> M
 
 impl types::Host for HostState {}
 
+// Every host function the WIT world declares reaches the guest through an `async` trait method, but
+// only the ones that actually reach the app layer await anything. The rest do their work
+// synchronously in a private method and hand back a ready future — `fn … -> impl Future`, the
+// signature an `async fn` desugars to — so the signature states what the body does rather than
+// claiming a suspension point that never exists (`clippy::unused_async_trait_impl`).
 impl log::Host for HostState {
-    async fn log(&mut self, level: log::Level, message: String) {
+    fn log(&mut self, level: log::Level, message: String) -> impl Future<Output = ()> {
+        self.write_log(level, &message);
+        std::future::ready(())
+    }
+}
+
+impl HostState {
+    /// Forwards one guest log record to `tracing`, or drops it when the capability is not granted.
+    fn write_log(&mut self, level: log::Level, message: &str) {
         if !self.grants.allows(Capability::Log) {
             return;
         }
@@ -154,10 +167,9 @@ impl log::Host for HostState {
             log::Level::Error => tracing::error!(target: "plugin", "{message}"),
         }
     }
-}
 
-impl commands::Host for HostState {
-    async fn begin_import(&mut self, file_asserted_at: Option<String>) -> Result<(), types::CapabilityError> {
+    /// Records the import's file-asserted-at date on the session (see [`commands::Host`]).
+    fn begin_import_now(&mut self, file_asserted_at: Option<String>) -> Result<(), types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
@@ -166,6 +178,15 @@ impl commands::Host for HostState {
         // problem, not a capability violation.
         self.file_asserted_at = file_asserted_at.and_then(|value| Timestamp::parse_rfc3339(&value));
         Ok(())
+    }
+}
+
+impl commands::Host for HostState {
+    fn begin_import(
+        &mut self,
+        file_asserted_at: Option<String>,
+    ) -> impl Future<Output = Result<(), types::CapabilityError>> {
+        std::future::ready(self.begin_import_now(file_asserted_at))
     }
 
     async fn create_person(
@@ -1895,8 +1916,10 @@ fn from_place_type(place_type: PlaceType) -> types::PlaceType {
     }
 }
 
-impl progress::Host for HostState {
-    async fn report(
+impl HostState {
+    /// Reports one progress tick to the host's callback and maps its answer back to the WIT
+    /// `control` (see [`progress::Host`]).
+    fn report_progress(
         &mut self,
         step: String,
         processed: u32,
@@ -1913,8 +1936,20 @@ impl progress::Host for HostState {
     }
 }
 
-impl import_source::Host for HostState {
-    async fn open(&mut self) -> Result<(), types::CapabilityError> {
+impl progress::Host for HostState {
+    fn report(
+        &mut self,
+        step: String,
+        processed: u32,
+        total: Option<u32>,
+    ) -> impl Future<Output = Result<progress::Control, types::CapabilityError>> {
+        std::future::ready(self.report_progress(step, processed, total))
+    }
+}
+
+impl HostState {
+    /// Opens the host-configured import source for reading (see [`import_source::Host`]).
+    fn open_source(&mut self) -> Result<(), types::CapabilityError> {
         if !self.grants.allows(Capability::ImportSource) {
             return Err(types::CapabilityError::Denied);
         }
@@ -1929,7 +1964,8 @@ impl import_source::Host for HostState {
         Ok(())
     }
 
-    async fn read(&mut self, len: u32) -> Result<Vec<u8>, types::CapabilityError> {
+    /// Reads up to `len` bytes from the open import source (see [`import_source::Host`]).
+    fn read_source(&mut self, len: u32) -> Result<Vec<u8>, types::CapabilityError> {
         if !self.grants.allows(Capability::ImportSource) {
             return Err(types::CapabilityError::Denied);
         }
@@ -1946,8 +1982,19 @@ impl import_source::Host for HostState {
     }
 }
 
-impl export_sink::Host for HostState {
-    async fn open(&mut self, suggested_name: String) -> Result<(), types::CapabilityError> {
+impl import_source::Host for HostState {
+    fn open(&mut self) -> impl Future<Output = Result<(), types::CapabilityError>> {
+        std::future::ready(self.open_source())
+    }
+
+    fn read(&mut self, len: u32) -> impl Future<Output = Result<Vec<u8>, types::CapabilityError>> {
+        std::future::ready(self.read_source(len))
+    }
+}
+
+impl HostState {
+    /// Creates the export sink's file, honouring the host-resolved path (see [`export_sink::Host`]).
+    fn open_sink(&mut self, suggested_name: &str) -> Result<(), types::CapabilityError> {
         if !self.grants.allows(Capability::ExportSink) {
             return Err(types::CapabilityError::Denied);
         }
@@ -1957,7 +2004,7 @@ impl export_sink::Host for HostState {
             .as_ref()
             .ok_or_else(|| types::CapabilityError::Backend("no export sink is configured".to_owned()))?;
         let path = target
-            .resolve(&suggested_name)
+            .resolve(suggested_name)
             .map_err(types::CapabilityError::Backend)?;
         // The host owns the path (the plugin only proposes a leaf name), so creating the directory it
         // asked for is part of honouring the target — `<workspace>/exports`, the CLI's and the GUI
@@ -1974,7 +2021,8 @@ impl export_sink::Host for HostState {
         Ok(())
     }
 
-    async fn write(&mut self, bytes: Vec<u8>) -> Result<(), types::CapabilityError> {
+    /// Appends `bytes` to the open export sink (see [`export_sink::Host`]).
+    fn write_sink(&mut self, bytes: &[u8]) -> Result<(), types::CapabilityError> {
         if !self.grants.allows(Capability::ExportSink) {
             return Err(types::CapabilityError::Denied);
         }
@@ -1982,11 +2030,12 @@ impl export_sink::Host for HostState {
             .sink
             .as_mut()
             .ok_or_else(|| types::CapabilityError::Backend("export sink is not open".to_owned()))?;
-        file.write_all(&bytes)
+        file.write_all(bytes)
             .map_err(|error| types::CapabilityError::Backend(format!("writing export: {error}")))
     }
 
-    async fn finish(&mut self) -> Result<(), types::CapabilityError> {
+    /// Flushes the open export sink (see [`export_sink::Host`]).
+    fn finish_sink(&mut self) -> Result<(), types::CapabilityError> {
         if !self.grants.allows(Capability::ExportSink) {
             return Err(types::CapabilityError::Denied);
         }
@@ -1996,6 +2045,20 @@ impl export_sink::Host for HostState {
             .ok_or_else(|| types::CapabilityError::Backend("export sink is not open".to_owned()))?;
         file.flush()
             .map_err(|error| types::CapabilityError::Backend(format!("flushing export: {error}")))
+    }
+}
+
+impl export_sink::Host for HostState {
+    fn open(&mut self, suggested_name: String) -> impl Future<Output = Result<(), types::CapabilityError>> {
+        std::future::ready(self.open_sink(&suggested_name))
+    }
+
+    fn write(&mut self, bytes: Vec<u8>) -> impl Future<Output = Result<(), types::CapabilityError>> {
+        std::future::ready(self.write_sink(&bytes))
+    }
+
+    fn finish(&mut self) -> impl Future<Output = Result<(), types::CapabilityError>> {
+        std::future::ready(self.finish_sink())
     }
 }
 
@@ -2054,16 +2117,27 @@ impl media_store::Host for HostState {
         Ok(to_stored_media(stored))
     }
 
-    async fn store(
+    fn store(
         &mut self,
         bytes: Vec<u8>,
         suggested_path: String,
+    ) -> impl Future<Output = Result<media_store::StoredMedia, types::CapabilityError>> {
+        std::future::ready(self.store_media(&bytes, &suggested_path))
+    }
+}
+
+impl HostState {
+    /// Stores guest-supplied bytes under the workspace's media root (see [`media_store::Host`]).
+    fn store_media(
+        &mut self,
+        bytes: &[u8],
+        suggested_path: &str,
     ) -> Result<media_store::StoredMedia, types::CapabilityError> {
         if !self.grants.allows(Capability::MediaStore) {
             return Err(types::CapabilityError::Denied);
         }
         let media_root = self.workspace.media_root();
-        let stored = media::store_bytes(&media_root, &suggested_path, &bytes).map_err(media_capability_error)?;
+        let stored = media::store_bytes(&media_root, suggested_path, bytes).map_err(media_capability_error)?;
         Ok(to_stored_media(stored))
     }
 }
