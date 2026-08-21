@@ -27,6 +27,8 @@ fn sample_date() -> GenealogicalDate {
         time: None,
     })
 }
+use vitni_ui_dioxus::components::TabItem;
+use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
     MediaEditForm, RecordActionLabels, RecordEditState, citations_table, media_attributes_table, media_overview,
     media_used_by, notes_table, record_head_actions, tags_panel,
@@ -148,6 +150,72 @@ fn media_view() -> Element {
         {notes_table(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
+}
+
+/// Renders the media detail header the way `media_detail` builds it: a `DetailContainer` with the 📷
+/// avatar, the filename title, the `mime · date` subtitle and the id badge — no second MIME badge
+/// (`docs/mockups/media.html:62`). `media_detail` itself is private and needs an `AppState`, so the
+/// header's own prop expressions are mirrored here (the `tag_detail.rs` pattern).
+fn media_header(detail: &MediaDetail) -> Element {
+    let active = use_signal(|| 0_usize);
+    rsx! {
+        DetailContainer {
+            title: detail.title.clone(),
+            subtitle: detail.header_subtitle(),
+            id_label: Some(detail.human_id.clone()),
+            avatar: "📷".to_owned(),
+            extras: rsx! {},
+            actions: rsx! {},
+            tabs: Vec::<TabItem>::new(),
+            active,
+        }
+    }
+}
+
+fn media_header_view() -> Element {
+    media_header(&sample())
+}
+
+/// The header of a record carrying neither a MIME nor a date — the record the CLI creates.
+fn media_header_bare() -> Element {
+    media_header(&MediaDetail {
+        mime: None,
+        date: None,
+        ..sample()
+    })
+}
+
+#[test]
+fn the_header_shows_the_mime_and_date_as_its_subtitle() {
+    let html = render(media_header_view);
+    assert!(
+        html.contains(r#"<div class="detail-sub">image/jpeg · c. 1900</div>"#),
+        "the header carries the mime · date subtitle:\n{html}"
+    );
+}
+
+#[test]
+fn the_header_shows_the_mime_only_in_the_subtitle_never_as_a_badge() {
+    // The mockup's `<span class="badge">image/jpeg</span>` is deleted, not implemented: the subtitle
+    // already carries the MIME, and a badge would say it twice.
+    let html = render(media_header_view);
+    assert!(
+        !html.contains(r#"class="badge">image/jpeg"#),
+        "no MIME badge beside the id badge:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="badge">O0050"#),
+        "the id badge is still there:\n{html}"
+    );
+}
+
+#[test]
+fn a_record_with_neither_mime_nor_date_renders_no_subtitle_line() {
+    let html = render(media_header_bare);
+    assert!(
+        !html.contains("detail-sub"),
+        "an empty subtitle draws no line at all:\n{html}"
+    );
 }
 
 fn media_edit() -> Element {

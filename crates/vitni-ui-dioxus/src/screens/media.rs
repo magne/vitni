@@ -414,6 +414,7 @@ fn media_detail(
     rsx! {
         DetailContainer {
             title: detail.title.clone(),
+            subtitle: detail.header_subtitle(),
             id_label: Some(detail.human_id.clone()),
             avatar: "📷".to_owned(),
             extras: restriction_display(loc, &detail.restrictions),
