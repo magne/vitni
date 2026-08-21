@@ -247,7 +247,10 @@ async fn run_command(cli: Cli) -> ExitCode {
 
     let context = match open_workspace(cli.workspace).await {
         Ok(context) => context,
-        Err((localizer, error)) => return report(&localizer, Err(error)),
+        Err(failure) => {
+            let (localizer, error) = *failure;
+            return report(&localizer, Err(error));
+        }
     };
     let Context {
         workspace,
@@ -277,12 +280,13 @@ async fn rebuild(workspace: &Workspace, localizer: &Localizer) -> Result<(), App
 /// Resolves and opens the workspace, returning the [`Context`] every non-`init` command needs.
 ///
 /// On failure returns the localizer to report through (workspace-aware if the directory resolved,
-/// else the baseline) alongside the error.
-async fn open_workspace(workspace: Option<String>) -> Result<Context, (Localizer, AppError)> {
+/// else the baseline) alongside the error — boxed, because the pair is an order of magnitude wider
+/// than the `Ok` side and every caller only reports it.
+async fn open_workspace(workspace: Option<String>) -> Result<Context, Box<(Localizer, AppError)>> {
     let workspace = workspace.or_else(workspace_from_env);
     let (config, dir) = match resolve(workspace.as_deref()) {
         Ok(resolved) => resolved,
-        Err(error) => return Err((Localizer::baseline(), error)),
+        Err(error) => return Err(Box::new((Localizer::baseline(), error))),
     };
     let config_ui_language = read_resolved_locale(&dir, &config.workspace_defaults).ui_language;
     let localizer = Localizer::for_workspace(&dir, config_ui_language.as_ref());
@@ -298,7 +302,7 @@ async fn open_workspace(workspace: Option<String>) -> Result<Context, (Localizer
                 localizer,
             })
         }
-        Err(error) => Err((localizer, error)),
+        Err(error) => Err(Box::new((localizer, error))),
     }
 }
 
