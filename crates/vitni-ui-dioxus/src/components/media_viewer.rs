@@ -1,11 +1,14 @@
-//! The media viewer overlay with the interactive crop tool (ADR 0017 §GUI; `media.html`).
+//! The media viewer, with an optional interactive crop tool (ADR 0017 §GUI; `media.html`).
 //!
-//! Shows an image at a chosen zoom inside a scrollable, shrink-wrapped frame, with a percent-based
-//! crop overlay drawn by dragging. Because the geometry is percentages of the frame, the region stays
-//! valid at any zoom. The drag math is the framework-free, unit-tested
-//! [`rect_from_drag`](vitni_ui::rect_from_drag); the pointer handlers here are thin closures over
-//! it. Committing a region (Set region) or clearing it supersedes the owning aggregate's media
-//! reference (the caller wires `onset`/`onclear` to a `SetMediaRegion` intent).
+//! Shows an image at a chosen zoom inside a scrollable, shrink-wrapped frame. The crop half is opt-in
+//! ([`MediaCropTools`]): a caller that can record a region gets a percent-based crop overlay drawn by
+//! dragging, a live readout and the Set / Clear actions; a caller that is only looking (the Media
+//! record's own preview dialog) passes `crop: None` and gets the same image and zoom controls with no
+//! region chrome. Because the geometry is percentages of the frame, the region stays valid at any zoom.
+//! The drag math is the framework-free, unit-tested [`rect_from_drag`](vitni_ui::rect_from_drag); the
+//! pointer handlers here are thin closures over it. Committing a region (Set region) or clearing it
+//! supersedes the owning aggregate's media reference (the caller wires `onset`/`onclear` to a
+//! `SetMediaRegion` intent).
 
 use dioxus::prelude::*;
 use vitni_app::Rect;
@@ -39,7 +42,8 @@ impl Zoom {
     }
 }
 
-/// The already-localized labels the viewer renders (built by the caller from the `Localizer`).
+/// The already-localized labels every viewer renders (built by the caller from the `Localizer`): the
+/// zoom group and Close, which both callers show.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaViewerLabels {
     /// The zoom button group's accessible name.
@@ -52,6 +56,14 @@ pub struct MediaViewerLabels {
     pub zoom_150: String,
     /// The 200% zoom label.
     pub zoom_200: String,
+    /// The "Close" action label.
+    pub close: String,
+}
+
+/// The already-localized labels only the crop half renders — required exactly when [`MediaCropTools`]
+/// is present, so a look-only caller never has to supply a string it cannot show.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaCropLabels {
     /// The readout prefix (e.g. "region").
     pub region: String,
     /// The readout shown when no region is set.
@@ -60,8 +72,19 @@ pub struct MediaViewerLabels {
     pub set_region: String,
     /// The "Clear region" action label.
     pub clear_region: String,
-    /// The "Close" action label.
-    pub close: String,
+}
+
+/// The crop half of the viewer: present when the caller can record a region, absent when the viewer is
+/// only for looking (the Media record's own preview). Its absence removes the readout, the Set/Clear
+/// actions, the drag-capture layer and the region rectangle — the image and the zoom group are shared.
+#[derive(Clone, PartialEq)]
+pub struct MediaCropTools {
+    /// The crop-only labels.
+    pub labels: MediaCropLabels,
+    /// Fired when the operator commits a region (Set region).
+    pub onset: EventHandler<Rect>,
+    /// Fired when the operator clears the region (Clear region).
+    pub onclear: EventHandler<()>,
 }
 
 /// Reads the crop frame's on-screen box into `frame_size` (a no-op under SSR, where `get_client_rect`
@@ -76,7 +99,7 @@ fn measure_frame(node: MountedEvent, mut frame_size: Signal<(f64, f64)>) {
 }
 
 /// The percent readout for a region (e.g. `region · 22,18 → 61,44 %`), or the no-region text.
-fn readout(labels: &MediaViewerLabels, region: Option<Rect>) -> String {
+fn readout(labels: &MediaCropLabels, region: Option<Rect>) -> String {
     match region {
         Some(rect) => format!(
             "{} · {},{} → {},{} %",
@@ -90,25 +113,94 @@ fn readout(labels: &MediaViewerLabels, region: Option<Rect>) -> String {
     }
 }
 
-/// The media viewer overlay: zoom controls, the image, a drag-to-draw crop overlay, a live percent
-/// readout, and the Set / Clear / Close actions. Controlled by the caller, which owns whether it is
-/// shown and handles the committed region.
+/// The crop half's toolbar actions — Set region (enabled once a region is drawn) and Clear region.
+/// Renders nothing for a look-only viewer.
+fn crop_actions(tools: Option<&MediaCropTools>, mut region: Signal<Option<Rect>>) -> Element {
+    let Some(tools) = tools else {
+        return rsx! {};
+    };
+    let onset = tools.onset;
+    let onclear = tools.onclear;
+    rsx! {
+        Button {
+            label: tools.labels.set_region.clone(),
+            small: true,
+            disabled: region().is_none(),
+            onclick: move |_| {
+                if let Some(rect) = region() {
+                    onset.call(rect);
+                }
+            },
+        }
+        Button {
+            label: tools.labels.clear_region.clone(),
+            variant: ButtonVariant::Ghost,
+            small: true,
+            onclick: move |_| {
+                region.set(None);
+                onclear.call(());
+            },
+        }
+    }
+}
+
+/// The drag-to-draw layer over the frame plus the region rectangle it draws. Renders nothing for a
+/// look-only viewer, so a plain preview has no invisible capture layer over its image.
+fn crop_overlay(
+    active: bool,
+    mut region: Signal<Option<Rect>>,
+    mut drag_start: Signal<Option<(f64, f64)>>,
+    frame_size: Signal<(f64, f64)>,
+    frame_el: Signal<Option<MountedEvent>>,
+) -> Element {
+    if !active {
+        return rsx! {};
+    }
+    rsx! {
+        div {
+            class: "crop-capture",
+            style: "position:absolute;inset:0",
+            onpointerdown: move |event: PointerEvent| {
+                // Re-measure at drag time: by now the image has laid out, so the frame's
+                // box is its true size (the `onmounted` measure ran before load).
+                if let Some(frame) = frame_el() {
+                    measure_frame(frame, frame_size);
+                }
+                let point = event.element_coordinates();
+                drag_start.set(Some((point.x, point.y)));
+            },
+            onpointermove: move |event: PointerEvent| {
+                let Some(start) = drag_start() else { return };
+                let point = event.element_coordinates();
+                if let Some(rect) = rect_from_drag(start, (point.x, point.y), frame_size()) {
+                    region.set(Some(rect));
+                }
+            },
+            onpointerup: move |_| drag_start.set(None),
+        }
+        if let Some(rect) = region() {
+            div { class: "crop-rect", style: rect_css(&rect) }
+        }
+    }
+}
+
+/// The media viewer: zoom controls, the image, the Close action, and — when the caller passes
+/// [`MediaCropTools`] — a drag-to-draw crop overlay with its live percent readout and Set / Clear
+/// actions. Controlled by the caller, which owns whether it is shown and handles the committed region.
 #[component]
 pub fn MediaViewer(
     /// The media reference being viewed (its image source + existing crop).
     item: MediaRefVm,
-    /// The already-localized labels.
+    /// The already-localized labels every viewer shows.
     labels: MediaViewerLabels,
-    /// Fired when the operator commits a region (Set region).
-    onset: EventHandler<Rect>,
-    /// Fired when the operator clears the region (Clear region).
-    onclear: EventHandler<()>,
+    /// The crop half, when the caller can record a region; `None` for a look-only viewer.
+    crop: Option<MediaCropTools>,
     /// Fired when the operator closes the viewer.
     onclose: EventHandler<()>,
 ) -> Element {
     let mut zoom = use_signal(|| Zoom::Fit);
-    let mut region = use_signal(|| item.crop);
-    let mut drag_start = use_signal(|| None::<(f64, f64)>);
+    let region = use_signal(|| item.crop);
+    let drag_start = use_signal(|| None::<(f64, f64)>);
     let frame_size = use_signal(|| (0.0_f64, 0.0_f64));
     // The crop frame's mounted element, kept so the drag can re-measure it: the frame shrink-wraps the
     // image, which lays out *after* `onmounted` fires, so the initial measure is stale/zero.
@@ -116,7 +208,6 @@ pub fn MediaViewer(
 
     let src = item.src();
     let is_image = item.is_image();
-    let current = region();
 
     let zoom_button = |this: Zoom, label: &str| {
         let active = zoom() == this;
@@ -141,27 +232,11 @@ pub fn MediaViewer(
                     {zoom_button(Zoom::P150, &labels.zoom_150)}
                     {zoom_button(Zoom::P200, &labels.zoom_200)}
                 }
-                span { class: "mv-readout", "{readout(&labels, current)}" }
+                if let Some(tools) = crop.as_ref() {
+                    span { class: "mv-readout", "{readout(&tools.labels, region())}" }
+                }
                 span { class: "spacer" }
-                Button {
-                    label: labels.set_region.clone(),
-                    small: true,
-                    disabled: current.is_none(),
-                    onclick: move |_| {
-                        if let Some(rect) = region() {
-                            onset.call(rect);
-                        }
-                    },
-                }
-                Button {
-                    label: labels.clear_region.clone(),
-                    variant: ButtonVariant::Ghost,
-                    small: true,
-                    onclick: move |_| {
-                        region.set(None);
-                        onclear.call(());
-                    },
-                }
+                {crop_actions(crop.as_ref(), region)}
                 Button {
                     label: labels.close.clone(),
                     variant: ButtonVariant::Ghost,
@@ -184,30 +259,7 @@ pub fn MediaViewer(
                     } else {
                         div { class: "img-glyph", aria_hidden: "true", "🗎" }
                     }
-                    div {
-                        class: "crop-capture",
-                        style: "position:absolute;inset:0",
-                        onpointerdown: move |event: PointerEvent| {
-                            // Re-measure at drag time: by now the image has laid out, so the frame's
-                            // box is its true size (the `onmounted` measure ran before load).
-                            if let Some(frame) = frame_el() {
-                                measure_frame(frame, frame_size);
-                            }
-                            let point = event.element_coordinates();
-                            drag_start.set(Some((point.x, point.y)));
-                        },
-                        onpointermove: move |event: PointerEvent| {
-                            let Some(start) = drag_start() else { return };
-                            let point = event.element_coordinates();
-                            if let Some(rect) = rect_from_drag(start, (point.x, point.y), frame_size()) {
-                                region.set(Some(rect));
-                            }
-                        },
-                        onpointerup: move |_| drag_start.set(None),
-                    }
-                    if let Some(rect) = current {
-                        div { class: "crop-rect", style: rect_css(&rect) }
-                    }
+                    {crop_overlay(crop.is_some(), region, drag_start, frame_size, frame_el)}
                 }
             }
         }

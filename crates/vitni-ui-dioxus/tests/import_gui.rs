@@ -13,7 +13,7 @@ use vitni_ui::{
 use vitni_ui_dioxus::components::{MediaSaveLabels, SelectChoice};
 use vitni_ui_dioxus::screens::{
     ConfirmChrome, ConfirmStage, ImportRowStatus, RecordsLabels, RecordsStage, SaveStage, SourceLabels, SourceStage,
-    SummaryLabels, SummaryStage, media_viewer_labels,
+    SummaryLabels, SummaryStage, media_crop_labels, media_viewer_labels,
 };
 
 fn loc() -> Localizer {
@@ -213,6 +213,7 @@ fn confirm_view() -> Element {
     rsx! {
         ConfirmStage {
             viewer_labels: media_viewer_labels(&loc()),
+            crop_labels: media_crop_labels(&loc()),
             chrome: ConfirmChrome {
                 heading: "Confirm record".to_owned(),
                 provenance_heading: "What will be recorded".to_owned(),
@@ -244,6 +245,7 @@ fn confirm_no_scan_view() -> Element {
     rsx! {
         ConfirmStage {
             viewer_labels: media_viewer_labels(&loc()),
+            crop_labels: media_crop_labels(&loc()),
             chrome: ConfirmChrome {
                 heading: "Confirm record".to_owned(),
                 provenance_heading: "What will be recorded".to_owned(),

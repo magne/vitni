@@ -5,7 +5,9 @@ use vitni_ui::{
 };
 
 use super::prelude::*;
-use crate::components::{MediaViewer, MediaViewerLabels, PickerOptions, ProvenanceAxis, ProvenanceBlock};
+use crate::components::{
+    MediaCropLabels, MediaCropTools, MediaViewer, MediaViewerLabels, PickerOptions, ProvenanceAxis, ProvenanceBlock,
+};
 use crate::i18n::Chrome;
 use crate::services::{Services, resolve_record_name};
 use crate::shell::nav_state::EditKey;
@@ -397,7 +399,7 @@ fn media_card(
     }
 }
 
-/// The localized labels the media viewer renders, built from the data localizer.
+/// The localized labels every media viewer renders (zoom group + Close), built from the data localizer.
 pub fn media_viewer_labels(loc: &Localizer) -> MediaViewerLabels {
     MediaViewerLabels {
         zoom_group: loc.media_viewer_zoom_group(),
@@ -405,11 +407,17 @@ pub fn media_viewer_labels(loc: &Localizer) -> MediaViewerLabels {
         zoom_100: loc.media_viewer_zoom(100),
         zoom_150: loc.media_viewer_zoom(150),
         zoom_200: loc.media_viewer_zoom(200),
+        close: loc.action_label(ActionLabel::Close),
+    }
+}
+
+/// The localized labels only a viewer with [`MediaCropTools`] renders — the readout and Set / Clear.
+pub fn media_crop_labels(loc: &Localizer) -> MediaCropLabels {
+    MediaCropLabels {
         region: loc.media_viewer_region(),
         no_region: loc.media_viewer_no_region(),
         set_region: loc.media_viewer_set_region(),
         clear_region: loc.media_viewer_clear_region(),
-        close: loc.action_label(ActionLabel::Close),
     }
 }
 
@@ -427,14 +435,17 @@ fn media_viewer_overlay(loc: &Localizer, state: MediaTabState) -> Element {
         MediaViewer {
             item: item.clone(),
             labels: media_viewer_labels(loc),
-            onset: move |crop: Rect| {
-                on_region.call((set_item.assertion_id.clone(), Some(crop), set_item.caption.clone()));
-                viewing.set(None);
-            },
-            onclear: move |()| {
-                on_region.call((clear_item.assertion_id.clone(), None, clear_item.caption.clone()));
-                viewing.set(None);
-            },
+            crop: Some(MediaCropTools {
+                labels: media_crop_labels(loc),
+                onset: EventHandler::new(move |crop: Rect| {
+                    on_region.call((set_item.assertion_id.clone(), Some(crop), set_item.caption.clone()));
+                    viewing.set(None);
+                }),
+                onclear: EventHandler::new(move |()| {
+                    on_region.call((clear_item.assertion_id.clone(), None, clear_item.caption.clone()));
+                    viewing.set(None);
+                }),
+            }),
             onclose: move |()| viewing.set(None),
         }
     }

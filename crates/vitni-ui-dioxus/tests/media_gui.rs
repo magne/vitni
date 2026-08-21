@@ -1,13 +1,14 @@
 //! SSR assertions for the Phase 8 media GUI (ADR 0017 §GUI): the gallery card (real thumbnail vs
-//! glyph fallback by MIME, caption, crop outline), the media viewer overlay (image, zoom controls,
-//! percent readout, crop rectangle, Set/Clear region actions), and the media save dialog (fields +
-//! live path preview). Rendered to a string over `vitni-ui`'s framework-free view-models.
+//! glyph fallback by MIME, caption, crop outline), the media viewer in both shapes (with crop tools:
+//! image, zoom controls, percent readout, crop rectangle, Set/Clear region actions — and without them,
+//! zoom and Close alone), and the media save dialog (fields + live path preview). Rendered to a string
+//! over `vitni-ui`'s framework-free view-models.
 
 use dioxus::prelude::*;
 use vitni_app::Rect;
 use vitni_ui::{Localizer, MediaRefVm, MediaSaveDraft};
-use vitni_ui_dioxus::components::{MediaSaveDialog, MediaSaveLabels, MediaViewer};
-use vitni_ui_dioxus::screens::{media_gallery, media_viewer_labels};
+use vitni_ui_dioxus::components::{MediaCropTools, MediaSaveDialog, MediaSaveLabels, MediaViewer};
+use vitni_ui_dioxus::screens::{media_crop_labels, media_gallery, media_viewer_labels};
 
 fn loc() -> Localizer {
     Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
@@ -88,8 +89,11 @@ fn nordic_viewer_view() -> Element {
         MediaViewer {
             item: nordic_image_ref(),
             labels: media_viewer_labels(&loc),
-            onset: |_: Rect| {},
-            onclear: |()| {},
+            crop: Some(MediaCropTools {
+                labels: media_crop_labels(&loc),
+                onset: EventHandler::new(|_: Rect| {}),
+                onclear: EventHandler::new(|()| {}),
+            }),
             onclose: |()| {},
         }
     }
@@ -175,8 +179,24 @@ fn viewer_view() -> Element {
         MediaViewer {
             item: image_ref(),
             labels: media_viewer_labels(&loc),
-            onset: |_: Rect| {},
-            onclear: |()| {},
+            crop: Some(MediaCropTools {
+                labels: media_crop_labels(&loc),
+                onset: EventHandler::new(|_: Rect| {}),
+                onclear: EventHandler::new(|()| {}),
+            }),
+            onclose: |()| {},
+        }
+    }
+}
+
+/// The viewer without crop tools — the Media record's own preview dialog, which is only for looking.
+fn viewer_view_zoom_only() -> Element {
+    let loc = loc();
+    rsx! {
+        MediaViewer {
+            item: image_ref(),
+            labels: media_viewer_labels(&loc),
+            crop: None,
             onclose: |()| {},
         }
     }
@@ -206,6 +226,24 @@ fn viewer_renders_image_zoom_controls_readout_and_actions() {
     // The region actions.
     assert!(html.contains("Set region"), "set region action: {html}");
     assert!(html.contains("Clear region"), "clear region action: {html}");
+}
+
+#[test]
+fn a_viewer_without_crop_tools_keeps_zoom_and_close_and_drops_every_region_control() {
+    let html = render(viewer_view_zoom_only);
+    assert!(
+        html.contains("src=\"/media/portraits/john.jpg\""),
+        "the image still renders: {html}"
+    );
+    for needle in ["Fit", "100%", "150%", "200%", "Close"] {
+        assert!(html.contains(needle), "expected {needle:?} in: {html}");
+    }
+    for needle in ["mv-readout", "crop-rect", "crop-capture", "Set region", "Clear region"] {
+        assert!(
+            !html.contains(needle),
+            "a look-only viewer renders no {needle:?}: {html}"
+        );
+    }
 }
 
 fn save_labels() -> MediaSaveLabels {

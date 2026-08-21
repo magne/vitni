@@ -111,11 +111,11 @@ pub use research_note::{
 pub use shared::{
     AttachLink, AttachPicker, CreateFormFocus, MediaTabState, RegisterFields, RetractSubject, RetractTarget,
     RowRetract, RowVerb, attach_link_field, attach_link_form, create_record_frame, create_record_header,
-    finish_attach_create, media_gallery, media_tab, media_viewer_labels, non_empty, picker_selection_id,
-    provenance_block, provenance_block_dna, provenance_claim_row, provenance_cue, register_fields_form,
-    restriction_display, retract_panel, retract_side_panel, row_actions_cell, source_cue, source_media_type_choices,
-    tag_chips, use_attach_picker, use_attach_save, use_detail_tab, use_existing_picker, use_record_step,
-    use_record_undo,
+    finish_attach_create, media_crop_labels, media_gallery, media_tab, media_viewer_labels, non_empty,
+    picker_selection_id, provenance_block, provenance_block_dna, provenance_claim_row, provenance_cue,
+    register_fields_form, restriction_display, retract_panel, retract_side_panel, row_actions_cell, source_cue,
+    source_media_type_choices, tag_chips, use_attach_picker, use_attach_save, use_detail_tab, use_existing_picker,
+    use_record_step, use_record_undo,
 };
 pub use source::{
     SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_record_fields,
