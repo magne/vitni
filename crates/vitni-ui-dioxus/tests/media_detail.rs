@@ -31,7 +31,7 @@ use vitni_ui_dioxus::components::TabItem;
 use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
     MediaEditForm, RecordActionLabels, RecordEditState, citations_table, media_attributes_table, media_overview,
-    media_used_by, notes_table, record_head_actions, tags_panel,
+    media_preview_dialog, media_used_by, notes_table, record_head_actions, tags_panel,
 };
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
@@ -379,6 +379,69 @@ fn the_checksum_is_locked_and_the_date_is_a_structured_editor() {
         assert!(
             html.contains(needle),
             "the structured date editor renders {needle:?}:\n{html}"
+        );
+    }
+}
+
+/// The preview dialog with `viewing` set — the state a click on the preview frame puts the pane in.
+fn media_preview_dialog_open() -> Element {
+    let loc = loc();
+    let viewing = use_signal(|| true);
+    rsx! { {media_preview_dialog(&loc, &sample(), viewing)} }
+}
+
+#[test]
+fn the_preview_frame_is_a_button_that_opens_the_image() {
+    // The Media record was the one record screen that never rendered `MediaViewer`, so a media
+    // object's own page was the only place its image could not be opened.
+    let html = render(media_view);
+    assert!(
+        html.contains(r#"<button class="media-open" type="button" aria-label="Open john-smith-portrait.jpg">"#),
+        "the preview frame is an accessible button:\n{html}"
+    );
+    let button = html.find("media-open").expect("the open button renders");
+    let image = html.find("media-full").expect("the preview image renders");
+    assert!(button < image, "the button wraps the image, not the reverse:\n{html}");
+}
+
+#[test]
+fn the_glyph_placeholder_is_not_clickable() {
+    // There is nothing to open, so an inert div is honest — a button would promise a dialog.
+    let html = render(media_view_outside_the_workspace);
+    assert!(
+        !html.contains("media-open"),
+        "an unservable location offers no open button:\n{html}"
+    );
+}
+
+#[test]
+fn the_preview_dialog_is_closed_until_the_frame_is_clicked() {
+    let html = render(media_view);
+    assert!(
+        !html.contains("overlay"),
+        "no dialog layer is mounted before the click:\n{html}"
+    );
+}
+
+#[test]
+fn the_open_preview_dialog_is_a_wide_modal_holding_a_look_only_viewer() {
+    let html = render(media_preview_dialog_open);
+    for needle in [
+        r#"class="overlay""#,
+        r#"class="modal modal-wide""#,
+        r#"role="dialog""#,
+        r#"aria-modal="true""#,
+        "john-smith-portrait.jpg",
+        "Fit",
+        "200%",
+        "Close",
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
+    for needle in ["Set region", "Clear region", "mv-readout", "crop-capture"] {
+        assert!(
+            !html.contains(needle),
+            "the record's own preview records no region, so no {needle:?}:\n{html}"
         );
     }
 }

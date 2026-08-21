@@ -1,7 +1,7 @@
 use super::{
     ActionLabel, AttachedRefVm, CitationRefVm, DateDraft, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest,
-    MediaEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, line_label, media_asset_src,
-    media_is_image, non_blank,
+    MediaEdit, MediaRefVm, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, line_label,
+    media_asset_src, media_is_image, non_blank,
 };
 
 /// A record that references a media object or note (Media "Used by" / Note "References"): its kind
@@ -145,6 +145,22 @@ impl MediaDetail {
             return Some(web.clone());
         }
         media_asset_src(self.file_path.as_deref())
+    }
+
+    /// The media reference the Overview's preview dialog views: this same object, addressed the way the
+    /// viewer addresses one. Its `path` is seeded **web-first**, because [`MediaRefVm::src`] has no web
+    /// branch of its own — so the dialog loads exactly the URL [`Self::preview_src`] shows. The dialog
+    /// records no region, so there is no attach assertion to name (`assertion_id` is empty).
+    #[must_use]
+    pub fn viewer_ref(&self) -> MediaRefVm {
+        MediaRefVm {
+            human_id: self.human_id.clone(),
+            assertion_id: String::new(),
+            caption: Some(self.title.clone()),
+            crop: None,
+            path: self.web_path.clone().or_else(|| self.file_path.clone()),
+            mime: self.mime.clone(),
+        }
     }
 
     /// The `mime · date` line the detail header shows under the title (`media.html:62`) — the same
@@ -618,6 +634,30 @@ mod media_preview_tests {
     #[test]
     fn a_recorded_non_image_mime_beats_the_extension() {
         assert!(!detail(Some("media/scans/deed.jpg"), None, Some("application/pdf")).is_image());
+    }
+
+    #[test]
+    fn a_web_only_records_dialog_loads_exactly_the_url_its_preview_shows() {
+        // `MediaRefVm::src` has no web branch of its own, so the reference must be seeded web-first or
+        // the dialog would ask the asset handler for a URL it cannot serve.
+        let detail = detail(None, Some("https://example.org/ada.jpg"), Some("image/jpeg"));
+        assert_eq!(detail.viewer_ref().src(), detail.preview_src());
+        assert_eq!(
+            detail.viewer_ref().src().as_deref(),
+            Some("https://example.org/ada.jpg")
+        );
+    }
+
+    #[test]
+    fn a_stored_files_dialog_loads_exactly_the_url_its_preview_shows() {
+        let detail = detail(Some("media/portraits/ada.jpg"), None, Some("image/jpeg"));
+        assert_eq!(detail.viewer_ref().src(), detail.preview_src());
+    }
+
+    #[test]
+    fn the_dialogs_reference_classifies_the_file_the_way_the_preview_does() {
+        let detail = detail(Some("media/deeds/deed.pdf"), None, None);
+        assert_eq!(detail.viewer_ref().is_image(), detail.is_image());
     }
 }
 

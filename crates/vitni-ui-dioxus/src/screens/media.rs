@@ -1,4 +1,7 @@
 use super::prelude::*;
+use super::shared::media_viewer_labels;
+// The preview dialog: the shared viewer at its look-only shape, inside the shared modal.
+use crate::components::{MediaViewer, Modal};
 // The media attribute row view-model (seeds the per-row attribute edit).
 use vitni_ui::MediaAttributeVm;
 
@@ -544,10 +547,10 @@ pub fn media_attributes_table(
     }
 }
 
-/// The Overview tab, read-first (`record-editing.html` §1/§2): a preview placeholder, the media
-/// object's scalar record (id · paths · MIME, with checksum/date locked) as read boxes, and the "Used
-/// by" card. Entering edit mode (via the sticky-header Edit) swaps the record fields to inputs and,
-/// while dirty, shows the provenance block; the preview and "Used by" cards are hidden in edit mode.
+/// The Overview tab, read-first (`record-editing.html` §1/§2): the preview, the media object's scalar
+/// record (paths · MIME, with checksum/date locked) as read boxes, and the "Used by" card. Entering
+/// edit mode (via the sticky-header Edit) swaps the record fields to inputs and, while dirty, shows the
+/// provenance block; the preview and "Used by" cards are hidden in edit mode.
 pub fn media_overview(loc: &Localizer, detail: &MediaDetail, record: RecordEditState<vitni_ui::MediaDraft>) -> Element {
     if record.editing.read().to_owned() {
         return rsx! {
@@ -555,21 +558,61 @@ pub fn media_overview(loc: &Localizer, detail: &MediaDetail, record: RecordEditS
             {record_edit_provenance(loc, record)}
         };
     }
+    let viewing = use_signal(|| false);
     rsx! {
         Card { title: loc.media_preview(),
-            if let (true, Some(src)) = (detail.is_image(), detail.preview_src()) {
-                div { class: "media-preview img-frame img-photo",
-                    img { class: "media-full", src: "{src}", alt: "{detail.title}", loading: "lazy" }
-                }
-            } else {
-                div { class: "media-preview faint", aria_hidden: "true", "📷" }
-            }
+            {media_preview_frame(loc, detail, viewing)}
             div { class: "muted", "{detail.title}" }
         }
         div { class: "grid-2",
             {media_record_fields(loc, record)}
             Card { title: loc.field_label("used-by"),
                 {media_used_by(loc, &detail.used_by)}
+            }
+        }
+        {media_preview_dialog(loc, detail, viewing)}
+    }
+}
+
+/// The Overview preview frame: a button opening the viewer dialog when there is an image to open (the
+/// gallery card's own pattern, `screens/shared.rs`), and an inert 📷 placeholder when there is not — a
+/// button there would promise a dialog with nothing in it.
+fn media_preview_frame(loc: &Localizer, detail: &MediaDetail, mut viewing: Signal<bool>) -> Element {
+    let Some(src) = detail.preview_src().filter(|_| detail.is_image()) else {
+        return rsx! {
+            div { class: "media-preview faint", aria_hidden: "true", "📷" }
+        };
+    };
+    rsx! {
+        button {
+            class: "media-open",
+            r#type: "button",
+            aria_label: loc.media_viewer_open(&detail.title),
+            onclick: move |_| viewing.set(true),
+            div { class: "media-preview img-frame img-photo",
+                img { class: "media-full", src: "{src}", alt: "{detail.title}", loading: "lazy" }
+            }
+        }
+    }
+}
+
+/// The preview dialog: the shared [`MediaViewer`] at its look-only shape (zoom + Close, no crop tools)
+/// inside a wide [`Modal`]. The `Modal` draws no ✕ of its own, so the viewer's Close is the visible
+/// dismiss control; the scrim and `Esc` dismiss it too.
+pub fn media_preview_dialog(loc: &Localizer, detail: &MediaDetail, mut viewing: Signal<bool>) -> Element {
+    rsx! {
+        Modal {
+            title: detail.title.clone(),
+            open: viewing(),
+            wide: true,
+            close_label: loc.action_label(ActionLabel::Close),
+            onclose: move |()| viewing.set(false),
+            footer: rsx! {},
+            MediaViewer {
+                item: detail.viewer_ref(),
+                labels: media_viewer_labels(loc),
+                crop: None,
+                onclose: move |()| viewing.set(false),
             }
         }
     }

@@ -78,7 +78,9 @@ pub use import::{
     RecordsStage, SaveStage, SourceLabels, SourceStage, SummaryLabels, SummaryStage, WizardLabels,
 };
 pub use map_shared::{DrawTool, MapControlLabels, MapDraft, MapZoomReadout, MovedCamera, effective_date_choice};
-pub use media::{MediaEditForm, media_attributes_table, media_overview, media_record_fields, media_used_by};
+pub use media::{
+    MediaEditForm, media_attributes_table, media_overview, media_preview_dialog, media_record_fields, media_used_by,
+};
 pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen, merge_blocked_card, merge_wizard_foot};
 pub use note::{NoteEditForm, note_content_tab, note_language_tab, note_record_fields, note_references_table};
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
