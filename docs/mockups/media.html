@@ -62,7 +62,6 @@
           <div class="detail-sub">image/jpeg · c.1900</div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge">O0050</span>
-            <span class="badge">image/jpeg</span>
             <!-- This media object is unrestricted, so the header shows no restriction group at all.
                  A restricted record shows the kinds in force as inert `.resn-static` pills; changing
                  them is part of the record's own edit — the Restrictions row in the card below. -->
@@ -91,10 +90,15 @@
         <div class="tab-pane active" data-pane="overview">
           <!-- Large preview: a real image placeholder (in the app, img src="/media/<rel>") -->
           <div class="card" style="text-align:center">
-            <div class="img-frame img-photo" style="height:320px">
-              <div class="img-cap">Preview · john-smith-portrait.jpg</div>
-            </div>
-            <div class="muted" style="margin-top:8px">Served by the desktop asset handler at
+            <h3>Preview</h3>
+            <button class="media-open" type="button" aria-label="Open john-smith-portrait.jpg">
+              <div class="media-preview img-frame img-photo">
+                <div class="img-glyph" aria-hidden="true">📷</div>
+              </div>
+            </button>
+            <div class="muted">john-smith-portrait.jpg</div>
+            <div class="muted" style="margin-top:8px">Clicking the frame opens the image in the
+              viewer dialog below. Served by the desktop asset handler at
               <span class="mono">/media/portraits/john-smith-portrait.jpg</span> — no multi-MB data URIs.</div>
             <div class="muted" style="font-size:var(--fs-xs);margin-top:6px;text-align:left">How that URL is
               resolved (one owner, so a stored path and a rendered <span class="mono">src</span> cannot
@@ -173,6 +177,39 @@
             </div>
           </div>
 
+          <!-- Preview-dialog specimen: the same viewer without the crop half (`crop: None`) -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Preview-dialog specimen — what the
+            Preview frame above opens: the same viewer in a wide modal, minus the crop half. No readout, no
+            Set/Clear region and no crop rectangle, because this object's own page records no region; the
+            viewer's Close is the visible dismiss control (the modal draws no ✕ of its own), and the scrim
+            and <span class="mono">Esc</span> dismiss it too:</div>
+          <div class="overlay" style="position:relative;inset:auto;display:block;background:transparent;padding:0;margin-top:4px">
+            <button class="modal-scrim" type="button" aria-label="Close"></button>
+            <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="john-smith-portrait.jpg" tabindex="-1" data-focus-trap="true">
+              <div class="m-head">john-smith-portrait.jpg</div>
+              <div class="m-body">
+                <div class="card media-viewer">
+                  <div class="mv-toolbar">
+                    <span class="mv-zoom" role="group" aria-label="Zoom">
+                      <button class="btn sm primary">Fit</button>
+                      <button class="btn sm">100%</button>
+                      <button class="btn sm">150%</button>
+                      <button class="btn sm">200%</button>
+                    </span>
+                    <span class="spacer"></span>
+                    <button class="btn sm ghost">Close</button>
+                  </div>
+                  <div class="mv-canvas">
+                    <div class="crop-frame img-frame img-photo" style="height:360px">
+                      <div class="img-glyph" aria-hidden="true">📷</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="m-foot"></div>
+            </div>
+          </div>
+
           <!-- Gallery specimen: thumbnails + caption + crop-outline state -->
           <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Gallery specimen — how a media
             reference renders on a Person/Family (<span class="mono">media_gallery</span>): thumbnail, caption,
@@ -219,6 +256,7 @@
               <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Web path</span><input class="in" style="flex:1;min-width:120px" value="https://archive.example.org/m/O0050.jpg"></div>
               <div class="fact-row"><span class="field-label" style="width:110px;margin:0">MIME</span><input class="in" style="width:160px" value="image/jpeg"></div>
               <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Date</span><input class="in" style="width:130px" value="c.1900"><select class="in" style="width:auto" aria-label="Confidence"><option selected>— (no judgment recorded)</option><option>Very low</option><option>Low</option><option>Normal</option><option>High</option><option>Very high</option></select></div>
+              <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Checksum</span><span class="grow"><input class="in mono" style="width:100%;font-size:var(--fs-xs)" value="sha256:9f3a8c12d4e7b6a05f1e2c9d8b7a64530fae21cc09bb47d3e6a1f8c2b5d409e7" disabled></span></div>
               <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Restrictions</span><span class="grow">
                 <span class="resn-set" role="group" aria-label="Privacy restrictions">
                   <button class="resn" type="button" data-kind="confidential" aria-pressed="false">Confidential</button>
@@ -285,7 +323,7 @@
 
         <!-- HISTORY -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b> — an audit trail that comes free from the event-sourced core. Any entry can be undone.</div>
           <div class="timeline">
             <div class="tl-item">
               <div class="tl-when">2026-06-20 10:18</div>
