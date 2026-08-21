@@ -1,18 +1,25 @@
 # The viewer's four zoom buttons did nothing at all, and SSR could not see it: the markup was right —
-# an `aria-pressed` toggle and an inline width per step — while the geometry that width resolved
-# against never existed. Three causes stacked, all of them CSS:
+# an `aria-pressed` toggle and a width per step — but nothing the buttons changed reached the layout.
+# What this scenario measured, once it could drive the real thing:
 #
-#   * `.media-full { width:100% }` (the record card's fixed-frame rule) outranked `Fit`'s
-#     `max-width:100%`, so **Fit and 100% rendered identically**;
-#   * `.crop-frame`/`.img-frame` both `overflow:hidden`, so a 150%/200% image was **clipped at the
-#     frame** and `.mv-canvas`'s `overflow:auto` never got the chance to scroll;
+#   * the zoom was an inline `style` on the frame, and a width set there **applies at mount and is
+#     never updated after**. The same `width:2000px` gives a 2000px frame as the mount-time value and
+#     leaves it at the canvas width as an update. So whichever step the viewer opened at was the only
+#     one that ever took, and every pair of steps rendered identically — the first run of this
+#     scenario failed both its `differ`s at RMSE 0.0000.
+#
+# Two more things had to be true for a zoom to resolve once it did apply, and neither was:
+#
 #   * the frame was `display:inline-block` — shrink-to-fit — and a percentage-width child contributes
 #     nothing to intrinsic width, so there was **no definite width for the percentage to resolve
 #     against**. Circular, and browser-dependent.
+#   * `.media-full`'s fixed-frame rules (for the record card's 320px preview) fought it: `width:100%`
+#     outranks a `Fit` cap, `height:100%` is circular against a frame whose height comes from the
+#     image, and `object-fit:contain` letterboxes a box that already carries the image's ratio.
 #
-# The fix moves the zoom onto the *frame*: it stays exactly the image's box (so percent crop geometry
-# stays zoom-invariant, ADR 0017 §GUI) and is a definite percentage of the canvas at every step above
-# Fit, which is what makes the canvas scroll instead of the frame clipping.
+# The fix moves the zoom onto the *frame*, as a class: it stays exactly the image's box (so percent crop
+# geometry stays zoom-invariant, ADR 0017 §GUI) and is a definite percentage of the canvas at every step
+# above Fit, which is what makes the canvas scroll instead of the frame clipping.
 #
 # The seeded image is 480x480 and the dialog's canvas is ~1030 wide, so the two states this scenario
 # separates are visibly different sizes: at Fit the image is 480 wide and stops at x 1119, at 100% it

@@ -39,9 +39,11 @@ impl Zoom {
     /// step is a definite percentage of `.mv-canvas`'s content box, which is what makes the canvas
     /// scroll instead of the frame clipping.
     ///
-    /// A **class**, not an inline `style`: measured in the real webview, the frame's `style` attribute
-    /// is applied when it mounts and then never updated again, so a zoom change moved nothing. Its
-    /// `class` does update — the toolbar's own active-button classes prove it in the same shots.
+    /// A **class**, not an inline `style`. Measured in the real webview: a width set in the frame's
+    /// `style` applies when it mounts and is then never updated again — the same `width:2000px` gives a
+    /// 2000px frame as the mount-time value and leaves it at the canvas width as an update. So no zoom
+    /// button moved anything at all. Its `class` does update; the toolbar's own active-button classes
+    /// change in the very same screenshots.
     const fn frame_class(self) -> &'static str {
         match self {
             Zoom::Fit => "crop-frame img-frame mv-frame zoom-fit",
@@ -60,8 +62,9 @@ mod zoom_geometry_tests {
 
     #[test]
     fn fit_and_one_hundred_percent_are_not_the_same_geometry() {
-        // They rendered identically: `.media-full`'s `width:100%` outranked Fit's `max-width:100%`, so
-        // both steps came out at the frame's width.
+        // They rendered identically, and every other pair did too: the geometry was an inline `style`
+        // that the frame only ever applied at mount, so whichever step was current when the viewer
+        // opened was the only one that took.
         assert_ne!(Zoom::Fit.frame_class(), Zoom::P100.frame_class());
     }
 
