@@ -122,6 +122,53 @@ label = "crop: draw a fresh region, starting outside the moved one"
 do = "shot"
 name = "redrawn"
 
+[[step]]
+do = "click"
+at = [1250, 843]
+label = "crop: focus the se grip (a click alone must not move it)"
+
+[[step]]
+do = "shot"
+name = "grip-focused"
+
+[[step]]
+do = "key"
+chord = "Right"
+label = "grip: arrow-resize one percent"
+
+[[step]]
+do = "key"
+chord = "Right"
+label = "grip: and again"
+
+[[step]]
+do = "key"
+chord = "Right"
+label = "grip: and again"
+
+[[step]]
+do = "shot"
+name = "grip-key-resized"
+
+[[step]]
+do = "key"
+chord = "shift+Down"
+label = "grip: Shift + arrow moves the whole region"
+
+[[step]]
+do = "key"
+chord = "shift+Down"
+label = "grip: and again"
+
+[[step]]
+do = "key"
+chord = "shift+Down"
+label = "grip: and again"
+
+[[step]]
+do = "shot"
+name = "grip-key-moved"
+
 [[assert]]
 kind = "differ"
 shots = ["viewer-open", "region-drawn"]
@@ -162,3 +209,15 @@ kind = "differ"
 shots = ["region-moved", "redrawn"]
 region = [755, 638, 220, 22]
 because = "a press on empty frame still draws a fresh region — the grips must not have stolen the capture layer"
+
+[[assert]]
+kind = "differ"
+shots = ["grip-focused", "grip-key-resized"]
+region = [755, 638, 220, 22]
+because = "the grips are focusable buttons: three Right presses resize the region by three percent"
+
+[[assert]]
+kind = "differ"
+shots = ["grip-key-resized", "grip-key-moved"]
+region = [755, 638, 220, 22]
+because = "Shift + arrow moves the region from the keyboard, so neither gesture is pointer-only"

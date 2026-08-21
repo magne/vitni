@@ -58,7 +58,7 @@ impl Zoom {
 }
 
 #[cfg(test)]
-mod zoom_geometry_tests {
+mod geometry_tests {
     use super::Zoom;
 
     const STEPS: [Zoom; 4] = [Zoom::Fit, Zoom::P100, Zoom::P150, Zoom::P200];
@@ -96,6 +96,34 @@ mod zoom_geometry_tests {
                 "{step:?} carries the frame base class the zoom modifiers hang off: {class}"
             );
         }
+    }
+
+    #[test]
+    fn a_keyboard_nudge_is_scaled_from_percent_to_the_frames_pixels() {
+        // The move path takes pixels; handing it the percentage directly nudged the region by one pixel,
+        // which rounds to no percent at all and made Shift+arrow silently inert.
+        assert_eq!(super::percent_step_px((1.0, 0.0), (1200.0, 600.0)), (12.0, 0.0));
+        assert_eq!(super::percent_step_px((0.0, -1.0), (1200.0, 600.0)), (0.0, -6.0));
+    }
+
+    #[test]
+    fn a_grips_corner_resolves_to_its_own_edges_in_pixels() {
+        let rect = vitni_app::Rect {
+            left: 10,
+            top: 20,
+            width: 30,
+            height: 40,
+        };
+        // The `se` grip sits at 40%,60% of a 200x200 frame; a +1% nudge takes it to 41%,61%.
+        assert_eq!(
+            super::corner_point(rect, super::CropCorner::SouthEast, (200.0, 200.0), (1.0, 1.0)),
+            (82.0, 122.0)
+        );
+        // The `nw` grip is the origin, and an unstepped read is the corner itself.
+        assert_eq!(
+            super::corner_point(rect, super::CropCorner::NorthWest, (200.0, 200.0), (0.0, 0.0)),
+            (20.0, 40.0)
+        );
     }
 
     #[test]
@@ -291,7 +319,7 @@ fn crop_handle(corner: CropCorner, labels: &MediaCropLabels, state: CropGrips) -
                 let Some(current) = region() else { return };
                 let bounds = frame_size();
                 let next = if event.modifiers().shift() {
-                    rect_moved(current, step, bounds)
+                    rect_moved(current, percent_step_px(step, bounds), bounds)
                 } else {
                     rect_resized(current, corner, corner_point(current, corner, bounds, step), bounds)
                 };
@@ -304,8 +332,9 @@ fn crop_handle(corner: CropCorner, labels: &MediaCropLabels, state: CropGrips) -
     }
 }
 
-/// One percent of the frame in pixels, in the direction an arrow key points, or `None` for any other
-/// key. One percent because that is the geometry's own resolution — a smaller step rounds to nothing.
+/// One percent, in the direction an arrow key points, or `None` for any other key. One percent because
+/// that is the geometry's own resolution — a smaller step rounds away. The unit is *percent*: the resize
+/// path adds it to a corner's percentage, and the move path scales it by the frame first.
 fn arrow_step(event: &KeyboardEvent) -> Option<(f64, f64)> {
     match event.key() {
         Key::ArrowLeft => Some((-1.0, 0.0)),
@@ -314,6 +343,13 @@ fn arrow_step(event: &KeyboardEvent) -> Option<(f64, f64)> {
         Key::ArrowDown => Some((0.0, 1.0)),
         _ => None,
     }
+}
+
+/// A percentage step in frame pixels. `rect_moved` takes pixels while [`arrow_step`] speaks percent, and
+/// passing the percentage straight through moves the region by a *pixel* — 0.08% of a 1213px frame,
+/// which rounds away to no move at all.
+fn percent_step_px(step: (f64, f64), bounds: (f64, f64)) -> (f64, f64) {
+    (step.0 / 100.0 * bounds.0, step.1 / 100.0 * bounds.1)
 }
 
 /// Where `corner` sits in frame pixels, offset by `step` percent — the synthetic pointer position a
