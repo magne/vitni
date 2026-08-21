@@ -227,6 +227,10 @@ plugin-UI vocabulary tail, upstream-blocked dependencies, assisted-import residu
 column chooser / list virtualization, geocoding, and the `place_parent` index. All `priority/low` or
 `priority/medium`, no milestone.
 
+The **media checksum gap** (#359) is filed here rather than in `0.9`: nothing in the system ever records
+a checksum, so the record's locked row is permanently blank — a data-completeness hole, not a screen
+reporting something false, which is the line `0.9` draws. It came out of #309's audit of the same screen.
+
 Three items from the 2026-08-12 walkthrough stay here too, and are not filed at all: expandable
 collection nodes with counts on the Dashboard and the History tab (a feature needing a disclosure
 primitive that does not exist yet), media edit-mode file handling (existence flagging, download from a

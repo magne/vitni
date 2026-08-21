@@ -117,14 +117,16 @@ already filed against it keep resolving their [`#tags`](#tags) anchor.
   placeholder. Honest, not useful: previewing it needs either a second asset-handler route scoped to a
   configured set of readable roots, or an explicit "copy into the workspace" action reusing the media
   save dialog. Neither is designed.
-- **The Media record diverges from `mockups/media.html`** — the File card repeats the human id the
-  header already shows (`media.rs:76-91` vs `:415`, and the mockup's File card starts at *File path*,
-  `media.html:118-120`); and the header passes no subtitle and no MIME badge (`media.rs:412-421` vs
-  `media.html:62,65`). Two of the four halves this bullet opened with are closed: `DraftText` now
-  renders the mockup's same-line `.fact-row` (#310 migrated every record row, `components/draft_field.rs`
-  at the media mockup's 90px label column), and the "Used by" card is a real `table.tbl` with the
-  mockup's three headers rather than misaligned `.fact-row` divs — `247b6fb` routed it through
-  `attached_table`, so its columns line up by construction. — #309
+- **Nothing ever records a media checksum**, so the record's locked *Checksum* row is permanently blank.
+  The digest is computed in exactly one place — `vitni-plugin-host/src/media.rs:147` — handed to the
+  guest as `stored-media.checksum` (`wit/host.wit:896`) and dropped: `host.wit`'s `commands` interface
+  has no `set-media-checksum`, so `plugins/digitalarkivet-import/src/lib.rs:379` logs it and moves on.
+  The command itself exists all the way down (`MediaCommand::SetChecksum`, and `vitni media
+  set-checksum` reaches it), but `MediaEdit::SetChecksum` is declared and handled while being
+  constructed nowhere, and `MediaDraft` deliberately never diffs the locked field. Neither
+  `vitni-gramps-xml`'s `MediaObject` nor `vitni-gedcom`'s media model has a checksum field at all, so an
+  import has nothing to pass on either. Only an operator typing the digest can fill it. ADR 0017 §71-80
+  intended the `media-store` hash to reach the aggregate; that hop was never built. — #359
 - **Media edit mode cannot check, fetch, or type a file** — *File path* is a plain `DraftText`
   (`media.rs:88-101`) with no existence check, and any check added must **flag, never block**: a
   record for a file that is not on this machine is legitimate. There is no download when *Web path*
@@ -621,11 +623,11 @@ The `area/docs` label already existed with no `###` home; this is it.
   `tests/record_row_css.rs` do compare both sheets rule-for-rule, but each over a *named list* — the
   ghost-row rules and the record-row rules — so everything outside those two lists is ungated. Measured
   by stripping comments from both sheets, descending into their `@media` blocks and comparing rules by
-  selector: **30 app rules have no mockup counterpart**, spanning 37 distinct selectors. Whole components
+  selector: **24 app rules have no mockup counterpart**, spanning 31 distinct selectors. Whole components
   are absent — `.switch` (+ `[aria-checked="true"]`), `.menu-anchor`/`.menu-scrim`/`.new-record-menu`
   (the mockup sheet names `.menu-scrim` only in a comment), `.help-browser`,
-  `.prov-anchor`/`.prov-backdrop`, the seven-rule `.media-card`/`.media-open`/`.media-thumb`/
-  `.media-full`/`.media-caption`/`.media-preview`/`.media-save-preview` set, `.crop-capture` —
+  `.prov-anchor`/`.prov-backdrop`, `.media-save-preview` and `.crop-capture` (what is left of the
+  media set after #309 mirrored the other six and put them under `tests/record_row_css.rs`) —
   alongside single rules a static page had no need for (`.shell > .topbar|.tabstrip|.workarea|.statusbar`'s
   grid rows, `.detail-slot`, `.detail-id`, `.card.blocked` + `> h3`, `.conf.conf-unset`,
   `.list-toolbar .sort`, `.doc p .help-link` + `:hover`, `.specimen .prov`) and the app's `text-box-trim`
@@ -637,6 +639,15 @@ The `area/docs` label already existed with no `###` home; this is it.
   not a diff someone reads once. One method trap for whoever writes that gate: comparing selector *text*
   produces false positives — six `.rail .nav-item*` rules read as missing until you notice the mockup
   groups each with `.subnav .nav-item`, so it has to compare selector atoms, not selector lists.
+- **Ten mockups quote a History note no shipped string says.** `source.html`, `event.html`,
+  `citation.html`, `place.html`, `repository.html`, `person.html`, `dna-test.html`, `family.html`,
+  `dna-match.html` and `note.html` all carry "This audit trail comes for free from the event-sourced
+  core — no competitor offers it built-in" in their History tab's `.section-note`, while the shipped
+  `history-note` (`vitni-ui/i18n/en/vitni-ui.ftl:70`) says "an audit trail that comes free from the
+  event-sourced core" and makes no competitor claim. Found while auditing `media.html` for #309, which
+  fixed that one page only — the other ten are a mechanical sweep, and worth doing in one pass so the
+  mockups stop advertising something the product does not say. Nothing gates prose against the
+  catalogue, which is why all eleven drifted together.
 - **`gui-pass` occasionally grabs a blank first shot.** Once in roughly a dozen runs the first `shot` of
   a scenario comes back uniform (`… is blank (standard deviation 0) — the webview painted nothing`) and
   the run aborts, passing on a re-run with nothing changed. The startup handshake in
