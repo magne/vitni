@@ -181,8 +181,8 @@ fn the_partner_picker_renders_and_opens_with_rows_and_a_new_person_row() {
         "the picker search input renders:\n{html}"
     );
     assert!(
-        html.contains(r#"class="picker-results""#),
-        "the open result list renders:\n{html}"
+        html.contains(r#"class="picker-results picker-results-viewport""#),
+        "the open result list renders, placed at the renderer-measured box:\n{html}"
     );
     assert!(
         html.contains("Ada Lovelace") && html.contains("I0001"),

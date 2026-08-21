@@ -129,8 +129,8 @@ fn nested_card_view() -> Element {
 fn an_open_picker_renders_capped_rows_and_the_new_query_row() {
     let html = render(open_view);
     assert!(
-        html.contains(r#"class="picker-results""#),
-        "the in-flow result list renders:\n{html}"
+        html.contains(r#"class="picker-results picker-results-viewport""#),
+        "the result list renders, placed at the renderer-measured box:\n{html}"
     );
     let rows = html.matches(r#"role="option""#).count();
     assert_eq!(rows, 6, "results are capped at six:\n{html}");
@@ -177,7 +177,7 @@ fn a_selection_collapses_to_a_labelled_value_chip() {
         "the clear control is labelled:\n{html}"
     );
     assert!(
-        !html.contains(r#"class="picker-results""#),
+        !html.contains("picker-results"),
         "no result list while collapsed:\n{html}"
     );
 }
@@ -253,7 +253,7 @@ fn an_open_picker_renders_the_anchor_and_scrim() {
 fn a_collapsed_picker_renders_neither_results_nor_scrim() {
     let html = render(selection_view);
     assert!(
-        !html.contains(r#"class="picker-results""#),
+        !html.contains("picker-results"),
         "no result list while collapsed:\n{html}"
     );
     assert!(
