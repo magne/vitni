@@ -1,6 +1,13 @@
-//! SSR assertions for the Media detail (Phase 5 PR27): the read-first Overview record (id · paths ·
-//! MIME, with the checksum locked and the date a structured editor), its edit mode swapping in inputs
-//! plus the sticky-header Cancel/Save, the citations table, and the tags panel.
+//! SSR assertions for the Media detail (Phase 5 PR27): the read-first Overview record (paths · MIME,
+//! with the checksum locked and the date a structured editor), its edit mode swapping in inputs plus
+//! the sticky-header Cancel/Save, the citations table, and the tags panel.
+//!
+//! Plus what #309 held the screen to against `docs/mockups/media.html`: the `mime · date` header
+//! subtitle with no second MIME badge, a File card that starts at File path and orders Date above
+//! Checksum, the clickable preview and the wide look-only viewer dialog it opens, and an Attributes row
+//! whose type is a chip and whose value is not dimmed. What SSR cannot see here — which element the
+//! click handler is on, and where focus lands in the dialog — is
+//! `tests/gui-pass/media-viewer-dialog.toml`.
 
 use dioxus::prelude::*;
 use vitni_app::{
