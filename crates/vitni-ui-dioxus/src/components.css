@@ -684,6 +684,9 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 }
 /* The dialog paints above its own scrim (a positioned sibling), and slides in with it. */
 .overlay > .modal { position: relative; animation: slide-in-down 140ms ease-out; }
+/* The wide dialog shape: a prompt's 440px cannot hold an image, so the media preview dialog
+   (`screens/media.rs`) takes this one instead. */
+.modal-wide { width: min(1100px, 92vw); }
 
 /* Focus guards: the pair of offscreen tab stops bracketing a trapped dialog's content
    (`shell/focus_trap.rs`). Tabbing onto one sends focus to the opposite end of the dialog, so focus
@@ -1174,15 +1177,18 @@ select.in.modified { border-color: var(--accent); }
 }
 .mv-canvas .img-frame { border: 0; border-radius: 0; }
 
-/* App-only: real image rendering + crop-drag capture (no mockup counterpart — the mockups fake the
-   image with a textured panel). */
+/* Real image rendering, mirrored into the mockup sheet (#309): `media.html` draws the preview frame
+   and the viewer dialog, so the superset must style them (`tests/record_row_css.rs`). Only two rules
+   stay app-only, because the mockups have nothing they could apply to: `.crop-capture` is the crop
+   drag-capture layer, invisible by construction, and `.media-save-preview` belongs to the media save
+   dialog, which no mockup draws. */
 .media-card { padding: var(--sp-2); }
 .media-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
 .media-thumb { display: block; width: 100%; height: 100%; object-fit: cover; }
 .media-full { display: block; width: 100%; height: 100%; object-fit: contain; }
 .media-caption { margin-top: 6px; font-size: var(--fs-xs); }
-.crop-capture { cursor: crosshair; }
 .media-preview { height: 320px; }
+.crop-capture { cursor: crosshair; }
 .media-save-preview { display: flex; gap: var(--sp-2); align-items: baseline; margin-top: var(--sp-2); }
 
 /* ---- Assisted-import wizard (ADR 0017; import.html) ---- */
