@@ -12,7 +12,7 @@
 
 use dioxus::prelude::*;
 use vitni_app::Rect;
-use vitni_ui::{MediaRefVm, rect_css, rect_from_drag};
+use vitni_ui::{CropCorner, MediaRefVm, rect_contains, rect_css, rect_from_drag, rect_moved, rect_resized};
 
 use crate::components::{Button, ButtonVariant};
 
@@ -141,6 +141,23 @@ pub struct MediaCropLabels {
     pub set_region: String,
     /// The "Clear region" action label.
     pub clear_region: String,
+    /// The four corner grips' accessible names, in `nw, ne, sw, se` order.
+    pub handles: [String; 4],
+    /// The grips' shared tooltip, naming the keyboard gestures.
+    pub handle_hint: String,
+}
+
+impl MediaCropLabels {
+    /// The accessible name of one corner grip.
+    fn handle(&self, corner: CropCorner) -> String {
+        let index = match corner {
+            CropCorner::NorthWest => 0,
+            CropCorner::NorthEast => 1,
+            CropCorner::SouthWest => 2,
+            CropCorner::SouthEast => 3,
+        };
+        self.handles.get(index).cloned().unwrap_or_default()
+    }
 }
 
 /// The crop half of the viewer: present when the caller can record a region, absent when the viewer is
@@ -205,41 +222,178 @@ fn crop_actions(tools: Option<&MediaCropTools>, mut region: Signal<Option<Rect>>
     }
 }
 
-/// The drag-to-draw layer over the frame plus the region rectangle it draws. Renders nothing for a
-/// look-only viewer, so a plain preview has no invisible capture layer over its image.
+/// Which gesture a press started. All three end up in the same `region` signal, so the readout, the
+/// rectangle and `Set region` need no knowledge of how the region was arrived at.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum CropDrag {
+    /// Drawing a fresh region: the press landed on empty frame.
+    Draw {
+        /// Where the press landed, in frame pixels — the region's anchored corner.
+        start: (f64, f64),
+    },
+    /// Moving the whole region: the press landed inside it.
+    Move {
+        /// Where the press landed, in frame pixels.
+        start: (f64, f64),
+        /// The region as it was when the press landed, so the move stays a pure translation of it
+        /// rather than accumulating each frame's rounding.
+        origin: Rect,
+    },
+    /// Resizing by a corner grip.
+    Resize {
+        /// The grip being dragged; the opposite corner is the anchor.
+        corner: CropCorner,
+        /// The region as it was when the grip was grabbed — the resize is absolute against the live
+        /// pointer, so applying it to the original each time cannot drift.
+        origin: Rect,
+    },
+}
+
+/// The region the pointer is now describing, or `None` if the gesture cannot produce one.
+fn dragged_region(drag: CropDrag, point: (f64, f64), bounds: (f64, f64)) -> Option<Rect> {
+    match drag {
+        CropDrag::Draw { start } => rect_from_drag(start, point, bounds),
+        CropDrag::Move { start, origin } => rect_moved(origin, (point.0 - start.0, point.1 - start.1), bounds),
+        CropDrag::Resize { corner, origin } => rect_resized(origin, corner, point, bounds),
+    }
+}
+
+/// One corner grip of the region: a drag target for the pointer and a focus stop for the keyboard.
+///
+/// A `<button>` rather than the mockup's `<span>` so the gesture is reachable without a pointer at all —
+/// the arrow keys nudge the grip's own corner and `Shift` + arrow moves the whole region, both by one
+/// percent, which is [`vitni_ui::rect_resized`]'s and [`vitni_ui::rect_moved`]'s minimum step.
+fn crop_handle(corner: CropCorner, labels: &MediaCropLabels, state: CropGrips) -> Element {
+    let CropGrips {
+        mut region,
+        mut drag,
+        frame_size,
+    } = state;
+    let Some(origin) = region() else {
+        return rsx! {};
+    };
+    let class = match corner {
+        CropCorner::NorthWest => "crop-handle nw",
+        CropCorner::NorthEast => "crop-handle ne",
+        CropCorner::SouthWest => "crop-handle sw",
+        CropCorner::SouthEast => "crop-handle se",
+    };
+    rsx! {
+        button {
+            class,
+            r#type: "button",
+            aria_label: labels.handle(corner),
+            title: labels.handle_hint.clone(),
+            onpointerdown: move |_| drag.set(Some(CropDrag::Resize { corner, origin })),
+            onpointerup: move |_| drag.set(None),
+            onkeydown: move |event: KeyboardEvent| {
+                let Some(step) = arrow_step(&event) else { return };
+                let Some(current) = region() else { return };
+                let bounds = frame_size();
+                let next = if event.modifiers().shift() {
+                    rect_moved(current, step, bounds)
+                } else {
+                    rect_resized(current, corner, corner_point(current, corner, bounds, step), bounds)
+                };
+                if let Some(rect) = next {
+                    event.prevent_default();
+                    region.set(Some(rect));
+                }
+            },
+        }
+    }
+}
+
+/// One percent of the frame in pixels, in the direction an arrow key points, or `None` for any other
+/// key. One percent because that is the geometry's own resolution — a smaller step rounds to nothing.
+fn arrow_step(event: &KeyboardEvent) -> Option<(f64, f64)> {
+    match event.key() {
+        Key::ArrowLeft => Some((-1.0, 0.0)),
+        Key::ArrowRight => Some((1.0, 0.0)),
+        Key::ArrowUp => Some((0.0, -1.0)),
+        Key::ArrowDown => Some((0.0, 1.0)),
+        _ => None,
+    }
+}
+
+/// Where `corner` sits in frame pixels, offset by `step` percent — the synthetic pointer position a
+/// keyboard nudge resizes to.
+fn corner_point(rect: Rect, corner: CropCorner, bounds: (f64, f64), step: (f64, f64)) -> (f64, f64) {
+    let (width, height) = bounds;
+    let x_pct = match corner {
+        CropCorner::NorthWest | CropCorner::SouthWest => f64::from(rect.left),
+        CropCorner::NorthEast | CropCorner::SouthEast => f64::from(rect.left.saturating_add(rect.width)),
+    };
+    let y_pct = match corner {
+        CropCorner::NorthWest | CropCorner::NorthEast => f64::from(rect.top),
+        CropCorner::SouthWest | CropCorner::SouthEast => f64::from(rect.top.saturating_add(rect.height)),
+    };
+    ((x_pct + step.0) / 100.0 * width, (y_pct + step.1) / 100.0 * height)
+}
+
+/// The signals the corner grips share with the capture layer.
+#[derive(Clone, Copy)]
+struct CropGrips {
+    /// The live region.
+    region: Signal<Option<Rect>>,
+    /// The gesture in progress, if any.
+    drag: Signal<Option<CropDrag>>,
+    /// The frame's observed box, in pixels.
+    frame_size: Signal<(f64, f64)>,
+}
+
+/// The gesture layer over the frame plus the region rectangle and its four corner grips. Renders
+/// nothing for a look-only viewer, so a plain preview has no invisible capture layer over its image.
+///
+/// Three gestures share one capture layer, told apart at `onpointerdown` by
+/// [`vitni_ui::rect_contains`]: a press inside the region moves it, a press anywhere else draws a fresh
+/// one, and a press on a grip (the only descendant of the `pointer-events:none` rectangle that takes
+/// events) resizes it. Hit-testing rather than putting handlers on the rectangle is what keeps drawing a
+/// fresh region working over the top of an existing one's interior.
 ///
 /// `frame_size` is the frame's observed box (see the `onresize` on the frame itself), never measured
 /// from here: a measurement started at `onpointerdown` resolves *after* the `onpointermove` that
 /// follows it, so the first move of a drag would read the size the frame had before it was ever
-/// measured — `(0.0, 0.0)`, which [`rect_from_drag`] rejects.
-fn crop_overlay(
-    active: bool,
-    mut region: Signal<Option<Rect>>,
-    mut drag_start: Signal<Option<(f64, f64)>>,
-    frame_size: Signal<(f64, f64)>,
-) -> Element {
-    if !active {
+/// measured — `(0.0, 0.0)`, which the geometry rejects.
+fn crop_overlay(tools: Option<&MediaCropTools>, state: CropGrips) -> Element {
+    let Some(tools) = tools else {
         return rsx! {};
-    }
+    };
+    let CropGrips {
+        mut region,
+        mut drag,
+        frame_size,
+    } = state;
+    let labels = tools.labels.clone();
     rsx! {
         div {
             class: "crop-capture",
             style: "position:absolute;inset:0",
             onpointerdown: move |event: PointerEvent| {
                 let point = event.element_coordinates();
-                drag_start.set(Some((point.x, point.y)));
+                let start = (point.x, point.y);
+                let inside = region().filter(|rect| rect_contains(*rect, start, frame_size()));
+                drag.set(Some(match inside {
+                    Some(origin) => CropDrag::Move { start, origin },
+                    None => CropDrag::Draw { start },
+                }));
             },
             onpointermove: move |event: PointerEvent| {
-                let Some(start) = drag_start() else { return };
+                let Some(gesture) = drag() else { return };
                 let point = event.element_coordinates();
-                if let Some(rect) = rect_from_drag(start, (point.x, point.y), frame_size()) {
+                if let Some(rect) = dragged_region(gesture, (point.x, point.y), frame_size()) {
                     region.set(Some(rect));
                 }
             },
-            onpointerup: move |_| drag_start.set(None),
+            onpointerup: move |_| drag.set(None),
         }
         if let Some(rect) = region() {
-            div { class: "crop-rect", style: rect_css(&rect) }
+            div { class: "crop-rect", style: rect_css(&rect),
+                {crop_handle(CropCorner::NorthWest, &labels, state)}
+                {crop_handle(CropCorner::NorthEast, &labels, state)}
+                {crop_handle(CropCorner::SouthWest, &labels, state)}
+                {crop_handle(CropCorner::SouthEast, &labels, state)}
+            }
         }
     }
 }
@@ -260,7 +414,7 @@ pub fn MediaViewer(
 ) -> Element {
     let mut zoom = use_signal(|| Zoom::Fit);
     let region = use_signal(|| item.crop);
-    let drag_start = use_signal(|| None::<(f64, f64)>);
+    let drag = use_signal(|| None::<CropDrag>);
     let mut frame_size = use_signal(|| (0.0_f64, 0.0_f64));
 
     let src = item.src();
@@ -322,7 +476,7 @@ pub fn MediaViewer(
                     } else {
                         div { class: "img-glyph", aria_hidden: "true", "🗎" }
                     }
-                    {crop_overlay(crop.is_some(), region, drag_start, frame_size)}
+                    {crop_overlay(crop.as_ref(), CropGrips { region, drag, frame_size })}
                 }
             }
         }

@@ -1,7 +1,7 @@
 use vitni_app::Rect;
 use vitni_ui::{
-    AttachSaveAction, EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, MediaRefVm, NewRecordDraft, PickerState,
-    ProvenanceDraft, SOURCE_QUALITIES, link_is_savable, rect_css, resolve_attach_save, tab_label,
+    AttachSaveAction, CropCorner, EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, MediaRefVm, NewRecordDraft,
+    PickerState, ProvenanceDraft, SOURCE_QUALITIES, link_is_savable, rect_css, resolve_attach_save, tab_label,
 };
 
 use super::prelude::*;
@@ -418,6 +418,13 @@ pub fn media_crop_labels(loc: &Localizer) -> MediaCropLabels {
         no_region: loc.media_viewer_no_region(),
         set_region: loc.media_viewer_set_region(),
         clear_region: loc.media_viewer_clear_region(),
+        handles: [
+            loc.media_crop_handle(CropCorner::NorthWest),
+            loc.media_crop_handle(CropCorner::NorthEast),
+            loc.media_crop_handle(CropCorner::SouthWest),
+            loc.media_crop_handle(CropCorner::SouthEast),
+        ],
+        handle_hint: loc.media_crop_handle_hint(),
     }
 }
 

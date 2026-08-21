@@ -263,6 +263,48 @@ fn button_tag(html: &str, label: &str) -> String {
 }
 
 #[test]
+fn a_region_carries_four_focusable_corner_grips() {
+    // `media.html:169-172` has drawn four `.crop-handle` grips since the crop tool was designed; the app
+    // never rendered them, so a region could only be redrawn, never nudged. They are `<button>`s rather
+    // than the mockup's `<span>`s so the gesture is reachable from the keyboard too.
+    let html = render(viewer_view);
+    for corner in ["nw", "ne", "sw", "se"] {
+        assert!(
+            html.contains(&format!(r#"class="crop-handle {corner}""#)),
+            "the {corner} grip renders: {html}"
+        );
+    }
+    for name in [
+        "Resize region from the top left",
+        "Resize region from the top right",
+        "Resize region from the bottom left",
+        "Resize region from the bottom right",
+    ] {
+        assert!(html.contains(name), "the grips carry accessible names: {html}");
+    }
+    assert_eq!(
+        html.matches("<button").count(),
+        html.matches(r#"class="crop-handle"#).count() + 7,
+        "the four grips are buttons, alongside the four zoom buttons and Set/Clear/Close: {html}"
+    );
+}
+
+#[test]
+fn the_grips_only_exist_while_a_region_does() {
+    let html = render(viewer_view_no_region);
+    assert!(!html.contains("crop-handle"), "no region, nothing to grab: {html}");
+}
+
+#[test]
+fn a_look_only_viewer_has_no_grips_either() {
+    let html = render(viewer_view_zoom_only);
+    assert!(
+        !html.contains("crop-handle"),
+        "the preview dialog records no region, so it offers no grips: {html}"
+    );
+}
+
+#[test]
 fn both_region_actions_are_inert_until_there_is_a_region_to_act_on() {
     // Clear had no `disabled:` at all, so pressing it with nothing selected called `onclear` — and the
     // caller's `SetMediaRegion(None)` wrote an event for a no-op change.

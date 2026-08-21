@@ -152,7 +152,16 @@
           <!-- Media viewer + crop tool specimen -->
           <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Media-viewer specimen — zoom + a
             crop region tool. Drawing a region supersedes the media reference's crop (recorded in History);
-            geometry is percent-based so it stays valid at any zoom (Phase 8, ADR 0017):</div>
+            geometry is percent-based so it stays valid at any zoom (Phase 8, ADR 0017). Three gestures a
+            static page cannot show: press empty frame and drag to <b>draw</b>; drag a corner grip to
+            <b>resize</b>, with the opposite corner anchored and a drag that would invert the rectangle
+            stopping at 1% rather than flipping; press the region's <b>interior</b> and drag to move it at
+            unchanged size, stopping against an edge rather than shrinking. The grips are the only part of
+            the rectangle that takes pointer events, so a press on the interior still reaches the layer
+            beneath — which is how an interior press can mean "move" while a press on empty frame still
+            draws a fresh region. In the app each grip is a <span class="mono">&lt;button&gt;</span> rather
+            than the <span class="mono">&lt;span&gt;</span> drawn here, so the gesture is reachable from
+            the keyboard: arrow keys nudge that corner by 1%, Shift + arrow moves the whole region:</div>
           <div class="card media-viewer" style="margin-top:4px">
             <div class="mv-toolbar">
               <span class="mv-zoom" role="group" aria-label="Zoom">

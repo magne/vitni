@@ -30,6 +30,7 @@ use vitni_app::{
 use crate::action::{ActionLabel, Affordance};
 use crate::navigation::Category;
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
+use crate::view_model::CropCorner;
 use crate::view_model::{DateModifierKind, TimelineKind};
 use crate::vocabulary::{Action, Field, Form, Panel, SelectOption, SubmitResult, Table};
 
@@ -1467,6 +1468,23 @@ impl Localizer {
     #[must_use]
     pub fn media_viewer_clear_region(&self) -> String {
         fl!(self.loader, "media-viewer-clear-region")
+    }
+
+    /// The accessible name of one corner grip of the crop region (`media.html`'s `.crop-handle` spans).
+    #[must_use]
+    pub fn media_crop_handle(&self, corner: CropCorner) -> String {
+        match corner {
+            CropCorner::NorthWest => fl!(self.loader, "media-crop-handle-nw"),
+            CropCorner::NorthEast => fl!(self.loader, "media-crop-handle-ne"),
+            CropCorner::SouthWest => fl!(self.loader, "media-crop-handle-sw"),
+            CropCorner::SouthEast => fl!(self.loader, "media-crop-handle-se"),
+        }
+    }
+
+    /// The corner grips' shared tooltip, naming the keyboard gestures a pointer drag hides.
+    #[must_use]
+    pub fn media_crop_handle_hint(&self) -> String {
+        fl!(self.loader, "media-crop-handle-hint")
     }
 
     /// The accessible name for a per-row Remove button, e.g. `Remove Jonathan` (a family child).
