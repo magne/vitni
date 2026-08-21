@@ -32,9 +32,11 @@ use vitni_ui::{
 
 use super::bulk_import::BulkImportBody;
 use super::prelude::*;
-use crate::components::{MediaSaveDialog, MediaSaveLabels, MediaViewer, MediaViewerLabels};
+use crate::components::{
+    MediaCropLabels, MediaCropTools, MediaSaveDialog, MediaSaveLabels, MediaViewer, MediaViewerLabels,
+};
 use crate::i18n::Chrome;
-use crate::screens::shared::media_viewer_labels;
+use crate::screens::shared::{media_crop_labels, media_viewer_labels};
 use crate::services::{PluginRow, PresentRequest, discover_plugins, start_assisted_import};
 
 /// A record's review status, tracked wizard-side and shown as a chip in the records table (the
@@ -221,6 +223,7 @@ pub fn ImportScreen() -> Element {
                 ConfirmStage {
                     key: "{resolved.record.provenance.external_id_url}",
                     viewer_labels: media_viewer_labels(loc),
+                    crop_labels: media_crop_labels(loc),
                     chrome: confirm_chrome(&chrome),
                     confidence_labels: confidence_levels(loc),
                     payload: resolved,
@@ -505,6 +508,7 @@ pub fn RecordsStage(
 #[component]
 pub fn ConfirmStage(
     viewer_labels: MediaViewerLabels,
+    crop_labels: MediaCropLabels,
     chrome: ConfirmChrome,
     confidence_labels: Vec<(ConfidenceLevel, String)>,
     payload: ConfirmRecordPayload,
@@ -570,8 +574,11 @@ pub fn ConfirmStage(
                         MediaViewer {
                             item,
                             labels: viewer_labels,
-                            onset: move |rect: Rect| region.set(Some(rect)),
-                            onclear: move |()| region.set(None),
+                            crop: Some(MediaCropTools {
+                                labels: crop_labels,
+                                onset: EventHandler::new(move |rect: Rect| region.set(Some(rect))),
+                                onclear: EventHandler::new(move |()| region.set(None)),
+                            }),
                             onclose: move |()| {},
                         }
                     }

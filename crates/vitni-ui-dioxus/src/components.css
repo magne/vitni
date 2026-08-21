@@ -684,6 +684,9 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 }
 /* The dialog paints above its own scrim (a positioned sibling), and slides in with it. */
 .overlay > .modal { position: relative; animation: slide-in-down 140ms ease-out; }
+/* The wide dialog shape: a prompt's 440px cannot hold an image, so the media preview dialog
+   (`screens/media.rs`) takes this one instead. */
+.modal-wide { width: min(1100px, 92vw); }
 
 /* Focus guards: the pair of offscreen tab stops bracketing a trapped dialog's content
    (`shell/focus_trap.rs`). Tabbing onto one sends focus to the opposite end of the dialog, so focus
@@ -1159,6 +1162,21 @@ select.in.modified { border-color: var(--accent); }
   border: 2px solid var(--accent); background: var(--accent-soft);
   box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
 }
+/* The four corner grips (`media.html:169-172`), mirrored from the mockup sheet where they have been
+   drawn since the crop tool was designed (#309 follow-up). `pointer-events: auto` on the grips alone is
+   what makes them grabbable while `.crop-rect` itself stays `none` — the capture layer underneath keeps
+   receiving presses on the region's interior, which is how a *fresh* region can still be drawn over an
+   existing one and how the interior-move hit-test (`rect_contains`) gets its event at all. In the app
+   these are `<button>`s, so the resize is reachable from the keyboard; the mockup draws `<span>`s
+   because a static page has no gesture to reach. */
+.crop-rect .crop-handle {
+  position: absolute; width: 10px; height: 10px; pointer-events: auto;
+  background: var(--accent); border: 1px solid var(--panel); border-radius: var(--r-sm);
+}
+.crop-rect .crop-handle.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.crop-rect .crop-handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.crop-rect .crop-handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.crop-rect .crop-handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
 .crop-outline { border: 2px dashed var(--accent); }
 .crop-outline .crop-label {
   position: absolute; left: 0; top: -18px; font-size: var(--fs-xs);
@@ -1173,16 +1191,45 @@ select.in.modified { border-color: var(--accent); }
   border: 1px solid var(--line); border-radius: var(--r-md);
 }
 .mv-canvas .img-frame { border: 0; border-radius: 0; }
+/* The viewer's zoom, as geometry. The zoom sizes the *frame* and the image fills it, so the frame
+   stays exactly the image's box and the percent crop geometry stays zoom-invariant (ADR 0017 §GUI).
+   `zoom-fit` shrink-wraps the image's natural size, capped at the canvas; the other three are definite
+   percentages of `.mv-canvas`'s content box, so the canvas scrolls instead of the frame clipping.
+   It lives in classes rather than an inline `style` because a width set in the frame's `style` applies
+   when it mounts and is never updated after (measured in the real webview: the same `width:2000px` is
+   honoured as the mount-time value and ignored as an update), so no zoom button moved anything at all.
+   Two further things had to be true for a zoom to resolve once it did apply, and neither was:
+     * the frame needs a *definite* width — a percentage-width image inside a shrink-to-fit frame is
+       circular, so `width:150%` had nothing to resolve against;
+     * `.media-full`'s fixed-frame rules (for the record card's 320px preview) must not reach here —
+       `height:100%` is circular against a frame whose height comes from the image, `object-fit` only
+       letterboxes a box that already carries the image's own ratio, and its `width:100%` outranks
+       `zoom-fit`'s cap. `.mv-frame > .media-full` neutralises all three inside the canvas. */
+.mv-frame { display: inline-block; }
+.mv-frame.zoom-fit { width: 100%; }
+.mv-frame > .media-full { height: auto; max-width: none; object-fit: fill; }
+.mv-frame.zoom-fit > .media-full { width: 100%; }
+.mv-frame.zoom-100 > .media-full { width: auto; zoom: 1; }
+.mv-frame.zoom-150 > .media-full { width: auto; zoom: 1.5; }
+.mv-frame.zoom-200 > .media-full { width: auto; zoom: 2; }
+/* In the wide preview dialog the canvas is the *only* scroller, at a fixed viewport-proportional
+   height, so a zoom step scales the image inside it instead of growing the dialog. Its own
+   `calc(100vh - 210px)` cap is not enough here: `.overlay` starts below the topbar and tabstrip and
+   pads itself 72px, so a modal sized against the whole viewport still overflows the window bottom. */
+.modal-wide .mv-canvas { height: 62vh; max-height: none; }
 
-/* App-only: real image rendering + crop-drag capture (no mockup counterpart — the mockups fake the
-   image with a textured panel). */
+/* Real image rendering, mirrored into the mockup sheet (#309): `media.html` draws the preview frame
+   and the viewer dialog, so the superset must style them (`tests/record_row_css.rs`). Only two rules
+   stay app-only, because the mockups have nothing they could apply to: `.crop-capture` is the crop
+   drag-capture layer, invisible by construction, and `.media-save-preview` belongs to the media save
+   dialog, which no mockup draws. */
 .media-card { padding: var(--sp-2); }
 .media-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
 .media-thumb { display: block; width: 100%; height: 100%; object-fit: cover; }
 .media-full { display: block; width: 100%; height: 100%; object-fit: contain; }
 .media-caption { margin-top: 6px; font-size: var(--fs-xs); }
-.crop-capture { cursor: crosshair; }
 .media-preview { height: 320px; }
+.crop-capture { cursor: crosshair; }
 .media-save-preview { display: flex; gap: var(--sp-2); align-items: baseline; margin-top: var(--sp-2); }
 
 /* ---- Assisted-import wizard (ADR 0017; import.html) ---- */

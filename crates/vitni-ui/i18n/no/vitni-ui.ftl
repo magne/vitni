@@ -1088,6 +1088,11 @@ media-viewer-region = område
 media-viewer-no-region = ingen region valgt
 media-viewer-set-region = Angi region
 media-viewer-clear-region = Fjern region
+media-crop-handle-nw = Endre størrelse fra øvre venstre
+media-crop-handle-ne = Endre størrelse fra øvre høyre
+media-crop-handle-sw = Endre størrelse fra nedre venstre
+media-crop-handle-se = Endre størrelse fra nedre høyre
+media-crop-handle-hint = Dra for å endre størrelsen; piltaster endrer størrelsen, Shift + piltast flytter regionen
 
 # Plugin trust tiers & capability grants (ADR 0014)
 plugin-trust-sanctioned = Godkjent

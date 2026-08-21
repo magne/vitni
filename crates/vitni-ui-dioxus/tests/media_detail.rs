@@ -1,6 +1,13 @@
-//! SSR assertions for the Media detail (Phase 5 PR27): the read-first Overview record (id · paths ·
-//! MIME, with the checksum locked and the date a structured editor), its edit mode swapping in inputs
-//! plus the sticky-header Cancel/Save, the citations table, and the tags panel.
+//! SSR assertions for the Media detail (Phase 5 PR27): the read-first Overview record (paths · MIME,
+//! with the checksum locked and the date a structured editor), its edit mode swapping in inputs plus
+//! the sticky-header Cancel/Save, the citations table, and the tags panel.
+//!
+//! Plus what #309 held the screen to against `docs/mockups/media.html`: the `mime · date` header
+//! subtitle with no second MIME badge, a File card that starts at File path and orders Date above
+//! Checksum, the clickable preview and the wide look-only viewer dialog it opens, and an Attributes row
+//! whose type is a chip and whose value is not dimmed. What SSR cannot see here — which element the
+//! click handler is on, and where focus lands in the dialog — is
+//! `tests/gui-pass/media-viewer-dialog.toml`.
 
 use dioxus::prelude::*;
 use vitni_app::{
@@ -27,9 +34,11 @@ fn sample_date() -> GenealogicalDate {
         time: None,
     })
 }
+use vitni_ui_dioxus::components::TabItem;
+use vitni_ui_dioxus::master_detail::DetailContainer;
 use vitni_ui_dioxus::screens::{
     MediaEditForm, RecordActionLabels, RecordEditState, citations_table, media_attributes_table, media_overview,
-    media_used_by, notes_table, record_head_actions, tags_panel,
+    media_preview_dialog, media_used_by, notes_table, record_head_actions, tags_panel,
 };
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
@@ -148,6 +157,72 @@ fn media_view() -> Element {
         {notes_table(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, use_callback(|_: (String, String)| {}))}
     }
+}
+
+/// Renders the media detail header the way `media_detail` builds it: a `DetailContainer` with the 📷
+/// avatar, the filename title, the `mime · date` subtitle and the id badge — no second MIME badge
+/// (`docs/mockups/media.html:62`). `media_detail` itself is private and needs an `AppState`, so the
+/// header's own prop expressions are mirrored here (the `tag_detail.rs` pattern).
+fn media_header(detail: &MediaDetail) -> Element {
+    let active = use_signal(|| 0_usize);
+    rsx! {
+        DetailContainer {
+            title: detail.title.clone(),
+            subtitle: detail.header_subtitle(),
+            id_label: Some(detail.human_id.clone()),
+            avatar: "📷".to_owned(),
+            extras: rsx! {},
+            actions: rsx! {},
+            tabs: Vec::<TabItem>::new(),
+            active,
+        }
+    }
+}
+
+fn media_header_view() -> Element {
+    media_header(&sample())
+}
+
+/// The header of a record carrying neither a MIME nor a date — the record the CLI creates.
+fn media_header_bare() -> Element {
+    media_header(&MediaDetail {
+        mime: None,
+        date: None,
+        ..sample()
+    })
+}
+
+#[test]
+fn the_header_shows_the_mime_and_date_as_its_subtitle() {
+    let html = render(media_header_view);
+    assert!(
+        html.contains(r#"<div class="detail-sub">image/jpeg · c. 1900</div>"#),
+        "the header carries the mime · date subtitle:\n{html}"
+    );
+}
+
+#[test]
+fn the_header_shows_the_mime_only_in_the_subtitle_never_as_a_badge() {
+    // The mockup's `<span class="badge">image/jpeg</span>` is deleted, not implemented: the subtitle
+    // already carries the MIME, and a badge would say it twice.
+    let html = render(media_header_view);
+    assert!(
+        !html.contains(r#"class="badge">image/jpeg"#),
+        "no MIME badge beside the id badge:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="badge">O0050"#),
+        "the id badge is still there:\n{html}"
+    );
+}
+
+#[test]
+fn a_record_with_neither_mime_nor_date_renders_no_subtitle_line() {
+    let html = render(media_header_bare);
+    assert!(
+        !html.contains("detail-sub"),
+        "an empty subtitle draws no line at all:\n{html}"
+    );
 }
 
 fn media_edit() -> Element {
@@ -315,6 +390,94 @@ fn the_checksum_is_locked_and_the_date_is_a_structured_editor() {
     }
 }
 
+/// The preview dialog with `viewing` set — the state a click on the preview frame puts the pane in.
+fn media_preview_dialog_open() -> Element {
+    let loc = loc();
+    let viewing = use_signal(|| true);
+    rsx! { {media_preview_dialog(&loc, &sample(), viewing)} }
+}
+
+#[test]
+fn the_preview_frame_is_a_button_that_opens_the_image() {
+    // The Media record was the one record screen that never rendered `MediaViewer`, so a media
+    // object's own page was the only place its image could not be opened.
+    let html = render(media_view);
+    assert!(
+        html.contains(r#"<button class="media-open" type="button" aria-label="Open john-smith-portrait.jpg">"#),
+        "the preview frame is an accessible button:\n{html}"
+    );
+    let button = html.find("media-open").expect("the open button renders");
+    let image = html.find("media-full").expect("the preview image renders");
+    assert!(button < image, "the button wraps the image, not the reverse:\n{html}");
+}
+
+#[test]
+fn the_glyph_placeholder_is_not_clickable() {
+    // There is nothing to open, so an inert div is honest — a button would promise a dialog.
+    let html = render(media_view_outside_the_workspace);
+    assert!(
+        !html.contains("media-open"),
+        "an unservable location offers no open button:\n{html}"
+    );
+}
+
+#[test]
+fn the_preview_dialog_is_closed_until_the_frame_is_clicked() {
+    let html = render(media_view);
+    assert!(
+        !html.contains("overlay"),
+        "no dialog layer is mounted before the click:\n{html}"
+    );
+}
+
+#[test]
+fn the_open_preview_dialog_is_a_wide_modal_holding_a_look_only_viewer() {
+    let html = render(media_preview_dialog_open);
+    for needle in [
+        r#"class="overlay""#,
+        r#"class="modal modal-wide""#,
+        r#"role="dialog""#,
+        r#"aria-modal="true""#,
+        "john-smith-portrait.jpg",
+        "Fit",
+        "200%",
+        "Close",
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
+    for needle in ["Set region", "Clear region", "mv-readout", "crop-capture"] {
+        assert!(
+            !html.contains(needle),
+            "the record's own preview records no region, so no {needle:?}:\n{html}"
+        );
+    }
+}
+
+#[test]
+fn a_stored_records_file_card_never_repeats_the_id_the_header_shows() {
+    // `media.html:120` starts the File card at File path: the header's id badge already names the
+    // record. The row survives in create mode only (`media_create.rs`), where there is no badge yet.
+    for view in [media_view as fn() -> Element, media_edit as fn() -> Element] {
+        let html = render(view);
+        assert!(
+            !html.contains("media-id"),
+            "no ID row on a stored record's File card:\n{html}"
+        );
+    }
+}
+
+#[test]
+fn the_file_card_orders_date_above_checksum() {
+    // `media.html:123-124` draws Date then Checksum; the code drew them the other way round.
+    let html = render(media_view);
+    let date = html.find("media-date").expect("the Date row renders");
+    let checksum = html.find("media-checksum").expect("the Checksum row renders");
+    assert!(
+        date < checksum,
+        "Date precedes Checksum (date at {date}, checksum at {checksum}):\n{html}"
+    );
+}
+
 #[test]
 fn citations_carry_source_page_and_evidence() {
     let html = render(media_view);
@@ -368,6 +531,21 @@ fn attribute_rows_carry_edit_and_retract_corrections() {
     assert!(
         html.contains("Retract this assertion"),
         "the Retract control carries the retract tooltip:\n{html}"
+    );
+}
+
+#[test]
+fn an_attribute_row_chips_its_type_and_shows_its_value_at_full_contrast() {
+    // `media.html:246` draws the type as a `.chip`, like every other typed cell on the screen, and its
+    // value as plain text — the app dimmed the value with `muted`, which the mockup never asked for.
+    let html = render(media_view);
+    assert!(
+        html.contains(r#"<td><span class="chip">dimensions</span></td>"#),
+        "the attribute type is a chip:\n{html}"
+    );
+    assert!(
+        html.contains("<td>1024x1536</td>"),
+        "the attribute value carries no muted class:\n{html}"
     );
 }
 

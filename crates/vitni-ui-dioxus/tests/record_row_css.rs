@@ -50,6 +50,34 @@ const ROW_SELECTORS: [&str; 22] = [
 /// the one-line `span.field.val` a record row draws (`record-editing.html:49`).
 const READ_VALUE_SELECTORS: [&str; 2] = [".field .val", ".field.val"];
 
+/// The Media record screen's own rules, held to the same superset gate (#309). They were declared
+/// deliberately app-only, which `cargo xtask css-check` cannot catch — it only scans for hex colour
+/// literals — so `media.html` drew a preview and a viewer dialog the app sheet styled and the mockup
+/// sheet did not. Only `.crop-capture` and `.media-save-preview` stay app-only, and the amended comment
+/// above them in `src/components.css` says why.
+const MEDIA_SELECTORS: [&str; 20] = [
+    ".crop-rect .crop-handle",
+    ".crop-rect .crop-handle.nw",
+    ".crop-rect .crop-handle.ne",
+    ".crop-rect .crop-handle.sw",
+    ".crop-rect .crop-handle.se",
+    ".modal-wide",
+    ".modal-wide .mv-canvas",
+    ".mv-frame",
+    ".mv-frame.zoom-fit",
+    ".mv-frame > .media-full",
+    ".mv-frame.zoom-fit > .media-full",
+    ".mv-frame.zoom-100 > .media-full",
+    ".mv-frame.zoom-150 > .media-full",
+    ".mv-frame.zoom-200 > .media-full",
+    ".media-card",
+    ".media-open",
+    ".media-thumb",
+    ".media-full",
+    ".media-caption",
+    ".media-preview",
+];
+
 /// The read value and every control that replaces it must be pinned to one height. Measured in the
 /// real webview (`tests/gui-pass/tag-record-rows.toml`): unpinned they came out 37px and 38px, which is
 /// invisible on one row and a whole pixel of drift by the third.
@@ -104,7 +132,11 @@ fn sheets() -> (String, String) {
 #[test]
 fn every_record_row_rule_is_in_both_sheets_with_the_same_declarations() {
     let (app, mockup) = sheets();
-    for selector in ROW_SELECTORS.into_iter().chain(READ_VALUE_SELECTORS) {
+    for selector in ROW_SELECTORS
+        .into_iter()
+        .chain(READ_VALUE_SELECTORS)
+        .chain(MEDIA_SELECTORS)
+    {
         let in_app = rule_declarations(&app, selector);
         let in_mockup = rule_declarations(&mockup, selector);
         assert!(in_app.is_some(), "src/components.css declares no rule for `{selector}`");

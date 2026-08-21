@@ -1,13 +1,14 @@
 //! SSR assertions for the Phase 8 media GUI (ADR 0017 §GUI): the gallery card (real thumbnail vs
-//! glyph fallback by MIME, caption, crop outline), the media viewer overlay (image, zoom controls,
-//! percent readout, crop rectangle, Set/Clear region actions), and the media save dialog (fields +
-//! live path preview). Rendered to a string over `vitni-ui`'s framework-free view-models.
+//! glyph fallback by MIME, caption, crop outline), the media viewer in both shapes (with crop tools:
+//! image, zoom controls, percent readout, crop rectangle, Set/Clear region actions — and without them,
+//! zoom and Close alone), and the media save dialog (fields + live path preview). Rendered to a string
+//! over `vitni-ui`'s framework-free view-models.
 
 use dioxus::prelude::*;
 use vitni_app::Rect;
 use vitni_ui::{Localizer, MediaRefVm, MediaSaveDraft};
-use vitni_ui_dioxus::components::{MediaSaveDialog, MediaSaveLabels, MediaViewer};
-use vitni_ui_dioxus::screens::{media_gallery, media_viewer_labels};
+use vitni_ui_dioxus::components::{MediaCropTools, MediaSaveDialog, MediaSaveLabels, MediaViewer};
+use vitni_ui_dioxus::screens::{media_crop_labels, media_gallery, media_viewer_labels};
 
 fn loc() -> Localizer {
     Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
@@ -88,8 +89,11 @@ fn nordic_viewer_view() -> Element {
         MediaViewer {
             item: nordic_image_ref(),
             labels: media_viewer_labels(&loc),
-            onset: |_: Rect| {},
-            onclear: |()| {},
+            crop: Some(MediaCropTools {
+                labels: media_crop_labels(&loc),
+                onset: EventHandler::new(|_: Rect| {}),
+                onclear: EventHandler::new(|()| {}),
+            }),
             onclose: |()| {},
         }
     }
@@ -175,8 +179,46 @@ fn viewer_view() -> Element {
         MediaViewer {
             item: image_ref(),
             labels: media_viewer_labels(&loc),
-            onset: |_: Rect| {},
-            onclear: |()| {},
+            crop: Some(MediaCropTools {
+                labels: media_crop_labels(&loc),
+                onset: EventHandler::new(|_: Rect| {}),
+                onclear: EventHandler::new(|()| {}),
+            }),
+            onclose: |()| {},
+        }
+    }
+}
+
+/// The crop viewer over an image that carries no region yet — the state every media reference starts
+/// in, and the one both region actions have to be inert in.
+fn viewer_view_no_region() -> Element {
+    let loc = loc();
+    let item = MediaRefVm {
+        crop: None,
+        ..image_ref()
+    };
+    rsx! {
+        MediaViewer {
+            item,
+            labels: media_viewer_labels(&loc),
+            crop: Some(MediaCropTools {
+                labels: media_crop_labels(&loc),
+                onset: EventHandler::new(|_: Rect| {}),
+                onclear: EventHandler::new(|()| {}),
+            }),
+            onclose: |()| {},
+        }
+    }
+}
+
+/// The viewer without crop tools — the Media record's own preview dialog, which is only for looking.
+fn viewer_view_zoom_only() -> Element {
+    let loc = loc();
+    rsx! {
+        MediaViewer {
+            item: image_ref(),
+            labels: media_viewer_labels(&loc),
+            crop: None,
             onclose: |()| {},
         }
     }
@@ -206,6 +248,104 @@ fn viewer_renders_image_zoom_controls_readout_and_actions() {
     // The region actions.
     assert!(html.contains("Set region"), "set region action: {html}");
     assert!(html.contains("Clear region"), "clear region action: {html}");
+}
+
+/// The `<button …>` opening tag carrying `label`, so a test can read the attributes on it rather than
+/// searching the whole document for a `disabled` that may belong to any other control.
+fn button_tag(html: &str, label: &str) -> String {
+    let Some(end) = html.find(&format!(">{label}<")) else {
+        return String::new();
+    };
+    let Some(start) = html[..end].rfind("<button") else {
+        return String::new();
+    };
+    html[start..end].to_owned()
+}
+
+#[test]
+fn a_region_carries_four_focusable_corner_grips() {
+    // `media.html:169-172` has drawn four `.crop-handle` grips since the crop tool was designed; the app
+    // never rendered them, so a region could only be redrawn, never nudged. They are `<button>`s rather
+    // than the mockup's `<span>`s so the gesture is reachable from the keyboard too.
+    let html = render(viewer_view);
+    for corner in ["nw", "ne", "sw", "se"] {
+        assert!(
+            html.contains(&format!(r#"class="crop-handle {corner}""#)),
+            "the {corner} grip renders: {html}"
+        );
+    }
+    for name in [
+        "Resize region from the top left",
+        "Resize region from the top right",
+        "Resize region from the bottom left",
+        "Resize region from the bottom right",
+    ] {
+        assert!(html.contains(name), "the grips carry accessible names: {html}");
+    }
+    assert_eq!(
+        html.matches("<button").count(),
+        html.matches(r#"class="crop-handle"#).count() + 7,
+        "the four grips are buttons, alongside the four zoom buttons and Set/Clear/Close: {html}"
+    );
+}
+
+#[test]
+fn the_grips_only_exist_while_a_region_does() {
+    let html = render(viewer_view_no_region);
+    assert!(!html.contains("crop-handle"), "no region, nothing to grab: {html}");
+}
+
+#[test]
+fn a_look_only_viewer_has_no_grips_either() {
+    let html = render(viewer_view_zoom_only);
+    assert!(
+        !html.contains("crop-handle"),
+        "the preview dialog records no region, so it offers no grips: {html}"
+    );
+}
+
+#[test]
+fn both_region_actions_are_inert_until_there_is_a_region_to_act_on() {
+    // Clear had no `disabled:` at all, so pressing it with nothing selected called `onclear` — and the
+    // caller's `SetMediaRegion(None)` wrote an event for a no-op change.
+    let html = render(viewer_view_no_region);
+    for label in ["Set region", "Clear region"] {
+        assert!(
+            button_tag(&html, label).contains("disabled"),
+            "{label:?} is disabled with no region set: {html}"
+        );
+    }
+}
+
+#[test]
+fn both_region_actions_are_live_once_a_region_exists() {
+    let html = render(viewer_view);
+    for label in ["Set region", "Clear region"] {
+        let tag = button_tag(&html, label);
+        assert!(!tag.is_empty(), "{label:?} renders as a button at all: {html}");
+        assert!(
+            !tag.contains("disabled"),
+            "{label:?} is live once a region is set: {html}"
+        );
+    }
+}
+
+#[test]
+fn a_viewer_without_crop_tools_keeps_zoom_and_close_and_drops_every_region_control() {
+    let html = render(viewer_view_zoom_only);
+    assert!(
+        html.contains("src=\"/media/portraits/john.jpg\""),
+        "the image still renders: {html}"
+    );
+    for needle in ["Fit", "100%", "150%", "200%", "Close"] {
+        assert!(html.contains(needle), "expected {needle:?} in: {html}");
+    }
+    for needle in ["mv-readout", "crop-rect", "crop-capture", "Set region", "Clear region"] {
+        assert!(
+            !html.contains(needle),
+            "a look-only viewer renders no {needle:?}: {html}"
+        );
+    }
 }
 
 fn save_labels() -> MediaSaveLabels {

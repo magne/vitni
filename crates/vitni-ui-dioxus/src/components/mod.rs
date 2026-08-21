@@ -43,7 +43,7 @@ pub use forms::{Checkbox, DateInput, DatePicker, Input, LabeledValue, NumberInpu
 pub use history::{HistoryEntry, HistoryTimeline};
 pub use layout::{Card, EmptyState, Modal, SidePanel};
 pub use media_save_dialog::{MediaSaveDialog, MediaSaveLabels};
-pub use media_viewer::{MediaViewer, MediaViewerLabels};
+pub use media_viewer::{MediaCropLabels, MediaCropTools, MediaViewer, MediaViewerLabels};
 pub use nav::{Breadcrumb, StatusLine, TabItem, Tabs};
 pub use new_record_card::NewRecordCard;
 pub use provenance::{ProvenanceAxis, ProvenanceBlock, provenance_new_citation_card};

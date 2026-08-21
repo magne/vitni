@@ -1,7 +1,7 @@
 use super::{
     ActionLabel, AttachedRefVm, CitationRefVm, DateDraft, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest,
-    MediaEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, line_label, media_asset_src,
-    media_is_image, non_blank,
+    MediaEdit, MediaRefVm, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, line_label,
+    media_asset_src, media_is_image, non_blank,
 };
 
 /// A record that references a media object or note (Media "Used by" / Note "References"): its kind
@@ -147,10 +147,44 @@ impl MediaDetail {
         media_asset_src(self.file_path.as_deref())
     }
 
+    /// The media reference the Overview's preview dialog views: this same object, addressed the way the
+    /// viewer addresses one. Its `path` is seeded **web-first**, because [`MediaRefVm::src`] has no web
+    /// branch of its own — so the dialog loads exactly the URL [`Self::preview_src`] shows. The dialog
+    /// records no region, so there is no attach assertion to name (`assertion_id` is empty).
+    #[must_use]
+    pub fn viewer_ref(&self) -> MediaRefVm {
+        MediaRefVm {
+            human_id: self.human_id.clone(),
+            assertion_id: String::new(),
+            caption: Some(self.title.clone()),
+            crop: None,
+            path: self.web_path.clone().or_else(|| self.file_path.clone()),
+            mime: self.mime.clone(),
+        }
+    }
+
+    /// The `mime · date` line the detail header shows under the title (`media.html:62`) — the same
+    /// line the master-list row carries, so the two cannot drift.
+    #[must_use]
+    pub fn header_subtitle(&self) -> Option<String> {
+        media_subtitle(self.mime.clone(), self.date.clone())
+    }
+
     /// The object's location, whichever kind it has — the path a MIME is inferred from when the record
     /// carries none.
     fn location(&self) -> Option<&str> {
         self.file_path.as_deref().or(self.web_path.as_deref())
+    }
+}
+
+/// The `mime · date` line the master-list row and the detail header both show (`media.html:25`,
+/// `:62`): whichever of the two is present, separated when both are.
+fn media_subtitle(mime: Option<String>, date: Option<String>) -> Option<String> {
+    match (mime, date) {
+        (Some(mime), Some(date)) => Some(format!("{mime} · {date}")),
+        (Some(mime), None) => Some(mime),
+        (None, Some(date)) => Some(date),
+        (None, None) => None,
     }
 }
 
@@ -170,12 +204,7 @@ pub fn media_row(summary: &vitni_app::MediaSummary, loc: &Localizer) -> RowVm {
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| summary.human_id.clone());
     let date = summary.date.as_ref().map(|date| loc.date(date));
-    let subtitle = match (summary.mime.clone(), date) {
-        (Some(mime), Some(date)) => Some(format!("{mime} · {date}")),
-        (Some(mime), None) => Some(mime),
-        (None, Some(date)) => Some(date),
-        (None, None) => None,
-    };
+    let subtitle = media_subtitle(summary.mime.clone(), date);
     RowVm {
         id: summary.human_id.clone(),
         title,
@@ -605,6 +634,88 @@ mod media_preview_tests {
     #[test]
     fn a_recorded_non_image_mime_beats_the_extension() {
         assert!(!detail(Some("media/scans/deed.jpg"), None, Some("application/pdf")).is_image());
+    }
+
+    #[test]
+    fn a_web_only_records_dialog_loads_exactly_the_url_its_preview_shows() {
+        // `MediaRefVm::src` has no web branch of its own, so the reference must be seeded web-first or
+        // the dialog would ask the asset handler for a URL it cannot serve.
+        let detail = detail(None, Some("https://example.org/ada.jpg"), Some("image/jpeg"));
+        assert_eq!(detail.viewer_ref().src(), detail.preview_src());
+        assert_eq!(
+            detail.viewer_ref().src().as_deref(),
+            Some("https://example.org/ada.jpg")
+        );
+    }
+
+    #[test]
+    fn a_stored_files_dialog_loads_exactly_the_url_its_preview_shows() {
+        let detail = detail(Some("media/portraits/ada.jpg"), None, Some("image/jpeg"));
+        assert_eq!(detail.viewer_ref().src(), detail.preview_src());
+    }
+
+    #[test]
+    fn the_dialogs_reference_classifies_the_file_the_way_the_preview_does() {
+        let detail = detail(Some("media/deeds/deed.pdf"), None, None);
+        assert_eq!(detail.viewer_ref().is_image(), detail.is_image());
+    }
+}
+
+#[cfg(test)]
+mod media_subtitle_tests {
+    use super::MediaDetail;
+
+    /// A detail carrying only the two fields the subtitle reads.
+    fn detail(mime: Option<&str>, date: Option<&str>) -> MediaDetail {
+        MediaDetail {
+            human_id: "O0001".to_owned(),
+            id: "0190-media-id".to_owned(),
+            title: "ada.jpg".to_owned(),
+            path: None,
+            file_path: None,
+            web_path: None,
+            mime: mime.map(str::to_owned),
+            checksum: None,
+            date: date.map(str::to_owned),
+            date_value: None,
+            attributes: Vec::new(),
+            citations: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            used_by: Vec::new(),
+            restrictions: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_mime_and_a_date_are_joined_by_a_separator() {
+        assert_eq!(
+            detail(Some("image/jpeg"), Some("c. 1900")).header_subtitle().as_deref(),
+            Some("image/jpeg · c. 1900")
+        );
+    }
+
+    #[test]
+    fn a_mime_alone_is_the_whole_subtitle() {
+        assert_eq!(
+            detail(Some("image/jpeg"), None).header_subtitle().as_deref(),
+            Some("image/jpeg")
+        );
+    }
+
+    #[test]
+    fn a_date_alone_is_the_whole_subtitle() {
+        // The common case: nothing infers a MIME, so most records carry none (#301).
+        assert_eq!(
+            detail(None, Some("c. 1900")).header_subtitle().as_deref(),
+            Some("c. 1900")
+        );
+    }
+
+    #[test]
+    fn neither_yields_no_subtitle_line() {
+        assert_eq!(detail(None, None).header_subtitle(), None);
     }
 }
 

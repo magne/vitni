@@ -16,7 +16,7 @@
 #     blank in the operator's own workspace.
 #
 # The `painted` region is a 200x100 rectangle wholly inside the preview frame, read off this scenario's
-# own shot: the seeded image paints x 995-1312, y 340-656, and its red circle's top arc crosses the
+# own shot: the seeded image paints x 995-1312, y 335-652, and its red circle's top arc crosses the
 # region, so a loaded image measures a deviation of ~0.20 there. Both records are the same image, so one
 # calibration covers both rows. Two things the region deliberately avoids, because each would let a
 # broken build pass:
@@ -27,9 +27,14 @@
 #     which measures ~0.035 over the frame's middle and is what a first, larger region here passed on
 #     while the image was still 404-ing.
 #
-# Measured on this fixture: 0 with the placeholder (no `<img>` rendered), 0.0035 with a broken `<img>`,
-# 0.20 with the image loaded. `min_deviation` sits 14x above the broken case and 4x below the loaded
-# one.
+# Measured on this fixture: 0 with the placeholder (the `else` branch renders no `<img>` and no
+# `.img-frame` either, so the region is flat panel), 0.0033 with a broken `<img>`, 0.1952 with the image
+# loaded. `min_deviation` sits 15x above the broken case and 4x below the loaded one.
+#
+# #309 moved the image up 5px (its frame is now inside the open button, under an `h3` heading) and
+# re-measured all three cases at the same coordinates rather than moving the region: it is still wholly
+# inside the frame, still clear of the centre, and still the size the gradient cannot dominate. The
+# broken figure was re-taken by deliberately suffixing the `src` and watching this assert fail.
 #
 # Coordinates are window pixels at 1800x1200, read off this scenario's own shots. The explorer rows are
 # separated at y 71 / 118 / 165, so the two row centres are y 95 and y 141 — `media-list` is the shot

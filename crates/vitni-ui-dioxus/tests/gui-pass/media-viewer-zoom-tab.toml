@@ -1,0 +1,146 @@
+# The same four zoom buttons as `media-viewer-zoom.toml`, in the **other host**: the crop viewer on a
+# record's Media tab, rather than the Media record's preview dialog.
+#
+# Both hosts exist because the reported failure was that they disagree — only Fit and 100% appeared to
+# act in the dialog, only Fit and 200% in the tab. That is the signature of a zoom expressed as a
+# percentage of the containing block: the dialog's canvas is 1029 wide and the tab's is 1213, so the
+# same button meant a different magnification in each, and whichever steps happened to round to the same
+# rendered size looked dead. A zoom relative to the **image's own** size cannot do that.
+#
+# The seeded image is 480x480, and this host renders the *same magnifications* the dialog does — 480 at
+# 100%, 720 at 150%, 960 at 200% — against a 1213px canvas instead of a 1029px one, which is the whole
+# point. Only Fit differs between the hosts, because Fit is container-relative by definition. The
+# measured table and the method are in `media-viewer-zoom.toml`'s header; `differ`/`match` cannot express
+# a width, so the equality of the two hosts is recorded there rather than asserted here.
+#
+# The tab's Media gallery starts empty, so the scenario attaches the seeded `portrait.png` through the
+# GUI (picker → Save) to get a card to open the viewer from; that flow is shared with
+# `media-crop-drag.toml`. Coordinates are window pixels at 1800x1200, read off this scenario's own
+# shots. The tab canvas's content box is x 546-1759, y 673 down, and the zoom buttons sit at y 648 with
+# centres 561 (Fit) / 607 (100%) / 662 (150%) / 717 (200%).
+description = "Every zoom step resizes the image in the Media tab's crop viewer, by the same multiples as the dialog"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: the seeded place row"
+
+[[step]]
+do = "click"
+at = [1030, 244]
+label = "place: the Media tab"
+
+[[step]]
+do = "click"
+at = [1723, 358]
+label = "media tab: + Attach media"
+
+[[step]]
+do = "click"
+at = [1610, 241]
+label = "attach panel: the media picker"
+
+[[step]]
+do = "key"
+chord = "p"
+label = "picker: type p"
+
+[[step]]
+do = "click"
+at = [1530, 290]
+label = "picker: portrait.png"
+
+[[step]]
+do = "click"
+at = [1468, 717]
+label = "attach panel: Save"
+
+[[step]]
+do = "click"
+at = [675, 465]
+label = "gallery: the attached card"
+
+[[step]]
+do = "shot"
+name = "zoom-fit"
+
+[[step]]
+do = "click"
+at = [607, 648]
+label = "viewer: 100%"
+
+[[step]]
+do = "shot"
+name = "zoom-100"
+
+[[step]]
+do = "click"
+at = [662, 648]
+label = "viewer: 150%"
+
+[[step]]
+do = "shot"
+name = "zoom-150"
+
+[[step]]
+do = "click"
+at = [717, 648]
+label = "viewer: 200%"
+
+[[step]]
+do = "shot"
+name = "zoom-200"
+
+[[step]]
+do = "click"
+at = [561, 648]
+label = "viewer: back to Fit"
+
+[[step]]
+do = "shot"
+name = "zoom-back-to-fit"
+
+[[assert]]
+kind = "differ"
+shots = ["zoom-fit", "zoom-100"]
+# Beyond the 100% image's right edge (546 + 480 = 1026) and inside the canvas: image at Fit, empty at 100%.
+region = [1100, 750, 200, 120]
+because = "Fit fills the canvas and 100% is the image's own 480px — they cannot render identically"
+
+[[assert]]
+kind = "differ"
+shots = ["zoom-100", "zoom-150"]
+region = [620, 780, 200, 120]
+because = "150% must magnify what 100% shows"
+
+[[assert]]
+kind = "differ"
+shots = ["zoom-150", "zoom-200"]
+region = [620, 780, 200, 120]
+because = "200% must magnify what 150% shows — the tab host reportedly saw nothing from 100% or 150%"
+
+[[assert]]
+kind = "match"
+shots = ["zoom-100", "zoom-150"]
+# Beyond both steps' right edges (546 + 480 and 546 + 720) and well inside the canvas (ends 1759). Under
+# a container-relative zoom every step is at least the canvas's width, so this strip could never be
+# empty panel — the same assertion the dialog scenario makes, over this host's own canvas.
+region = [1306, 873, 100, 100]
+because = "no zoom step fills the canvas — the image is sized from itself, not from the box it sits in"
+
+[[assert]]
+kind = "painted"
+shot = "zoom-200"
+because = "the zoomed image must still be the image's own bytes, not a blank stretched box"
+region = [1350, 1000, 120, 120]
+min_deviation = 0.05
+
+[[assert]]
+kind = "match"
+shots = ["zoom-fit", "zoom-back-to-fit"]
+because = "the zoom steps are reversible in this host too"

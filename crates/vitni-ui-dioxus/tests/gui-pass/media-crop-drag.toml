@@ -1,0 +1,223 @@
+# The crop region's three gestures, in the host where the crop tool actually lives — a record's Media
+# tab. SSR cannot reach any of them: all three are pointer gestures whose only trace is a signal, and
+# SSR fires no pointer events at all.
+#
+#   * **draw** — press on empty frame and drag. This already worked; the reported "Set region does
+#     nothing" turned out to be a misread of the interaction (you draw the rectangle first, *then* press
+#     Set region), so the coverage here is a regression guard rather than a fix.
+#   * **resize** — drag one of the four corner grips. `media.html:169-172` has drawn those grips since
+#     the crop tool was designed and the app never rendered them, so a region could only be redrawn,
+#     never nudged.
+#   * **move** — press the region's interior and drag it, size unchanged.
+#
+# All three share one capture layer and are told apart at `onpointerdown` by `rect_contains`: a press
+# inside the region moves it, a press anywhere else draws a fresh one, and a press on a grip resizes it
+# (the grips are the only descendants of the `pointer-events:none` rectangle that take events). That is
+# why the last step matters — **a press outside the region must still draw**, and it is the coordinates
+# that prove it: after the move the region covers x 546-922 / y 806-1146, and the fresh draw starts at
+# (1100, 720), outside it on both axes, so the hit-test can only choose `Draw`.
+#
+# The surface is the fixture's one place, Kristiansand, whose Media tab starts empty: the scenario
+# attaches the seeded `portrait.png` through the GUI (picker → Save), which is what gives it a gallery
+# card to open the crop viewer from. Nothing is seeded for this; the attach is part of the test.
+#
+# Coordinates are window pixels at 1800x1200, read off this scenario's own shots. At Fit the image fills
+# the canvas — x 546-1758, y 673 down — so the frame is 1213px wide and every drag below stays inside it.
+# The readout is the cheapest true signal that the geometry changed, so most assertions read it; the
+# percentages it printed on the run that calibrated this file, each checked against the arithmetic:
+#
+#   draw   (650,750) -> (910,990)   `region · 9,6 -> 30,26 %`
+#   resize se grip +120,+100        `region · 9,6 -> 40,34 %`   origin anchored, far corner moved
+#   move   -150,+60                 `region · 0,11 -> 31,39 %`  31x28 kept, left edge clamped at 0
+#   draw   (1100,720) +150,+120     `region · 46,4 -> 58,14 %`  a fresh rectangle, not a move
+#
+description = "Draw, resize by a corner grip, and move the crop region — and a fresh draw still works"
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: the seeded place row"
+
+[[step]]
+do = "click"
+at = [1030, 244]
+label = "place: the Media tab"
+
+[[step]]
+do = "click"
+at = [1723, 358]
+label = "media tab: + Attach media"
+
+[[step]]
+do = "click"
+at = [1610, 241]
+label = "attach panel: the media picker"
+
+[[step]]
+do = "key"
+chord = "p"
+label = "picker: type p"
+
+[[step]]
+do = "click"
+at = [1530, 290]
+label = "picker: portrait.png"
+
+[[step]]
+do = "click"
+at = [1468, 717]
+label = "attach panel: Save"
+
+[[step]]
+do = "click"
+at = [675, 465]
+label = "gallery: the attached card"
+
+[[step]]
+do = "shot"
+name = "viewer-open"
+
+[[step]]
+do = "drag"
+from = [650, 750]
+by = [260, 240]
+label = "crop layer: drag a region"
+
+[[step]]
+do = "shot"
+name = "region-drawn"
+
+[[step]]
+do = "drag"
+from = [910, 990]
+by = [120, 100]
+label = "crop: drag the se grip out"
+
+[[step]]
+do = "shot"
+name = "grip-resized"
+
+[[step]]
+do = "drag"
+from = [800, 850]
+by = [-150, 60]
+label = "crop: drag the region's interior"
+
+[[step]]
+do = "shot"
+name = "region-moved"
+
+[[step]]
+do = "drag"
+from = [1100, 720]
+by = [150, 120]
+label = "crop: draw a fresh region, starting outside the moved one"
+
+[[step]]
+do = "shot"
+name = "redrawn"
+
+[[step]]
+do = "click"
+at = [1250, 843]
+label = "crop: focus the se grip (a click alone must not move it)"
+
+[[step]]
+do = "shot"
+name = "grip-focused"
+
+[[step]]
+do = "key"
+chord = "Right"
+label = "grip: arrow-resize one percent"
+
+[[step]]
+do = "key"
+chord = "Right"
+label = "grip: and again"
+
+[[step]]
+do = "key"
+chord = "Right"
+label = "grip: and again"
+
+[[step]]
+do = "shot"
+name = "grip-key-resized"
+
+[[step]]
+do = "key"
+chord = "shift+Down"
+label = "grip: Shift + arrow moves the whole region"
+
+[[step]]
+do = "key"
+chord = "shift+Down"
+label = "grip: and again"
+
+[[step]]
+do = "key"
+chord = "shift+Down"
+label = "grip: and again"
+
+[[step]]
+do = "shot"
+name = "grip-key-moved"
+
+[[assert]]
+kind = "differ"
+shots = ["viewer-open", "region-drawn"]
+# The `Set region` button: dimmed with no region, live with one.
+region = [1505, 636, 95, 26]
+because = "a drag must enable Set region — draw the rectangle first, then press it"
+
+[[assert]]
+kind = "differ"
+shots = ["viewer-open", "region-drawn"]
+# The readout beside the zoom group: "no region set" becomes "region · l,t → r,b %".
+region = [755, 638, 220, 22]
+because = "the readout must report the dragged region's percentages, so the drag reached rect_from_drag"
+
+[[assert]]
+kind = "differ"
+shots = ["viewer-open", "region-drawn"]
+# Inside the image: `.crop-rect` draws its border and dims everything outside it.
+region = [700, 800, 200, 120]
+because = "the region rectangle must be drawn over the image, with its dimming mask"
+
+[[assert]]
+kind = "differ"
+shots = ["region-drawn", "grip-resized"]
+# The readout again: dragging the `se` grip out must grow the region's width and height, so the two
+# right-hand numbers change while `22,16` stays put.
+region = [755, 638, 220, 22]
+because = "a corner grip resizes the region — the mockup has drawn four grips since the tool was designed"
+
+[[assert]]
+kind = "differ"
+shots = ["grip-resized", "region-moved"]
+region = [755, 638, 220, 22]
+because = "grabbing the region's interior moves it, which the readout shows as a changed origin"
+
+[[assert]]
+kind = "differ"
+shots = ["region-moved", "redrawn"]
+region = [755, 638, 220, 22]
+because = "a press on empty frame still draws a fresh region — the grips must not have stolen the capture layer"
+
+[[assert]]
+kind = "differ"
+shots = ["grip-focused", "grip-key-resized"]
+region = [755, 638, 220, 22]
+because = "the grips are focusable buttons: three Right presses resize the region by three percent"
+
+[[assert]]
+kind = "differ"
+shots = ["grip-key-resized", "grip-key-moved"]
+region = [755, 638, 220, 22]
+because = "Shift + arrow moves the region from the keyboard, so neither gesture is pointer-only"

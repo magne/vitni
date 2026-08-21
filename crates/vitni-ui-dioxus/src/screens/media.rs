@@ -1,10 +1,13 @@
 use super::prelude::*;
+use super::shared::media_viewer_labels;
+// The preview dialog: the shared viewer at its look-only shape, inside the shared modal.
+use crate::components::{MediaViewer, Modal};
 // The media attribute row view-model (seeds the per-row attribute edit).
 use vitni_ui::MediaAttributeVm;
 
 /// The label column width of every media record row (`docs/mockups/media.html:120-125`, `:218-222`).
-/// The shared record floor: `KONTROLLSUM` (96px) and `RESTRIKSJONER` (102px) both overflowed the 90px
-/// the mockup drew, taking those two rows' values out of line with the card's others.
+/// The shared record floor is exactly the 110px the mockup draws, and it clears the card's longest
+/// Norwegian labels — `KONTROLLSUM` (96px) and `RESTRIKSJONER` (102px) — so no page override is needed.
 const MEDIA_LABEL_WIDTH: u32 = RECORD_LABEL_WIDTH;
 
 /// The create-mode media record: an uncommitted [`MediaDraft`] rendered as the create form in the
@@ -62,10 +65,42 @@ pub fn MediaCreateRecord(draft_id: DraftId) -> Element {
     )
 }
 
-/// The media object's scalar record fields (id · file path · web path · MIME), read-first: read boxes
-/// in view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). Checksum is
-/// locked (§3, disabled); the date is the structured `DraftDate` editor. A pure fn (the edit state's
-/// signals passed in) so the create pane and SSR tests render it without `AppCtx`.
+/// The File card's user-facing id row — create mode only. A stored record's id is already the header's
+/// badge, and `media.html:120` starts its File card at File path; in create mode there is no header
+/// badge yet (the pane draws a "draft · not saved" one), so this row is the only way to assign an id.
+fn media_id_field(loc: &Localizer, record: RecordEditState<vitni_ui::MediaDraft>, editing: bool) -> Element {
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let committed = seed.read().clone();
+    if committed.existing_human_id.is_some() {
+        return rsx! {};
+    }
+    rsx! {
+        DraftText {
+            label: loc.field_label("id"),
+            name: "media-id".to_owned(),
+            label_width: MEDIA_LABEL_WIDTH,
+            editing,
+            value: draft().human_id.clone(),
+            original: committed.human_id.clone(),
+            reset_label: loc.action_reset_field(&loc.field_label("id")),
+            mono: true,
+            hint: Some(loc.field_human_id_hint()),
+            oninput: move |value: String| draft.write().human_id = value,
+            onreset: move |()| {
+                let value = seed.read().human_id.clone();
+                draft.write().human_id = value;
+            },
+        }
+    }
+}
+
+/// The media object's scalar record fields (file path · web path · MIME · date · checksum), read-first:
+/// read boxes in view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3).
+/// Checksum is locked (§3, disabled); the date is the structured `DraftDate` editor. The user-facing id
+/// row is create-only — a stored record's id is already in the header badge (`media.html:120`), so the
+/// File card starts at File path. A pure fn (the edit state's signals passed in) so the create pane and
+/// SSR tests render it without `AppCtx`.
 pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::MediaDraft>) -> Element {
     let editing = record.editing.read().to_owned();
     let mut draft = record.draft;
@@ -75,22 +110,7 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
     rsx! {
         Card { title: loc.section_label("file"),
             div { class: "stack",
-                DraftText {
-                    label: loc.field_label("id"),
-                    name: "media-id".to_owned(),
-                    label_width: MEDIA_LABEL_WIDTH,
-                    editing,
-                    value: current.human_id.clone(),
-                    original: committed.human_id.clone(),
-                    reset_label: loc.action_reset_field(&loc.field_label("id")),
-                    mono: true,
-                    hint: Some(loc.field_human_id_hint()),
-                    oninput: move |value: String| draft.write().human_id = value,
-                    onreset: move |()| {
-                        let value = seed.read().human_id.clone();
-                        draft.write().human_id = value;
-                    },
-                }
+                {media_id_field(loc, record, editing)}
                 DraftText {
                     label: loc.field_label("file-path"),
                     name: "media-file-path".to_owned(),
@@ -134,19 +154,6 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
                         draft.write().mime = value;
                     },
                 }
-                DraftText {
-                    label: loc.field_label("checksum"),
-                    name: "media-checksum".to_owned(),
-                    label_width: MEDIA_LABEL_WIDTH,
-                    editing,
-                    value: current.checksum.clone(),
-                    original: committed.checksum.clone(),
-                    reset_label: loc.action_reset_field(&loc.field_label("checksum")),
-                    mono: true,
-                    locked: true,
-                    oninput: move |_: String| {},
-                    onreset: move |()| {},
-                }
                 {date_draft_field(
                     loc,
                     "media-date",
@@ -162,6 +169,19 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<vitni_ui::Me
                         }),
                     },
                 )}
+                DraftText {
+                    label: loc.field_label("checksum"),
+                    name: "media-checksum".to_owned(),
+                    label_width: MEDIA_LABEL_WIDTH,
+                    editing,
+                    value: current.checksum.clone(),
+                    original: committed.checksum.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("checksum")),
+                    mono: true,
+                    locked: true,
+                    oninput: move |_: String| {},
+                    onreset: move |()| {},
+                }
                 {record_restrictions_field(loc, record, MEDIA_LABEL_WIDTH)}
             }
         }
@@ -414,6 +434,7 @@ fn media_detail(
     rsx! {
         DetailContainer {
             title: detail.title.clone(),
+            subtitle: detail.header_subtitle(),
             id_label: Some(detail.human_id.clone()),
             avatar: "📷".to_owned(),
             extras: restriction_display(loc, &detail.restrictions),
@@ -511,8 +532,8 @@ pub fn media_attributes_table(
             headers: vec![loc.field_label("attribute-type"), loc.field_label("value"), String::new()],
             for attribute in attributes.iter() {
                 tr {
-                    td { "{attribute.attribute_type}" }
-                    td { class: "muted", "{attribute.value}" }
+                    td { Chip { label: attribute.attribute_type.clone() } }
+                    td { "{attribute.value}" }
                     {row_actions_cell(
                         loc,
                         &attribute.attribute_type,
@@ -526,10 +547,10 @@ pub fn media_attributes_table(
     }
 }
 
-/// The Overview tab, read-first (`record-editing.html` §1/§2): a preview placeholder, the media
-/// object's scalar record (id · paths · MIME, with checksum/date locked) as read boxes, and the "Used
-/// by" card. Entering edit mode (via the sticky-header Edit) swaps the record fields to inputs and,
-/// while dirty, shows the provenance block; the preview and "Used by" cards are hidden in edit mode.
+/// The Overview tab, read-first (`record-editing.html` §1/§2): the preview, the media object's scalar
+/// record (paths · MIME, with checksum/date locked) as read boxes, and the "Used by" card. Entering
+/// edit mode (via the sticky-header Edit) swaps the record fields to inputs and, while dirty, shows the
+/// provenance block; the preview and "Used by" cards are hidden in edit mode.
 pub fn media_overview(loc: &Localizer, detail: &MediaDetail, record: RecordEditState<vitni_ui::MediaDraft>) -> Element {
     if record.editing.read().to_owned() {
         return rsx! {
@@ -537,21 +558,61 @@ pub fn media_overview(loc: &Localizer, detail: &MediaDetail, record: RecordEditS
             {record_edit_provenance(loc, record)}
         };
     }
+    let viewing = use_signal(|| false);
     rsx! {
         Card { title: loc.media_preview(),
-            if let (true, Some(src)) = (detail.is_image(), detail.preview_src()) {
-                div { class: "media-preview img-frame img-photo",
-                    img { class: "media-full", src: "{src}", alt: "{detail.title}", loading: "lazy" }
-                }
-            } else {
-                div { class: "media-preview faint", aria_hidden: "true", "📷" }
-            }
+            {media_preview_frame(loc, detail, viewing)}
             div { class: "muted", "{detail.title}" }
         }
         div { class: "grid-2",
             {media_record_fields(loc, record)}
             Card { title: loc.field_label("used-by"),
                 {media_used_by(loc, &detail.used_by)}
+            }
+        }
+        {media_preview_dialog(loc, detail, viewing)}
+    }
+}
+
+/// The Overview preview frame: a button opening the viewer dialog when there is an image to open (the
+/// gallery card's own pattern, `screens/shared.rs`), and an inert 📷 placeholder when there is not — a
+/// button there would promise a dialog with nothing in it.
+fn media_preview_frame(loc: &Localizer, detail: &MediaDetail, mut viewing: Signal<bool>) -> Element {
+    let Some(src) = detail.preview_src().filter(|_| detail.is_image()) else {
+        return rsx! {
+            div { class: "media-preview faint", aria_hidden: "true", "📷" }
+        };
+    };
+    rsx! {
+        button {
+            class: "media-open",
+            r#type: "button",
+            aria_label: loc.media_viewer_open(&detail.title),
+            onclick: move |_| viewing.set(true),
+            div { class: "media-preview img-frame img-photo",
+                img { class: "media-full", src: "{src}", alt: "{detail.title}", loading: "lazy" }
+            }
+        }
+    }
+}
+
+/// The preview dialog: the shared [`MediaViewer`] at its look-only shape (zoom + Close, no crop tools)
+/// inside a wide [`Modal`]. The `Modal` draws no ✕ of its own, so the viewer's Close is the visible
+/// dismiss control; the scrim and `Esc` dismiss it too.
+pub fn media_preview_dialog(loc: &Localizer, detail: &MediaDetail, mut viewing: Signal<bool>) -> Element {
+    rsx! {
+        Modal {
+            title: detail.title.clone(),
+            open: viewing(),
+            wide: true,
+            close_label: loc.action_label(ActionLabel::Close),
+            onclose: move |()| viewing.set(false),
+            footer: rsx! {},
+            MediaViewer {
+                item: detail.viewer_ref(),
+                labels: media_viewer_labels(loc),
+                crop: None,
+                onclose: move |()| viewing.set(false),
             }
         }
     }

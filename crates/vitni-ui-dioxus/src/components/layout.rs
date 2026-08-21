@@ -129,6 +129,10 @@ pub fn Modal(
     title: String,
     /// Whether the dialog is shown.
     open: bool,
+    /// Whether the dialog takes the wide shape (`.modal-wide`) — for content a prompt's width cannot
+    /// hold, e.g. an image.
+    #[props(default)]
+    wide: bool,
     /// The accessible name for the click-away scrim (already localized).
     close_label: String,
     /// Fired when the dialog is dismissed without deciding — the scrim is clicked, or `Esc` is pressed.
@@ -153,7 +157,7 @@ pub fn Modal(
                 onclick: move |_| onclose.call(()),
             }
             div {
-                class: "modal",
+                class: if wide { "modal modal-wide" } else { "modal" },
                 role: "dialog",
                 aria_modal: "true",
                 aria_label: "{title}",

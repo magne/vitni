@@ -1088,6 +1088,11 @@ media-viewer-region = region
 media-viewer-no-region = no region set
 media-viewer-set-region = Set region
 media-viewer-clear-region = Clear region
+media-crop-handle-nw = Resize region from the top left
+media-crop-handle-ne = Resize region from the top right
+media-crop-handle-sw = Resize region from the bottom left
+media-crop-handle-se = Resize region from the bottom right
+media-crop-handle-hint = Drag to resize; arrow keys resize, Shift + arrow moves the region
 
 # Plugin trust tiers & capability grants (ADR 0014)
 plugin-trust-sanctioned = Sanctioned
