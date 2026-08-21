@@ -55,8 +55,16 @@ const READ_VALUE_SELECTORS: [&str; 2] = [".field .val", ".field.val"];
 /// literals — so `media.html` drew a preview and a viewer dialog the app sheet styled and the mockup
 /// sheet did not. Only `.crop-capture` and `.media-save-preview` stay app-only, and the amended comment
 /// above them in `src/components.css` says why.
-const MEDIA_SELECTORS: [&str; 7] = [
+const MEDIA_SELECTORS: [&str; 15] = [
     ".modal-wide",
+    ".modal-wide .mv-canvas",
+    ".mv-frame",
+    ".mv-frame.zoom-fit",
+    ".mv-frame.zoom-100",
+    ".mv-frame.zoom-150",
+    ".mv-frame.zoom-200",
+    ".mv-frame > .media-full",
+    ".mv-frame.zoom-fit > .media-full",
     ".media-card",
     ".media-open",
     ".media-thumb",

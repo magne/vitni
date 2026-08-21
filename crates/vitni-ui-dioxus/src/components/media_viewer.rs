@@ -16,28 +16,91 @@ use vitni_ui::{MediaRefVm, rect_css, rect_from_drag};
 
 use crate::components::{Button, ButtonVariant};
 
-/// The zoom steps offered by the viewer toolbar: fit-to-width, then fixed percentages that overflow
-/// the scroll container.
+/// The zoom steps offered by the viewer toolbar: fit-to-width, then fixed percentages of the canvas
+/// width that overflow it and make it scroll.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Zoom {
-    /// Scale the image down to fit the frame width.
+    /// Show the image at its natural size, shrunk if it is wider than the canvas.
     Fit,
-    /// 100% of the frame width.
+    /// 100% of the canvas width.
     P100,
-    /// 150% of the frame width.
+    /// 150% of the canvas width.
     P150,
-    /// 200% of the frame width.
+    /// 200% of the canvas width.
     P200,
 }
 
 impl Zoom {
-    /// The inline `style` that sizes the image for this zoom.
-    const fn image_style(self) -> &'static str {
+    /// The frame's full class list for this zoom.
+    ///
+    /// The zoom sizes the **frame**, not the image: the frame is the crop overlay's coordinate space,
+    /// so percent geometry is only zoom-invariant (ADR 0017 §GUI) while the frame stays exactly the
+    /// image's box. `zoom-fit` shrink-wraps the image's natural size, capped at the canvas; every other
+    /// step is a definite percentage of `.mv-canvas`'s content box, which is what makes the canvas
+    /// scroll instead of the frame clipping.
+    ///
+    /// A **class**, not an inline `style`: measured in the real webview, the frame's `style` attribute
+    /// is applied when it mounts and then never updated again, so a zoom change moved nothing. Its
+    /// `class` does update — the toolbar's own active-button classes prove it in the same shots.
+    const fn frame_class(self) -> &'static str {
         match self {
-            Zoom::Fit => "max-width:100%;height:auto",
-            Zoom::P100 => "width:100%;height:auto",
-            Zoom::P150 => "width:150%;height:auto",
-            Zoom::P200 => "width:200%;height:auto",
+            Zoom::Fit => "crop-frame img-frame mv-frame zoom-fit",
+            Zoom::P100 => "crop-frame img-frame mv-frame zoom-100",
+            Zoom::P150 => "crop-frame img-frame mv-frame zoom-150",
+            Zoom::P200 => "crop-frame img-frame mv-frame zoom-200",
+        }
+    }
+}
+
+#[cfg(test)]
+mod zoom_geometry_tests {
+    use super::Zoom;
+
+    const STEPS: [Zoom; 4] = [Zoom::Fit, Zoom::P100, Zoom::P150, Zoom::P200];
+
+    #[test]
+    fn fit_and_one_hundred_percent_are_not_the_same_geometry() {
+        // They rendered identically: `.media-full`'s `width:100%` outranked Fit's `max-width:100%`, so
+        // both steps came out at the frame's width.
+        assert_ne!(Zoom::Fit.frame_class(), Zoom::P100.frame_class());
+    }
+
+    #[test]
+    fn every_step_has_its_own_frame_class() {
+        for (index, step) in STEPS.into_iter().enumerate() {
+            for other in STEPS.into_iter().skip(index + 1) {
+                assert_ne!(
+                    step.frame_class(),
+                    other.frame_class(),
+                    "{step:?} and {other:?} size the frame the same way"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_zoom_is_a_class_and_carries_no_inline_geometry() {
+        // The frame's inline `style` is applied at mount and never updated again (measured in the real
+        // webview), so a zoom expressed there moved nothing at all. Its class does update.
+        for step in STEPS {
+            let class = step.frame_class();
+            assert!(!class.contains(':'), "{step:?} is a class list, not a style: {class}");
+            assert!(
+                class.contains("mv-frame"),
+                "{step:?} carries the frame base class the zoom modifiers hang off: {class}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_step_keeps_the_frame_a_crop_frame_and_an_image_frame() {
+        // The crop overlay is positioned against `.crop-frame` and `.crop-rect`'s dimming mask needs
+        // its `overflow:hidden`; `.img-frame` carries the frame's own chrome. A zoom modifier must not
+        // replace either.
+        for step in STEPS {
+            let class = step.frame_class();
+            assert!(class.contains("crop-frame"), "{step:?}: {class}");
+            assert!(class.contains("img-frame"), "{step:?}: {class}");
         }
     }
 }
@@ -249,15 +312,14 @@ pub fn MediaViewer(
             }
             div { class: "mv-canvas",
                 div {
-                    class: "crop-frame img-frame",
-                    style: "display:inline-block;position:relative",
+                    class: zoom().frame_class(),
                     onmounted: move |event: MountedEvent| {
                         frame_el.set(Some(event.clone()));
                         measure_frame(event, frame_size);
                     },
                     if is_image {
                         if let Some(src) = src.clone() {
-                            img { class: "media-full", src: "{src}", style: zoom().image_style() }
+                            img { class: "media-full", src: "{src}" }
                         }
                     } else {
                         div { class: "img-glyph", aria_hidden: "true", "🗎" }

@@ -1176,6 +1176,31 @@ select.in.modified { border-color: var(--accent); }
   border: 1px solid var(--line); border-radius: var(--r-md);
 }
 .mv-canvas .img-frame { border: 0; border-radius: 0; }
+/* The viewer's zoom, as geometry. The zoom sizes the *frame* and the image fills it, so the frame
+   stays exactly the image's box and the percent crop geometry stays zoom-invariant (ADR 0017 §GUI).
+   `zoom-fit` shrink-wraps the image's natural size, capped at the canvas; the other three are definite
+   percentages of `.mv-canvas`'s content box, so the canvas scrolls instead of the frame clipping.
+   Three things had to be true at once for a zoom to resolve at all, and none of them were:
+     * the frame needs a *definite* width — a percentage-width image inside a shrink-to-fit frame is
+       circular, so `width:150%` had nothing to resolve against;
+     * `.media-full`'s fixed-frame rules (for the record card's 320px preview) must not apply here —
+       `height:100%` is circular against a frame whose height comes from the image, and `object-fit`
+       only letterboxes a box that already carries the image's own ratio;
+     * `Fit` must not be overridden by `.media-full`'s `width:100%`, which made Fit and 100% identical.
+   It lives in classes rather than an inline `style` because the frame's `style` attribute is applied
+   when it mounts and never updated after (measured in the real webview), so the buttons moved nothing. */
+.mv-frame { display: inline-block; }
+.mv-frame.zoom-fit { max-width: 100%; }
+.mv-frame.zoom-100 { width: 100%; }
+.mv-frame.zoom-150 { width: 150%; }
+.mv-frame.zoom-200 { width: 200%; }
+.mv-frame > .media-full { width: 100%; height: auto; object-fit: fill; }
+.mv-frame.zoom-fit > .media-full { width: auto; max-width: 100%; }
+/* In the wide preview dialog the canvas is the *only* scroller, at a fixed viewport-proportional
+   height, so a zoom step scales the image inside it instead of growing the dialog. Its own
+   `calc(100vh - 210px)` cap is not enough here: `.overlay` starts below the topbar and tabstrip and
+   pads itself 72px, so a modal sized against the whole viewport still overflows the window bottom. */
+.modal-wide .mv-canvas { height: 62vh; max-height: none; }
 
 /* Real image rendering, mirrored into the mockup sheet (#309): `media.html` draws the preview frame
    and the viewer dialog, so the superset must style them (`tests/record_row_css.rs`). Only two rules
