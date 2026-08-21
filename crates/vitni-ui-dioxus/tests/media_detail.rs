@@ -528,6 +528,21 @@ fn attribute_rows_carry_edit_and_retract_corrections() {
 }
 
 #[test]
+fn an_attribute_row_chips_its_type_and_shows_its_value_at_full_contrast() {
+    // `media.html:246` draws the type as a `.chip`, like every other typed cell on the screen, and its
+    // value as plain text — the app dimmed the value with `muted`, which the mockup never asked for.
+    let html = render(media_view);
+    assert!(
+        html.contains(r#"<td><span class="chip">dimensions</span></td>"#),
+        "the attribute type is a chip:\n{html}"
+    );
+    assert!(
+        html.contains("<td>1024x1536</td>"),
+        "the attribute value carries no muted class:\n{html}"
+    );
+}
+
+#[test]
 fn attachments_carry_detach_corrections() {
     let html = render(media_view);
     assert!(
