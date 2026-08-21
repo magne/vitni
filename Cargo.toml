@@ -114,7 +114,7 @@ predicates = "3.1.4"
 dioxus = "0.7.8"
 dioxus-ssr = "0.7.8"
 # OS appearance detection for the "System" theme mode (vitni-ui-dioxus, desktop only)
-dark-light = "2.0.0"
+dark-light = "3.0.0"
 # internal crates
 vitni-interchange = { path = "crates/vitni-interchange" }
 vitni-core = { path = "crates/vitni-core" }
