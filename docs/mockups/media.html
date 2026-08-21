@@ -167,13 +167,15 @@
               <button class="btn sm ghost">Clear region</button>
             </div>
             <div class="mv-canvas">
-              <!-- The zoom sizes the *frame*, not the image inside it: the frame stays exactly the
-                   image's box, which is what keeps the percent crop geometry zoom-invariant. It is a
-                   class (`.mv-frame` + one `zoom-*` modifier), not an inline style — 100% is the active
-                   step here, so `zoom-100` makes the frame the canvas's full width; `zoom-150`/
-                   `zoom-200` overflow it and the canvas scrolls. `height` stands in for the image the
-                   app loads. -->
-              <div class="crop-frame img-frame img-photo mv-frame zoom-100" style="height:360px">
+              <!-- The frame shrink-wraps the image, so it stays exactly the image's box — that is what
+                   keeps the percent crop geometry zoom-invariant. The zoom is a class (`.mv-frame` plus
+                   one `zoom-*` modifier), not an inline style, and above Fit it scales the image by its
+                   **own** size (CSS `zoom`), never by the canvas's — so a step means the same
+                   magnification here as in the Media record's preview dialog. 100% is the active step,
+                   so this frame is the image's own 480px box; `zoom-150`/`zoom-200` are 720 and 960 and
+                   the canvas scrolls. The inline `width`/`height` stand in for the image the app
+                   loads. -->
+              <div class="crop-frame img-frame img-photo mv-frame zoom-100" style="width:480px;height:360px">
                 <div class="img-glyph" aria-hidden="true">📷</div>
                 <div class="crop-rect" style="left:22%;top:18%;width:39%;height:26%">
                   <span class="crop-handle nw"></span><span class="crop-handle ne"></span>
@@ -206,8 +208,8 @@
                     <button class="btn sm ghost">Close</button>
                   </div>
                   <div class="mv-canvas">
-                    <!-- Fit is the active step, so `zoom-fit` wraps the image's natural size capped
-                         at the canvas width (`max-width`, no definite width). -->
+                    <!-- Fit is the active step, so `zoom-fit` fills the canvas's width — the one
+                         container-relative step. -->
                     <div class="crop-frame img-frame img-photo mv-frame zoom-fit" style="height:360px">
                       <div class="img-glyph" aria-hidden="true">📷</div>
                     </div>

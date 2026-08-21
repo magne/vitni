@@ -16,28 +16,31 @@ use vitni_ui::{MediaRefVm, rect_css, rect_from_drag};
 
 use crate::components::{Button, ButtonVariant};
 
-/// The zoom steps offered by the viewer toolbar: fit-to-width, then fixed percentages of the canvas
-/// width that overflow it and make it scroll.
+/// The zoom steps offered by the viewer toolbar: fit-to-width, then multiples of the image's **own**
+/// size, which overflow the canvas and make it scroll.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Zoom {
-    /// Show the image at its natural size, shrunk if it is wider than the canvas.
+    /// Fill the canvas's width, scaling the image either way. The one container-relative step, which is
+    /// what fitting means.
     Fit,
-    /// 100% of the canvas width.
+    /// The image's own pixels, 1:1.
     P100,
-    /// 150% of the canvas width.
+    /// One and a half times the image's own size.
     P150,
-    /// 200% of the canvas width.
+    /// Twice the image's own size.
     P200,
 }
 
 impl Zoom {
     /// The frame's full class list for this zoom.
     ///
-    /// The zoom sizes the **frame**, not the image: the frame is the crop overlay's coordinate space,
-    /// so percent geometry is only zoom-invariant (ADR 0017 §GUI) while the frame stays exactly the
-    /// image's box. `zoom-fit` shrink-wraps the image's natural size, capped at the canvas; every other
-    /// step is a definite percentage of `.mv-canvas`'s content box, which is what makes the canvas
-    /// scroll instead of the frame clipping.
+    /// The frame stays exactly the image's box at every step — it shrink-wraps the image — because it is
+    /// the crop overlay's coordinate space and percent geometry is only zoom-invariant (ADR 0017 §GUI)
+    /// while the two coincide. Above `Fit` the size comes from the image's **intrinsic** pixels (the CSS
+    /// `zoom` property, which unlike `transform` affects layout, so the frame grows and `.mv-canvas`
+    /// gets something to scroll). A percentage of the containing block would make the same button mean a
+    /// different magnification in the preview dialog than on a record's Media tab, which is exactly what
+    /// was reported; `Fit` is the one step that is container-relative, by definition.
     ///
     /// A **class**, not an inline `style`. Measured in the real webview: a width set in the frame's
     /// `style` applies when it mounts and is then never updated again — the same `width:2000px` gives a

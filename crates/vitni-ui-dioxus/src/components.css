@@ -1191,12 +1191,12 @@ select.in.modified { border-color: var(--accent); }
        letterboxes a box that already carries the image's own ratio, and its `width:100%` outranks
        `zoom-fit`'s cap. `.mv-frame > .media-full` neutralises all three inside the canvas. */
 .mv-frame { display: inline-block; }
-.mv-frame.zoom-fit { max-width: 100%; }
-.mv-frame.zoom-100 { width: 100%; }
-.mv-frame.zoom-150 { width: 150%; }
-.mv-frame.zoom-200 { width: 200%; }
-.mv-frame > .media-full { width: 100%; height: auto; object-fit: fill; }
-.mv-frame.zoom-fit > .media-full { width: auto; max-width: 100%; }
+.mv-frame.zoom-fit { width: 100%; }
+.mv-frame > .media-full { height: auto; max-width: none; object-fit: fill; }
+.mv-frame.zoom-fit > .media-full { width: 100%; }
+.mv-frame.zoom-100 > .media-full { width: auto; zoom: 1; }
+.mv-frame.zoom-150 > .media-full { width: auto; zoom: 1.5; }
+.mv-frame.zoom-200 > .media-full { width: auto; zoom: 2; }
 /* In the wide preview dialog the canvas is the *only* scroller, at a fixed viewport-proportional
    height, so a zoom step scales the image inside it instead of growing the dialog. Its own
    `calc(100vh - 210px)` cap is not enough here: `.overlay` starts below the topbar and tabstrip and

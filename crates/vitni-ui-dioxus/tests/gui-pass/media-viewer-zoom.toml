@@ -1,36 +1,53 @@
-# The viewer's four zoom buttons did nothing at all, and SSR could not see it: the markup was right —
-# an `aria-pressed` toggle and a width per step — but nothing the buttons changed reached the layout.
-# What this scenario measured, once it could drive the real thing:
+# The viewer's four zoom buttons in the **Media record's preview dialog**. Its twin,
+# `media-viewer-zoom-tab.toml`, drives the same four buttons in the other host — the crop viewer on a
+# record's Media tab — because "works in one host, not the other" is exactly the reported failure, and a
+# zoom that is a percentage of *its container* cannot behave the same in a 1029px dialog canvas and a
+# 1213px tab canvas.
 #
-#   * the zoom was an inline `style` on the frame, and a width set there **applies at mount and is
-#     never updated after**. The same `width:2000px` gives a 2000px frame as the mount-time value and
-#     leaves it at the canvas width as an update. So whichever step the viewer opened at was the only
-#     one that ever took, and every pair of steps rendered identically — the first run of this
-#     scenario failed both its `differ`s at RMSE 0.0000.
+# Two defects, both invisible to SSR (the markup was right the whole time — an `aria-pressed` toggle and
+# a width per step — while nothing the buttons changed reached the layout):
 #
-# Two more things had to be true for a zoom to resolve once it did apply, and neither was:
+#   * the zoom was an inline `style` on the frame, and a width set there **applies at mount and is never
+#     updated after**. The same `width:2000px` gives a 2000px frame as the mount-time value and leaves
+#     it at the canvas width as an update. So whichever step the viewer opened at was the only one that
+#     ever took, and every pair of steps rendered identically — the first run of this scenario failed
+#     both its `differ`s at RMSE 0.0000. The zoom is a **class** now; the toolbar's own active-button
+#     classes change in these same shots, which is how we know classes update.
+#   * the zoom was then a **percentage of the containing block**, so the same button meant a different
+#     magnification in each host. It is `zoom` on the image at its intrinsic size now: 100% is the
+#     image's own pixels, 150% and 200% are multiples of them, in both hosts. `Fit` is the one
+#     container-relative step, which is what fitting means.
 #
-#   * the frame was `display:inline-block` — shrink-to-fit — and a percentage-width child contributes
-#     nothing to intrinsic width, so there was **no definite width for the percentage to resolve
-#     against**. Circular, and browser-dependent.
-#   * `.media-full`'s fixed-frame rules (for the record card's 320px preview) fought it: `width:100%`
-#     outranks a `Fit` cap, `height:100%` is circular against a frame whose height comes from the
-#     image, and `object-fit:contain` letterboxes a box that already carries the image's ratio.
+# One more thing had to stop fighting it, in `components.css`: `.media-full`'s fixed-frame rules (for the
+# record card's 320px preview) must not reach inside the viewer — `width:100%` outranks a Fit cap,
+# `height:100%` is circular against a frame whose height comes from the image, and `object-fit:contain`
+# letterboxes a box that already carries the image's ratio. `.mv-frame > .media-full` neutralises all
+# three. The frame's own `overflow:hidden` was left alone deliberately: the frame shrink-wraps the zoomed
+# image, so it *is* the image's box and clips nothing at any step (the 200% shots show the whole image,
+# with the canvas scrolling), while `.crop-rect`'s dimming mask is a `0 0 0 100vmax` box-shadow that
+# needs the frame to clip it.
 #
-# The fix moves the zoom onto the *frame*, as a class: it stays exactly the image's box (so percent crop
-# geometry stays zoom-invariant, ADR 0017 §GUI) and is a definite percentage of the canvas at every step
-# above Fit, which is what makes the canvas scroll instead of the frame clipping.
+# **Host-independence is a measurement, not an assertion** — `differ`/`match`/`painted` cannot express
+# "the image is exactly 720px wide", and the circle is flat enough over most of the frame that a `match`
+# between two zoom levels passes under either model. So it is recorded here instead, taken with
+# `convert <shot> -crop <w>x1+<x>+<y> +repage txt:-` across the row just under the canvas top and read
+# for the image's own edges (never eyeballed). Re-take it if the geometry changes:
 #
-# The seeded image is 480x480 and the dialog's canvas is ~1030 wide, so the two states this scenario
-# separates are visibly different sizes: at Fit the image is 480 wide and stops at x 1119, at 100% it
-# fills the canvas. That is what the first `differ` reads — a region *beside* the Fit image, empty
-# canvas at Fit and image at 100%. The second `differ` compares two different zoom levels over the same
-# window rectangle, so it fails if a step is a no-op even when the first one passed.
+#   step | dialog (canvas 1029px wide) | tab (canvas 1213px wide)
+#   -----+----------------------------+------------------------
+#   Fit  | 1029                       | 1213      <- container-relative, by definition
+#   100% |  480                       |  480      <- the image's own pixels
+#   150% |  720                       |  720
+#   200% |  960                       |  960
 #
-# Coordinates are window pixels at the default 1800x1200, read off this scenario's own shots. The zoom
-# buttons sit at y 301, with borders at x 639-670 (Fit), 675-726 (100%), 731-781 (150%) and 786-836
-# (200%) — centres 655 / 700 / 756 / 811.
-description = "Each viewer zoom step actually resizes the image, and Fit is not 100% (#309 follow-up)"
+# The three zoom steps are identical in both hosts and Fit is the only one that tracks its container.
+# Before this change the same steps measured 759/714/503-wide *chords* in the dialog against 813/777/505
+# in the tab — different magnifications from the same button, which is what the report described.
+#
+# Coordinates are window pixels at the default 1800x1200, read off this scenario's own shots. The
+# dialog's canvas content box is x 639-1668, y 326 down. The zoom buttons sit at y 301, with borders at
+# x 639-670 (Fit), 675-726 (100%), 731-781 (150%) and 786-836 (200%) — centres 655 / 700 / 756 / 811.
+description = "Every zoom step resizes the image in the preview dialog, by a multiple of the image, not the canvas"
 
 [[step]]
 do = "click"
@@ -62,6 +79,15 @@ name = "zoom-100"
 
 [[step]]
 do = "click"
+at = [756, 301]
+label = "viewer: 150%"
+
+[[step]]
+do = "shot"
+name = "zoom-150"
+
+[[step]]
+do = "click"
 at = [811, 301]
 label = "viewer: 200%"
 
@@ -81,24 +107,37 @@ name = "zoom-back-to-fit"
 [[assert]]
 kind = "differ"
 shots = ["zoom-fit", "zoom-100"]
-# Beside the Fit image (which ends at x 1119) and inside the canvas: empty panel at Fit, image at 100%.
-region = [1130, 400, 200, 120]
-because = "Fit and 100% must not render identically — `.media-full`'s width:100% used to win over Fit's cap"
+# Beyond the 100% image's right edge (x 1119) and inside the canvas: image at Fit, empty panel at 100%.
+region = [1200, 400, 200, 120]
+because = "Fit fills the canvas and 100% is the image's own 480px — they cannot render identically"
 
 [[assert]]
 kind = "differ"
-shots = ["zoom-100", "zoom-200"]
-region = [700, 400, 200, 120]
-because = "200% must scale the image past the canvas and scroll, not clip at the frame"
+shots = ["zoom-100", "zoom-150"]
+region = [700, 450, 200, 120]
+because = "150% must magnify what 100% shows"
+
+[[assert]]
+kind = "differ"
+shots = ["zoom-150", "zoom-200"]
+region = [700, 450, 200, 120]
+because = "200% must magnify what 150% shows — every step has to act, not just the first"
+
+[[assert]]
+kind = "match"
+shots = ["zoom-100", "zoom-150"]
+# Beyond both steps' right edges (639 + 480 and 639 + 720) and well inside the canvas (ends 1668). Under
+# a container-relative zoom every step is at least the canvas's width, so this strip could never be
+# empty panel at all; it says nothing about *which* multiple, which is why the table above is measured.
+region = [1399, 526, 100, 100]
+because = "no zoom step fills the canvas — the image is sized from itself, not from the box it sits in"
 
 [[assert]]
 kind = "painted"
-# Crossing the circle's right arc against the sky at 200%, where the image measures 0.2496; the middle
-# of the frame is flat colour at this zoom (0.0104) and would answer for a blank stretched box.
-region = [1450, 340, 200, 120]
 shot = "zoom-200"
-min_deviation = 0.05
 because = "the zoomed image must still be the image's own bytes, not a blank stretched box"
+region = [1450, 700, 120, 120]
+min_deviation = 0.05
 
 [[assert]]
 kind = "match"
