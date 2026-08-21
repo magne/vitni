@@ -1,0 +1,81 @@
+# #309: the Media record was the one record screen that never rendered `MediaViewer`, so a media
+# object's own page was the only place its image could not be opened. The fix wraps the preview frame in
+# a button that opens the viewer in a wide modal.
+#
+# SSR cannot see either half of that. It asserts the markup of a `button.media-open` and of the dialog,
+# but not **which element the click handler is attached to** and not that `Esc` reaches the overlay —
+# and both are exactly how defects have shipped past every SSR test here before (the keyboard
+# dispatcher sits on `.app`, and every overlay renders as a *sibling* of `.app`, so an `onkeydown` on
+# the overlay is the only thing that dismisses one).
+#
+# Coordinates are window pixels at the default 1800x1200, read off this scenario's own shots — not
+# `media-preview.toml`'s, even though it drives the same fixture to the same record. The click on the
+# preview lands at (1150, 490): inside the seeded image, which paints x 995-1312 / y 335-652 on the
+# Overview, and clear of the frame's dead margins on either side of it.
+#
+# The `painted` region is a 200x120 rectangle wholly inside the *dialog's* image, which is a different
+# box: at Fit it paints x 639-1119 / y 325-807. The region crosses the red circle's top arc against the
+# sky above it, which is why a loaded image measures 0.1725 there. It stays 15px clear of the image's
+# top edge and well clear of its centre (880, 567), where a glyph placeholder or WebKit's broken-image
+# marker would paint and answer for the image with their own texture. The frame in the dialog carries no
+# `.img-photo` gradient (`.mv-canvas .img-frame` strips its border, and the viewer's frame never gets
+# that class), so the only gradient inside the region is the image's own; the modal body behind it is
+# flat, so a missing image reads as ~0 rather than as texture.
+#
+# The `match` compares against `media-detail`, the shot taken immediately before the dialog opened, not
+# against the first shot: focus rings are real pixels and move as a scenario runs.
+description = "The Media preview frame opens the viewer dialog, and Esc dismisses it (#309)"
+
+[[step]]
+do = "click"
+at = [85, 431]
+label = "rail: Media"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: the seeded portrait.png row"
+
+[[step]]
+do = "shot"
+name = "media-detail"
+
+[[step]]
+do = "click"
+at = [1150, 490]
+label = "overview: the preview frame"
+
+[[step]]
+do = "shot"
+name = "viewer-open"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "viewer: Esc"
+
+[[step]]
+do = "shot"
+name = "viewer-after-esc"
+
+[[assert]]
+kind = "differ"
+shots = ["media-detail", "viewer-open"]
+# The dialog and its backdrop wash cover most of the window, so this is a large difference. The
+# tolerance is raised above the default only to keep a focus ring from passing as an opened dialog —
+# the failure mode `overlay-dismiss.toml` was first calibrated against.
+tolerance = 0.04
+because = "clicking the preview frame must open the viewer dialog — the handler has to be on the frame, not beside it"
+
+[[assert]]
+kind = "painted"
+shot = "viewer-open"
+region = [780, 340, 200, 120]
+min_deviation = 0.05
+because = "the dialog must load the image's own bytes, not a placeholder or a broken img"
+
+[[assert]]
+kind = "match"
+shots = ["media-detail", "viewer-after-esc"]
+tolerance = 0.04
+because = "Esc must dismiss the viewer dialog"
