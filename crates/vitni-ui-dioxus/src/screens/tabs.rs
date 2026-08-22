@@ -357,6 +357,24 @@ pub fn fallback_tab(id: &'static str) -> DetailTab {
     }
 }
 
+impl From<&DetailTab> for TabItem {
+    /// The tab strip's item for one [`DetailTab`]: the same id, label and count, with `id` owned
+    /// because the design-system component is generic over strips whose ids are not `'static`.
+    ///
+    /// The conversion lives here rather than in `components/nav.rs` so the design system stays
+    /// ignorant of `vitni_ui`'s view-models — the pedigree screen builds its own [`TabItem`]s from
+    /// something else entirely, and a `From` in the component module would tie the strip to the
+    /// record-detail vocabulary it happens to serve most often. `DetailTab::action` has no counterpart:
+    /// it is the tab's *content* affordance ([`tab_frame`]'s bar), never part of the strip.
+    fn from(tab: &DetailTab) -> Self {
+        Self {
+            id: tab.id.to_owned(),
+            label: tab.label.clone(),
+            count: tab.count,
+        }
+    }
+}
+
 /// The label column of an address card's rows (`docs/mockups/repository.html:163-185`,
 /// `event.html:239-246`). The canonical [`DEFAULT_LABEL_WIDTH`]: the 90px both mockups drew is 1px
 /// short of `POSTNUMMER`, which took that row's value out of line with the card's others.

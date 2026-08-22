@@ -208,14 +208,7 @@ fn tag_detail(
 ) -> Element {
     let loc = state.data_loc();
     let tabs = tag_tabs(detail, loc);
-    let tab_items: Vec<TabItem> = tabs
-        .iter()
-        .map(|tab| TabItem {
-            id: tab.id.to_owned(),
-            label: tab.label.clone(),
-            count: tab.count,
-        })
-        .collect();
+    let tab_items: Vec<TabItem> = tabs.iter().map(TabItem::from).collect();
     let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let priority = detail.priority.unwrap_or(DEFAULT_TAG_PRIORITY);
     let color = detail.color.clone().unwrap_or_else(|| DEFAULT_TAG_COLOR.to_owned());

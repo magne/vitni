@@ -533,14 +533,7 @@ fn dna_match_detail(
     let on_undo = callbacks.on_undo;
     let on_tag_remove = callbacks.on_tag_remove;
     let tabs = dna_match_tabs(detail, loc);
-    let tab_items: Vec<TabItem> = tabs
-        .iter()
-        .map(|tab| TabItem {
-            id: tab.id.to_owned(),
-            label: tab.label.clone(),
-            count: tab.count,
-        })
-        .collect();
+    let tab_items: Vec<TabItem> = tabs.iter().map(TabItem::from).collect();
     let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     let status_actions = dna_match_status_actions(loc, on_submit, human_id);
