@@ -173,12 +173,9 @@ long-standing "DNA match views in the UI" item is closed.
 
 ### Shell, tabs & notifications
 
-- **Back/forward cannot return to a draft tab.** `NavLocation.record` is `(Category, String)`, a saved
-  record's key, so a draft is never recorded in the history and `⌘←`/`⌘→` step past it to the last saved
-  record instead. True before several drafts per category (#260) and unchanged by it, but a strip that
-  can now hold four drafts makes it easier to notice. `NavLocation` lives in `vitni-ui`
-  (framework-neutral, ADR 0008) and a history entry naming a draft goes dead when the draft is cancelled
-  *or* committed, so the variant needs a rule for that first. — #313
+No open items. The area keeps its heading so `area/frontend/shell` stays a live label and the issues
+already filed against it keep resolving their
+[`#shell-tabs--notifications`](#shell-tabs--notifications) anchor.
 
 ### Record detail & shared tabs
 

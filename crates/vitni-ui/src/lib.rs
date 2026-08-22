@@ -62,10 +62,10 @@ pub use navigation::{
     Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, Destination, DnaMatchChangeSetRequest,
     DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftId, DraftNewCitation, DraftNewSource,
     DraftSourceRef, EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent,
-    MediaChangeSetRequest, MediaEdit, MergePersons, NavHistory, NavLocation, NewRecordRequest, NoteChangeSetRequest,
-    NoteEdit, PartnerRequest, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, RecordRef,
-    RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest, ResearchNoteEdit, Screen,
-    SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest, Tool, tab_label,
+    MediaChangeSetRequest, MediaEdit, MergePersons, NavHistory, NavLocation, NavRecord, NewRecordRequest,
+    NoteChangeSetRequest, NoteEdit, PartnerRequest, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest,
+    PlaceEdit, RecordRef, RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest, ResearchNoteEdit,
+    Screen, SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest, Tool, tab_label,
 };
 pub use palette::{
     PALETTE_GROUP_MAX, PaletteAction, PaletteCommand, PaletteCommandVm, PaletteEntry, PaletteGroup, PaletteGroupKind,

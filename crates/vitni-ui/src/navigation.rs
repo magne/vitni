@@ -442,14 +442,54 @@ impl fmt::Display for DraftId {
     }
 }
 
+/// The record a [`NavLocation`] focuses: a **saved** record keyed by `(category, human id)`, or an
+/// open **draft** keyed by its [`DraftId`].
+///
+/// Both kinds are here because back/forward has to be able to return to a create form (#313): a
+/// draft has no `human_id` yet, so the saved key cannot name one, and history would step straight
+/// past its tab to the last saved record. They are separate variants rather than one key with an
+/// optional id because they resolve differently — a saved entry is matched against the open tabs by
+/// key, a draft one by id — and because a draft entry has a lifetime a saved one does not:
+/// cancelling the draft drops its entries ([`NavHistory::forget_draft`]) and committing it rewrites
+/// them onto the record the commit stored ([`NavHistory::rekey_draft`]).
+///
+/// The key is a value, not an index, in both variants, so an entry survives tab reordering — and a
+/// saved one survives a rename too, since the `human_id` is the stable id and not the label.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NavRecord {
+    /// A stored record, by category and user-facing id (e.g. `I0001`).
+    Saved(Category, String),
+    /// An open, unsaved draft, by the [`DraftId`] it was minted under.
+    Draft(Category, DraftId),
+}
+
+impl NavRecord {
+    /// The category the record belongs to, whichever kind it is.
+    #[must_use]
+    pub fn category(&self) -> Category {
+        match self {
+            Self::Saved(category, _) | Self::Draft(category, _) => *category,
+        }
+    }
+
+    /// The draft this names, or `None` when it is a saved record.
+    #[must_use]
+    pub fn draft(&self) -> Option<DraftId> {
+        match self {
+            Self::Saved(_, _) => None,
+            Self::Draft(_, draft) => Some(*draft),
+        }
+    }
+}
+
 /// One visited navigation location: the mounted destination plus the focused record (if any),
-/// identified by its `(category, human id)` so history survives tab reordering.
+/// identified by value (see [`NavRecord`]) so history survives tab reordering.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NavLocation {
     /// The destination mounted at this point in history.
     pub destination: Destination,
-    /// The record focused within that destination, if any, identified by category + human id.
-    pub record: Option<(Category, String)>,
+    /// The record focused within that destination, if any — a saved record or an open draft.
+    pub record: Option<NavRecord>,
 }
 
 impl NavLocation {
@@ -463,6 +503,11 @@ impl NavLocation {
             return false;
         };
         self.record.is_none()
+    }
+
+    /// The draft this location focuses, or `None` when it focuses a saved record or nothing.
+    fn focused_draft(&self) -> Option<DraftId> {
+        self.record.as_ref().and_then(NavRecord::draft)
     }
 }
 
@@ -528,6 +573,67 @@ impl NavHistory {
     #[must_use]
     pub fn can_forward(&self) -> bool {
         self.cursor.is_some_and(|cursor| cursor + 1 < self.entries.len())
+    }
+
+    /// Drops every entry focusing the draft `draft` — what a cancelled (or otherwise closed) draft
+    /// leaves behind, so back/forward never stops on a tab that is no longer there (#313).
+    ///
+    /// The cursor moves to the last surviving entry at or before it, so going back once from the
+    /// remaining strip lands where it would have without the draft ever being opened. At least one
+    /// entry always survives: the seeded Dashboard root focuses no record, so it is never a draft's.
+    pub fn forget_draft(&mut self, draft: DraftId) {
+        self.retain_with_cursor(|entry, _| entry.focused_draft() != Some(draft));
+        self.collapse_adjacent_duplicates();
+    }
+
+    /// Rewrites every entry focusing the draft `draft` onto the saved record `(category, human_id)`
+    /// the commit stored — the history half of the same rule the save queue follows when a draft
+    /// becomes a record: committing is a change of the editor's *identity*, not a new place, so the
+    /// stops the draft earned stay, now naming the record.
+    pub fn rekey_draft(&mut self, draft: DraftId, category: Category, human_id: &str) {
+        for entry in &mut self.entries {
+            if entry.focused_draft() == Some(draft) {
+                entry.record = Some(NavRecord::Saved(category, human_id.to_owned()));
+            }
+        }
+        self.collapse_adjacent_duplicates();
+    }
+
+    /// Collapses each run of identical adjacent entries into one, keeping the cursor on the same
+    /// location.
+    ///
+    /// Both draft rewrites need this, because both can put two identical entries next to each other:
+    /// dropping the draft from `[X, draft, X]` would otherwise leave two stops on `X` (one back-press
+    /// that appears to do nothing), and committing a draft into a record already on the stack would
+    /// do the same. [`Self::push`] already refuses to add a duplicate of the current entry, so this
+    /// is the same rule applied after the fact.
+    fn collapse_adjacent_duplicates(&mut self) {
+        self.retain_with_cursor(|entry, previous| previous != Some(entry));
+    }
+
+    /// Rebuilds [`Self::entries`], keeping each entry `keep` accepts — given the entry and the last
+    /// entry kept so far — and moving the cursor to the last kept entry at or before where it stood.
+    ///
+    /// Both drop paths share this because the cursor remap is the fiddly half and must not be written
+    /// twice: removing entries renumbers everything after them, and the cursor has to end up on a
+    /// *location*, not on whatever index it happened to hold. An entirely emptied history takes the
+    /// cursor to `None`, matching [`Self::default`].
+    fn retain_with_cursor(&mut self, keep: impl Fn(&NavLocation, Option<&NavLocation>) -> bool) {
+        let cursor = self.cursor.unwrap_or(0);
+        let mut kept: Vec<NavLocation> = Vec::with_capacity(self.entries.len());
+        // No surviving entry at or before the cursor leaves it at the front rather than adrift.
+        let mut moved = 0;
+        for (index, entry) in std::mem::take(&mut self.entries).into_iter().enumerate() {
+            if !keep(&entry, kept.last()) {
+                continue;
+            }
+            if index <= cursor {
+                moved = kept.len();
+            }
+            kept.push(entry);
+        }
+        self.entries = kept;
+        self.cursor = (!self.entries.is_empty()).then_some(moved);
     }
 }
 
@@ -2549,7 +2655,7 @@ mod tests {
 
     use vitni_app::SuccessionKind;
 
-    use super::{Category, Destination, NavHistory, NavLocation, PlaceEdit, Tool, tab_label};
+    use super::{Category, Destination, DraftId, NavHistory, NavLocation, NavRecord, PlaceEdit, Tool, tab_label};
 
     fn location(category: Category) -> NavLocation {
         NavLocation {
@@ -2561,8 +2667,22 @@ mod tests {
     fn location_with_record(category: Category, human_id: &str) -> NavLocation {
         NavLocation {
             destination: Destination::Category(category),
-            record: Some((category, human_id.to_string())),
+            record: Some(NavRecord::Saved(category, human_id.to_string())),
         }
+    }
+
+    fn location_with_draft(category: Category, draft: DraftId) -> NavLocation {
+        NavLocation {
+            destination: Destination::Category(category),
+            record: Some(NavRecord::Draft(category, draft)),
+        }
+    }
+
+    /// The draft id a shell whose counter stands at `counter` would mint next — the only way to build
+    /// one, mirroring how the shell obtains its own.
+    fn draft_id(counter: u32) -> DraftId {
+        let mut counter = counter;
+        DraftId::mint(&mut counter)
     }
 
     #[test]
@@ -2727,6 +2847,122 @@ mod tests {
         assert!(!history.can_forward());
         assert!(history.can_back());
         assert_eq!(history.back(), Some(location(Category::People)));
+    }
+
+    #[test]
+    fn a_nav_record_reports_its_category_and_whether_it_names_a_draft() {
+        let saved = NavRecord::Saved(Category::People, "I0001".to_owned());
+        assert_eq!(saved.category(), Category::People);
+        assert_eq!(saved.draft(), None);
+
+        let draft = draft_id(1);
+        let drafted = NavRecord::Draft(Category::Sources, draft);
+        assert_eq!(drafted.category(), Category::Sources);
+        assert_eq!(drafted.draft(), Some(draft));
+    }
+
+    #[test]
+    fn a_category_with_a_focused_draft_is_not_recordless() {
+        assert!(!location_with_draft(Category::People, draft_id(1)).is_recordless_list());
+    }
+
+    #[test]
+    fn forget_draft_drops_its_entries_and_moves_the_cursor_back() {
+        let draft = draft_id(1);
+        let mut history = NavHistory::default();
+        history.push(location(Category::Dashboard));
+        history.push(location_with_record(Category::People, "I0001"));
+        history.push(location_with_draft(Category::People, draft));
+
+        history.forget_draft(draft);
+
+        assert_eq!(
+            history.current(),
+            Some(&location_with_record(Category::People, "I0001")),
+            "the cursor lands on the last surviving entry at or before the dropped one"
+        );
+        assert!(history.can_back());
+        assert!(
+            !history.can_forward(),
+            "a cancelled draft must not be reachable by going forward again"
+        );
+    }
+
+    #[test]
+    fn forget_draft_collapses_the_duplicate_the_drop_exposes() {
+        let draft = draft_id(1);
+        let mut history = NavHistory::default();
+        history.push(location_with_record(Category::People, "I0001"));
+        history.push(location_with_draft(Category::People, draft));
+        history.push(location_with_record(Category::People, "I0001"));
+
+        history.forget_draft(draft);
+
+        assert_eq!(
+            history.current(),
+            Some(&location_with_record(Category::People, "I0001"))
+        );
+        assert!(
+            !history.can_back(),
+            "[X, draft, X] must collapse to one stop on X, not two"
+        );
+        assert!(!history.can_forward());
+    }
+
+    #[test]
+    fn forget_draft_leaves_another_drafts_entries_alone() {
+        let first = draft_id(1);
+        let second = draft_id(2);
+        let mut history = NavHistory::default();
+        history.push(location(Category::Dashboard));
+        history.push(location_with_draft(Category::People, first));
+        history.push(location_with_draft(Category::People, second));
+
+        history.forget_draft(first);
+
+        assert_eq!(
+            history.current(),
+            Some(&location_with_draft(Category::People, second)),
+            "the surviving draft is still the cursor's entry"
+        );
+        assert_eq!(history.back(), Some(location(Category::Dashboard)));
+        assert!(!history.can_back());
+    }
+
+    #[test]
+    fn rekey_draft_rewrites_its_entries_onto_the_stored_record() {
+        let draft = draft_id(1);
+        let mut history = NavHistory::default();
+        history.push(location(Category::Dashboard));
+        history.push(location_with_draft(Category::People, draft));
+
+        history.rekey_draft(draft, Category::People, "I0002");
+
+        assert_eq!(
+            history.current(),
+            Some(&location_with_record(Category::People, "I0002")),
+            "the draft's stop now names the record the commit stored"
+        );
+        assert_eq!(history.back(), Some(location(Category::Dashboard)));
+    }
+
+    #[test]
+    fn rekey_draft_collapses_the_duplicate_the_rewrite_creates() {
+        let draft = draft_id(1);
+        let mut history = NavHistory::default();
+        history.push(location_with_record(Category::People, "I0002"));
+        history.push(location_with_draft(Category::People, draft));
+
+        history.rekey_draft(draft, Category::People, "I0002");
+
+        assert_eq!(
+            history.current(),
+            Some(&location_with_record(Category::People, "I0002"))
+        );
+        assert!(
+            !history.can_back(),
+            "committing into a record already on the stack must not leave two stops on it"
+        );
     }
 
     #[test]

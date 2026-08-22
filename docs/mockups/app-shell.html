@@ -80,8 +80,10 @@
       full-width and has none. A tab is a record you have open; drag one onto the detail pane (or press
       <kbd>⌘⇧</kbd><kbd>1…9</kbd>) to dock it side-by-side.</p>
     <div class="specimen">
-      <div class="label">Tabstrip — clean, unsaved, a typed draft, an untouched draft, docked</div>
+      <div class="label">Tabstrip — back/forward, then clean, unsaved, a typed draft, an untouched draft, docked</div>
       <div class="tabstrip" role="tablist" aria-label="Open records">
+        <button class="icon-btn" type="button" aria-label="Back">‹</button>
+        <button class="icon-btn" type="button" aria-label="Forward" disabled>›</button>
         <div class="tabs-scroll">
           <div class="rtab active" role="tab" tabindex="0" aria-selected="true"><span>John Smith</span><span class="close" role="button" tabindex="0" aria-label="Close John Smith">✕</span></div>
           <div class="rtab unsaved" role="tab" tabindex="-1" aria-selected="false" aria-label="Mary Doe — unsaved changes"><span class="unsaved-dot" aria-hidden="true">●</span><span>Mary Doe</span><span class="close" role="button" tabindex="0" aria-label="Close Mary Doe">✕</span></div>
@@ -110,6 +112,17 @@
         it outlives its editor and stays visible from the strip while another record is on screen. The
         marker is a glyph plus an “unsaved changes” accessible name, not colour alone (WCAG 1.4.1); the
         docked tab's accent underline is the same convention.</div>
+      <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">The
+        <kbd>‹</kbd>&#8202;<kbd>›</kbd> buttons at the head of the strip are <b>back/forward through the
+        navigation history</b> — not a scroll control (the tabs scroll themselves). They step through the
+        places you have <b>had a record in focus</b>: opening a record, activating another tab, and
+        <b>opening a draft</b>. A bare category list with nothing focused is never a stop, so back never
+        replays an empty list. Each button is <b>disabled at its end of the history</b> — above, forward
+        is, because the strip is at the newest stop.<br><br>A <b>draft's</b> stop lasts exactly as long as
+        its tab. <b>Cancel</b> (or close) the draft and its stops go with it, so back steps to whatever
+        was in focus before it — never onto a tab that is no longer there. <b>Save</b> it and its stops
+        become the <b>record it stored</b>, so back and forward land on that record's tab; the draft and
+        the record it became are <b>one</b> stop, not two.</div>
     </div>
 
     <!-- Docked split: a full second editor, not a preview (#279) -->
