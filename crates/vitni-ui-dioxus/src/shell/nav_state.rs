@@ -16,6 +16,11 @@ use vitni_ui::{Category, Destination, NavHistory, NavLocation, ProvenanceDraft, 
 
 use crate::components::ToastKind;
 
+/// Re-exported so the shell's draft vocabulary stays one import: an id is minted here
+/// ([`NavState::open_create`]) and read here ([`OpenTab::draft_id`]), but the type itself lives in
+/// `vitni-ui` because the framework-neutral navigation history has to name drafts too (#313).
+pub use vitni_ui::DraftId;
+
 /// The entity category a destination shows a list + editor for, or `None` when the destination is a
 /// full-width screen with no Explorer/editor (a tool, the workspace Dashboard, or Help). This is the
 /// single source of truth for the two shell shapes: `Some` ⇒ `rail | Explorer | editor`, `None` ⇒
@@ -178,21 +183,6 @@ fn detect_os_theme() -> Theme {
 #[cfg(not(feature = "desktop"))]
 fn detect_os_theme() -> Theme {
     Theme::Dark
-}
-
-/// One create draft's own identity, minted by [`NavState::open_create`] from a per-[`NavState`]
-/// counter. It is what distinguishes two unsaved drafts of the same category — their parked buffers,
-/// their tabs, and their panes (#260). Displays as `#1`.
-///
-/// No public constructor on purpose: an id names a draft the shell actually opened, so the only ways
-/// to obtain one are [`NavState::open_create`]'s return value and [`OpenTab::draft_id`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DraftId(u32);
-
-impl fmt::Display for DraftId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "#{}", self.0)
-    }
 }
 
 /// One open tab in the record strip: a saved record or an unsaved draft (a create form).
@@ -690,11 +680,10 @@ impl NavState {
         draft
     }
 
-    /// Mints the next [`DraftId`] and advances the counter ([`Self::next_draft`]).
+    /// Mints the next [`DraftId`] and advances the counter ([`Self::next_draft`]) — the shell's only
+    /// source of draft ids, since [`DraftId::mint`] is the type's only constructor.
     fn mint_draft(&mut self) -> DraftId {
-        let id = *self.next_draft.peek();
-        self.next_draft.set(id.wrapping_add(1));
-        DraftId(id)
+        DraftId::mint(&mut self.next_draft.write())
     }
 
     /// Opens a research-note create draft pre-seeded with `(category, human_id)` as its subject — the

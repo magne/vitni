@@ -12,6 +12,8 @@
 //! here: the plugin host sits above this crate (ADR 0008), so a renderer orchestrates it directly
 //! and hands the result to [`vocabulary::parse`](crate::vocabulary::parse).
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use vitni_app::{
     Address, Age, AssociationRole, Attribute, Centimorgans, ChildParentRelationship, DateInput, DnaGenomeBuild,
@@ -402,6 +404,41 @@ impl Destination {
             Self::Tool(tool) => tool.label_id(),
             Self::Help { .. } => "nav-help",
         }
+    }
+}
+
+/// One create draft's own identity, minted by [`Self::mint`] from a per-shell counter. It is what
+/// distinguishes two unsaved drafts of the same category — their parked buffers, their tabs, and
+/// their panes (#260). Displays as `#1`.
+///
+/// Framework-neutral, and in this crate rather than in the renderer, because [`NavLocation`] has to
+/// be able to name a draft: back/forward must return to an open draft tab (#313), and the navigation
+/// history is framework-neutral (ADR 0008).
+///
+/// No public field and one constructor on purpose: [`Self::mint`] advances the counter it is handed,
+/// so an id always names a draft the shell actually opened and no two open drafts can share one. The
+/// shell's own counter discipline is therefore the only source of ids.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DraftId(u32);
+
+impl DraftId {
+    /// Mints the next draft id and advances `counter` past it.
+    ///
+    /// The increment wraps rather than saturating or panicking: the counter is a session-local
+    /// ticket dispenser, never a stored key, so however many drafts one session opens it must not
+    /// be able to abort a debug build — and wrapping past `u32::MAX` would take more drafts than a
+    /// session can hold open.
+    #[must_use]
+    pub fn mint(counter: &mut u32) -> Self {
+        let id = *counter;
+        *counter = counter.wrapping_add(1);
+        Self(id)
+    }
+}
+
+impl fmt::Display for DraftId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#{}", self.0)
     }
 }
 

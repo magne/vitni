@@ -60,7 +60,7 @@ pub use intent::{
 pub use list::{ListQuery, RowSort, RowVm, step_row, visible_rows};
 pub use navigation::{
     Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, Destination, DnaMatchChangeSetRequest,
-    DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftNewCitation, DraftNewSource,
+    DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftId, DraftNewCitation, DraftNewSource,
     DraftSourceRef, EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent,
     MediaChangeSetRequest, MediaEdit, MergePersons, NavHistory, NavLocation, NewRecordRequest, NoteChangeSetRequest,
     NoteEdit, PartnerRequest, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, RecordRef,
