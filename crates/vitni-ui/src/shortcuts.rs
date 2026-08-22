@@ -281,12 +281,16 @@ pub enum ShortcutAction {
     CloseCurrentTab,
     /// Save the record the operator is looking at (`⌘S`).
     SaveRecord,
+    /// Step back through the navigation history (`⌘←`).
+    HistoryBack,
+    /// Step forward through the navigation history (`⌘→`).
+    HistoryForward,
 }
 
 impl ShortcutAction {
     /// Every action, used to assert the map is exhaustive.
     #[must_use]
-    pub const fn all() -> [Self; 23] {
+    pub const fn all() -> [Self; 25] {
         [
             Self::CommandPalette,
             Self::NewRecord,
@@ -311,6 +315,8 @@ impl ShortcutAction {
             Self::Quit,
             Self::CloseCurrentTab,
             Self::SaveRecord,
+            Self::HistoryBack,
+            Self::HistoryForward,
         ]
     }
 
@@ -342,6 +348,8 @@ impl ShortcutAction {
             Self::Quit => "quit",
             Self::CloseCurrentTab => "close-tab",
             Self::SaveRecord => "save-record",
+            Self::HistoryBack => "history-back",
+            Self::HistoryForward => "history-forward",
         }
     }
 
@@ -394,9 +402,9 @@ pub fn shortcuts() -> Vec<Shortcut> {
         Home, Question,
     };
     use ShortcutAction::{
-        AddSource, Close, CloseCurrentTab, CommandPalette, DockRecordTab, Edit, Find, FirstTab, Help, LastTab,
-        MoveDown, MoveUp, NewRecord, NextRecord, NextTab, Open, PrevRecord, PrevTab, Quit, Redo, SaveRecord,
-        SwitchRecordTab, Undo,
+        AddSource, Close, CloseCurrentTab, CommandPalette, DockRecordTab, Edit, Find, FirstTab, Help, HistoryBack,
+        HistoryForward, LastTab, MoveDown, MoveUp, NewRecord, NextRecord, NextTab, Open, PrevRecord, PrevTab, Quit,
+        Redo, SaveRecord, SwitchRecordTab, Undo,
     };
     use ShortcutGroup::{Global, WithinScreen};
     let no_mod = Modifier::NONE;
@@ -415,6 +423,8 @@ pub fn shortcuts() -> Vec<Shortcut> {
         shortcut(Close, no_mod, Escape, Global, "sc-close"),
         shortcut(Quit, command, Char('q'), Global, "sc-quit"),
         shortcut(CloseCurrentTab, command, Char('w'), Global, "sc-close-tab"),
+        shortcut(HistoryBack, command, ArrowLeft, Global, "sc-history-back"),
+        shortcut(HistoryForward, command, ArrowRight, Global, "sc-history-forward"),
         shortcut(MoveUp, no_mod, ArrowUp, WithinScreen, "sc-move-up"),
         shortcut(MoveDown, no_mod, ArrowDown, WithinScreen, "sc-move-down"),
         shortcut(Open, no_mod, Enter, WithinScreen, "sc-open"),
@@ -593,7 +603,7 @@ mod tests {
             .iter()
             .filter(|entry| entry.group == ShortcutGroup::WithinScreen)
             .count();
-        assert_eq!(global, 12);
+        assert_eq!(global, 14);
         assert_eq!(within, 11);
     }
 

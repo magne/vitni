@@ -12,9 +12,16 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use vitni_app::{RecentItem, ThemeMode, push_recent};
-use vitni_ui::{Category, Destination, NavHistory, NavLocation, ProvenanceDraft, RecordDraft, RecordRef, Tool};
+use vitni_ui::{
+    Category, Destination, NavHistory, NavLocation, NavRecord, ProvenanceDraft, RecordDraft, RecordRef, Tool,
+};
 
 use crate::components::ToastKind;
+
+/// Re-exported so the shell's draft vocabulary stays one import: an id is minted here
+/// ([`NavState::open_create`]) and read here ([`OpenTab::draft_id`]), but the type itself lives in
+/// `vitni-ui` because the framework-neutral navigation history has to name drafts too (#313).
+pub use vitni_ui::DraftId;
 
 /// The entity category a destination shows a list + editor for, or `None` when the destination is a
 /// full-width screen with no Explorer/editor (a tool, the workspace Dashboard, or Help). This is the
@@ -180,21 +187,6 @@ fn detect_os_theme() -> Theme {
     Theme::Dark
 }
 
-/// One create draft's own identity, minted by [`NavState::open_create`] from a per-[`NavState`]
-/// counter. It is what distinguishes two unsaved drafts of the same category — their parked buffers,
-/// their tabs, and their panes (#260). Displays as `#1`.
-///
-/// No public constructor on purpose: an id names a draft the shell actually opened, so the only ways
-/// to obtain one are [`NavState::open_create`]'s return value and [`OpenTab::draft_id`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DraftId(u32);
-
-impl fmt::Display for DraftId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "#{}", self.0)
-    }
-}
-
 /// One open tab in the record strip: a saved record or an unsaved draft (a create form).
 ///
 /// "Create is a tab": [`NavState::open_create`] appends a [`Self::Draft`]; committing it
@@ -227,6 +219,17 @@ impl OpenTab {
         match self {
             Self::Saved(record) => Some(&record.human_id),
             Self::Draft(_, _) => None,
+        }
+    }
+
+    /// This tab's key in the back/forward navigation history — a saved record by `(category,
+    /// human_id)`, a draft by its [`DraftId`]. Every tab has one, which is what lets history return
+    /// to an open create form instead of stepping past it (#313).
+    #[must_use]
+    pub fn nav_record(&self) -> NavRecord {
+        match self {
+            Self::Saved(record) => NavRecord::Saved(record.category, record.human_id.clone()),
+            Self::Draft(category, draft) => NavRecord::Draft(*category, *draft),
         }
     }
 
@@ -682,19 +685,25 @@ impl NavState {
     ///
     /// The new tab must keep being **appended**: [`CloseRequest::Tab`] and [`SaveThen::CloseTab`] hold
     /// raw strip indices, and an append is the one insertion that cannot invalidate an armed one.
+    ///
+    /// Opening the draft is a history stop like any other tab activation (#313), so back returns to
+    /// wherever the operator was when they pressed New. Cancelling the draft takes that stop with it
+    /// ([`Self::close_record`]) and committing it re-keys it onto the stored record
+    /// ([`Self::commit_draft`]), so the entry never outlives the tab it names.
     pub fn open_create(&mut self, category: Category) -> DraftId {
         let draft = self.mint_draft();
         self.records.write().push(OpenTab::Draft(category, draft));
         let last = self.records.read().len().saturating_sub(1);
         self.active_record.set(Some(last));
+        let location = self.current_location();
+        self.history.write().push(location);
         draft
     }
 
-    /// Mints the next [`DraftId`] and advances the counter ([`Self::next_draft`]).
+    /// Mints the next [`DraftId`] and advances the counter ([`Self::next_draft`]) — the shell's only
+    /// source of draft ids, since [`DraftId::mint`] is the type's only constructor.
     fn mint_draft(&mut self) -> DraftId {
-        let id = *self.next_draft.peek();
-        self.next_draft.set(id.wrapping_add(1));
-        DraftId(id)
+        DraftId::mint(&mut self.next_draft.write())
     }
 
     /// Opens a research-note create draft pre-seeded with `(category, human_id)` as its subject — the
@@ -722,10 +731,18 @@ impl NavState {
     /// new record's tab unsaved and refill its form on the next mount. A save run armed on the draft is
     /// re-keyed to the stored record — committing *is* a change of the
     /// editor's identity, the same as a rename, and the screen reports back under the new one.
+    ///
+    /// The navigation history is re-keyed for the same reason and *before* the fallback below, so a
+    /// draft that was closed mid-commit still has its stops rewritten rather than left naming a tab
+    /// that no longer exists (#313). The `push` at the end then dedupes to a no-op, since the cursor
+    /// already sits on the re-keyed entry.
     pub fn commit_draft(&mut self, draft: DraftId, record: RecordRef) {
         let key = EditKey::draft(record.category, draft);
         self.drop_edit(&key);
         self.rekey_save_run(&key, &EditKey::saved(record.category, &record.human_id));
+        self.history
+            .write()
+            .rekey_draft(draft, record.category, &record.human_id);
         if let Some(kind) = record.category.aggregate_kind() {
             push_recent(
                 &mut self.recent.write(),
@@ -853,6 +870,11 @@ impl NavState {
     /// edit parked for the closed tab is dropped with it — the edit is gone (the caller confirmed that
     /// via [`Self::request_close_tab`]), so leaving the entry would block later closes.
     ///
+    /// A closed **draft** also loses its navigation-history stops ([`NavHistory::forget_draft`], #313):
+    /// nothing can re-open that draft, so an entry naming it would be a dead stop. Doing it here rather
+    /// than in [`Self::cancel_draft`] covers every way a draft tab closes at one site — Cancel, the
+    /// tabstrip `✕`, `⌘W`, and a save run closing the tab behind a commit.
+    ///
     /// Runs [`Self::drop_armed_if`] last (#302): a save run may be waiting on exactly this tab (it was
     /// cancelled or closed while its save was armed), and that check can itself activate a different
     /// tab ([`Self::advance_save_run`] arming the next queued target) — it must not have that overwritten
@@ -864,6 +886,9 @@ impl NavState {
         let closed = self.records.write().remove(index);
         self.drop_edit(&closed.edit_key());
         self.forget_tab(&closed.edit_key());
+        if let Some(draft) = closed.draft_id() {
+            self.history.write().forget_draft(draft);
+        }
         let remaining = self.records.read().len();
         if remaining == 0 {
             self.active_record.set(None);
@@ -1616,26 +1641,34 @@ impl NavState {
         self.history.read().can_forward()
     }
 
-    /// The current navigation location: the active destination plus the active record's
-    /// `(category, human_id)`, if any.
+    /// The current navigation location: the active destination plus the active *tab*'s history key
+    /// ([`OpenTab::nav_record`]), if a tab is active.
+    ///
+    /// Reading the tab rather than [`Self::active_record_ref`] is what puts drafts in the history
+    /// (#313): the saved-record view of the strip is `None` for a draft, so every push made from here
+    /// used to record the destination alone and back/forward skipped the draft's tab.
     fn current_location(&self) -> NavLocation {
         NavLocation {
             destination: *self.active.peek(),
-            record: self
-                .active_record_ref()
-                .map(|record| (record.category, record.human_id)),
+            record: self.active_tab().map(|tab| tab.nav_record()),
         }
     }
 
     /// Applies a [`NavLocation`] pulled from history: sets the active destination and, if the
-    /// location names a record still open, re-focuses it — without pushing a new history entry.
+    /// location names a tab still open, re-focuses it — without pushing a new history entry.
+    ///
+    /// A saved entry resolves by key so it survives reordering and renaming; a draft entry resolves
+    /// by [`DraftId`], which is all a draft has. An entry that resolves to nothing clears the active
+    /// record rather than guessing — but for a draft that is now a dead end that should not exist:
+    /// closing a draft drops its entries ([`Self::close_record`]) and committing one re-keys them
+    /// ([`Self::commit_draft`]).
     fn apply(&mut self, location: NavLocation) {
         self.active.set(location.destination);
-        let index = location.record.and_then(|(category, human_id)| {
-            self.records
-                .read()
-                .iter()
-                .position(|open| open.is_saved_key(category, &human_id))
+        let index = location.record.and_then(|record| {
+            self.records.read().iter().position(|open| match &record {
+                NavRecord::Saved(category, human_id) => open.is_saved_key(*category, human_id),
+                NavRecord::Draft(_, draft) => open.draft_id() == Some(*draft),
+            })
         });
         self.active_record.set(index);
     }

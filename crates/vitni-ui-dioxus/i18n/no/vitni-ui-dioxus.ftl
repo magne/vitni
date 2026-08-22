@@ -142,6 +142,8 @@ sc-add-source = Legg til kilde
 sc-edit = Rediger
 sc-quit = Avslutt
 sc-close-tab = Lukk fane
+sc-history-back = Tilbake i historikken
+sc-history-forward = Fremover i historikken
 
 # Bekreftelsesdialoger for lukk-fane / avslutt (⌘W, ⌘Q over ulagret arbeid). Hver har to
 # brødtekster: `-body` for et ulagret utkast (ingenting er lagret ennå) og `-body-edits` for en

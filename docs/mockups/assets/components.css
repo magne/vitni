@@ -170,8 +170,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   /* Shrink to the shell width so `.tabs-scroll` scrolls the tabs instead of the window overflowing. */
   min-width: 0;
 }
-/* The `‹ ›` buttons beside it are this strip's scroll affordance, so its scrollbar is suppressed for
-   the same reason `.tabs`' is (#285), and measured the same way rather than assumed from the shared
+/* Wheel, trackpad and keyboard focus scroll this strip — the `‹ ›` buttons beside it are back/forward
+   through the navigation history, not a scroll affordance. Its scrollbar is suppressed for the same
+   reason `.tabs`' is (#285), and measured the same way rather than assumed from the shared
    rule: the `.rtab` row paints 34px tall, the scrollbar's ~20px hit rectangle covers the lower two
    thirds of every record tab — the label's own centre and its close `✕` — and six tabs overflow the
    strip at the app's own 1280x840 default window, which is one open record plus a draft per category.

@@ -257,8 +257,10 @@
     keyboard focus do the scrolling. That is a hit-target decision, not a cosmetic one — the row is
     one 36px line, and a scrollbar's hit rectangle would claim its lower half, so a click on the
     label's own centre would scroll the strip instead of switching the tab. The record tabstrip's
-    <span class="mono">.tabs-scroll</span> follows the same rule, with its
-    <kbd>‹</kbd>&#8202;<kbd>›</kbd> buttons as the affordance.</p>
+    <span class="mono">.tabs-scroll</span> suppresses its scrollbar for the same reason, and is scrolled
+    the same three ways. It has no button affordance: the <kbd>‹</kbd>&#8202;<kbd>›</kbd> buttons beside
+    it are <b>back/forward through the navigation history</b> (see <a href="app-shell.html">App
+    shell</a>), and moving them would not scroll the strip.</p>
   <div class="specimen">
     <div class="label">Collection tab action bar (<span class="mono">.tab-actions</span>) — one bar, one button, its verb from a closed set</div>
     <div class="tab-actions"><button class="btn sm primary">+ Attach citation</button></div>
