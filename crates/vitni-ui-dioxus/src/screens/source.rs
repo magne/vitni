@@ -424,6 +424,34 @@ fn source_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
+    // `citations: None` is deliberate, and belt-and-braces with the explicit `"citations"` arm below:
+    // a source's Citations tab is a reverse index over the citations *of* this source
+    // (`Vec<SourceCitationVm>`), not the attached `CitationRefVm`s the shared table renders.
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: None,
+            media: Some(MediaArm {
+                form: SourceEditForm::Media,
+                rows: &detail.media,
+                state: media_state,
+                on_detach: on_retract,
+            }),
+            notes: Some(NotesArm {
+                form: SourceEditForm::Note,
+                rows: &detail.notes,
+                on_detach: on_retract,
+            }),
+            tags: Some(TagsArm {
+                form: SourceEditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: None,
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "repositories" => tab_frame(
             loc,
@@ -447,42 +475,7 @@ fn source_tab_content(
                 {source_attributes_table(loc, detail, on_edit_open, on_retract)}
             },
         ),
-        "media" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, SourceEditForm::Media),
-            None,
-            rsx! {
-                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
-            },
-        ),
-        "notes" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, SourceEditForm::Note),
-            None,
-            rsx! {
-                {notes_table(loc, &detail.notes, Some(on_retract))}
-            },
-        ),
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, SourceEditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => source_overview(loc, detail, record),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| source_overview(loc, detail, record)),
     }
 }
 

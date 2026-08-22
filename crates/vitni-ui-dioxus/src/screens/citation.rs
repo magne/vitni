@@ -741,6 +741,31 @@ fn citation_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: None,
+            media: Some(MediaArm {
+                form: CitationEditForm::Media,
+                rows: &detail.media,
+                state: media_state,
+                on_detach: on_retract,
+            }),
+            notes: Some(NotesArm {
+                form: CitationEditForm::Note,
+                rows: &detail.notes,
+                on_detach: on_retract,
+            }),
+            tags: Some(TagsArm {
+                form: CitationEditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: None,
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "attributes" => tab_frame(
             loc,
@@ -751,42 +776,7 @@ fn citation_tab_content(
                 {citation_attributes_table(loc, &detail.attributes, on_edit_open, on_retract)}
             },
         ),
-        "media" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, CitationEditForm::Media),
-            None,
-            rsx! {
-                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
-            },
-        ),
-        "notes" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, CitationEditForm::Note),
-            None,
-            rsx! {
-                {notes_table(loc, &detail.notes, Some(on_retract))}
-            },
-        ),
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, CitationEditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => citation_overview(loc, detail, record),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| citation_overview(loc, detail, record)),
     }
 }
 

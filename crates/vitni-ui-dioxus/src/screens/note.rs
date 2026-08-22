@@ -446,6 +446,22 @@ fn note_tab_content(
     on_tag_remove: Callback<(String, String)>,
 ) -> Element {
     let loc = state.data_loc();
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: None,
+            media: None,
+            notes: None,
+            tags: Some(TagsArm {
+                form: NoteEditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: None,
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "language" => tab_frame(
             loc,
@@ -460,24 +476,7 @@ fn note_tab_content(
             div { class: "section-note", "{loc.note_references_note()}" }
             {note_references_table(loc, &detail.references)}
         },
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, NoteEditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => note_content_tab(loc, detail, record),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| note_content_tab(loc, detail, record)),
     }
 }
 
