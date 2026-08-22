@@ -3,12 +3,16 @@
 //! One `onkeydown` on the shell root interprets the resolved shortcut map
 //! (`vitni_ui::resolved_shortcuts`, ADR 0030) into shell actions: open the palette, toggle help,
 //! navigate via the `g`-prefix, switch record tabs (`⌘1…9`), dock a record tab side-by-side
-//! (`⌘⇧1…9`), step through records (`[`/`]`), undo (`⌘Z`), and close overlays.
+//! (`⌘⇧1…9`), step through records (`[`/`]`), step the navigation history (`⌘←`/`⌘→`), undo (`⌘Z`),
+//! and close overlays.
 //! The key→action decision is the pure [`shell_intent`] (unit-tested exhaustively over the *default*
 //! map — the regression net a rebind must not break); [`dispatch`] is a thin interpreter that applies
 //! the resulting [`ShellIntent`] to the shell state. The primary modifier is `⌘` on macOS and `Ctrl`
 //! elsewhere. Within-screen keys owned by a focused widget (↑/↓, Enter, ←/→, Home/End) and the
-//! `g`-prefix navigation keys are not rebindable (ADR 0030 §2) and stay hardcoded here.
+//! `g`-prefix navigation keys are not rebindable (ADR 0030 §2) and stay hardcoded here. `←`/`→` now
+//! carry two meanings — bare, the detail tabs; with the primary modifier, the navigation history —
+//! and the lookup keeps them apart by filtering on [`ShortcutGroup::Global`], so a bare arrow still
+//! finds no shell chord at all.
 
 use std::time::{Duration, Instant};
 
@@ -74,6 +78,10 @@ pub enum ShellIntent {
     CloseCurrentTab,
     /// Save the record the operator is looking at (`⌘S`).
     SaveRecord,
+    /// Step back through the navigation history (`⌘←`).
+    HistoryBack,
+    /// Step forward through the navigation history (`⌘→`).
+    HistoryForward,
 }
 
 /// Installs the `g`-prefix state and returns its signal for the shell root to thread into
@@ -158,6 +166,8 @@ fn shell_intent_for_action(action: ShortcutAction) -> Option<ShellIntent> {
         ShortcutAction::Quit => Some(ShellIntent::Quit),
         ShortcutAction::CloseCurrentTab => Some(ShellIntent::CloseCurrentTab),
         ShortcutAction::SaveRecord => Some(ShellIntent::SaveRecord),
+        ShortcutAction::HistoryBack => Some(ShellIntent::HistoryBack),
+        ShortcutAction::HistoryForward => Some(ShellIntent::HistoryForward),
         ShortcutAction::SwitchRecordTab
         | ShortcutAction::DockRecordTab
         | ShortcutAction::MoveUp
@@ -194,11 +204,21 @@ fn event_modifier(modifiers: Modifiers, primary: bool) -> vitni_ui::Modifier {
     }
 }
 
-/// Maps a `dioxus` key event to the [`vitni_ui::Key`] a chord lookup matches against: `?` and
-/// single ASCII letters only (every `Global` action's key is one of those). `None` for anything else
-/// (arrows, Enter, digits, punctuation) — those are either matched earlier (brackets, digits) or
-/// belong to a non-rebindable within-screen/`g`-prefix chord this dispatcher does not reach here.
+/// Maps a `dioxus` key event to the [`vitni_ui::Key`] a chord lookup matches against: `?`, single
+/// ASCII letters, and the left/right arrows. `None` for anything else (Enter, up/down, Home/End,
+/// digits, punctuation) — those are either matched earlier (brackets, digits) or belong to a
+/// non-rebindable within-screen/`g`-prefix chord this dispatcher does not reach here.
+///
+/// The left/right arrows are here because `⌘←`/`⌘→` step the navigation history (#313). Mapping them
+/// does **not** claim the bare arrows: the lookup below filters on [`ShortcutGroup::Global`], and the
+/// bare-arrow rows are `WithinScreen`, so an unmodified arrow resolves to no action, yields `None`,
+/// and reaches the focused widget's own handler with no `prevent_default` — exactly as before.
 fn shortcut_key(key: &Key) -> Option<vitni_ui::Key> {
+    match key {
+        Key::ArrowLeft => return Some(vitni_ui::Key::ArrowLeft),
+        Key::ArrowRight => return Some(vitni_ui::Key::ArrowRight),
+        _ => {}
+    }
     let Key::Character(character) = key else {
         return None;
     };
@@ -261,6 +281,8 @@ pub fn dispatch(
                 nav.notify(notices.nothing_to_save.clone());
             }
         }
+        ShellIntent::HistoryBack => nav.history_back(),
+        ShellIntent::HistoryForward => nav.history_forward(),
     }
 }
 
@@ -564,6 +586,72 @@ mod tests {
         assert_eq!(
             shell_intent(&character("s"), Modifiers::empty(), Code::KeyS, false, &defaults()),
             None
+        );
+    }
+
+    #[test]
+    fn primary_arrows_step_the_navigation_history() {
+        assert_eq!(
+            shell_intent(&Key::ArrowLeft, Modifiers::empty(), Code::ArrowLeft, true, &defaults()),
+            Some(ShellIntent::HistoryBack)
+        );
+        assert_eq!(
+            shell_intent(
+                &Key::ArrowRight,
+                Modifiers::empty(),
+                Code::ArrowRight,
+                true,
+                &defaults()
+            ),
+            Some(ShellIntent::HistoryForward)
+        );
+    }
+
+    /// The bare arrows stay the detail-tab keys: they are `WithinScreen`, and the lookup only matches
+    /// `Global` rows, so an unmodified arrow finds nothing here and reaches the focused widget with no
+    /// `prevent_default`.
+    #[test]
+    fn bare_arrows_are_ignored_so_they_still_move_within_a_screen() {
+        assert_eq!(
+            shell_intent(&Key::ArrowLeft, Modifiers::empty(), Code::ArrowLeft, false, &defaults()),
+            None
+        );
+        assert_eq!(
+            shell_intent(
+                &Key::ArrowRight,
+                Modifiers::empty(),
+                Code::ArrowRight,
+                false,
+                &defaults()
+            ),
+            None
+        );
+        // Up/down are within-screen too and gain no primary-modifier chord.
+        assert_eq!(
+            shell_intent(&Key::ArrowUp, Modifiers::empty(), Code::ArrowUp, true, &defaults()),
+            None
+        );
+        assert_eq!(
+            shell_intent(&Key::ArrowDown, Modifiers::empty(), Code::ArrowDown, true, &defaults()),
+            None
+        );
+    }
+
+    #[test]
+    fn a_rebound_history_back_chord_changes_what_shell_intent_returns() {
+        // The history chords are Global, so a workspace may rebind them (ADR 0030 §2).
+        let overrides = BTreeMap::from([("history-back".to_owned(), "mod+b".to_owned())]);
+        let (resolved, errors) = resolved_shortcuts(&overrides);
+        assert!(errors.is_empty());
+        assert_eq!(
+            shell_intent(&Key::ArrowLeft, Modifiers::empty(), Code::ArrowLeft, true, &resolved),
+            None,
+            "the old chord no longer fires once rebound"
+        );
+        assert_eq!(
+            shell_intent(&character("b"), Modifiers::empty(), Code::KeyB, true, &resolved),
+            Some(ShellIntent::HistoryBack),
+            "the new chord fires the same action"
         );
     }
 

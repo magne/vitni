@@ -142,6 +142,8 @@ sc-add-source = Add source
 sc-edit = Edit
 sc-quit = Quit
 sc-close-tab = Close tab
+sc-history-back = History back
+sc-history-forward = History forward
 
 # Close-tab / quit confirm dialogs (⌘W, ⌘Q over unsaved work). Each has two bodies: the `-body` one
 # for an unsaved draft (nothing stored yet) and the `-body-edits` one for an in-progress edit of an
