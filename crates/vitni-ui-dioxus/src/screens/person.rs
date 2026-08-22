@@ -890,6 +890,40 @@ fn person_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: Some(CitationsArm {
+                form: EditForm::Citation,
+                rows: &detail.citations,
+                show_backs: true,
+                on_detach: on_retract,
+            }),
+            media: Some(MediaArm {
+                form: EditForm::Media,
+                rows: &detail.media,
+                state: media_state,
+                on_detach: on_retract,
+            }),
+            notes: Some(NotesArm {
+                form: EditForm::Note,
+                rows: &detail.notes,
+                on_detach: on_retract,
+            }),
+            tags: Some(TagsArm {
+                form: EditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: Some(ResearchNotesArm {
+            category: Category::People,
+            human_id: &detail.human_id,
+            rows: &detail.research_notes,
+        }),
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "names" => tab_frame(
             loc,
@@ -921,60 +955,8 @@ fn person_tab_content(
             },
         ),
         "families" => families_panel(loc, &detail.families),
-        "citations" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EditForm::Citation),
-            None,
-            rsx! {
-                {citations_table::<EditForm>(loc, &detail.citations, true, on_retract)}
-            },
-        ),
-        "media" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EditForm::Media),
-            None,
-            rsx! {
-                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
-            },
-        ),
-        "notes" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EditForm::Note),
-            None,
-            rsx! {
-                {notes_table(loc, &detail.notes, Some(on_retract))}
-            },
-        ),
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "research-notes" => rsx! {
-            ResearchNotesTab {
-                tab: tab.clone(),
-                category: Category::People,
-                human_id: detail.human_id.clone(),
-                rows: detail.research_notes.clone(),
-            }
-        },
         "timeline" => timeline_panel(loc, &detail.timeline),
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => person_overview(loc, detail, record),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| person_overview(loc, detail, record)),
     }
 }
 

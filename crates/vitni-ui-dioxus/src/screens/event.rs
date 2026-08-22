@@ -795,6 +795,40 @@ fn event_tab_content(
     media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: Some(CitationsArm {
+                form: EventEditForm::Citation,
+                rows: &detail.citations,
+                show_backs: false,
+                on_detach: on_retract,
+            }),
+            media: Some(MediaArm {
+                form: EventEditForm::Media,
+                rows: &detail.media,
+                state: media_state,
+                on_detach: on_retract,
+            }),
+            notes: Some(NotesArm {
+                form: EventEditForm::Note,
+                rows: &detail.notes,
+                on_detach: on_retract,
+            }),
+            tags: Some(TagsArm {
+                form: EventEditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: Some(ResearchNotesArm {
+            category: Category::Events,
+            human_id: &detail.human_id,
+            rows: &detail.research_notes,
+        }),
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "addresses" => {
             let onedit =
@@ -818,59 +852,7 @@ fn event_tab_content(
                 {event_participants_table(loc, detail, on_edit_open, on_person_retract)}
             },
         ),
-        "citations" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EventEditForm::Citation),
-            None,
-            rsx! {
-                {citations_table::<EventEditForm>(loc, &detail.citations, false, on_retract)}
-            },
-        ),
-        "media" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EventEditForm::Media),
-            None,
-            rsx! {
-                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
-            },
-        ),
-        "notes" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EventEditForm::Note),
-            None,
-            rsx! {
-                {notes_table(loc, &detail.notes, Some(on_retract))}
-            },
-        ),
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EventEditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "research-notes" => rsx! {
-            ResearchNotesTab {
-                tab: tab.clone(),
-                category: Category::Events,
-                human_id: detail.human_id.clone(),
-                rows: detail.research_notes.clone(),
-            }
-        },
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => event_overview(loc, detail, ctx),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| event_overview(loc, detail, ctx)),
     }
 }
 
