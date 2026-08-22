@@ -387,14 +387,7 @@ fn source_detail(
     let on_tag_remove = callbacks.on_tag_remove;
     let media_state = callbacks.media_state;
     let tabs = source_tabs(detail, loc);
-    let tab_items: Vec<TabItem> = tabs
-        .iter()
-        .map(|tab| TabItem {
-            id: tab.id.to_owned(),
-            label: tab.label.clone(),
-            count: tab.count,
-        })
-        .collect();
+    let tab_items: Vec<TabItem> = tabs.iter().map(TabItem::from).collect();
     let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
@@ -406,31 +399,74 @@ fn source_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {source_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+            {source_tab_content(state, detail, &active_tab, editing, record, SourceTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove, media_state })}
         }
         {source_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
     }
 }
 
+/// The row callbacks a source's tabs dispatch through, grouped so the tab dispatcher stays under
+/// the argument limit.
+#[derive(Clone, Copy)]
+struct SourceTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<SourceEditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
+}
+
 /// The content of one source detail tab, with its contextual add/edit affordances.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threads the pane's signals + callbacks"
-)]
 fn source_tab_content(
     state: &AppState,
     detail: &SourceDetail,
     tab: &DetailTab,
     editing: Signal<Option<SourceEditForm>>,
     record: RecordEditState<vitni_ui::SourceDraft>,
-    on_retract: Callback<(String, String, bool)>,
-    on_edit_open: Callback<SourceEditForm>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<(String, String)>,
-    media_state: MediaTabState,
+    callbacks: SourceTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let SourceTabCallbacks {
+        on_retract,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+        media_state,
+    } = callbacks;
+    // `citations: None` is deliberate, and belt-and-braces with the explicit `"citations"` arm below:
+    // a source's Citations tab is a reverse index over the citations *of* this source
+    // (`Vec<SourceCitationVm>`), not the attached `CitationRefVm`s the shared table renders.
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: None,
+            media: Some(MediaArm {
+                form: SourceEditForm::Media,
+                rows: &detail.media,
+                state: media_state,
+                on_detach: on_retract,
+            }),
+            notes: Some(NotesArm {
+                form: SourceEditForm::Note,
+                rows: &detail.notes,
+                on_detach: on_retract,
+            }),
+            tags: Some(TagsArm {
+                form: SourceEditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: None,
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "repositories" => tab_frame(
             loc,
@@ -454,42 +490,7 @@ fn source_tab_content(
                 {source_attributes_table(loc, detail, on_edit_open, on_retract)}
             },
         ),
-        "media" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, SourceEditForm::Media),
-            None,
-            rsx! {
-                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
-            },
-        ),
-        "notes" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, SourceEditForm::Note),
-            None,
-            rsx! {
-                {notes_table(loc, &detail.notes, Some(on_retract))}
-            },
-        ),
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, SourceEditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => source_overview(loc, detail, record),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| source_overview(loc, detail, record)),
     }
 }
 

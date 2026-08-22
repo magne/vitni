@@ -205,23 +205,6 @@ which is what makes them worth fixing in the shared code rather than per screen.
   its picker with `allow_new: false`, so every attach dialog was existing-only regardless. Fixed by
   routing every attach/link side panel through the find-or-create `use_attach_picker` +
   `attach_link_form` (issue #314). — #314
-- **The 13 detail screens re-implement the shared tab arms instead of calling one shared frame.**
-  `screens/tabs.rs` and `screens/shared.rs` hold the tab *bodies*, but each screen still spells out the
-  arm that reaches them: `"history" =>` in 13 screens, `"tags" =>` in 12, `"notes" =>` in 10, `"media"
-  =>` and `"citations" =>` in 6 each, `"research-notes" =>` in 4. The `tab_with_add` arms are
-  character-identical across screens apart from the screen's own edit-form variant — `place.rs:703-729`
-  against `event.rs:882-908` is 27 lines the same but for `PlaceEditForm::`/`EventEditForm::` — and the
-  `DetailTab` → `TabItem` mapping above them is repeated verbatim in all 13 `*_detail` fns
-  (`source.rs:446-453`). Neither #303 nor #304 turned out to need it, for the same reason: what varies
-  across the 13 screens is the arm, not the body it reaches. #303's per-tab explanation resolves from
-  `tab.id` inside `tab_frame` because `DetailTab` already carries the tab's identity and its action
-  (issue #314), and #304's convergence landed as one `attached_table` in `tabs.rs` that the six
-  attached-records tables call — one edit each, not 13. So the case for the struct is the arms'
-  duplication on its own, not a shape change blocked behind it.
-  Wanted: `shared_tab<E>(loc, tab_id, &SharedTabCtx<E>) -> Option<Element>` in `tabs.rs` — the
-  collection slices, the four `E` form variants, the `on_retract`/`on_tag_remove`/`on_undo` callbacks
-  and the `MediaTabState` in one struct — returning `None` for a tab the screen owns itself, so each
-  `*_tab_content` keeps only its entity-specific arms; plus `impl From<&DetailTab> for TabItem`. — #322
 - **The change-set commit path is written out 14 times in `services.rs`.** `services.rs:283-497` holds
   the 13 `commit_*_change_set` wrappers plus `commit_new_record`, whose bodies are the same four
   statements — `localizer()`, `open()`, `Session::new(config.operator_agent())`,

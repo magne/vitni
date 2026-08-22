@@ -533,14 +533,7 @@ fn dna_match_detail(
     let on_undo = callbacks.on_undo;
     let on_tag_remove = callbacks.on_tag_remove;
     let tabs = dna_match_tabs(detail, loc);
-    let tab_items: Vec<TabItem> = tabs
-        .iter()
-        .map(|tab| TabItem {
-            id: tab.id.to_owned(),
-            label: tab.label.clone(),
-            count: tab.count,
-        })
-        .collect();
+    let tab_items: Vec<TabItem> = tabs.iter().map(TabItem::from).collect();
     let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     let status_actions = dna_match_status_actions(loc, on_submit, human_id);
@@ -554,7 +547,7 @@ fn dna_match_detail(
                 actions: record_head_actions(&labels, record, status_actions, on_record_save),
                 tabs: tab_items,
                 active,
-                {dna_match_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
+                {dna_match_tab_content(state, detail, &active_tab, editing, record, DnaMatchTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove })}
             }
             {dna_match_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-note")}
@@ -603,53 +596,64 @@ fn dna_match_status_actions(
     }
 }
 
-/// The content of one DNA-match detail tab, with its contextual add/edit affordances.
+/// The row callbacks a DNA match's tabs dispatch through, grouped so the tab dispatcher stays under
+/// the argument limit.
+#[derive(Clone, Copy)]
 #[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threads the pane's signals + callbacks"
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
 )]
+struct DnaMatchTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<DnaMatchEditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
+}
+
+/// The content of one DNA-match detail tab, with its contextual add/edit affordances.
 fn dna_match_tab_content(
     state: &AppState,
     detail: &DnaMatchDetail,
     tab: &DetailTab,
     editing: Signal<Option<DnaMatchEditForm>>,
     record: RecordEditState<vitni_ui::DnaMatchDraft>,
-    on_retract: Callback<(String, String, bool)>,
-    on_edit_open: Callback<DnaMatchEditForm>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<(String, String)>,
+    callbacks: DnaMatchTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let DnaMatchTabCallbacks {
+        on_retract,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+    } = callbacks;
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: None,
+            media: None,
+            notes: Some(NotesArm {
+                form: DnaMatchEditForm::Note,
+                rows: &detail.notes,
+                on_detach: on_retract,
+            }),
+            tags: Some(TagsArm {
+                form: DnaMatchEditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: None,
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "segments" => dna_match_segments_table(loc, tab, &detail.segments, on_edit_open, on_retract),
         "ancestors" => dna_match_ancestors_table(loc, tab, &detail.shared_ancestors, on_edit_open, on_retract),
-        "notes" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, DnaMatchEditForm::Note),
-            None,
-            rsx! {
-                {notes_table(loc, &detail.notes, Some(on_retract))}
-            },
-        ),
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, DnaMatchEditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => dna_match_overview(loc, detail, record),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| dna_match_overview(loc, detail, record)),
     }
 }
 

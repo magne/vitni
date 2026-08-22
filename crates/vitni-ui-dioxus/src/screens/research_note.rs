@@ -586,14 +586,7 @@ fn research_note_detail(
     } = pane;
     let on_submit = callbacks.on_submit;
     let tabs = research_note_tabs(detail, loc);
-    let tab_items: Vec<TabItem> = tabs
-        .iter()
-        .map(|tab| TabItem {
-            id: tab.id.to_owned(),
-            label: tab.label.clone(),
-            count: tab.count,
-        })
-        .collect();
+    let tab_items: Vec<TabItem> = tabs.iter().map(TabItem::from).collect();
     let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("content"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
@@ -624,6 +617,24 @@ fn research_note_tab_content(
     callbacks: ResearchNoteCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    // A research note carries no `on_retract`: its rows are unnamed by `on_subject_remove` and its
+    // tags by `on_tag_remove`, so the three form arms with a detach are all absent here.
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: None,
+            media: None,
+            notes: None,
+            tags: Some(TagsArm {
+                form: ResearchNoteEditForm::Tag,
+                rows: &detail.tags,
+                on_remove: callbacks.on_tag_remove,
+            }),
+        }),
+        research_notes: None,
+        history: &detail.history,
+        on_undo: Some(callbacks.on_undo),
+    };
     match tab.id {
         "subjects" => tab_frame(
             loc,
@@ -634,24 +645,7 @@ fn research_note_tab_content(
                 {research_note_subjects_table(loc, &detail.subjects, callbacks.on_subject_remove)}
             },
         ),
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, ResearchNoteEditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, callbacks.on_tag_remove),
-        ),
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(callbacks.on_undo)),
-        ),
-        _ => research_note_content_tab(loc, record),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| research_note_content_tab(loc, record)),
     }
 }
 

@@ -63,6 +63,7 @@ pub use super::shared::{
     use_record_undo,
 };
 pub use super::tabs::{
-    AddressForm, AttachedLink, AttachedRow, ParticipationForm, ParticipationSeed, TabActionStyle, TabActionTarget,
-    address_cards, attached_table, citations_table, fallback_tab, history_panel, notes_table, tab_frame, tags_panel,
+    AddressForm, AttachedLink, AttachedRow, CitationsArm, FormTabs, MediaArm, NotesArm, ParticipationForm,
+    ParticipationSeed, ResearchNotesArm, SharedTabCtx, TabActionStyle, TabActionTarget, TagsArm, address_cards,
+    attached_table, fallback_tab, shared_tab, tab_frame,
 };

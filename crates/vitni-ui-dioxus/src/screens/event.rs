@@ -755,14 +755,7 @@ fn event_detail(
     let on_tag_remove = callbacks.on_tag_remove;
     let media_state = callbacks.media_state;
     let tabs = event_tabs(detail, loc);
-    let tab_items: Vec<TabItem> = tabs
-        .iter()
-        .map(|tab| TabItem {
-            id: tab.id.to_owned(),
-            label: tab.label.clone(),
-            count: tab.count,
-        })
-        .collect();
+    let tab_items: Vec<TabItem> = tabs.iter().map(TabItem::from).collect();
     let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
@@ -775,7 +768,7 @@ fn event_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {event_tab_content(state, detail, &active_tab, editing, &ctx, on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+                {event_tab_content(state, detail, &active_tab, editing, &ctx, EventTabCallbacks { on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove, media_state })}
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -783,25 +776,77 @@ fn event_detail(
     }
 }
 
+/// The row callbacks an event's tabs dispatch through, grouped so the tab dispatcher stays under the
+/// argument limit.
+#[derive(Clone, Copy)]
+struct EventTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Retracts a participation, which is written on the *person* aggregate, so the row's person id
+    /// rides along: `(assertion_id, label, detach, person human_id)`.
+    on_person_retract: Callback<(String, String, bool, String)>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<EventEditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
+}
+
 /// The content of one event detail tab, with its contextual add/edit affordances.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threads the pane's signals + callbacks"
-)]
 fn event_tab_content(
     state: &AppState,
     detail: &EventDetail,
     tab: &DetailTab,
     editing: Signal<Option<EventEditForm>>,
     ctx: &EventEditCtx,
-    on_retract: Callback<(String, String, bool)>,
-    on_person_retract: Callback<(String, String, bool, String)>,
-    on_edit_open: Callback<EventEditForm>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<(String, String)>,
-    media_state: MediaTabState,
+    callbacks: EventTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let EventTabCallbacks {
+        on_retract,
+        on_person_retract,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+        media_state,
+    } = callbacks;
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: Some(CitationsArm {
+                form: EventEditForm::Citation,
+                rows: &detail.citations,
+                show_backs: false,
+                on_detach: on_retract,
+            }),
+            media: Some(MediaArm {
+                form: EventEditForm::Media,
+                rows: &detail.media,
+                state: media_state,
+                on_detach: on_retract,
+            }),
+            notes: Some(NotesArm {
+                form: EventEditForm::Note,
+                rows: &detail.notes,
+                on_detach: on_retract,
+            }),
+            tags: Some(TagsArm {
+                form: EventEditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: Some(ResearchNotesArm {
+            category: Category::Events,
+            human_id: &detail.human_id,
+            rows: &detail.research_notes,
+        }),
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "addresses" => {
             let onedit =
@@ -825,59 +870,7 @@ fn event_tab_content(
                 {event_participants_table(loc, detail, on_edit_open, on_person_retract)}
             },
         ),
-        "citations" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EventEditForm::Citation),
-            None,
-            rsx! {
-                {citations_table::<EventEditForm>(loc, &detail.citations, false, on_retract)}
-            },
-        ),
-        "media" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EventEditForm::Media),
-            None,
-            rsx! {
-                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
-            },
-        ),
-        "notes" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EventEditForm::Note),
-            None,
-            rsx! {
-                {notes_table(loc, &detail.notes, Some(on_retract))}
-            },
-        ),
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EventEditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "research-notes" => rsx! {
-            ResearchNotesTab {
-                tab: tab.clone(),
-                category: Category::Events,
-                human_id: detail.human_id.clone(),
-                rows: detail.research_notes.clone(),
-            }
-        },
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => event_overview(loc, detail, ctx),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| event_overview(loc, detail, ctx)),
     }
 }
 

@@ -408,14 +408,7 @@ fn note_detail(
     let on_undo = callbacks.on_undo;
     let on_tag_remove = callbacks.on_tag_remove;
     let tabs = note_tabs(detail, loc);
-    let tab_items: Vec<TabItem> = tabs
-        .iter()
-        .map(|tab| TabItem {
-            id: tab.id.to_owned(),
-            label: tab.label.clone(),
-            count: tab.count,
-        })
-        .collect();
+    let tab_items: Vec<TabItem> = tabs.iter().map(TabItem::from).collect();
     let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("content"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
@@ -427,7 +420,7 @@ fn note_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {note_tab_content(state, detail, &active_tab, editing, record, on_edit_open, on_retract, on_undo, on_tag_remove)}
+            {note_tab_content(state, detail, &active_tab, editing, record, NoteTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove })}
         }
         {note_edit_panel(state, editing, on_submit, human_id)}
         // Only ever armed for an untag here (a note has no retractable row), so the Detach note id this
@@ -436,23 +429,56 @@ fn note_detail(
     }
 }
 
-/// The content of one note detail tab, with its contextual add affordances.
+/// The row callbacks a note's tabs dispatch through, grouped so the tab dispatcher stays under
+/// the argument limit.
+#[derive(Clone, Copy)]
 #[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threading the note's edit callbacks"
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
 )]
+struct NoteTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<NoteEditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
+}
+
+/// The content of one note detail tab, with its contextual add affordances.
 fn note_tab_content(
     state: &AppState,
     detail: &NoteDetail,
     tab: &DetailTab,
     editing: Signal<Option<NoteEditForm>>,
     record: RecordEditState<vitni_ui::NoteDraft>,
-    on_edit_open: Callback<NoteEditForm>,
-    on_retract: Callback<(String, String, bool)>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<(String, String)>,
+    callbacks: NoteTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let NoteTabCallbacks {
+        on_retract,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+    } = callbacks;
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: None,
+            media: None,
+            notes: None,
+            tags: Some(TagsArm {
+                form: NoteEditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: None,
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "language" => tab_frame(
             loc,
@@ -467,24 +493,7 @@ fn note_tab_content(
             div { class: "section-note", "{loc.note_references_note()}" }
             {note_references_table(loc, &detail.references)}
         },
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, NoteEditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => note_content_tab(loc, detail, record),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| note_content_tab(loc, detail, record)),
     }
 }
 

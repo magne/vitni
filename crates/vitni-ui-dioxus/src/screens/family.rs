@@ -693,14 +693,7 @@ fn family_detail(
     let on_tag_remove = callbacks.on_tag_remove;
     let media_state = callbacks.media_state;
     let tabs = family_tabs(detail, loc);
-    let tab_items: Vec<TabItem> = tabs
-        .iter()
-        .map(|tab| TabItem {
-            id: tab.id.to_owned(),
-            label: tab.label.clone(),
-            count: tab.count,
-        })
-        .collect();
+    let tab_items: Vec<TabItem> = tabs.iter().map(TabItem::from).collect();
     let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let labels = RecordActionLabels::resolve(loc);
     rsx! {
@@ -758,6 +751,40 @@ fn family_tab_content(
         on_tag_remove,
         media_state,
     } = callbacks;
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: Some(CitationsArm {
+                form: FamilyEditForm::Citation,
+                rows: &detail.citations,
+                show_backs: true,
+                on_detach: on_retract,
+            }),
+            media: Some(MediaArm {
+                form: FamilyEditForm::Media,
+                rows: &detail.media,
+                state: media_state,
+                on_detach: on_retract,
+            }),
+            notes: Some(NotesArm {
+                form: FamilyEditForm::Note,
+                rows: &detail.notes,
+                on_detach: on_retract,
+            }),
+            tags: Some(TagsArm {
+                form: FamilyEditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: Some(ResearchNotesArm {
+            category: Category::Families,
+            human_id: &detail.human_id,
+            rows: &detail.research_notes,
+        }),
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "children" => tab_frame(
             loc,
@@ -777,59 +804,7 @@ fn family_tab_content(
                 {family_events_table(loc, &detail.events, on_retract)}
             },
         ),
-        "citations" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, FamilyEditForm::Citation),
-            None,
-            rsx! {
-                {citations_table::<FamilyEditForm>(loc, &detail.citations, true, on_retract)}
-            },
-        ),
-        "media" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, FamilyEditForm::Media),
-            None,
-            rsx! {
-                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
-            },
-        ),
-        "notes" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, FamilyEditForm::Note),
-            None,
-            rsx! {
-                {notes_table(loc, &detail.notes, Some(on_retract))}
-            },
-        ),
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, FamilyEditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "research-notes" => rsx! {
-            ResearchNotesTab {
-                tab: tab.clone(),
-                category: Category::Families,
-                human_id: detail.human_id.clone(),
-                rows: detail.research_notes.clone(),
-            }
-        },
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => family_overview(loc, detail, editing, record, on_retract),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| family_overview(loc, detail, editing, record, on_retract)),
     }
 }
 

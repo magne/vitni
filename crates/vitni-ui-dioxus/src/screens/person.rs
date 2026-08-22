@@ -826,14 +826,7 @@ fn person_detail(
     let on_tag_remove = callbacks.on_tag_remove;
     let media_state = callbacks.media_state;
     let tabs = person_tabs(detail, loc);
-    let tab_items: Vec<TabItem> = tabs
-        .iter()
-        .map(|tab| TabItem {
-            id: tab.id.to_owned(),
-            label: tab.label.clone(),
-            count: tab.count,
-        })
-        .collect();
+    let tab_items: Vec<TabItem> = tabs.iter().map(TabItem::from).collect();
     let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
     let subtitle = match &detail.vitals {
         Some(vitals) => format!("{vitals} · {}", detail.sex),
@@ -858,7 +851,7 @@ fn person_detail(
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
-            {person_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+            {person_tab_content(state, detail, &active_tab, editing, record, PersonTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove, media_state })}
         }
         {edit_panel(state, detail, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -879,24 +872,73 @@ fn person_initials(detail: &PersonDetail) -> String {
     initials
 }
 
+/// The row callbacks a person's tabs dispatch through, grouped so the tab dispatcher stays under the
+/// argument limit.
+#[derive(Clone, Copy)]
+struct PersonTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<EditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
+}
+
 /// The content of one person detail tab, with its contextual add/edit affordances.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threads the pane's signals + callbacks"
-)]
 fn person_tab_content(
     state: &AppState,
     detail: &PersonDetail,
     tab: &DetailTab,
     editing: Signal<Option<EditForm>>,
     record: RecordEditState<PersonDraft>,
-    on_retract: Callback<(String, String, bool)>,
-    on_edit_open: Callback<EditForm>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<(String, String)>,
-    media_state: MediaTabState,
+    callbacks: PersonTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let PersonTabCallbacks {
+        on_retract,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+        media_state,
+    } = callbacks;
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: Some(CitationsArm {
+                form: EditForm::Citation,
+                rows: &detail.citations,
+                show_backs: true,
+                on_detach: on_retract,
+            }),
+            media: Some(MediaArm {
+                form: EditForm::Media,
+                rows: &detail.media,
+                state: media_state,
+                on_detach: on_retract,
+            }),
+            notes: Some(NotesArm {
+                form: EditForm::Note,
+                rows: &detail.notes,
+                on_detach: on_retract,
+            }),
+            tags: Some(TagsArm {
+                form: EditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: Some(ResearchNotesArm {
+            category: Category::People,
+            human_id: &detail.human_id,
+            rows: &detail.research_notes,
+        }),
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "names" => tab_frame(
             loc,
@@ -928,60 +970,8 @@ fn person_tab_content(
             },
         ),
         "families" => families_panel(loc, &detail.families),
-        "citations" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EditForm::Citation),
-            None,
-            rsx! {
-                {citations_table::<EditForm>(loc, &detail.citations, true, on_retract)}
-            },
-        ),
-        "media" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EditForm::Media),
-            None,
-            rsx! {
-                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
-            },
-        ),
-        "notes" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EditForm::Note),
-            None,
-            rsx! {
-                {notes_table(loc, &detail.notes, Some(on_retract))}
-            },
-        ),
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, EditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "research-notes" => rsx! {
-            ResearchNotesTab {
-                tab: tab.clone(),
-                category: Category::People,
-                human_id: detail.human_id.clone(),
-                rows: detail.research_notes.clone(),
-            }
-        },
         "timeline" => timeline_panel(loc, &detail.timeline),
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => person_overview(loc, detail, record),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| person_overview(loc, detail, record)),
     }
 }
 
