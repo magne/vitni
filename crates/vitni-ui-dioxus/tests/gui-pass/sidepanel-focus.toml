@@ -6,8 +6,13 @@
 # whose controls are exactly ✕ → the reason input → the Danger confirm. That count is what makes the
 # cycle assertion sharp: three `Tab`s from any control must come back to it.
 #
+# It is also the guard for the panel's `inert` background (#312), which SSR cannot see either: while
+# the panel is open every region behind it is `inert`, so a missed unregister on close would leave the
+# whole application frozen, and inerting the pane *blurs* the control that opened the panel — which is
+# why the focus-restore assertion below is what caught both halves of that fix.
+#
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
-description = "A side panel takes focus, cycles Tab within itself, and restores focus on Esc (#247)"
+description = "A side panel takes focus, cycles Tab within itself, restores focus on Esc (#247), and leaves the shell interactive (#312)"
 
 [[step]]
 do = "click"
@@ -87,6 +92,24 @@ label = "reopen with the restored focus"
 do = "shot"
 name = "reopened"
 
+[[step]]
+do = "key"
+chord = "Escape"
+label = "panel: Esc again, to leave the shell with no panel open"
+
+[[step]]
+do = "shot"
+name = "closed-again"
+
+[[step]]
+do = "click"
+at = [85, 175]
+label = "rail: People — the shell must be interactive again"
+
+[[step]]
+do = "shot"
+name = "shell-after-close"
+
 [[assert]]
 kind = "differ"
 shots = ["before-open", "panel-open"]
@@ -114,3 +137,11 @@ shots = ["focus-close", "reopened"]
 # ✕ — `panel-open` was reached by mouse, and WebKit shows no `:focus-visible` ring for that.
 tolerance = 0.002
 because = "closing the panel must restore focus to the control that opened it"
+
+[[assert]]
+kind = "differ"
+shots = ["closed-again", "shell-after-close"]
+# The unregister guard (#312): while a panel is open every region behind it is `inert`, and a missed
+# unregister on close would leave the whole shell inert — an application that looks fine and answers
+# nothing. A rail click that changes the view is the proof it came back.
+because = "the shell must be interactive again once the panel closed"

@@ -13,6 +13,7 @@ use crate::screens::{
 use crate::services::load_counts;
 use crate::shell::close_confirm::CloseConfirmDialog;
 use crate::shell::explorer::Explorer;
+use crate::shell::focus_trap::FocusHistory;
 use crate::shell::help_overlay::HelpOverlay;
 use crate::shell::keyboard::{ShellNotices, dispatch, use_keyboard_dispatch};
 use crate::shell::nav_state::{NavState, Overlay, entity_category};
@@ -106,6 +107,11 @@ pub fn Shell() -> Element {
     // attribute and freezes the whole app — it must be omitted, not set to false. (SSR omits false
     // bools, so this divergence is not caught by the SSR tests.)
     let overlay_open = *nav.overlay.read() != Overlay::None || nav.pending_close.read().is_some();
+    // A `SidePanel` cannot use that clause: it renders *inside* `.app`, so inerting `.app` would inert
+    // the panel with it. Each region behind a panel inerts its own root instead (#312) — here the skip
+    // link, the only focusable direct child of `.app`. `main.workarea` is deliberately left alone: the
+    // open panel is inside it.
+    let behind_panel = nav.panel_inert();
     rsx! {
         div {
             class: "{app_class}",
@@ -117,7 +123,13 @@ pub fn Shell() -> Element {
                 let resolved = vitni_ui::resolved_shortcuts(&shortcuts_ctx.0.read().bindings).0;
                 dispatch(&event, nav, gp, &notices, &resolved);
             },
-            a { class: "skip-link", href: "#main", "{chrome.0.skip_to_content()}" }
+            a {
+                class: "skip-link",
+                href: "#main",
+                inert: behind_panel,
+                aria_hidden: behind_panel,
+                "{chrome.0.skip_to_content()}"
+            }
             Rail {}
             if let Some(category) = active_category {
                 // Keyed by category so switching entity categories remounts the Explorer with the new
@@ -139,6 +151,7 @@ pub fn Shell() -> Element {
             WindowGeometryManager {}
             QuitManager {}
             RecentPersistenceManager {}
+            FocusHistory {}
         }
         // Siblings of `.app` (not descendants) so inerting `.app` cannot inert the modal itself.
         CommandPalette {}

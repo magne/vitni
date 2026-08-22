@@ -257,8 +257,14 @@ pub fn DetailContainer(
     // The docked pane's own title is a subordinate `<h2>`, not a second `<h1>`: `PaneRole` is provided
     // only there (`DockedRecordDetail`), so the active/undocked pane's markup is unchanged (#279).
     let docked = try_consume_context::<PaneRole>() == Some(PaneRole::Docked);
+    // A pane renders its `SidePanel`s as this container's *siblings*, so an open panel inerts the
+    // container rather than the shell root — `.app` is the panel's own ancestor (#312). Every root this
+    // container renders (the header, and `Tabs`'s own two) has to carry it: `inert` is per-element, and
+    // this is a fragment, not one wrapper. `try_consume_context` because the framework tests render the
+    // container with no shell in context.
+    let behind_panel = try_consume_context::<NavState>().and_then(|nav| nav.panel_inert());
     rsx! {
-        div { class: "detail-head",
+        div { class: "detail-head", inert: behind_panel, aria_hidden: behind_panel,
             if let Some(color) = avatar_color {
                 div { class: "avatar-lg", style: "background:transparent",
                     span { class: "dot", style: "width:28px;height:28px;border-radius:var(--r-pill);background:{color}" }
@@ -291,6 +297,7 @@ pub fn DetailContainer(
             tabs,
             active: active(),
             onselect: move |index| active.set(index),
+            inert: behind_panel,
             {children}
         }
     }

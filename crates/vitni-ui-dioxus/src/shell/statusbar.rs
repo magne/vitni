@@ -24,8 +24,11 @@ pub fn ShellStatusbar() -> Element {
         .0
         .theme_mode_status(*nav.theme_mode.read(), *nav.theme.read() == Theme::Dark);
     let workspace = workspace_name();
+    // Behind an open `SidePanel` the status bar is hidden from assistive tech with the rest of the
+    // chrome (#312) — it has nothing focusable, but a modal's background is announced as a whole.
+    let behind_panel = nav.panel_inert();
     rsx! {
-        StatusLine { active_record: Some(active_label),
+        StatusLine { active_record: Some(active_label), inert: behind_panel,
             if let Some(workspace) = workspace {
                 span { "{workspace}" }
             }

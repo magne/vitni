@@ -52,6 +52,14 @@
   <h2>b · Side panel — for complex edits</h2>
   <p class="muted">When an edit has 6+ fields, nested sub-records, or needs a citation attached, a slide-in
     panel keeps you in context with the record still visible behind it.</p>
+  <p class="muted">It is modal, so <i>visible</i> is all the record behind it is: while the panel is open
+    the pane it covers and every shell region around it — rail, Explorer, top bar, tabstrip, status bar,
+    notice layer, skip link — carry <span class="mono">inert</span> and
+    <span class="mono">aria-hidden</span>, which closes the pointer, <kbd>Tab</kbd> and
+    assistive-technology paths together (ARIA APG modal pattern). The panel is rendered as the pane's
+    <b>sibling</b>, not inside it: <span class="mono">inert</span> is inherited and no descendant can
+    undo it, so a panel within the inerted subtree would disable itself. Closing the panel lifts it all
+    again and returns focus to the control that opened it.</p>
   <div class="specimen" style="display:grid;place-items:start">
     <div class="sidepanel">
       <div class="sp-head"><h3>Edit birth fact</h3><span class="spacer"></span><button class="btn sm ghost">✕</button></div>

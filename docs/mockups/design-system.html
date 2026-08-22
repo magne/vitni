@@ -348,7 +348,13 @@
     <span class="mono">.focus-guard</span> tab stops brackets the dialog's content: tabbing onto one
     sends focus to the opposite end, so <kbd>Tab</kbd>/<kbd>⇧Tab</kbd> cycle inside the dialog and
     never reach the inert shell behind it. Focus moves into the dialog on open and back to the control
-    that opened it on close. Both overlays slide in; the
+    that opened it on close. What "inert shell" means differs by layer: a
+    <span class="mono">.modal</span> sits on <span class="mono">.overlay</span>, a sibling of
+    <span class="mono">.app</span>, so <span class="mono">.app</span> itself takes
+    <span class="mono">inert</span>; a <span class="mono">.sidepanel</span> lives <i>inside</i>
+    <span class="mono">.app</span>, so each region behind it — the rail, Explorer, top bar, tabstrip,
+    status bar, notice layer, skip link, and the record container the panel is a sibling of — takes
+    <span class="mono">inert</span> on its own root instead. Both overlays slide in; the
     <span class="mono">prefers-reduced-motion</span> block drops the motion.</p>
   <div class="specimen" style="position:relative;min-height:280px;overflow:hidden">
     <div class="overlay">

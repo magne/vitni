@@ -27,12 +27,14 @@ pub fn Explorer() -> Element {
     let Some(category) = nav.and_then(|nav| entity_category(*nav.active.read())) else {
         return rsx! {};
     };
+    // Behind an open `SidePanel` the whole list column is inert, its rows and filter with it (#312).
+    let behind_panel = nav.and_then(|nav| nav.panel_inert());
     // Keyed by category so switching categories remounts a fresh list (its own resource + signals),
     // mirroring how the old per-screen mount re-fetched on every category switch. `aside.list` is the
     // single grid cell of the `.app.has-explorer` layout (rail | list | work-area) — it must wrap the
     // list here (not inside `ExplorerList`) so the column exists even while the list is still loading.
     rsx! {
-        aside { class: "list",
+        aside { class: "list", inert: behind_panel, aria_hidden: behind_panel,
             ExplorerList { key: "{category.id()}", category }
         }
     }

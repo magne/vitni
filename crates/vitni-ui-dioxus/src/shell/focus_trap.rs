@@ -105,24 +105,60 @@ fn focus_end_script(end: DialogEnd) -> String {
     format!("{DIALOG_CONTROLS}\nif (dialog !== null) (controls[{index}] ?? dialog).focus();")
 }
 
+/// The script that records every element as it takes focus, so a dialog can still name the control
+/// that opened it after the background went `inert` — becoming inert *blurs* whatever it contains
+/// (`WebKit` runs the focus fixup rule), so by the time a side panel's own effect looks,
+/// `document.activeElement` may already be the body (#312). Installed once, at shell mount, because
+/// the control it has to remember was focused before the panel existed.
+///
+/// Focus guards are skipped: focus only ever passes through one on its way somewhere else, so one is
+/// never what a dialog should restore to.
+const TRACK_FOCUS: &str = "
+if (!window.__vitniFocusTracked) {
+  window.__vitniFocusTracked = true;
+  document.addEventListener('focusin', (event) => {
+    const target = event.target;
+    if (target instanceof HTMLElement && !target.hasAttribute('data-focus-guard')) {
+      window.__vitniLastFocused = target;
+    }
+  }, true);
+}
+";
+
+/// How many further animation frames the restore will wait for the background to stop being `inert`.
+/// A dialog's removal and the lifting of `inert` behind it are two different render passes, so they can
+/// reach the webview as two batches — `focus()` on a still-inert control is silently ignored, and
+/// nothing would try again (#312).
+const RESTORE_FRAMES: u8 = 8;
+
 /// The script that moves focus into the open trapped dialog and restores the control that had it once
 /// the dialog is gone. The restore is driven by the dialog's own removal (a `MutationObserver`) rather
-/// than a Rust-side unmount hook, so it runs *after* the shell has torn the dialog down and lifted
-/// `inert` from the background — an inert element cannot take focus.
+/// than a Rust-side unmount hook, so it runs *after* the shell has torn the dialog down; it then
+/// retries for [`RESTORE_FRAMES`] frames, until the control is no longer `inert` and takes the focus.
+///
+/// The control to restore is the live `document.activeElement` whenever the browser still has one, and
+/// [`TRACK_FOCUS`]'s record otherwise: a side panel inerts the pane it covers, which blurs the very
+/// control that opened it, leaving `activeElement` as the body (#312).
 fn enter_and_restore_script() -> String {
     format!(
         "{DIALOG_CONTROLS}
 if (dialog !== null) {{
-  const restore = document.activeElement;
+  const focused = document.activeElement;
+  const restore = focused instanceof HTMLElement && focused !== document.body
+    ? focused
+    : window.__vitniLastFocused;
   (controls[0] ?? dialog).focus();
+  const restoreFocus = (attempts) => {{
+    if (!(restore instanceof HTMLElement) || !restore.isConnected || dialog.contains(restore)) return;
+    restore.focus();
+    if (document.activeElement !== restore && attempts > 0) {{
+      requestAnimationFrame(() => restoreFocus(attempts - 1));
+    }}
+  }};
   const observer = new MutationObserver(() => {{
     if (dialog.isConnected) return;
     observer.disconnect();
-    requestAnimationFrame(() => {{
-      if (restore instanceof HTMLElement && restore.isConnected && !dialog.contains(restore)) {{
-        restore.focus();
-      }}
-    }});
+    requestAnimationFrame(() => restoreFocus({RESTORE_FRAMES}));
   }});
   observer.observe(document.body, {{ childList: true, subtree: true }});
 }}"
@@ -158,6 +194,15 @@ pub fn focus_guard(guard: FocusGuard) -> Element {
 #[component]
 pub fn DialogFocus() -> Element {
     use_effect(|| run(enter_and_restore_script()));
+    rsx! {}
+}
+
+/// Installs [`TRACK_FOCUS`] once for the whole application. Markup-free; mounted by the
+/// [`Shell`](super::root::Shell) beside its other managers, because a dialog's restore target is
+/// focused long before that dialog mounts.
+#[component]
+pub fn FocusHistory() -> Element {
+    use_effect(|| run(TRACK_FOCUS.to_owned()));
     rsx! {}
 }
 
@@ -199,7 +244,9 @@ pub fn keep_typing_local(event: &KeyboardEvent) {
 
 #[cfg(test)]
 mod tests {
-    use super::{DialogEnd, FocusGuard, enter_and_restore_script, focus_end_script, is_local_typing, wrap_end};
+    use super::{
+        DialogEnd, FocusGuard, TRACK_FOCUS, enter_and_restore_script, focus_end_script, is_local_typing, wrap_end,
+    };
     use dioxus::prelude::{Key, Modifiers};
 
     #[test]
@@ -251,8 +298,13 @@ mod tests {
     fn the_entry_script_restores_the_previously_focused_control_after_the_dialog_goes() {
         let script = enter_and_restore_script();
         assert!(
-            script.contains("const restore = document.activeElement"),
+            script.contains("const focused = document.activeElement"),
             "the control focused before the dialog opened is remembered:\n{script}"
+        );
+        assert!(
+            script.contains("window.__vitniLastFocused"),
+            "and the focus history covers the case where inerting the background already blurred it \
+             (#312):\n{script}"
         );
         assert!(
             script.contains("if (dialog.isConnected) return"),
@@ -261,6 +313,18 @@ mod tests {
         assert!(
             script.contains("requestAnimationFrame"),
             "and for the background's inert to be lifted with it:\n{script}"
+        );
+    }
+
+    #[test]
+    fn the_focus_history_records_every_control_but_the_guards() {
+        assert!(
+            TRACK_FOCUS.contains("window.__vitniFocusTracked"),
+            "the listener installs at most once:\n{TRACK_FOCUS}"
+        );
+        assert!(
+            TRACK_FOCUS.contains("!target.hasAttribute('data-focus-guard')"),
+            "a guard is never a restore target — focus only passes through one:\n{TRACK_FOCUS}"
         );
     }
 

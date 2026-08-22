@@ -47,8 +47,10 @@ pub fn Topbar() -> Element {
     {
         segments.push(record.label);
     }
+    // Behind an open `SidePanel` the top bar is inert — search, theme, and help with it (#312).
+    let behind_panel = nav.panel_inert();
     rsx! {
-        header { class: "topbar", role: "banner",
+        header { class: "topbar", role: "banner", inert: behind_panel, aria_hidden: behind_panel,
             nav { class: "breadcrumb-wrap", aria_label: "{chrome.0.aria_breadcrumb()}",
                 Breadcrumb { segments }
             }

@@ -33,6 +33,12 @@ pub fn Tabs(
     /// (e.g. a preceding heading). Omitted by default — existing callers keep their prior markup.
     #[props(default)]
     aria_label: Option<String>,
+    /// `Some("true")` when the caller sits behind an open [`SidePanel`](crate::components::SidePanel)
+    /// and this strip must therefore be `inert` too (#312) — passed down rather than read here,
+    /// because a strip *inside* a panel must stay live. `None` (the default) renders no attribute at
+    /// all: `inert` is a boolean HTML attribute, so any rendered value would freeze the strip.
+    #[props(default)]
+    inert: Option<&'static str>,
     /// The active tab's panel content.
     children: Element,
 ) -> Element {
@@ -51,6 +57,8 @@ pub fn Tabs(
             class: "tabs",
             role: "tablist",
             aria_label,
+            inert,
+            aria_hidden: inert,
             onmounted: move |event| strip.set(Some(event)),
             onwheel: move |event| horizontal_wheel(&event, strip),
             onkeydown: move |event| tab_keys(&event, active, total, nodes, &onselect),
@@ -77,7 +85,7 @@ pub fn Tabs(
                 }
             }
         }
-        div { class: "tab-body", role: "tabpanel", id: "{panel_id}", {children} }
+        div { class: "tab-body", role: "tabpanel", id: "{panel_id}", inert, aria_hidden: inert, {children} }
     }
 }
 
@@ -156,11 +164,15 @@ pub fn StatusLine(
     /// The currently active record label, if any.
     #[props(default)]
     active_record: Option<String>,
+    /// `Some("true")` while an open [`SidePanel`](crate::components::SidePanel) puts this bar behind it
+    /// (#312) — see [`Tabs`]'s prop of the same name for why it is passed down rather than read here.
+    #[props(default)]
+    inert: Option<&'static str>,
     /// Right-aligned status content.
     children: Element,
 ) -> Element {
     rsx! {
-        div { class: "statusbar", role: "contentinfo",
+        div { class: "statusbar", role: "contentinfo", inert, aria_hidden: inert,
             if let Some(active_record) = active_record {
                 span { class: "active-record", aria_live: "polite", "{active_record}" }
             }

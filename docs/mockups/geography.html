@@ -218,7 +218,10 @@
          With a place selected instead, the same commit opens "Edit geometry — <name>" (the
          edit-patterns.html sidepanel pattern, reused rather than redrawn here) exactly as Finish
          polygon does. The panel slides in from the viewport edge (`viewport_anchored`), not from
-         `.workarea`, since this is a tool screen with no detail pane underneath it (#208). -->
+         `.workarea`, since this is a tool screen with no detail pane underneath it (#208). It is a
+         sibling of the screen's own content root, which — like every other region behind an open panel
+         — is `inert` while it stands: toolbar, place rail, map and time slider all stop answering
+         (#312). -->
     <h3 style="margin-top:20px">Point tool, no draw target: "New place here"</h3>
     <div class="specimen" style="display:grid;place-items:start">
       <div class="sidepanel">
