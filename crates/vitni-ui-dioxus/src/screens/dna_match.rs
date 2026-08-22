@@ -613,36 +613,30 @@ fn dna_match_tab_content(
     on_tag_remove: Callback<(String, String)>,
 ) -> Element {
     let loc = state.data_loc();
+    let shared = SharedTabCtx {
+        forms: Some(FormTabs {
+            editing,
+            citations: None,
+            media: None,
+            notes: Some(NotesArm {
+                form: DnaMatchEditForm::Note,
+                rows: &detail.notes,
+                on_detach: on_retract,
+            }),
+            tags: Some(TagsArm {
+                form: DnaMatchEditForm::Tag,
+                rows: &detail.tags,
+                on_remove: on_tag_remove,
+            }),
+        }),
+        research_notes: None,
+        history: &detail.history,
+        on_undo: Some(on_undo),
+    };
     match tab.id {
         "segments" => dna_match_segments_table(loc, tab, &detail.segments, on_edit_open, on_retract),
         "ancestors" => dna_match_ancestors_table(loc, tab, &detail.shared_ancestors, on_edit_open, on_retract),
-        "notes" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, DnaMatchEditForm::Note),
-            None,
-            rsx! {
-                {notes_table(loc, &detail.notes, Some(on_retract))}
-            },
-        ),
-        "tags" => tab_frame(
-            loc,
-            tab,
-            TabActionTarget::Form(editing, DnaMatchEditForm::Tag),
-            Some(TabActionStyle {
-                emphasis: Some(ButtonVariant::Ghost),
-                ..Default::default()
-            }),
-            tags_panel(loc, &detail.tags, on_tag_remove),
-        ),
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, Some(on_undo)),
-        ),
-        _ => dna_match_overview(loc, detail, record),
+        _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| dna_match_overview(loc, detail, record)),
     }
 }
 

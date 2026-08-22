@@ -240,16 +240,19 @@ fn tag_tab_content(
     name_touched: Signal<bool>,
     picker_open: Signal<bool>,
 ) -> Element {
+    // Tag is the one aggregate with no edit-form enum, no side panel and no retraction, so History is
+    // its whole share of the six and `forms: None` says so without a signal to put in.
+    let shared = SharedTabCtx::<()> {
+        forms: None,
+        research_notes: None,
+        history: &detail.history,
+        on_undo: None,
+    };
     match tab.id {
         "usage" => tag_usage_tab(loc, detail),
-        "history" => tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, &detail.history, None),
-        ),
-        _ => tag_overview(loc, detail, edit, name_touched, picker_open),
+        _ => {
+            shared_tab(loc, tab, &shared).unwrap_or_else(|| tag_overview(loc, detail, edit, name_touched, picker_open))
+        }
     }
 }
 

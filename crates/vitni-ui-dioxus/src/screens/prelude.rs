@@ -65,5 +65,5 @@ pub use super::shared::{
 pub use super::tabs::{
     AddressForm, AttachedLink, AttachedRow, CitationsArm, FormTabs, MediaArm, NotesArm, ParticipationForm,
     ParticipationSeed, ResearchNotesArm, SharedTabCtx, TabActionStyle, TabActionTarget, TagsArm, address_cards,
-    attached_table, fallback_tab, history_panel, notes_table, shared_tab, tab_frame, tags_panel,
+    attached_table, fallback_tab, shared_tab, tab_frame,
 };
