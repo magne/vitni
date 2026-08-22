@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 
 use crate::components::button::IconButton;
 use crate::shell::focus_trap::{DialogFocus, FocusGuard, dismiss_on_escape, focus_guard};
+use crate::shell::nav_state::NavState;
 
 /// A titled content container.
 #[component]
@@ -46,9 +47,19 @@ pub fn EmptyState(
 /// the panel and restored to the control that opened it on close, the same cycling trap [`Modal`] uses
 /// ([`crate::shell::focus_trap`]).
 ///
-/// Unlike an overlay, a panel renders *inside* `.app`, so the shell cannot inert the background around
-/// it (inerting `.app` would inert the panel too). The trap closes the keyboard path and the scrim the
-/// pointer one; the background staying reachable to assistive tech is tracked in `docs/issues.md`.
+/// Unlike an overlay, a panel renders *inside* `.app`, so the shell cannot inert the background by
+/// inerting `.app` — that is the panel's own ancestor, and `inert` cannot be undone by a descendant.
+/// Instead the panel registers its scope in [`NavState::open_panels`] while it is open, and every
+/// region behind it — the rail, Explorer, top bar, tabstrip, status bar, toast layer, skip link, and
+/// the record container it is a sibling of — inerts its own root
+/// ([`NavState::panel_inert`], #312). So the trap closes the keyboard path, the scrim the pointer one,
+/// and `inert` the assistive-technology one.
+///
+/// Registration happens **during render**, not in an effect: `dioxus-ssr` runs no effects, and the
+/// behaviour has to be assertable there. Unregistration is the load-bearing half — a missed one leaves
+/// the whole shell inert, i.e. a frozen application — so it runs on both exits: the `open: false`
+/// branch (the component stays mounted when a caller merely closes the panel) and a `use_drop` for the
+/// live-renderer path where the pane drops the panel from its rsx.
 ///
 /// `position: absolute`, escaping into the nearest positioned ancestor — a record's own `.detail`
 /// pane for every `*DetailPane`'s side panel, bounding it to that pane rather than the whole window.
@@ -75,6 +86,24 @@ pub fn SidePanel(
     #[props(default)]
     viewport_anchored: bool,
 ) -> Element {
+    // `try_consume_context`: a bare SSR probe of this component (`tests/side_panel.rs`,
+    // `tests/components.rs`) renders it with no shell in context, and must keep working.
+    let nav = try_consume_context::<NavState>();
+    let scope = dioxus::core::current_scope_id();
+    // Ahead of the `open` branch, like every hook here: a hook that only ran while the panel was open
+    // would shift the hook order the next time it closed.
+    use_drop(move || {
+        if let Some(mut nav) = nav {
+            nav.close_panel(scope);
+        }
+    });
+    if let Some(mut nav) = nav {
+        if open {
+            nav.open_panel(scope);
+        } else {
+            nav.close_panel(scope);
+        }
+    }
     if !open {
         return rsx! {};
     }

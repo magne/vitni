@@ -57,8 +57,11 @@ pub fn ShellToast() -> Element {
         .as_ref()
         .map_or_else(String::new, |notice| notice.message.clone());
     let kind = notice.as_ref().map_or(ToastKind::Info, |notice| notice.kind);
+    // Behind an open `SidePanel` the notice layer is inert too (#312): its Dismiss action is a button
+    // sitting over the work area, outside the panel.
+    let behind_panel = nav.panel_inert();
     rsx! {
-        div { class: "toast-layer",
+        div { class: "toast-layer", inert: behind_panel, aria_hidden: behind_panel,
             Toast {
                 visible,
                 message,

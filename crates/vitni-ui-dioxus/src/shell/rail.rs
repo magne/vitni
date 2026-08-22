@@ -50,8 +50,15 @@ pub fn Rail() -> Element {
         .filter(|(_, item)| item.group == RailGroup::Tools)
         .map(|(index, item)| (index, *item))
         .collect();
+    // Behind an open `SidePanel` the rail is inert, like every other region around the panel (#312).
+    let behind_panel = use_context::<NavState>().panel_inert();
     rsx! {
-        aside { class: "rail", role: "navigation", aria_label: "{chrome.0.aria_primary_nav()}",
+        aside {
+            class: "rail",
+            role: "navigation",
+            aria_label: "{chrome.0.aria_primary_nav()}",
+            inert: behind_panel,
+            aria_hidden: behind_panel,
             div { class: "brand",
                 span { class: "logo", aria_hidden: "true", "V" }
                 span { "{chrome.0.brand_title()}" }

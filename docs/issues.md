@@ -173,12 +173,6 @@ long-standing "DNA match views in the UI" item is closed.
 
 ### Shell, tabs & notifications
 
-- **A `SidePanel`'s background is not `inert`.** The panel now traps and restores focus like `Modal`
-  (#247), so neither `Tab` nor the pointer can reach the shell behind it, but assistive tech still
-  can: `shell/root.rs` inerts `.app` for the overlays and the close/quit confirm, and every
-  `SidePanel` renders *inside* `.app`, so inerting the shell would inert the panel with it. The fix is
-  a layer the panel can render into as a sibling of `.app` (what the overlays already use), not
-  another `inert` clause. — #312
 - **Back/forward cannot return to a draft tab.** `NavLocation.record` is `(Category, String)`, a saved
   record's key, so a draft is never recorded in the history and `⌘←`/`⌘→` step past it to the last saved
   record instead. True before several drafts per category (#260) and unchanged by it, but a strip that
@@ -237,10 +231,9 @@ which is what makes them worth fixing in the shared code rather than per screen.
   `SidePanel` call sites in the crate pass `footer: rsx! {}`, every panel's Save sitting in the body
   instead, so `components/layout.rs:71-72`'s footer slot is dead weight at every one of them. Wanted:
   `edit_side_panel<E>(loc, title, editing, body)` in `screens/shared.rs` beside the
-  `retract_side_panel` it mirrors, and `footer` given `#[props(default)]` or dropped. Worth doing
-  before #312, whose fix is to render the panel into a sibling layer of `.app` the way
-  `shell/root.rs:132-135` mounts the overlays — a change that reaches every construction site, since
-  the overlay layer is a root-mounted component reading a signal rather than a portal.
+  `retract_side_panel` it mirrors, and `footer` given `#[props(default)]` or dropped. Independent of
+  #312, which is fixed: a panel stays where it is authored, registers itself in `NavState::open_panels`
+  while open, and every region behind it inerts its own root — so no construction site moved.
 - **A date row's four controls stack instead of sitting on one line.** `DatePicker`
   (`components/forms.rs:164-203`) emits exactly the row `event.html:186-192` draws — modifier select,
   date input, quality select, calendar select, each `width:auto` inside a `.fact-row` — but

@@ -6,7 +6,7 @@
 //! `vitni-ui` (ADR 0008); the renderer merely interprets it.
 
 use std::any::Any;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 
@@ -500,6 +500,20 @@ pub struct NavState {
     /// requested with nothing unsaved). The desktop-only `QuitManager` observes it and closes the
     /// native window; it is a no-op under SSR, which mounts no window.
     pub quit_requested: Signal<u32>,
+    /// The scopes of the currently open [`SidePanel`](crate::components::SidePanel)s — the registry
+    /// every chrome region *behind* a panel inerts itself from (#312), read through
+    /// [`Self::panel_inert`].
+    ///
+    /// A panel renders *inside* `.app`, so the overlays' trick of inerting `.app`
+    /// ([`Shell`](crate::shell::root::Shell)) is not available to it: `.app` is the panel's own
+    /// ancestor, and `inert` cannot be undone by a descendant. Each region therefore inerts its own
+    /// root instead, and the panel — a sibling of the container it covers, never a descendant of it —
+    /// stays live.
+    ///
+    /// A **set of scopes**, not a flag or a count: two panels can be open at once (a pane's edit panel
+    /// beside its retract panel, or a primary and a docked pane each with one), and keying by scope
+    /// makes the register/unregister every render performs idempotent.
+    pub open_panels: Signal<HashSet<ScopeId>>,
     /// The already-localized notice raised when a save run ends with work still unsaved (#302). The
     /// shell seeds it at mount because `NavState` carries no localizer; `None` under a bare SSR mount,
     /// where the run then ends silently rather than with an English literal (ADR 0003).
@@ -556,6 +570,7 @@ impl NavState {
             save_queue: Signal::new(Vec::new()),
             next_draft: Signal::new(1),
             quit_requested: Signal::new(0),
+            open_panels: Signal::new(HashSet::new()),
             save_incomplete_notice: Signal::new(None),
         }
     }
@@ -1421,6 +1436,56 @@ impl NavState {
     /// Closes any open overlay.
     pub fn close_overlay(&mut self) {
         self.overlay.set(Overlay::None);
+    }
+
+    /// Registers `scope`'s open [`SidePanel`](crate::components::SidePanel) in
+    /// [`Self::open_panels`], so every chrome region behind it inerts itself (#312).
+    ///
+    /// Idempotent: the panel registers itself on every render (an effect would be invisible to
+    /// `dioxus-ssr`, which runs none), and an unconditional write would re-dirty every region each
+    /// pass — an endless render loop.
+    pub fn open_panel(&mut self, scope: ScopeId) {
+        if self.open_panels.peek().contains(&scope) {
+            return;
+        }
+        self.open_panels.write().insert(scope);
+    }
+
+    /// Unregisters `scope`'s [`SidePanel`](crate::components::SidePanel) — it closed, or its component
+    /// unmounted with the pane that held it. Load-bearing: a missed unregister leaves every region
+    /// `inert`, which is a frozen application, so both of the panel's exits call it (the closed branch
+    /// of its render, and its `use_drop`).
+    ///
+    /// Fallible reads/writes because the `use_drop` path also runs while the whole `VirtualDom` is
+    /// torn down, where this signal may already be gone: a dropped registry means there is nothing
+    /// left to unregister, rather than a panic on quit.
+    pub fn close_panel(&mut self, scope: ScopeId) {
+        let registered = self.open_panels.try_peek().is_ok_and(|open| open.contains(&scope));
+        if !registered {
+            return;
+        }
+        if let Ok(mut open) = self.open_panels.try_write() {
+            open.remove(&scope);
+        }
+    }
+
+    /// Whether any [`SidePanel`](crate::components::SidePanel) is open — reads reactively, so a region
+    /// that asks re-renders when the first panel opens and when the last one closes.
+    #[must_use]
+    pub fn panel_open(&self) -> bool {
+        !self.open_panels.read().is_empty()
+    }
+
+    /// The `inert`/`aria-hidden` value a region behind an open panel emits: `Some("true")` while a
+    /// panel is open, `None` otherwise.
+    ///
+    /// Never `Some("false")`. `inert` is a boolean HTML attribute, so on the live renderer *any*
+    /// rendered value freezes the subtree — it must be absent, not false, exactly as
+    /// [`Shell`](crate::shell::root::Shell) emits the overlays' own clause. (SSR omits false bools, so
+    /// the divergence is invisible to the SSR tests.)
+    #[must_use]
+    pub fn panel_inert(&self) -> Option<&'static str> {
+        self.panel_open().then_some("true")
     }
 
     /// Dismisses the topmost dismissable layer (`Esc`). The close/quit confirm sits above every

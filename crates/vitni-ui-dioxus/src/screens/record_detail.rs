@@ -94,8 +94,11 @@ pub fn DockedRecordDetail() -> Element {
     let Some(record) = nav.docked_record_ref() else {
         return rsx! {};
     };
+    // Behind an open `SidePanel` — either pane's — the docked header is inert with the rest of the
+    // chrome (#312); its undock ✕ is a focusable control outside the panel.
+    let behind_panel = nav.panel_inert();
     rsx! {
-        div { class: "docked-head",
+        div { class: "docked-head", inert: behind_panel, aria_hidden: behind_panel,
             span { class: "docked-title", "{record.label}" }
             button {
                 class: "icon-btn",

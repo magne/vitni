@@ -31,8 +31,16 @@ pub fn RecordTabstrip() -> Element {
     // category's drafts, which no single tab knows.
     let labels = tab_labels(&nav, &chrome.0, &loc);
     let mut menu_open = use_signal(|| false);
+    // Behind an open `SidePanel` the whole strip is inert — history, tabs, and the new-record menu
+    // (#312).
+    let behind_panel = nav.panel_inert();
     rsx! {
-        div { class: "tabstrip", role: "tablist", aria_label: "{chrome.0.aria_open_records()}",
+        div {
+            class: "tabstrip",
+            role: "tablist",
+            aria_label: "{chrome.0.aria_open_records()}",
+            inert: behind_panel,
+            aria_hidden: behind_panel,
             button {
                 class: "icon-btn",
                 r#type: "button",

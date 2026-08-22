@@ -237,8 +237,14 @@ pub fn GeographyScreen() -> Element {
         on_moved,
     };
     let main_content = geography_main_content(&chrome.0, &loading, data.read_unchecked().is_some(), source_state, pane);
+    // The geometry panel below is this content root's *sibling*, so an open panel inerts the root —
+    // toolbar, rail, map and time slider — and not the panel itself (#312).
+    let behind_panel = nav.panel_inert();
     rsx! {
-        div { style: "display:flex;flex-direction:column;height:100%;min-height:0;gap:var(--sp-3)",
+        div {
+            style: "display:flex;flex-direction:column;height:100%;min-height:0;gap:var(--sp-3)",
+            inert: behind_panel,
+            aria_hidden: behind_panel,
             h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-geography\")}" }
             {geography_toolbar(
                 loc,
