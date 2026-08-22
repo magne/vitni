@@ -124,8 +124,9 @@ pub use source::{
     source_repositories_table,
 };
 pub use tabs::{
-    AddressForm, AttachedLink, AttachedRow, ParticipationForm, ParticipationSeed, TabActionStyle, TabActionTarget,
-    address_cards, address_form, attached_table, citations_table, history_panel, notes_table, participation_form,
+    AddressForm, AttachedLink, AttachedRow, CitationsArm, FormTabs, MediaArm, NotesArm, ParticipationForm,
+    ParticipationSeed, ResearchNotesArm, SharedTabCtx, TabActionStyle, TabActionTarget, TagsArm, address_cards,
+    address_form, attached_table, citations_table, history_panel, notes_table, participation_form, shared_tab,
     tab_frame, tags_panel,
 };
 pub use tag::{tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_usage_tab};

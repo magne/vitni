@@ -357,6 +357,210 @@ pub fn fallback_tab(id: &'static str) -> DetailTab {
     }
 }
 
+/// One detail screen's participation in the six tabs every aggregate renders the same way — the
+/// argument [`shared_tab`] dispatches on (issue #322).
+///
+/// The ctx describes *which* shared tabs the screen has and what to render them over; it never
+/// decides *whether* one is shown. A screen still declares its own tab list, and `shared_tab` is
+/// reached only from its dispatcher's `_` arm, so a tab the screen matches explicitly always wins.
+/// A shared tab whose arm is absent here resolves to `None` and falls through to the screen's
+/// overview, which is what makes the ctx and the tab list unable to disagree about ownership.
+///
+/// The four form tabs are grouped under [`FormTabs`] rather than sitting flat, because they share
+/// the `editing` signal their action bars write to and only they need it — Tag, which carries no
+/// edit-form enum at all, says `forms: None` in one word instead of manufacturing a signal it has
+/// nothing to put in.
+pub struct SharedTabCtx<'a, E> {
+    /// The Citations/Media/Notes/Tags tabs this screen carries, or `None` for a screen with no side
+    /// panel to arm. None of the four is universal: `Citation` exists on 5 of the 12 edit-form
+    /// enums, `Media` on 6, `Note` on 10, `Tag` on 12 — so each arm is separately optional.
+    pub forms: Option<FormTabs<'a, E>>,
+    /// The Research notes tab, for the four aggregates a research note can be *about*.
+    pub research_notes: Option<ResearchNotesArm<'a>>,
+    /// The audit timeline. Not optional: all 13 screens carry History.
+    pub history: &'a [HistoryEntryVm],
+    /// Undoes an assertion from the History tab, forwarded to [`history_panel`] as it stands.
+    /// `None` for an aggregate with no retraction (Tag).
+    pub on_undo: Option<Callback<String>>,
+}
+
+/// The shared tabs that arm a side-panel form, and the one signal all of them write to.
+///
+/// `editing` sits here rather than on [`SharedTabCtx`] so that a screen cannot name a form tab
+/// without supplying the signal its button targets: the invariant is the type's, not a runtime
+/// `let Some(editing) = … else { return None }` that would silently drop a tab a screen meant to
+/// show. Each arm carries its own detach callback rather than the ctx carrying one shared field,
+/// because the research-note screen has no plain `on_retract` to give and Tag has none at all.
+pub struct FormTabs<'a, E> {
+    /// The screen's side-panel form slot, which each tab's action bar writes its own variant into.
+    pub editing: Signal<Option<E>>,
+    /// The Citations tab — the citations attached to this record.
+    pub citations: Option<CitationsArm<'a, E>>,
+    /// The Media tab — the media objects attached to this record.
+    pub media: Option<MediaArm<'a, E>>,
+    /// The Notes tab — the notes attached to this record.
+    pub notes: Option<NotesArm<'a, E>>,
+    /// The Tags tab — the tags applied to this record.
+    pub tags: Option<TagsArm<'a, E>>,
+}
+
+/// The Citations tab's contents and wiring.
+pub struct CitationsArm<'a, E> {
+    /// The edit-form variant the "Attach citation" bar arms.
+    pub form: E,
+    /// The attached citations, as [`citations_table`] renders them.
+    pub rows: &'a [CitationRefVm],
+    /// Whether to render the "Backs" column — set for the plural-subject records (Person, Family),
+    /// clear for the singular-subject ones (Event, Place, Media).
+    pub show_backs: bool,
+    /// Detaches a row: `(assertion_id, human_id, true)`.
+    pub on_detach: Callback<(String, String, bool)>,
+}
+
+/// The Media tab's contents and wiring.
+pub struct MediaArm<'a, E> {
+    /// The edit-form variant the "Attach media" bar arms.
+    pub form: E,
+    /// The attached media references, as [`media_tab`] renders them.
+    pub rows: &'a [MediaRefVm],
+    /// The screen's viewer state and crop-supersede wiring.
+    pub state: MediaTabState,
+    /// Detaches a card: `(assertion_id, human_id, true)`.
+    pub on_detach: Callback<(String, String, bool)>,
+}
+
+/// The Notes tab's contents and wiring.
+pub struct NotesArm<'a, E> {
+    /// The edit-form variant the "Attach note" bar arms.
+    pub form: E,
+    /// The attached notes, as [`notes_table`] renders them.
+    pub rows: &'a [AttachedRefVm],
+    /// Detaches a row: `(assertion_id, human_id, true)`.
+    pub on_detach: Callback<(String, String, bool)>,
+}
+
+/// The Tags tab's contents and wiring.
+pub struct TagsArm<'a, E> {
+    /// The edit-form variant the "Add tag" bar arms.
+    pub form: E,
+    /// The applied tags, as [`tags_panel`] renders them.
+    pub rows: &'a [TagRef],
+    /// Arms the untag panel for a chip's ×: `(tag_id, tag name)`. Not a detach — tags never
+    /// retract (data-model §9), so this is the one form tab whose removal has its own shape.
+    pub on_remove: Callback<(String, String)>,
+}
+
+/// The Research notes tab's contents: what the notes would be *about*, and the notes already about
+/// it. There is no `editing` here because the tab's action opens a draft tab rather than a side
+/// panel — [`ResearchNotesTab`] builds that from `NavState` itself.
+pub struct ResearchNotesArm<'a> {
+    /// The subject record's entity category, for the "New research note" the tab's bar opens.
+    pub category: Category,
+    /// The subject record's user-facing id (e.g. `I0001`).
+    pub human_id: &'a str,
+    /// The research notes already naming this record as a subject.
+    pub rows: &'a [RowVm],
+}
+
+/// Renders one of the six tabs every aggregate shares (Citations, Media, Notes, Tags, Research
+/// notes, History), or `None` when `tab` is not one of them — or is one the `ctx` does not carry.
+///
+/// This is the arm the 13 detail screens used to spell out 51 times between them, differing only in
+/// the screen's own edit-form variant. Each dispatcher now ends `_ => shared_tab(loc, tab, ctx)
+/// .unwrap_or_else(|| …overview…)`, so the shared frame's shape is one edit rather than 13.
+///
+/// It takes the whole [`DetailTab`] rather than just its id because [`tab_frame`] needs the tab's
+/// `action` (which resolves the bar's label) and its `id` (which keys the tab's explanation).
+pub fn shared_tab<E: Clone + PartialEq + 'static>(
+    loc: &Localizer,
+    tab: &DetailTab,
+    ctx: &SharedTabCtx<'_, E>,
+) -> Option<Element> {
+    match tab.id {
+        "research-notes" => {
+            let arm = ctx.research_notes.as_ref()?;
+            Some(rsx! {
+                ResearchNotesTab {
+                    tab: tab.clone(),
+                    category: arm.category,
+                    human_id: arm.human_id.to_owned(),
+                    rows: arm.rows.to_vec(),
+                }
+            })
+        }
+        "history" => Some(tab_frame::<()>(
+            loc,
+            tab,
+            TabActionTarget::None,
+            None,
+            history_panel(loc, ctx.history, ctx.on_undo),
+        )),
+        _ => shared_form_tab(loc, tab, ctx.forms.as_ref()?),
+    }
+}
+
+/// The four shared tabs that arm a side-panel form — split out of [`shared_tab`] so neither fn
+/// carries the whole six-way dispatch plus its per-arm `Option` unwrapping.
+fn shared_form_tab<E: Clone + PartialEq + 'static>(
+    loc: &Localizer,
+    tab: &DetailTab,
+    forms: &FormTabs<'_, E>,
+) -> Option<Element> {
+    let editing = forms.editing;
+    match tab.id {
+        "citations" => {
+            let arm = forms.citations.as_ref()?;
+            Some(tab_frame(
+                loc,
+                tab,
+                TabActionTarget::Form(editing, arm.form.clone()),
+                None,
+                rsx! {
+                    {citations_table::<E>(loc, arm.rows, arm.show_backs, arm.on_detach)}
+                },
+            ))
+        }
+        "media" => {
+            let arm = forms.media.as_ref()?;
+            Some(tab_frame(
+                loc,
+                tab,
+                TabActionTarget::Form(editing, arm.form.clone()),
+                None,
+                rsx! {
+                    {media_tab(loc, arm.rows, Some(arm.on_detach), arm.state)}
+                },
+            ))
+        }
+        "notes" => {
+            let arm = forms.notes.as_ref()?;
+            Some(tab_frame(
+                loc,
+                tab,
+                TabActionTarget::Form(editing, arm.form.clone()),
+                None,
+                rsx! {
+                    {notes_table(loc, arm.rows, Some(arm.on_detach))}
+                },
+            ))
+        }
+        "tags" => {
+            let arm = forms.tags.as_ref()?;
+            Some(tab_frame(
+                loc,
+                tab,
+                TabActionTarget::Form(editing, arm.form.clone()),
+                Some(TabActionStyle {
+                    emphasis: Some(ButtonVariant::Ghost),
+                    ..Default::default()
+                }),
+                tags_panel(loc, arm.rows, arm.on_remove),
+            ))
+        }
+        _ => None,
+    }
+}
+
 impl From<&DetailTab> for TabItem {
     /// The tab strip's item for one [`DetailTab`]: the same id, label and count, with `id` owned
     /// because the design-system component is generic over strips whose ids are not `'static`.
