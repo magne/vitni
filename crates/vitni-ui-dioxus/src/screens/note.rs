@@ -420,7 +420,7 @@ fn note_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {note_tab_content(state, detail, &active_tab, editing, record, on_edit_open, on_retract, on_undo, on_tag_remove)}
+            {note_tab_content(state, detail, &active_tab, editing, record, NoteTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove })}
         }
         {note_edit_panel(state, editing, on_submit, human_id)}
         // Only ever armed for an untag here (a note has no retractable row), so the Detach note id this
@@ -429,23 +429,40 @@ fn note_detail(
     }
 }
 
-/// The content of one note detail tab, with its contextual add affordances.
+/// The row callbacks a note's tabs dispatch through, grouped so the tab dispatcher stays under
+/// the argument limit.
+#[derive(Clone, Copy)]
 #[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threading the note's edit callbacks"
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
 )]
+struct NoteTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<NoteEditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
+}
+
+/// The content of one note detail tab, with its contextual add affordances.
 fn note_tab_content(
     state: &AppState,
     detail: &NoteDetail,
     tab: &DetailTab,
     editing: Signal<Option<NoteEditForm>>,
     record: RecordEditState<vitni_ui::NoteDraft>,
-    on_edit_open: Callback<NoteEditForm>,
-    on_retract: Callback<(String, String, bool)>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<(String, String)>,
+    callbacks: NoteTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let NoteTabCallbacks {
+        on_retract,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+    } = callbacks;
     let shared = SharedTabCtx {
         forms: Some(FormTabs {
             editing,

@@ -851,7 +851,7 @@ fn person_detail(
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
-            {person_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+            {person_tab_content(state, detail, &active_tab, editing, record, PersonTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove, media_state })}
         }
         {edit_panel(state, detail, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -872,24 +872,39 @@ fn person_initials(detail: &PersonDetail) -> String {
     initials
 }
 
+/// The row callbacks a person's tabs dispatch through, grouped so the tab dispatcher stays under the
+/// argument limit.
+#[derive(Clone, Copy)]
+struct PersonTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<EditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
+}
+
 /// The content of one person detail tab, with its contextual add/edit affordances.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threads the pane's signals + callbacks"
-)]
 fn person_tab_content(
     state: &AppState,
     detail: &PersonDetail,
     tab: &DetailTab,
     editing: Signal<Option<EditForm>>,
     record: RecordEditState<PersonDraft>,
-    on_retract: Callback<(String, String, bool)>,
-    on_edit_open: Callback<EditForm>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<(String, String)>,
-    media_state: MediaTabState,
+    callbacks: PersonTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let PersonTabCallbacks {
+        on_retract,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+        media_state,
+    } = callbacks;
     let shared = SharedTabCtx {
         forms: Some(FormTabs {
             editing,

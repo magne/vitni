@@ -434,30 +434,47 @@ fn media_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {media_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
+            {media_tab_content(state, detail, &active_tab, editing, record, MediaTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove })}
         }
         {media_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
     }
 }
 
-/// The content of one media detail tab, with its contextual add/edit affordances.
+/// The row callbacks a media object's tabs dispatch through, grouped so the tab dispatcher stays under
+/// the argument limit.
+#[derive(Clone, Copy)]
 #[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threads the pane's signals + callbacks"
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
 )]
+struct MediaTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<MediaEditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
+}
+
+/// The content of one media detail tab, with its contextual add/edit affordances.
 fn media_tab_content(
     state: &AppState,
     detail: &MediaDetail,
     tab: &DetailTab,
     editing: Signal<Option<MediaEditForm>>,
     record: RecordEditState<vitni_ui::MediaDraft>,
-    on_retract: Callback<(String, String, bool)>,
-    on_edit_open: Callback<MediaEditForm>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<(String, String)>,
+    callbacks: MediaTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let MediaTabCallbacks {
+        on_retract,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+    } = callbacks;
     let shared = SharedTabCtx {
         forms: Some(FormTabs {
             editing,

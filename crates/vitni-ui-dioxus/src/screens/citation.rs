@@ -715,7 +715,7 @@ fn citation_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {citation_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+                {citation_tab_content(state, detail, &active_tab, editing, record, CitationTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove, media_state })}
             }
             {citation_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -723,24 +723,39 @@ fn citation_detail(
     }
 }
 
+/// The row callbacks a citation's tabs dispatch through, grouped so the tab dispatcher stays under
+/// the argument limit.
+#[derive(Clone, Copy)]
+struct CitationTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<CitationEditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
+}
+
 /// The content of one citation detail tab, with its contextual add/edit affordances.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threads the pane's signals + callbacks"
-)]
 fn citation_tab_content(
     state: &AppState,
     detail: &CitationDetail,
     tab: &DetailTab,
     editing: Signal<Option<CitationEditForm>>,
     record: RecordEditState<vitni_ui::CitationDraft>,
-    on_retract: Callback<(String, String, bool)>,
-    on_edit_open: Callback<CitationEditForm>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<(String, String)>,
-    media_state: MediaTabState,
+    callbacks: CitationTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let CitationTabCallbacks {
+        on_retract,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+        media_state,
+    } = callbacks;
     let shared = SharedTabCtx {
         forms: Some(FormTabs {
             editing,

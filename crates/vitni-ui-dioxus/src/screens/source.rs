@@ -399,31 +399,46 @@ fn source_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {source_tab_content(state, detail, &active_tab, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+            {source_tab_content(state, detail, &active_tab, editing, record, SourceTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove, media_state })}
         }
         {source_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
     }
 }
 
+/// The row callbacks a source's tabs dispatch through, grouped so the tab dispatcher stays under
+/// the argument limit.
+#[derive(Clone, Copy)]
+struct SourceTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<SourceEditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
+}
+
 /// The content of one source detail tab, with its contextual add/edit affordances.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threads the pane's signals + callbacks"
-)]
 fn source_tab_content(
     state: &AppState,
     detail: &SourceDetail,
     tab: &DetailTab,
     editing: Signal<Option<SourceEditForm>>,
     record: RecordEditState<vitni_ui::SourceDraft>,
-    on_retract: Callback<(String, String, bool)>,
-    on_edit_open: Callback<SourceEditForm>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<(String, String)>,
-    media_state: MediaTabState,
+    callbacks: SourceTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let SourceTabCallbacks {
+        on_retract,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+        media_state,
+    } = callbacks;
     // `citations: None` is deliberate, and belt-and-braces with the explicit `"citations"` arm below:
     // a source's Citations tab is a reverse index over the citations *of* this source
     // (`Vec<SourceCitationVm>`), not the attached `CitationRefVm`s the shared table renders.

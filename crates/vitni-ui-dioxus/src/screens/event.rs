@@ -768,7 +768,7 @@ fn event_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {event_tab_content(state, detail, &active_tab, editing, &ctx, on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
+                {event_tab_content(state, detail, &active_tab, editing, &ctx, EventTabCallbacks { on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove, media_state })}
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
             {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -776,25 +776,43 @@ fn event_detail(
     }
 }
 
+/// The row callbacks an event's tabs dispatch through, grouped so the tab dispatcher stays under the
+/// argument limit.
+#[derive(Clone, Copy)]
+struct EventTabCallbacks {
+    /// Opens the shared retract/detach panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Retracts a participation, which is written on the *person* aggregate, so the row's person id
+    /// rides along: `(assertion_id, label, detach, person human_id)`.
+    on_person_retract: Callback<(String, String, bool, String)>,
+    /// Opens a collection-row edit form pre-filled from the row.
+    on_edit_open: Callback<EventEditForm>,
+    /// Retracts an assertion by id from the History tab.
+    on_undo: Callback<String>,
+    /// Arms the untag panel for a tag chip's ×: `(tag_id, tag name)`.
+    on_tag_remove: Callback<(String, String)>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
+}
+
 /// The content of one event detail tab, with its contextual add/edit affordances.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a tab dispatcher threads the pane's signals + callbacks"
-)]
 fn event_tab_content(
     state: &AppState,
     detail: &EventDetail,
     tab: &DetailTab,
     editing: Signal<Option<EventEditForm>>,
     ctx: &EventEditCtx,
-    on_retract: Callback<(String, String, bool)>,
-    on_person_retract: Callback<(String, String, bool, String)>,
-    on_edit_open: Callback<EventEditForm>,
-    on_undo: Callback<String>,
-    on_tag_remove: Callback<(String, String)>,
-    media_state: MediaTabState,
+    callbacks: EventTabCallbacks,
 ) -> Element {
     let loc = state.data_loc();
+    let EventTabCallbacks {
+        on_retract,
+        on_person_retract,
+        on_edit_open,
+        on_undo,
+        on_tag_remove,
+        media_state,
+    } = callbacks;
     let shared = SharedTabCtx {
         forms: Some(FormTabs {
             editing,
