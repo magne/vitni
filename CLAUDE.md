@@ -132,10 +132,9 @@ weighed against, with the verdict, is in [`docs/concept-art/`](docs/concept-art/
 SSR tests (`crates/vitni-ui-dioxus/tests/*.rs`) assert markup and are the default — fast, and they
 cover view logic. They cannot reach anything that only exists in a live webview: `document::eval`,
 CSS, the MapLibre canvas, **which element a handler is attached to**, or **where focus actually goes**.
-Those last two are not theoretical — the first scenarios written found three shipped defects that every
-SSR test passed: `Esc` dismissed no overlay (the dispatcher is on `.app`, the overlays are siblings of
-it), `?` never opened the help sheet (its chord is declared with no modifiers, but typing `?` always
-reports Shift), and the help sheet's `autofocus` never took, leaving focus on `body`.
+SSR passes defects of both kinds: the key dispatcher sits on `.app` while overlays are its siblings,
+so a handler there never sees their keys; typing `?` always reports Shift, so a chord declared with
+no modifiers never matches it; and `autofocus` does not take in the webview, leaving focus on `body`.
 
 **`cargo xtask gui-pass` is how you test that layer.** It runs the real GUI on its own **Xvfb**
 display, drives it with `xdotool`, and asserts over screenshots. Requires `xvfb`, `xdotool` and
@@ -161,8 +160,8 @@ checks `target/gui-pass/workspace/workspace.toml` on disk for a substring instea
 reached disk rather than only an in-memory signal (unavailable under `--real-config`, whose workspace
 path is the caller's own). Read the PNGs under `target/gui-pass/shots/<scenario>/`; crop with
 `convert <in> -crop WxH+X+Y +repage <out>`, and **column-scan rather than eyeball** when a coordinate
-is in question — `convert <shot> -crop 1xH+X+Y +repage txt:-` prints exact pixel rows, which is what
-#285 needed to falsify a band read off a screenshot by eye. The GUI child's own stdout/stderr land in
+is in question — `convert <shot> -crop 1xH+X+Y +repage txt:-` prints exact pixel rows; a band read
+off a screenshot by eye is often wrong by several pixels. The GUI child's own stdout/stderr land in
 `gui.log` in the same directory, at `RUST_LOG=info`.
 
 Writing one:
@@ -205,8 +204,8 @@ them is reachable through the `vitni` launcher too, which forwards anything with
 > and `cargo xtask` are unaffected. `nextest` is the local runner; CI uses `cargo test` and runs
 > doctests separately, which neither `--lib --bins --tests` nor `nextest` covers.
 
-`--lib --bins --tests` deliberately excludes `benches/`: each `vitni-db` bench takes ~140 s
-(15 of them, run `30783699764`), so nextest running them costs ~18 minutes it doesn't need to.
+`--lib --bins --tests` deliberately excludes `benches/`: each `vitni-db` bench takes minutes, so
+running them under nextest multiplies a test run many times over for no coverage gain.
 Clippy still runs `--all-targets`, so the bench code stays linted. Run benches deliberately with
 `cargo bench -p vitni-db --features sqlite`.
 
@@ -258,8 +257,6 @@ Clippy still runs `--all-targets`, so the bench code stays linted. Run benches d
 
 A Tree-sitter knowledge graph (auto-updated on file changes) backs this repo via the
 **code-review-graph** MCP server. Preference order, overriding the global "prefer LSP" default:
-**the graph** for structure, callers/dependents, impact radius, and review context
-(`semantic_search_nodes`, `query_graph`, `get_impact_radius`, `get_affected_flows`,
-`get_review_context`, `get_architecture_overview`, `refactor_tool`); then **LSP** for definitions,
-references, and types; then **`rg`/`ast-grep`/Read** for literal text and config values, or
-whenever the graph doesn't cover the need.
+**the graph**, when its server is connected, for structure, callers/dependents, impact radius, and
+review context; then **LSP** for definitions, references, and types; then **`rg`/`ast-grep`/Read**
+for literal text and config values, or whenever the graph doesn't cover the need.
