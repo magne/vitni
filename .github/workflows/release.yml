@@ -119,7 +119,7 @@ jobs:
       - name: publish GitHub Release
         # `gh release` would avoid a third-party action, but the baked CI image (rust:bookworm) has no
         # gh CLI; this pinned action is the reviewed alternative.
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.2 # zizmor: ignore[superfluous-actions]
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3 # zizmor: ignore[superfluous-actions]
         with:
           files: |
             target/dist/vitni-*-linux-*.tar.gz
