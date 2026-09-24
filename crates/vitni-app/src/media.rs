@@ -1,7 +1,17 @@
 //! Media use-cases (ADR 0006): create, set path/checksum, assert date, add attribute/citation,
 //! attach note, tag, show, and list.
+//!
+//! Setting a file path also records the file's checksum (#359): when the path names a file in the
+//! workspace media library, its bytes are hashed here — the app layer owns the I/O the pure core may
+//! not do — and a `ChecksumSet` follows whenever the digest differs from the recorded one.
 
 use std::collections::{BTreeSet, HashMap};
+use std::fmt::Write;
+use std::fs::File;
+use std::io::{self, Read};
+use std::path::Path;
+
+use sha2::{Digest, Sha256};
 
 use vitni_core::citation::CitationView;
 use vitni_core::date::GenealogicalDate;
@@ -9,7 +19,7 @@ use vitni_core::enums::Restriction;
 use vitni_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, TagId};
 use vitni_core::media::MediaView;
 use vitni_core::media::command::{MediaCommand, MediaCommandEnvelope};
-use vitni_core::media_path::MediaPath;
+use vitni_core::media_path::{MediaPath, media_root_relative};
 use vitni_core::provenance::EvidenceRef;
 use vitni_core::text::{Attribute, Url};
 use vitni_db::Store;
@@ -121,6 +131,7 @@ pub async fn create_media(
     .await?;
 
     if let Some(path) = new.path {
+        let checksum = library_file_checksum(workspace, &path);
         execute(
             store,
             session,
@@ -133,6 +144,7 @@ pub async fn create_media(
             Vec::new(),
         )
         .await?;
+        record_checksum(store, session, media_id, checksum, None).await?;
     }
 
     Ok(human_id)
@@ -450,8 +462,78 @@ async fn set_media_path(
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
-    let media_id = resolve_media_id(store, human_id).await?;
-    execute_media_mutation(store, session, media_id, MediaCommand::SetPath { media_id, path }, meta).await
+    let media = store.find_media(human_id).await?;
+    let recorded = media.as_ref().and_then(|view| view.checksum().map(str::to_owned));
+    let media_id = use_case::resolve_id(media, MediaView::media_id, || {
+        AppError::MediaNotFound(human_id.to_owned())
+    })?;
+    let checksum = match &path {
+        MediaPath::File(file) => library_file_checksum(workspace, file),
+        MediaPath::Web(_) => None,
+    };
+    execute_media_mutation(store, session, media_id, MediaCommand::SetPath { media_id, path }, meta).await?;
+    record_checksum(store, session, media_id, checksum, recorded.as_deref()).await
+}
+
+/// Records `checksum` on the media object when it is known and differs from the `recorded` one. A
+/// mechanical setter, so it carries no provenance (data-model §8).
+async fn record_checksum(
+    store: &Store,
+    session: &Session,
+    media_id: MediaId,
+    checksum: Option<String>,
+    recorded: Option<&str>,
+) -> Result<(), AppError> {
+    let Some(checksum) = checksum else {
+        return Ok(());
+    };
+    if recorded == Some(checksum.as_str()) {
+        return Ok(());
+    }
+    execute(
+        store,
+        session,
+        &media_id.to_string(),
+        MediaCommand::SetChecksum { media_id, checksum },
+        Provenance::default(),
+        Vec::new(),
+    )
+    .await
+}
+
+/// The `"sha256:<hex>"` digest of the media-library file `stored` names, or `None` when it names no
+/// library file (an absolute path, a `..` escape) or the file is not on this machine — both legitimate
+/// for a media record, so neither fails the write. Any other read failure is logged and skipped.
+fn library_file_checksum(workspace: &Workspace, stored: &str) -> Option<String> {
+    let path = workspace.media_root().join(media_root_relative(stored)?);
+    match file_checksum(&path) {
+        Ok(checksum) => Some(checksum),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => {
+            tracing::warn!(path = %path.display(), %error, "not recording a checksum: the media file is unreadable");
+            None
+        }
+    }
+}
+
+/// Streams the file at `path` through SHA-256, in the `"sha256:<lowercase hex>"` form the plugin host's
+/// `media-store` reports.
+fn file_checksum(path: &Path) -> io::Result<String> {
+    let mut file = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 8 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    let mut checksum = String::from("sha256:");
+    for byte in hasher.finalize() {
+        let _ = write!(checksum, "{byte:02x}");
+    }
+    Ok(checksum)
 }
 
 /// Sets a media object's privacy restrictions (GEDCOM `RESN` — data-model §6).
