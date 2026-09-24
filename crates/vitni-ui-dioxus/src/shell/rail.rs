@@ -151,7 +151,7 @@ fn RailItemView(
             },
             onkeydown: move |event| activate_keys(&event, &mut nav, destination),
             span { class: "ico", aria_hidden: "true", "{item.icon}" }
-            span { "{label}" }
+            span { class: "nav-label", title: "{label}", "{label}" }
             if item.has_count {
                 span { class: "count", aria_hidden: "true", "{count_text}" }
             }

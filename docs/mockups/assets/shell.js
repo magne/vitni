@@ -115,7 +115,7 @@
     if (item.id === active) n.setAttribute("aria-current", "page");
     n.innerHTML =
       '<span class="ico" aria-hidden="true">' + item.icon + "</span>" +
-      "<span>" + item.label + "</span>" +
+      '<span class="nav-label" title="' + item.label + '">' + item.label + "</span>" +
       (item.count ? '<span class="count" aria-hidden="true">' + item.count + "</span>" : "");
     if (item.count) n.setAttribute("aria-label", item.label + " (" + item.count + ")");
     return n;
