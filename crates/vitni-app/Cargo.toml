@@ -24,6 +24,8 @@ directories = { workspace = true }
 whoami = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+# Media checksums (#359): a file-path write hashes the media-library file it names.
+sha2 = { workspace = true }
 unic-langid = { workspace = true, features = ["serde"] }
 # The Google Map Tiles adapter (ADR 0033): session/tile/viewport-copyright requests. Map network I/O
 # stays in the app layer (ADR 0008) — the renderer never fetches.

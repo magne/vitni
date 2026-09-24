@@ -157,6 +157,9 @@ async fn census_server() -> MockServer {
 /// A minimal valid JPEG body (SOI + EOI markers) — enough for `media-store` to store and checksum.
 const SCAN_JPEG: &[u8] = &[0xFF, 0xD8, 0xFF, 0xD9];
 
+/// SHA-256 of [`SCAN_JPEG`], in the `media-store` checksum form.
+const SCAN_JPEG_CHECKSUM: &str = "sha256:32461d5bd1773012acef0ba15636752949bd7c2ce50f9172159d9f56cf0dd9af";
+
 async fn mount(server: &MockServer, regex: &str, body: String) {
     Mock::given(method("GET"))
         .and(path_regex(regex))
@@ -394,6 +397,11 @@ async fn assert_census_import(root: &Path) {
         media[0].mime.as_deref(),
         Some("image/jpeg"),
         "the scan MIME was sniffed"
+    );
+    assert_eq!(
+        media[0].checksum.as_deref(),
+        Some(SCAN_JPEG_CHECKSUM),
+        "the stored scan's digest reached the media object (#359)"
     );
     // The stored path is media-root-relative (`02_…/x.jpg`), NOT the `media/`-prefixed workspace path
     // `media-store` returns; persisting the prefix doubles the segment and the GUI asset handler 404s.

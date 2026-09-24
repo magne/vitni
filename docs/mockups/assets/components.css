@@ -399,10 +399,12 @@ table.tbl tr:hover .btn.ghost,
    (record-editing.html §3). Both placements: the stacked `.field > .val`, and the one-line
    `.fact-row .grow > span.field.val` a record row draws (record-editing.html:49) — which also has to
    drop `.field`'s own bottom margin, or a read row would stand taller than the input row it toggles
-   into. */
+   into. An unbroken value (a `sha256:` checksum, a URL) wraps anywhere rather than running out of its
+   card. */
 .field .val, .field.val {
   display: block; padding: var(--sp-2) var(--sp-3); border: 1px solid transparent;
   border-radius: var(--r-md); font: var(--fs-md)/1.4 var(--font-sans); margin-bottom: 0;
+  overflow-wrap: anywhere;
 }
 .field input, .field select, .field textarea, input.in, select.in, textarea.in {
   width: 100%; background: var(--bg); border: 1px solid var(--line-2);

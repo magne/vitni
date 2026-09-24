@@ -479,6 +479,16 @@ fn the_file_card_orders_date_above_checksum() {
 }
 
 #[test]
+fn the_overview_shows_the_recorded_checksum() {
+    let html = render(media_view);
+    let row = html.find("media-checksum").expect("the Checksum row renders");
+    assert!(
+        html[row..].contains("sha256:9f3a8c12d4e7b6a05f1e"),
+        "the read-first Checksum row shows the recorded digest (#359):\n{html}"
+    );
+}
+
+#[test]
 fn citations_carry_source_page_and_evidence() {
     let html = render(media_view);
     for needle in [

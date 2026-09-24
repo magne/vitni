@@ -117,16 +117,6 @@ already filed against it keep resolving their [`#tags`](#tags) anchor.
   placeholder. Honest, not useful: previewing it needs either a second asset-handler route scoped to a
   configured set of readable roots, or an explicit "copy into the workspace" action reusing the media
   save dialog. Neither is designed.
-- **Nothing ever records a media checksum**, so the record's locked *Checksum* row is permanently blank.
-  The digest is computed in exactly one place — `vitni-plugin-host/src/media.rs:147` — handed to the
-  guest as `stored-media.checksum` (`wit/host.wit:896`) and dropped: `host.wit`'s `commands` interface
-  has no `set-media-checksum`, so `plugins/digitalarkivet-import/src/lib.rs:379` logs it and moves on.
-  The command itself exists all the way down (`MediaCommand::SetChecksum`, and `vitni media
-  set-checksum` reaches it), but `MediaEdit::SetChecksum` is declared and handled while being
-  constructed nowhere, and `MediaDraft` deliberately never diffs the locked field. Neither
-  `vitni-gramps-xml`'s `MediaObject` nor `vitni-gedcom`'s media model has a checksum field at all, so an
-  import has nothing to pass on either. Only an operator typing the digest can fill it. ADR 0017 §71-80
-  intended the `media-store` hash to reach the aggregate; that hop was never built. — #359
 - **Media edit mode cannot check, fetch, or type a file** — *File path* is a plain `DraftText`
   (`media.rs:88-101`) with no existence check, and any check added must **flag, never block**: a
   record for a file that is not on this machine is legitimate. There is no download when *Web path*

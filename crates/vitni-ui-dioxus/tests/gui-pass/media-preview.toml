@@ -81,3 +81,15 @@ shot = "media-detail-nordic"
 region = [1000, 360, 200, 100]
 min_deviation = 0.05
 because = "a filename carrying æøå and a space must resolve too — the served URL is percent-encoded per segment and decoded by the asset handler"
+
+# #359: the seed writes each image *before* `vitni media create --path` names it, so the record the
+# CLI creates has its checksum recorded from the file's bytes — the File card's Checksum row is not
+# blank. The region is the row's value column (the first of its two wrapped lines of hex), read off
+# `media-detail`: it measures 0.207 with the digest shown and 0 with the row blank (the pre-#359 app,
+# re-seeded with `--reset`), so `min_deviation` sits well clear of both.
+[[assert]]
+kind = "painted"
+shot = "media-detail"
+region = [680, 960, 300, 40]
+min_deviation = 0.05
+because = "a media record created over a file in the media library shows its recorded checksum, not a blank row (#359)"
