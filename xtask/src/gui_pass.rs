@@ -51,7 +51,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
@@ -115,6 +115,17 @@ const SEED_MEDIA_NORDIC_REL: &str = "02_folketelling/1920 greipstad_bergstøl-as
 const SEED_MEDIA_SIZE: u32 = 480;
 /// How long to wait for the window to map before giving up.
 const WINDOW_TIMEOUT: Duration = Duration::from_secs(45);
+/// How long to wait for Xvfb to accept connections before giving up.
+const XVFB_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long the window must stay unchanged before a step counts as settled.
+const SETTLE_QUIET: Duration = Duration::from_millis(600);
+/// The longest a step waits to settle. A screen that never stops changing (a spinner, an animating
+/// canvas) costs this and no more — the fixed sleep every step used to take.
+const SETTLE_CAP: Duration = Duration::from_secs(4);
+/// How often a settling window is re-grabbed.
+const SETTLE_POLL: Duration = Duration::from_millis(100);
+/// Pixels that may differ between two grabs of a settled window: a blinking text caret is ~40.
+const SETTLE_NOISE_PIXELS: usize = 200;
 /// How long [`Step::AwaitExit`] waits for the GUI process to exit before failing.
 const AWAIT_EXIT_TIMEOUT: Duration = Duration::from_secs(15);
 /// Standard deviation below which a screenshot is treated as blank (an unpainted or black window).
@@ -401,7 +412,8 @@ fn run_one(options: &Options, fixture: &Fixture, out: &Path, home: &Path, path: 
         &["windowsize", &window, &size.0.to_string(), &size.1.to_string()],
     )?;
     focus(&options.display, &window, size)?;
-    settle();
+    let window = Window::connect(&options.display, window)?;
+    window.settle()?;
 
     let taken = drive(&options.display, &window, &script.steps, shots, &mut session)?;
     if options.keep {
@@ -771,7 +783,7 @@ fn start_session(options: &Options, fixture: &Fixture, home: &Path, shots: &Path
         gui: None,
         keep: false,
     };
-    sleep(Duration::from_secs(2));
+    wait_for_xvfb(&options.display, &mut session.xvfb)?;
 
     let log_path = shots.join("gui.log");
     let log = fs::File::create(&log_path).with_context(|| format!("creating {}", log_path.display()))?;
@@ -801,6 +813,23 @@ fn start_session(options: &Options, fixture: &Fixture, home: &Path, shots: &Path
     }
     session.gui = Some(gui.spawn().context("starting the GUI")?);
     Ok(session)
+}
+
+/// Polls until the new Xvfb accepts connections. Fails if it exits instead — it does when another
+/// server already holds the display, and connecting then would drive whatever that server is showing.
+fn wait_for_xvfb(display: &str, xvfb: &mut Child) -> Result<()> {
+    let poll = Duration::from_millis(50);
+    let started = Instant::now();
+    while started.elapsed() < XVFB_TIMEOUT {
+        if let Some(status) = xvfb.try_wait().context("polling Xvfb")? {
+            bail!("gui-pass: Xvfb exited ({status}) — is another X server already on {display}?");
+        }
+        if x11rb::connect(Some(display)).is_ok() {
+            return Ok(());
+        }
+        sleep(poll);
+    }
+    bail!("gui-pass: Xvfb did not accept connections on {display} within {XVFB_TIMEOUT:?}")
 }
 
 /// Polls for the GUI window until it maps.
@@ -838,13 +867,13 @@ fn focus(display: &str, window: &str, size: (u32, u32)) -> Result<()> {
 }
 
 /// Runs every step, returning the shot names in the order they were taken.
-fn drive(display: &str, window: &str, steps: &[Step], shots: &Path, session: &mut Session) -> Result<Vec<String>> {
+fn drive(display: &str, window: &Window, steps: &[Step], shots: &Path, session: &mut Session) -> Result<Vec<String>> {
     let mut taken = Vec::new();
     for step in steps {
         match step {
             Step::Shot { name } => {
                 let path = shot_file(shots, taken.len() + 1, name);
-                grab(display, window, &path)?;
+                grab(display, &window.id, &path)?;
                 assert_painted(&path)?;
                 println!("  shot {}", path.display());
                 taken.push(name.clone());
@@ -853,22 +882,22 @@ fn drive(display: &str, window: &str, steps: &[Step], shots: &Path, session: &mu
                 println!("  {label}");
                 xdotool(display, &["mousemove", &at[0].to_string(), &at[1].to_string()])?;
                 xdotool(display, &["click", "1"])?;
-                settle();
+                window.settle()?;
             }
             Step::Key { chord, label } => {
                 println!("  {label}");
                 xdotool(display, &["key", "--clearmodifiers", chord])?;
-                settle();
+                window.settle()?;
             }
             Step::Drag { from, by, label } => {
                 println!("  {label}");
                 drag(display, *from, *by)?;
-                settle();
+                window.settle()?;
             }
             Step::Wheel { at, clicks, label } => {
                 println!("  {label}");
                 wheel(display, *at, *clicks)?;
-                settle();
+                window.settle()?;
             }
             Step::AwaitExit { label } => {
                 println!("  {label}");
@@ -876,13 +905,13 @@ fn drive(display: &str, window: &str, steps: &[Step], shots: &Path, session: &mu
             }
             Step::WmClose { label } => {
                 println!("  {label}");
-                wm_close(display, window)?;
-                settle();
+                wm_close(display, &window.id)?;
+                window.settle()?;
             }
             Step::Wait { seconds, label } => {
                 println!("  {label}");
                 sleep(Duration::from_secs(*seconds));
-                settle();
+                window.settle()?;
             }
         }
     }
@@ -977,9 +1006,113 @@ fn wheel(display: &str, at: [i32; 2], clicks: i32) -> Result<()> {
     Ok(())
 }
 
-/// Lets the webview repaint and any network tile fetch land.
-fn settle() {
-    sleep(Duration::from_secs(4));
+/// The GUI's toplevel window: the id `xdotool` and `import` address it by, plus an X connection that
+/// reads its pixels back directly, so settling can poll many times a second without spawning a
+/// process per frame.
+struct Window {
+    id: String,
+    xid: u32,
+    connection: x11rb::rust_connection::RustConnection,
+}
+
+impl Window {
+    fn connect(display: &str, id: String) -> Result<Self> {
+        let xid = id.parse().with_context(|| format!("parsing the window id {id:?}"))?;
+        let (connection, _) = x11rb::connect(Some(display)).with_context(|| format!("connecting to {display}"))?;
+        Ok(Self { id, xid, connection })
+    }
+
+    /// Waits until the window has stopped changing for [`SETTLE_QUIET`], or [`SETTLE_CAP`] has passed.
+    ///
+    /// Every step used to sleep a flat 4 s, which was most of a run's wall-clock. Most steps repaint in
+    /// well under a second; the ceiling keeps the old bound for a screen that never goes quiet (a
+    /// spinner, or a map whose tiles keep landing). A frame counts as unchanged when it differs from the
+    /// one that started the quiet period by at most [`SETTLE_NOISE_PIXELS`] — a text caret blinks on a
+    /// ~600 ms cycle, which would otherwise hold every step with a focused input at the cap. A window
+    /// that has gone (the step quit the app) has nothing left to settle.
+    fn settle(&self) -> Result<()> {
+        let started = Instant::now();
+        sleep(SETTLE_POLL);
+        let Some(mut reference) = self.frame()? else {
+            return Ok(());
+        };
+        let mut quiet_since = Instant::now();
+        while started.elapsed() < SETTLE_CAP {
+            sleep(SETTLE_POLL);
+            let Some(frame) = self.frame()? else {
+                return Ok(());
+            };
+            if differing_pixels(&reference, &frame) > SETTLE_NOISE_PIXELS {
+                reference = frame;
+                quiet_since = Instant::now();
+            } else if quiet_since.elapsed() >= SETTLE_QUIET {
+                return Ok(());
+            }
+        }
+        Ok(())
+    }
+
+    /// The window's current pixels, as the server's `ZPixmap` bytes, or `None` once the window is gone.
+    fn frame(&self) -> Result<Option<Vec<u8>>> {
+        use x11rb::protocol::xproto::{ConnectionExt as _, ImageFormat};
+
+        let geometry = match self
+            .connection
+            .get_geometry(self.xid)
+            .context("asking the window's geometry")?
+            .reply()
+        {
+            Ok(geometry) => geometry,
+            Err(error) if window_gone(&error) => return Ok(None),
+            Err(error) => return Err(error).context("reading the window's geometry"),
+        };
+        let image = self
+            .connection
+            .get_image(
+                ImageFormat::Z_PIXMAP,
+                self.xid,
+                0,
+                0,
+                geometry.width,
+                geometry.height,
+                u32::MAX,
+            )
+            .context("grabbing the window")?
+            .reply();
+        match image {
+            Ok(image) => Ok(Some(image.data)),
+            Err(error) if window_gone(&error) => Ok(None),
+            Err(error) => Err(error).context("reading the window's pixels"),
+        }
+    }
+}
+
+/// Whether a request failed because its window no longer exists — the app quit between two grabs.
+fn window_gone(error: &x11rb::errors::ReplyError) -> bool {
+    use x11rb::errors::ReplyError;
+    use x11rb::protocol::ErrorKind;
+
+    match error {
+        ReplyError::X11Error(error) => {
+            let kind = error.error_kind;
+            kind == ErrorKind::Drawable || kind == ErrorKind::Window || kind == ErrorKind::Match
+        }
+        ReplyError::ConnectionError(_) => false,
+    }
+}
+
+/// How many 4-byte pixels differ between two frames; every pixel, when a resize changed their size.
+fn differing_pixels(a: &[u8], b: &[u8]) -> usize {
+    if a.len() != b.len() {
+        return a.len().max(b.len()) / 4;
+    }
+    let mut differing = 0;
+    for (left, right) in a.as_chunks::<4>().0.iter().zip(b.as_chunks::<4>().0) {
+        if left != right {
+            differing += 1;
+        }
+    }
+    differing
 }
 
 /// Runs `xdotool` against the headless display.
@@ -1211,8 +1344,8 @@ fn shot_path(taken: &[String], shots: &Path, name: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Assertion, MIN_STANDARD_DEVIATION, Script, WINDOW, describe_region, focus_click, painted_failed, read_region,
-        window_size,
+        Assertion, MIN_STANDARD_DEVIATION, Script, WINDOW, describe_region, differing_pixels, focus_click,
+        painted_failed, read_region, window_size,
     };
     use std::path::Path;
 
@@ -1357,5 +1490,27 @@ mod tests {
             read_region(path, None),
             "target/gui-pass/shots/map-repaint/04-polygon-armed.png"
         );
+    }
+
+    #[test]
+    fn identical_frames_have_no_differing_pixels() {
+        let frame = [1, 2, 3, 4, 5, 6, 7, 8];
+        assert_eq!(differing_pixels(&frame, &frame), 0);
+        assert_eq!(differing_pixels(&[], &[]), 0);
+    }
+
+    #[test]
+    fn a_pixel_differs_when_any_of_its_bytes_do() {
+        let before = [0, 0, 0, 0, 9, 9, 9, 9, 5, 5, 5, 5];
+        let after = [0, 0, 0, 1, 9, 9, 9, 9, 6, 5, 5, 5];
+        assert_eq!(differing_pixels(&before, &after), 2);
+    }
+
+    #[test]
+    fn a_resized_frame_differs_everywhere() {
+        let small = [0; 8];
+        let large = [0; 16];
+        assert_eq!(differing_pixels(&small, &large), 4);
+        assert_eq!(differing_pixels(&large, &small), 4);
     }
 }

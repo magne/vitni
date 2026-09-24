@@ -118,6 +118,11 @@ at = [300, 1100]
 label = "park the pointer on empty list space"
 
 [[step]]
+do = "wait"
+seconds = 6
+label = "let the Save's notice expire (NOTICE_TTL), so restricted and cancelled both lack it"
+
+[[step]]
 do = "shot"
 name = "restricted"
 

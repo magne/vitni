@@ -66,6 +66,11 @@ at = [675, 465]
 label = "gallery: the attached card"
 
 [[step]]
+do = "wait"
+seconds = 6
+label = "let the attach's Saved notice expire (NOTICE_TTL), so zoom-fit and zoom-back-to-fit both lack it"
+
+[[step]]
 do = "shot"
 name = "zoom-fit"
 
