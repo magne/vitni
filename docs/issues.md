@@ -527,9 +527,8 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   "trying to overwrite … which is also in package". Inherited from the `vitni`/`vitni-gui` split rather
   than introduced by ADR 0035, and only reachable by someone who wants the launcher *and* a headless
   CLI on one machine — but that is a reasonable thing to want. Either declare
-  `Conflicts`/`Replaces`, or split the fleet into a `vitni-plugins` package both depend on (which is
-  also where a default *system* embedded path would want to live — see the `VITNI_PLUGIN_DIR`
-  item, #212).
+  `Conflicts`/`Replaces`, or split the fleet into a `vitni-plugins` package both depend on, still
+  installing to the `/usr/lib/vitni/plugins` the embedded-layer resolver looks in.
 - **Cross-platform packaging** — 1.0 is Linux-first (tarball + `.deb` + AppImage). macOS/Windows
   bundles and **OS-level code-signing / notarization** (Gatekeeper, Authenticode) are a later cycle
   (ADR 0014 §Out of scope). — #215
@@ -544,25 +543,11 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   overriding an already-set variable, both gitignored — the key stays out of config files, logs and
   the event log either way, which is the whole point of naming a variable rather than storing a
   secret. — #296
-- **`.deb` needs `VITNI_PLUGIN_DIR`** — the embedded plugin layer has no default *system* path, so a
-  distro-installed binary needs `VITNI_PLUGIN_DIR=/usr/lib/vitni/plugins` (the AppImage sets it
-  via `AppRun`; the tarball resolves the fleet beside the binary). Teaching the embedded layer a default
-  system path so an installed `.deb` finds the fleet with no env var is the follow-up (see
-  [`release.md`](release.md)). — #212
 - **Real release keys not yet generated** — only the deterministic **DEV** signing key exists (Sanctioned
   in debug builds only), so `embedded_sanctioned_keys()` is `None` in a release build until one is
   configured. Before the first real release, generate the release ed25519 keypair, set the private half
   as the `VITNI_PLUGIN_SIGNING_KEY` repo secret, and embed the public half via
   `VITNI_PROJECT_PUBLIC_KEY` (ADR 0014 §6; procedure in [`release.md`](release.md)). — #210
-- **The embedded plugin-dir resolver is duplicated *and* divergent** — the ADR 0014 §4 *layering* is
-  shared (`vitni_app::plugin_layers`), but each frontend still resolves the embedded layer itself
-  and the two disagree on the dev fallback: `vitni-ui-dioxus/src/app.rs:326` uses
-  `CARGO_MANIFEST_DIR/../../target/plugins` (source-tree-absolute) while
-  `vitni-cli/src/commands/io.rs:83` uses a bare `target/plugins` **relative to the working
-  directory**. So a CLI invoked from anywhere but the repo root silently finds no embedded fleet while
-  the GUI always finds it. The Phase 11 plan called for replacing this duplication; only the layering
-  half landed. Fold both into one `vitni-app` resolver — the same change that would give an
-  installed `.deb` a default system path (item above). — #213
 - **No `[profile.release]` section** — the Phase 11 plan's "strip/optimize release profile" was not
   done: the root `Cargo.toml` has no `[profile.release]`, so shipped binaries carry full debug symbols
   and default codegen settings. `strip = true` plus a considered `lto`/`codegen-units` is the cheapest

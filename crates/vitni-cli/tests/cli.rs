@@ -625,6 +625,23 @@ fn plugin_trust_add_list_remove_round_trips_through_config() {
 }
 
 #[test]
+fn plugin_list_finds_the_embedded_fleet_outside_the_source_tree() {
+    // The embedded layer (ADR 0014 §4) resolves independently of the working directory: run from a
+    // temp dir with no override, the dev fallback still finds the built fleet (`cargo xtask
+    // build-plugins`, which CI runs before tests).
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    vitni(dir.path())
+        .current_dir(dir.path())
+        .env_remove("VITNI_PLUGIN_DIR")
+        .args(["plugin", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("gedcom-import"));
+}
+
+#[test]
 fn plugin_trust_add_rejects_a_malformed_key() {
     let dir = TempDir::new().unwrap();
     init(dir.path());

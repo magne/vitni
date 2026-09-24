@@ -17,9 +17,17 @@ OS-level code signing/notarization are **out of scope** (deferred cycle, ADR 001
 | `Vitni-x86_64.AppImage`                | self-contained launcher + `vitni-cli` + bundled fleet (its `AppRun` points `VITNI_PLUGIN_DIR` at the fleet) |
 
 The plugin fleet is laid out as the ADR 0014 §4 **embedded layer**: one bundle directory per plugin
-(`<id>/{plugin.toml,plugin.wasm,plugin.sig,i18n/}`). Both binaries resolve the embedded layer from
-`$VITNI_PLUGIN_DIR` (when set) else the dev source tree; a packaged install points that variable
-at the shipped fleet.
+(`<id>/{plugin.toml,plugin.wasm,plugin.sig,i18n/}`). Both binaries resolve the embedded layer through
+one resolver (`vitni_app::embedded_plugins_dir`); the first match wins:
+
+1. `$VITNI_PLUGIN_DIR`, when set and non-empty — the AppImage's `AppRun` sets it.
+2. `<exe_dir>/plugins`, if it is a directory — the tarball's `plugins/` beside the binaries.
+3. `<exe_dir>/../lib/vitni/plugins`, if it is a directory — the `.deb`'s `/usr/lib/vitni/plugins`
+   beside `/usr/bin/vitni`.
+4. `target/plugins` in the source tree the binary was built from, whatever the working directory —
+   the dev default, filled by `cargo xtask build-plugins`.
+
+So no installed layout needs the variable; it remains an override.
 
 ## Signing keys (ADR 0014 §6)
 
@@ -75,10 +83,5 @@ sanctioned trust root.
 
 ## Residuals
 
-- **System default embedded path.** The `.deb` installs the fleet to `/usr/lib/vitni/plugins`, but
-  the loader has no built-in default for that path yet — a `.deb`-installed GUI/CLI needs
-  `VITNI_PLUGIN_DIR=/usr/lib/vitni/plugins` (the AppImage sets it via `AppRun`; the tarball
-  user sets it to the fleet beside the binary). Teaching the embedded layer a packaged default is a
-  follow-up.
 - **Architectures.** Only `x86_64` is wired (the AppImage step and the CI image publish amd64); arm64
   is a later addition mirroring the ci-image arch-aware setup.

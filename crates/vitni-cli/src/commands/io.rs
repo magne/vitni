@@ -78,20 +78,15 @@ pub async fn export(
     Ok(())
 }
 
-/// The embedded plugin layer: `$VITNI_PLUGIN_DIR`, else `target/plugins` relative to the working
-/// directory (the dev default). The lowest-precedence layer of the ADR 0014 §4 override order.
-fn embedded_plugins_dir() -> PathBuf {
-    match std::env::var_os("VITNI_PLUGIN_DIR") {
-        Some(value) => PathBuf::from(value),
-        None => PathBuf::from("target/plugins"),
-    }
-}
-
 /// The ordered plugin-bundle layers for `workspace_dir` (ADR 0014 §4): workspace over the shared
 /// app-dir over the embedded fleet. A shared app-dir that cannot be located contributes no layer.
 pub(crate) fn plugin_layers(workspace_dir: &Path) -> Vec<PathBuf> {
     let shared = vitni_app::config::shared_plugins_dir().ok();
-    vitni_app::plugin_layers(Some(workspace_dir), shared.as_deref(), &embedded_plugins_dir())
+    vitni_app::plugin_layers(
+        Some(workspace_dir),
+        shared.as_deref(),
+        &vitni_app::embedded_plugins_dir(),
+    )
 }
 
 /// Resolves the bundle directory for plugin `id` across the ADR 0014 §4 layers via the app-level
