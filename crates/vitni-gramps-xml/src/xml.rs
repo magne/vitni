@@ -91,9 +91,7 @@ fn build_tree(text: &str) -> Result<Element, GrampsError> {
                 push_child(&mut stack, finished)?;
             }
             Event::Text(bytes_text) => {
-                let decoded = bytes_text
-                    .decode()
-                    .map_err(|error| GrampsError::Xml(error.to_string()))?;
+                let decoded = bytes_text.xml10_content();
                 let value =
                     quick_xml::escape::unescape(&decoded).map_err(|error| GrampsError::Xml(error.to_string()))?;
                 if let Some(current) = stack.last_mut() {
@@ -117,8 +115,7 @@ fn element_from_start(start: &quick_xml::events::BytesStart<'_>) -> Result<Eleme
     for attribute in start.attributes() {
         let attribute = attribute.map_err(|error| GrampsError::Xml(error.to_string()))?;
         let key = local_name(attribute.key.as_ref());
-        let raw = String::from_utf8_lossy(&attribute.value);
-        let value = quick_xml::escape::unescape(&raw)
+        let value = quick_xml::escape::unescape(&attribute.value)
             .map_err(|error| GrampsError::Xml(error.to_string()))?
             .into_owned();
         attrs.push((key, value));
@@ -141,11 +138,10 @@ fn push_child(stack: &mut [Element], element: Element) -> Result<(), GrampsError
     Ok(())
 }
 
-/// Strips a namespace prefix (`gramps:person` -> `person`) and decodes the bytes as UTF-8 (lossy).
-fn local_name(raw: &[u8]) -> String {
-    let name = String::from_utf8_lossy(raw);
+/// Strips a namespace prefix (`gramps:person` -> `person`).
+fn local_name(name: &str) -> String {
     match name.rsplit_once(':') {
         Some((_, local)) => local.to_owned(),
-        None => name.into_owned(),
+        None => name.to_owned(),
     }
 }
