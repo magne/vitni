@@ -44,8 +44,9 @@ percent-encoding = "2.3.2"
 # event-store backends (vitni-db, feature-gated)
 sqlite-es = "0.5.0"
 postgres-es = "0.5.0"
-# plugin host (vitni-plugin-host; ADR 0007, 0011). Floor held at 47.0.3: 47.0.2 carries
-# RUSTSEC-2026-0222 and RUSTSEC-2026-0223, both of which break VM state isolation the sandbox relies on.
+# plugin host (vitni-plugin-host; ADR 0007, 0011). Floor held at 48.0.2: 47.0.3 carries
+# RUSTSEC-2026-0268 (guest-sized host allocation) and RUSTSEC-2026-0269 (filesystem sandbox escape), and
+# 47.0.2 RUSTSEC-2026-0222/0223 — each breaks isolation the sandbox relies on.
 wasmtime = "48.0.2"
 wasmtime-wasi = "48.0.2"
 # plugin bundle signing (vitni-plugin-host, xtask; ADR 0014): ed25519 detached signatures over a
