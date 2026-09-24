@@ -175,17 +175,6 @@ only the Overview and their entity-specific tables. So each item here lands on e
 which is what makes them worth fixing in the shared code rather than per screen. All came out of the
 2026-08-12 GUI walkthrough.
 
-- **A record tab cannot create the record it wants to attach.** The labels already split by capability
-  — `action-attach-citation/-media/-note` versus `action-add-*` — and there is no split-button or
-  menu-button primitive in `components/` to offer both. The cheaper answer than a split button is that
-  the *picker* creates: the design system already specifies that affordance (`+ New person "ann"…`,
-  `mockups/design-system.html:327-332`), so the tab button stays a single "Attach …" and the search
-  field grows the create path. Confirmed: `RecordPicker` already wired the "+ New …" row and
-  `.draft-card` rendering (used by the create form and the provenance block); the gap was narrower than
-  it looked — the shared attach/link side-panel path (`screens/shared.rs`'s `attach_picker_form`) built
-  its picker with `allow_new: false`, so every attach dialog was existing-only regardless. Fixed by
-  routing every attach/link side panel through the find-or-create `use_attach_picker` +
-  `attach_link_form` (issue #314). — #314
 - **The change-set commit path is written out 14 times in `services.rs`.** `services.rs:283-497` holds
   the 13 `commit_*_change_set` wrappers plus `commit_new_record`, whose bodies are the same four
   statements — `localizer()`, `open()`, `Session::new(config.operator_agent())`,
