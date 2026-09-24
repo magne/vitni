@@ -64,7 +64,7 @@ pub struct Services {
     pub open_workspace: String,
     /// The plugin host (shared; reused across plugin runs).
     pub host: Rc<PluginHost>,
-    /// The embedded plugin layer (`target/plugins` in dev): the lowest-precedence ADR 0014 §4
+    /// The embedded plugin layer ([`vitni_app::embedded_plugins_dir`]): the lowest-precedence ADR 0014 §4
     /// loading layer and the base for resolving bundles across the workspace/app-dir/embedded order.
     pub plugins_dir: PathBuf,
 }

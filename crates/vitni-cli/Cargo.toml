@@ -41,9 +41,8 @@ uuid = { workspace = true }
 # built from `crates/vitni` is the one that opens a window.
 # `target/release/` is cargo-deb's special prefix (rewritten to the real target dir); `target/plugins`
 # has no such rewrite, so the fleet is referenced via the workspace-relative `../../target/plugins`.
-# `cargo xtask build-plugins` MUST run first so the signed bundles exist. The fleet installs to a
-# system path; a packaged binary resolves it via `VITNI_PLUGIN_DIR=/usr/lib/vitni/plugins`
-# (see docs/release.md — teaching the loader a default system embedded path is a residual).
+# `cargo xtask build-plugins` MUST run first so the signed bundles exist. The fleet installs to
+# `/usr/lib/vitni/plugins`, which the embedded-layer resolver finds from `/usr/bin` (docs/release.md).
 [package.metadata.deb]
 name = "vitni-cli"
 maintainer = "Magne Rasmussen <magne.rasmussen@gmail.com>"

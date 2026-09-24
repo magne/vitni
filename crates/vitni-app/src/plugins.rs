@@ -9,7 +9,8 @@
 //!
 //! 1. **Workspace** — `<workspace>/plugins/`.
 //! 2. **App-dir** — the shared app plugin dir ([`crate::config::shared_plugins_dir`]).
-//! 3. **Embedded** — the sanctioned first-party fleet shipped with the binary (dev: `target/plugins`).
+//! 3. **Embedded** — the sanctioned first-party fleet shipped with the binary
+//!    ([`resolve_embedded_plugins_dir`] gives the lookup order; dev: `target/plugins`).
 //!
 //! This module owns only the *layering* — which directories participate, in what precedence, and the
 //! id-keyed merge. Inspecting and verifying a bundle's component (Wasmtime, trust roots) stays in
@@ -18,6 +19,7 @@
 //! `load_bundle`/`discover_bundle` to inspect and classify it.
 
 use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 /// The trust tier a discovered plugin's signature places it in (ADR 0014 §3), as a frontend-visible
@@ -110,6 +112,52 @@ pub fn resolve_bundle(layers: &[PathBuf], id: &str) -> Option<PathBuf> {
     None
 }
 
+/// The embedded plugin layer (ADR 0014 §4) for this process: [`resolve_embedded_plugins_dir`] over
+/// `$VITNI_PLUGIN_DIR` and the running binary's path. The only place those two inputs are read.
+///
+/// A binary path that cannot be determined skips the installed locations (logged at `debug`), leaving
+/// the override or the dev fallback.
+#[must_use]
+pub fn embedded_plugins_dir() -> PathBuf {
+    let env_override = std::env::var_os("VITNI_PLUGIN_DIR");
+    let exe = match std::env::current_exe() {
+        Ok(exe) => Some(exe),
+        Err(error) => {
+            tracing::debug!(%error, "cannot locate the running binary; skipping installed plugin fleet locations");
+            None
+        }
+    };
+    resolve_embedded_plugins_dir(env_override.as_deref(), exe.as_deref())
+}
+
+/// Resolves the embedded plugin layer (ADR 0014 §4) from its two inputs; first match wins:
+///
+/// 1. `env_override` (`$VITNI_PLUGIN_DIR`) when non-empty, as given — an `AppImage`'s `AppRun` sets it.
+/// 2. `<exe_dir>/plugins`, if a directory — the release tarball ships the fleet beside the binaries.
+/// 3. `<exe_dir>/../lib/vitni/plugins`, if a directory — a `.deb` installs `/usr/bin/vitni` and
+///    `/usr/lib/vitni/plugins`.
+/// 4. `target/plugins` in this source tree, independent of the working directory (the dev default;
+///    `cargo xtask build-plugins` fills it).
+#[must_use]
+pub fn resolve_embedded_plugins_dir(env_override: Option<&OsStr>, exe: Option<&Path>) -> PathBuf {
+    if let Some(dir) = env_override.filter(|value| !value.is_empty()) {
+        return PathBuf::from(dir);
+    }
+    if let Some(exe_dir) = exe.and_then(Path::parent) {
+        let beside = exe_dir.join("plugins");
+        if beside.is_dir() {
+            return beside;
+        }
+        if let Some(prefix) = exe_dir.parent() {
+            let lib = prefix.join("lib/vitni/plugins");
+            if lib.is_dir() {
+                return lib;
+            }
+        }
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/plugins")
+}
+
 /// Whether `dir` is a plugin bundle: a directory holding both the manifest and the component.
 fn is_bundle(dir: &Path) -> bool {
     dir.join(BUNDLE_MANIFEST).is_file() && dir.join(BUNDLE_COMPONENT).is_file()
@@ -117,8 +165,93 @@ fn is_bundle(dir: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{plugin_layers, resolve_bundle, resolve_bundles};
-    use std::path::Path;
+    use super::{plugin_layers, resolve_bundle, resolve_bundles, resolve_embedded_plugins_dir};
+    use std::ffi::OsStr;
+    use std::path::{Path, PathBuf};
+
+    /// An install root `<tmp>/` with the binary at `<tmp>/bin/vitni`; returns the exe path.
+    fn exe_in(root: &Path) -> PathBuf {
+        let bin = root.join("bin");
+        std::fs::create_dir_all(&bin).expect("bin dir");
+        bin.join("vitni")
+    }
+
+    fn assert_dev_fallback(resolved: &Path) {
+        assert!(
+            resolved.is_absolute(),
+            "the dev fallback is source-tree-absolute: {resolved:?}"
+        );
+        assert!(
+            resolved.ends_with("target/plugins"),
+            "the dev fallback is target/plugins: {resolved:?}"
+        );
+    }
+
+    #[test]
+    fn the_env_override_wins_even_over_a_fleet_beside_the_binary() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let exe = exe_in(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("bin/plugins")).expect("beside-binary fleet");
+        let resolved = resolve_embedded_plugins_dir(Some(OsStr::new("/opt/fleet")), Some(&exe));
+        assert_eq!(resolved, PathBuf::from("/opt/fleet"));
+    }
+
+    #[test]
+    fn an_empty_env_override_is_treated_as_unset() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let exe = exe_in(tmp.path());
+        let beside = tmp.path().join("bin/plugins");
+        std::fs::create_dir_all(&beside).expect("beside-binary fleet");
+        assert_eq!(resolve_embedded_plugins_dir(Some(OsStr::new("")), Some(&exe)), beside);
+    }
+
+    #[test]
+    fn a_fleet_beside_the_binary_is_chosen() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let exe = exe_in(tmp.path());
+        let beside = tmp.path().join("bin/plugins");
+        std::fs::create_dir_all(&beside).expect("beside-binary fleet");
+        assert_eq!(resolve_embedded_plugins_dir(None, Some(&exe)), beside);
+    }
+
+    #[test]
+    fn the_lib_fleet_is_chosen_when_only_it_exists() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let exe = exe_in(tmp.path());
+        let lib = tmp.path().join("lib/vitni/plugins");
+        std::fs::create_dir_all(&lib).expect("lib fleet");
+        assert_eq!(resolve_embedded_plugins_dir(None, Some(&exe)), lib);
+    }
+
+    #[test]
+    fn the_fleet_beside_the_binary_beats_the_lib_fleet() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let exe = exe_in(tmp.path());
+        let beside = tmp.path().join("bin/plugins");
+        std::fs::create_dir_all(&beside).expect("beside-binary fleet");
+        std::fs::create_dir_all(tmp.path().join("lib/vitni/plugins")).expect("lib fleet");
+        assert_eq!(resolve_embedded_plugins_dir(None, Some(&exe)), beside);
+    }
+
+    #[test]
+    fn no_installed_fleet_falls_back_to_the_source_tree() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let exe = exe_in(tmp.path());
+        assert_dev_fallback(&resolve_embedded_plugins_dir(None, Some(&exe)));
+    }
+
+    #[test]
+    fn an_unknown_exe_falls_back_to_the_source_tree() {
+        assert_dev_fallback(&resolve_embedded_plugins_dir(None, None));
+    }
+
+    #[test]
+    fn a_file_named_plugins_beside_the_binary_is_not_a_fleet() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let exe = exe_in(tmp.path());
+        std::fs::write(tmp.path().join("bin/plugins"), b"not a directory").expect("plugins file");
+        assert_dev_fallback(&resolve_embedded_plugins_dir(None, Some(&exe)));
+    }
 
     /// Lays out a bundle `<root>/<id>/` with `plugin.toml` + `plugin.wasm`.
     fn write_bundle(root: &Path, id: &str) {

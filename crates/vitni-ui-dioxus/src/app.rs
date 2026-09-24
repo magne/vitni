@@ -4,7 +4,6 @@
 //! provides the result as context. Screens read [`AppCtx`] for the services and localizers and hold
 //! the active [`Screen`] as navigation state.
 
-use std::path::PathBuf;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
@@ -308,7 +307,7 @@ fn build_state() -> Result<AppState, String> {
         dir,
         open_workspace,
         host: Rc::new(host),
-        plugins_dir: plugins_dir(),
+        plugins_dir: vitni_app::embedded_plugins_dir(),
         data_quality: DataQualityCache::default(),
     };
     Ok(AppState {
@@ -323,16 +322,4 @@ fn build_state() -> Result<AppState, String> {
 /// The workspace name from `VITNI_WORKSPACE`, if set.
 pub(crate) fn workspace_from_env() -> Option<String> {
     std::env::var("VITNI_WORKSPACE").ok().filter(|name| !name.is_empty())
-}
-
-/// The embedded plugin layer (ADR 0014 §4). Holds one bundle directory `<id>/` per plugin
-/// (`plugin.toml` + `plugin.wasm` + `plugin.sig` + `i18n/`). `$VITNI_PLUGIN_DIR` when set (a
-/// packaged install points it at the fleet shipped beside the binary — the packaged `AppImage`'s
-/// `AppRun` script does this), else `target/plugins` relative to the source tree (the dev default;
-/// run `cargo xtask build-plugins`). Mirrors the CLI's `embedded_plugins_dir`.
-fn plugins_dir() -> PathBuf {
-    match std::env::var_os("VITNI_PLUGIN_DIR") {
-        Some(value) => PathBuf::from(value),
-        None => PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/plugins"),
-    }
 }

@@ -176,6 +176,7 @@ pub use place::{
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
 pub use plugins::{PluginTrust, plugin_layers, resolve_bundle, resolve_bundles};
+pub use plugins::{embedded_plugins_dir, resolve_embedded_plugins_dir};
 pub use repository::{
     NewRepository, RepositoryAddressRef, RepositorySummary, RepositoryUrlRef, add_repository_address,
     add_repository_url, attach_repository_note, create_repository, import_attach_repository_note, list_repositories,
