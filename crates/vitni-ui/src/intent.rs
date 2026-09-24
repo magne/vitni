@@ -55,9 +55,9 @@ use vitni_app::{
     commit_event_change_set, commit_family_change_set, commit_media_change_set, commit_note_change_set,
     commit_place_change_set, commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build,
     set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type,
-    set_media_checksum, set_media_file_path, set_media_mime, set_media_web_path, set_place_code, set_place_type,
-    set_repository_name, set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
-    show_geography, year_only_date,
+    set_media_file_path, set_media_mime, set_media_web_path, set_place_code, set_place_type, set_repository_name,
+    set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info, set_title, show_geography,
+    year_only_date,
 };
 use vitni_app::{NewDnaMatch, observe_dna_match};
 use vitni_app::{
@@ -1727,11 +1727,6 @@ pub async fn dispatch_media_edit(
         }
         MediaEdit::SetMime { human_id, mime } => {
             set_media_mime(workspace, session, human_id, mime.clone(), prov.meta())
-                .await
-                .map(|()| human_id.clone())
-        }
-        MediaEdit::SetChecksum { human_id, checksum } => {
-            set_media_checksum(workspace, session, human_id, checksum.clone(), prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }

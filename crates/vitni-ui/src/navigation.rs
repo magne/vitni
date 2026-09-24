@@ -1928,13 +1928,6 @@ pub enum MediaEdit {
         /// The MIME type to set (e.g. `image/jpeg`).
         mime: String,
     },
-    /// Set (or change) the media object's checksum.
-    SetChecksum {
-        /// The media object to edit.
-        human_id: String,
-        /// The checksum to set.
-        checksum: String,
-    },
     /// Set (or change) the media object's date.
     SetDate {
         /// The media object to edit.
@@ -1999,7 +1992,6 @@ impl MediaEdit {
             | Self::SetFilePath { human_id, .. }
             | Self::SetWebPath { human_id, .. }
             | Self::SetMime { human_id, .. }
-            | Self::SetChecksum { human_id, .. }
             | Self::SetDate { human_id, .. }
             | Self::AddAttribute { human_id, .. }
             | Self::AttachCitation { human_id, .. }
