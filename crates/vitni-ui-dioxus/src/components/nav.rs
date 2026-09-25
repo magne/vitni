@@ -21,6 +21,9 @@ pub struct TabItem {
 /// forwarded via `onselect`; the caller renders the active panel as `children`. The active tab is
 /// the single tab stop (roving `tabindex`); ←/→ move selection and Home/End jump to the ends,
 /// pulling DOM focus to the newly selected tab.
+///
+/// The panel is the pane's scroller and is keyed on the active tab, so every switch mounts a fresh
+/// one that opens at the top rather than inheriting the previous tab's scroll offset (#374).
 #[component]
 pub fn Tabs(
     /// The tabs, in display order.
@@ -85,7 +88,17 @@ pub fn Tabs(
                 }
             }
         }
-        div { class: "tab-body", role: "tabpanel", id: "{panel_id}", inert, aria_hidden: inert, {children} }
+        {rsx! {
+            div {
+                key: "{panel_id}",
+                class: "tab-body",
+                role: "tabpanel",
+                id: "{panel_id}",
+                inert,
+                aria_hidden: inert,
+                {children}
+            }
+        }}
     }
 }
 

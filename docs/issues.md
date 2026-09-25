@@ -232,13 +232,6 @@ which is what makes them worth fixing in the shared code rather than per screen.
   entries), one on a record's History tab. There is no disclosure primitive to build on: no
   `Disclosure` component and no `<details>` anywhere in `components/`, only ad-hoc `aria-expanded` on
   four unrelated widgets.
-- **Switching tabs keeps the previous tab's scroll offset.** `Tabs` renders one `.tab-body` scroller
-  for every tab (`components/nav.rs:88`) and select only sets the index (`master_detail.rs:299`), so a
-  scrolled Overview's `scrollTop` carries into the next tab. An overflowing tab opens mid-way
-  (reproduced under `gui-pass`: Place → Hierarchy at 1800×600). A tab that fits relies on the webview
-  clamping the offset. On a desktop session that clamp leaves part of the content offset with no
-  scrollbar to recover it. Under Xvfb it repaints correctly, so the suspected compositor cause is
-  unconfirmed. Fix: key `.tab-body` on the active tab so every switch starts at the top. — #374
 - **Fast typing can lose characters in record text fields.** Under Xvfb, keys 12 ms apart into a new
   Tag's Name came out wrong 3 runs in 4 (`TR-7Olo` for "TRee-7 Oslo"). At 30 ms apart none were lost.
   The suspected cause, unconfirmed, is the controlled input's round trip: a key landing before the

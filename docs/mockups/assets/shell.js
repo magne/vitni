@@ -247,12 +247,15 @@
         attr(tab, { role: "tab", tabindex: tab.classList.contains("active") ? "0" : "-1",
           "aria-selected": tab.classList.contains("active") ? "true" : "false", "aria-controls": "pane-" + id, id: "tab-" + id });
         function activate() {
+          if (tab.classList.contains("active")) return;
           tabEls.forEach(function (t) { t.classList.remove("active"); t.setAttribute("aria-selected", "false"); t.setAttribute("tabindex", "-1"); });
           tab.classList.add("active"); tab.setAttribute("aria-selected", "true"); tab.setAttribute("tabindex", "0");
           var host = tabs.closest(".detail") || document;
           host.querySelectorAll(".tab-pane").forEach(function (p) {
             p.classList.toggle("active", p.getAttribute("data-pane") === id);
           });
+          var body = tabs.nextElementSibling;
+          if (body && body.classList.contains("tab-body")) body.scrollTop = 0;
         }
         tab.addEventListener("click", activate);
         tab.addEventListener("keydown", function (ev) {
