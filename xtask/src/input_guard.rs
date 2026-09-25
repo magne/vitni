@@ -1,6 +1,6 @@
 //! `input-guard` — guards the shared-input-primitive convention (the "global keys fire inside text
 //! controls" fix): every form control in the renderer must compose the guarded behavior cores
-//! ([`TextInput`]/[`SelectInput`]), so the keydown typing guard is wired in exactly one place. This
+//! (`TextInput`/`SelectInput`, in `vitni-ui-dioxus`), so the keydown typing guard is wired in exactly one place. This
 //! lint scans `crates/vitni-ui-dioxus/src/**/*.rs` and flags any RSX `input {` / `textarea {` /
 //! `select {` element outside the two allowlisted primitive files, reporting `file` + line.
 //! Diagnostics are collected per file; the command only exits non-zero after scanning everything.
