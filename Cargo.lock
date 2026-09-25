@@ -10064,6 +10064,7 @@ name = "vitni-app"
 version = "0.1.0"
 dependencies = [
  "directories",
+ "dotenvy",
  "reqwest",
  "serde",
  "serde_json",

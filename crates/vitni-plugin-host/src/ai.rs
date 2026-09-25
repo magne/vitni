@@ -32,7 +32,7 @@ const ERROR_EXCERPT_CHARS: usize = 500;
 /// transport failures to `backend` (the caller does the mapping).
 #[derive(Debug)]
 pub enum AiError {
-    /// A caller fault: a bad media path, an unsupported provider kind, or a missing API-key env var.
+    /// A caller fault: a bad media path, an unsupported provider kind, or a missing API key.
     InvalidInput(String),
     /// A provider process, network, or protocol failure.
     Backend(String),
@@ -47,9 +47,9 @@ pub enum AiError {
 ///
 /// # Errors
 ///
-/// [`AiError::InvalidInput`] for the reserved `plugin` kind, a missing API-key env var, or a non-HTTPS
-/// endpoint; [`AiError::Backend`] for a provider process/transport failure, a timeout, or an
-/// unreadable response.
+/// [`AiError::InvalidInput`] for the reserved `plugin` kind, a missing API key (see
+/// [`vitni_app::require_secret_env`]), or a non-HTTPS endpoint; [`AiError::Backend`] for a provider
+/// process/transport failure, a timeout, or an unreadable response.
 pub async fn interpret(
     provider: &AiProvider,
     workspace_dir: &Path,
@@ -69,7 +69,11 @@ pub async fn interpret(
             model,
             api_key_env,
             timeout_secs,
-        } => run_vision_api(url, model, api_key_env, media_abs, prompt, *timeout_secs, require_https).await,
+        } => {
+            let key = vitni_app::require_secret_env(api_key_env, workspace_dir)
+                .map_err(|error| AiError::InvalidInput(format!("the AI provider's API key: {error}")))?;
+            run_vision_api(url, model, &key, media_abs, prompt, *timeout_secs, require_https).await
+        }
         AiProvider::Plugin => Err(AiError::InvalidInput(
             "the `plugin` AI provider kind is reserved and not yet supported (ADR 0017 §4)".to_owned(),
         )),
@@ -133,22 +137,17 @@ async fn run_command(
 }
 
 /// Runs a `vision-api`-kind provider: an OpenAI-compatible chat-completions POST with the media
-/// base64-encoded as an `image_url` data URI. The API key is read from `api_key_env` at call time and
-/// used only as a bearer header — never logged or echoed in an error.
+/// base64-encoded as an `image_url` data URI. The `key` (resolved from `api_key_env` at call time by
+/// [`interpret`]) is used only as a bearer header — never logged or echoed in an error.
 async fn run_vision_api(
     url: &str,
     model: &str,
-    api_key_env: &str,
+    key: &str,
     media_abs: &Path,
     prompt: &str,
     timeout_secs: u64,
     require_https: bool,
 ) -> Result<String, AiError> {
-    let key = std::env::var(api_key_env).map_err(|_| {
-        AiError::InvalidInput(format!(
-            "the AI provider's API-key environment variable `{api_key_env}` is not set"
-        ))
-    })?;
     let endpoint = format!("{}/chat/completions", url.trim_end_matches('/'));
     if require_https && !endpoint.starts_with("https://") {
         return Err(AiError::InvalidInput(
@@ -181,7 +180,7 @@ async fn run_vision_api(
 
     let response = net::client()
         .post(&endpoint)
-        .bearer_auth(&key)
+        .bearer_auth(key)
         .json(&body)
         .timeout(Duration::from_secs(timeout_secs))
         .send()

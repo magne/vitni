@@ -87,7 +87,11 @@
          — named entries mirroring `[ai.providers]`, e.g. `[map.providers.carto]` — never entered here;
          the select's own options are exactly the built-in default plus those names, each labelled
          "name (kind)". Picking one switches the live map immediately: it persists the choice, resolves
-         its tile/style source, and repaints the canvas without reloading the screen. -->
+         its tile/style source, and repaints the canvas without reloading the screen. A keyed provider's
+         config names an environment variable (`api-key-env`), never the key; the variable is looked up
+         in the environment, then `<workspace>/.env`, then `~/.config/vitni/.env` (ADR 0036), so a GUI
+         started from a desktop launcher reaches it too. If none defines it, the switch is refused with
+         the provider-switch error toast naming the variable and both files, and the select reverts. -->
     <div class="geo-toolbar" style="margin-bottom:10px">
       <input class="filter" style="width:220px" placeholder="🔍 Search or geocode a place…">
       <span class="chip">Places 5,128</span>

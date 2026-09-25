@@ -270,7 +270,8 @@ pub enum AiProvider {
         /// The model name sent in the request body.
         model: String,
         /// The **name** of the environment variable holding the API key — the key itself never lives
-        /// in config or logs (ADR 0017 §4).
+        /// in config or logs (ADR 0017 §4). Looked up in the environment, then `<workspace>/.env`, then
+        /// `~/.config/vitni/.env` ([`crate::secret_env`], ADR 0036).
         api_key_env: String,
         /// The per-request timeout in seconds (default 180).
         #[serde(default = "ai_default_timeout_secs")]
@@ -344,14 +345,16 @@ pub enum MapProvider {
         /// The attribution string shown on the map, per the provider's terms.
         attribution: String,
         /// The **name** of the environment variable holding the style's API key, if it needs one —
-        /// the key itself never lives in config or logs (mirrors [`AiProvider::VisionApi`]).
+        /// the key itself never lives in config or logs, and is looked up as for
+        /// [`AiProvider::VisionApi`] (mirrors its `api_key_env`).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         api_key_env: Option<String>,
     },
     /// A paid Google Maps style.
     #[serde(rename_all = "kebab-case")]
     Google {
-        /// The **name** of the environment variable holding the API key.
+        /// The **name** of the environment variable holding the API key, looked up as for
+        /// [`AiProvider::VisionApi`].
         api_key_env: String,
         /// The attribution string shown on the map, per the provider's terms.
         attribution: String,
@@ -657,6 +660,16 @@ fn project_dirs() -> Result<ProjectDirs, AppError> {
 /// [`AppError::Config`] if no home directory can be determined.
 pub fn config_path() -> Result<PathBuf, AppError> {
     Ok(project_dirs()?.config_dir().join("config.toml"))
+}
+
+/// The global `.env` file, e.g. `~/.config/vitni/.env` — the last place an API key named by
+/// `api-key-env`/`api_key_env` is looked up (see [`crate::secret_env`]).
+///
+/// # Errors
+///
+/// [`AppError::Config`] if no home directory can be determined.
+pub fn global_env_path() -> Result<PathBuf, AppError> {
+    Ok(project_dirs()?.config_dir().join(crate::secret_env::ENV_FILE_NAME))
 }
 
 /// The default directory for a workspace named `name`, e.g.
