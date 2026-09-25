@@ -25,17 +25,24 @@ pub const ENV_FILE_NAME: &str = ".env";
 /// if a `.env` file that is consulted is malformed or unreadable (never its content); or if no home
 /// directory can be determined for the global file.
 pub fn require_secret_env(name: &str, workspace_dir: &Path) -> Result<String, AppError> {
-    let files = [workspace_dir.join(ENV_FILE_NAME), global_env_path()?];
-    resolve(name, std::env::var(name).ok(), &files)
+    resolve(name, std::env::var(name).ok(), || {
+        Ok(vec![workspace_dir.join(ENV_FILE_NAME), global_env_path()?])
+    })
 }
 
 /// [`require_secret_env`] over an explicit environment value and file list — the pure core, so the
-/// precedence is testable without mutating the process environment.
-fn resolve(name: &str, env_value: Option<String>, files: &[PathBuf]) -> Result<String, AppError> {
+/// precedence is testable without mutating the process environment. `files` is only called once the
+/// environment has no value, so a set variable never depends on finding a home directory.
+fn resolve(
+    name: &str,
+    env_value: Option<String>,
+    files: impl FnOnce() -> Result<Vec<PathBuf>, AppError>,
+) -> Result<String, AppError> {
     if let Some(value) = env_value.filter(|value| !value.is_empty()) {
         return Ok(value);
     }
-    for file in files {
+    let files = files()?;
+    for file in &files {
         if let Some(value) = read_from_file(name, file)? {
             return Ok(value);
         }
@@ -48,6 +55,7 @@ fn resolve(name: &str, env_value: Option<String>, files: &[PathBuf]) -> Result<S
 }
 
 /// The first non-empty value `file` gives `name`, or `None` if the file is absent or never defines it.
+/// The whole file is parsed even after a match, so a malformed line anywhere fails it.
 ///
 /// # Errors
 ///
@@ -59,6 +67,7 @@ fn read_from_file(name: &str, file: &Path) -> Result<Option<String>, AppError> {
         Err(error) if error.not_found() => return Ok(None),
         Err(_) => return Err(AppError::Config(format!("{} cannot be read", file.display()))),
     };
+    let mut found = None;
     for entry in entries {
         let Ok((key, value)) = entry else {
             return Err(AppError::Config(format!(
@@ -66,11 +75,11 @@ fn read_from_file(name: &str, file: &Path) -> Result<Option<String>, AppError> {
                 file.display()
             )));
         };
-        if key == name && !value.is_empty() {
-            return Ok(Some(value));
+        if found.is_none() && key == name && !value.is_empty() {
+            found = Some(value);
         }
     }
-    Ok(None)
+    Ok(found)
 }
 
 #[cfg(test)]
@@ -86,7 +95,18 @@ mod tests {
     }
 
     fn resolved(env_value: Option<&str>, files: &[PathBuf]) -> String {
-        resolve(NAME, env_value.map(str::to_owned), files).expect("the secret resolves")
+        resolve(NAME, env_value.map(str::to_owned), || Ok(files.to_vec())).expect("the secret resolves")
+    }
+
+    fn resolve_error(files: &[PathBuf]) -> AppError {
+        resolve(NAME, None, || Ok(files.to_vec())).expect_err("the secret does not resolve")
+    }
+
+    #[test]
+    fn a_set_environment_value_needs_no_fallback_paths() {
+        let no_home = || Err(AppError::Config("no valid home directory".to_owned()));
+        let value = resolve(NAME, Some("from-shell".to_owned()), no_home).expect("the environment suffices");
+        assert_eq!(value, "from-shell");
     }
 
     #[test]
@@ -143,7 +163,7 @@ mod tests {
     fn unset_everywhere_names_the_variable_and_every_file_checked() {
         let dir = tempfile::tempdir().expect("tempdir");
         let files = [dir.path().join("ws.env"), dir.path().join("global.env")];
-        let error = resolve(NAME, None, &files).expect_err("nothing defines the variable");
+        let error = resolve_error(&files);
         let message = error.to_string();
         assert!(message.contains(NAME), "{message}");
         for file in &files {
@@ -156,13 +176,25 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let workspace = write(dir.path(), "ws.env", "VITNI_TEST_SECRET='hunter2-unterminated\n");
         let global = write(dir.path(), "global.env", "VITNI_TEST_SECRET=from-global\n");
-        let error = resolve(NAME, None, &[workspace.clone(), global]).expect_err("the workspace file is malformed");
+        let error = resolve_error(&[workspace.clone(), global]);
         let message = error.to_string();
         assert!(message.contains(&workspace.display().to_string()), "{message}");
         assert!(
             !message.contains("hunter2"),
             "the error must not echo file content: {message}"
         );
+    }
+
+    #[test]
+    fn a_malformed_line_after_the_match_still_fails_the_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = write(
+            dir.path(),
+            "ws.env",
+            "VITNI_TEST_SECRET=from-workspace\nOTHER='unterminated\n",
+        );
+        let error = resolve_error(std::slice::from_ref(&workspace));
+        assert!(error.to_string().contains(&workspace.display().to_string()), "{error}");
     }
 
     #[test]
