@@ -67,24 +67,9 @@ at = [1150, 627]
 label = "field: Name"
 
 [[step]]
-do = "key"
-chord = "shift+o"
-label = "type: O"
-
-[[step]]
-do = "key"
-chord = "s"
-label = "type: s"
-
-[[step]]
-do = "key"
-chord = "l"
-label = "type: l"
-
-[[step]]
-do = "key"
-chord = "o"
-label = "type: o — the draft names itself Oslo"
+do = "text"
+text = "Oslo"
+label = "type: Oslo — the draft names itself Oslo"
 
 [[step]]
 do = "shot"

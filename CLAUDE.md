@@ -143,7 +143,8 @@ reliable than driving the GUI on your desktop, where mutter gives synthetic inpu
 compositor focused, not to the window you aimed at.
 
 ```bash
-cargo xtask gui-pass                     # every scenario
+cargo xtask gui-pass                     # every scenario, in parallel (1 worker per 4 cores, ≤4)
+cargo xtask gui-pass --jobs 1            # one at a time, progress printed live
 cargo xtask gui-pass map-canvas          # one, by name
 cargo xtask gui-pass --reset             # wipe the fixture workspace, isolated home and old shots
 cargo xtask gui-pass --keep              # leave it up; attach with `x11vnc -display :99`
@@ -151,12 +152,12 @@ cargo xtask gui-pass --workspace gen     # drive your own config + workspace ins
 ```
 
 Scenarios are **TOML, not Rust** — `crates/vitni-ui-dioxus/tests/gui-pass/*.toml`, so adding one
-needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `drag`, `wheel`, `wait` to sleep and
-let a timed effect fire, `await-exit` to wait for the GUI process to quit) and `[[assert]]`s over the
-shots by name: `differ` for "the UI reacted",
+needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `text` to type a word, `drag`,
+`wheel`, `wait` to sleep and let a timed effect fire, `await-exit` to wait for the GUI process to quit)
+and `[[assert]]`s over the shots by name: `differ` for "the UI reacted",
 `match` for "the UI came back to this state", both with an RMSE tolerance and an optional
 `region = [x, y, w, h]` to compare one window sub-rectangle instead of the whole shot; `manifest`
-checks `target/gui-pass/workspace/workspace.toml` on disk for a substring instead, proving a write
+checks the running worker's `workspace/workspace.toml` on disk for a substring instead, proving a write
 reached disk rather than only an in-memory signal (unavailable under `--real-config`, whose workspace
 path is the caller's own). Read the PNGs under `target/gui-pass/shots/<scenario>/`; crop with
 `convert <in> -crop WxH+X+Y +repage <out>`, and **column-scan rather than eyeball** when a coordinate
@@ -174,9 +175,19 @@ Writing one:
 - **`region` when a whole-window compare can't isolate the change** — e.g. a repaint elsewhere in the
   window (the tabstrip on every Save) would otherwise mask or fake a `differ`/`match` result.
 - **Steps settle on a quiet screen, not a fixed sleep.** Each input step waits until the window stops
-  changing for 600 ms (4 s at most), so steps are fast and wall-clock gaps are short. So a timed effect
-  never expires between two steps by accident. Most often that is a notice (the *Saved* toast lives 6 s,
-  `NOTICE_TTL`). If a `match` spans a Save, add a `wait` that outlasts the notice before the first shot.
+  changing for 600 ms (4 s at most), so steps are fast and a timed effect no longer expires between two
+  steps by accident. Most often that is a notice (the *Saved* toast lives 6 s, `NOTICE_TTL`). If a
+  `match` spans a Save, add a `wait` that outlasts the notice before the first shot.
+- **`text` types letters, digits, space and `-.,` only**, 40 ms apart in one `xdotool key` call
+  (`xdotool type` drops characters on Xvfb). Keep per-character `key` steps where the point is a
+  re-render *between* keystrokes (`restriction-edit`, `untag-reason` guard the reason field against being
+  blanked after each one).
+- **Scenarios run in parallel** by default (one worker per four cores, at most four; `--jobs N` to
+  override). Worker *n* has its own display (`:99`+*n*), home and workspace: worker 0 under
+  `target/gui-pass/`, the rest under `target/gui-pass/workers/<n>/`, all restored from one shared seed.
+  `--keep` and `--real-config`/`--workspace` drive a single GUI, so they run with one worker. A
+  scenario that depends on wall-clock time (a toast's 6 s lifetime) is the first to fail under
+  contention, so give such a scenario margin rather than raising the worker count past four.
 - Runs are **isolated by default**: a throwaway `XDG_CONFIG_HOME`/`XDG_DATA_HOME` plus a seeded fixture
   workspace under `target/gui-pass/`. Keep it that way — a scripted click run writes events, and
   `--real-config`/`--workspace` point it at real genealogy data.

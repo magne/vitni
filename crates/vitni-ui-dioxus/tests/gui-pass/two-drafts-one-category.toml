@@ -57,19 +57,9 @@ at = [1150, 486]
 label = "field: Given name"
 
 [[step]]
-do = "key"
-chord = "shift+a"
-label = "type: A"
-
-[[step]]
-do = "key"
-chord = "d"
-label = "type: d"
-
-[[step]]
-do = "key"
-chord = "a"
-label = "type: a — draft 1 names itself Ada"
+do = "text"
+text = "Ada"
+label = "type: Ada — draft 1 names itself Ada"
 
 [[step]]
 do = "click"
@@ -118,19 +108,9 @@ at = [1150, 486]
 label = "field: Given name"
 
 [[step]]
-do = "key"
-chord = "shift+b"
-label = "type: B"
-
-[[step]]
-do = "key"
-chord = "o"
-label = "type: o"
-
-[[step]]
-do = "key"
-chord = "b"
-label = "type: b — draft 2 names itself Bob"
+do = "text"
+text = "Bob"
+label = "type: Bob — draft 2 names itself Bob"
 
 [[step]]
 do = "shot"

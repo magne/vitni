@@ -40,14 +40,9 @@ at = [1150, 495]
 label = "field: Latitude"
 
 [[step]]
-do = "key"
-chord = "5"
-label = "type: 5"
-
-[[step]]
-do = "key"
-chord = "9"
-label = "type: 9 — a latitude with no longitude: unsaved work that cannot be saved"
+do = "text"
+text = "59"
+label = "type: 59 — a latitude with no longitude: unsaved work that cannot be saved"
 
 [[step]]
 do = "shot"

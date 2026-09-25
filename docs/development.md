@@ -126,17 +126,19 @@ desktop, where the compositor hands synthetic input to whatever it thinks is foc
 the window you aimed at.
 
 ```bash
-cargo xtask gui-pass                     # every scenario
+cargo xtask gui-pass                     # every scenario, in parallel (1 worker per 4 cores, ≤4)
+cargo xtask gui-pass --jobs 1            # one at a time, progress printed live
 cargo xtask gui-pass map-canvas          # one, by name
 cargo xtask gui-pass --reset             # wipe the fixture workspace, isolated home and old shots
 cargo xtask gui-pass --keep              # leave it running; attach with `x11vnc -display :99`
 ```
 
 Scenarios are **TOML, not Rust** — `crates/vitni-ui-dioxus/tests/gui-pass/*.toml` — so adding one
-needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `drag`, `wheel`, `wait`,
+needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `text`, `drag`, `wheel`, `wait`,
 `await-exit`) and `[[assert]]`s over the shots by name. Runs are isolated by default: a throwaway
 `XDG_CONFIG_HOME`/`XDG_DATA_HOME` and a freshly seeded fixture workspace under `target/gui-pass/`,
-because a scripted click run writes real events. Shots land in
+because a scripted click run writes real events. Parallel workers each get their own display, home and
+workspace (`target/gui-pass/workers/<n>/`), restored from the same seed. Shots land in
 `target/gui-pass/shots/<scenario>/` and the GUI's own log in `gui.log` beside them.
 
 When a screenshot disagrees with your reading of it, column-scan instead of squinting:
