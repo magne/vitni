@@ -7,8 +7,7 @@
 # which no markup assertion can ever see.
 #
 # The fixture seeds no tags, so the record is created here: ⌘N opens a Tag draft with Name autofocused,
-# then one `key` per character (the schema has no text-entry step) and a Save click, exactly as
-# `create-appears-in-list.toml` does. Save leaves the new tag selected and in read mode.
+# then a `text` step and a Save click, exactly as `create-appears-in-list.toml` does. Save leaves the new tag selected and in read mode.
 #
 # What the assertions encode:
 #
@@ -40,24 +39,9 @@ chord = "ctrl+n"
 label = "⌘N: a new Tag draft, Name autofocused"
 
 [[step]]
-do = "key"
-chord = "shift+t"
-label = "type: T"
-
-[[step]]
-do = "key"
-chord = "e"
-label = "type: e"
-
-[[step]]
-do = "key"
-chord = "s"
-label = "type: s"
-
-[[step]]
-do = "key"
-chord = "t"
-label = "type: t"
+do = "text"
+text = "Test"
+label = "type: Test"
 
 [[step]]
 do = "click"

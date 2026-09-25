@@ -52,24 +52,9 @@ at = [630, 620]
 label = "field: Name"
 
 [[step]]
-do = "key"
-chord = "shift+o"
-label = "type: O"
-
-[[step]]
-do = "key"
-chord = "s"
-label = "type: s"
-
-[[step]]
-do = "key"
-chord = "l"
-label = "type: l"
-
-[[step]]
-do = "key"
-chord = "o"
-label = "type: o"
+do = "text"
+text = "Oslo"
+label = "type: Oslo"
 
 [[step]]
 do = "click"

@@ -212,6 +212,9 @@ enum Step {
     Click { at: [i32; 2], label: String },
     /// Send a chord in `xdotool key` syntax (`ctrl+k`, `Escape`, `question`).
     Key { chord: String, label: String },
+    /// Type `text` into whatever has keyboard focus: one step and one settle for a whole word, not a
+    /// `key` step (and a settle) per character. Letters, digits, space and `-.,` only — see [`keysyms`].
+    Text { text: String, label: String },
     /// Press at `from`, move by `by`, release — a canvas drag (map pan).
     Drag {
         from: [i32; 2],
@@ -391,6 +394,11 @@ pub fn run_fixture(options: &Options, fixture: &Fixture) -> Result<PathBuf> {
 fn run_one(options: &Options, fixture: &Fixture, out: &Path, home: &Path, path: &Path) -> Result<()> {
     let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let script: Script = toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
+    for step in &script.steps {
+        if let Step::Text { text, .. } = step {
+            keysyms(text).with_context(|| format!("in {}", path.display()))?;
+        }
+    }
     let name = script_name(path);
     println!("\n=== {name} — {}", script.description);
     let shots = out.join("shots").join(&name);
@@ -889,6 +897,11 @@ fn drive(display: &str, window: &Window, steps: &[Step], shots: &Path, session: 
                 xdotool(display, &["key", "--clearmodifiers", chord])?;
                 window.settle()?;
             }
+            Step::Text { text, label } => {
+                println!("  {label}");
+                type_text(display, text)?;
+                window.settle()?;
+            }
             Step::Drag { from, by, label } => {
                 println!("  {label}");
                 drag(display, *from, *by)?;
@@ -994,6 +1007,47 @@ fn drag(display: &str, from: [i32; 2], by: [i32; 2]) -> Result<()> {
     )?;
     sleep(Duration::from_millis(300));
     xdotool(display, &["mouseup", "1"])
+}
+
+/// The gap between a [`Step::Text`] step's keystrokes. Measured on Xvfb: keys 12 ms apart lose
+/// characters (3 runs in 4), 30 ms apart none (4 of 4), so this leaves a margin over the latter.
+const TYPE_DELAY_MS: &str = "40";
+
+/// Types `text` as one `xdotool key` call over explicit keysyms.
+///
+/// Not `xdotool type`: it remaps keycodes on the fly for each character, and on Xvfb that drops or
+/// reorders characters at any delay ("Oslo" came out as "Oso"). `key` with a fixed keysym per
+/// character and [`TYPE_DELAY_MS`] between them types every character.
+fn type_text(display: &str, text: &str) -> Result<()> {
+    let keys = keysyms(text)?;
+    let mut args = vec!["key", "--clearmodifiers", "--delay", TYPE_DELAY_MS];
+    for key in &keys {
+        args.push(key);
+    }
+    xdotool(display, &args)
+}
+
+/// The `xdotool key` keysym for each character of `text`: letters (upper case as `shift+`), digits,
+/// space and `-.,`. Anything else fails, naming the character — the default Xvfb keymap has no key for
+/// `æøå` and friends, and a remapped one would bring back the `xdotool type` unreliability.
+fn keysyms(text: &str) -> Result<Vec<String>> {
+    if text.is_empty() {
+        bail!("gui-pass: a text step needs something to type");
+    }
+    let mut keys = Vec::new();
+    for character in text.chars() {
+        let key = match character {
+            'a'..='z' | '0'..='9' => character.to_string(),
+            'A'..='Z' => format!("shift+{}", character.to_ascii_lowercase()),
+            ' ' => "space".to_owned(),
+            '-' => "minus".to_owned(),
+            '.' => "period".to_owned(),
+            ',' => "comma".to_owned(),
+            other => bail!("gui-pass: a text step cannot type {other:?} — use letters, digits, space or -.,"),
+        };
+        keys.push(key);
+    }
+    Ok(keys)
 }
 
 /// Scrolls the wheel: button 4 up, button 5 down.
@@ -1344,8 +1398,8 @@ fn shot_path(taken: &[String], shots: &Path, name: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Assertion, MIN_STANDARD_DEVIATION, Script, WINDOW, describe_region, differing_pixels, focus_click,
-        painted_failed, read_region, window_size,
+        Assertion, MIN_STANDARD_DEVIATION, Script, Step, WINDOW, describe_region, differing_pixels, focus_click,
+        keysyms, painted_failed, read_region, window_size,
     };
     use std::path::Path;
 
@@ -1373,6 +1427,67 @@ mod tests {
             "#,
         );
         assert_eq!(window_size(&parsed), (1280, 840));
+    }
+
+    #[test]
+    fn a_text_step_carries_the_whole_string() {
+        let parsed = script(
+            r#"
+            description = "a scenario"
+
+            [[step]]
+            do = "text"
+            text = "Oslo"
+            label = "type: Oslo"
+            "#,
+        );
+        let [Step::Text { text, label }] = parsed.steps.as_slice() else {
+            panic!("expected one text step");
+        };
+        assert_eq!(text, "Oslo");
+        assert_eq!(label, "type: Oslo");
+    }
+
+    #[test]
+    fn text_maps_to_one_keysym_per_character() {
+        let keys = keysyms("TRee-7 Oslo").expect("every character is typeable");
+        assert_eq!(
+            keys,
+            [
+                "shift+t", "shift+r", "e", "e", "minus", "7", "space", "shift+o", "s", "l", "o"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_untypeable_character_is_rejected_by_name() {
+        let error = keysyms("Bærum").expect_err("æ has no key on the Xvfb keymap");
+        assert!(
+            format!("{error:#}").contains("'æ'"),
+            "the error names the character: {error:#}"
+        );
+    }
+
+    #[test]
+    fn empty_text_is_rejected() {
+        assert!(
+            keysyms("").is_err(),
+            "a text step with nothing to type is a scenario mistake"
+        );
+    }
+
+    #[test]
+    fn a_text_step_needs_its_text() {
+        let parsed: Result<Script, _> = toml::from_str(
+            r#"
+            description = "a scenario"
+
+            [[step]]
+            do = "text"
+            label = "type: nothing"
+            "#,
+        );
+        assert!(parsed.is_err(), "a text step without `text` must not parse");
     }
 
     #[test]

@@ -4,9 +4,9 @@
 # always repaints the tabstrip, draft-tab-becomes-saved-tab, either way), so the assertion is scoped to
 # `aside.list` with `region`.
 #
-# Tags' create form autofocuses Name, so no click into the field is needed — only `key` steps to type
-# it (the schema has no text-entry step, so this is one `key` per character). Save is a click, not a
-# chord — `record_keydown`'s `⌘S` is scoped to a record already in edit mode, not a fresh create draft.
+# Tags' create form autofocuses Name, so no click into the field is needed — a `text` step types it.
+# Save is a click, not a chord — `record_keydown`'s `⌘S` is scoped to a record already in edit mode,
+# not a fresh create draft.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "Creating a tag makes it appear in the Explorer list without a manual refresh (#207)"
@@ -26,34 +26,9 @@ chord = "ctrl+n"
 label = "⌘N: a new Tag draft, Name autofocused"
 
 [[step]]
-do = "key"
-chord = "shift+t"
-label = "type: T"
-
-[[step]]
-do = "key"
-chord = "shift+r"
-label = "type: R"
-
-[[step]]
-do = "key"
-chord = "e"
-label = "type: e"
-
-[[step]]
-do = "key"
-chord = "e"
-label = "type: e"
-
-[[step]]
-do = "key"
-chord = "minus"
-label = "type: -"
-
-[[step]]
-do = "key"
-chord = "7"
-label = "type: 7"
+do = "text"
+text = "TRee-7"
+label = "type: TRee-7"
 
 [[step]]
 do = "click"
