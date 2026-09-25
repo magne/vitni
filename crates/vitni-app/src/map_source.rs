@@ -4,6 +4,7 @@
 //! here, in the app layer (ADR 0008): `vitni-ui-dioxus` never fetches, it only renders whatever
 //! [`MapSource`] this module hands back.
 
+use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -12,6 +13,7 @@ use serde_json::json;
 
 use crate::config::MapProvider;
 use crate::error::AppError;
+use crate::secret_env::require_secret_env;
 
 /// The tile/style source a renderer mounts, resolved from a [`MapProvider`]. Unlike the configured
 /// provider (which may name a style URL with an unresolved `{key}` placeholder, or no tile URL at
@@ -67,14 +69,15 @@ const GOOGLE_SESSION_TTL: Duration = Duration::from_hours(24 * 7);
 /// `api_key_env` environment variable.
 const KEY_PLACEHOLDER: &str = "{key}";
 
-/// Resolves `provider` into the [`MapSource`] a renderer mounts.
+/// Resolves `provider` into the [`MapSource`] a renderer mounts. An `api_key_env` is looked up in the
+/// environment, then `<workspace_dir>/.env`, then the global `.env` ([`require_secret_env`]).
 ///
 /// # Errors
 ///
 /// [`AppError::Config`] if a `MapLibre` style names an `api_key_env` that is unset, or names one with
 /// no `{key}` placeholder in its URL; or if the Google adapter's session request fails (missing
-/// `GOOGLE_MAPS_KEY`-named env var, a network failure, or an unparsable response).
-pub async fn resolve_map_source(provider: &MapProvider) -> Result<MapSource, AppError> {
+/// `GOOGLE_MAPS_KEY`-named variable, a network failure, or an unparsable response).
+pub async fn resolve_map_source(provider: &MapProvider, workspace_dir: &Path) -> Result<MapSource, AppError> {
     match provider {
         MapProvider::OsmRaster { tile_url, attribution } => Ok(MapSource {
             basemap: MapBasemap::Raster {
@@ -90,7 +93,7 @@ pub async fn resolve_map_source(provider: &MapProvider) -> Result<MapSource, App
             api_key_env,
         } => Ok(MapSource {
             basemap: MapBasemap::Style {
-                style_url: resolve_style_url(style_url, api_key_env.as_deref())?,
+                style_url: resolve_style_url(style_url, api_key_env.as_deref(), workspace_dir)?,
             },
             attribution: attribution.clone(),
         }),
@@ -98,7 +101,7 @@ pub async fn resolve_map_source(provider: &MapProvider) -> Result<MapSource, App
             api_key_env,
             attribution,
         } => {
-            let api_key = required_env(api_key_env)?;
+            let api_key = require_secret_env(api_key_env, workspace_dir)?;
             let session = google_session(&api_key).await?;
             Ok(MapSource {
                 basemap: MapBasemap::Raster {
@@ -112,14 +115,14 @@ pub async fn resolve_map_source(provider: &MapProvider) -> Result<MapSource, App
     }
 }
 
-/// Substitutes [`KEY_PLACEHOLDER`] in `style_url` from the environment variable named by
-/// `api_key_env`, or returns `style_url` verbatim when no `api_key_env` is configured.
+/// Substitutes [`KEY_PLACEHOLDER`] in `style_url` from the variable named by `api_key_env` (see
+/// [`require_secret_env`]), or returns `style_url` verbatim when no `api_key_env` is configured.
 ///
 /// # Errors
 ///
 /// [`AppError::Config`] naming `api_key_env` if it is set but the variable is unset/empty, or if
 /// `style_url` has no `{key}` placeholder for it to substitute.
-fn resolve_style_url(style_url: &str, api_key_env: Option<&str>) -> Result<String, AppError> {
+fn resolve_style_url(style_url: &str, api_key_env: Option<&str>, workspace_dir: &Path) -> Result<String, AppError> {
     let Some(env_name) = api_key_env else {
         return Ok(style_url.to_owned());
     };
@@ -128,18 +131,8 @@ fn resolve_style_url(style_url: &str, api_key_env: Option<&str>) -> Result<Strin
             "the map style URL names api-key-env {env_name:?} but has no {KEY_PLACEHOLDER} placeholder to substitute"
         )));
     }
-    let key = required_env(env_name)?;
+    let key = require_secret_env(env_name, workspace_dir)?;
     Ok(style_url.replace(KEY_PLACEHOLDER, &key))
-}
-
-/// Reads `name` from the environment, or a named [`AppError::Config`] if it is unset or empty.
-fn required_env(name: &str) -> Result<String, AppError> {
-    match std::env::var(name) {
-        Ok(value) if !value.is_empty() => Ok(value),
-        _ => Err(AppError::Config(format!(
-            "the map provider needs the {name:?} environment variable, which is unset"
-        ))),
-    }
 }
 
 /// The shared HTTP client for every Google Map Tiles request this process makes.
@@ -364,13 +357,14 @@ pub async fn google_viewport_copyright(
 /// the viewport request fails.
 pub async fn refresh_map_attribution(
     provider: &MapProvider,
+    workspace_dir: &Path,
     zoom: f64,
     bounds: (f64, f64, f64, f64),
 ) -> Result<Option<String>, AppError> {
     let MapProvider::Google { api_key_env, .. } = provider else {
         return Ok(None);
     };
-    let api_key = required_env(api_key_env)?;
+    let api_key = require_secret_env(api_key_env, workspace_dir)?;
     let session = google_session(&api_key).await?;
     google_viewport_copyright(&session.session, &api_key, zoom, bounds)
         .await
@@ -393,9 +387,14 @@ mod tests {
         MapProvider::default_osm()
     }
 
+    /// A workspace directory with no `.env` — every test that is not about the file fallback.
+    fn no_env_file() -> tempfile::TempDir {
+        tempfile::tempdir().expect("tempdir")
+    }
+
     #[tokio::test]
     async fn an_osm_raster_provider_resolves_verbatim_with_no_io() {
-        let source = resolve_map_source(&osm()).await.expect("resolve");
+        let source = resolve_map_source(&osm(), no_env_file().path()).await.expect("resolve");
         assert_eq!(
             source.basemap,
             MapBasemap::Raster {
@@ -409,7 +408,8 @@ mod tests {
 
     #[test]
     fn a_style_url_with_no_api_key_env_is_used_verbatim() {
-        let resolved = resolve_style_url("https://example.test/style.json", None).expect("resolve");
+        let resolved =
+            resolve_style_url("https://example.test/style.json", None, no_env_file().path()).expect("resolve");
         assert_eq!(resolved, "https://example.test/style.json");
     }
 
@@ -422,6 +422,7 @@ mod tests {
         let resolved = resolve_style_url(
             "https://example.test/style.json?key={key}",
             Some("VITNI_TEST_MAP_KEY_SUBSTITUTE"),
+            no_env_file().path(),
         )
         .expect("resolve");
         assert_eq!(resolved, "https://example.test/style.json?key=secret-123");
@@ -434,6 +435,7 @@ mod tests {
         let error = resolve_style_url(
             "https://example.test/style.json?key={key}",
             Some("VITNI_TEST_MAP_KEY_UNSET"),
+            no_env_file().path(),
         )
         .expect_err("the env var is unset");
         let AppError::Config(message) = error else {
@@ -451,6 +453,7 @@ mod tests {
         let error = resolve_style_url(
             "https://example.test/style.json",
             Some("VITNI_TEST_MAP_KEY_NO_PLACEHOLDER"),
+            no_env_file().path(),
         )
         .expect_err("the URL has no {key} placeholder");
         let AppError::Config(message) = error else {
@@ -470,8 +473,33 @@ mod tests {
             attribution: "© Example".to_owned(),
             api_key_env: Some("VITNI_TEST_MAP_KEY_ALSO_UNSET".to_owned()),
         };
-        let error = resolve_map_source(&provider).await.expect_err("the env var is unset");
+        let error = resolve_map_source(&provider, no_env_file().path())
+            .await
+            .expect_err("the env var is unset");
         assert!(matches!(error, AppError::Config(_)));
+    }
+
+    /// The launcher case (#296): the variable is in no environment, only in `<workspace>/.env`.
+    #[tokio::test]
+    async fn a_workspace_env_file_supplies_a_key_the_environment_lacks() {
+        let workspace = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            workspace.path().join(".env"),
+            "VITNI_TEST_MAP_KEY_FROM_FILE=file-secret\n",
+        )
+        .expect("writing the workspace .env");
+        let provider = MapProvider::MaplibreStyle {
+            style_url: "https://example.test/style.json?key={key}".to_owned(),
+            attribution: "© Example".to_owned(),
+            api_key_env: Some("VITNI_TEST_MAP_KEY_FROM_FILE".to_owned()),
+        };
+        let source = resolve_map_source(&provider, workspace.path()).await.expect("resolve");
+        assert_eq!(
+            source.basemap,
+            MapBasemap::Style {
+                style_url: "https://example.test/style.json?key=file-secret".to_owned()
+            }
+        );
     }
 
     #[test]
@@ -576,7 +604,7 @@ mod tests {
                 api_key_env: None,
             },
         ] {
-            let refreshed = refresh_map_attribution(&provider, 10.0, (60.0, 59.0, 11.0, 10.0))
+            let refreshed = refresh_map_attribution(&provider, no_env_file().path(), 10.0, (60.0, 59.0, 11.0, 10.0))
                 .await
                 .expect("no I/O for a non-Google provider");
             assert_eq!(refreshed, None);

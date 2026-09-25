@@ -147,9 +147,14 @@ pub fn GeographyScreen() -> Element {
     // `geography_provider_select`'s own `apply_map_source`, not a fresh resource read, so this never
     // re-mints a Google session just because the active provider changed.
     let initial_provider = provider();
-    let source = use_resource(move || {
-        let provider = initial_provider.clone();
-        async move { resolve_map_source(provider).await }
+    let workspace_dir = services.dir.clone();
+    let source = use_resource({
+        let workspace_dir = workspace_dir.clone();
+        move || {
+            let provider = initial_provider.clone();
+            let workspace_dir = workspace_dir.clone();
+            async move { resolve_map_source(provider, workspace_dir).await }
+        }
     });
     let mut attribution = use_signal(String::new);
     use_effect(move || {
@@ -167,9 +172,11 @@ pub fn GeographyScreen() -> Element {
     // for every other provider kind, per `refresh_map_attribution`'s own doc comment.
     let on_moved = EventHandler::new(move |camera: MovedCamera| {
         let active_provider = provider();
+        let workspace_dir = workspace_dir.clone();
         spawn(async move {
             if let Ok(Some(text)) = refresh_map_attribution(
                 active_provider,
+                workspace_dir,
                 camera.zoom,
                 (camera.north, camera.south, camera.east, camera.west),
             )
@@ -492,7 +499,7 @@ fn geography_provider_select(chrome: &Chrome, switch: ProviderSwitch) -> Element
                 let services = services.clone();
                 spawn(async move {
                     let chrome = services.chrome();
-                    let resolved = match resolve_map_source(candidate.clone()).await {
+                    let resolved = match resolve_map_source(candidate.clone(), services.dir.clone()).await {
                         Ok(resolved) => resolved,
                         Err(detail) => {
                             select_generation += 1;

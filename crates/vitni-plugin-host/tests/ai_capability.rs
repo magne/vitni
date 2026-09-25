@@ -526,6 +526,48 @@ async fn vision_api_error_status_is_a_backend_error_without_the_key() {
     }
 }
 
+/// The launcher case (#296): the key is in no environment, only in the workspace's `.env`.
+#[tokio::test]
+async fn vision_api_reads_a_key_the_environment_lacks_from_the_workspace_env_file() {
+    const KEY_ENV: &str = "VITNI_TEST_AI_KEY_FROM_FILE";
+    let server = MockServer::start().await;
+    let base = base_url(&server);
+    Mock::given(method("POST"))
+        .and(path("/chat/completions"))
+        .and(header("authorization", "Bearer file-secret-456"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "choices": [{ "message": { "content": "read with the file key" } }]
+        })))
+        .mount(&server)
+        .await;
+
+    let (root, _dir) = init_workspace();
+    write_media(&root, "media/scan.png", b"bytes");
+    std::fs::write(root.join(".env"), format!("{KEY_ENV}=file-secret-456\n")).expect("write .env");
+    let workspace = open_workspace(&root).await;
+
+    let result = Box::pin(temp_env::async_with_vars([(KEY_ENV, None::<&str>)], async {
+        common::host()
+            .fixture_try_interpret(
+                &common::component("fixture"),
+                workspace,
+                software_session(),
+                ai_grant(),
+                ResourceBudget::default(),
+                vision_config(&base, KEY_ENV),
+                localhost_policy(),
+                None,
+                "media/scan.png",
+                "read this",
+            )
+            .await
+    }))
+    .await;
+
+    let (text, _ws) = result.expect("vision-api call");
+    assert_eq!(text, "read with the file key");
+}
+
 #[tokio::test]
 async fn vision_api_missing_env_var_is_invalid_input_naming_the_var() {
     const KEY_ENV: &str = "VITNI_TEST_AI_KEY_ABSENT";

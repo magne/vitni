@@ -931,15 +931,16 @@ pub async fn store_map_config(map: MapConfig) -> Result<(), String> {
 
 /// Resolves `provider` into the [`MapSource`] a renderer mounts (ADR 0033): env substitution for a
 /// `MapLibre` style, or a minted Google session for the Google adapter. The tile source a renderer
-/// paints, never the configured `kind` — see `vitni_app::resolve_map_source`'s doc comment. Needs
-/// no `Services` — the whole resolution is env vars and outbound HTTP, nothing workspace-scoped.
+/// paints, never the configured `kind` — see `vitni_app::resolve_map_source`'s doc comment. Takes
+/// only the workspace directory from `Services` ([`Services::dir`]): an API key the environment lacks
+/// is looked up in that workspace's `.env`, then the global one.
 ///
 /// # Errors
 ///
-/// The technical cause (a missing API-key env var, or an unreachable style/session endpoint) as plain
-/// text — see [`store_map_config`]'s doc comment for why this is not already localized.
-pub async fn resolve_map_source(provider: MapProvider) -> Result<MapSource, String> {
-    vitni_app::resolve_map_source(&provider)
+/// The technical cause (a missing API key, or an unreachable style/session endpoint) as plain text —
+/// see [`store_map_config`]'s doc comment for why this is not already localized.
+pub async fn resolve_map_source(provider: MapProvider, workspace_dir: PathBuf) -> Result<MapSource, String> {
+    vitni_app::resolve_map_source(&provider, &workspace_dir)
         .await
         .map_err(|error| error.to_string())
 }
@@ -947,7 +948,7 @@ pub async fn resolve_map_source(provider: MapProvider) -> Result<MapSource, Stri
 /// Refreshes the live per-viewport attribution Google's Map Tiles terms require, for the camera at
 /// `zoom`/`bounds` (`north, south, east, west`) — a no-op (`Ok(None)`) for every provider but
 /// [`vitni_app::MapProvider::Google`], whose terms are the only ones requiring a dynamic credit.
-/// Needs no `Services`, for the same reason [`resolve_map_source`] does not.
+/// Takes the workspace directory for the same reason [`resolve_map_source`] does.
 ///
 /// # Errors
 ///
@@ -956,10 +957,11 @@ pub async fn resolve_map_source(provider: MapProvider) -> Result<MapSource, Stri
 /// a failed background refresh is not worth interrupting the operator over).
 pub async fn refresh_map_attribution(
     provider: MapProvider,
+    workspace_dir: PathBuf,
     zoom: f64,
     bounds: (f64, f64, f64, f64),
 ) -> Result<Option<String>, String> {
-    vitni_app::refresh_map_attribution(&provider, zoom, bounds)
+    vitni_app::refresh_map_attribution(&provider, &workspace_dir, zoom, bounds)
         .await
         .map_err(|error| error.to_string())
 }

@@ -46,8 +46,8 @@ Anything that breaks a boundary the program claims to hold:
 - **Integrity of the record** — anything that silently drops, rewrites or reorders committed events,
   or that lets an operator's identity in an `EventContext` be forged. The event log is the evidence
   layer; a correction must be a new assertion, never an edit.
-- **Credential leaks** — an API key from `config.toml` or the environment (`[map]`, `[ai]`) reaching a
-  plugin, a log line, a crash report, or an export.
+- **Credential leaks** — an API key from `config.toml`, the environment, or a `.env` file (`[map]`,
+  `[ai]`; ADR 0036) reaching a plugin, a log line, a crash report, or an export.
 
 ## What is not in scope
 

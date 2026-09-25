@@ -747,9 +747,11 @@ fn PlaceMapEditor(
     let map_provider = map_config(state.services())
         .resolve(None)
         .unwrap_or_else(|_| MapProvider::default_osm());
+    let workspace_dir = state.services().dir.clone();
     let source = use_resource(move || {
         let provider = map_provider.clone();
-        async move { resolve_map_source(provider).await }
+        let workspace_dir = workspace_dir.clone();
+        async move { resolve_map_source(provider, workspace_dir).await }
     });
     let mut attribution = use_signal(String::new);
     use_effect(move || {

@@ -257,7 +257,9 @@
           </div>
 
           <!-- Toolbar: draw tools + fit + the live zoom readout (#253) + a read-only provider label.
-               Scoped to THIS place (no place search here — that lives in the Geography atlas). -->
+               Scoped to THIS place (no place search here — that lives in the Geography atlas). A keyed
+               active provider resolves its key exactly as the Geography map does (environment, then
+               `<workspace>/.env`, then `~/.config/vitni/.env`, ADR 0036). -->
           <div class="geo-toolbar" style="margin-bottom:10px">
             <button class="btn sm primary" title="Pan / select">✋ Pan</button>
             <button class="btn sm" title="Drop or move this place's point">📍 Point</button>
