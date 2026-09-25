@@ -1,0 +1,79 @@
+# #374 — switching a record's tab opens the new tab at the top, not at the previous tab's scroll offset.
+#
+# `.tab-body` is the detail pane's only vertical scroller. `Tabs` used to render one for every tab and
+# swap only its children, so its `scrollTop` belonged to the element: a scrolled Overview carried its
+# offset into whichever tab came next. The fix keys the panel on the active tab, so each switch mounts a
+# fresh scroller at 0.
+#
+# At 1800x600 both Kristiansand's Overview and its Hierarchy tab overflow the pane, so the inherited
+# offset shows: without the fix Hierarchy opens part-way down and the `match` below fails. Hierarchy is
+# opened twice by the same click, first unscrolled for the reference shot, then after Overview was
+# wheeled to the bottom; `overview-scrolled` proves the wheel really moved Overview, or the `match` would
+# pass vacuously.
+#
+# Measured on this scenario's own shots: the tab row's labels sit on y=244 (Overview centred at x=597,
+# Hierarchy at x=841), `.tab-body` starts at y=265 and ends above the status bar at y=571. The regions
+# stop at x=1788 so the overlay scrollbar, which WebKitGTK paints only after the wheel, is left out.
+description = "Switching a record's tab opens the new tab at the top, not at the previous tab's scroll offset (#374)"
+window = [1800, 600]
+
+[[step]]
+do = "click"
+at = [85, 283]
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = [300, 99]
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "click"
+at = [841, 244]
+label = "Hierarchy tab"
+
+[[step]]
+do = "shot"
+name = "hierarchy-fresh"
+
+[[step]]
+do = "click"
+at = [597, 244]
+label = "Overview tab"
+
+[[step]]
+do = "shot"
+name = "overview-top"
+
+[[step]]
+do = "wheel"
+at = [1160, 450]
+clicks = -30
+label = "Overview: scroll to the bottom"
+
+[[step]]
+do = "shot"
+name = "overview-scrolled"
+
+[[step]]
+do = "click"
+at = [841, 244]
+label = "Hierarchy tab"
+
+[[step]]
+do = "shot"
+name = "hierarchy-after-scroll"
+
+[[assert]]
+kind = "differ"
+shots = ["overview-top", "overview-scrolled"]
+region = [533, 265, 1255, 306]
+tolerance = 0.02
+because = "the wheel must scroll Overview, or the match below proves nothing"
+
+[[assert]]
+kind = "match"
+shots = ["hierarchy-fresh", "hierarchy-after-scroll"]
+region = [533, 265, 1255, 306]
+tolerance = 0.01
+because = "a tab opened after scrolling Overview must start at the top, exactly as when opened unscrolled (#374)"

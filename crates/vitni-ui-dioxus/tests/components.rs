@@ -476,3 +476,53 @@ fn deletable_chip_carries_the_delete_control_inside_the_chip() {
     );
     assert!(html.contains("T0007"), "the trailing id renders:\n{html}");
 }
+
+thread_local! {
+    /// How many times a [`MountProbe`] has mounted on this test's thread.
+    static PANEL_MOUNTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// A panel child that counts its own mounts.
+#[component]
+fn MountProbe() -> Element {
+    use_hook(|| PANEL_MOUNTS.with(|mounts| mounts.set(mounts.get() + 1)));
+    rsx! { div { "panel" } }
+}
+
+/// A two-tab strip that selects its second tab once, after the first render.
+fn switching_tabs() -> Element {
+    let mut active = use_signal(|| 0);
+    use_effect(move || active.set(1));
+    rsx! {
+        Tabs {
+            tabs: vec![
+                TabItem { id: "overview".to_owned(), label: "Overview".to_owned(), count: None },
+                TabItem { id: "names".to_owned(), label: "Names".to_owned(), count: None },
+            ],
+            active: active(),
+            onselect: move |index| active.set(index),
+            MountProbe {}
+        }
+    }
+}
+
+/// #374: the tab body is the pane's scroller, so reusing it across a switch carries the previous tab's
+/// `scrollTop` into the next. A switch must mount a fresh panel, which opens at the top.
+#[test]
+fn switching_tabs_mounts_a_fresh_panel() {
+    let mut vdom = VirtualDom::new(switching_tabs);
+    vdom.rebuild_in_place();
+    for _ in 0..8 {
+        vdom.render_immediate(&mut dioxus::core::NoOpMutations);
+    }
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"id="panel-names""#),
+        "the second tab is active:\n{html}"
+    );
+    assert_eq!(
+        PANEL_MOUNTS.with(std::cell::Cell::get),
+        2,
+        "the switch remounts the panel:\n{html}"
+    );
+}
