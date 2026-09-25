@@ -458,9 +458,12 @@ fn run_one(options: &Options, fixture: &Fixture, worker: &Worker, path: &Path, l
 }
 
 /// Prints a finished scenario's buffered log and its verdict together, so parallel scenarios never
-/// interleave. Returns the scenario's name when it failed.
+/// interleave. Both streams are held for the whole report — stdout first, as every caller takes them —
+/// so another scenario's block cannot land between a log and its `FAILED` line. Returns the scenario's
+/// name when it failed.
 fn report(fixture: &Fixture, name: &str, log: &Log, outcome: Result<()>) -> Option<String> {
     let mut out = std::io::stdout().lock();
+    let mut errors = std::io::stderr().lock();
     let _ = write!(out, "{}", log.text);
     match outcome {
         Ok(()) => {
@@ -468,8 +471,8 @@ fn report(fixture: &Fixture, name: &str, log: &Log, outcome: Result<()>) -> Opti
             None
         }
         Err(error) => {
-            drop(out);
-            eprintln!("{}: {name} FAILED: {error:#}", fixture.name);
+            let _ = out.flush();
+            let _ = writeln!(errors, "{}: {name} FAILED: {error:#}", fixture.name);
             Some(name.to_owned())
         }
     }
@@ -624,7 +627,22 @@ fn resolve_scripts(fixture: &Fixture, named: &[String]) -> Result<Vec<PathBuf>> 
         }
         chosen.push(path);
     }
+    unique_names(&chosen)?;
     Ok(chosen)
+}
+
+/// Fails when two scenarios share a name. A scenario's shots and `gui.log` go to `shots/<name>`, so two
+/// runs of one name — the same scenario named twice, or one stem in two directories — would have two
+/// workers overwrite each other's files.
+fn unique_names(paths: &[PathBuf]) -> Result<()> {
+    let mut seen = std::collections::BTreeSet::new();
+    for path in paths {
+        let name = script_name(path);
+        if !seen.insert(name.clone()) {
+            bail!("gui-pass: scenario {name} is named twice, and both runs would write shots/{name}");
+        }
+    }
+    Ok(())
 }
 
 /// A scenario's name: its file stem.
@@ -1600,10 +1618,10 @@ fn shot_path(taken: &[String], shots: &Path, name: &str) -> Option<PathBuf> {
 mod tests {
     use super::{
         Assertion, MIN_STANDARD_DEVIATION, Script, Step, WINDOW, available_cores, default_jobs, describe_region,
-        differing_pixels, focus_click, keysyms, painted_failed, parse_args, read_region, run_queue, window_size,
-        worker_config, worker_display,
+        differing_pixels, focus_click, keysyms, painted_failed, parse_args, read_region, run_queue, unique_names,
+        window_size, worker_config, worker_display,
     };
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     fn asserts(toml: &str) -> Vec<Assertion> {
         let script: Script = toml::from_str(toml).expect("the scenario parses");
@@ -1652,6 +1670,29 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|arg| (*arg).to_owned()).collect()
+    }
+
+    #[test]
+    fn scenarios_with_distinct_names_are_accepted() {
+        let paths = [PathBuf::from("a/map-zoom.toml"), PathBuf::from("a/map-view.toml")];
+        assert!(unique_names(&paths).is_ok());
+    }
+
+    #[test]
+    fn two_scenarios_writing_the_same_shot_directory_are_rejected() {
+        // Shots land in `shots/<file stem>`, so the same name twice — or two paths with one stem — would
+        // have two workers overwrite each other's shots and logs.
+        let repeated = [PathBuf::from("a/map-zoom.toml"), PathBuf::from("a/map-zoom.toml")];
+        let error = unique_names(&repeated).expect_err("a repeated scenario is rejected");
+        assert!(
+            format!("{error:#}").contains("map-zoom"),
+            "the error names it: {error:#}"
+        );
+        let same_stem = [PathBuf::from("a/map-zoom.toml"), PathBuf::from("b/map-zoom.toml")];
+        assert!(
+            unique_names(&same_stem).is_err(),
+            "one stem from two directories is rejected"
+        );
     }
 
     #[test]
