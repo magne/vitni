@@ -173,6 +173,10 @@ Writing one:
   rings are real pixels and move as a scenario runs.
 - **`region` when a whole-window compare can't isolate the change** — e.g. a repaint elsewhere in the
   window (the tabstrip on every Save) would otherwise mask or fake a `differ`/`match` result.
+- **Steps settle on a quiet screen, not a fixed sleep.** Each input step waits until the window stops
+  changing for 600 ms (4 s at most), so steps are fast and wall-clock gaps are short. So a timed effect
+  never expires between two steps by accident. Most often that is a notice (the *Saved* toast lives 6 s,
+  `NOTICE_TTL`). If a `match` spans a Save, add a `wait` that outlasts the notice before the first shot.
 - Runs are **isolated by default**: a throwaway `XDG_CONFIG_HOME`/`XDG_DATA_HOME` plus a seeded fixture
   workspace under `target/gui-pass/`. Keep it that way — a scripted click run writes events, and
   `--real-config`/`--workspace` point it at real genealogy data.

@@ -562,6 +562,13 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 The `area/docs` label already existed with no `###` home; this is it.
 
+- **`gui-pass` could be faster still.** `settle()` now waits until the window stops changing (600 ms
+  quiet, 4 s cap) instead of sleeping a flat 4 s after every step. Not yet done: settling only before a
+  `shot` (inputs spaced by a short gap), a `text` step that types a string in one call, and running
+  scenarios in parallel on several Xvfb displays, which needs a separate `target/gui-pass/` output
+  directory per worker. Each needs before/after timings and two clean full runs to show it adds no
+  flakiness. — #378
+
 - **The mockup sheet is only partly the superset it is documented to be.** [`CLAUDE.md`](../CLAUDE.md)
   states that `docs/mockups/assets/components.css` is the superset — "the app sheet must not introduce a
   rule the mockups lack" — and nothing checks the sheet as a whole, so it does not hold.
