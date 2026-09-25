@@ -253,6 +253,8 @@
           host.querySelectorAll(".tab-pane").forEach(function (p) {
             p.classList.toggle("active", p.getAttribute("data-pane") === id);
           });
+          var body = tabs.nextElementSibling;
+          if (body && body.classList.contains("tab-body")) body.scrollTop = 0;
         }
         tab.addEventListener("click", activate);
         tab.addEventListener("keydown", function (ev) {
