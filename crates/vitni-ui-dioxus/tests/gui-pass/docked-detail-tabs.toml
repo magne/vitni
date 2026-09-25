@@ -86,7 +86,7 @@ name = "oslo-overview"
 
 [[step]]
 do = "click"
-at = [710, 249]
+at = [734, 249]
 label = "Oslo: Names tab"
 
 [[step]]
@@ -127,7 +127,7 @@ name = "docked"
 
 [[step]]
 do = "click"
-at = [721, 249]
+at = [745, 249]
 label = "active pane (Kristiansand): Names tab, at the painted label's centre"
 
 [[step]]
@@ -136,7 +136,7 @@ name = "active-names-clicked"
 
 [[step]]
 do = "click"
-at = [1220, 296]
+at = [1232, 296]
 label = "docked pane (Oslo): Overview tab, at the painted label's centre (it starts on Names, its remembered tab)"
 
 [[step]]
@@ -146,37 +146,37 @@ name = "docked-overview-clicked"
 [[assert]]
 kind = "differ"
 shots = ["oslo-overview", "oslo-names"]
-region = [508, 92, 1292, 1080]
+region = [532, 92, 1268, 1080]
 because = "clicking a single pane's own tab must change it"
 
 [[assert]]
 kind = "match"
 shots = ["oslo-names", "oslo-remounted"]
-region = [508, 92, 1292, 1080]
+region = [532, 92, 1268, 1080]
 because = "a remounted pane comes back on the tab it left, not a flash of Overview (#209)"
 
 [[assert]]
 kind = "differ"
 shots = ["docked", "active-names-clicked"]
-region = [508, 270, 646, 900]
+region = [532, 270, 634, 900]
 tolerance = 0.02
 because = "the active pane's own tab strip is operable with a split open (#279, #285)"
 
 [[assert]]
 kind = "match"
 shots = ["docked", "active-names-clicked"]
-region = [1154, 92, 646, 1080]
+region = [1166, 92, 634, 1080]
 because = "clicking the active pane's tab must not disturb the docked pane"
 
 [[assert]]
 kind = "differ"
 shots = ["active-names-clicked", "docked-overview-clicked"]
-region = [1156, 320, 644, 840]
+region = [1168, 320, 632, 840]
 tolerance = 0.02
 because = "the docked pane's own tab strip is independently operable — the #279 fix"
 
 [[assert]]
 kind = "match"
 shots = ["active-names-clicked", "docked-overview-clicked"]
-region = [508, 92, 646, 1080]
+region = [532, 92, 634, 1080]
 because = "clicking the docked pane's tab must not disturb the active pane"

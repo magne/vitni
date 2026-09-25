@@ -19,7 +19,7 @@ description = "The polygon tool turns canvas clicks into a ring and hands it to 
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]
@@ -28,7 +28,7 @@ name = "map"
 
 [[step]]
 do = "click"
-at = [300, 220]
+at = [324, 220]
 label = "place list: Kristiansand"
 
 [[step]]
@@ -73,7 +73,7 @@ name = "ring-closed"
 
 [[step]]
 do = "click"
-at = [517, 1048]
+at = [541, 1048]
 label = "Finish polygon"
 
 [[step]]
@@ -88,13 +88,13 @@ because = "picking a place must recentre and zoom the map onto it"
 [[assert]]
 kind = "differ"
 shots = ["map", "selected"]
-region = [208, 190, 240, 60]
+region = [232, 190, 240, 60]
 because = "the rail must highlight the row a drawn shape will attach to (#255)"
 
 [[assert]]
 kind = "differ"
 shots = ["map", "selected"]
-region = [520, 95, 260, 40]
+region = [544, 95, 260, 40]
 because = "the toolbar must name the place a drawn shape will attach to (#255)"
 
 [[assert]]

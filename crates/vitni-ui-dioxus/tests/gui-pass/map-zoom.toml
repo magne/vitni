@@ -4,9 +4,9 @@
 # ceiling and floor actually stop a gesture. `tests/map_zoom.rs` covers the readout's own markup.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The MapLibre
-# controls are positioned by MapLibre itself, 10px inside the canvas: the canvas fills x 461..1797,
-# y 159..1057 with Pan armed, so the `+`/`−` buttons land at (487, 182)/(487, 212) and the scale bar
-# at x 472..554, y 1026..1046. The readout sits between Fit and the provider select at x 1607..1633.
+# controls are positioned by MapLibre itself, 10px inside the canvas: the canvas fills x 485..1797,
+# y 159..1057 with Pan armed, so the `+`/`−` buttons land at (511, 182)/(511, 212) and the scale bar
+# at x 496..578, y 1026..1046. The readout sits between Fit and the provider select at x 1607..1633.
 #
 # Notch counts are measured, not guessed: one `xdotool click 4` moves MapLibre's camera ≈0.167 of a
 # zoom level, so a first attempt at 40 notches only reached z11.7 and every clamp assert below compared
@@ -17,7 +17,7 @@ description = "The map's zoom is bounded to the tiles, and visible and adjustabl
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]
@@ -26,7 +26,7 @@ name = "map"
 
 [[step]]
 do = "click"
-at = [487, 182]
+at = [511, 182]
 label = "map: NavigationControl +"
 
 [[step]]
@@ -152,5 +152,5 @@ because = "the readout must sit still at the floor too"
 [[assert]]
 kind = "painted"
 shot = "map"
-region = [472, 1026, 84, 22]
+region = [496, 1026, 84, 22]
 because = "a metric scale bar must be drawn bottom-left, saying what the zoom level means on the ground"

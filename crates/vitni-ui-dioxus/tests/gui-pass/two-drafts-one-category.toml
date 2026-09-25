@@ -166,22 +166,22 @@ name = "back-to-two"
 [[assert]]
 kind = "differ"
 shots = ["one-typed", "two-fresh"]
-region = [508, 130, 1292, 1040]
+region = [532, 130, 1268, 1040]
 because = "a second ⌘N must build a fresh, empty form — a reused component instance would still show draft 1's text (#260)"
 
 [[assert]]
 kind = "differ"
 shots = ["two-fresh", "two-id"]
-region = [508, 130, 1292, 1040]
+region = [532, 130, 1268, 1040]
 because = "the caret must be inside the new form, or the keystroke reaches the shell dispatcher instead"
 
 [[assert]]
 kind = "match"
 shots = ["two-fresh", "two-id"]
-# The strip's ‹ › history controls, left of the first tab at x 588 — the part of the shell chrome the
+# The strip's ‹ › history controls, left of the first tab at x 612 — the part of the shell chrome the
 # keystroke may not touch. The tabs themselves are excluded on purpose: the key lands in draft 2's ID,
 # which marks that draft unsaved and paints its `●` (#307).
-region = [508, 80, 78, 45]
+region = [532, 80, 78, 45]
 # Byte-identical when it works (RMSE 0.0000): a field took the keystroke, so no shell chrome repainted.
 # An overlay opening instead — `?` is one keystroke away from an unfocused shell — paints over the whole
 # strip, controls included, and the `differ` above alone could not tell the two apart.
@@ -191,13 +191,13 @@ because = "and it must be a *field* that took it, not the shell — an overlay w
 [[assert]]
 kind = "differ"
 shots = ["two-id", "two-typed"]
-region = [508, 80, 1292, 45]
+region = [532, 80, 1268, 45]
 because = "typing a name into a draft renames its own tab, live (#260)"
 
 [[assert]]
 kind = "match"
 shots = ["one-parked", "back-to-one"]
-region = [508, 130, 1292, 1040]
+region = [532, 130, 1268, 1040]
 # RMSE 0.0019 — the residue is the remount's own repaint (the per-field reset ↺ on the restored,
 # modified input), not the text: over the Given name field alone the two frames are identical.
 because = "returning to draft 1 must restore draft 1's own buffer, from the shell, after its pane was torn down"
@@ -205,7 +205,7 @@ because = "returning to draft 1 must restore draft 1's own buffer, from the shel
 [[assert]]
 kind = "match"
 shots = ["two-parked", "back-to-two"]
-region = [508, 130, 1292, 1040]
+region = [532, 130, 1268, 1040]
 because = "and returning to draft 2 must restore draft 2's, not the one it was rebuilt beside"
 
 [[assert]]

@@ -7,13 +7,13 @@
 # a rectangle wholly inside the canvas in both the tall (Pan) and short (Polygon) layouts.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The canvas fills
-# x 461..1797, y 159..1057 with Pan armed and y 159..1018 with Polygon armed; [500, 200, 1250, 700]
+# x 485..1797, y 159..1057 with Pan armed and y 159..1018 with Polygon armed; [500, 200, 1250, 700]
 # sits inside both.
 description = "Arming a draw tool leaves the map painted, and re-arming the active one changes nothing (#252)"
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]

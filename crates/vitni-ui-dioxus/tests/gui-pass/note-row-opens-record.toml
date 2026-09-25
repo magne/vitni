@@ -69,10 +69,10 @@ name = "row-before"
 # The row's leading cell, not the row: the link is a 22x25 `button.src-link` at the left of the Note
 # column, and the first coordinate tried here (mid-row, in the empty part of the Content column) still
 # produced a whole-window `differ` — off the link entirely. Column-scanned off `01-row-before.png`
-# (`convert <shot> -crop 60x1+520+445 +repage txt:-`), the chip spans x 540..562, y 433..458.
+# (`convert <shot> -crop 60x1+544+445 +repage txt:-`), the chip spans x 564..586, y 433..458.
 [[step]]
 do = "click"
-at = [551, 445]
+at = [575, 445]
 label = "notes table: the note link in the row's leading cell"
 
 [[step]]
@@ -90,5 +90,5 @@ shots = ["row-before", "note-open"]
 # Scoped to the record header — the avatar, the title and the id pill. The whole-window assertion above
 # would also pass on a repaint anywhere in the window; this one only passes if the editor is showing a
 # *different record* than the place the click started from.
-region = [520, 128, 700, 90]
+region = [544, 128, 700, 90]
 because = "the editor must now hold the note, not the place that referenced it"

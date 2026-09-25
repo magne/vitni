@@ -28,12 +28,12 @@ description = "The geometry panel's Effective-date radios take a click and an Ar
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]
 do = "click"
-at = [300, 220]
+at = [324, 220]
 label = "place list: Kristiansand"
 
 [[step]]
@@ -58,7 +58,7 @@ label = "map: third vertex"
 
 [[step]]
 do = "click"
-at = [517, 1048]
+at = [541, 1048]
 label = "Finish polygon"
 
 [[step]]

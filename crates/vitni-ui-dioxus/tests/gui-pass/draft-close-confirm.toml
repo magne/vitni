@@ -150,7 +150,7 @@ because = "⌘N must open a draft tab and its create form"
 [[assert]]
 kind = "match"
 # The tabstrip alone: the tab is gone rather than sitting behind a dialog.
-region = [508, 80, 1292, 45]
+region = [532, 80, 1268, 45]
 shots = ["before", "closed"]
 tolerance = 0.001
 because = "⌘W on a draft nobody typed into must close it, with no confirm to answer (#307)"
@@ -158,7 +158,7 @@ because = "⌘W on a draft nobody typed into must close it, with no confirm to a
 [[assert]]
 kind = "differ"
 # The tabstrip alone, again: what typing changed there is the tab's own name and its ● marker.
-region = [508, 80, 1292, 45]
+region = [532, 80, 1268, 45]
 shots = ["draft-open", "typed"]
 because = "typing into a draft names its tab and marks it unsaved"
 
@@ -169,7 +169,7 @@ because = "⌘W on a draft holding typed-in work must raise the close confirm in
 
 [[assert]]
 kind = "match"
-region = [508, 80, 1292, 45]
+region = [532, 80, 1268, 45]
 shots = ["closed", "closed-again"]
 tolerance = 0.001
 because = "backspacing the work away makes the draft closable with no confirm again — the marker follows the buffer both ways"

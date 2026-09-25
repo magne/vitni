@@ -20,7 +20,7 @@ description = "Finishing a shape with no draw target is refused, and the draft s
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]
@@ -53,7 +53,7 @@ name = "ring-closed"
 
 [[step]]
 do = "click"
-at = [517, 1048]
+at = [541, 1048]
 label = "Finish polygon"
 
 [[step]]
@@ -62,7 +62,7 @@ name = "refused"
 
 [[step]]
 do = "click"
-at = [300, 220]
+at = [324, 220]
 label = "place list: Kristiansand"
 
 [[step]]
@@ -71,7 +71,7 @@ name = "targeted"
 
 [[step]]
 do = "click"
-at = [517, 995]
+at = [541, 995]
 label = "Finish polygon (post-toast row)"
 
 [[step]]
@@ -88,7 +88,7 @@ kind = "differ"
 shots = ["refused", "targeted"]
 # The rail's Kristiansand row only. A whole-window compare here is answered by the recentre the
 # selection triggers, which says nothing about the highlight this issue is about.
-region = [208, 190, 240, 60]
+region = [232, 190, 240, 60]
 because = "picking a place must highlight it as the draw target"
 
 [[assert]]

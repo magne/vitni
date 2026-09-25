@@ -7,7 +7,7 @@ description = "The Point tool commits a dropped point to the geometry panel, sam
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]
@@ -26,7 +26,7 @@ name = "point-dropped"
 
 [[step]]
 do = "click"
-at = [528, 1048]
+at = [552, 1048]
 label = "Use this point"
 
 [[step]]
@@ -40,7 +40,7 @@ label = "close the New place here panel"
 
 [[step]]
 do = "click"
-at = [300, 220]
+at = [324, 220]
 label = "place list: Kristiansand"
 
 [[step]]
@@ -54,7 +54,7 @@ name = "point-dropped-targeted"
 
 [[step]]
 do = "click"
-at = [528, 1048]
+at = [552, 1048]
 label = "Use this point (targeted)"
 
 [[step]]

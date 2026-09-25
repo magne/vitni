@@ -13,7 +13,7 @@ description = "Creating a tag makes it appear in the Explorer list without a man
 
 [[step]]
 do = "click"
-at = [85, 564]
+at = [85, 543]
 label = "rail: Tags"
 
 [[step]]
@@ -70,4 +70,4 @@ shots = ["list-before", "list-after"]
 because = "the Tags list must gain the new row without a category switch (#207)"
 # `aside.list` only — the rail count and the tabstrip both legitimately repaint on Save too, so a
 # whole-window (or rail-including) region would not isolate the list itself changing.
-region = [208, 0, 300, 1200]
+region = [232, 0, 300, 1200]

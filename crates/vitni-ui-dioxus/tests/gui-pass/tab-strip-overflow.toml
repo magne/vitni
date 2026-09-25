@@ -43,6 +43,6 @@ name = "names"
 [[assert]]
 kind = "differ"
 shots = ["overview", "names"]
-region = [508, 268, 772, 480]
+region = [532, 268, 748, 480]
 tolerance = 0.02
 because = "clicking the painted label must switch the tab, not scroll the strip (#285)"

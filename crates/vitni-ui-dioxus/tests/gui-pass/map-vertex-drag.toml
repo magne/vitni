@@ -17,7 +17,7 @@ description = "A draft polygon vertex handle can be grabbed and dragged to a new
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]

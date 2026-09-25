@@ -10,12 +10,12 @@ description = "A successful geometry save clears the draft, so a follow-up Clear
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]
 do = "click"
-at = [300, 220]
+at = [324, 220]
 label = "place list: Kristiansand"
 
 [[step]]
@@ -40,7 +40,7 @@ label = "map: third vertex"
 
 [[step]]
 do = "click"
-at = [517, 1048]
+at = [541, 1048]
 label = "Finish polygon"
 
 [[step]]
@@ -54,7 +54,7 @@ name = "saved"
 
 [[step]]
 do = "click"
-at = [612, 1048]
+at = [636, 1048]
 label = "Clear"
 
 [[step]]

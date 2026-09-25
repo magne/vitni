@@ -36,7 +36,7 @@ name = "after-esc"
 
 [[step]]
 do = "click"
-at = [85, 953]
+at = [85, 935]
 label = "rail: Preferences"
 
 [[step]]
