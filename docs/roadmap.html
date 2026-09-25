@@ -607,6 +607,8 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>0.9.5 &mdash; public release</td><td>ADR 0007, 0011, 0014</td></tr>
     <tr><td><b><a href="adr/0035-launcher-binary-over-cli-and-gui.md">ADR 0035</a></b> &mdash; accepted</td><td>A <code>vitni</code> launcher binary over the CLI and GUI libraries: GUI with no arguments, CLI with any, in-process; <code>vitni-cli</code> renamed, <code>vitni-ui-dioxus</code> library-only</td>
       <td>0.9.5 &mdash; public release</td><td>ADR 0008</td></tr>
+    <tr><td><b><a href="adr/0036-api-keys-from-env-files.md">ADR 0036</a></b> &mdash; accepted</td><td>API keys named by <code>api-key-env</code>/<code>api_key_env</code> resolve from the environment, then <code>&lt;workspace&gt;/.env</code>, then <code>~/.config/vitni/.env</code>, looked up at use time and never loaded into the process environment</td>
+      <td>Packaging (#296)</td><td>ADR 0017, 0033, 0005</td></tr>
     <tr><td><b>ADR 0031</b></td><td>Place model for real-world administrative geography: reopen the <code>Multi*</code> geometry variant, add a civil/ecclesiastical/judicial <code>relation</code> to <code>PlaceRef</code>, and carry positional accuracy separately from <code>Confidence</code></td>
       <td>Phase 9 residual closure</td><td>ADR 0024, 0026, 0027</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>
