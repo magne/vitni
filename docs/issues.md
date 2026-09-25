@@ -560,13 +560,6 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 The `area/docs` label already existed with no `###` home; this is it.
 
-- **`gui-pass` could be faster still.** `settle()` now waits until the window stops changing (600 ms
-  quiet, 4 s cap) instead of sleeping a flat 4 s after every step. Not yet done: settling only before a
-  `shot` (inputs spaced by a short gap), a `text` step that types a string in one call, and running
-  scenarios in parallel on several Xvfb displays, which needs a separate `target/gui-pass/` output
-  directory per worker. Each needs before/after timings and two clean full runs to show it adds no
-  flakiness. — #378
-
 - **The mockup sheet is only partly the superset it is documented to be.** [`CLAUDE.md`](../CLAUDE.md)
   states that `docs/mockups/assets/components.css` is the superset — "the app sheet must not introduce a
   rule the mockups lack" — and nothing checks the sheet as a whole, so it does not hold.
@@ -770,6 +763,18 @@ decision, not a gap.
   config split: the server adds the `ConfigStore` **database** backend so the operator and
   client/presentation scopes persist per authenticated user, while the embedded build keeps the file
   backend.
+
+### Repo tooling
+
+- **`gui-pass` settles every step, not only before a `shot`.** Giving inputs a short fixed gap and
+  waiting for a quiet screen only before a `shot` was weighed in #378 and declined. It would save about
+  0.6 s per input step, which is little once scenarios run in parallel. The cost is a race: a click
+  that depends on the previous click's async result (a panel opening, a picker mounting) could fire
+  before that result lands.
+- **`gui-pass` starts a fresh Xvfb per scenario.** Reusing one X server per worker was weighed in #378
+  and declined. Startup is polled, so it costs about 0.1 s. A reused server would carry pointer position
+  and input focus from one scenario into the next, so a first shot's hover state would depend on run
+  order.
 
 ### Publication
 
