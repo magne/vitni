@@ -15,7 +15,7 @@ description = "The provider select switches the running map without a remount (#
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]

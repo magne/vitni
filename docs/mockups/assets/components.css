@@ -86,8 +86,12 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   font-size: var(--fs-md);
   user-select: none;
 }
-.rail .nav-item .ico, .subnav .nav-item .ico { width: 18px; text-align: center; opacity: 0.9; }
+.rail .nav-item .ico, .subnav .nav-item .ico { flex: none; width: 18px; text-align: center; opacity: 0.9; }
+/* Single-line: the active item is bold, and a label that wrapped once bolded moved every row below it
+   (#375). A label too long even for the widened rail ellipsizes; its `title` carries the full text. */
+.rail .nav-item .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail .nav-item .count, .subnav .nav-item .count {
+  flex: none;
   margin-left: auto;
   display: inline-flex; align-items: center; justify-content: center;
   min-height: 16px; line-height: 1;
@@ -907,7 +911,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
   }
   .rail nav { display: flex; align-items: center; gap: var(--sp-1); }
   .rail .nav-group-label, .rail .nav-sep, .rail .nav-item .count { display: none; }
-  .rail .nav-item { white-space: nowrap; }
+  .rail .nav-item { flex: none; white-space: nowrap; }
 
   .search { min-width: 0; }
 }

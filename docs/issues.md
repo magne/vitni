@@ -163,11 +163,9 @@ long-standing "DNA match views in the UI" item is closed.
 
 ### Shell, tabs & notifications
 
-- **The active *Research notes* rail item wraps.** `.rail .nav-item.active` is `font-weight: 600`
-  (`components.css:113`). In the fixed `--rail-w: 208px` rail (`tokens.css:74`), the bold label plus its
-  count badge no longer fits, so the row wraps and pushes the rows below it down. Fix: widen `--rail-w`
-  (app and mockup tokens together) so the longest bold label fits in `en` and `no` (`Forskningsnotater`,
-  and `Sammenlign / slå sammen` under Tools). — #375
+No open items. The area keeps its heading so `area/frontend/shell` stays a live label and the issues
+already filed against it keep resolving their
+[`#shell-tabs--notifications`](#shell-tabs--notifications) anchor.
 
 ### Record detail & shared tabs
 
@@ -685,6 +683,14 @@ decision, not a gap.
   External ids are importer bookkeeping, not user-editable data.
 
 ### Shell & panes
+
+- **Long rail labels ellipsize rather than widen the rail.** #375 widened `--rail-w` from 208px to
+  232px, enough for every English label in bold with its count, and made the label single-line
+  (`.nav-label`, ellipsis, full text in `title`). A rail wide enough for the longest Norwegian labels in
+  bold (`Forskningsnotater` with a 3-digit count, `Sammenlign / slå sammen`) would need about 250px, and
+  every pixel comes out of the work area. So those two truncate by design. What must never happen again
+  is a label wrapping or pushing its count out of the row; `rail-active-label-fits.toml` guards the
+  wrap.
 
 - **A shell-wide ticket a detail pane consumes must be addressed, not bumped.** #284 filed the class:
   `pending_undo` was a counter every mounted pane latched a per-pane `seen` against, so with a record

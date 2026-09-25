@@ -8,7 +8,7 @@
 # scenario measured it — a seeded tag would move the rail's Tags count and the Tags list in all of them.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes; the chip's `×` was
-# located by zooming its crop (`convert <shot> -crop 120x40+130+424 +repage -scale 400% <out>`), because
+# located by zooming its crop (`convert <shot> -crop 120x40+154+424 +repage -scale 400% <out>`), because
 # it is 8 px of glyph beside the label it belongs to. The Tags tab's own coordinates moved with the shared
 # tab frame (#303): the tab's explanation pushed the bar and the chips down, and the bar's button is now
 # right-aligned, so `Add tag` sits at the pane's right edge rather than its left.
@@ -16,7 +16,7 @@ description = "Removing a tag opens the reason panel, and its confirm is what re
 
 [[step]]
 do = "click"
-at = [85, 564]
+at = [85, 543]
 label = "rail: Tags"
 
 [[step]]
@@ -61,7 +61,7 @@ label = "explorer: Kristiansand"
 
 [[step]]
 do = "click"
-at = [1367, 244]
+at = [1391, 244]
 label = "detail tab: Tags"
 
 [[step]]
@@ -80,7 +80,7 @@ name = "chip"
 
 [[step]]
 do = "click"
-at = [596, 420]
+at = [620, 420]
 label = "tags: the todo chip's ×"
 
 [[step]]
@@ -143,11 +143,11 @@ because = "the reason field must take the typing, which is the rationale the rem
 kind = "differ"
 shots = ["chip", "removed"]
 # The chip's own row, left of the panel: the confirm is what removes it, and nothing before it did.
-region = [528, 400, 300, 40]
+region = [552, 400, 300, 40]
 because = "the panel's confirm must remove the tag, so the chip goes"
 
 [[assert]]
 kind = "differ"
 shots = ["chip", "removed"]
-region = [1336, 232, 74, 26]
+region = [1360, 232, 74, 26]
 because = "and the removal must reach the projection, so the Tags tab count goes 1 → 0"

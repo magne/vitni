@@ -14,13 +14,13 @@
 # first measured against, so it still overflows but by less: re-measure, never carry old numbers over.
 #
 # Measured on this scenario's own `filled` shot: the `.rtab` box paints y 86-119 with the label glyphs
-# on 99-107, and `.tabstrip`'s border-bottom on 121. Tab boxes are Kristiansand 585-703, New place
-# 708-813, New person 818-934, New family 939-1049, New event 1054-1161, New source 1166-past the
+# on 99-107, and `.tabstrip`'s border-bottom on 121. Tab boxes are Kristiansand 608-726, New place
+# 731-836, New person 841-957, New family 962-1072, New event 1077-1184, New source 1189-past the
 # scroll box's right edge at 1231 — the clip that is the overflow this depends on. The clicks aim at
-# New person's painted label centre (866, 103; its glyphs run 832-901), then Kristiansand's (635, 103;
-# glyphs 600-671), then Kristiansand's close `✕` (694, 103) — re-measured on `kristiansand-clicked`,
-# because `.rtab.active` is `font-weight: 600` and the bolder label pushes its own `✕` right (693-695
-# there, against 685-686 while inactive). Without the fix all three sit in the dead band and every
+# New person's painted label centre (889, 103; its glyphs run 855-920), then Kristiansand's (658, 103;
+# glyphs 623-694), then Kristiansand's close `✕` (717, 103) — re-measured on `kristiansand-clicked`,
+# because `.rtab.active` is `font-weight: 600` and the bolder label pushes its own `✕` right (716-718
+# there, against 708-709 while inactive). Without the fix all three sit in the dead band and every
 # assertion below fails at RMSE 0.0000.
 #
 # The `✕` probe closes **Kristiansand**, a saved record, and that choice is load-bearing. Aimed at a
@@ -95,7 +95,7 @@ name = "filled"
 
 [[step]]
 do = "click"
-at = [866, 103]
+at = [889, 103]
 label = "record tab: New person, at the painted label's centre"
 
 [[step]]
@@ -104,7 +104,7 @@ name = "people-clicked"
 
 [[step]]
 do = "click"
-at = [635, 103]
+at = [658, 103]
 label = "record tab: Kristiansand, at the painted label's centre"
 
 [[step]]
@@ -113,7 +113,7 @@ name = "kristiansand-clicked"
 
 [[step]]
 do = "click"
-at = [694, 103]
+at = [717, 103]
 label = "record tab: Kristiansand's close ✕, at its painted centre"
 
 [[step]]
@@ -123,20 +123,20 @@ name = "kristiansand-closed"
 [[assert]]
 kind = "differ"
 shots = ["filled", "people-clicked"]
-region = [508, 130, 772, 600]
+region = [532, 130, 748, 600]
 tolerance = 0.02
 because = "clicking a record tab's painted label must switch records, not scroll the tabstrip (#285)"
 
 [[assert]]
 kind = "differ"
 shots = ["people-clicked", "kristiansand-clicked"]
-region = [508, 130, 772, 600]
+region = [532, 130, 748, 600]
 tolerance = 0.02
 because = "a second tab's painted label, to prove the first hit was not a one-off"
 
 [[assert]]
 kind = "differ"
 shots = ["kristiansand-clicked", "kristiansand-closed"]
-region = [508, 130, 772, 600]
+region = [532, 130, 748, 600]
 tolerance = 0.02
 because = "the close ✕ sits in the same dead band as the label — closing the active record's tab must move the pane to another record (#285)"

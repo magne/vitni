@@ -9,7 +9,7 @@ name = "dashboard"
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]

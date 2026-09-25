@@ -122,4 +122,4 @@ kind = "differ"
 shots = ["rail-before", "rail-after"]
 because = "an inline create marks the workspace changed, so the rail's Citations count goes 0 → 1 (#207)"
 # The rail's Citations row alone: the panel behind the pointer repaints on Add regardless.
-region = [0, 335, 208, 45]
+region = [0, 335, 232, 45]

@@ -1,0 +1,44 @@
+# #375: activating a rail item must not reflow the rail. `.rail .nav-item.active` is bold, and a bold
+# label that no longer fits its row used to wrap onto a second line — "Research notes" did, pushing every
+# row below it down by a line. The label is now single-line (ellipsized if it ever overflows) in a rail
+# wide enough for the English labels in bold.
+#
+# The window width is load-bearing. `--fs-md` is `clamp(13px, 0.9vw, 14px)`, so the rail's text size
+# follows the window: at 1400 wide (13px) the bold label fit even before the fix, and at 1800 (14px) it
+# wrapped even *unbolded*, so neither width could see activation change anything. At 1460 (~13.1px) the
+# regular label fits and the bold one wrapped — the reported symptom — which is what makes this scenario
+# fail on the unfixed rail.
+#
+# Notes is activated first so the reference shot has the pointer and the active highlight *above* the
+# compared region; the region then covers the rail from the Tags row down, which a wrap would move.
+description = "Activating a rail item never wraps its label or moves the rows below it (#375)"
+window = [1460, 900]
+
+[[step]]
+do = "click"
+at = [85, 468]
+label = "rail: Notes"
+
+[[step]]
+do = "shot"
+name = "notes-active"
+
+[[step]]
+do = "click"
+at = [85, 504]
+label = "rail: Research notes"
+
+[[step]]
+do = "shot"
+name = "research-active"
+
+[[assert]]
+kind = "differ"
+shots = ["notes-active", "research-active"]
+because = "the click reached Research notes (the Explorer switches list)"
+
+[[assert]]
+kind = "match"
+shots = ["notes-active", "research-active"]
+region = [0, 530, 200, 370]
+because = "a bold active label must not wrap and push the rows below it down"

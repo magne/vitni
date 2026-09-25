@@ -16,7 +16,7 @@ description = "Clicking Clear after drawing a polygon erases the ring from the c
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]
@@ -45,7 +45,7 @@ name = "ring-closed"
 
 [[step]]
 do = "click"
-at = [612, 1048]
+at = [636, 1048]
 label = "Clear"
 
 [[step]]

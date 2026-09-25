@@ -142,4 +142,4 @@ because = "Save must create the note and attach it, replacing the empty state wi
 kind = "differ"
 shots = ["rail-before", "rail-after"]
 because = "the create marks the workspace changed, so the rail's Notes count goes 0 → 1 (#207)"
-region = [0, 448, 208, 40]
+region = [0, 448, 232, 40]

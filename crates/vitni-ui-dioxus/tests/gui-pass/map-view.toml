@@ -14,7 +14,7 @@ description = "Fit frames the plotted places and the time slider re-dates the ma
 
 [[step]]
 do = "click"
-at = [85, 881]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]
@@ -32,7 +32,7 @@ name = "fitted"
 
 [[step]]
 do = "click"
-at = [900, 1102]
+at = [924, 1102]
 label = "time slider: drop the year to ~1350"
 
 [[step]]

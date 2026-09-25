@@ -22,14 +22,14 @@
 # card to open the crop viewer from. Nothing is seeded for this; the attach is part of the test.
 #
 # Coordinates are window pixels at 1800x1200, read off this scenario's own shots. At Fit the image fills
-# the canvas — x 546-1758, y 673 down — so the frame is 1213px wide and every drag below stays inside it.
+# the canvas — x 570-1758, y 673 down — so the frame is 1188px wide and every drag below stays inside it.
 # The readout is the cheapest true signal that the geometry changed, so most assertions read it; the
 # percentages it printed on the run that calibrated this file, each checked against the arithmetic:
 #
-#   draw   (650,750) -> (910,990)   `region · 9,6 -> 30,26 %`
-#   resize se grip +120,+100        `region · 9,6 -> 40,34 %`   origin anchored, far corner moved
-#   move   -150,+60                 `region · 0,11 -> 31,39 %`  31x28 kept, left edge clamped at 0
-#   draw   (1100,720) +150,+120     `region · 46,4 -> 58,14 %`  a fresh rectangle, not a move
+#   draw   (650,750) -> (910,990)   `region · 7,6 -> 29,27 %`
+#   resize se grip +120,+100        `region · 7,6 -> 39,35 %`   origin anchored, far corner moved
+#   move   -150,+60                 `region · 0,11 -> 32,40 %`  32x29 kept, left edge clamped at 0
+#   draw   (1100,720) +150,+120     `region · 44,4 -> 57,14 %`  a fresh rectangle, not a move
 #
 description = "Draw, resize by a corner grip, and move the crop region — and a fresh draw still works"
 
@@ -124,7 +124,7 @@ name = "redrawn"
 
 [[step]]
 do = "click"
-at = [1250, 843]
+at = [1245, 838]
 label = "crop: focus the se grip (a click alone must not move it)"
 
 [[step]]
@@ -180,7 +180,7 @@ because = "a drag must enable Set region — draw the rectangle first, then pres
 kind = "differ"
 shots = ["viewer-open", "region-drawn"]
 # The readout beside the zoom group: "no region set" becomes "region · l,t → r,b %".
-region = [755, 638, 220, 22]
+region = [779, 638, 220, 22]
 because = "the readout must report the dragged region's percentages, so the drag reached rect_from_drag"
 
 [[assert]]
@@ -194,30 +194,30 @@ because = "the region rectangle must be drawn over the image, with its dimming m
 kind = "differ"
 shots = ["region-drawn", "grip-resized"]
 # The readout again: dragging the `se` grip out must grow the region's width and height, so the two
-# right-hand numbers change while `22,16` stays put.
-region = [755, 638, 220, 22]
+# right-hand numbers change while the origin `7,6` stays put.
+region = [779, 638, 220, 22]
 because = "a corner grip resizes the region — the mockup has drawn four grips since the tool was designed"
 
 [[assert]]
 kind = "differ"
 shots = ["grip-resized", "region-moved"]
-region = [755, 638, 220, 22]
+region = [779, 638, 220, 22]
 because = "grabbing the region's interior moves it, which the readout shows as a changed origin"
 
 [[assert]]
 kind = "differ"
 shots = ["region-moved", "redrawn"]
-region = [755, 638, 220, 22]
+region = [779, 638, 220, 22]
 because = "a press on empty frame still draws a fresh region — the grips must not have stolen the capture layer"
 
 [[assert]]
 kind = "differ"
 shots = ["grip-focused", "grip-key-resized"]
-region = [755, 638, 220, 22]
+region = [779, 638, 220, 22]
 because = "the grips are focusable buttons: three Right presses resize the region by three percent"
 
 [[assert]]
 kind = "differ"
 shots = ["grip-key-resized", "grip-key-moved"]
-region = [755, 638, 220, 22]
+region = [779, 638, 220, 22]
 because = "Shift + arrow moves the region from the keyboard, so neither gesture is pointer-only"
