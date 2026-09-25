@@ -11,7 +11,7 @@
 //! `window = [w, h]` sets the size the window is resized to before its steps run, defaulting to
 //! [`WINDOW`] when omitted — the narrow-window case (below `--bp-lg`) needs its own coordinates, never
 //! a single-pane layout's carried over (see `CLAUDE.md`'s "Writing one"). A file lists `[[step]]`s (a
-//! click, a chord, a drag, a wheel, a screenshot, `wait` to sleep and let a timed effect fire,
+//! click, a chord, a typed word, a drag, a wheel, a screenshot, `wait` to sleep and let a timed effect fire,
 //! `wm-close` to ask the window to close the way a window manager does, or `await-exit` to wait for the
 //! GUI process itself to quit) and `[[assert]]`s over the shots it took —
 //! `differ` for "the UI reacted",
@@ -21,8 +21,8 @@
 //! needed when a change is provably confined to one area but the rest of the window can legitimately
 //! repaint either way (e.g. the tabstrip repaints on every Save, so a whole-window `differ` cannot
 //! isolate a list-column change), and needed by `painted`, whose whole-window form the surrounding
-//! chrome would always answer for. `manifest` is different again: it checks
-//! `target/gui-pass/workspace/workspace.toml` on disk for a substring, proving a write reached disk
+//! chrome would always answer for. `manifest` is different again: it checks the worker's
+//! `workspace/workspace.toml` on disk for a substring, proving a write reached disk
 //! rather than only an in-memory signal — unavailable under `--real-config`, where that path is the
 //! caller's own workspace.
 //!
@@ -34,6 +34,11 @@
 //! `target/gui-pass/home` and a seeded fixture workspace, so a scripted click run can never append
 //! assertions to real genealogy data. `--real-config` (optionally with `--workspace <name>`) points
 //! the same scripts at the caller's own config and workspaces when reproducing something in real data.
+//!
+//! Scenarios run [`default_jobs`] at a time (`--jobs N` to change it), each [`Worker`] on its own Xvfb
+//! display with its own isolated home and workspace, restored from one shared seed. A scenario's
+//! progress lines are held and printed with its verdict, so parallel scenarios never interleave; with
+//! one worker they print live.
 //!
 //! The driving machinery is parameterised by a [`Fixture`], because a second caller needs the same
 //! harness over different data: `cargo xtask screenshots` (see [`crate::screenshots`]) drives a demo
@@ -48,6 +53,7 @@
 //! user's GPU. Those stay the `manual-verify` residual (see `docs/issue-tracking.md`).
 
 use std::fs;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
@@ -76,8 +82,13 @@ const GUI_PASS: Fixture = Fixture {
 /// covers both, and each dispatch arm is exercised by every run.
 const LAUNCHER: &str = "target/debug/vitni";
 
-/// The Xvfb display the GUI is driven on. Overridable with `--display`.
+/// The Xvfb display the GUI is driven on — the first worker's, with each further worker on the next
+/// number. Overridable with `--display`.
 pub const DEFAULT_DISPLAY: &str = ":99";
+/// The most scenarios [`default_jobs`] runs at once. Measured on 22 cores: 1 worker 657 s, 2 334 s,
+/// 4 177 s, 6 143 s, and 8 125 s with `toast-auto-dismiss` failing — its toast lives 6 s of wall-clock,
+/// which that much contention stretches past.
+const MAX_DEFAULT_JOBS: usize = 4;
 /// The virtual screen Xvfb serves. Larger than the window so a resize never clips.
 const SCREEN: &str = "2560x1600x24";
 /// The window size a scenario's coordinates are written against, when it declares no `window` of its
@@ -290,6 +301,8 @@ pub struct Options {
     keep: bool,
     /// Delete the isolated home and fixture workspace before seeding.
     reset: bool,
+    /// How many scenarios run at once, each worker on its own display with its own home and workspace.
+    jobs: usize,
 }
 
 impl Options {
@@ -307,6 +320,7 @@ impl Options {
             workspace: None,
             keep,
             reset: true,
+            jobs: 1,
         }
     }
 }
@@ -364,16 +378,22 @@ pub fn run_fixture(options: &Options, fixture: &Fixture) -> Result<PathBuf> {
     }
 
     let scripts = resolve_scripts(fixture, &options.scripts)?;
+    let jobs = options.jobs.min(scripts.len()).max(1);
+    let mut workers = Vec::new();
+    for index in 0..jobs {
+        workers.push(Worker::new(options, fixture, &out, index)?);
+    }
+    let outcomes = run_queue(jobs, &scripts, |index, path| {
+        let mut log = Log::new(jobs == 1);
+        let outcome = workers
+            .get(index)
+            .context("gui-pass: no worker for this job")
+            .and_then(|worker| run_one(options, fixture, worker, path, &mut log));
+        report(fixture, &script_name(path), &log, outcome)
+    });
     let mut failed = Vec::new();
-    for path in &scripts {
-        let name = script_name(path);
-        match run_one(options, fixture, &out, &home, path) {
-            Ok(()) => println!("{}: {name} passed", fixture.name),
-            Err(error) => {
-                eprintln!("{}: {name} FAILED: {error:#}", fixture.name);
-                failed.push(name);
-            }
-        }
+    for name in outcomes.into_iter().flatten() {
+        failed.push(name);
     }
     if !failed.is_empty() {
         bail!(
@@ -391,7 +411,7 @@ pub fn run_fixture(options: &Options, fixture: &Fixture) -> Result<PathBuf> {
 /// Runs one scenario end to end, from a fresh copy of the seeded workspace and an empty shot
 /// directory — a scenario writes events (dropping a map point asserts coordinates), so sharing either
 /// would make one scenario's result depend on which ran before it.
-fn run_one(options: &Options, fixture: &Fixture, out: &Path, home: &Path, path: &Path) -> Result<()> {
+fn run_one(options: &Options, fixture: &Fixture, worker: &Worker, path: &Path, log: &mut Log) -> Result<()> {
     let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let script: Script = toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
     for step in &script.steps {
@@ -400,41 +420,175 @@ fn run_one(options: &Options, fixture: &Fixture, out: &Path, home: &Path, path: 
         }
     }
     let name = script_name(path);
-    println!("\n=== {name} — {}", script.description);
-    let shots = out.join("shots").join(&name);
+    log.line(&format!("\n=== {name} — {}", script.description));
+    let shots = worker.out.join("shots").join(&name);
     if shots.exists() {
         fs::remove_dir_all(&shots).with_context(|| format!("clearing {}", shots.display()))?;
     }
     fs::create_dir_all(&shots).with_context(|| format!("creating {}", shots.display()))?;
     let shots = shots.as_path();
     if !options.real_config {
-        restore_workspace(fixture, out)?;
-        restore_config(out, home)?;
+        restore_workspace(fixture, worker)?;
+        restore_config(fixture, worker)?;
     }
 
     let size = window_size(&script);
-    let mut session = start_session(options, fixture, home, shots)?;
-    let window = wait_for_window(&options.display)?;
+    let display = worker.display.as_str();
+    let mut session = start_session(options, fixture, worker, shots)?;
+    let window = wait_for_window(display)?;
     xdotool(
-        &options.display,
+        display,
         &["windowsize", &window, &size.0.to_string(), &size.1.to_string()],
     )?;
-    focus(&options.display, &window, size)?;
-    let window = Window::connect(&options.display, window)?;
+    focus(display, &window, size)?;
+    let window = Window::connect(display, window)?;
     window.settle()?;
 
-    let taken = drive(&options.display, &window, &script.steps, shots, &mut session)?;
+    let taken = drive(&window, &script.steps, shots, &mut session, log)?;
     if options.keep {
         session.keep = true;
-        println!(
-            "gui-pass: leaving {} and the GUI up — attach with `x11vnc -display {}`",
-            options.display, options.display
-        );
+        log.line(&format!(
+            "gui-pass: leaving {display} and the GUI up — attach with `x11vnc -display {display}`"
+        ));
     }
     // `--real-config` points the isolated fixture's workspace path at the caller's own workspace,
     // which a `manifest` assertion must not read — see `Assertion::Manifest`.
-    let workspace = (!options.real_config).then(|| out.join(fixture.workspace_dir));
-    check(&script.asserts, &taken, shots, workspace.as_deref())
+    let workspace = (!options.real_config).then_some(worker.workspace.as_path());
+    check(&script.asserts, &taken, shots, workspace)
+}
+
+/// Prints a finished scenario's buffered log and its verdict together, so parallel scenarios never
+/// interleave. Returns the scenario's name when it failed.
+fn report(fixture: &Fixture, name: &str, log: &Log, outcome: Result<()>) -> Option<String> {
+    let mut out = std::io::stdout().lock();
+    let _ = write!(out, "{}", log.text);
+    match outcome {
+        Ok(()) => {
+            let _ = writeln!(out, "{}: {name} passed", fixture.name);
+            None
+        }
+        Err(error) => {
+            drop(out);
+            eprintln!("{}: {name} FAILED: {error:#}", fixture.name);
+            Some(name.to_owned())
+        }
+    }
+}
+
+/// One scenario's progress lines. With one worker they print as they happen, as a serial run always
+/// has; with several they are held until the scenario ends, see [`report`].
+struct Log {
+    live: bool,
+    text: String,
+}
+
+impl Log {
+    fn new(live: bool) -> Self {
+        Self {
+            live,
+            text: String::new(),
+        }
+    }
+
+    fn line(&mut self, line: &str) {
+        if self.live {
+            println!("{line}");
+        } else {
+            self.text.push_str(line);
+            self.text.push('\n');
+        }
+    }
+}
+
+/// Where one worker's scenarios run: its own X display, isolated home and workspace. Worker 0 keeps
+/// the single-worker layout (`<out>/home`, `<out>/workspace` on `--display`) that `--keep`,
+/// `--real-config` and `screenshots` use; worker *i* lives under `<out>/workers/<i>` on the display
+/// *i* above it. Every worker restores from the one shared seed and writes shots to `<out>/shots`,
+/// whose directories are per scenario.
+struct Worker {
+    display: String,
+    home: PathBuf,
+    workspace: PathBuf,
+    /// The fixture's output directory, holding the shared seeds and the shots.
+    out: PathBuf,
+}
+
+impl Worker {
+    fn new(options: &Options, fixture: &Fixture, out: &Path, index: usize) -> Result<Self> {
+        let root = if index == 0 {
+            out.to_owned()
+        } else {
+            out.join("workers").join(index.to_string())
+        };
+        Ok(Self {
+            display: worker_display(&options.display, index)?,
+            home: absolute(&root.join("home"))?,
+            workspace: absolute(&root.join(fixture.workspace_dir))?,
+            out: out.to_owned(),
+        })
+    }
+}
+
+/// The display for worker `index`: `base` (`:<n>`) plus `index`.
+fn worker_display(base: &str, index: usize) -> Result<String> {
+    let number: usize = base
+        .strip_prefix(':')
+        .and_then(|number| number.parse().ok())
+        .with_context(|| format!("gui-pass: --display takes `:<number>`, not {base:?}"))?;
+    Ok(format!(":{}", number + index))
+}
+
+/// The seeded global config with workspace `name` pointed at `path` — a worker's own copy.
+fn worker_config(seed: &str, name: &str, path: &Path) -> Result<String> {
+    let mut config: toml::Table = toml::from_str(seed).context("parsing the seeded config")?;
+    let Some(workspace) = config
+        .get_mut("workspaces")
+        .and_then(toml::Value::as_table_mut)
+        .and_then(|workspaces| workspaces.get_mut(name))
+        .and_then(toml::Value::as_table_mut)
+    else {
+        bail!("gui-pass: the seeded config registers no workspace {name:?} — re-run with --reset");
+    };
+    workspace.insert(
+        "path".to_owned(),
+        toml::Value::String(path.to_string_lossy().into_owned()),
+    );
+    toml::to_string(&config).context("writing a worker's config")
+}
+
+/// Runs `run` over every item on up to `jobs` threads, each pulling the next item as it frees up, and
+/// returns the results in item order. `run` receives the worker index (`0..jobs`) with the item, so
+/// each worker can use resources only it touches.
+fn run_queue<T: Sync, R: Send>(jobs: usize, items: &[T], run: impl Fn(usize, &T) -> R + Sync) -> Vec<R> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Mutex, PoisonError};
+
+    let next = AtomicUsize::new(0);
+    let results: Mutex<Vec<Option<R>>> = Mutex::new(items.iter().map(|_| None).collect());
+    std::thread::scope(|scope| {
+        for worker in 0..jobs.clamp(1, items.len().max(1)) {
+            let (next, results, run) = (&next, &results, &run);
+            scope.spawn(move || {
+                loop {
+                    let index = next.fetch_add(1, Ordering::SeqCst);
+                    let Some(item) = items.get(index) else {
+                        break;
+                    };
+                    let result = run(worker, item);
+                    let mut results = results.lock().unwrap_or_else(PoisonError::into_inner);
+                    if let Some(slot) = results.get_mut(index) {
+                        *slot = Some(result);
+                    }
+                }
+            });
+        }
+    });
+    let results = results.into_inner().unwrap_or_else(PoisonError::into_inner);
+    let mut ordered = Vec::new();
+    for result in results.into_iter().flatten() {
+        ordered.push(result);
+    }
+    ordered
 }
 
 /// The scenario files to run: the named ones (a bare name, or a path), else every file in the
@@ -487,10 +641,13 @@ fn parse_args(args: &[String]) -> Result<Options> {
         workspace: None,
         keep: false,
         reset: false,
+        jobs: 1,
     };
+    let mut jobs = None;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
+            "--jobs" => jobs = Some(job_count(&value(&mut rest, "--jobs")?)?),
             "--keep" => options.keep = true,
             "--reset" => options.reset = true,
             "--real-config" => options.real_config = true,
@@ -503,7 +660,38 @@ fn parse_args(args: &[String]) -> Result<Options> {
             name => options.scripts.push(name.to_owned()),
         }
     }
+    let single = options.keep || options.real_config;
+    options.jobs = match jobs {
+        Some(count) if single && count > 1 => {
+            bail!("gui-pass: --keep and --real-config/--workspace drive one GUI, so they need --jobs 1")
+        }
+        Some(count) => count,
+        None if single => 1,
+        None => default_jobs(available_cores()),
+    };
     Ok(options)
+}
+
+/// How many scenarios run at once when `--jobs` is not given: one worker per four cores, since each
+/// runs a software-GL webview, capped at [`MAX_DEFAULT_JOBS`].
+fn default_jobs(cores: usize) -> usize {
+    (cores / 4).clamp(1, MAX_DEFAULT_JOBS)
+}
+
+/// The machine's core count, or 1 when it cannot be read.
+fn available_cores() -> usize {
+    std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
+}
+
+/// `--jobs`' value: a positive worker count.
+fn job_count(text: &str) -> Result<usize> {
+    let count: usize = text
+        .parse()
+        .with_context(|| format!("gui-pass: --jobs takes a number of workers, not {text:?}"))?;
+    if count == 0 {
+        bail!("gui-pass: --jobs needs at least one worker");
+    }
+    Ok(count)
 }
 
 /// The value following a flag.
@@ -543,7 +731,7 @@ fn preflight() -> Result<()> {
 
 /// Deletes the isolated home, the fixture workspace, the seeded global config and the shots.
 fn reset(fixture: &Fixture, out: &Path) -> Result<()> {
-    for dir in ["home", fixture.workspace_dir, SEED_DIR, "shots"] {
+    for dir in ["home", fixture.workspace_dir, SEED_DIR, "shots", "workers"] {
         let path = out.join(dir);
         if path.exists() {
             fs::remove_dir_all(&path).with_context(|| format!("removing {}", path.display()))?;
@@ -683,8 +871,8 @@ fn seed_media(fixture: &Fixture, home: &Path, workspace: &Path) -> Result<()> {
 
 /// Replaces the fixture workspace with a fresh copy of the seed, so every scenario starts from the
 /// same data. Nothing is running against it yet — this is called before the GUI launches.
-fn restore_workspace(fixture: &Fixture, out: &Path) -> Result<()> {
-    let seed = out.join(SEED_DIR);
+fn restore_workspace(fixture: &Fixture, worker: &Worker) -> Result<()> {
+    let seed = worker.out.join(SEED_DIR);
     if !seed.is_dir() {
         bail!(
             "{}: no seed at {} — re-run with --reset to reseed the fixture",
@@ -692,26 +880,32 @@ fn restore_workspace(fixture: &Fixture, out: &Path) -> Result<()> {
             seed.display()
         );
     }
-    let workspace = out.join(fixture.workspace_dir);
+    let workspace = &worker.workspace;
     if workspace.exists() {
-        fs::remove_dir_all(&workspace).with_context(|| format!("removing {}", workspace.display()))?;
+        fs::remove_dir_all(workspace).with_context(|| format!("removing {}", workspace.display()))?;
     }
-    copy_dir(&seed, &workspace)
+    copy_dir(&seed, workspace)
 }
 
 /// Replaces the isolated global config with a fresh copy of the seed (ADR 0033's `map-provider-switch`
 /// scenario writes to it, next to [`restore_workspace`]'s own reasoning) — nothing is running against
-/// it yet, called before the GUI launches.
-fn restore_config(out: &Path, home: &Path) -> Result<()> {
-    let seed = out.join(CONFIG_SEED_FILE);
+/// it yet, called before the GUI launches. The copy registers the fixture workspace at this worker's
+/// own [`Worker::workspace`] (see [`worker_config`]).
+fn restore_config(fixture: &Fixture, worker: &Worker) -> Result<()> {
+    let seed = worker.out.join(CONFIG_SEED_FILE);
     if !seed.is_file() {
         bail!(
             "gui-pass: no seeded config at {} — re-run with --reset to reseed the fixture",
             seed.display()
         );
     }
-    let config = config_file(home);
-    fs::copy(&seed, &config).with_context(|| format!("restoring {}", config.display()))?;
+    let text = fs::read_to_string(&seed).with_context(|| format!("reading {}", seed.display()))?;
+    let config = config_file(&worker.home);
+    if let Some(parent) = config.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    }
+    let rewritten = worker_config(&text, fixture.workspace, &worker.workspace)?;
+    fs::write(&config, rewritten).with_context(|| format!("restoring {}", config.display()))?;
     Ok(())
 }
 
@@ -779,9 +973,9 @@ fn absolute(path: &Path) -> Result<PathBuf> {
 /// `/dev/null`: `tracing_subscriber::fmt::init()` and any webview or GTK diagnostic write there, and a
 /// discarded stream makes a failing scenario undiagnosable. `RUST_LOG=info` because the default filter
 /// is `ERROR` only, which hides every `info!` the app emits.
-fn start_session(options: &Options, fixture: &Fixture, home: &Path, shots: &Path) -> Result<Session> {
+fn start_session(options: &Options, fixture: &Fixture, worker: &Worker, shots: &Path) -> Result<Session> {
     let xvfb = Command::new("Xvfb")
-        .args([&options.display, "-screen", "0", SCREEN, "-nolisten", "tcp"])
+        .args([&worker.display, "-screen", "0", SCREEN, "-nolisten", "tcp"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -791,7 +985,7 @@ fn start_session(options: &Options, fixture: &Fixture, home: &Path, shots: &Path
         gui: None,
         keep: false,
     };
-    wait_for_xvfb(&options.display, &mut session.xvfb)?;
+    wait_for_xvfb(&worker.display, &mut session.xvfb)?;
 
     let log_path = shots.join("gui.log");
     let log = fs::File::create(&log_path).with_context(|| format!("creating {}", log_path.display()))?;
@@ -801,7 +995,7 @@ fn start_session(options: &Options, fixture: &Fixture, home: &Path, shots: &Path
     // No arguments, so the launcher takes its GUI arm (ADR 0035 §2) — which is what makes every
     // scenario a test of that dispatch as well as of the window it opens.
     let mut gui = Command::new(LAUNCHER);
-    gui.env("DISPLAY", &options.display)
+    gui.env("DISPLAY", &worker.display)
         // GTK prefers Wayland when the session advertises it, which would put the window on the
         // caller's desktop instead of the headless display.
         .env("GDK_BACKEND", "x11")
@@ -812,7 +1006,7 @@ fn start_session(options: &Options, fixture: &Fixture, home: &Path, shots: &Path
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(errors));
     if !options.real_config {
-        gui.envs(isolated_home(home));
+        gui.envs(isolated_home(&worker.home));
     }
     if let Some(name) = options.workspace.as_deref() {
         gui.env("VITNI_WORKSPACE", name);
@@ -875,7 +1069,8 @@ fn focus(display: &str, window: &str, size: (u32, u32)) -> Result<()> {
 }
 
 /// Runs every step, returning the shot names in the order they were taken.
-fn drive(display: &str, window: &Window, steps: &[Step], shots: &Path, session: &mut Session) -> Result<Vec<String>> {
+fn drive(window: &Window, steps: &[Step], shots: &Path, session: &mut Session, log: &mut Log) -> Result<Vec<String>> {
+    let display = window.display.as_str();
     let mut taken = Vec::new();
     for step in steps {
         match step {
@@ -883,46 +1078,46 @@ fn drive(display: &str, window: &Window, steps: &[Step], shots: &Path, session: 
                 let path = shot_file(shots, taken.len() + 1, name);
                 grab(display, &window.id, &path)?;
                 assert_painted(&path)?;
-                println!("  shot {}", path.display());
+                log.line(&format!("  shot {}", path.display()));
                 taken.push(name.clone());
             }
             Step::Click { at, label } => {
-                println!("  {label}");
+                log.line(&format!("  {label}"));
                 xdotool(display, &["mousemove", &at[0].to_string(), &at[1].to_string()])?;
                 xdotool(display, &["click", "1"])?;
                 window.settle()?;
             }
             Step::Key { chord, label } => {
-                println!("  {label}");
+                log.line(&format!("  {label}"));
                 xdotool(display, &["key", "--clearmodifiers", chord])?;
                 window.settle()?;
             }
             Step::Text { text, label } => {
-                println!("  {label}");
+                log.line(&format!("  {label}"));
                 type_text(display, text)?;
                 window.settle()?;
             }
             Step::Drag { from, by, label } => {
-                println!("  {label}");
+                log.line(&format!("  {label}"));
                 drag(display, *from, *by)?;
                 window.settle()?;
             }
             Step::Wheel { at, clicks, label } => {
-                println!("  {label}");
+                log.line(&format!("  {label}"));
                 wheel(display, *at, *clicks)?;
                 window.settle()?;
             }
             Step::AwaitExit { label } => {
-                println!("  {label}");
+                log.line(&format!("  {label}"));
                 await_exit(session)?;
             }
             Step::WmClose { label } => {
-                println!("  {label}");
+                log.line(&format!("  {label}"));
                 wm_close(display, &window.id)?;
                 window.settle()?;
             }
             Step::Wait { seconds, label } => {
-                println!("  {label}");
+                log.line(&format!("  {label}"));
                 sleep(Duration::from_secs(*seconds));
                 window.settle()?;
             }
@@ -1064,6 +1259,7 @@ fn wheel(display: &str, at: [i32; 2], clicks: i32) -> Result<()> {
 /// reads its pixels back directly, so settling can poll many times a second without spawning a
 /// process per frame.
 struct Window {
+    display: String,
     id: String,
     xid: u32,
     connection: x11rb::rust_connection::RustConnection,
@@ -1073,7 +1269,12 @@ impl Window {
     fn connect(display: &str, id: String) -> Result<Self> {
         let xid = id.parse().with_context(|| format!("parsing the window id {id:?}"))?;
         let (connection, _) = x11rb::connect(Some(display)).with_context(|| format!("connecting to {display}"))?;
-        Ok(Self { id, xid, connection })
+        Ok(Self {
+            display: display.to_owned(),
+            id,
+            xid,
+            connection,
+        })
     }
 
     /// Waits until the window has stopped changing for [`SETTLE_QUIET`], or [`SETTLE_CAP`] has passed.
@@ -1398,8 +1599,9 @@ fn shot_path(taken: &[String], shots: &Path, name: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Assertion, MIN_STANDARD_DEVIATION, Script, Step, WINDOW, describe_region, differing_pixels, focus_click,
-        keysyms, painted_failed, read_region, window_size,
+        Assertion, MIN_STANDARD_DEVIATION, Script, Step, WINDOW, available_cores, default_jobs, describe_region,
+        differing_pixels, focus_click, keysyms, painted_failed, parse_args, read_region, run_queue, window_size,
+        worker_config, worker_display,
     };
     use std::path::Path;
 
@@ -1446,6 +1648,106 @@ mod tests {
         };
         assert_eq!(text, "Oslo");
         assert_eq!(label, "type: Oslo");
+    }
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|arg| (*arg).to_owned()).collect()
+    }
+
+    #[test]
+    fn the_default_worker_count_follows_the_cores_up_to_four() {
+        // Each worker runs a software-GL webview; one per four cores kept every scenario green here,
+        // and past four the gain was small while a timing-sensitive scenario started to fail.
+        assert_eq!(default_jobs(1), 1);
+        assert_eq!(default_jobs(4), 1);
+        assert_eq!(default_jobs(8), 2);
+        assert_eq!(default_jobs(12), 3);
+        assert_eq!(default_jobs(22), 4);
+        assert_eq!(default_jobs(64), 4);
+    }
+
+    #[test]
+    fn jobs_default_to_the_parallel_default_and_take_a_count() {
+        let default = parse_args(&args(&[])).expect("no flags parse");
+        assert_eq!(default.jobs, default_jobs(available_cores()));
+        let four = parse_args(&args(&["--jobs", "4", "map-zoom"])).expect("--jobs 4 parses");
+        assert_eq!(four.jobs, 4);
+        assert_eq!(four.scripts, ["map-zoom"]);
+    }
+
+    #[test]
+    fn jobs_must_be_a_positive_count() {
+        assert!(
+            parse_args(&args(&["--jobs", "0"])).is_err(),
+            "zero workers can run nothing"
+        );
+        assert!(
+            parse_args(&args(&["--jobs", "many"])).is_err(),
+            "a non-number is rejected"
+        );
+        assert!(parse_args(&args(&["--jobs"])).is_err(), "the count is required");
+    }
+
+    #[test]
+    fn parallel_runs_refuse_keep_and_real_config() {
+        // `--keep` leaves one GUI up to attach to, and `--real-config` shares one real workspace — neither
+        // means anything across several workers at once.
+        assert!(parse_args(&args(&["--jobs", "2", "--keep"])).is_err());
+        assert!(parse_args(&args(&["--jobs", "2", "--real-config"])).is_err());
+        assert!(parse_args(&args(&["--jobs", "2", "--workspace", "gen"])).is_err());
+        let serial = parse_args(&args(&["--jobs", "1", "--keep"])).expect("one worker may keep its GUI");
+        assert!(serial.keep);
+    }
+
+    #[test]
+    fn keep_and_real_config_imply_one_worker_when_jobs_is_not_given() {
+        assert_eq!(parse_args(&args(&["--keep"])).expect("parses").jobs, 1);
+        assert_eq!(parse_args(&args(&["--workspace", "gen"])).expect("parses").jobs, 1);
+    }
+
+    #[test]
+    fn each_worker_gets_the_next_display() {
+        assert_eq!(worker_display(":99", 0).expect("valid"), ":99");
+        assert_eq!(worker_display(":99", 3).expect("valid"), ":102");
+        assert!(worker_display("99", 1).is_err(), "a display is `:<number>`");
+    }
+
+    #[test]
+    fn a_worker_config_points_the_workspace_at_the_workers_copy() {
+        let seed =
+            "default = \"gui-pass\"\n\n[workspaces.gui-pass]\npath = \"/old/workspace\"\n\n[operator]\nid = \"x\"\n";
+        let config = worker_config(seed, "gui-pass", Path::new("/w/1/workspace")).expect("rewrites");
+        let parsed: toml::Table = toml::from_str(&config).expect("still TOML");
+        assert_eq!(
+            parsed["workspaces"]["gui-pass"]["path"].as_str(),
+            Some("/w/1/workspace")
+        );
+        assert_eq!(parsed["operator"]["id"].as_str(), Some("x"), "everything else is kept");
+    }
+
+    #[test]
+    fn a_worker_config_without_the_workspace_is_an_error() {
+        let seed = "[workspaces.other]\npath = \"/x\"\n";
+        assert!(worker_config(seed, "gui-pass", Path::new("/w")).is_err());
+    }
+
+    #[test]
+    fn the_queue_runs_every_item_once_and_keeps_their_order() {
+        let items: Vec<usize> = (0..10).collect();
+        let workers = std::sync::Mutex::new(std::collections::BTreeSet::new());
+        let results = run_queue(3, &items, |worker, item| {
+            workers.lock().expect("not poisoned").insert(worker);
+            item * 10
+        });
+        assert_eq!(results, (0..10).map(|item| item * 10).collect::<Vec<_>>());
+        let used = workers.into_inner().expect("not poisoned");
+        assert!(used.iter().all(|worker| *worker < 3), "only workers 0..3 run: {used:?}");
+    }
+
+    #[test]
+    fn more_workers_than_items_is_fine() {
+        assert_eq!(run_queue(8, &[1, 2], |_, item| *item), [1, 2]);
+        assert_eq!(run_queue(1, &[1, 2, 3], |worker, item| worker + item), [1, 2, 3]);
     }
 
     #[test]
