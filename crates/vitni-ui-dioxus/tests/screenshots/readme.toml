@@ -32,12 +32,12 @@ label = "explorer: Marit Olsdotter Vestheim (I0005), the pedigree's focus"
 
 [[step]]
 do = "click"
-at = [85, 734]
+at = [85, 713]
 label = "rail: Pedigree"
 
 [[step]]
 do = "click"
-at = [455, 171]
+at = [479, 171]
 label = "pedigree: the generations field"
 
 [[step]]
@@ -52,7 +52,7 @@ label = "type: 3"
 
 [[step]]
 do = "click"
-at = [548, 171]
+at = [572, 171]
 label = "pedigree: Show"
 
 [[step]]
@@ -61,7 +61,7 @@ name = "pedigree"
 
 [[step]]
 do = "click"
-at = [85, 882]
+at = [85, 861]
 label = "rail: Geography"
 
 [[step]]
