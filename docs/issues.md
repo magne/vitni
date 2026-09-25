@@ -239,6 +239,10 @@ which is what makes them worth fixing in the shared code rather than per screen.
   clamping the offset. On a desktop session that clamp leaves part of the content offset with no
   scrollbar to recover it. Under Xvfb it repaints correctly, so the suspected compositor cause is
   unconfirmed. Fix: key `.tab-body` on the active tab so every switch starts at the top. — #374
+- **Fast typing can lose characters in record text fields.** Under Xvfb, keys 12 ms apart into a new
+  Tag's Name came out wrong 3 runs in 4 (`TR-7Olo` for "TRee-7 Oslo"). At 30 ms apart none were lost.
+  The suspected cause, unconfirmed, is the controlled input's round trip: a key landing before the
+  re-render writes the old `value` back is overwritten. Needs a check on a real desktop. — #382
 
 ### Lists, search & scale
 
