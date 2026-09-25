@@ -163,27 +163,32 @@ pub fn PedigreeScreen() -> Element {
                     }
                 }
             }
-            div { style: "flex:1;min-height:0;overflow:auto;padding:var(--sp-4) var(--sp-5)",
-                match view() {
-                    PedigreeView::Relationships => relationship_body(
-                        &chrome.0,
-                        &loading,
-                        relationship_data.read_unchecked().as_ref(),
-                        person_a_input,
-                        person_b_input,
-                        person_a,
-                        person_b,
-                    ),
-                    other => pedigree_body(
-                        &chrome.0,
-                        state.data_loc(),
-                        &loading,
-                        other,
-                        depth(),
-                        pedigree_data.read_unchecked().as_ref(),
-                    ),
+            // The view's own scroller, keyed like `Tabs`' panel so a view switch opens at the top (#374).
+            {rsx! {
+                div {
+                    key: "{view().id()}",
+                    style: "flex:1;min-height:0;overflow:auto;padding:var(--sp-4) var(--sp-5)",
+                    match view() {
+                        PedigreeView::Relationships => relationship_body(
+                            &chrome.0,
+                            &loading,
+                            relationship_data.read_unchecked().as_ref(),
+                            person_a_input,
+                            person_b_input,
+                            person_a,
+                            person_b,
+                        ),
+                        other => pedigree_body(
+                            &chrome.0,
+                            state.data_loc(),
+                            &loading,
+                            other,
+                            depth(),
+                            pedigree_data.read_unchecked().as_ref(),
+                        ),
+                    }
                 }
-            }
+            }}
         }
     }
 }
