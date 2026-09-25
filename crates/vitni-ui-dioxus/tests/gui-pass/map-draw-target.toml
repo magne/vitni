@@ -3,10 +3,11 @@
 # (Kristiansand, `xtask/src/gui_pass.rs`) and nothing auto-selects it, so "no target" here is just
 # "never click the rail row" before finishing the polygon.
 #
-# Trap: the toast is *not* an overlay — `.toast` has no `position` (`components.css`) and renders as a
-# sibling grid row of the screen column, so showing it shrinks the map surface (and, post-#252, repaints
-# the canvas) and moves the Finish/Clear row up from y=1048 to y=995. The second Finish click below is
-# read off that post-toast layout, not off `map-polygon.toml`'s (pre-toast) row.
+# The refusal toast renders in the shell's notice layer (#208), which is out of grid flow, so it no longer
+# moves the Finish/Clear row: both Finish clicks below aim at the same y=1048. When the toast was a grid
+# row it pushed that row up to y=995, and the second click stayed aimed there after #208. It then landed
+# on the canvas and added a fourth vertex, which is what made `targeted`/`recovered` differ while the
+# geometry panel never opened.
 #
 # "The draft survives the refusal" is asserted by *finishing again* after picking a place, not by
 # clicking Clear and watching the ring vanish: Clear does erase the ring (`map-clear-draft.toml` covers
@@ -71,8 +72,8 @@ name = "targeted"
 
 [[step]]
 do = "click"
-at = [541, 995]
-label = "Finish polygon (post-toast row)"
+at = [541, 1048]
+label = "Finish polygon, again"
 
 [[step]]
 do = "shot"
@@ -94,4 +95,7 @@ because = "picking a place must highlight it as the draw target"
 [[assert]]
 kind = "differ"
 shots = ["targeted", "recovered"]
+# The geometry panel's header band, top right: a whole-window compare also passed when the click missed
+# Finish and only added a vertex to the ring.
+region = [1420, 30, 380, 60]
 because = "a refused draft must survive, so finishing again with a target opens the geometry panel"
