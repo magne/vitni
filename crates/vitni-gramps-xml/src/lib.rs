@@ -165,6 +165,7 @@ mod tests {
                 source_ref: Some("_s1".to_owned()),
                 page: Some("p. 5".to_owned()),
                 confidence: Some(2),
+                note_refs: vec!["_n2".to_owned()],
             }],
             repositories: vec![Repository {
                 handle: "_r1".to_owned(),
@@ -177,16 +178,30 @@ mod tests {
                 file: Some("photo.jpg".to_owned()),
                 mime: Some("image/jpeg".to_owned()),
             }],
-            notes: vec![Note {
-                handle: "_n1".to_owned(),
-                gramps_id: Some("N0001".to_owned()),
-                text: Some("A research note.".to_owned()),
-            }],
+            notes: sample_notes(),
             tags: vec![Tag {
                 handle: "_t1".to_owned(),
                 name: Some("Important".to_owned()),
             }],
         }
+    }
+
+    /// The sample's notes: an untyped one on the person and a `Transcript` on the citation.
+    fn sample_notes() -> Vec<Note> {
+        vec![
+            Note {
+                handle: "_n1".to_owned(),
+                gramps_id: Some("N0001".to_owned()),
+                note_type: None,
+                text: Some("A research note.".to_owned()),
+            },
+            Note {
+                handle: "_n2".to_owned(),
+                gramps_id: Some("N0002".to_owned()),
+                note_type: Some("Transcript".to_owned()),
+                text: Some("John Smith, carpenter.\nBorn in Mandal.".to_owned()),
+            },
+        ]
     }
 
     #[test]
@@ -195,6 +210,31 @@ mod tests {
         let bytes = emit(&db);
         let parsed = parse(&bytes).expect("parse");
         assert_eq!(parsed, db);
+    }
+
+    #[test]
+    fn parses_a_hand_written_citation_noteref_and_note_type() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<citations>
+<citation handle="_c1" id="C0001">
+<page>p. 5</page>
+<confidence>2</confidence>
+<noteref hlink="_n1"/>
+<noteref hlink="_n2"/>
+<sourceref hlink="_s1"/>
+</citation>
+</citations>
+<notes>
+<note handle="_n1" id="N0001" type="Transcript">
+<text>John Smith, carpenter.</text>
+</note>
+</notes>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(db.citations[0].note_refs, vec!["_n1".to_owned(), "_n2".to_owned()]);
+        assert_eq!(db.notes[0].note_type.as_deref(), Some("Transcript"));
     }
 
     #[test]

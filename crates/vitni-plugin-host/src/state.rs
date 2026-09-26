@@ -21,7 +21,8 @@ use vitni_app::{
     Workspace, build_genealogical_date,
 };
 use vitni_core::enums::{
-    ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, PlaceType, Restriction, Sex, SourceMediaType,
+    ChildParentRelationship, EventType, EvidenceLevel, NoteType, ParticipantRole, PlaceType, Restriction, Sex,
+    SourceMediaType,
 };
 use wasmtime::StoreLimits;
 use wasmtime::component::ResourceTable;
@@ -596,6 +597,26 @@ impl commands::Host for HostState {
         )
         .await
         .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_note_type(&mut self, note: String, note_type: types::NoteType) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        vitni_app::set_note_type(
+            &self.workspace,
+            &self.session,
+            &note,
+            to_note_type(note_type),
+            self.mutation_meta(),
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn attach_citation_note(&mut self, citation: String, note: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        vitni_app::attach_citation_note(&self.workspace, &self.session, &citation, &note, self.mutation_meta())
+            .await
+            .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_person_note(&mut self, person: String, note: String) -> Result<(), types::CapabilityError> {
@@ -1769,6 +1790,7 @@ impl query::Host for HostState {
                 source: citation.source.map(|s| s.human_id),
                 page: citation.page,
                 confidence: citation.confidence.map(from_confidence),
+                notes: citation.notes.into_iter().map(|note| note.human_id).collect(),
                 restrictions: from_restrictions(&citation.restrictions),
             })
             .collect())
@@ -1803,6 +1825,7 @@ impl query::Host for HostState {
             .into_iter()
             .map(|note| types::NoteDto {
                 human_id: note.human_id,
+                note_type: note.note_type.map(from_note_type),
                 text: note.text,
                 restrictions: from_restrictions(&note.restrictions),
             })
@@ -1881,6 +1904,28 @@ fn from_confidence(confidence: vitni_app::Confidence) -> types::Confidence {
         vitni_app::Confidence::Normal => types::Confidence::Normal,
         vitni_app::Confidence::High => types::Confidence::High,
         vitni_app::Confidence::VeryHigh => types::Confidence::VeryHigh,
+    }
+}
+
+/// Maps the WIT `note-type` variant onto the domain [`NoteType`].
+fn to_note_type(note_type: types::NoteType) -> NoteType {
+    match note_type {
+        types::NoteType::General => NoteType::General,
+        types::NoteType::Research => NoteType::Research,
+        types::NoteType::Transcript => NoteType::Transcript,
+        types::NoteType::Citation => NoteType::Citation,
+        types::NoteType::Custom(label) => NoteType::Custom(label),
+    }
+}
+
+/// Maps the domain [`NoteType`] back onto the WIT `note-type` variant.
+fn from_note_type(note_type: NoteType) -> types::NoteType {
+    match note_type {
+        NoteType::General => types::NoteType::General,
+        NoteType::Research => types::NoteType::Research,
+        NoteType::Transcript => types::NoteType::Transcript,
+        NoteType::Citation => types::NoteType::Citation,
+        NoteType::Custom(label) => types::NoteType::Custom(label),
     }
 }
 

@@ -56,13 +56,13 @@ pub fn emit(tree: &Tree) -> String {
             emit_event(&mut out, event);
         }
         for citation in &family.citations {
-            emit_citation(&mut out, citation);
+            emit_citation(&mut out, 1, citation);
         }
         for media in &family.media {
             emit_media(&mut out, media);
         }
         for note in &family.notes {
-            let _ = writeln!(out, "1 NOTE {note}");
+            emit_multiline(&mut out, 1, "NOTE", note);
         }
     }
 
@@ -152,13 +152,13 @@ fn emit_individual(out: &mut String, individual: &Individual, fams: &FamilyXrefM
         }
     }
     for citation in &individual.citations {
-        emit_citation(out, citation);
+        emit_citation(out, 1, citation);
     }
     for media in &individual.media {
         emit_media(out, media);
     }
     for note in &individual.notes {
-        let _ = writeln!(out, "1 NOTE {note}");
+        emit_multiline(out, 1, "NOTE", note);
     }
 }
 
@@ -249,11 +249,38 @@ fn emit_name(out: &mut String, name: &Name) {
     }
 }
 
-/// Emits one citation (`1 SOUR @S..@`, then `2 PAGE` when present).
-fn emit_citation(out: &mut String, citation: &Citation) {
-    let _ = writeln!(out, "1 SOUR @{}@", citation.source_xref);
+/// Emits one citation at `level` (`SOUR @S..@`, then `PAGE` when present and one `DATA` holding a
+/// `TEXT` per transcription).
+fn emit_citation(out: &mut String, level: u8, citation: &Citation) {
+    let _ = writeln!(out, "{level} SOUR @{}@", citation.source_xref);
     if let Some(page) = &citation.page {
-        let _ = writeln!(out, "2 PAGE {page}");
+        let _ = writeln!(out, "{} PAGE {page}", level + 1);
+    }
+    if !citation.transcriptions.is_empty() {
+        let _ = writeln!(out, "{} DATA", level + 1);
+        for text in &citation.transcriptions {
+            emit_multiline(out, level + 2, "TEXT", text);
+        }
+    }
+}
+
+/// Emits `text` as `level TAG first-line`, each further line a `CONT` one level deeper — GEDCOM
+/// forbids a raw line break inside a value.
+fn emit_multiline(out: &mut String, level: u8, tag: &str, text: &str) {
+    let mut lines = text.split('\n');
+    let first = lines.next().unwrap_or_default();
+    emit_line(out, level, tag, first);
+    for line in lines {
+        emit_line(out, level + 1, "CONT", line);
+    }
+}
+
+/// Emits `level TAG value`, or `level TAG` alone when the value is empty (no trailing space).
+fn emit_line(out: &mut String, level: u8, tag: &str, value: &str) {
+    if value.is_empty() {
+        let _ = writeln!(out, "{level} {tag}");
+    } else {
+        let _ = writeln!(out, "{level} {tag} {value}");
     }
 }
 
@@ -304,7 +331,7 @@ fn emit_partner_age(out: &mut String, tag: &str, age: Option<&Age>) {
     }
 }
 
-/// Emits one event-level `ASSO` witness (`2 ASSO @x@`, then `3 ROLE`, nested `3 SOUR`/`4 PAGE`, and
+/// Emits one event-level `ASSO` witness (`2 ASSO @x@`, then `3 ROLE`, nested `3 SOUR` citations, and
 /// `3 NOTE`).
 fn emit_event_association(out: &mut String, association: &EventAssociation) {
     let _ = writeln!(out, "2 ASSO @{}@", association.other_xref);
@@ -312,13 +339,10 @@ fn emit_event_association(out: &mut String, association: &EventAssociation) {
         let _ = writeln!(out, "3 ROLE {}", association_role(role));
     }
     for citation in &association.citations {
-        let _ = writeln!(out, "3 SOUR @{}@", citation.source_xref);
-        if let Some(page) = &citation.page {
-            let _ = writeln!(out, "4 PAGE {page}");
-        }
+        emit_citation(out, 3, citation);
     }
     for note in &association.notes {
-        let _ = writeln!(out, "3 NOTE {note}");
+        emit_multiline(out, 3, "NOTE", note);
     }
 }
 

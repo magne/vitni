@@ -17,7 +17,7 @@ crate-type = ["cdylib"]
 # test-only fixture exercises every host mechanic, so it declares the fixture world's imports.
 [package.metadata.vitni-plugin]
 role = "test-fixture"
-host_api = "0.22.0"
+host_api = "0.23.0"
 capabilities = ["log", "commands", "net", "media-store", "ai", "present"]
 
 [dependencies]

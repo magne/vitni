@@ -12,9 +12,9 @@ use std::sync::{Arc, Mutex};
 
 use uuid::Uuid;
 use vitni_app::{
-    AiConfig, AppDefaults, OperatorConfig, ParticipantRole, PersonSummary, Session, Workspace, WorkspaceDefaults,
-    list_citations, list_events, list_families, list_media, list_notes, list_persons, list_places, list_sources,
-    list_tags,
+    AiConfig, AppDefaults, NoteType, OperatorConfig, ParticipantRole, PersonSummary, Session, Workspace,
+    WorkspaceDefaults, list_citations, list_events, list_families, list_media, list_notes, list_persons, list_places,
+    list_sources, list_tags,
 };
 use vitni_core::ids::AgentId;
 use vitni_plugin_host::{
@@ -722,6 +722,110 @@ async fn gramps_imports_and_exports_a_repository_call_number_and_medium() {
         vitni_app::SourceMediaType::Film,
         "medium survived export and re-import"
     );
+}
+
+/// A citation's transcription (issue #344): a `Transcript` note referenced from the `<citation>`, plus
+/// a Gramps-native and a Gramps-only note type on the person so the type mapping is exercised both ways.
+const CITATION_TRANSCRIPTION: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_p1" id="I0001">
+<name><first>John</first><surname>Smith</surname></name>
+<citationref hlink="_c1"/>
+<noteref hlink="_n2"/>
+<noteref hlink="_n3"/>
+</person>
+</people>
+<sources>
+<source handle="_s1" id="S0001"><stitle>1850 U.S. Federal Census</stitle></source>
+</sources>
+<citations>
+<citation handle="_c1" id="C0001"><page>line 14</page><noteref hlink="_n1"/><sourceref hlink="_s1"/></citation>
+</citations>
+<notes>
+<note handle="_n1" id="N0001" type="Transcript"><text>Smith, John - age 0, b. New York.</text></note>
+<note handle="_n2" id="N0002" type="General"><text>A general note.</text></note>
+<note handle="_n3" id="N0003" type="To Do"><text>Find the baptism.</text></note>
+</notes>
+</database>
+"#;
+
+/// Asserts [`CITATION_TRANSCRIPTION`]'s citation carries its `Transcript` note and every note kept its type.
+async fn assert_citation_transcription(workspace: &Workspace, stage: &str) {
+    let citations = list_citations(workspace).await.expect("citations");
+    let notes: Vec<_> = citations[0]
+        .notes
+        .iter()
+        .map(|note| (note.note_type.clone(), note.text.as_deref()))
+        .collect();
+    assert_eq!(
+        notes,
+        vec![(Some(NoteType::Transcript), Some("Smith, John - age 0, b. New York."))],
+        "{stage}: the citation's transcription"
+    );
+    let mut types: Vec<_> = list_notes(workspace)
+        .await
+        .expect("notes")
+        .into_iter()
+        .map(|note| note.note_type)
+        .collect();
+    types.sort_by_key(|note_type| format!("{note_type:?}"));
+    assert_eq!(
+        types,
+        vec![
+            Some(NoteType::Custom("To Do".to_owned())),
+            Some(NoteType::General),
+            Some(NoteType::Transcript),
+        ],
+        "{stage}: note types"
+    );
+}
+
+#[tokio::test]
+async fn gramps_imports_and_exports_a_citation_transcription() {
+    let host = common::host();
+    let importer = common::component("gramps-import");
+    let exporter = common::component("gramps-export");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.gramps", CITATION_TRANSCRIPTION.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    assert_citation_transcription(&workspace, "import").await;
+
+    let exported = io_dir.path().join("out.gramps");
+    let (_, workspace) = host
+        .run_bulk_export(
+            &exporter,
+            invocation(workspace, export_grants()),
+            ExportTarget::File(exported.clone()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("export");
+    drop(workspace);
+
+    let (root2, _dir2) = init_workspace();
+    let workspace2 = open_workspace(&root2).await;
+    let (_, workspace2) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace2, import_grants()),
+            exported,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("re-import");
+    assert_citation_transcription(&workspace2, "re-import").await;
 }
 
 /// A second `<name>` (PR4 Step C item 1): must be kept, not silently clobber the first.

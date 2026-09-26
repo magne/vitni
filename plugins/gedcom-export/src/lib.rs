@@ -13,15 +13,15 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.22.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.22.0": vitni_plugin_api::log,
-        "vitni:host-api/query@0.22.0": vitni_plugin_api::query,
-        "vitni:host-api/progress@0.22.0": vitni_plugin_api::progress,
-        "vitni:host-api/export-sink@0.22.0": vitni_plugin_api::export_sink,
+        "vitni:host-api/types@0.23.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.23.0": vitni_plugin_api::log,
+        "vitni:host-api/query@0.23.0": vitni_plugin_api::query,
+        "vitni:host-api/progress@0.23.0": vitni_plugin_api::progress,
+        "vitni:host-api/export-sink@0.23.0": vitni_plugin_api::export_sink,
     },
 });
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use vitni_gedcom::{Association, Event, EventAssociation, EventKind, Fact, Place};
 use vitni_plugin_api::{convert, query, types};
@@ -43,7 +43,8 @@ impl Guest for Exporter {
         let families = query::list_families().map_err(|error| format!("list-families failed: {error:?}"))?;
         let events = query::list_events().map_err(|error| format!("list-events failed: {error:?}"))?;
         let sources = query::list_sources().map_err(|error| format!("list-sources failed: {error:?}"))?;
-        let repositories = query::list_repositories().map_err(|error| format!("list-repositories failed: {error:?}"))?;
+        let repositories =
+            query::list_repositories().map_err(|error| format!("list-repositories failed: {error:?}"))?;
         let citations = query::list_citations().map_err(|error| format!("list-citations failed: {error:?}"))?;
         let notes = query::list_notes().map_err(|error| format!("list-notes failed: {error:?}"))?;
         let person_count = persons.len() as u32;
@@ -72,21 +73,37 @@ impl Guest for Exporter {
         }
 
         // Owned-record content keyed by human id, so each person's attached citations/media/notes
-        // reconstruct their INDI.SOUR/OBJE/NOTE content.
+        // reconstruct their INDI.SOUR/OBJE/NOTE content. A citation's `Transcript` notes are its
+        // `DATA.TEXT` (data-model §6).
+        let mut transcripts: HashSet<String> = HashSet::new();
+        for note in &notes {
+            if let Some(types::NoteType::Transcript) = note.note_type {
+                transcripts.insert(note.human_id.clone());
+            }
+        }
+        let note_content: HashMap<String, String> = notes
+            .into_iter()
+            .filter_map(|n| n.text.map(|text| (n.human_id, text)))
+            .collect();
         let citation_content: HashMap<String, vitni_gedcom::Citation> = citations
             .into_iter()
             .map(|c| {
+                let transcriptions = c
+                    .notes
+                    .iter()
+                    .filter(|note| transcripts.contains(*note))
+                    .filter_map(|note| note_content.get(note).cloned())
+                    .collect();
                 (
                     c.human_id,
                     vitni_gedcom::Citation {
                         source_xref: c.source.unwrap_or_default(),
                         page: c.page,
+                        transcriptions,
                     },
                 )
             })
             .collect();
-        let note_content: HashMap<String, String> =
-            notes.into_iter().filter_map(|n| n.text.map(|text| (n.human_id, text))).collect();
 
         let mut individuals: Vec<vitni_gedcom::Individual> = persons
             .into_iter()
@@ -158,7 +175,11 @@ impl Guest for Exporter {
                     author: source.author,
                     pub_info: source.pub_info,
                     abbrev: source.abbrev,
-                    repository_refs: source.repositories.into_iter().map(repository_citation_from_wit).collect(),
+                    repository_refs: source
+                        .repositories
+                        .into_iter()
+                        .map(repository_citation_from_wit)
+                        .collect(),
                 })
                 .collect(),
             repositories: repositories
@@ -224,14 +245,18 @@ fn distribute_events(
         // An explicit family↔event link nests the event under its family directly (robust even when
         // the event has no participants); otherwise fall back to the participant-set heuristic.
         if let Some(&index) = family_event_links.get(&event_dto.human_id) {
-            families[index].events.push(family_event(base, participants, note_content));
+            families[index]
+                .events
+                .push(family_event(base, participants, note_content));
             continue;
         }
         if is_family_event(kind) {
             let set: BTreeSet<String> = participants.iter().map(|p| p.person.clone()).collect();
             if let Some(index) = family_partner_sets.iter().position(|partners| *partners == set) {
                 let partners = families[index].partners.clone();
-                families[index].events.push(family_event_for(base, participants, &partners, note_content));
+                families[index]
+                    .events
+                    .push(family_event_for(base, participants, &partners, note_content));
                 continue;
             }
         }

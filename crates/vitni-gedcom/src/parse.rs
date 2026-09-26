@@ -161,14 +161,7 @@ fn individual(node: &Node) -> Individual {
                     });
                 }
             }
-            "SOUR" => {
-                if let Some(source_xref) = unwrap_xref(&child.value) {
-                    individual.citations.push(Citation {
-                        source_xref: source_xref.to_owned(),
-                        page: child.child_value("PAGE"),
-                    });
-                }
-            }
+            "SOUR" => individual.citations.extend(citation(child)),
             "OBJE" => individual.media.push(media_object(child)),
             "NOTE" => {
                 if let Some(text) = non_empty(&child.full_value()) {
@@ -209,14 +202,7 @@ fn family(node: &Node) -> Family {
             }
             "_UID" => family.uid = non_empty(&child.value),
             "RESN" => family.restrictions = parse_resn(&child.full_value()),
-            "SOUR" => {
-                if let Some(source_xref) = unwrap_xref(&child.value) {
-                    family.citations.push(Citation {
-                        source_xref: source_xref.to_owned(),
-                        page: child.child_value("PAGE"),
-                    });
-                }
-            }
+            "SOUR" => family.citations.extend(citation(child)),
             "OBJE" => family.media.push(media_object(child)),
             "NOTE" => {
                 if let Some(text) = non_empty(&child.full_value()) {
@@ -337,6 +323,23 @@ fn place(node: &Node) -> Option<Place> {
     })
 }
 
+/// Interprets a `SOUR` citation node: the source pointer, `PAGE`, and each `DATA.TEXT`
+/// transcription. A `SOUR` without an xref pointer (an inline source) is skipped.
+fn citation(node: &Node) -> Option<Citation> {
+    let source_xref = unwrap_xref(&node.value)?.to_owned();
+    let mut transcriptions = Vec::new();
+    for data in node.children.iter().filter(|child| child.tag == "DATA") {
+        for text in data.children.iter().filter(|child| child.tag == "TEXT") {
+            transcriptions.extend(non_empty(&text.full_value()));
+        }
+    }
+    Some(Citation {
+        source_xref,
+        page: node.child_value("PAGE"),
+        transcriptions,
+    })
+}
+
 /// Reads a `FAM`-event partner's age (`HUSB`/`WIFE` → `AGE`).
 fn partner_age(node: &Node, tag: &str) -> Option<vitni_interchange::Age> {
     node.child(tag)
@@ -352,12 +355,7 @@ fn event_association(node: &Node) -> Option<EventAssociation> {
         .children
         .iter()
         .filter(|c| c.tag == "SOUR")
-        .filter_map(|c| {
-            unwrap_xref(&c.value).map(|source_xref| Citation {
-                source_xref: source_xref.to_owned(),
-                page: c.child_value("PAGE"),
-            })
-        })
+        .filter_map(citation)
         .collect();
     let notes = node
         .children

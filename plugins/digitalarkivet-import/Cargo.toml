@@ -17,7 +17,7 @@ crate-type = ["cdylib"]
 # ADR 0014 §2 bundle manifest (see `build-plugins`): declared role and capability requests.
 [package.metadata.vitni-plugin]
 role = "assisted-import"
-host_api = "0.22.0"
+host_api = "0.23.0"
 capabilities = ["log", "query", "commands", "progress", "net", "media-store", "ai", "present"]
 
 [dependencies]

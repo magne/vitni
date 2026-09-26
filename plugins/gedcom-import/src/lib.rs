@@ -8,18 +8,19 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.22.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.22.0": vitni_plugin_api::log,
-        "vitni:host-api/commands@0.22.0": vitni_plugin_api::commands,
-        "vitni:host-api/progress@0.22.0": vitni_plugin_api::progress,
-        "vitni:host-api/import-source@0.22.0": vitni_plugin_api::import_source,
+        "vitni:host-api/types@0.23.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.23.0": vitni_plugin_api::log,
+        "vitni:host-api/commands@0.23.0": vitni_plugin_api::commands,
+        "vitni:host-api/progress@0.23.0": vitni_plugin_api::progress,
+        "vitni:host-api/import-source@0.23.0": vitni_plugin_api::import_source,
     },
 });
 
 use std::collections::HashMap;
 
 use vitni_gedcom::{
-    Age, Association, Calendar, Date, DateModifier, Event, EventAssociation, Fact, MediaObject, Repository, Source,
+    Age, Association, Calendar, Citation, Date, DateModifier, Event, EventAssociation, Fact, MediaObject, Repository,
+    Source,
 };
 use vitni_plugin_api::commands;
 use vitni_plugin_api::convert;
@@ -46,13 +47,19 @@ impl Guest for Importer {
         // Place name -> human id, so a place referenced by several events is created once.
         let mut places: HashMap<String, String> = HashMap::new();
         // Source xref -> record, so a citation can title (and set author/pub-info on) the source it creates.
-        let source_index: HashMap<&str, &Source> =
-            tree.sources.iter().map(|source| (source.xref.as_str(), source)).collect();
+        let source_index: HashMap<&str, &Source> = tree
+            .sources
+            .iter()
+            .map(|source| (source.xref.as_str(), source))
+            .collect();
         // Source xref -> created source human id, so a shared source is created once.
         let mut sources: HashMap<String, String> = HashMap::new();
         // Repository xref -> record, so a source can name (and create) the repository it links.
-        let repository_index: HashMap<&str, &Repository> =
-            tree.repositories.iter().map(|repo| (repo.xref.as_str(), repo)).collect();
+        let repository_index: HashMap<&str, &Repository> = tree
+            .repositories
+            .iter()
+            .map(|repo| (repo.xref.as_str(), repo))
+            .collect();
         // Repository xref -> created repository human id, so a shared repository is created once.
         let mut repositories: HashMap<String, String> = HashMap::new();
         // Media file -> created media human id, so a shared media object is created once.
@@ -106,8 +113,7 @@ impl Guest for Importer {
                         &repository_index,
                         &mut repositories,
                     )?;
-                    let citation_id = commands::create_citation(&source_id, citation.page.as_deref())
-                        .map_err(|error| format!("create-citation failed: {error:?}"))?;
+                    let citation_id = create_citation(&source_id, citation)?;
                     commands::attach_person_citation(&person.human_id, &citation_id)
                         .map_err(|error| format!("attach-person-citation failed: {error:?}"))?;
                 }
@@ -144,8 +150,12 @@ impl Guest for Importer {
         // Associations reference another person by xref; resolve now that every person exists.
         for (person, association) in &pending_associations {
             if let Some(other) = xref_to_human.get(&association.other_xref) {
-                commands::assert_association(person, other, &convert::association_role_to_wit(association.role.as_ref()))
-                    .map_err(|error| format!("assert-association failed: {error:?}"))?;
+                commands::assert_association(
+                    person,
+                    other,
+                    &convert::association_role_to_wit(association.role.as_ref()),
+                )
+                .map_err(|error| format!("assert-association failed: {error:?}"))?;
             }
         }
 
@@ -206,15 +216,19 @@ impl Guest for Importer {
                         &repository_index,
                         &mut repositories,
                     )?;
-                    let citation_id = commands::create_citation(&source_id, citation.page.as_deref())
-                        .map_err(|error| format!("create-citation failed: {error:?}"))?;
+                    let citation_id = create_citation(&source_id, citation)?;
                     commands::attach_family_citation(&family_record.human_id, &citation_id)
                         .map_err(|error| format!("attach-family-citation failed: {error:?}"))?;
                 }
                 for object in &family.media {
                     if let Some(media_id) = media_human_id(object, &mut media)? {
-                        commands::attach_family_media(&family_record.human_id, &media_id, None, object.caption.as_deref())
-                            .map_err(|error| format!("attach-family-media failed: {error:?}"))?;
+                        commands::attach_family_media(
+                            &family_record.human_id,
+                            &media_id,
+                            None,
+                            object.caption.as_deref(),
+                        )
+                        .map_err(|error| format!("attach-family-media failed: {error:?}"))?;
                     }
                 }
                 for note in &family.notes {
@@ -249,10 +263,7 @@ impl Guest for Importer {
                     &repository_index,
                     &mut repositories,
                 )?;
-                citations.push(
-                    commands::create_citation(&source_id, citation.page.as_deref())
-                        .map_err(|error| format!("create-citation failed: {error:?}"))?,
-                );
+                citations.push(create_citation(&source_id, citation)?);
             }
             let input = ParticipationInput {
                 role: convert::association_kind_to_participant_role(association.role.as_ref()),
@@ -326,8 +337,28 @@ fn import_event(
 /// Asserts one INDI-attribute fact on a person.
 fn import_fact(person: &str, fact: &Fact) -> Result<(), String> {
     let date = fact.date.as_ref().map(convert::date_to_wit);
-    commands::assert_fact(person, &convert::fact_type_to_wit(fact.kind), fact.value.as_deref(), date.as_ref())
-        .map_err(|error| format!("assert-fact failed: {error:?}"))
+    commands::assert_fact(
+        person,
+        &convert::fact_type_to_wit(fact.kind),
+        fact.value.as_deref(),
+        date.as_ref(),
+    )
+    .map_err(|error| format!("assert-fact failed: {error:?}"))
+}
+
+/// Creates a citation of `source_id` with its page, then records each `DATA.TEXT` transcription as a
+/// `Transcript` note attached to it (data-model §6). Returns the citation's human id.
+fn create_citation(source_id: &str, citation: &Citation) -> Result<String, String> {
+    let citation_id = commands::create_citation(source_id, citation.page.as_deref())
+        .map_err(|error| format!("create-citation failed: {error:?}"))?;
+    for text in &citation.transcriptions {
+        let note_id = commands::create_note(text).map_err(|error| format!("create-note failed: {error:?}"))?;
+        commands::set_note_type(&note_id, &types::NoteType::Transcript)
+            .map_err(|error| format!("set-note-type failed: {error:?}"))?;
+        commands::attach_citation_note(&citation_id, &note_id)
+            .map_err(|error| format!("attach-citation-note failed: {error:?}"))?;
+    }
+    Ok(citation_id)
 }
 
 /// Returns the human id of the source for `source_xref`, creating it (titled from the parsed
@@ -361,9 +392,12 @@ fn source_human_id(
         }
         for citation in &source.repository_refs {
             let repository_id = repository_human_id(&citation.xref, repository_index, repositories)?;
-            let media_type = citation.medium.as_ref().map_or(types::SourceMediaType::Custom(String::new()), |medium| {
-                convert::source_media_kind_to_wit(medium)
-            });
+            let media_type = citation
+                .medium
+                .as_ref()
+                .map_or(types::SourceMediaType::Custom(String::new()), |medium| {
+                    convert::source_media_kind_to_wit(medium)
+                });
             commands::link_source_repository(&human_id, &repository_id, citation.call_number.as_deref(), &media_type)
                 .map_err(|error| format!("link-source-repository failed: {error:?}"))?;
         }
@@ -399,9 +433,11 @@ fn repository_human_id(
     if let Some(human_id) = repositories.get(repository_xref) {
         return Ok(human_id.clone());
     }
-    let name = index.get(repository_xref).and_then(|repo| repo.name.as_deref()).unwrap_or_default();
-    let human_id =
-        commands::create_repository(name).map_err(|error| format!("create-repository failed: {error:?}"))?;
+    let name = index
+        .get(repository_xref)
+        .and_then(|repo| repo.name.as_deref())
+        .unwrap_or_default();
+    let human_id = commands::create_repository(name).map_err(|error| format!("create-repository failed: {error:?}"))?;
     repositories.insert(repository_xref.to_owned(), human_id.clone());
     Ok(human_id)
 }

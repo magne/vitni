@@ -115,6 +115,7 @@ mod tests {
                 citations: vec![Citation {
                     source_xref: "S0001".to_owned(),
                     page: Some("p. 5".to_owned()),
+                    transcriptions: vec!["Ada, daughter of Byron.\nBaptised the same day.".to_owned()],
                 }],
                 media: vec![MediaObject {
                     file: Some("https://example.test/photo.jpg".to_owned()),
@@ -165,6 +166,7 @@ mod tests {
                 citations: vec![Citation {
                     source_xref: "S0001".to_owned(),
                     page: Some("p. 9".to_owned()),
+                    transcriptions: Vec::new(),
                 }],
                 media: vec![MediaObject {
                     file: Some("https://example.test/wedding.jpg".to_owned()),
@@ -711,6 +713,90 @@ mod tests {
     }
 
     #[test]
+    fn parses_and_round_trips_citation_transcriptions_at_every_citation_site() {
+        let text = "\
+0 @I1@ INDI
+1 BIRT
+2 ASSO @I2@
+3 SOUR @S1@
+4 DATA
+5 TEXT Pat stood witness.
+1 SOUR @S1@
+2 PAGE p. 12
+2 DATA
+3 TEXT Ada, daugh
+4 CONC ter of Byron.
+4 CONT
+4 CONT Baptised the same day.
+3 TEXT A second excerpt.
+0 @I2@ INDI
+0 @F1@ FAM
+1 SOUR @S1@
+2 DATA
+3 TEXT Married by banns.
+0 @S1@ SOUR
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        assert_eq!(
+            tree.individuals[0].citations[0].transcriptions,
+            vec![
+                "Ada, daughter of Byron.\n\nBaptised the same day.".to_owned(),
+                "A second excerpt.".to_owned(),
+            ]
+        );
+        assert_eq!(
+            tree.individuals[0].events[0].associations[0].citations[0].transcriptions,
+            vec!["Pat stood witness.".to_owned()]
+        );
+        assert_eq!(
+            tree.families[0].citations[0].transcriptions,
+            vec!["Married by banns.".to_owned()]
+        );
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "DATA.TEXT round-trips at INDI, FAM and ASSO citations");
+    }
+
+    #[test]
+    fn emits_multi_line_notes_as_cont_lines() {
+        let note = "First line.\n\nThird line.".to_owned();
+        let association = EventAssociation {
+            other_xref: "I1".to_owned(),
+            notes: vec![note.clone()],
+            ..EventAssociation::default()
+        };
+        let tree = Tree {
+            individuals: vec![Individual {
+                xref: "I1".to_owned(),
+                events: vec![Event {
+                    kind: EventKind::Birth,
+                    associations: vec![association],
+                    ..event_defaults()
+                }],
+                notes: vec![note.clone()],
+                ..Individual::default()
+            }],
+            families: vec![Family {
+                xref: "F1".to_owned(),
+                notes: vec![note],
+                ..Family::default()
+            }],
+            ..Tree::default()
+        };
+        let text = emit(&tree);
+        assert!(
+            text.contains("1 NOTE First line.\n2 CONT\n2 CONT Third line.\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("3 NOTE First line.\n4 CONT\n4 CONT Third line.\n"),
+            "{text}"
+        );
+        let reparsed = parse(&text).expect("reparse");
+        assert_eq!(reparsed, tree, "multi-line INDI, FAM and ASSO notes round-trip");
+    }
+
+    #[test]
     fn emits_fams_and_famc_back_references() {
         let tree = Tree {
             individuals: vec![
@@ -895,6 +981,7 @@ mod tests {
             vec![Citation {
                 source_xref: "S1".to_owned(),
                 page: Some("p. 2".to_owned()),
+                transcriptions: Vec::new(),
             }]
         );
         assert_eq!(
@@ -1053,6 +1140,7 @@ mod tests {
                 citations: vec![Citation {
                     source_xref: "S1".to_owned(),
                     page: Some("p. 3".to_owned()),
+                    transcriptions: Vec::new(),
                 }],
                 notes: vec!["Witnessed the baptism.".to_owned()],
             }]
