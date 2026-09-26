@@ -204,7 +204,7 @@ mod tests {
             id: "gedcom-import".to_owned(),
             version: "0.1.0".to_owned(),
             publisher: "vitni-project".to_owned(),
-            host_api: "0.22.0".to_owned(),
+            host_api: "0.23.0".to_owned(),
             role: "bulk-import".to_owned(),
             capabilities: vec!["log".to_owned(), "commands".to_owned()],
         };

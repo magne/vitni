@@ -11,23 +11,24 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.22.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.22.0": vitni_plugin_api::log,
-        "vitni:host-api/commands@0.22.0": vitni_plugin_api::commands,
-        "vitni:host-api/progress@0.22.0": vitni_plugin_api::progress,
-        "vitni:host-api/import-source@0.22.0": vitni_plugin_api::import_source,
+        "vitni:host-api/types@0.23.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.23.0": vitni_plugin_api::log,
+        "vitni:host-api/commands@0.23.0": vitni_plugin_api::commands,
+        "vitni:host-api/progress@0.23.0": vitni_plugin_api::progress,
+        "vitni:host-api/import-source@0.23.0": vitni_plugin_api::import_source,
     },
 });
 
 use std::collections::{HashMap, HashSet};
 
-use vitni_gramps_xml::{Citation, Database, Event, EventRef, Gender, Place, Region, Source};
+use vitni_gramps_xml::{Citation, Database, Event, EventRef, Gender, Note, Place, Region, Source};
 use vitni_interchange::{AssociationKind, parse_age};
 use vitni_plugin_api::commands;
 use vitni_plugin_api::convert;
 use vitni_plugin_api::types;
 use vitni_plugin_api::types::{
-    Attribute, ChildParentRel, Confidence, ExternalId, MediaCrop, ParticipantRole, ParticipationInput, PlaceType, Sex,
+    Attribute, ChildParentRel, Confidence, ExternalId, MediaCrop, NoteType, ParticipantRole, ParticipationInput,
+    PlaceType, Sex,
 };
 
 /// Maps a Gramps `<region>` crop (top-left origin + extent, percent) onto the host `media-crop`
@@ -50,7 +51,7 @@ struct Resolver<'a> {
     places: HashMap<String, &'a Place>,
     sources: HashMap<String, &'a Source>,
     citations: HashMap<String, &'a Citation>,
-    note_text: HashMap<String, String>,
+    notes: HashMap<String, &'a Note>,
     media_file: HashMap<String, Option<String>>,
     media_mime: HashMap<String, Option<String>>,
     repository_name: HashMap<String, Option<String>>,
@@ -129,7 +130,11 @@ impl Guest for Importer {
                     }
                 }
                 for person_ref in &person.person_refs {
-                    pending_associations.push((record.human_id.clone(), person_ref.hlink.clone(), person_ref.rel.clone()));
+                    pending_associations.push((
+                        record.human_id.clone(),
+                        person_ref.hlink.clone(),
+                        person_ref.rel.clone(),
+                    ));
                 }
                 for handle in &person.tag_refs {
                     if let Some(tag) = resolver.ensure_tag(handle)? {
@@ -235,10 +240,14 @@ impl<'a> Resolver<'a> {
             places: index(&db.places, |p| &p.handle),
             sources: index(&db.sources, |s| &s.handle),
             citations: index(&db.citations, |c| &c.handle),
-            note_text: db.notes.iter().map(|n| (n.handle.clone(), n.text.clone().unwrap_or_default())).collect(),
+            notes: index(&db.notes, |n| &n.handle),
             media_file: db.objects.iter().map(|o| (o.handle.clone(), o.file.clone())).collect(),
             media_mime: db.objects.iter().map(|o| (o.handle.clone(), o.mime.clone())).collect(),
-            repository_name: db.repositories.iter().map(|r| (r.handle.clone(), r.name.clone())).collect(),
+            repository_name: db
+                .repositories
+                .iter()
+                .map(|r| (r.handle.clone(), r.name.clone()))
+                .collect(),
             tag_name: db.tags.iter().map(|t| (t.handle.clone(), t.name.clone())).collect(),
             created_events: HashMap::new(),
             created_places: HashMap::new(),
@@ -308,11 +317,12 @@ impl<'a> Resolver<'a> {
         let Some(source) = self.sources.get(handle).copied() else {
             return Ok(None);
         };
-        let human_id =
-            commands::create_source(source.title.as_deref()).map_err(|error| format!("create-source failed: {error:?}"))?;
+        let human_id = commands::create_source(source.title.as_deref())
+            .map_err(|error| format!("create-source failed: {error:?}"))?;
         self.created_sources.insert(handle.to_owned(), human_id.clone());
         if let Some(author) = &source.author {
-            commands::set_source_author(&human_id, author).map_err(|error| format!("set-source-author failed: {error:?}"))?;
+            commands::set_source_author(&human_id, author)
+                .map_err(|error| format!("set-source-author failed: {error:?}"))?;
         }
         if let Some(pub_info) = &source.pub_info {
             commands::set_source_pub_info(&human_id, pub_info)
@@ -324,9 +334,12 @@ impl<'a> Resolver<'a> {
         }
         for reporef in &source.repository_refs {
             if let Some(repository) = self.ensure_repository(&reporef.hlink)? {
-                let media_type = reporef.medium.as_ref().map_or(types::SourceMediaType::Custom(String::new()), |medium| {
-                    convert::source_media_kind_to_wit(medium)
-                });
+                let media_type = reporef
+                    .medium
+                    .as_ref()
+                    .map_or(types::SourceMediaType::Custom(String::new()), |medium| {
+                        convert::source_media_kind_to_wit(medium)
+                    });
                 commands::link_source_repository(&human_id, &repository, reporef.call_number.as_deref(), &media_type)
                     .map_err(|error| format!("link-source-repository failed: {error:?}"))?;
             }
@@ -334,7 +347,8 @@ impl<'a> Resolver<'a> {
         Ok(Some(human_id))
     }
 
-    /// Creates the citation for `handle` (once), its source, page, and confidence.
+    /// Creates the citation for `handle` (once), its source, page, confidence, and attached notes — a
+    /// transcription among them (data-model §6).
     fn ensure_citation(&mut self, handle: &str) -> Result<Option<String>, String> {
         if let Some(human_id) = self.created_citations.get(handle) {
             return Ok(Some(human_id.clone()));
@@ -356,19 +370,30 @@ impl<'a> Resolver<'a> {
             commands::set_citation_confidence(&human_id, confidence_of(confidence))
                 .map_err(|error| format!("set-citation-confidence failed: {error:?}"))?;
         }
+        for note_handle in &citation.note_refs {
+            if let Some(note) = self.ensure_note(note_handle)? {
+                commands::attach_citation_note(&human_id, &note)
+                    .map_err(|error| format!("attach-citation-note failed: {error:?}"))?;
+            }
+        }
         Ok(Some(human_id))
     }
 
-    /// Creates the note for `handle` (once).
+    /// Creates the note for `handle` (once), with its type.
     fn ensure_note(&mut self, handle: &str) -> Result<Option<String>, String> {
         if let Some(human_id) = self.created_notes.get(handle) {
             return Ok(Some(human_id.clone()));
         }
-        let Some(text) = self.note_text.get(handle) else {
+        let Some(note) = self.notes.get(handle).copied() else {
             return Ok(None);
         };
-        let human_id = commands::create_note(text).map_err(|error| format!("create-note failed: {error:?}"))?;
+        let human_id = commands::create_note(note.text.as_deref().unwrap_or_default())
+            .map_err(|error| format!("create-note failed: {error:?}"))?;
         self.created_notes.insert(handle.to_owned(), human_id.clone());
+        if let Some(note_type) = &note.note_type {
+            commands::set_note_type(&human_id, &note_type_of(note_type))
+                .map_err(|error| format!("set-note-type failed: {error:?}"))?;
+        }
         Ok(Some(human_id))
     }
 
@@ -512,6 +537,18 @@ fn confidence_of(value: u8) -> Confidence {
         3 => Confidence::High,
         4 => Confidence::VeryHigh,
         _ => Confidence::Normal,
+    }
+}
+
+/// Maps a Gramps note-type label onto the host `note-type` variant; a Gramps type with no vitni
+/// counterpart is kept verbatim as a custom type.
+fn note_type_of(label: &str) -> NoteType {
+    match label {
+        "General" => NoteType::General,
+        "Research" => NoteType::Research,
+        "Transcript" => NoteType::Transcript,
+        "Citation" => NoteType::Citation,
+        other => NoteType::Custom(other.to_owned()),
     }
 }
 

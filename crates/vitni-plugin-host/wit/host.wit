@@ -159,7 +159,14 @@
 // Version 0.22.0 renames the project from `genealogy` to `Vitni` (issue #324), so the package
 // identifier becomes `vitni:host-api`. No interface, world, record, or function changes — every
 // guest recompiles against the new package name and is otherwise untouched.
-package vitni:host-api@0.22.0;
+//
+// Version 0.23.0 round-trips a citation's transcription (GEDCOM `SOUR.DATA.TEXT`, a Gramps citation
+// note — issue #344), which data-model §6 records as a `Transcript` note attached to the citation. A
+// new `note-type` variant mirrors `vitni_core::enums::NoteType`; `note-dto` gains `note-type` and
+// `citation-dto` gains `notes` (the attached notes' human ids, in attachment order); `commands` gains
+// `set-note-type` and `attach-citation-note`. A breaking change to `note-dto` and `citation-dto`;
+// additive to `commands`.
+package vitni:host-api@0.23.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `vitni_core::name::NameType`.
@@ -342,6 +349,7 @@ interface types {
         source: option<string>,         // human id of the cited source
         page: option<string>,
         confidence: option<confidence>,
+        notes: list<string>,            // human ids of attached notes, in attachment order
         restrictions: list<restriction>,
     }
 
@@ -375,9 +383,20 @@ interface types {
         restrictions: list<restriction>,
     }
 
+    // The kind of a note (data-model §6 / Gramps note type), mirroring `vitni_core::enums::NoteType`.
+    // A citation's transcribed source text is a `transcript` note attached to the citation.
+    variant note-type {
+        general,
+        research,
+        transcript,
+        citation,
+        custom(string),
+    }
+
     // A note as a frontend reads it — mirrors `vitni_app::NoteSummary`.
     record note-dto {
         human-id: string,
+        note-type: option<note-type>,
         text: option<string>,
         restrictions: list<restriction>,
     }
@@ -704,7 +723,7 @@ interface query {
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{external-id, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, media-crop, source-media-type, capability-error};
+    use types.{external-id, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, media-crop, source-media-type, note-type, capability-error};
 
     // Declares the file's own asserted-as-of date (its export/header date, RFC 3339) for the rest of
     // this import session — the input the app-layer timestamp-gated reconciliation rule gates on
@@ -763,6 +782,8 @@ interface commands {
     set-media-mime: func(media: string, mime: string) -> result<_, capability-error>;
     // Create a note with Markdown text. Returns its human id.
     create-note: func(text: string) -> result<string, capability-error>;
+    // Set (or change) a note's type — `transcript` for a citation's transcribed source text.
+    set-note-type: func(note: string, note-type: note-type) -> result<_, capability-error>;
     // Create a repository with a name. Returns its human id; the caller dedups by name.
     create-repository: func(name: string) -> result<string, capability-error>;
     // Create a tag with a name. Returns its id (a UUID string); the caller dedups by name.
@@ -779,6 +800,7 @@ interface commands {
     attach-event-citation: func(event: string, citation: string) -> result<_, capability-error>;
     attach-event-media: func(event: string, media: string, crop: option<media-crop>, caption: option<string>) -> result<_, capability-error>;
     attach-event-note: func(event: string, note: string) -> result<_, capability-error>;
+    attach-citation-note: func(citation: string, note: string) -> result<_, capability-error>;
 
     // Apply a tag (a tag id from `create-tag`) to an owner.
     apply-person-tag: func(person: string, tag: string) -> result<_, capability-error>;

@@ -18,7 +18,7 @@ crate-type = ["cdylib"]
 # `<id>.plugin.toml` beside the component and signs the manifest+component pair.
 [package.metadata.vitni-plugin]
 role = "bulk-import"
-host_api = "0.22.0"
+host_api = "0.23.0"
 capabilities = ["log", "commands", "progress", "import-source"]
 
 [dependencies]

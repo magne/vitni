@@ -12,11 +12,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.22.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.22.0": vitni_plugin_api::log,
-        "vitni:host-api/query@0.22.0": vitni_plugin_api::query,
-        "vitni:host-api/progress@0.22.0": vitni_plugin_api::progress,
-        "vitni:host-api/export-sink@0.22.0": vitni_plugin_api::export_sink,
+        "vitni:host-api/types@0.23.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.23.0": vitni_plugin_api::log,
+        "vitni:host-api/query@0.23.0": vitni_plugin_api::query,
+        "vitni:host-api/progress@0.23.0": vitni_plugin_api::progress,
+        "vitni:host-api/export-sink@0.23.0": vitni_plugin_api::export_sink,
     },
 });
 
@@ -92,20 +92,27 @@ impl Guest for Exporter {
         let places = query::list_places().map_err(|e| format!("list-places failed: {e:?}"))?;
         let tags = query::list_tags().map_err(|e| format!("list-tags failed: {e:?}"))?;
         let total = (persons.len() + families.len()) as u32;
-        vitni_plugin_api::log_info(&format!("exporting {} people and {} families", persons.len(), families.len()));
+        vitni_plugin_api::log_info(&format!(
+            "exporting {} people and {} families",
+            persons.len(),
+            families.len()
+        ));
 
         // event human-id -> participants (role + age + attributes + notes), from each person's
         // participations.
         let mut event_participants: HashMap<String, Vec<ParticipantInfo>> = HashMap::new();
         for person in &persons {
             for participation in &person.participations {
-                event_participants.entry(participation.event.clone()).or_default().push(ParticipantInfo {
-                    person: person.human_id.clone(),
-                    role: participation.role,
-                    age: participation.age.clone(),
-                    attributes: participation.attributes.clone(),
-                    notes: participation.notes.clone(),
-                });
+                event_participants
+                    .entry(participation.event.clone())
+                    .or_default()
+                    .push(ParticipantInfo {
+                        person: person.human_id.clone(),
+                        role: participation.role,
+                        age: participation.age.clone(),
+                        attributes: participation.attributes.clone(),
+                        notes: participation.notes.clone(),
+                    });
             }
         }
 
@@ -177,21 +184,27 @@ fn distribute_events(
         // back to the participant-set heuristic. Either way, a partner carrying a payload (age, a
         // witness role, …) also gets a person-side `<eventref>` so the payload round-trips.
         if let Some(&index) = family_event_links.get(&event_dto.human_id) {
-            families[index].event_refs.push(EventRef::bare(event_dto.human_id.as_str()));
+            families[index]
+                .event_refs
+                .push(EventRef::bare(event_dto.human_id.as_str()));
             push_payload_event_refs(participants, &event_dto.human_id, people, person_index);
             continue;
         }
         if is_family_event(kind) {
             let set: BTreeSet<String> = participants.iter().map(|p| p.person.clone()).collect();
             if let Some(index) = family_partner_sets.iter().position(|partners| *partners == set) {
-                families[index].event_refs.push(EventRef::bare(event_dto.human_id.as_str()));
+                families[index]
+                    .event_refs
+                    .push(EventRef::bare(event_dto.human_id.as_str()));
                 push_payload_event_refs(participants, &event_dto.human_id, people, person_index);
                 continue;
             }
         }
         for participant in participants {
             if let Some(&index) = person_index.get(&participant.person) {
-                people[index].event_refs.push(participant.event_ref(&event_dto.human_id));
+                people[index]
+                    .event_refs
+                    .push(participant.event_ref(&event_dto.human_id));
             }
         }
     }
@@ -364,6 +377,7 @@ fn citation(dto: types::CitationDto) -> Citation {
         source_ref: dto.source,
         page: dto.page,
         confidence: dto.confidence.map(confidence_value),
+        note_refs: dto.notes,
     }
 }
 
@@ -388,7 +402,19 @@ fn note(dto: types::NoteDto) -> Note {
     Note {
         handle: dto.human_id,
         gramps_id: None,
+        note_type: dto.note_type.map(note_type_label),
         text: dto.text,
+    }
+}
+
+/// Maps the host `note-type` variant onto its Gramps note-type label; a custom type is written verbatim.
+fn note_type_label(note_type: types::NoteType) -> String {
+    match note_type {
+        types::NoteType::General => "General".to_owned(),
+        types::NoteType::Research => "Research".to_owned(),
+        types::NoteType::Transcript => "Transcript".to_owned(),
+        types::NoteType::Citation => "Citation".to_owned(),
+        types::NoteType::Custom(label) => label,
     }
 }
 

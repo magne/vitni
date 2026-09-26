@@ -11,9 +11,9 @@ use std::sync::{Arc, Mutex};
 
 use uuid::Uuid;
 use vitni_app::{
-    AgeBound, AiConfig, AppDefaults, ChildParentRelationship, OperatorConfig, ParticipantRole, PersonSummary, Session,
-    Workspace, WorkspaceDefaults, list_citations, list_events, list_families, list_media, list_notes, list_persons,
-    list_places, list_repositories, list_sources,
+    AgeBound, AiConfig, AppDefaults, ChildParentRelationship, NoteType, OperatorConfig, ParticipantRole, PersonSummary,
+    Session, Workspace, WorkspaceDefaults, list_citations, list_events, list_families, list_media, list_notes,
+    list_persons, list_places, list_repositories, list_sources,
 };
 use vitni_core::ids::AgentId;
 use vitni_plugin_host::{
@@ -805,6 +805,104 @@ async fn gedcom_imports_and_exports_a_repository_call_number_and_medium() {
         vitni_app::SourceMediaType::Film,
         "MEDI survived export and re-import"
     );
+}
+
+const CITATION_TRANSCRIPTION: &str = "\
+0 HEAD
+1 SOUR test
+0 @I1@ INDI
+1 NAME John /Smith/
+1 SOUR @S1@
+2 PAGE line 14
+2 DATA
+3 TEXT Smith, John - age 0,
+4 CONT b. New York.
+0 @F1@ FAM
+1 HUSB @I1@
+1 SOUR @S1@
+2 PAGE banns
+2 DATA
+3 TEXT Married by banns.
+0 @S1@ SOUR
+1 TITL 1850 U.S. Federal Census
+0 TRLR
+";
+
+/// Asserts each citation in [`CITATION_TRANSCRIPTION`] carries exactly its `DATA.TEXT` as one attached
+/// `Transcript` note (data-model §6).
+async fn assert_citation_transcriptions(workspace: &Workspace, stage: &str) {
+    let citations = list_citations(workspace).await.expect("citations");
+    for (page, text) in [
+        ("line 14", "Smith, John - age 0,\nb. New York."),
+        ("banns", "Married by banns."),
+    ] {
+        let citation = citations
+            .iter()
+            .find(|c| c.page.as_deref() == Some(page))
+            .expect("a citation with this page");
+        let notes: Vec<_> = citation
+            .notes
+            .iter()
+            .map(|note| (note.note_type.clone(), note.text.as_deref()))
+            .collect();
+        assert_eq!(
+            notes,
+            vec![(Some(NoteType::Transcript), Some(text))],
+            "{stage}: citation {page:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn gedcom_imports_and_exports_a_citation_transcription() {
+    let host = common::host();
+    let importer = common::component("gedcom-import");
+    let exporter = common::component("gedcom-export");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.ged", CITATION_TRANSCRIPTION.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    assert_citation_transcriptions(&workspace, "import").await;
+
+    let exported = io_dir.path().join("out.ged");
+    let (_, workspace) = host
+        .run_bulk_export(
+            &exporter,
+            invocation(workspace, export_grants()),
+            ExportTarget::File(exported.clone()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("export");
+    drop(workspace);
+    let text = std::fs::read_to_string(&exported).expect("read export");
+    assert!(
+        text.contains("2 DATA\n3 TEXT Smith, John - age 0,\n4 CONT b. New York.\n"),
+        "{text}"
+    );
+
+    let (root2, _dir2) = init_workspace();
+    let workspace2 = open_workspace(&root2).await;
+    let (_, workspace2) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace2, import_grants()),
+            exported,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("re-import");
+    assert_citation_transcriptions(&workspace2, "re-import").await;
 }
 
 /// Exercises the round-trip-gap group (PR4 Step C item 1): a second `NAME` record must be kept, not
