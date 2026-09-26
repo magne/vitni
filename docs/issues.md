@@ -439,13 +439,6 @@ Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none 
 - **`Address` on the Gramps side** — `vitni-gramps-xml` has no `Address` concept at all, so
   `Address.original_text` (which round-trips on the GEDCOM side now) has nowhere to go there; and
   `original_text` has no Gramps DTD equivalent even once an Address type exists.
-- **A citation's transcription (`SOUR.DATA.TEXT`)** — a transcribed source text is an attached
-  `NoteType::Transcript` note (data-model §6), and both formats have a target for it: GEDCOM
-  `SOUR.DATA.TEXT` and a Gramps citation note. Neither direction is wired. `vitni-gedcom`'s `Citation`
-  (`crates/vitni-gedcom/src/model.rs:80-85`) carries only `source_xref` + `page`, so importing the text
-  means parsing it and having `plugins/gedcom-import` create the Note aggregate and attach it (and the
-  reverse on export). Shares the blocker the `NOTE.TRAN` bullet above names: no structured `Note` model
-  in that crate yet. — #344
 
 ### Plugin-UI vocabulary
 
