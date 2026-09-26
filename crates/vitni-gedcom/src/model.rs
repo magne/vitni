@@ -75,13 +75,16 @@ pub struct Repository {
     pub name: Option<String>,
 }
 
-/// A citation: a `SOUR` pointer into a top-level source, with an optional page locator.
+/// A citation: a `SOUR` pointer into a top-level source, with an optional page locator and the
+/// source's transcribed words.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Citation {
     /// The cited source's xref.
     pub source_xref: String,
     /// The page locator (`PAGE`).
     pub page: Option<String>,
+    /// Each transcribed excerpt of the source (`DATA.TEXT`, repeatable), `CONT` lines joined by `\n`.
+    pub transcriptions: Vec<String>,
 }
 
 /// An inline `OBJE` media object.
