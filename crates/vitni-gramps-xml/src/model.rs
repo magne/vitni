@@ -342,6 +342,8 @@ pub struct Citation {
     pub page: Option<String>,
     /// The confidence (`<confidence>`, 0–4); `None` when unspecified.
     pub confidence: Option<u8>,
+    /// Handles of attached notes (`<noteref hlink>`), in document order — a transcription among them.
+    pub note_refs: Vec<String>,
 }
 
 /// A `<repository>` record.
@@ -375,6 +377,8 @@ pub struct Note {
     pub handle: String,
     /// The user-facing id (e.g. `N0001`).
     pub gramps_id: Option<String>,
+    /// The note type (`type`), verbatim — Gramps's own strings (`General`, `Transcript`, …).
+    pub note_type: Option<String>,
     /// The note text (`<text>`).
     pub text: Option<String>,
 }

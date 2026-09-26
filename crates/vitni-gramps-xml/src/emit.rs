@@ -272,6 +272,9 @@ fn emit_citation(out: &mut String, citation: &Citation) {
     if let Some(confidence) = citation.confidence {
         out.push_str(&text_element("confidence", &confidence.to_string()));
     }
+    for hlink in &citation.note_refs {
+        out.push_str(&empty("noteref", &[("hlink", hlink)]));
+    }
     if let Some(source) = &citation.source_ref {
         out.push_str(&empty("sourceref", &[("hlink", source)]));
     }
@@ -302,7 +305,11 @@ fn emit_media(out: &mut String, media: &MediaObject) {
 }
 
 fn emit_note(out: &mut String, note: &Note) {
-    out.push_str(&open("note", &id_attrs(&note.handle, note.gramps_id.as_deref())));
+    let mut attrs = id_attrs(&note.handle, note.gramps_id.as_deref());
+    if let Some(note_type) = &note.note_type {
+        attrs.push(("type".to_owned(), note_type.clone()));
+    }
+    out.push_str(&open("note", &attrs));
     if let Some(text) = &note.text {
         out.push_str(&text_element("text", text));
     }

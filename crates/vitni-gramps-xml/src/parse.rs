@@ -267,6 +267,7 @@ fn citation(element: &Element) -> Citation {
             .map(ToOwned::to_owned),
         page: child_text(element, "page"),
         confidence: element.child("confidence").and_then(|c| c.text.parse().ok()),
+        note_refs: hlinks(element, "noteref"),
     }
 }
 
@@ -294,6 +295,7 @@ fn note(element: &Element) -> Note {
     Note {
         handle: handle(element),
         gramps_id: gramps_id(element),
+        note_type: element.attr("type").map(ToOwned::to_owned),
         text: child_text(element, "text"),
     }
 }
