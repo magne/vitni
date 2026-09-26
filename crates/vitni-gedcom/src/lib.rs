@@ -758,6 +758,45 @@ mod tests {
     }
 
     #[test]
+    fn emits_multi_line_notes_as_cont_lines() {
+        let note = "First line.\n\nThird line.".to_owned();
+        let association = EventAssociation {
+            other_xref: "I1".to_owned(),
+            notes: vec![note.clone()],
+            ..EventAssociation::default()
+        };
+        let tree = Tree {
+            individuals: vec![Individual {
+                xref: "I1".to_owned(),
+                events: vec![Event {
+                    kind: EventKind::Birth,
+                    associations: vec![association],
+                    ..event_defaults()
+                }],
+                notes: vec![note.clone()],
+                ..Individual::default()
+            }],
+            families: vec![Family {
+                xref: "F1".to_owned(),
+                notes: vec![note],
+                ..Family::default()
+            }],
+            ..Tree::default()
+        };
+        let text = emit(&tree);
+        assert!(
+            text.contains("1 NOTE First line.\n2 CONT\n2 CONT Third line.\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("3 NOTE First line.\n4 CONT\n4 CONT Third line.\n"),
+            "{text}"
+        );
+        let reparsed = parse(&text).expect("reparse");
+        assert_eq!(reparsed, tree, "multi-line INDI, FAM and ASSO notes round-trip");
+    }
+
+    #[test]
     fn emits_fams_and_famc_back_references() {
         let tree = Tree {
             individuals: vec![

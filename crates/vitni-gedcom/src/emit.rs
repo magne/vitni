@@ -62,7 +62,7 @@ pub fn emit(tree: &Tree) -> String {
             emit_media(&mut out, media);
         }
         for note in &family.notes {
-            let _ = writeln!(out, "1 NOTE {note}");
+            emit_multiline(&mut out, 1, "NOTE", note);
         }
     }
 
@@ -158,7 +158,7 @@ fn emit_individual(out: &mut String, individual: &Individual, fams: &FamilyXrefM
         emit_media(out, media);
     }
     for note in &individual.notes {
-        let _ = writeln!(out, "1 NOTE {note}");
+        emit_multiline(out, 1, "NOTE", note);
     }
 }
 
@@ -342,7 +342,7 @@ fn emit_event_association(out: &mut String, association: &EventAssociation) {
         emit_citation(out, 3, citation);
     }
     for note in &association.notes {
-        let _ = writeln!(out, "3 NOTE {note}");
+        emit_multiline(out, 3, "NOTE", note);
     }
 }
 
