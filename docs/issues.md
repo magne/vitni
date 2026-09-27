@@ -155,7 +155,9 @@ long-standing "DNA match views in the UI" item is closed.
   Either delete the wrapper, or keep it to back a `vitni check` subcommand so quality findings are
   scriptable.
 - **Data-quality checks are person-only** — both `CheckKind`s are `DeathBeforeBirth` and
-  `PossibleDuplicates`. Widening checks to the other twelve aggregates is its own item.
+  `PossibleDuplicates`. Widening checks to the other twelve aggregates is its own item. The duplicate
+  half is taken by *The duplicate check scores through the engine* (under *Record matching & identity*),
+  which leaves the consistency checks (such as a date inversion on an Event or Place).
 - **Repository media refs (U31)** — should Repository carry media refs (e.g. archive photos)? A
   data-model question.
 
@@ -223,7 +225,9 @@ which is what makes them worth fixing in the shared code rather than per screen.
   local fix. Found while re-measuring `picker-sees-new-record` for #310: the succession form's
   provenance block runs past a 1200px window because of it, so that scenario now scrolls its panel
   before clicking.
-- **Collection history nodes cannot be expanded and show no count.** `collapse_runs`
+- **Collection history nodes cannot be expanded and show no count.** (ADR 0037's `ImportRun`, under
+  *Record matching & identity*, persists the run's children and count, which is this bullet's data
+  half.) `collapse_runs`
   (`vitni-app/src/history.rs:247-302`) folds a software run into one synthetic
   `ActivityDetail::ImportBatch { count }` row and **discards the children**, and `ActivityVm`
   (`view_model/history.rs:99-122`) has no count field either — the number survives only baked into the
@@ -375,25 +379,34 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   `parse` to the person loop and never reads `db.header`, though `vitni-gramps-xml/src/parse.rs:400`
   does parse the date — so a Gramps re-import gets no timestamp gating at all. Found while verifying
   the Phase 10 completion claim, which described both formats as wired.
-- **Source merge/sync reconciliation prerequisite** — Source resolve-or-create (`ExternalId` dedup) +
-  `set-source-title`/`set-source-abbrev` WIT verbs + a field-level `AssertionId`/`occurred_at` read
-  path. Unlike Person/Family, a standalone Source has no `ExternalId` resolve-or-create today (a second
-  import of the same file duplicates the Source aggregate), so the ADR 0029 timestamp-gated rule can't
-  target it yet. `Person.sex` reconciliation shipped without these; widening the rule to Source's
-  bibliographic fields (`title`/`author`/`pub_info`/`abbrev`) is blocked on them.
-- **Place merge/sync reconciliation prerequisite** — the same three gaps ADR 0029 §4 recorded for Source,
-  and Place has them identically: no `ExternalId` resolve-or-create (Place is absent from
-  `for_each_db_external_id_aggregate!`, and `import.rs` has no place path, so a second import duplicates
-  every place), no WIT verbs for most Place fields, and no read path exposing a field's live
-  `AssertionId` **together with** that assertion's `occurred_at` — without which the timestamp gate
-  cannot be evaluated at all. Place's dated multi-valued fields do have the natural match key `Fact`
-  lacks: the effective-from `date`. See [`research/gis-norway.md`](research/gis-norway.md).
-- **Retraction resurrection blocks recurring imports** — ADR 0029 compares the incoming value against the
-  *live* assertion, and a retracted assertion is not live. So a value a researcher retracted as wrong is
-  re-asserted by the next import run, and every run after it, attributed to `AgentKind::Software` so it
-  reads as routine in the history. This destroys editorial judgement rather than merely duplicating data,
-  and must be resolved before any import is made recurring. Needs a tombstone rule over retracted
-  assertions keyed by originating authority.
+- **GEDCOM and Gramps external ids collide across files** — the importers resolve by authority
+  `gedcom-xref` with the bare xref (`@I1@`), and by `gramps-id` (`I0001`), neither scoped to a file
+  (`plugins/gedcom-import/src/lib.rs:466`, `plugins/gramps-import/src/lib.rs:505`). Importing a second,
+  unrelated file therefore resolves its `@I1@` onto the first file's `@I1@` person, and silently attaches
+  one person's names and facts to another. *Shape:* ADR 0037 §3. Datasets scope file-local keys, and xrefs
+  and Gramps ids become origin records rather than `ExternalId`s. This lands with the `RecordOrigin`
+  bullet under *Record matching & identity*, which carries the dataset. *Exit:* a test imports two
+  different files that share `@I1@` and gets two persons.
+- **Import creates a person or family and its `ExternalId` in two commits, and drops the provenance
+  template** — `import_person`/`import_family` (`vitni-app/src/import.rs:53-65, 88-89`) run
+  `create_*`, then `add_external_id`, as separate commands. A failure between the two leaves a keyless
+  record that the next run duplicates. Both also pass `Provenance::default()`, so the assisted flow's
+  `Confidence::Low` template (ADR 0017 §7) never reaches the persons and families it creates, unlike
+  every other command in the same run. *Shape:* the create command carries its external ids, so one
+  `decide` emits both events in one transaction, and the host's provenance is threaded through.
+  *Exit:* a test injects a failure after creation and proves no keyless person remains; the assisted
+  test asserts `Low` on the created person.
+- **Source merge/sync reconciliation prerequisite** — `set-source-title`/`set-source-abbrev` WIT verbs,
+  GEDCOM `ABBR` / Gramps `<sabbrev>` round-trip, and a field-level `AssertionId` + `occurred_at` read
+  path. The ADR 0029 timestamp-gated rule cannot target Source's bibliographic fields
+  (`title`/`author`/`pub_info`/`abbrev`) without them. Resolve-or-create itself (a re-import today
+  duplicates the Source) moves to ADR 0037's origin index, under *Record matching & identity*.
+- **Place merge/sync reconciliation prerequisite** — the same remaining gaps for Place: no WIT verbs for
+  most Place fields, and no read path exposing a field's live `AssertionId` **together with** that
+  assertion's `occurred_at`, without which the timestamp gate cannot be evaluated at all. Place's dated
+  multi-valued fields do have the natural match key `Fact` lacks: the effective-from `date`. See
+  [`research/gis-norway.md`](research/gis-norway.md). Resolve-or-create itself (a re-import today
+  duplicates every place) moves to ADR 0037's origin index, under *Record matching & identity*.
 - **Lift `prepare_import_target`** into `vitni-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
 - **No merge/conflict mockup for reconciled fields** — the Phase 10 plan required a merge/conflict view
@@ -405,6 +418,18 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
 ### Assisted import
 
 Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none blocks the flow.
+
+- **Re-importing a Digitalarkivet census person duplicates it in the GUI** — reported from real use.
+  `import_person` resolves by the `digitalarkivet` `ExternalId`, and
+  `re_running_the_same_url_imports_no_duplicates` (`vitni-plugin-host/tests/assisted_digitalarkivet.rs:437`)
+  passes, so the failing path is one the test does not cover. The root cause is not known. None of the
+  hypotheses to check is confirmed: a stale installed plugin build shadowing the fresh one; an `og:url`
+  variant changing the record id (`vitni-digitalarkivet/src/html.rs:42`); the two-commit
+  create-then-key window (under *Bulk import, export & sync*); and the GUI's workspace/store wiring
+  (`vitni-ui-dioxus/src/services.rs:858`). Also check whether church-book participants share one
+  `pd…` id and collapse onto one person, which is the opposite failure. *Exit:* a regression test on the
+  actual failing path; a re-run sweep over census person, census household, church-book, GEDCOM and
+  Gramps.
 
 - **Assisted session survives navigation.** The assisted-import session is screen-local — navigating
   away from the `Tool::Import` wizard cancels the run (the documented cancel-on-navigate path, ADR
@@ -428,6 +453,153 @@ Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none 
   round-trips, but `vitni-plugin-host/src/ai.rs:73` returns `AiError::InvalidInput` for it, so a
   workspace configured with `kind = "plugin"` fails only at first use. Either implement it or reject it
   at config-load time.
+
+### Record matching & identity
+
+The `0.10 — Record matching` milestone ([`issue-tracking.md`](issue-tracking.md) §4). The design is
+in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and import runs),
+[0038](adr/0038-record-matching-explainable-scoring.md) (matching),
+[0039](adr/0039-identity-decisions-clusters-merge-distinct.md) (identity decisions),
+[0040](adr/0040-staged-import-plan-review-commit.md) (staged import) and
+[0041](adr/0041-workspace-backup-and-restore.md) (backup), with the survey in
+[`research/record-matching.md`](research/record-matching.md). The bullets are listed in dependency
+order. The three import bugs sit under their own areas above, and backup under *Backup & restore*. The
+rule every bullet keeps is that only deterministic identity acts without the user. A score never does.
+
+- **`RecordOrigin` and the `ImportRun` aggregate** — ADR 0037 §1, §3, §5, §6. `EventContext.origin`
+  (dataset, record, item, digest, run) is additive and threaded through `Provenance` / `AssertionMeta`.
+  `ImportRun` becomes the fourteenth aggregate via the `for_each_aggregate!` recipe, with
+  `ImportRunStarted`/`ItemResolved`/`ImportRunFinished`/`ImportRunAbandoned`, and `Session` mints run
+  ids. Datasets are a projection over runs. History renders a real run row with its count and
+  children, which replaces `collapse_runs` and settles the *Collection history nodes* bullet's data
+  half. *Exit:* an import writes a run, and every imported assertion carries its origin; the History
+  run row lists its children.
+- **`record_origins` index and resolve-by-origin for every aggregate** — ADR 0037 §4. The projection
+  runs on SQLite and Postgres and is rebuildable. `field_key` is derived in `vitni-app`. Resolve-or-
+  create by `(dataset, record, item)` or by a recorded `ItemResolved`. A same-digest item is a no-op,
+  and a changed digest reconciles per field (ADR 0029). This closes the Source and Place duplication on
+  re-import. *Needs:* the `RecordOrigin` bullet. *Exit:* re-importing an unchanged GEDCOM and Gramps file
+  emits zero events, and every aggregate count is unchanged.
+- **Tombstones by origin** — ADR 0037 §4. A value whose same-origin assertion the user retracted is never
+  re-asserted by a later run. A different incoming value is still offered. This replaces the old
+  *Retraction resurrection blocks recurring imports* bullet: re-asserting a retracted value destroyed
+  editorial judgement under a routine-looking Software agent. *Needs:* the index. *Exit:* retract an
+  imported occupation, re-import, and the occupation stays retracted.
+- **Matching core: graded comparators and Fellegi–Sunter assessment** — ADR 0038 §1, §3–§6, in
+  `vitni_core::matching`. It covers name comparison driven by name-culture packs (the TOML schema,
+  loader and workspace override, shipping `universal`/`no`/`da`/`en`); pack selection from places
+  (time-aware, `matching/regions.toml`), data language and lineage; date intervals with decay curves
+  scaled by quality and provenance (census age ±5 years, baptism as a birth proxy, Julian↔Gregorian);
+  places by fuzzy name, enclosure and distance; and hard conflicts. A `MatchAssessment` carries its
+  features, cultures and engine version. *Exit:* property tests (symmetry, bounds, self-match maximal,
+  monotonic decay); table cases Guldbrand Olsen ↔ Gulbrand Olsøn, Haugen ↔ Haug, census 1852 ↔ baptism
+  1849, and a birth three years off staying Possible; a toy pack loaded from a fixture changes a score
+  with no code change.
+- **Person profile with relationship context** — ADR 0038 §2, §4. `vitni-app` builds the person
+  profile from views: names, sex, vital intervals, places, occupations, and parents, partners and
+  children with their names and birth intervals. A patronymic is checked against the candidate
+  father. Two different items of one record are a hard conflict. *Needs:* the matching core.
+  *Exit:* two same-named people born the same year separate on their fathers.
+- **Family and Event profiles** — ADR 0038 §2. A family by its partners, children and marriage. An event
+  by type, date, place and participants. These carry the census and marriage cases. *Needs:* the person
+  profile. *Exit:* the same marriage from a church book and a GEDCOM file scores Probable.
+- **Place, Source, Repository, Citation, Media, Note and Tag profiles** — ADR 0038 §2. Media matches
+  exactly by checksum, and Tag by case-folded name. *Needs:* the matching core. *Exit:* per-kind table
+  tests, including a farm matched to its parish as Partial.
+- **`match_keys` blocking index and `find_similar`** — ADR 0038 §7, §8. Loose keys: phonetic and
+  normalized given name, equivalence class across every installed pack, and the birth decade with its
+  neighbours. Surname is not required. A pack-set fingerprint triggers a rebuild. `find_similar(kind,
+  target, min_band, limit)` and `assess` become the only entry points, and `duplicates.rs` is removed,
+  together with its `AggRef.id` set to the human id (`duplicates.rs:191`). *Needs:* the profiles.
+  *Exit:* a bench at 100k persons; recall on the corpus is not lost to blocking.
+- **The duplicate check scores through the engine** — ADR 0038 §8. `PossibleDuplicates` covers every
+  matchable kind with the engine's score, band and features, and excludes decided pairs. The
+  Dashboard data-quality card and the palette's *Find duplicates* show the probability and the
+  reasons. This supersedes the duplicate half of *Data-quality checks are person-only*. *Needs:*
+  `find_similar`, and distinct decisions. *Exit:* a place duplicate appears on the Dashboard with its
+  reasons.
+- **Evaluation corpus and `cargo xtask match-eval`** — ADR 0038 §9. Labelled pairs: invented ones, plus
+  public census and church records over 100 years old. The corpus deliberately holds the hard true
+  matches: spelling variants, a surname changed after a move, a census age off by one to five years,
+  a baptism standing in for a birth. The harness reports precision and recall per band, and CI gates
+  recall on the hard cases. *Needs:* the matching core. *Exit:* the gate fails when a weight change
+  loses a hard case.
+- **`PersonsDistinguished` and the assessment on identity decisions** — ADR 0039 §1–§3.
+  `PersonsDistinguished`, plus `assessment: Option<MatchEvidence>` on `PersonsMerged`. `merge_persons`
+  stops hardcoding `Confidence::Normal` and its default rationale (`vitni-app/src/person.rs:778-816`).
+  Decided pairs, either way, are excluded from every consumer. This amends data-model §11.3
+  (suggestions are computed, not asserted). *Exit:* a rejected pair never reappears; the history shows
+  the assessment behind a merge.
+- **Persona clusters** — ADR 0039 §4, §5. `identity_links(kind, member, root)` holds the transitive
+  closure, refusing cycles and blocking a merge on a live distinct decision. Read-time composition in
+  `vitni-app`: the root's detail is the union of every member's claims, each still attributed, and a
+  row edit is routed to its owner. Members are hidden from lists and pickers, references resolve to
+  the root, and exporters fold clusters. Data-model §9 is updated. *Needs:* distinct decisions.
+  *Exit:* after a link, the person appears once in lists, pickers, families and a GEDCOM export;
+  *Unlink* restores both.
+- **Merge and distinguish for Event and Family** — ADR 0039 §1. `EventsMerged`/`EventsDistinguished`
+  and `FamiliesMerged`/`FamiliesDistinguished`, redirected through `identity_links`. Participants of a
+  merged event are unioned in the projection. *Needs:* persona clusters. *Exit:* two copies of one
+  marriage merge into one event with every participant.
+- **Merge and distinguish for Place, Source, Citation, Repository, Note, Media and Tag** — ADR 0039 §1,
+  §6. The same pair of variants per kind, and the same redirect. Place identity is named apart from
+  ADR 0026 succession in the UI. *Needs:* persona clusters. *Exit:* per-kind tests; an event whose
+  place was merged shows the survivor.
+- **Staged import: WIT record graph, `ImportPlan`, commit and resume** — ADR 0040 §1, §2, §5.
+  `host-api@0.24.0` adds the `staging` interface (`begin-run`, `submit(record-graph)`) and removes
+  the imperative create verbs from the import worlds. `vitni-app` plans every entity as Unchanged,
+  Update, Link, Candidates or New, with graph-aware resolution. Commit is dependency-ordered and
+  origin-stamped, with atomic per-aggregate creation, and resumes by re-run. *Needs:* the index and
+  `find_similar`. *Exit:* an interrupted commit finishes on re-run with no duplicates.
+- **Port the GEDCOM and Gramps importers to record graphs** — ADR 0040 §1, ADR 0037 §3. Parsers emit
+  graphs with stable item keys and dataset-scoped origins, with places and sources keyed. The dataset
+  is proposed from the header fingerprint and key overlap, and the user confirms (CLI `--dataset` /
+  `--new-dataset`). *Needs:* staged import. *Exit:* a re-run fixture per importer proves stable item
+  keys.
+- **Port the Digitalarkivet importer to record graphs** — ADR 0040 §1, §4. The census-person, household
+  and church-book pages become graphs, and the owner-gated `record_claims` path and the title/path
+  `query` dedup are removed. *Needs:* staged import. *Exit:* the existing assisted tests pass through
+  the graph path.
+- **Digitalarkivet imports what it drops today** — ADR 0040. For a census: the residence event with its
+  participants, roles and ages; an estimated birth from the age; birthplace and residence places; and
+  household relationships. For a church book: the event, with participants by role. Without these a
+  census or marriage record has nothing to match on beyond a name. *Needs:* the Digitalarkivet port.
+  *Exit:* a household import yields its event, places and family links, each carrying an origin.
+- **Shared match-compare view** — ADR 0038 §3, ADR 0039. A view-model and component generalized from
+  the Merge compare grid (`vitni-ui/src/view_model/merge.rs:198`): per-kind rows, the feature
+  explanations, origin chips, an evidence snippet (the scan crop), and *Same* / *Not the same* /
+  *Decide later*, with shortcuts (ADR 0030). The mockups are updated in the same change. *Needs:* the
+  matching core and distinct decisions. *Exit:* SSR tests and a gui-pass scenario deciding a pair by
+  keyboard.
+- **Assisted wizard match stage** — ADR 0040 §4. A host-owned `present` stage after *Confirm*, shown
+  only when the record has candidates. `docs/mockups/import.html` is updated. *Needs:* the compare view
+  and the Digitalarkivet port. *Exit:* a gui-pass scenario covering a record with a candidate, and one
+  without, where no stage appears.
+- **Bulk import Plan and Review stages, and `vitni import --plan`** — ADR 0040 §3, §4. A plan summary by
+  kind and disposition, a review list with bulk actions (*Treat all Probable places as the same*,
+  *Decide the rest later*), and commit. CLI: `--plan` (text or `--json`, writes nothing),
+  `--defer-matches` (the non-interactive default), and interactive review on a TTY. The mockups are
+  updated. *Needs:* the compare view and the GEDCOM/Gramps port. *Exit:* `--plan` over a re-import
+  reports all Unchanged.
+- **Possible-matches review queue** — ADR 0039 §3. The Merge tool becomes *Matches*: the computed queue
+  across kinds, filtered by run, kind and band, with a Dashboard card. CLI:
+  `vitni match list|show|same|distinct`. The mockups are updated. *Needs:* the duplicate check and the
+  compare view. *Exit:* deferred pairs from one run are listed under that run and emptied by deciding
+  them.
+- **Similar-record hint on manual entry** — ADR 0038 §8. Creating a record, or adding a relative
+  through a picker, warns *possibly the same as I0042 (87%)* and offers *Use existing* / *Compare*,
+  never blocking. Pickers rank by similarity, and every record screen gets *Find similar*. The CLI
+  create verbs print the same hint on stderr. The mockups are updated. *Needs:* `find_similar`.
+  *Exit:* typing an existing person's name and birth year raises the hint.
+- **Linked records on a conclusion person** — ADR 0039 §5. A view of each linked persona with its origin,
+  source and *Unlink*. *Why we believe* names the origin record, with a link out where the dataset has
+  one. The mockups are updated. *Needs:* persona clusters. *Exit:* unlinking from the view restores two
+  people.
+- **`find-similar` query for plugins** — ADR 0038 §8. A read-only WIT query returning candidates with
+  their band and features, deny-by-default like every capability. *Needs:* `find_similar`. Low
+  priority.
+- **More name-culture packs** — ADR 0038 §5. `pl` and `pl-en`, `sv`, `de`, `fi` …, each one a TOML file
+  plus corpus cases, with no code change. File one when a user's data needs it. Unfiled by design.
 
 ### Round-trip gaps
 
@@ -517,10 +689,29 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   done: the root `Cargo.toml` has no `[profile.release]`, so shipped binaries carry full debug symbols
   and default codegen settings. `strip = true` plus a considered `lto`/`codegen-units` is the cheapest
   size win available before the first tag. — #214
+- **Remove the pre-1.0 backup upgraders and freeze backup format v1** — ADR 0041 §4. At the 1.0
+  release, delete `backup::upgrade::pre_release`; the format then in force becomes the permanent v1
+  baseline, and every later upgrader is permanent. The `xtask check` guard that forces this lands with
+  the backup bullet under *Backup & restore*. This bullet is only the deletion.
 - **`release.yml` unverified end-to-end** — no version tag has been pushed, so the release workflow is
   zizmor / YAML / `bash -n` verified and its build/package steps reproduced locally, but has never run a
   full tag → AppImage → GitHub Release cycle. The first real tag is that verification, and wants
   watching. — #211
+
+### Backup & restore
+
+- **Workspace backup and restore, with a versioned format** — ADR 0041. `vitni backup create
+  [--with-media]` / `restore --new NAME PATH`, plus a GUI *Back up…* / *Restore…* entry. The archive is a
+  `.vitni-backup` zip holding the manifest (`format_version`), `events.jsonl`, `workspace.toml` and a
+  media manifest. Restore inserts the rows as stored and rebuilds the projections, on either engine. A
+  chain of upgraders runs at restore. Before 1.0 the window is the current format and two before it, in
+  `backup::upgrade::pre_release`, and an archive older than that is refused with an actionable message.
+  Golden fixtures of invented data sit under `crates/vitni-app/tests/fixtures/backup/v<N>/`, and a
+  coverage test requires every event variant in the current fixture. The `xtask check` guard fails at
+  version ≥ 1.0.0 while `pre_release` still exists, and `docs/release.md` gains the checklist line.
+  This lands early in `0.10` so every later event change in the milestone passes the fixture guard.
+  The origin bullet then extends the round-trip test: a backup keeps origins, an export has none.
+  *Exit:* backup, restore into the other engine, and projections equal row for row.
 
 ### Dependencies blocked upstream
 

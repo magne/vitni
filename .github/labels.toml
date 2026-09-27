@@ -97,6 +97,11 @@ color = "5319e7"
 description = "Assisted import and external archive search"
 
 [[label]]
+name = "area/import/matching"
+color = "5319e7"
+description = "Record matching, identity decisions, staged import"
+
+[[label]]
 name = "area/import/round-trip"
 color = "5319e7"
 description = "GEDCOM and Gramps XML round-trip fidelity"
@@ -120,6 +125,11 @@ description = "Performance, pagination, projection scale"
 name = "area/platform/packaging"
 color = "b60205"
 description = "Packaging, release, distribution"
+
+[[label]]
+name = "area/platform/backup"
+color = "b60205"
+description = "Workspace backup and restore, backup format"
 
 [[label]]
 name = "area/platform/deps"
