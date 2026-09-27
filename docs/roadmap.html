@@ -327,6 +327,13 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
       release CI</div>
   </div>
   <div class="tl-row">
+    <div class="tl-label">Phase 14 <small>0.10, pre-1.0</small></div>
+    <div class="tl-bar spike"><span class="chip spike">next</span> &nbsp;Record matching &amp; identity
+      (ADRs 0037&ndash;0041): record origins + import runs · explainable Fellegi&ndash;Sunter matching with
+      name-culture packs · persona clusters, merge &amp; &ldquo;not the same&rdquo; · staged import
+      (plan &rarr; side-by-side review &rarr; resumable commit) · versioned workspace backup</div>
+  </div>
+  <div class="tl-row">
     <div class="tl-label">Phase 12</div>
     <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;DNA breadth &amp; depth:
       DNA match views · Y/mtDNA markers · haplogroup detail · triangulation groups (§17)</div>
@@ -609,6 +616,16 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>0.9.5 &mdash; public release</td><td>ADR 0008</td></tr>
     <tr><td><b><a href="adr/0036-api-keys-from-env-files.md">ADR 0036</a></b> &mdash; accepted</td><td>API keys named by <code>api-key-env</code>/<code>api_key_env</code> resolve from the environment, then <code>&lt;workspace&gt;/.env</code>, then <code>~/.config/vitni/.env</code>, looked up at use time and never loaded into the process environment</td>
       <td>Packaging (#296)</td><td>ADR 0017, 0033, 0005</td></tr>
+    <tr><td><b><a href="adr/0037-record-origin-and-import-runs.md">ADR 0037</a></b> &mdash; proposed</td><td>Record origin on <code>EventContext</code> (dataset, record, item, digest, run), dataset-scoped file-local keys, the <code>record_origins</code> index, tombstones, the <code>ImportRun</code> aggregate</td>
+      <td>Phase 14 (0.10)</td><td>ADR 0004, 0013, 0029</td></tr>
+    <tr><td><b><a href="adr/0038-record-matching-explainable-scoring.md">ADR 0038</a></b> &mdash; proposed</td><td>Explainable Fellegi&ndash;Sunter matching: graded comparators, name-culture packs chosen by place/time/language/lineage, deterministic-only automation, loose blocking, one engine for every consumer</td>
+      <td>Phase 14 (0.10)</td><td>data-model &sect;11.3, &sect;17</td></tr>
+    <tr><td><b><a href="adr/0039-identity-decisions-clusters-merge-distinct.md">ADR 0039</a></b> &mdash; proposed</td><td>Identity decisions: survivor-side merge and distinct for every matchable kind, the assessment snapshot, <code>identity_links</code> clusters, a computed review queue</td>
+      <td>Phase 14 (0.10)</td><td>data-model &sect;9, &sect;11.3; ADR 0019</td></tr>
+    <tr><td><b><a href="adr/0040-staged-import-plan-review-commit.md">ADR 0040</a></b> &mdash; proposed</td><td>Staged import: WIT record graphs, the host <code>ImportPlan</code>, per-kind decision semantics, host-owned match stages, resumable commit</td>
+      <td>Phase 14 (0.10)</td><td>ADR 0013, 0017</td></tr>
+    <tr><td><b><a href="adr/0041-workspace-backup-and-restore.md">ADR 0041</a></b> &mdash; proposed</td><td>Workspace backup and restore: event-log archive, restore-time upgraders, pre-1.0 two-version window, v1 freeze at 1.0, golden fixtures</td>
+      <td>Phase 14 (0.10), 1.0</td><td>ADR 0010, 0018 &sect;3</td></tr>
     <tr><td><b>ADR 0031</b></td><td>Place model for real-world administrative geography: reopen the <code>Multi*</code> geometry variant, add a civil/ecclesiastical/judicial <code>relation</code> to <code>PlaceRef</code>, and carry positional accuracy separately from <code>Confidence</code></td>
       <td>Phase 9 residual closure</td><td>ADR 0024, 0026, 0027</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>
