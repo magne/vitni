@@ -201,6 +201,8 @@ fn the_real_history_tab_renders_exactly_one_explanation() {
             why: None,
             assertion_id: "a-1".to_owned(),
             can_undo: true,
+            count: None,
+            children: Vec::new(),
         }];
         tab_frame::<TestForm>(
             &loc,

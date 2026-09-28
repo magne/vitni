@@ -1763,8 +1763,8 @@ impl Localizer {
 
     /// A localized phrase summarizing what an entry recorded.
     ///
-    /// A payload-derived [`ActivityDetail`] gives the specific phrase (the fact's kind, a collapsed
-    /// import's count); otherwise the event-type verb is used (one phrase per type across all 12
+    /// A payload-derived [`ActivityDetail`] gives the specific phrase (the fact's kind, what an import
+    /// run imported); otherwise the event-type verb is used (one phrase per type across all 14
     /// aggregates), with a generic "recorded a change" only for an unmapped type.
     #[must_use]
     pub fn change_summary(&self, entry: &ChangeLogEntry) -> String {
@@ -1773,34 +1773,28 @@ impl Localizer {
                 let fact = self.fact_type_label(fact_type);
                 fl!(self.loader, "history-fact-asserted-kind", fact = fact)
             }
-            Some(ActivityDetail::ImportBatch { count }) => {
-                let count = i64::from(*count);
-                fl!(self.loader, "dashboard-import-batch", count = count)
+            Some(ActivityDetail::ImportRun { run, .. }) => {
+                let source = if run.source_label.is_empty() {
+                    run.plugin.clone()
+                } else {
+                    run.source_label.clone()
+                };
+                fl!(self.loader, "history-import-run", source = source)
             }
             None => self.event_type_summary(&entry.event_type),
         }
     }
 
-    /// A localized phrase summarizing what a History-tab entry recorded.
-    ///
-    /// Like [`Self::change_summary`], except a collapsed import run reads by its origin ("Imported
-    /// from gedcom-import") rather than the dashboard's record count: on one record's own history the
-    /// count is of assertions on that single record, not of distinct records imported, so the
-    /// dashboard's wording would overstate what happened (issue #306).
+    /// The muted count beside an import-run row: the records a finished run imported.
     #[must_use]
-    pub fn history_summary(&self, entry: &ChangeLogEntry) -> String {
-        match &entry.detail {
-            Some(ActivityDetail::ImportBatch { .. }) => self.history_import_run(entry.operator_display.as_deref()),
-            Some(ActivityDetail::Fact { .. }) | None => self.change_summary(entry),
-        }
+    pub fn import_run_records(&self, records: u32) -> String {
+        fl!(self.loader, "history-import-run-records", count = i64::from(records))
     }
 
-    /// The record History tab's import-run sentence, e.g. `Imported from gedcom-import`. Falls back
-    /// to the "unknown operator" label when the run's software agent recorded no display name.
+    /// The muted count beside an import-run row: the changes the row folds.
     #[must_use]
-    pub fn history_import_run(&self, origin: Option<&str>) -> String {
-        let origin = origin.map_or_else(|| fl!(self.loader, "history-operator-unknown"), ToOwned::to_owned);
-        fl!(self.loader, "history-import-run", origin = origin)
+    pub fn import_run_changes(&self, count: u32) -> String {
+        fl!(self.loader, "history-import-run-changes", count = i64::from(count))
     }
 
     /// The localized verb phrase for an event type — one per variant across the 12 aggregates.
@@ -3283,6 +3277,7 @@ mod tests {
             evidence_analysis: None,
             detail: None,
             can_undo: false,
+            run: None,
         }
     }
 

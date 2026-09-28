@@ -1,3 +1,5 @@
+use vitni_app::ActivityDetail;
+
 use super::{Category, ChangeLogEntry, HashMap, Localizer, RecordRef};
 
 /// One change-log entry, for the History tab — who changed what, when, and why.
@@ -15,22 +17,36 @@ pub struct HistoryEntryVm {
     pub assertion_id: String,
     /// Whether this entry can be undone (drives the undo control).
     pub can_undo: bool,
+    /// For an import-run row, the localized count of the changes it folds (e.g. `4 changes`), shown
+    /// muted beside it; `None` for any other entry.
+    pub count: Option<String>,
+    /// For an import-run row, the entries it folds, newest first; empty otherwise.
+    pub children: Vec<HistoryEntryVm>,
 }
 
 impl HistoryEntryVm {
     /// Builds a history view-model from an app [`ChangeLogEntry`], localizing the summary + operator.
     ///
-    /// Uses [`Localizer::history_summary`], not `change_summary` directly: a collapsed import run
-    /// reads by its origin on the History tab, not by the dashboard's record count (issue #306).
+    /// An import-run row counts the changes it folds on this one record, not the records the run
+    /// imported, which would overstate what happened here (issue #306).
     #[must_use]
     pub fn from_entry(entry: &ChangeLogEntry, loc: &Localizer) -> Self {
+        let (count, children) = match &entry.detail {
+            Some(ActivityDetail::ImportRun { count, children, .. }) => (
+                Some(loc.import_run_changes(*count)),
+                children.iter().map(|child| Self::from_entry(child, loc)).collect(),
+            ),
+            Some(ActivityDetail::Fact { .. }) | None => (None, Vec::new()),
+        };
         Self {
             when: friendly_timestamp(&entry.occurred_at),
-            what: loc.history_summary(entry),
+            what: loc.change_summary(entry),
             who: loc.operator_line(entry),
             why: entry.rationale.clone(),
             assertion_id: entry.assertion_id.clone(),
             can_undo: entry.can_undo,
+            count,
+            children,
         }
     }
 }
@@ -45,13 +61,12 @@ pub fn first_undoable(entries: &[HistoryEntryVm]) -> Option<&HistoryEntryVm> {
     entries.iter().find(|entry| entry.can_undo)
 }
 
-/// Builds the History-tab rows, collapsing consecutive same-software-agent runs (e.g. an import) into
-/// one row via the shared [`vitni_app::collapse_runs`] — the same grouping [`ActivityVm::from_entry`]
-/// uses for the dashboard activity feed. The collapsed row is stamped from the run's newest entry, so
-/// it stays undoable like any other entry, rather than always carrying no undo control.
+/// Builds the History-tab rows, folding each import run's entries into one row via the shared
+/// [`vitni_app::group_runs`] — the same grouping the dashboard activity feed gets from the app. The
+/// run row is stamped from its newest entry, so it stays undoable like any other entry.
 #[must_use]
 pub fn collapse_history(entries: &[ChangeLogEntry], loc: &Localizer) -> Vec<HistoryEntryVm> {
-    vitni_app::collapse_runs(entries)
+    vitni_app::group_runs(entries)
         .iter()
         .map(|entry| HistoryEntryVm::from_entry(entry, loc))
         .collect()
@@ -77,24 +92,44 @@ pub struct ActivityVm {
     pub who: String,
     /// The affected record, when it resolves to a navigable detail (any aggregate with a `human_id`).
     pub record: Option<RecordRef>,
+    /// For an import-run row, the localized count shown muted beside it: the records the run
+    /// imported once it has ended (e.g. `142 records`), else the changes the row folds.
+    pub count: Option<String>,
+    /// For an import-run row, the entries it folds, newest first; empty otherwise.
+    pub children: Vec<ActivityVm>,
 }
 
 impl ActivityVm {
     /// Builds an activity row from an app [`ChangeLogEntry`], linking the affected record by name/id.
     #[must_use]
     pub(crate) fn from_entry(entry: &ChangeLogEntry, loc: &Localizer, names: &HashMap<String, String>) -> Self {
+        let (count, children) = match &entry.detail {
+            Some(ActivityDetail::ImportRun { run, count, children }) => (
+                Some(run.records.map_or_else(
+                    || loc.import_run_changes(*count),
+                    |records| loc.import_run_records(records),
+                )),
+                children
+                    .iter()
+                    .map(|child| Self::from_entry(child, loc, names))
+                    .collect(),
+            ),
+            Some(ActivityDetail::Fact { .. }) | None => (None, Vec::new()),
+        };
         Self {
             when: friendly_timestamp(&entry.occurred_at),
             what: loc.change_summary(entry),
             who: loc.operator_line(entry),
             record: record_for(entry, names),
+            count,
+            children,
         }
     }
 }
 
 /// The navigable record an entry affected, across every aggregate. People are labelled by display
-/// name (from `names`); other aggregates fall back to their `human_id`. A synthetic collapsed-import
-/// row (no kind, no id) and a record without a resolved `human_id` are not navigable.
+/// name (from `names`); other aggregates fall back to their `human_id`. An import-run row (no kind,
+/// no id) and a record without a resolved `human_id` are not navigable.
 fn record_for(entry: &ChangeLogEntry, names: &HashMap<String, String>) -> Option<RecordRef> {
     let human_id = entry.aggregate_human_id.as_ref()?;
     let category = Category::from_aggregate_kind(&entry.aggregate_kind)?;
@@ -117,6 +152,8 @@ mod tests {
             why: None,
             assertion_id: assertion_id.to_owned(),
             can_undo,
+            count: None,
+            children: Vec::new(),
         }
     }
 

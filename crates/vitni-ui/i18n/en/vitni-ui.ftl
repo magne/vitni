@@ -150,10 +150,18 @@ history-description-set = Description set
 history-place-linked = Place linked
 history-generic = Recorded a change
 
-# The record History tab's own phrase for a collapsed import run — by origin, not by how many
-# assertions the run left on this one record (issue #306). `dashboard-import-batch` below is the
-# Dashboard's activity-feed phrase for the same run, by record count.
-history-import-run = Imported from { $origin }
+# An import run's row, on the Dashboard and on a record's History tab (ADR 0037 §5): what it
+# imported, with a muted count beside it — the records a finished run imported on the Dashboard, the
+# changes it made to this one record on its History tab (issue #306).
+history-import-run = Imported from { $source }
+history-import-run-records = { $count ->
+    [one] 1 record
+   *[other] { $count } records
+}
+history-import-run-changes = { $count ->
+    [one] 1 change
+   *[other] { $count } changes
+}
 
 # Change-log operator line
 history-operator-human = { $name } · { $confidence }
@@ -426,7 +434,6 @@ dashboard-stat-evidence = Evidence health
 dashboard-stat-evidence-caption = facts with at least one source
 dashboard-stat-attention = Needs attention
 dashboard-recent-activity = Recent activity — who changed what
-dashboard-import-batch = { $count } records imported
 dashboard-jump-back = Jump back in
 dashboard-data-quality = Data quality
 dashboard-data-quality-loading = Checking data quality…

@@ -83,6 +83,7 @@ fn gallery() -> Element {
                 can_undo: true,
                 undo_text: "Undo".to_owned(),
                 undo_label: "Undo: Birth asserted".to_owned(),
+                count: None,
             }],
             onundo: move |_| {},
         }

@@ -23,10 +23,44 @@ fn timeline() -> Element {
                 can_undo: true,
                 undo_text: "Undo".to_owned(),
                 undo_label: "Undo: Name asserted".to_owned(),
+                count: None,
             }],
             onundo: move |_| {},
         }
     }
+}
+
+/// Renders the audit timeline with an import run's row.
+fn run_timeline() -> Element {
+    rsx! {
+        HistoryTimeline {
+            entries: vec![HistoryEntry {
+                when: "2026-06-22 14:35".to_owned(),
+                what: "Imported from tree.ged".to_owned(),
+                who: "gedcom-import (software agent)".to_owned(),
+                why: None,
+                assertion_id: "a1".to_owned(),
+                can_undo: true,
+                undo_text: "Undo".to_owned(),
+                undo_label: "Undo: Imported from tree.ged".to_owned(),
+                count: Some("4 changes".to_owned()),
+            }],
+            onundo: move |_| {},
+        }
+    }
+}
+
+#[test]
+fn an_import_run_row_shows_its_count_muted_beside_it() {
+    let mut vdom = VirtualDom::new(run_timeline);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(
+            r#"<div class="tl-what">Imported from tree.ged<span class="muted tl-count">4 changes</span></div>"#
+        ),
+        "the count sits in the row's summary line, muted:\n{html}"
+    );
 }
 
 #[test]
@@ -65,16 +99,28 @@ fn dashboard() -> Element {
             facts_without_source: 31,
             facts_total: 220,
         },
-        recent: vec![ActivityVm {
-            when: "2026-06-22 14:35".to_owned(),
-            what: "Name asserted".to_owned(),
-            who: "magne · High".to_owned(),
-            record: Some(RecordRef {
-                category: Category::People,
-                human_id: "I0001".to_owned(),
-                label: "John Smith".to_owned(),
-            }),
-        }],
+        recent: vec![
+            ActivityVm {
+                when: "2026-06-22 14:35".to_owned(),
+                what: "Name asserted".to_owned(),
+                who: "magne · High".to_owned(),
+                record: Some(RecordRef {
+                    category: Category::People,
+                    human_id: "I0001".to_owned(),
+                    label: "John Smith".to_owned(),
+                }),
+                count: None,
+                children: Vec::new(),
+            },
+            ActivityVm {
+                when: "2026-06-22 14:30".to_owned(),
+                what: "Imported from tree.ged".to_owned(),
+                who: "gedcom-import (software agent)".to_owned(),
+                record: None,
+                count: Some("142 records".to_owned()),
+                children: Vec::new(),
+            },
+        ],
         jump_back: vec![JumpVm {
             record: RecordRef {
                 category: Category::People,
@@ -184,22 +230,24 @@ fn dashboard_renders_stats_activity_and_data_quality() {
     let html = dioxus_ssr::render(&vdom);
 
     for needle in [
-        "Workspace at a glance", // the heading
-        "1284",                  // the people count
-        "642 families",          // the people caption
-        "86%",                   // evidence health
-        "31",                    // needs-attention / no-source count
-        "Recent activity",       // the activity card
-        r#"class="timeline""#,   // the activity feed reuses the audit timeline
-        "Name asserted",         // an activity row
-        "John Smith",            // the linked record + the jump-back button, by display name
-        "👤",                    // the entity icon prefixes the record links
-        r#"class="no-source""#,  // the computable data-quality check
-        "Death before birth",    // the death-before-birth check row
-        "Jane Reversed",         // its flagged person, as a navigable link
-        "Possible duplicates",   // the duplicates check row
-        "14",                    // the real duplicate-pair count
-        "Compare",               // the Compare button routing into the merge wizard
+        "Workspace at a glance",                              // the heading
+        "1284",                                               // the people count
+        "642 families",                                       // the people caption
+        "86%",                                                // evidence health
+        "31",                                                 // needs-attention / no-source count
+        "Recent activity",                                    // the activity card
+        r#"class="timeline""#,                                // the activity feed reuses the audit timeline
+        "Name asserted",                                      // an activity row
+        "Imported from tree.ged",                             // an import run's row
+        r#"<span class="muted tl-count">142 records</span>"#, // its count, muted beside it
+        "John Smith",           // the linked record + the jump-back button, by display name
+        "👤",                   // the entity icon prefixes the record links
+        r#"class="no-source""#, // the computable data-quality check
+        "Death before birth",   // the death-before-birth check row
+        "Jane Reversed",        // its flagged person, as a navigable link
+        "Possible duplicates",  // the duplicates check row
+        "14",                   // the real duplicate-pair count
+        "Compare",              // the Compare button routing into the merge wizard
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }

@@ -124,6 +124,8 @@ fn history_rows() -> Vec<HistoryEntryVm> {
         why: Some("Read off the register".to_owned()),
         assertion_id: "55555555-5555-7555-8555-555555555555".to_owned(),
         can_undo: true,
+        count: None,
+        children: Vec::new(),
     }]
 }
 

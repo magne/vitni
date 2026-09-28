@@ -150,10 +150,18 @@ history-description-set = Beskrivelse satt
 history-place-linked = Sted koblet
 history-generic = Registrerte en endring
 
-# Postens Historikk-fane sin egen frase for en samlet importkjøring — etter opphav, ikke etter hvor
-# mange påstander kjøringen la på denne ene posten (sak #306). `dashboard-import-batch` under er
-# Dashbordets aktivitetsstrøm-frase for samme kjøring, etter postantall.
-history-import-run = Importert fra { $origin }
+# En importkjørings rad, på Dashbordet og i en posts Historikk-fane (ADR 0037 §5): hva den
+# importerte, med et dempet antall ved siden av — postene en fullført kjøring importerte på
+# Dashbordet, endringene den gjorde på denne ene posten i Historikk-fanen (sak #306).
+history-import-run = Importert fra { $source }
+history-import-run-records = { $count ->
+    [one] 1 post
+   *[other] { $count } poster
+}
+history-import-run-changes = { $count ->
+    [one] 1 endring
+   *[other] { $count } endringer
+}
 
 # Endringslogg-operatørlinje
 history-operator-human = { $name } · { $confidence }
@@ -426,7 +434,6 @@ dashboard-stat-evidence = Bevishelse
 dashboard-stat-evidence-caption = fakta med minst én kilde
 dashboard-stat-attention = Trenger oppmerksomhet
 dashboard-recent-activity = Nylig aktivitet — hvem endret hva
-dashboard-import-batch = { $count } poster importert
 dashboard-jump-back = Hopp tilbake
 dashboard-data-quality = Datakvalitet
 dashboard-data-quality-loading = Sjekker datakvalitet…
