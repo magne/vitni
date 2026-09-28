@@ -518,7 +518,7 @@ fn library_file_checksum(workspace: &Workspace, stored: &str) -> Option<String> 
 
 /// Streams the file at `path` through SHA-256, in the `"sha256:<lowercase hex>"` form the plugin host's
 /// `media-store` reports.
-fn file_checksum(path: &Path) -> io::Result<String> {
+pub(crate) fn file_checksum(path: &Path) -> io::Result<String> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 8 * 1024];

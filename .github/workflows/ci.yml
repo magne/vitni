@@ -105,7 +105,7 @@ jobs:
       # the bench code still builds and lints; run it deliberately with
       # `cargo bench -p vitni-db --features sqlite`.
       - name: test
-        run: cargo nextest run --workspace --all-features --lib --bins --tests -E 'not binary_id(=vitni-db::postgres_store)'
+        run: cargo nextest run --workspace --all-features --lib --bins --tests -E 'not binary_id(=vitni-db::postgres_store) and not binary_id(=vitni-app::backup_postgres)'
       # nextest does not run doctests; keep them a separate cargo step.
       - name: doctests
         run: cargo test --workspace --all-features --doc
@@ -113,7 +113,7 @@ jobs:
   postgres:
     name: postgres integration tests
     # Native runner (not the container image): testcontainers needs a reachable Docker daemon, which
-    # only works outside a container job. vitni-db has no webview/UI deps, so no apt setup is
+    # only works outside a container job. vitni-db and vitni-app have no webview/UI deps, so no apt setup is
     # needed; the test-containers-util helper starts and reuses the `vitni-pg` container.
     runs-on: ubuntu-latest
     env:
@@ -133,6 +133,9 @@ jobs:
         run: docker pull postgres:18-alpine
       - name: test
         run: cargo test -p vitni-db --features postgres
+      # The backup exit test (ADR 0041): restore into the other engine, projections row for row.
+      - name: backup cross-engine test
+        run: cargo test -p vitni-app --features postgres --test backup_postgres
 
   deny:
     name: cargo-deny

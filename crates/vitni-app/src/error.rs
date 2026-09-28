@@ -34,6 +34,10 @@ macro_rules! app_error {
             /// guest-reported error). Carries the plugin host's message.
             #[error("plugin error: {0}")]
             Plugin(String),
+            /// A backup could not be written, or an archive or restore target was refused
+            /// (ADR 0041).
+            #[error(transparent)]
+            Backup(#[from] crate::backup::BackupError),
             $(
                 #[doc = concat!("No ", $noun, " exists with the given identifier.")]
                 #[error($msg)]
