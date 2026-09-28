@@ -1,6 +1,6 @@
 # 39. Identity decisions: persona clusters, merge and distinct
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-27
 
 ## Context

@@ -1,6 +1,6 @@
 # 40. Staged import: plan, review, commit
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-27
 
 ## Context

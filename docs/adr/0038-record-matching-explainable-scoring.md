@@ -1,6 +1,6 @@
 # 38. Record matching: explainable probabilistic scoring
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-27
 
 ## Context

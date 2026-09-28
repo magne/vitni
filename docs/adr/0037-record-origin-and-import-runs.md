@@ -1,6 +1,6 @@
 # 37. Record origin: source-record keys on assertions, and import runs
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-27
 
 ## Context

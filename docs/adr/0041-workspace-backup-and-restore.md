@@ -1,6 +1,6 @@
 # 41. Workspace backup and restore, with a versioned format
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-27
 
 ## Context
