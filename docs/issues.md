@@ -174,8 +174,8 @@ already filed against it keep resolving their
 The 13 detail screens share their tab **bodies** — `screens/tabs.rs` (citations, notes, tags,
 addresses, history) and `screens/shared.rs` (media, the retract and attach side panels) — and re-implement
 only the Overview and their entity-specific tables. So each item here lands on every aggregate at once,
-which is what makes them worth fixing in the shared code rather than per screen. All came out of the
-2026-08-12 GUI walkthrough.
+which is what makes them worth fixing in the shared code rather than per screen. Most came out of the
+2026-08-12 GUI walkthrough; the rest from reading the code.
 
 - **The change-set commit path is written out 14 times in `services.rs`.** `services.rs:283-497` holds
   the 13 `commit_*_change_set` wrappers plus `commit_new_record`, whose bodies are the same four
@@ -244,14 +244,17 @@ which is what makes them worth fixing in the shared code rather than per screen.
   side panel (`attach_link_form`) shows the provenance fields, and every dispatch arm receives the
   filled `ProvenanceDraft`. Person, Family and Citation pass it on (`prov.meta()`). Ten arms in
   `vitni-ui/src/intent.rs` drop it: media and note on Event, Place and Source, and note on
-  Repository, Media, DnaTest and DnaMatch. They call the `import_attach_*` wrappers, which take no
-  metadata and write `MutationMeta::default()`, so the reason, surety and citations a user enters never
-  reach History. `vitni-ui` has to use these wrappers because the picker returns `human_id`s and it
-  cannot name `NoteId`/`MediaId` (ADR 0008). `dispatch_provenance.rs` says the draft reaches "every
-  mutation" but tests only Person. *Shape:* each wrapper takes a `MutationMeta`, as
-  `attach_person_note` does. The ten arms pass `prov.meta()`, and the plugin host's two event verbs
-  pass `mutation_meta()`. *Exit:* a dispatch test per kind attaches a note (and media, where the kind
-  has it) with a filled draft and finds its rationale and confidence in that record's change log. — #424
+  Repository, Media, DnaTest and DnaMatch. They call the `import_attach_*` wrappers. The Event pair
+  takes a `Provenance` (since #421) and the two arms pass `Provenance::default()`. The other eight
+  wrappers take no metadata and write `MutationMeta::default()` themselves. Either way, the reason,
+  surety and citations a user enters never reach History. `vitni-ui` has to use these wrappers because
+  the picker returns `human_id`s and it cannot name `NoteId`/`MediaId` (ADR 0008).
+  `dispatch_provenance.rs` says the draft reaches "every mutation" but tests only Person. *Shape:* every
+  wrapper takes a `MutationMeta`, as `attach_person_note` does. For the Event pair that replaces the
+  `Provenance`, which cannot carry citations. The ten arms pass `prov.meta()`, and the plugin host's two
+  event verbs pass `mutation_meta()`. *Exit:* a dispatch test per kind attaches a note (and media, where
+  the kind has it) with a filled draft and finds its rationale, confidence and citation in that record's
+  change log. — #424
 
 ### Lists, search & scale
 
