@@ -159,8 +159,8 @@ shipping later. So the packaging work sequences **last** — it is the least val
 early, because there is no point packaging an interface that isn't finished.
 
 The workspace is at `0.1.0` with no tags yet, so the gates are numbered to make their order
-unambiguous. `0.10` sorts before `0.9` in a plain lexical sort, so each milestone carries a due date
-and GitHub's list is read in due-date order.
+unambiguous. The numbers are versions, not strings: `0.10` follows `0.9`, even where a title sort in
+GitHub's milestone list shows it first. The order is the one in the table below.
 
 **`0.10 — Record matching` is a pre-1.0 gate because import currently corrupts data.** A second,
 unrelated GEDCOM file silently resolves its people onto the first file's people, and a re-import
@@ -176,7 +176,7 @@ rather than kept as history — the archive is the record.
 | --- | --- |
 | **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: a save run that hangs when its target leaves the strip (#302), and the shared record tabs having no common layout contract (#303). |
 | **`0.10 — Record matching`** | Import that never duplicates and never guesses: record origins and import runs, the matching engine, identity decisions, staged import with side-by-side review, and versioned workspace backup (ADRs 0037–0041). Groomed in full in §4, in dependency order. |
-| **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end on the first real tag, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. Also the deletion of the pre-1.0 backup upgraders, which freezes backup format v1 (ADR 0041 §4). |
+| **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end on the first real tag, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. Also the deletion of the pre-1.0 backup upgraders, which freezes backup format v1 (#392, ADR 0041 §4). |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
 server/web work, the plugin-UI vocabulary tail, the ADR 0014 plugin-trust out-of-scope list, round-trip
@@ -233,7 +233,7 @@ a hit-test bug (#285), the map needs a repaint rather than a resize (#252), and 
 ever blanked the canvas. The code changes themselves are in the PRs and the commit log, which is where
 §6 says they belong.
 
-### `0.10 — Record matching` (29 planned)
+### `0.10 — Record matching` (29 open)
 
 Ordered by dependency, not severity. The three bugs go first because they corrupt data today. Backup
 goes next, so every later event change passes its fixture guard. Then come the origins, the engine
@@ -244,17 +244,17 @@ import*, backup under *Backup & restore*, and the rest under
 
 | Stage | Items | Why it gates |
 | --- | --- | --- |
-| Bugs | Digitalarkivet census re-import duplicates in the GUI; GEDCOM/Gramps external ids collide across files; person/family created in two commits without the provenance template | Import writes wrong data today: duplicates, and people from two files merged |
-| Backup (ADR 0041) | Versioned backup and restore, with golden fixtures and the pre-1.0 window | Internal ids must survive; the format 1.0 freezes has to exist |
-| Origin (ADR 0037) | `RecordOrigin` + `ImportRun`; the `record_origins` index and resolve-by-origin; tombstones | A re-import is a no-op for every kind; retractions survive re-import |
-| Engine (ADR 0038) | Matching core with culture packs; person profile; Family/Event profiles; the other kinds' profiles; `match_keys` + `find_similar`; duplicate check through the engine; evaluation corpus + `match-eval` | One explainable answer to "are these the same?" |
-| Identity (ADR 0039) | `PersonsDistinguished` + assessment; persona clusters; Event/Family merge; the other kinds' merge | A confirmed match behaves as one record; a rejected one never returns |
-| Staged import (ADR 0040) | WIT record graph + `ImportPlan`; GEDCOM/Gramps port; Digitalarkivet port; Digitalarkivet events, places, households | The host resolves identically for every importer, before writing |
-| UI & CLI | Shared compare view; assisted match stage; bulk Plan/Review + `--plan`; review queue; similar-record hint; linked records | The user decides side by side; with nothing to ask, nothing is shown |
-| Plugins | `find-similar` WIT query | Plugins reuse the engine instead of re-implementing it |
+| Bugs (#388–#390) | Digitalarkivet census re-import duplicates in the GUI; GEDCOM/Gramps external ids collide across files; person/family created in two commits without the provenance template | Import writes wrong data today: duplicates, and people from two files merged |
+| Backup (ADR 0041, #391) | Versioned backup and restore, with golden fixtures and the pre-1.0 window | Internal ids must survive; the format 1.0 freezes has to exist |
+| Origin (ADR 0037, #393–#395) | `RecordOrigin` + `ImportRun`; the `record_origins` index and resolve-by-origin; tombstones | A re-import is a no-op for every kind; retractions survive re-import |
+| Engine (ADR 0038, #396–#402) | Matching core with culture packs; person profile; Family/Event profiles; the other kinds' profiles; `match_keys` + `find_similar`; duplicate check through the engine; evaluation corpus + `match-eval` | One explainable answer to "are these the same?" |
+| Identity (ADR 0039, #403–#406) | `PersonsDistinguished` + assessment; persona clusters; Event/Family merge; the other kinds' merge | A confirmed match behaves as one record; a rejected one never returns |
+| Staged import (ADR 0040, #407–#410) | WIT record graph + `ImportPlan`; GEDCOM/Gramps port; Digitalarkivet port; Digitalarkivet events, places, households | The host resolves identically for every importer, before writing |
+| UI & CLI (#411–#416) | Shared compare view; assisted match stage; bulk Plan/Review + `--plan`; review queue; similar-record hint; linked records | The user decides side by side; with nothing to ask, nothing is shown |
+| Plugins (#417) | `find-similar` WIT query | Plugins reuse the engine instead of re-implementing it |
 
 The count is 29 because the *More name-culture packs* bullet is unfiled by design, and the backup
-freeze (v1) is filed in `1.0`. Issue numbers are added to this table when they are filed.
+freeze (v1, #392) is filed in `1.0`. Within each stage, issues are numbered in dependency order.
 
 ### Not in any milestone
 
