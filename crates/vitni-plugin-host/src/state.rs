@@ -272,7 +272,7 @@ impl commands::Host for HostState {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        vitni_app::import_add_partner(&self.workspace, &self.session, &family, &person)
+        vitni_app::import_add_partner(&self.workspace, &self.session, &family, &person, self.provenance())
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -286,11 +286,14 @@ impl commands::Host for HostState {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        let relationships = relationships
-            .into_iter()
-            .map(|rel| (rel.partner, to_child_relationship(&rel.relationship)))
-            .collect();
-        vitni_app::import_add_child(&self.workspace, &self.session, &family, &child, relationships)
+        let child = vitni_app::ImportedChild {
+            human_id: child,
+            relationships: relationships
+                .into_iter()
+                .map(|rel| (rel.partner, to_child_relationship(&rel.relationship)))
+                .collect(),
+        };
+        vitni_app::import_add_child(&self.workspace, &self.session, &family, child, self.provenance())
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -691,8 +694,11 @@ impl commands::Host for HostState {
             &self.workspace,
             &self.session,
             &event,
-            &media,
-            media_ref_input(crop, caption),
+            vitni_app::ImportedMediaRef {
+                media_human_id: media,
+                input: media_ref_input(crop, caption),
+            },
+            self.provenance(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -700,7 +706,7 @@ impl commands::Host for HostState {
 
     async fn attach_event_note(&mut self, event: String, note: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        vitni_app::import_attach_event_note(&self.workspace, &self.session, &event, &note)
+        vitni_app::import_attach_event_note(&self.workspace, &self.session, &event, &note, self.provenance())
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -2277,7 +2283,14 @@ impl present::Host for HostState {
 
 #[cfg(test)]
 mod tests {
-    use super::{MediaRefInput, Rect, media_ref_input, types};
+    use vitni_app::{AppDefaults, NewEvent, NewMedia, NewNote, OperatorConfig, WorkspaceDefaults};
+    use vitni_core::ids::AgentId;
+    use wasmtime_wasi::WasiCtxBuilder;
+
+    use super::{
+        AiConfig, BulkIo, Capability, Confidence, EventType, Grants, HostState, MediaRefInput, NetPolicy, Provenance,
+        Rect, Session, StoreLimits, Workspace, commands, media_ref_input, types,
+    };
 
     #[test]
     fn media_crop_maps_onto_the_core_rect() {
@@ -2307,5 +2320,135 @@ mod tests {
     #[test]
     fn absent_crop_and_caption_map_to_the_default_input() {
         assert_eq!(media_ref_input(None, None), MediaRefInput::default());
+    }
+
+    /// A host with the `commands` grant and the assisted `Low` template, over a fresh workspace.
+    async fn low_template_host(dir: &tempfile::TempDir) -> HostState {
+        let operator = OperatorConfig {
+            id: AgentId::from_uuid(uuid::Uuid::from_u128(1)),
+            display: Some("Tester".to_owned()),
+            email: None,
+        };
+        let root = dir.path().join("ws");
+        Workspace::init(&root, &operator, &AppDefaults::default(), None).expect("init");
+        let workspace = Workspace::open(&root, &operator, &WorkspaceDefaults::default())
+            .await
+            .expect("open workspace");
+        HostState::new(
+            WasiCtxBuilder::new().build(),
+            StoreLimits::default(),
+            Grants::none().with(Capability::Commands),
+            workspace,
+            Session::software("fixture", "0.1.0"),
+            NetPolicy::deny_all(),
+            AiConfig::default(),
+            Some(Confidence::Low),
+            BulkIo::none(),
+        )
+    }
+
+    /// Seeds a record through `commands`, returning its `human_id`.
+    fn created(result: Result<types::ImportResult, types::CapabilityError>) -> String {
+        result.expect("seed record").human_id
+    }
+
+    #[tokio::test]
+    async fn the_template_reaches_family_links_and_event_attachments() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut host = low_template_host(&dir).await;
+        let partner = created(commands::Host::create_person(&mut host, None, None).await);
+        let child = created(commands::Host::create_person(&mut host, None, None).await);
+        let family = created(commands::Host::create_family(&mut host, None).await);
+        let session = Session::software("seed", "0.1.0");
+        let event = vitni_app::create_event(
+            &host.workspace,
+            &session,
+            NewEvent {
+                human_id: None,
+                event_type: EventType::Marriage,
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("event");
+        let media = vitni_app::create_media(
+            &host.workspace,
+            &session,
+            NewMedia {
+                human_id: None,
+                path: Some("scan.jpg".to_owned()),
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("media");
+        let note = vitni_app::create_note(
+            &host.workspace,
+            &session,
+            NewNote {
+                human_id: None,
+                text: None,
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("note");
+
+        commands::Host::add_partner(&mut host, family.clone(), partner.clone())
+            .await
+            .expect("partner");
+        let link = types::ChildParentRel {
+            partner,
+            relationship: types::ChildRelationship::Birth,
+        };
+        commands::Host::add_child(&mut host, family.clone(), child, vec![link])
+            .await
+            .expect("child");
+        commands::Host::attach_event_media(&mut host, event.clone(), media, None, None)
+            .await
+            .expect("event media");
+        commands::Host::attach_event_note(&mut host, event.clone(), note)
+            .await
+            .expect("event note");
+
+        let family_log = vitni_app::change_log_for_family(&host.workspace, &family)
+            .await
+            .expect("family log");
+        let event_log = vitni_app::change_log_for_event(&host.workspace, &event)
+            .await
+            .expect("event log");
+        let linked = [
+            "PartnerAdded",
+            "ChildAdded",
+            "ChildRelationshipAsserted",
+            "MediaAttached",
+            "NoteAttached",
+        ];
+        let mut seen = Vec::new();
+        for entry in family_log.iter().chain(&event_log) {
+            if linked.contains(&entry.event_type.as_str()) {
+                assert_eq!(
+                    entry.confidence,
+                    Some(Confidence::Low),
+                    "{} carries the template",
+                    entry.event_type
+                );
+                seen.push(entry.event_type.clone());
+            }
+        }
+        seen.sort_unstable();
+        assert_eq!(
+            seen,
+            [
+                "ChildAdded",
+                "ChildRelationshipAsserted",
+                "MediaAttached",
+                "NoteAttached",
+                "PartnerAdded"
+            ]
+        );
     }
 }

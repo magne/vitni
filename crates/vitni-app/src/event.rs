@@ -515,8 +515,19 @@ pub async fn attach_event_note(
     .await
 }
 
+/// A media reference an importer attaches: the media object's `human_id` and the region and caption
+/// the reference carries.
+#[derive(Debug, Clone)]
+pub struct ImportedMediaRef {
+    /// The media object's `human_id`.
+    pub media_human_id: String,
+    /// The crop region and caption of this reference.
+    pub input: MediaRefInput,
+}
+
 /// Attaches a media object (by its `human_id`) to an event — the importer-facing wrapper that
-/// resolves the media `human_id` to its id, so a bulk importer never handles UUIDs.
+/// resolves the media `human_id` to its id, so a bulk importer never handles UUIDs. `provenance` is
+/// the caller's confidence template (ADR 0017 §7).
 ///
 /// # Errors
 ///
@@ -526,27 +537,24 @@ pub async fn import_attach_event_media(
     workspace: &Workspace,
     session: &Session,
     event_human_id: &str,
-    media_human_id: &str,
-    input: MediaRefInput,
+    media: ImportedMediaRef,
+    provenance: Provenance,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = use_case::resolve_id(
-        store.find_media(media_human_id).await?,
+        store.find_media(&media.media_human_id).await?,
         vitni_core::media::MediaView::media_id,
-        || AppError::MediaNotFound(media_human_id.to_owned()),
+        || AppError::MediaNotFound(media.media_human_id.clone()),
     )?;
-    attach_event_media(
-        workspace,
-        session,
-        event_human_id,
-        media_id,
-        input,
-        MutationMeta::default(),
-    )
-    .await
+    let meta = MutationMeta {
+        provenance,
+        ..MutationMeta::default()
+    };
+    attach_event_media(workspace, session, event_human_id, media_id, media.input, meta).await
 }
 
-/// Attaches a note (by its `human_id`) to an event — the importer-facing wrapper.
+/// Attaches a note (by its `human_id`) to an event — the importer-facing wrapper. `provenance` is the
+/// caller's confidence template (ADR 0017 §7).
 ///
 /// # Errors
 ///
@@ -557,6 +565,7 @@ pub async fn import_attach_event_note(
     session: &Session,
     event_human_id: &str,
     note_human_id: &str,
+    provenance: Provenance,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = use_case::resolve_id(
@@ -564,7 +573,11 @@ pub async fn import_attach_event_note(
         vitni_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_event_note(workspace, session, event_human_id, note_id, MutationMeta::default()).await
+    let meta = MutationMeta {
+        provenance,
+        ..MutationMeta::default()
+    };
+    attach_event_note(workspace, session, event_human_id, note_id, meta).await
 }
 
 /// Applies (or removes) a tag on an event, identified by `human_id`.

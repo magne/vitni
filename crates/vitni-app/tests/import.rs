@@ -5,9 +5,11 @@
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, Confidence, ExternalId, OperatorConfig, PersonNameParts, Provenance, Session, Workspace,
-    WorkspaceDefaults, change_log_for_family, change_log_for_person, import_add_partner, import_family, import_person,
-    list_families, list_persons, show_person,
+    AppDefaults, ChildParentRelationship, Confidence, EventType, ExternalId, ImportedChild, ImportedMediaRef,
+    MediaRefInput, NewEvent, NewMedia, NewNote, OperatorConfig, PersonNameParts, Provenance, Session, Workspace,
+    WorkspaceDefaults, change_log_for_event, change_log_for_family, change_log_for_person, create_event, create_media,
+    create_note, import_add_child, import_add_partner, import_attach_event_media, import_attach_event_note,
+    import_family, import_person, list_families, list_persons, show_person,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
@@ -144,10 +146,10 @@ async fn re_importing_a_family_and_its_partners_is_idempotent() {
         let (family, _) = import_family(&ws, &session, uid("F-1"), Provenance::default())
             .await
             .expect("family");
-        import_add_partner(&ws, &session, &family, &husband)
+        import_add_partner(&ws, &session, &family, &husband, Provenance::default())
             .await
             .expect("partner husband");
-        import_add_partner(&ws, &session, &family, &wife)
+        import_add_partner(&ws, &session, &family, &wife, Provenance::default())
             .await
             .expect("partner wife");
     }
@@ -256,6 +258,110 @@ async fn an_assisted_import_stamps_its_template_on_the_family_and_its_key() {
     kinds.sort_unstable();
     assert_eq!(kinds, ["ExternalIdAdded", "FamilyCreated"]);
     for entry in &log {
+        assert_eq!(
+            entry.confidence,
+            Some(Confidence::Low),
+            "{} carries the template",
+            entry.event_type
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_assisted_import_stamps_its_template_on_family_links_and_event_attachments() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let (partner, _) = import_person(&ws, &session, uid("I-1"), Some(name("John", "Smith")), low())
+        .await
+        .expect("partner");
+    let (child, _) = import_person(&ws, &session, uid("I-2"), Some(name("Jon", "Smith")), low())
+        .await
+        .expect("child");
+    let (family, _) = import_family(&ws, &session, uid("F-1"), low()).await.expect("family");
+    let event = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        low(),
+        &[],
+    )
+    .await
+    .expect("event");
+    let media = create_media(
+        &ws,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: Some("scan.jpg".to_owned()),
+        },
+        low(),
+        &[],
+    )
+    .await
+    .expect("media");
+    let note = create_note(
+        &ws,
+        &session,
+        NewNote {
+            human_id: None,
+            text: None,
+        },
+        low(),
+        &[],
+    )
+    .await
+    .expect("note");
+
+    // Twice: the second pass is a re-import, whose already-present links stay silent no-ops.
+    for _ in 0..2 {
+        import_add_partner(&ws, &session, &family, &partner, low())
+            .await
+            .expect("partner");
+        let imported = ImportedChild {
+            human_id: child.clone(),
+            relationships: vec![(partner.clone(), ChildParentRelationship::Birth)],
+        };
+        import_add_child(&ws, &session, &family, imported, low())
+            .await
+            .expect("child");
+    }
+    let media_ref = ImportedMediaRef {
+        media_human_id: media,
+        input: MediaRefInput::default(),
+    };
+    import_attach_event_media(&ws, &session, &event, media_ref, low())
+        .await
+        .expect("event media");
+    import_attach_event_note(&ws, &session, &event, &note, low())
+        .await
+        .expect("event note");
+
+    let family_log = change_log_for_family(&ws, &family).await.expect("family log");
+    let event_log = change_log_for_event(&ws, &event).await.expect("event log");
+    let mut kinds: Vec<&str> = family_log
+        .iter()
+        .chain(&event_log)
+        .map(|entry| entry.event_type.as_str())
+        .collect();
+    kinds.sort_unstable();
+    assert_eq!(
+        kinds,
+        [
+            "ChildAdded",
+            "ChildRelationshipAsserted",
+            "EventCreated",
+            "ExternalIdAdded",
+            "FamilyCreated",
+            "MediaAttached",
+            "NoteAttached",
+            "PartnerAdded",
+        ],
+        "each link is asserted once across both passes"
+    );
+    for entry in family_log.iter().chain(&event_log) {
         assert_eq!(
             entry.confidence,
             Some(Confidence::Low),

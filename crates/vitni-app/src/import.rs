@@ -10,7 +10,7 @@
 //! reconciliation rule covers): a differing live `Person.sex` is superseded, not just left alone,
 //! when the file's own export date is at least as current as the live assertion.
 
-use vitni_core::enums::{EvidenceLevel, Sex};
+use vitni_core::enums::{ChildParentRelationship, EvidenceLevel, Sex};
 use vitni_core::family::FamilyError;
 use vitni_core::person::PersonView;
 use vitni_core::provenance::Timestamp;
@@ -102,6 +102,8 @@ pub async fn import_family(
 
 /// Adds a partner to a family, treating an already-present partner as a no-op (additive re-import).
 ///
+/// `provenance` is the caller's confidence template, as for [`import_person`].
+///
 /// # Errors
 ///
 /// [`AppError::FamilyNotFound`]/[`AppError::PersonNotFound`] if either does not exist, or a
@@ -111,13 +113,14 @@ pub async fn import_add_partner(
     session: &Session,
     family_human_id: &str,
     person_human_id: &str,
+    provenance: Provenance,
 ) -> Result<(), AppError> {
     match family::add_partner(
         workspace,
         session,
         family_human_id,
         person_human_id,
-        MutationMeta::default(),
+        stamped(provenance),
     )
     .await
     {
@@ -126,8 +129,20 @@ pub async fn import_add_partner(
     }
 }
 
-/// Adds a (birth) child to a family, treating an already-present child as a no-op (additive
-/// re-import).
+/// A child an importer adds to a family: its `human_id` and the child-to-partner links its record
+/// states, each as `(partner human_id, relationship)`.
+#[derive(Debug, Clone)]
+pub struct ImportedChild {
+    /// The child's `human_id`.
+    pub human_id: String,
+    /// The pedigree links to the family's partners (GEDCOM `_FREL`/`_MREL`, Gramps `frel`/`mrel`).
+    pub relationships: Vec<(String, ChildParentRelationship)>,
+}
+
+/// Adds a child to a family, treating an already-present child as a no-op (additive re-import).
+///
+/// `provenance` is the caller's confidence template, as for [`import_person`], stamped on the
+/// membership and on every relationship link.
 ///
 /// # Errors
 ///
@@ -137,8 +152,8 @@ pub async fn import_add_child(
     workspace: &Workspace,
     session: &Session,
     family_human_id: &str,
-    child_human_id: &str,
-    relationships: Vec<(String, vitni_core::enums::ChildParentRelationship)>,
+    child: ImportedChild,
+    provenance: Provenance,
 ) -> Result<(), AppError> {
     // Membership and each parent link are separate assertions (ADR 0021), so re-import swallows a
     // duplicate *per piece*: an already-present child keeps its membership, and a newly-appearing
@@ -148,24 +163,24 @@ pub async fn import_add_child(
         workspace,
         session,
         family_human_id,
-        child_human_id,
+        &child.human_id,
         Vec::new(),
-        MutationMeta::default(),
+        stamped(provenance.clone()),
     )
     .await
     {
         Err(AppError::FamilyDomain(FamilyError::ChildAlreadyPresent(_))) => {}
         other => other?,
     }
-    for (partner_human_id, relationship) in relationships {
+    for (partner_human_id, relationship) in child.relationships {
         match family::assert_child_relationship(
             workspace,
             session,
             family_human_id,
-            child_human_id,
+            &child.human_id,
             &partner_human_id,
             relationship,
-            MutationMeta::default(),
+            stamped(provenance.clone()),
         )
         .await
         {
@@ -195,11 +210,7 @@ async fn ensure_name(
         return Ok(());
     }
     let human_id = human_id_of(view.human_id(), "person")?;
-    let meta = MutationMeta {
-        provenance,
-        ..MutationMeta::default()
-    };
-    person::add_name(workspace, session, &human_id, name, meta).await
+    person::add_name(workspace, session, &human_id, name, stamped(provenance)).await
 }
 
 /// Asserts a person's sex during import, reconciling against any existing value using the file's
@@ -233,11 +244,7 @@ pub async fn import_assert_sex(
         .await?
         .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))?;
     let Some(live) = view.sex_with_assertions().last() else {
-        let meta = MutationMeta {
-            provenance,
-            ..MutationMeta::default()
-        };
-        return person::assert_sex(workspace, session, human_id, sex, meta).await;
+        return person::assert_sex(workspace, session, human_id, sex, stamped(provenance)).await;
     };
     if live.value.value == sex {
         return Ok(());
@@ -259,6 +266,14 @@ pub async fn import_assert_sex(
         ..MutationMeta::default()
     };
     person::assert_sex(workspace, session, human_id, sex, meta).await
+}
+
+/// The mutation metadata for an import assertion: the caller's provenance template and nothing else.
+fn stamped(provenance: Provenance) -> MutationMeta<'static> {
+    MutationMeta {
+        provenance,
+        ..MutationMeta::default()
+    }
 }
 
 /// Pulls the `human_id` string from a just-resolved view, mapping a missing one to a backend error
