@@ -113,10 +113,10 @@ pub use dto::{
 pub use duplicates::{DuplicateCandidate, MatchKind, find_duplicate_candidates};
 pub use error::AppError;
 pub use event::{
-    DateInput, DateParts, EventAddressRef, EventPlaceRow, EventRow, EventSummary, NewEvent, ParticipantRef,
-    PlaceRefSummary, add_event_citation, assert_event_address, assert_event_date, assert_event_date_value,
-    attach_event_media, attach_event_note, build_genealogical_date, create_event, gregorian_date,
-    import_attach_event_media, import_attach_event_note, link_place, list_event_rows, list_events,
+    DateInput, DateParts, EventAddressRef, EventPlaceRow, EventRow, EventSummary, ImportedMediaRef, NewEvent,
+    ParticipantRef, PlaceRefSummary, add_event_citation, assert_event_address, assert_event_date,
+    assert_event_date_value, attach_event_media, attach_event_note, build_genealogical_date, create_event,
+    gregorian_date, import_attach_event_media, import_attach_event_note, link_place, list_event_rows, list_events,
     set_event_description, set_event_human_id, set_event_type, set_restrictions as set_event_restrictions, show_event,
     tag_event, update_event_media_ref,
 };
@@ -141,7 +141,9 @@ pub use history::{
     undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion,
     undo_research_note_assertion, undo_source_assertion, workspace_counts,
 };
-pub use import::{import_add_child, import_add_partner, import_assert_sex, import_family, import_person};
+pub use import::{
+    ImportedChild, import_add_child, import_add_partner, import_assert_sex, import_family, import_person,
+};
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
 pub use media::{
     MediaAttributeRef, MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date,

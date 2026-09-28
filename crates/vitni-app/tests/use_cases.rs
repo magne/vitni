@@ -857,7 +857,9 @@ async fn assert_child_relationship_supersedes_per_row() {
 
 #[tokio::test]
 async fn import_add_child_is_additive_across_reimport() {
-    use vitni_app::{ChildParentRelationship, add_partner, create_family, import_add_child, show_family};
+    use vitni_app::{
+        ChildParentRelationship, ImportedChild, add_partner, create_family, import_add_child, show_family,
+    };
 
     let (ws, _dir) = workspace().await;
     let session = session();
@@ -884,8 +886,11 @@ async fn import_add_child_is_additive_across_reimport() {
         &ws,
         &session,
         &family,
-        &child,
-        vec![(partner_a.clone(), ChildParentRelationship::Birth)],
+        ImportedChild {
+            human_id: child.clone(),
+            relationships: vec![(partner_a.clone(), ChildParentRelationship::Birth)],
+        },
+        Provenance::default(),
     )
     .await
     .expect("first import");
@@ -894,8 +899,11 @@ async fn import_add_child_is_additive_across_reimport() {
         &ws,
         &session,
         &family,
-        &child,
-        vec![(partner_a.clone(), ChildParentRelationship::Birth)],
+        ImportedChild {
+            human_id: child.clone(),
+            relationships: vec![(partner_a.clone(), ChildParentRelationship::Birth)],
+        },
+        Provenance::default(),
     )
     .await
     .expect("re-import same");
@@ -912,11 +920,14 @@ async fn import_add_child_is_additive_across_reimport() {
         &ws,
         &session,
         &family,
-        &child,
-        vec![
-            (partner_a.clone(), ChildParentRelationship::Birth),
-            (partner_b.clone(), ChildParentRelationship::Step),
-        ],
+        ImportedChild {
+            human_id: child.clone(),
+            relationships: vec![
+                (partner_a.clone(), ChildParentRelationship::Birth),
+                (partner_b.clone(), ChildParentRelationship::Step),
+            ],
+        },
+        Provenance::default(),
     )
     .await
     .expect("re-import with a new link");
