@@ -523,6 +523,7 @@ mod tests {
                     confidence: Some(Confidence::High),
                     rationale: Some("cross-checked".to_owned()),
                     evidence_analysis: None,
+                    origin: None,
                 },
                 citations: vec![cite],
             },

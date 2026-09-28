@@ -64,6 +64,7 @@ fn next_meta(counter: &mut u128) -> AssertionMeta {
             confidence: Some(Confidence::Normal),
             citations: Vec::new(),
             evidence_analysis: None,
+            origin: None,
         },
     }
 }

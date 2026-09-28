@@ -229,6 +229,7 @@ mod tests {
             confidence,
             citations: Vec::new(),
             evidence_analysis: None,
+            origin: None,
         }
     }
 
@@ -265,6 +266,7 @@ mod tests {
         assert_variant_names_are_serde_tags::<crate::dna_test::DnaTestEventBody>();
         assert_variant_names_are_serde_tags::<crate::event::EventEventBody>();
         assert_variant_names_are_serde_tags::<crate::family::FamilyEventBody>();
+        assert_variant_names_are_serde_tags::<crate::import_run::ImportRunEventBody>();
         assert_variant_names_are_serde_tags::<crate::media::MediaEventBody>();
         assert_variant_names_are_serde_tags::<crate::note::NoteEventBody>();
         assert_variant_names_are_serde_tags::<crate::person::PersonEventBody>();

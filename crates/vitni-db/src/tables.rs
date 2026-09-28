@@ -26,8 +26,8 @@ for_each_db_aggregate!(db_view_tables);
 /// (every aggregate but Tag) — the tables the `human_id` indexes (ADR 0032) are created for.
 macro_rules! db_human_id_view_tables {
     ($(($snake:ident, $next:ident, $table_const:ident)),+ $(,)?) => {
-        /// Every projection table with a `human_id` column indexed (ADR 0032) — all 12 aggregates
-        /// but Tag, which has no `human_id`.
+        /// Every projection table with a `human_id` column indexed (ADR 0032) — every aggregate
+        /// but Tag and `ImportRun`, which have no `human_id`.
         pub(crate) const HUMAN_ID_VIEW_TABLES: &[&str] = &[$($table_const),+];
     };
 }
@@ -39,7 +39,7 @@ for_each_db_human_id_aggregate!(db_human_id_view_tables);
 macro_rules! db_view_table_lookup {
     ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $($rest:tt)*)),+ $(,)?) => {
         /// The projection table for `aggregate_type` (the stored `Aggregate::TYPE`), or `None` if it
-        /// is not one of the 12 aggregates.
+        /// is not one of the 14 aggregates.
         pub(crate) fn view_table_for(aggregate_type: &str) -> Option<&'static str> {
             match aggregate_type {
                 $(stringify!($snake) => Some($table_const),)+

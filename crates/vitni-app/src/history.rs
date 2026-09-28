@@ -9,6 +9,7 @@
 //! append-only — data-model §10), and the History tab marks which entries can be undone.
 
 use serde::Deserialize;
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap};
 use uuid::Uuid;
 use vitni_core::citation::CitationView;
@@ -22,7 +23,8 @@ use vitni_core::event::EventView;
 use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
 use vitni_core::family::FamilyView;
 use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
-use vitni_core::ids::AssertionId;
+use vitni_core::ids::{AssertionId, ImportRunId};
+use vitni_core::import_run::ImportRunView;
 use vitni_core::media::MediaView;
 use vitni_core::media::command::{MediaCommand, MediaCommandEnvelope};
 use vitni_core::note::NoteView;
@@ -69,11 +71,28 @@ pub enum ActivityDetail {
         /// The asserted fact's kind (Birth, Death, Occupation, …).
         fact_type: FactType,
     },
-    /// A collapsed run of consecutive software-agent (import) events.
-    ImportBatch {
-        /// How many events the run collapsed.
+    /// One import run's entries, folded into a single row (ADR 0037 §5).
+    ImportRun {
+        /// The run.
+        run: RunRef,
+        /// How many entries the row folds.
         count: u32,
+        /// The folded entries, newest first.
+        children: Vec<ChangeLogEntry>,
     },
+}
+
+/// The import run an entry belongs to, with what a run row shows of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunRef {
+    /// The run's id.
+    pub id: ImportRunId,
+    /// What the run imported (a file name, or an assisted session's request).
+    pub source_label: String,
+    /// The importing plugin's id.
+    pub plugin: String,
+    /// The importer's own record count, once the run has ended.
+    pub records: Option<u32>,
 }
 
 /// One entry in an aggregate's change log: a single event rendered for an audit timeline.
@@ -108,6 +127,9 @@ pub struct ChangeLogEntry {
     pub detail: Option<ActivityDetail>,
     /// Whether this assertion can still be undone (not a creation, retraction, or already retracted).
     pub can_undo: bool,
+    /// The import run that wrote this entry: the run named by its record origin, or the run itself
+    /// for one of an `import_run`'s own events. `None` for a change made at the keyboard.
+    pub run: Option<RunRef>,
 }
 
 /// Per-aggregate record counts for the workspace — the Dashboard stat cards and the rail badges.
@@ -141,7 +163,8 @@ pub struct WorkspaceCounts {
     pub dna_match: u64,
 }
 
-/// The 13 aggregate kinds, as the `Aggregate::TYPE` strings the store keys on.
+/// The 13 record kinds the Dashboard counts, as the `Aggregate::TYPE` strings the store keys on: every
+/// aggregate but `import_run`, which records an import rather than genealogy.
 const AGGREGATE_KINDS: [&str; 13] = [
     "person",
     "family",
@@ -188,7 +211,7 @@ pub async fn change_log_for_person(workspace: &Workspace, human_id: &str) -> Res
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Reads the most recent changes across the whole workspace, newest first (the Dashboard activity
@@ -200,7 +223,7 @@ pub async fn change_log_for_person(workspace: &Workspace, human_id: &str) -> Res
 pub async fn recent_activity(workspace: &Workspace, limit: u32) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let limit = limit.max(1);
-    // Collapse import bursts *before* honouring `limit`: a bulk import is one row, and the `limit-1`
+    // Fold import runs *before* honouring `limit`: a bulk import is one row, and the `limit-1`
     // real changes before it stay visible. Over-read in widening windows until enough collapsed rows
     // exist (or the stream is exhausted), since the store only returns the newest `window` raw events.
     let mut window = limit;
@@ -208,7 +231,7 @@ pub async fn recent_activity(workspace: &Workspace, limit: u32) -> Result<Vec<Ch
         let events = store.read_recent_events(window).await?;
         let got = u32::try_from(events.len()).unwrap_or(u32::MAX);
         let exhausted = got < window;
-        let collapsed = collapse_runs(&build_entries(store, &events).await?);
+        let collapsed = group_runs(&build_entries(store, &events).await?);
         let enough = u32::try_from(collapsed.len()).unwrap_or(u32::MAX) >= limit;
         if enough || exhausted || window >= MAX_ACTIVITY_SCAN {
             break collapsed;
@@ -239,74 +262,82 @@ async fn build_entries(store: &Store, events: &[StoredEvent]) -> Result<Vec<Chan
             .and_then(|index| index.get(&event.aggregate_id).cloned());
         entries.push(entry(event, &header, human_id, false));
     }
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
-/// Collapses runs of consecutive events by the same software agent (an import) into one synthetic
-/// [`ActivityDetail::ImportBatch`] row, so a bulk import reads as a single line rather than N rows.
+/// Folds each import run's entries into one [`ActivityDetail::ImportRun`] row (ADR 0037 §5), so an
+/// import reads as a single line that lists its children rather than as N rows.
 ///
-/// The one implementation shared by the Dashboard's workspace-wide activity feed
-/// ([`recent_activity`]) and each record's History tab (`vitni_ui::collapse_history`) — they differ
-/// only in how they phrase the resulting row, not in how they group entries into one.
+/// `entries` are newest first. A run's row sits where its newest entry was, and gathers every later
+/// entry of the same run whether or not they are consecutive, so two imports that interleave stay
+/// apart. The run's own events (its start, resolutions and end) place the row but are not children.
+/// The row is stamped from its newest child: it carries that child's `assertion_id` and `can_undo`, so
+/// `⌘Z` on a record whose newest history is an import retracts the newest imported assertion rather
+/// than skipping the run (issue #306).
+///
+/// Shared by the Dashboard's activity feed ([`recent_activity`]) and each record's History tab
+/// (`vitni_ui::collapse_history`).
 #[must_use]
-pub fn collapse_runs(entries: &[ChangeLogEntry]) -> Vec<ChangeLogEntry> {
-    let mut rows = Vec::new();
-    let mut index = 0;
-    while index < entries.len() {
-        let run = software_run_len(entries, index);
-        if run >= 2 {
-            rows.push(import_batch_entry(&entries[index], run));
-            index += run;
-        } else {
-            rows.push(entries[index].clone());
-            index += 1;
+pub fn group_runs(entries: &[ChangeLogEntry]) -> Vec<ChangeLogEntry> {
+    let mut rows: Vec<GroupedRow> = Vec::new();
+    let mut positions: HashMap<ImportRunId, usize> = HashMap::new();
+    for entry in entries {
+        let Some(run) = &entry.run else {
+            rows.push(GroupedRow::Entry(entry.clone()));
+            continue;
+        };
+        let position = *positions.entry(run.id).or_insert_with(|| {
+            rows.push(GroupedRow::Run {
+                anchor: entry.clone(),
+                children: Vec::new(),
+            });
+            rows.len() - 1
+        });
+        if entry.aggregate_kind != IMPORT_RUN
+            && let Some(GroupedRow::Run { children, .. }) = rows.get_mut(position)
+        {
+            children.push(entry.clone());
         }
     }
-    rows
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        match row {
+            GroupedRow::Entry(entry) => out.push(entry),
+            GroupedRow::Run { anchor, children } => out.push(run_row(anchor, children)),
+        }
+    }
+    out
 }
 
-/// The length of the run of consecutive software-agent events starting at `start` sharing the same
-/// operator; `1` for a non-software or lone entry, `0` past the end.
-fn software_run_len(entries: &[ChangeLogEntry], start: usize) -> usize {
-    let Some(first) = entries.get(start) else {
-        return 0;
+/// A row [`group_runs`] is building: an entry of its own, or a run gathering its children.
+enum GroupedRow {
+    Entry(ChangeLogEntry),
+    Run {
+        anchor: ChangeLogEntry,
+        children: Vec<ChangeLogEntry>,
+    },
+}
+
+/// The row for one run: stamped from its newest child (or, with none, from the run's own newest
+/// event), linking no single record.
+fn run_row(anchor: ChangeLogEntry, children: Vec<ChangeLogEntry>) -> ChangeLogEntry {
+    let stamp = children.first().cloned().unwrap_or(anchor);
+    let Some(run) = stamp.run.clone() else {
+        return stamp;
     };
-    if first.operator_kind != OperatorKind::Software {
-        return 1;
-    }
-    let mut end = start + 1;
-    while entries.get(end).is_some_and(|next| {
-        next.operator_kind == OperatorKind::Software && next.operator_display == first.operator_display
-    }) {
-        end += 1;
-    }
-    end - start
-}
-
-/// Builds the synthetic collapsed-import row for a run of `count` software-agent events, stamped from
-/// the run's newest entry. It links no record, but carries that entry's `assertion_id` and `can_undo`
-/// so the row stays undoable: `⌘Z` on a record whose newest history is an import run retracts the
-/// newest assertion in it rather than skipping past the whole run (issue #306). The Dashboard's
-/// activity rows are display-only (`build_entries` passes `can_undo: false` for every entry), so this
-/// carries no undo control there regardless.
-fn import_batch_entry(newest: &ChangeLogEntry, count: usize) -> ChangeLogEntry {
     ChangeLogEntry {
         aggregate_kind: String::new(),
         aggregate_human_id: None,
-        assertion_id: newest.assertion_id.clone(),
-        sequence: newest.sequence,
-        event_type: "ImportBatch".to_owned(),
-        occurred_at: newest.occurred_at.clone(),
-        operator_display: newest.operator_display.clone(),
-        operator_kind: OperatorKind::Software,
-        confidence: newest.confidence,
+        event_type: "ImportRun".to_owned(),
         rationale: None,
         citations: Vec::new(),
         evidence_analysis: None,
-        detail: Some(ActivityDetail::ImportBatch {
-            count: u32::try_from(count).unwrap_or(u32::MAX),
+        detail: Some(ActivityDetail::ImportRun {
+            run,
+            count: u32::try_from(children.len()).unwrap_or(u32::MAX),
+            children,
         }),
-        can_undo: newest.can_undo,
+        ..stamp
     }
 }
 
@@ -362,7 +393,7 @@ pub async fn change_log_for_citation(workspace: &Workspace, human_id: &str) -> R
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Undoes a citation assertion by retracting it (non-destructive — the log is append-only).
@@ -412,7 +443,7 @@ pub async fn change_log_for_family(workspace: &Workspace, human_id: &str) -> Res
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Undoes a family assertion by retracting it (non-destructive — the log is append-only).
@@ -462,7 +493,7 @@ pub async fn change_log_for_event(workspace: &Workspace, human_id: &str) -> Resu
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Undoes an event assertion by retracting it (non-destructive — the log is append-only).
@@ -512,7 +543,7 @@ pub async fn change_log_for_place(workspace: &Workspace, human_id: &str) -> Resu
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Undoes a place assertion by retracting it (non-destructive — the log is append-only).
@@ -562,7 +593,7 @@ pub async fn change_log_for_source(workspace: &Workspace, human_id: &str) -> Res
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Undoes a source assertion by retracting it (non-destructive — the log is append-only).
@@ -615,7 +646,7 @@ pub async fn change_log_for_repository(workspace: &Workspace, human_id: &str) ->
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Undoes a repository assertion by retracting it (non-destructive — the log is append-only).
@@ -665,7 +696,7 @@ pub async fn change_log_for_media(workspace: &Workspace, human_id: &str) -> Resu
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Undoes a media assertion by retracting it (non-destructive — the log is append-only).
@@ -715,7 +746,7 @@ pub async fn change_log_for_note(workspace: &Workspace, human_id: &str) -> Resul
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Undoes a note assertion by retracting it (non-destructive — the log is append-only).
@@ -772,7 +803,7 @@ pub async fn change_log_for_research_note(
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Undoes a research-note assertion by retracting it (non-destructive — the log is append-only).
@@ -827,7 +858,7 @@ pub async fn change_log_for_dna_test(workspace: &Workspace, human_id: &str) -> R
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Undoes a DNA test assertion by retracting it (non-destructive — the log is append-only).
@@ -879,7 +910,7 @@ pub async fn change_log_for_dna_match(workspace: &Workspace, human_id: &str) -> 
         entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Undoes a DNA match assertion by retracting it (non-destructive — the log is append-only).
@@ -934,7 +965,7 @@ pub async fn change_log_for_tag(workspace: &Workspace, id: &str) -> Result<Vec<C
         entries.push(entry(event, &header, None, false));
     }
     entries.reverse();
-    Ok(entries)
+    label_runs(store, entries).await
 }
 
 /// Counts every aggregate's projected records for the Dashboard and the rail badges.
@@ -974,6 +1005,7 @@ fn undo_provenance(rationale: Option<String>) -> Provenance {
         confidence: None,
         rationale: Some(rationale.unwrap_or_else(|| "Undo".to_owned())),
         evidence_analysis: None,
+        origin: None,
     }
 }
 
@@ -995,7 +1027,53 @@ fn entry(event: &StoredEvent, header: &EnvelopeHeader, human_id: Option<String>,
         evidence_analysis: header.context.evidence_analysis,
         detail: extract_detail(event),
         can_undo,
+        run: entry_run(event, header).map(|id| RunRef {
+            id,
+            source_label: String::new(),
+            plugin: String::new(),
+            records: None,
+        }),
     }
+}
+
+/// The import run an event belongs to: the run its record origin names, or — for one of an
+/// `import_run`'s own events — that run.
+fn entry_run(event: &StoredEvent, header: &EnvelopeHeader) -> Option<ImportRunId> {
+    if let Some(origin) = &header.context.origin {
+        return Some(origin.run);
+    }
+    if event.aggregate_type == IMPORT_RUN {
+        return Uuid::parse_str(&event.aggregate_id).ok().map(ImportRunId::from_uuid);
+    }
+    None
+}
+
+/// The `Aggregate::TYPE` of an import run.
+const IMPORT_RUN: &str = "import_run";
+
+/// Fills each entry's [`RunRef`] with its run's labels, reading each distinct run once.
+///
+/// # Errors
+///
+/// [`AppError`] on a store read failure.
+async fn label_runs(store: &Store, mut entries: Vec<ChangeLogEntry>) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let mut labels: HashMap<ImportRunId, Option<ImportRunView>> = HashMap::new();
+    for entry in &mut entries {
+        let Some(run) = &mut entry.run else {
+            continue;
+        };
+        let view = match labels.entry(run.id) {
+            Entry::Occupied(known) => known.into_mut(),
+            Entry::Vacant(unknown) => unknown.insert(store.find_import_run(&run.id.to_string()).await?),
+        };
+        let Some(view) = view else {
+            continue;
+        };
+        view.source_label().clone_into(&mut run.source_label);
+        view.plugin().clone_into(&mut run.plugin);
+        run.records = view.counts().records;
+    }
+    Ok(entries)
 }
 
 /// Extracts a payload-specific [`ActivityDetail`] when the event type alone is too coarse.
@@ -1212,11 +1290,12 @@ async fn resolve_dna_match_id(store: &Store, human_id: &str) -> Result<vitni_cor
 #[cfg(test)]
 mod tests {
     use super::{
-        ActivityDetail, ChangeLogEntry, OperatorKind, change_log_for_person, collapse_runs, recent_activity,
+        ActivityDetail, ChangeLogEntry, OperatorKind, RunRef, change_log_for_person, group_runs, recent_activity,
         undo_assertion, workspace_counts,
     };
     use super::{change_log_for_research_note, undo_research_note_assertion};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
+    use crate::import_run::{finish_import_run, start_import_run};
     use crate::person::{NewFact, NewPerson, assert_fact, assert_sex, create_person, set_restrictions, show_person};
     use crate::research_note::{
         NewResearchNote, NewResearchNoteSubject, create_research_note, set_research_note_body, show_research_note,
@@ -1229,6 +1308,9 @@ mod tests {
     use uuid::Uuid;
     use vitni_core::enums::{EvidenceLevel, FactType, Restriction, Sex};
     use vitni_core::ids::AgentId;
+    use vitni_core::ids::ImportRunId;
+    use vitni_core::import_run::{ImportCounts, NewImportRun};
+    use vitni_core::origin::{DatasetId, RecordOrigin};
     use vitni_core::provenance::{Agent, AgentKind, Confidence};
 
     fn operator() -> OperatorConfig {
@@ -1324,13 +1406,9 @@ mod tests {
         human_id
     }
 
-    /// A synthetic change-log entry for exercising [`collapse_runs`] without a workspace.
-    fn synthetic_entry(
-        assertion_id: &str,
-        operator_kind: OperatorKind,
-        operator_display: &str,
-        can_undo: bool,
-    ) -> ChangeLogEntry {
+    /// A synthetic change-log entry for exercising [`group_runs`] without a workspace: an assertion
+    /// written by `run` (an import) or at the keyboard (`None`).
+    fn synthetic_entry(assertion_id: &str, run: Option<u128>, can_undo: bool) -> ChangeLogEntry {
         ChangeLogEntry {
             aggregate_kind: "person".to_owned(),
             aggregate_human_id: Some("I0001".to_owned()),
@@ -1338,56 +1416,107 @@ mod tests {
             sequence: 1,
             event_type: "NameAsserted".to_owned(),
             occurred_at: "2026-06-22T14:35:00Z".to_owned(),
-            operator_display: Some(operator_display.to_owned()),
-            operator_kind,
+            operator_display: Some("gedcom-import".to_owned()),
+            operator_kind: if run.is_some() {
+                OperatorKind::Software
+            } else {
+                OperatorKind::Human
+            },
             confidence: None,
             rationale: None,
             citations: Vec::new(),
             evidence_analysis: None,
             detail: None,
             can_undo,
+            run: run.map(run_ref),
         }
     }
 
-    #[test]
-    fn collapse_runs_stamps_the_synthetic_row_from_the_runs_newest_entry() {
-        // Newest-first order: "b" (undoable) is newer than "a" (already retracted, not undoable).
-        let entries = vec![
-            synthetic_entry("b", OperatorKind::Software, "gedcom-import", true),
-            synthetic_entry("a", OperatorKind::Software, "gedcom-import", false),
-        ];
-        let rows = collapse_runs(&entries);
-        assert_eq!(rows.len(), 1, "the run of 2 collapses into one row");
-        assert_eq!(
-            rows[0].detail,
-            Some(ActivityDetail::ImportBatch { count: 2 }),
-            "the row records how many events it collapsed"
-        );
-        assert_eq!(
-            rows[0].assertion_id, "b",
-            "the collapsed row carries the newest entry's assertion id"
-        );
-        assert!(
-            rows[0].can_undo,
-            "the collapsed row carries the newest entry's can_undo, so it stays undoable"
-        );
+    fn run_ref(n: u128) -> RunRef {
+        RunRef {
+            id: ImportRunId::from_uuid(Uuid::from_u128(n)),
+            source_label: format!("tree-{n}.ged"),
+            plugin: "gedcom-import".to_owned(),
+            records: Some(7),
+        }
+    }
+
+    /// One of the run's own events (start, resolution, finish), which anchors its row.
+    fn run_event(n: u128, event_type: &str) -> ChangeLogEntry {
+        ChangeLogEntry {
+            aggregate_kind: "import_run".to_owned(),
+            aggregate_human_id: None,
+            event_type: event_type.to_owned(),
+            operator_kind: OperatorKind::Human,
+            can_undo: false,
+            ..synthetic_entry(event_type, Some(n), false)
+        }
+    }
+
+    fn run_row(rows: &[ChangeLogEntry], index: usize) -> (&RunRef, u32, &[ChangeLogEntry]) {
+        let Some(ActivityDetail::ImportRun { run, count, children }) = &rows[index].detail else {
+            panic!("row {index} is not an import run: {:?}", rows[index]);
+        };
+        (run, *count, children)
     }
 
     #[test]
-    fn collapse_runs_leaves_a_lone_software_entry_uncollapsed() {
-        let entries = vec![synthetic_entry("a", OperatorKind::Software, "gedcom-import", true)];
-        let rows = collapse_runs(&entries);
-        assert_eq!(rows, entries, "a lone software entry is not a run");
+    fn group_runs_folds_a_runs_entries_into_one_row_listing_them() {
+        let entries = vec![
+            synthetic_entry("c", None, true),
+            synthetic_entry("b", Some(1), true),
+            synthetic_entry("a", Some(1), false),
+        ];
+        let rows = group_runs(&entries);
+        assert_eq!(rows.len(), 2, "{rows:#?}");
+        assert_eq!(rows[0], entries[0], "a keyboard entry stays its own row");
+        let (run, count, children) = run_row(&rows, 1);
+        assert_eq!((run.id, count), (run_ref(1).id, 2));
+        assert_eq!(children, &entries[1..], "the row lists its children, newest first");
     }
 
     #[test]
-    fn collapse_runs_does_not_merge_different_software_operators() {
+    fn group_runs_stamps_the_row_from_its_newest_child_so_it_stays_undoable() {
         let entries = vec![
-            synthetic_entry("b", OperatorKind::Software, "gedcom-import", true),
-            synthetic_entry("a", OperatorKind::Software, "dna-match-engine", true),
+            run_event(1, "ImportRunFinished"),
+            synthetic_entry("b", Some(1), true),
+            synthetic_entry("a", Some(1), false),
+            run_event(1, "ImportRunStarted"),
         ];
-        let rows = collapse_runs(&entries);
-        assert_eq!(rows, entries, "different operators never collapse into one row");
+        let rows = group_runs(&entries);
+        assert_eq!(rows.len(), 1, "the run's own events anchor its one row: {rows:#?}");
+        assert_eq!(rows[0].assertion_id, "b", "the newest child's assertion (issue #306)");
+        assert!(rows[0].can_undo);
+        let (_, count, children) = run_row(&rows, 0);
+        assert_eq!(count, 2, "the run's own events are not children");
+        assert_eq!(children.len(), 2);
+    }
+
+    #[test]
+    fn group_runs_keeps_interleaved_runs_apart() {
+        let entries = vec![
+            synthetic_entry("d", Some(2), true),
+            synthetic_entry("c", Some(1), true),
+            synthetic_entry("b", Some(2), true),
+            synthetic_entry("a", Some(1), true),
+        ];
+        let rows = group_runs(&entries);
+        assert_eq!(rows.len(), 2, "{rows:#?}");
+        assert_eq!(
+            run_row(&rows, 0).0.id,
+            run_ref(2).id,
+            "placed where its newest entry was"
+        );
+        assert_eq!(run_row(&rows, 0).1, 2);
+        assert_eq!(run_row(&rows, 1).0.id, run_ref(1).id);
+        assert_eq!(run_row(&rows, 1).1, 2);
+    }
+
+    #[test]
+    fn a_lone_imported_entry_is_still_its_runs_row() {
+        let entries = vec![synthetic_entry("a", Some(1), true)];
+        let rows = group_runs(&entries);
+        assert_eq!(run_row(&rows, 0).1, 1);
     }
 
     #[tokio::test]
@@ -1507,6 +1636,7 @@ mod tests {
                     confidence: Some(Confidence::High),
                     rationale: None,
                     evidence_analysis: None,
+                    origin: None,
                 },
                 citations: &[],
                 dna_matches: &[],
@@ -1531,29 +1661,76 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn recent_activity_collapses_a_software_import_burst() {
+    async fn recent_activity_folds_an_import_run_into_one_row_with_its_children() {
         let (workspace, human, _dir) = setup().await;
-        // A human change first — it must stay visible after the burst is collapsed.
+        // A human change first — it must stay visible beside the run's row.
         let _ = person_with_sex(&workspace, &human).await;
-        // Then a run of consecutive imports by one software agent.
+        let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+        let new_run = NewImportRun {
+            plugin: "gedcom-import".to_owned(),
+            plugin_version: "0.1.0".to_owned(),
+            dataset: dataset.clone(),
+            dataset_label: "tree.ged".to_owned(),
+            source_label: "tree.ged".to_owned(),
+            file_asserted_at: None,
+        };
+        let run = start_import_run(&workspace, &human, new_run).await.expect("start");
         let importer = software_session();
-        for _ in 0..4 {
-            create_bare(&workspace, &importer).await;
+        for n in 0..4 {
+            let provenance = Provenance {
+                origin: Some(RecordOrigin {
+                    dataset: dataset.clone(),
+                    record: format!("I{n}"),
+                    item: None,
+                    digest: None,
+                    run,
+                }),
+                ..Provenance::default()
+            };
+            let new = NewPerson {
+                human_id: None,
+                name: None,
+                evidence_level: EvidenceLevel::Conclusion,
+                external_ids: Vec::new(),
+            };
+            create_person(&workspace, &importer, new, provenance, &[])
+                .await
+                .expect("create");
         }
+        let counts = ImportCounts {
+            records: Some(4),
+            ..ImportCounts::default()
+        };
+        finish_import_run(&workspace, &human, run, Vec::new(), counts)
+            .await
+            .expect("finish");
 
         let activity = recent_activity(&workspace, 10).await.expect("activity");
-        let batches: Vec<_> = activity
+        let runs: Vec<_> = activity
             .iter()
-            .filter(|entry| entry.event_type == "ImportBatch")
+            .filter(|entry| entry.event_type == "ImportRun")
             .collect();
-        assert_eq!(batches.len(), 1, "the 4 imports collapse into one row");
-        assert_eq!(batches[0].detail, Some(ActivityDetail::ImportBatch { count: 4 }));
-        assert_eq!(batches[0].operator_kind, OperatorKind::Software);
+        assert_eq!(runs.len(), 1, "the run is one row: {activity:#?}");
+        let Some(ActivityDetail::ImportRun {
+            run: run_ref,
+            count,
+            children,
+        }) = &runs[0].detail
+        else {
+            panic!("an import-run row: {:?}", runs[0]);
+        };
+        assert_eq!((run_ref.id, run_ref.source_label.as_str()), (run, "tree.ged"));
+        assert_eq!(run_ref.records, Some(4), "the run's own count, from its projection");
+        assert_eq!(*count, 4);
+        assert!(
+            children.iter().all(|child| child.event_type == "PersonCreated"),
+            "{children:#?}"
+        );
         assert!(
             activity
                 .iter()
                 .any(|entry| entry.event_type == "SexAsserted" && entry.operator_kind == OperatorKind::Human),
-            "the human change before the burst is still visible"
+            "the human change before the run is still visible"
         );
     }
 

@@ -312,6 +312,7 @@ mod tests {
                     confidence: Some(Confidence::High),
                     rationale: Some("parish register".to_owned()),
                     evidence_analysis: None,
+                    origin: None,
                 },
                 ..draft(EventType::Baptism)
             },

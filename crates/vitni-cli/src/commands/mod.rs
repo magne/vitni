@@ -8,6 +8,7 @@ pub mod dna_match;
 pub mod dna_test;
 pub mod event;
 pub mod family;
+pub mod import_run;
 pub mod io;
 pub mod media;
 pub mod note;

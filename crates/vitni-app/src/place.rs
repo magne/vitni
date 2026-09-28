@@ -211,6 +211,7 @@ pub async fn create_place(
     provenance: Provenance,
     citations: &[String],
 ) -> Result<String, AppError> {
+    let follow_up = provenance.follow_up();
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -249,7 +250,7 @@ pub async fn create_place(
                 place_id,
                 name: place_name(text),
             },
-            Provenance::default(),
+            follow_up,
             Vec::new(),
         )
         .await?;

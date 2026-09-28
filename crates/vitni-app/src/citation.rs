@@ -112,6 +112,7 @@ pub async fn create_citation(
     provenance: Provenance,
     citations: &[String],
 ) -> Result<String, AppError> {
+    let follow_up = provenance.follow_up();
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -148,7 +149,7 @@ pub async fn create_citation(
             session,
             &aggregate_id,
             CitationCommand::SetPage { citation_id, page },
-            Provenance::default(),
+            follow_up,
             Vec::new(),
         )
         .await?;

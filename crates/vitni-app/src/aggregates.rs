@@ -1,11 +1,12 @@
-//! The canonical registry of the 12 aggregates — the single place the per-aggregate wiring of the
+//! The canonical registry of the 14 aggregates — the single place the per-aggregate wiring of the
 //! application layer is enumerated (issue #38).
 //!
 //! Adding an aggregate is a one-line edit here instead of parallel edits scattered across
 //! [`error`](crate::error), [`session`](crate::session), [`config`](crate::config), and
 //! [`workspace`](crate::workspace). Each of those modules defines a small *callback* macro that
-//! pattern-matches the columns it needs and hands it to [`for_each_aggregate!`] (all 12) or
-//! [`for_each_human_id_aggregate!`] (the 11 that allocate a `HumanId` — every aggregate but Tag).
+//! pattern-matches the columns it needs and hands it to [`for_each_aggregate!`] (all 14) or
+//! [`for_each_human_id_aggregate!`] (the 12 that allocate a `HumanId` — every aggregate but Tag and
+//! `ImportRun`).
 //!
 //! This is the classic "x-macro" pattern: the data lives once, here; each consumer decides what to
 //! generate from it. Identifier and error types are written as fully-qualified paths so a consumer
@@ -18,7 +19,7 @@
 /// - `minter_fn` — the [`Session`](crate::session::Session) id-minting method name.
 /// - `domain_variant` / `not_found_variant` — the [`AppError`](crate::error::AppError) variant names
 ///   (Person's domain wrapper is historically `Domain`, the rest are `<Name>Domain`).
-/// - `not_found_msg` — the `thiserror` `#[error(...)]` string (Tag is keyed by `id`, not `human_id`).
+/// - `not_found_msg` — the `thiserror` `#[error(...)]` string (Tag and `ImportRun` are keyed by `id`, not `human_id`).
 macro_rules! for_each_aggregate {
     ($callback:ident) => {
         $callback! {
@@ -35,6 +36,7 @@ macro_rules! for_each_aggregate {
             (media, "media", vitni_core::ids::MediaId, new_media_id, vitni_core::media::MediaError, MediaDomain, MediaNotFound, "no media with human_id {0:?}"),
             (tag, "tag", vitni_core::ids::TagId, new_tag_id, vitni_core::tag::TagError, TagDomain, TagNotFound, "no tag with id {0:?}"),
             (research_note, "research note", vitni_core::ids::ResearchNoteId, new_research_note_id, vitni_core::research_note::ResearchNoteError, ResearchNoteDomain, ResearchNoteNotFound, "no research note with human_id {0:?}"),
+            (import_run, "import run", vitni_core::ids::ImportRunId, new_import_run_id, vitni_core::import_run::ImportRunError, ImportRunDomain, ImportRunNotFound, "no import run with id {0:?}"),
         }
     };
 }
@@ -42,7 +44,7 @@ macro_rules! for_each_aggregate {
 pub(crate) use for_each_aggregate;
 
 /// Invokes `$callback!` with one parenthesized row per aggregate that allocates a `HumanId` — every
-/// aggregate except Tag (tags are keyed by their own id). Columns, in order:
+/// aggregate except Tag and `ImportRun` (both keyed by their own id). Columns, in order:
 /// `(snake, noun, default_format, id_format_accessor)`.
 ///
 /// - `noun` — the display noun used in generated doc comments (back-ticked where it is a type name).

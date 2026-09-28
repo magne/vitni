@@ -27,6 +27,7 @@ mod error;
 mod media;
 mod net;
 mod present;
+mod run;
 pub mod signing;
 mod state;
 mod trust;
@@ -48,6 +49,7 @@ pub use crate::discovery::{PluginInfo, PluginRole};
 pub use crate::error::PluginError;
 pub use crate::net::{HostPattern, NetPolicy};
 pub use crate::present::{PresentError, Presenter};
+pub use crate::run::ImportRunSpec;
 pub use crate::trust::{TrustRoots, TrustTier, classify, resolve_trust_roots};
 
 /// A progress update a bulk plugin reports as it advances (ADR 0013). `total` is absent when the
@@ -172,6 +174,10 @@ pub struct Invocation {
     /// pre-assisted behavior (no surety judgment recorded); the assisted caller sets
     /// `Some(Confidence::Low)`.
     pub provenance_confidence: Option<Confidence>,
+    /// The import run a bulk or assisted import writes (ADR 0037 §5). With a run, every write the
+    /// guest makes carries the record origin it declared, and a write without one is refused. `None`
+    /// writes no run and stamps no origin; the other entry points ignore it.
+    pub import: Option<ImportRunSpec>,
 }
 
 /// Per-instance resource limits (ADR 0011 §4). Fuel bounds execution (a runaway guest traps);
@@ -318,6 +324,7 @@ impl PluginHost {
             net_policy,
             ai_config,
             provenance_confidence,
+            import,
         } = run;
         let io = BulkIo::import(source, Box::new(progress));
         let mut store = self.build_store(
@@ -330,12 +337,17 @@ impl PluginHost {
             provenance_confidence,
             io,
         )?;
+        if let Some(spec) = import {
+            store.data_mut().begin_run(spec);
+        }
         let bindings = import_world::BulkImport::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
         let outcome = bindings.call_run_import(&mut store).await;
-        let count = interpret_result(outcome)?;
-        Ok((count, store.into_data().into_workspace()))
+        let (workspace, active) = store.into_data().into_parts();
+        let result = interpret_result(outcome);
+        close_run(&workspace, active, &run::Ending::Bulk(&result)).await?;
+        Ok((result?, workspace))
     }
 
     /// Runs a bulk export plugin (ADR 0013): the plugin reads via `query`, writes its document to the
@@ -359,6 +371,7 @@ impl PluginHost {
             net_policy,
             ai_config,
             provenance_confidence,
+            import: _,
         } = run;
         let io = BulkIo::export(target, Box::new(progress));
         let mut store = self.build_store(
@@ -404,6 +417,7 @@ impl PluginHost {
             net_policy,
             ai_config,
             provenance_confidence,
+            import,
         } = run;
         let io = BulkIo::assisted(presenter, Box::new(progress));
         let mut store = self.build_store(
@@ -416,12 +430,17 @@ impl PluginHost {
             provenance_confidence,
             io,
         )?;
+        if let Some(spec) = import {
+            store.data_mut().begin_run(spec);
+        }
         let bindings = assisted_import_world::AssistedImport::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
         let outcome = bindings.call_run_assisted(&mut store, request).await;
-        let summary = interpret_result(outcome)?;
-        Ok((summary, store.into_data().into_workspace()))
+        let (workspace, active) = store.into_data().into_parts();
+        let result = interpret_result(outcome);
+        close_run(&workspace, active, &run::Ending::Assisted(&result)).await?;
+        Ok((result?, workspace))
     }
 
     /// Runs a plugin-UI plugin (ADR 0012): instantiates the `ui-panel` world and returns the form
@@ -796,6 +815,34 @@ impl PluginHost {
         let response = interpret_result(outcome)?;
         Ok((response, store.into_data().into_workspace()))
     }
+}
+
+/// Closes the invocation's import run, if it started one (ADR 0037 §5).
+///
+/// When the import itself succeeded, failing to record its end is the invocation's error. When the
+/// import already failed, that failure is what the caller must see, so a failure to record the
+/// abandonment is logged rather than masking it.
+///
+/// # Errors
+/// [`PluginError::Runtime`] when a successful import's run cannot be finished.
+async fn close_run(
+    workspace: &Workspace,
+    active: Option<run::ActiveRun>,
+    ending: &run::Ending<'_>,
+) -> Result<(), PluginError> {
+    let Some(active) = active else {
+        return Ok(());
+    };
+    let Err(error) = run::close(workspace, active, ending).await else {
+        return Ok(());
+    };
+    if ending.succeeded() {
+        return Err(PluginError::Runtime(format!(
+            "recording the end of the import run: {error}"
+        )));
+    }
+    tracing::warn!(%error, "the failed import's run could not be recorded as abandoned");
+    Ok(())
 }
 
 /// Interprets a guest call that returns `result<T, string>`: a host trap (fuel/instantiation), the

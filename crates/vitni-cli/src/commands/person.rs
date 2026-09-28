@@ -154,6 +154,7 @@ pub async fn run(
                 confidence: confidence.map(Into::into),
                 rationale,
                 evidence_analysis: None,
+                origin: None,
             };
             add_name(
                 workspace,

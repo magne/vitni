@@ -218,6 +218,7 @@ fn assisted_invocation(workspace: Workspace, grants: Grants) -> vitni_plugin_hos
         net_policy: vitni_plugin_host::NetPolicy::deny_all(),
         ai_config: vitni_app::AiConfig::default(),
         provenance_confidence: Some(vitni_app::Confidence::Low),
+        import: None,
     }
 }
 

@@ -99,6 +99,7 @@ pub async fn create_source(
     provenance: Provenance,
     citations: &[String],
 ) -> Result<String, AppError> {
+    let follow_up = provenance.follow_up();
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -133,7 +134,7 @@ pub async fn create_source(
             session,
             &aggregate_id,
             SourceCommand::SetTitle { source_id, title },
-            Provenance::default(),
+            follow_up,
             Vec::new(),
         )
         .await?;

@@ -86,7 +86,10 @@ pub fn sex_from_wit(sex: types::Sex) -> Sex {
 #[must_use]
 pub fn name_to_wit(name: &Name) -> types::PersonName {
     types::PersonName {
-        name_type: name.name_type.as_ref().map_or(types::NameType::BirthName, name_type_to_wit),
+        name_type: name
+            .name_type
+            .as_ref()
+            .map_or(types::NameType::BirthName, name_type_to_wit),
         given: name.given.clone(),
         surname_prefix: name.surname_prefix.clone(),
         surname: name.surname.clone(),

@@ -2165,6 +2165,36 @@ impl Chrome {
         fl!(self.loader, "bulk-import-confirm-title", workspace = workspace)
     }
 
+    /// The existing-target confirm body when the target holds earlier imports but no persons.
+    #[must_use]
+    pub fn bulk_import_confirm_datasets_body(&self, workspace: &str) -> String {
+        fl!(self.loader, "bulk-import-confirm-datasets-body", workspace = workspace)
+    }
+
+    /// The label of the confirm dialog's "which tree is this file" select (ADR 0037 §3).
+    #[must_use]
+    pub fn bulk_import_dataset_label(&self) -> String {
+        fl!(self.loader, "bulk-import-dataset-label")
+    }
+
+    /// The dataset select's unchosen first entry.
+    #[must_use]
+    pub fn bulk_import_dataset_placeholder(&self) -> String {
+        fl!(self.loader, "bulk-import-dataset-placeholder")
+    }
+
+    /// A dataset choice naming an earlier import: "A later export of {label}".
+    #[must_use]
+    pub fn bulk_import_dataset_existing(&self, label: &str) -> String {
+        fl!(self.loader, "bulk-import-dataset-existing", label = label)
+    }
+
+    /// The dataset choice for a file that is none of the earlier trees.
+    #[must_use]
+    pub fn bulk_import_dataset_new(&self) -> String {
+        fl!(self.loader, "bulk-import-dataset-new")
+    }
+
     /// The non-empty-target confirm dialog's body, naming the target workspace and its person count.
     #[must_use]
     pub fn bulk_import_confirm_body(&self, workspace: &str, count: usize) -> String {

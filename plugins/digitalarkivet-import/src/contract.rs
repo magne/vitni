@@ -7,8 +7,8 @@
 //! is well-formed. Field/action `label`s are Fluent message ids the wizard resolves against this
 //! plugin's catalogue (ADR 0012 §5); record content (names, dates, places) is sent verbatim.
 
-use vitni_digitalarkivet::PersonRecord;
 use serde::{Deserialize, Serialize};
+use vitni_digitalarkivet::PersonRecord;
 
 /// The `run-assisted` request: `{"kind":"url","url":…}` (additive kinds later).
 #[derive(Debug, Deserialize)]
@@ -256,13 +256,34 @@ struct FieldSpec {
 /// The confirm fields, in display order: the name (always) then the optional census/church-book
 /// fields the parser found. Each `label` resolves against this plugin's catalogue.
 const FIELD_SPECS: &[FieldSpec] = &[
-    FieldSpec { key: "name", label: "field-name" },
-    FieldSpec { key: "birth", label: "field-birth" },
-    FieldSpec { key: "birthplace", label: "field-birthplace" },
-    FieldSpec { key: "residence", label: "field-residence" },
-    FieldSpec { key: "role", label: "field-role" },
-    FieldSpec { key: "marital-status", label: "field-marital-status" },
-    FieldSpec { key: "occupation", label: "field-occupation" },
+    FieldSpec {
+        key: "name",
+        label: "field-name",
+    },
+    FieldSpec {
+        key: "birth",
+        label: "field-birth",
+    },
+    FieldSpec {
+        key: "birthplace",
+        label: "field-birthplace",
+    },
+    FieldSpec {
+        key: "residence",
+        label: "field-residence",
+    },
+    FieldSpec {
+        key: "role",
+        label: "field-role",
+    },
+    FieldSpec {
+        key: "marital-status",
+        label: "field-marital-status",
+    },
+    FieldSpec {
+        key: "occupation",
+        label: "field-occupation",
+    },
 ];
 
 impl Payload {
@@ -293,8 +314,14 @@ impl Payload {
                 provenance: provenance(record, scan_url),
             },
             actions: vec![
-                Action { id: "import".to_owned(), label: "action-import".to_owned() },
-                Action { id: "skip".to_owned(), label: "action-skip".to_owned() },
+                Action {
+                    id: "import".to_owned(),
+                    label: "action-import".to_owned(),
+                },
+                Action {
+                    id: "skip".to_owned(),
+                    label: "action-skip".to_owned(),
+                },
             ],
         }
     }

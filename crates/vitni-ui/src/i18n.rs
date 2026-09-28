@@ -21,8 +21,8 @@ use tracing::warn;
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
     ActivityDetail, Age, AgeBound, AppError, AssociationRole, BackupError, Calendar, ChangeLogEntry,
-    ChildParentRelationship, ChromosomeSide, CitingContext, DateModifier, DatePoint, DateQuality, DbError,
-    DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate,
+    ChildParentRelationship, ChromosomeSide, CitingContext, DatasetError, DateModifier, DatePoint, DateQuality,
+    DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate,
     GenealogicalDateBody, InformationKind, Kinship, MatchKind, MatchStatus, NameType, NoteType, OperatorKind,
     ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality, SuretyLabelOverrides, UsingKind, config,
 };
@@ -1763,8 +1763,8 @@ impl Localizer {
 
     /// A localized phrase summarizing what an entry recorded.
     ///
-    /// A payload-derived [`ActivityDetail`] gives the specific phrase (the fact's kind, a collapsed
-    /// import's count); otherwise the event-type verb is used (one phrase per type across all 12
+    /// A payload-derived [`ActivityDetail`] gives the specific phrase (the fact's kind, what an import
+    /// run imported); otherwise the event-type verb is used (one phrase per type across all 14
     /// aggregates), with a generic "recorded a change" only for an unmapped type.
     #[must_use]
     pub fn change_summary(&self, entry: &ChangeLogEntry) -> String {
@@ -1773,34 +1773,28 @@ impl Localizer {
                 let fact = self.fact_type_label(fact_type);
                 fl!(self.loader, "history-fact-asserted-kind", fact = fact)
             }
-            Some(ActivityDetail::ImportBatch { count }) => {
-                let count = i64::from(*count);
-                fl!(self.loader, "dashboard-import-batch", count = count)
+            Some(ActivityDetail::ImportRun { run, .. }) => {
+                let source = if run.source_label.is_empty() {
+                    run.plugin.clone()
+                } else {
+                    run.source_label.clone()
+                };
+                fl!(self.loader, "history-import-run", source = source)
             }
             None => self.event_type_summary(&entry.event_type),
         }
     }
 
-    /// A localized phrase summarizing what a History-tab entry recorded.
-    ///
-    /// Like [`Self::change_summary`], except a collapsed import run reads by its origin ("Imported
-    /// from gedcom-import") rather than the dashboard's record count: on one record's own history the
-    /// count is of assertions on that single record, not of distinct records imported, so the
-    /// dashboard's wording would overstate what happened (issue #306).
+    /// The muted count beside an import-run row: the records a finished run imported.
     #[must_use]
-    pub fn history_summary(&self, entry: &ChangeLogEntry) -> String {
-        match &entry.detail {
-            Some(ActivityDetail::ImportBatch { .. }) => self.history_import_run(entry.operator_display.as_deref()),
-            Some(ActivityDetail::Fact { .. }) | None => self.change_summary(entry),
-        }
+    pub fn import_run_records(&self, records: u32) -> String {
+        fl!(self.loader, "history-import-run-records", count = i64::from(records))
     }
 
-    /// The record History tab's import-run sentence, e.g. `Imported from gedcom-import`. Falls back
-    /// to the "unknown operator" label when the run's software agent recorded no display name.
+    /// The muted count beside an import-run row: the changes the row folds.
     #[must_use]
-    pub fn history_import_run(&self, origin: Option<&str>) -> String {
-        let origin = origin.map_or_else(|| fl!(self.loader, "history-operator-unknown"), ToOwned::to_owned);
-        fl!(self.loader, "history-import-run", origin = origin)
+    pub fn import_run_changes(&self, count: u32) -> String {
+        fl!(self.loader, "history-import-run-changes", count = i64::from(count))
     }
 
     /// The localized verb phrase for an event type — one per variant across the 12 aggregates.
@@ -1885,6 +1879,10 @@ impl Localizer {
             "EventTypeSet" => fl!(self.loader, "history-event-type-set"),
             "DescriptionSet" => fl!(self.loader, "history-description-set"),
             "PlaceLinked" => fl!(self.loader, "history-place-linked"),
+            "ImportRunStarted" => fl!(self.loader, "history-import-run-started"),
+            "ItemResolved" => fl!(self.loader, "history-item-resolved"),
+            "ImportRunFinished" => fl!(self.loader, "history-import-run-finished"),
+            "ImportRunAbandoned" => fl!(self.loader, "history-import-run-abandoned"),
             _ => fl!(self.loader, "history-generic"),
         }
     }
@@ -2619,7 +2617,8 @@ impl Localizer {
             | AppError::NoteNotFound(id)
             | AppError::MediaNotFound(id)
             | AppError::TagNotFound(id)
-            | AppError::ResearchNoteNotFound(id) => fl!(self.loader, "err-not-found", id = id.clone()),
+            | AppError::ResearchNoteNotFound(id)
+            | AppError::ImportRunNotFound(id) => fl!(self.loader, "err-not-found", id = id.clone()),
             AppError::Domain(_)
             | AppError::FamilyDomain(_)
             | AppError::PlaceDomain(_)
@@ -2632,10 +2631,21 @@ impl Localizer {
             | AppError::NoteDomain(_)
             | AppError::MediaDomain(_)
             | AppError::TagDomain(_)
-            | AppError::ResearchNoteDomain(_) => fl!(self.loader, "err-domain"),
+            | AppError::ResearchNoteDomain(_)
+            | AppError::ImportRunDomain(_) => fl!(self.loader, "err-domain"),
             AppError::Plugin(detail) => fl!(self.loader, "err-plugin", detail = detail.clone()),
             AppError::Backup(backup) => self.backup_error(backup),
+            AppError::Dataset(dataset) => self.dataset_error(dataset),
             AppError::Db(db) => self.db_error(db),
+        }
+    }
+
+    fn dataset_error(&self, error: &DatasetError) -> String {
+        match error {
+            DatasetError::NotFound { query, .. } => fl!(self.loader, "err-dataset-not-found", query = query.clone()),
+            DatasetError::Ambiguous { query, .. } => fl!(self.loader, "err-dataset-ambiguous", query = query.clone()),
+            DatasetError::Required { .. } => fl!(self.loader, "err-dataset-required"),
+            DatasetError::Global { scheme } => fl!(self.loader, "err-dataset-global", scheme = scheme.clone()),
         }
     }
 
@@ -3166,7 +3176,7 @@ mod tests {
     use crate::presentation::ConfidenceLevel;
     use vitni_app::{AppError, ChangeLogEntry, Confidence, DbError, OperatorKind, Sex};
 
-    /// Every event variant's `type_name()` across the 12 aggregates (vitni-core `*/event.rs`).
+    /// Every event variant's `type_name()` across the 14 aggregates (vitni-core `*/event.rs`).
     /// Keep in sync when a new event variant lands — an unmapped type renders as "Recorded a change".
     const EVENT_TYPES: &[&str] = &[
         "PersonCreated",
@@ -3235,6 +3245,10 @@ mod tests {
         "AbbrevSet",
         "RepositoryLinked",
         "TagCreated",
+        "ImportRunStarted",
+        "ItemResolved",
+        "ImportRunFinished",
+        "ImportRunAbandoned",
         "TagRenamed",
         "TagColorSet",
         "TagPrioritySet",
@@ -3263,6 +3277,7 @@ mod tests {
             evidence_analysis: None,
             detail: None,
             can_undo: false,
+            run: None,
         }
     }
 

@@ -1,11 +1,11 @@
-//! The canonical registry of the 12 aggregates for the persistence layer (issue #38).
+//! The canonical registry of the 14 aggregates for the persistence layer (issue #38).
 //!
 //! Both the engine-neutral facade ([`store`](crate::store)) and the SQLite backend
 //! ([`sqlite`](crate::sqlite)) are per-aggregate-repetitive in lockstep: every aggregate needs the
 //! same delegation methods, the same `cqrs-es` wiring, the same projection table, and the same
 //! rebuild entry. This module is the single place that list lives; each consumer defines a callback
-//! macro and hands it to [`for_each_db_aggregate!`] (all 12) or [`for_each_db_human_id_aggregate!`]
-//! (the 11 that allocate a `HumanId` — every aggregate but Tag).
+//! macro and hands it to [`for_each_db_aggregate!`] (all 14) or [`for_each_db_human_id_aggregate!`]
+//! (the 12 that allocate a `HumanId` — every aggregate but Tag and `ImportRun`).
 //!
 //! Types are fully-qualified paths so a consumer needs no imports. The `wiring` column drives how
 //! the SQLite backend assembles each aggregate's `CqrsFramework` in `open()`:
@@ -35,13 +35,14 @@ macro_rules! for_each_db_aggregate {
             (media, vitni_core::media::MediaState, vitni_core::media::MediaView, vitni_core::media::MediaCommandEnvelope, vitni_core::media::MediaError, MEDIA_VIEW_TABLE, "media_view", execute_media, find_media, human_id, list_media, (plain), Vec::new(),),
             (tag, vitni_core::tag::TagState, vitni_core::tag::TagView, vitni_core::tag::TagCommandEnvelope, vitni_core::tag::TagError, TAG_VIEW_TABLE, "tag_view", execute_tag, find_tag, tag_id, list_tags, (plain), Vec::new(),),
             (research_note, vitni_core::research_note::ResearchNoteState, vitni_core::research_note::ResearchNoteView, vitni_core::research_note::ResearchNoteCommandEnvelope, vitni_core::research_note::ResearchNoteError, RESEARCH_NOTE_VIEW_TABLE, "research_note_view", execute_research_note, find_research_note, human_id, list_research_notes, (resolver crate::resolver::ResearchNoteRefService), Vec::new(),),
+            (import_run, vitni_core::import_run::ImportRunState, vitni_core::import_run::ImportRunView, vitni_core::import_run::ImportRunCommandEnvelope, vitni_core::import_run::ImportRunError, IMPORT_RUN_VIEW_TABLE, "import_run_view", execute_import_run, find_import_run, run_id, list_import_runs, (plain), Vec::new(),),
         }
     };
 }
 
 pub(crate) use for_each_db_aggregate;
 
-/// Invokes `$callback!` with one row per aggregate that allocates a `HumanId` (all but Tag).
+/// Invokes `$callback!` with one row per aggregate that allocates a `HumanId` (all but Tag and `ImportRun`).
 /// Columns, in order: `(snake, next_fn, table_const)`.
 macro_rules! for_each_db_human_id_aggregate {
     ($callback:ident) => {

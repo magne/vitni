@@ -19,14 +19,15 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use uuid::Uuid;
 use vitni_app::{
-    AiConfig, AppDefaults, Confidence, OperatorConfig, Rect, Session, Workspace, WorkspaceDefaults,
-    change_log_for_person, list_citations, list_media, list_persons, list_repositories, list_sources,
+    AiConfig, AppDefaults, Confidence, DatasetId, ImportRunStatus, OperatorConfig, Rect, Session, Workspace,
+    WorkspaceDefaults, change_log_for_person, list_citations, list_import_runs, list_media, list_persons,
+    list_repositories, list_sources,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 use vitni_plugin_host::{
-    Capability, Grants, HostPattern, Invocation, NetPolicy, PluginError, PresentError, Presenter, ProgressControl,
-    ResourceBudget,
+    Capability, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PluginError, PresentError, Presenter,
+    ProgressControl, ResourceBudget,
 };
 use wiremock::matchers::{method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -106,6 +107,18 @@ fn invocation(workspace: Workspace, grants: Grants) -> Invocation {
         net_policy: localhost_policy(),
         ai_config: AiConfig::default(),
         provenance_confidence: Some(Confidence::Low),
+        import: Some(ImportRunSpec {
+            operator: Session::new(Agent {
+                kind: AgentKind::Human,
+                id: AgentId::from_uuid(Uuid::from_u128(1)),
+                display: Some("Tester".to_owned()),
+            }),
+            dataset: DatasetId::global("digitalarkivet"),
+            dataset_label: "digitalarkivet".to_owned(),
+            source_label: "census person".to_owned(),
+            plugin: PLUGIN.to_owned(),
+            plugin_version: "0.1.0".to_owned(),
+        }),
     }
 }
 
@@ -329,11 +342,25 @@ async fn imports_a_census_person_with_source_citation_and_cropped_media() {
     assert_census_import(&root).await;
 }
 
+/// Asserts the session wrote one finished run into the global dataset, and the citation names the
+/// census record it was read from (ADR 0037).
+async fn assert_census_run(root: &Path, workspace: &Workspace) {
+    let runs = list_import_runs(workspace).await.expect("runs");
+    assert_eq!(runs.len(), 1, "the session wrote one import run");
+    assert_eq!(runs[0].status, ImportRunStatus::Finished);
+    assert_eq!(runs[0].dataset, DatasetId::global("digitalarkivet"));
+    assert!(
+        events_contain(root, r#""item":"citation","record":"pf01073902000464""#).await,
+        "the citation names the census record it was read from"
+    );
+}
+
 /// Asserts the aggregates a single census-person import produces: the person (with the edited name,
 /// the attached citation, and the cropped media), the source/repository/citation, the media object,
 /// the scan on disk, and the Software-agent `digitalarkivet` `ExternalId` in the event store.
 async fn assert_census_import(root: &Path) {
     let workspace = open_workspace(root).await;
+    assert_census_run(root, &workspace).await;
     let persons = list_persons(&workspace).await.expect("persons");
     assert_eq!(persons.len(), 1, "one person created");
     let person = &persons[0];

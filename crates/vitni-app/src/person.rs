@@ -795,6 +795,7 @@ pub async fn merge_persons(
         confidence: Some(Confidence::Normal),
         rationale: Some(rationale.unwrap_or_else(|| "Merge".to_owned())),
         evidence_analysis: None,
+        origin: None,
     };
     execute_person_command(
         store,

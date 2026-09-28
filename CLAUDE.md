@@ -24,9 +24,9 @@ These docs are the source of truth; read them before changing the core or its wi
   command/event catalog, and the `EventContext` provenance envelope. The model is
   **evidence/conclusion**: the **event log is the assertion/evidence layer** (each event is a
   claim by an operator), and **projections are the conclusion layer**, shaped as the Gramps
-  entities and rebuildable from the log. There are **13 aggregates** — the 10 Gramps primaries
+  entities and rebuildable from the log. There are **14 aggregates** — the 10 Gramps primaries
   (Person, Family, Event, Place, Source, Citation, Repository, Media, Note, Tag) plus `DnaTest`,
-  `DnaMatch`, and `ResearchNote` (ADR 0028); `for_each_aggregate!` in
+  `DnaMatch`, `ResearchNote` (ADR 0028), and `ImportRun` (ADR 0037); `for_each_aggregate!` in
   `crates/vitni-app/src/aggregates.rs` is the registry that lists them.
 - **`docs/adr/` — architecture decisions. ADRs are immutable**: never edit an accepted ADR;
   supersede it with a new one.

@@ -18,6 +18,43 @@ pub use vitni::host_api::{
 
 pub mod convert;
 
+thread_local! {
+    /// The origins entered by [`with_origin`] and not yet left, innermost last.
+    static ORIGINS: std::cell::RefCell<Vec<types::OriginKey>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Runs `write` with every host write it makes stamped with the source record `record` and, when the
+/// record yields several entities, the stable `item` key of the one being written (ADR 0037 §1).
+///
+/// Scopes nest: an inner call (a place created while writing an event) sets its own origin and puts
+/// the outer one back when it returns, so a resolver that creates shared records on demand keeps each
+/// record's own origin.
+///
+/// # Errors
+/// Returns `write`'s error, or a message if the host refuses the origin.
+pub fn with_origin<T>(
+    record: &str,
+    item: Option<&str>,
+    write: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let key = types::OriginKey {
+        record: record.to_owned(),
+        item: item.map(ToOwned::to_owned),
+    };
+    commands::set_origin(Some(&key)).map_err(|error| format!("set-origin failed: {error:?}"))?;
+    ORIGINS.with(|origins| origins.borrow_mut().push(key));
+    let result = write();
+    let outer = ORIGINS.with(|origins| {
+        let mut origins = origins.borrow_mut();
+        origins.pop();
+        origins.last().cloned()
+    });
+    let restored = commands::set_origin(outer.as_ref());
+    let value = result?;
+    restored.map_err(|error| format!("set-origin failed: {error:?}"))?;
+    Ok(value)
+}
+
 /// The chunk size used when draining the import source.
 const CHUNK: u32 = 64 * 1024;
 
@@ -91,7 +128,8 @@ pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
 /// Returns a message if the host denies the capability, the provider is unknown, or the provider
 /// fails.
 pub fn interpret(provider: Option<&str>, media_path: &str, prompt: &str) -> Result<String, String> {
-    ai::interpret_media(provider, media_path, prompt).map_err(|error| format!("interpreting {media_path} failed: {error:?}"))
+    ai::interpret_media(provider, media_path, prompt)
+        .map_err(|error| format!("interpreting {media_path} failed: {error:?}"))
 }
 
 /// Shows `payload` to the frontend through the host `present` capability (ADR 0017 §5) and suspends

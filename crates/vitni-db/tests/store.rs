@@ -38,6 +38,7 @@ fn meta(assertion: u128) -> AssertionMeta {
             confidence: Some(Confidence::Normal),
             citations: Vec::new(),
             evidence_analysis: None,
+            origin: None,
         },
     }
 }
@@ -340,7 +341,7 @@ async fn decode_rejects_unknown_aggregates_and_undecodable_payloads() {
 #[test]
 fn event_variants_list_every_aggregate() {
     let variants = vitni_db::event_variants();
-    assert_eq!(variants.len(), 13);
+    assert_eq!(variants.len(), 14);
     let (_, person) = variants.iter().find(|(kind, _)| *kind == "person").unwrap();
     assert!(person.contains(&"PersonCreated"));
 }

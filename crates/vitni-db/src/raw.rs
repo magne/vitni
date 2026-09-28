@@ -124,7 +124,7 @@ macro_rules! raw_event_registry {
         fn decode_serialized(row: &RawEvent, serialized: SerializedEvent) -> Result<(), DbError> {
             match row.aggregate_type.as_str() {
                 $(stringify!($snake) => upcast_and_decode::<$State>(row, serialized, &$upcasters),)+
-                _ => Err(malformed(row, "the aggregate type is not one of the 13 aggregates")),
+                _ => Err(malformed(row, "the aggregate type is not one of the 14 aggregates")),
             }
         }
 
@@ -160,7 +160,7 @@ mod tests {
             let Err(error) = decode_raw_event(&row) else {
                 continue;
             };
-            assert!(!error.to_string().contains("not one of the 13"), "{kind}: {error}");
+            assert!(!error.to_string().contains("not one of the 14"), "{kind}: {error}");
         }
     }
 

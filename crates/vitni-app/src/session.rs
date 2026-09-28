@@ -67,6 +67,12 @@ impl Session {
         AssertionId::from_uuid(Uuid::now_v7())
     }
 
+    /// Mints the lineage id of a new file-lineage dataset (`gedcom:<uuid>` — ADR 0037 §3).
+    #[must_use]
+    pub fn new_dataset_lineage(&self) -> Uuid {
+        Uuid::now_v7()
+    }
+
     /// Reads the wall clock — for a record of *when* something ran that is not an assertion (a
     /// backup's creation time, ADR 0041), so the clock is still read here and nowhere else.
     #[must_use]
@@ -90,6 +96,7 @@ impl Session {
                 confidence: provenance.confidence,
                 citations,
                 evidence_analysis: provenance.evidence_analysis,
+                origin: provenance.origin.map(Box::new),
             },
         }
     }
@@ -119,6 +126,7 @@ mod tests {
             confidence: Some(Confidence::Normal),
             rationale: Some("note".to_owned()),
             evidence_analysis: None,
+            origin: None,
         };
         let meta = session().new_meta(provenance, Vec::new());
         assert_eq!(meta.context.operator.id, AgentId::from_uuid(Uuid::from_u128(42)));
@@ -145,6 +153,7 @@ mod tests {
             confidence: Some(Confidence::High),
             rationale: None,
             evidence_analysis: Some(analysis),
+            origin: None,
         };
         let meta = session().new_meta(provenance, Vec::new());
         assert_eq!(

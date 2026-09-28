@@ -137,6 +137,10 @@ history-pub-info-set = Publiseringsinfo satt
 history-abbrev-set = Forkortelse satt
 history-repository-linked = Arkiv koblet
 history-tag-created = Etikett opprettet
+history-import-run-started = Import startet
+history-item-resolved = Importert post gjenkjent som en eksisterende
+history-import-run-finished = Import fullført
+history-import-run-abandoned = Import stanset før den var ferdig
 history-tag-renamed = Etikett omdøpt
 history-tag-color-set = Etikettfarge satt
 history-tag-priority-set = Etikettprioritet satt
@@ -146,10 +150,18 @@ history-description-set = Beskrivelse satt
 history-place-linked = Sted koblet
 history-generic = Registrerte en endring
 
-# Postens Historikk-fane sin egen frase for en samlet importkjøring — etter opphav, ikke etter hvor
-# mange påstander kjøringen la på denne ene posten (sak #306). `dashboard-import-batch` under er
-# Dashbordets aktivitetsstrøm-frase for samme kjøring, etter postantall.
-history-import-run = Importert fra { $origin }
+# En importkjørings rad, på Dashbordet og i en posts Historikk-fane (ADR 0037 §5): hva den
+# importerte, med et dempet antall ved siden av — postene en fullført kjøring importerte på
+# Dashbordet, endringene den gjorde på denne ene posten i Historikk-fanen (sak #306).
+history-import-run = Importert fra { $source }
+history-import-run-records = { $count ->
+    [one] 1 post
+   *[other] { $count } poster
+}
+history-import-run-changes = { $count ->
+    [one] 1 endring
+   *[other] { $count } endringer
+}
 
 # Endringslogg-operatørlinje
 history-operator-human = { $name } · { $confidence }
@@ -422,7 +434,6 @@ dashboard-stat-evidence = Bevishelse
 dashboard-stat-evidence-caption = fakta med minst én kilde
 dashboard-stat-attention = Trenger oppmerksomhet
 dashboard-recent-activity = Nylig aktivitet — hvem endret hva
-dashboard-import-batch = { $count } poster importert
 dashboard-jump-back = Hopp tilbake
 dashboard-data-quality = Datakvalitet
 dashboard-data-quality-loading = Sjekker datakvalitet…
@@ -553,6 +564,10 @@ err-backup-unknown-format = sikkerhetskopiformat { $found } er ikke skrevet av n
 err-backup-invalid-event = hendelsen på linje { $line } i sikkerhetskopien er ugyldig: { $detail }
 err-backup-event-count = manifestet i sikkerhetskopien oppgir { $expected } hendelser, men den inneholder { $found }
 err-backup-target-not-empty = { $path } er ikke tom; gjenopprett til en ny eller tom mappe
+err-dataset-not-found = ingen datasett passer til «{ $query }»
+err-dataset-ambiguous = «{ $query }» gjelder flere datasett
+err-dataset-required = arbeidsområdet har allerede data av denne typen; velg treet filen hører til, eller et nytt
+err-dataset-global = { $scheme }-importer bruker alltid det ene datasettet sitt
 err-backup-database-not-empty = måldatabasen har allerede hendelser; gjenopprett til en tom database
 
 # Source · Repository slices (Phase 5 PR9)

@@ -112,6 +112,7 @@ mod tests {
                 confidence: Some(Confidence::Normal),
                 citations: Vec::new(),
                 evidence_analysis: None,
+                origin: None,
             },
         }
     }

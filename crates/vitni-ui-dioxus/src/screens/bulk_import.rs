@@ -32,8 +32,9 @@ use crate::app::request_restart;
 use crate::components::Modal;
 use crate::i18n::Chrome;
 use crate::services::{
-    BulkImportHandle, PluginRow, Services, count_workspace_persons, discover_plugins, start_bulk_import,
+    BulkImportHandle, ImportTargetProbe, PluginRow, Services, discover_plugins, probe_import_target, start_bulk_import,
 };
+use vitni_app::DatasetChoice;
 
 /// The wizard chrome shared across stages: the heading and the three step names.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,6 +107,10 @@ pub struct BulkConfirmLabels {
     pub title: String,
     /// The dialog body (names the person count).
     pub body: String,
+    /// The label of the "which tree is this file" select (ADR 0037 §3).
+    pub dataset: String,
+    /// The select's first, unchosen entry.
+    pub dataset_placeholder: String,
     /// The Cancel action label.
     pub cancel: String,
     /// The "Import anyway" action label.
@@ -123,7 +128,33 @@ struct PendingRun {
     source: PathBuf,
     workspace: String,
     count: usize,
+    /// The target's datasets of this plugin's scheme, as select options; empty when there is nothing
+    /// to choose between.
+    datasets: Vec<SelectChoice>,
     unknown_failure: String,
+}
+
+/// A bulk import ready to launch: what to run, where, and into which dataset.
+struct BulkRun {
+    services: Services,
+    plugin_id: String,
+    source: PathBuf,
+    target: ImportTargetChoice,
+    dataset: DatasetChoice,
+    unknown_failure: String,
+}
+
+/// The value the dataset select gives "a different tree".
+const NEW_DATASET: &str = "new";
+
+/// The dataset choice a confirm-dialog value stands for: nothing to choose, a new tree, or an
+/// existing dataset's id.
+fn dataset_choice(value: &str) -> DatasetChoice {
+    match value {
+        "" => DatasetChoice::Unspecified,
+        NEW_DATASET => DatasetChoice::New,
+        id => DatasetChoice::Existing(id.to_owned()),
+    }
 }
 
 /// The bulk-import wizard body: owns the session, probes a non-empty existing target, starts the
@@ -148,6 +179,7 @@ pub fn BulkImportBody() -> Element {
         database_url: use_signal(String::new),
     };
     let pending = use_signal(|| None::<PendingRun>);
+    let dataset = use_signal(String::new);
     let default_dir = state.services().dir.clone();
 
     let body = match session().stage().clone() {
@@ -162,6 +194,7 @@ pub fn BulkImportBody() -> Element {
             session,
             cancel,
             pending,
+            dataset,
             &default_dir,
         ),
         BulkImportStage::Running(progress) => rsx! {
@@ -223,6 +256,7 @@ fn bulk_source_body(
     session: Signal<BulkImportSession>,
     cancel: Signal<Option<Arc<AtomicBool>>>,
     pending: Signal<Option<PendingRun>>,
+    dataset: Signal<String>,
     default_dir: &Path,
 ) -> Element {
     let plugin_options = discover_import_plugins(state, plugin_id);
@@ -258,7 +292,7 @@ fn bulk_source_body(
             target_error,
             onrun,
         }
-        {confirm_modal(chrome, pending, session, cancel)}
+        {confirm_modal(chrome, pending, dataset, session, cancel)}
     }
 }
 
@@ -339,6 +373,7 @@ fn build_bulk_onrun(
 ) -> impl FnMut(()) + 'static {
     let run_services = state.services().clone();
     let unknown_failure = chrome.bulk_import_failed_unknown();
+    let dataset_new = chrome.bulk_import_dataset_new();
     move |()| {
         let id = plugin_id();
         let source = ImportSourcePath::parse(&source_typed(), &default_dir);
@@ -358,84 +393,183 @@ fn build_bulk_onrun(
         match target {
             ImportTargetChoice::Existing { workspace } => {
                 let probe_services = services.clone();
+                let dataset_new = dataset_new.clone();
                 spawn(async move {
-                    match count_workspace_persons(&probe_services, &workspace).await {
-                        Ok(0) => launch_bulk_import(
-                            services,
-                            id,
-                            source_path,
-                            ImportTargetChoice::Existing { workspace },
+                    match probe_import_target(&probe_services, &workspace, &id).await {
+                        Ok(probe) if probe.persons == 0 && probe.datasets.is_empty() => launch_bulk_import(
+                            BulkRun {
+                                services,
+                                plugin_id: id,
+                                source: source_path,
+                                target: ImportTargetChoice::Existing { workspace },
+                                dataset: DatasetChoice::Unspecified,
+                                unknown_failure,
+                            },
                             session,
                             cancel,
-                            unknown_failure,
                         ),
-                        Ok(count) => pending.set(Some(PendingRun {
-                            services: probe_services,
-                            plugin_id: id,
-                            source: source_path,
-                            workspace,
-                            count,
-                            unknown_failure,
-                        })),
+                        Ok(probe) => {
+                            let chrome = probe_services.chrome();
+                            let existing = |label: &str| chrome.bulk_import_dataset_existing(label);
+                            let datasets = dataset_options(&probe, &existing, &dataset_new);
+                            pending.set(Some(PendingRun {
+                                services: probe_services,
+                                plugin_id: id,
+                                source: source_path,
+                                workspace,
+                                count: probe.persons,
+                                datasets,
+                                unknown_failure,
+                            }));
+                        }
                         Err(message) => session.write().on_failure(message),
                     }
                 });
             }
             ImportTargetChoice::New { .. } => {
-                launch_bulk_import(services, id, source_path, target, session, cancel, unknown_failure);
+                let run = BulkRun {
+                    services,
+                    plugin_id: id,
+                    source: source_path,
+                    target,
+                    dataset: DatasetChoice::Unspecified,
+                    unknown_failure,
+                };
+                launch_bulk_import(run, session, cancel);
             }
         }
     }
 }
 
-/// The non-empty-target confirm dialog: shown while [`PendingRun`] is armed, naming the target
-/// workspace and its person count; Cancel drops the pending run, "Import anyway" launches it.
+/// The select options for the target's earlier datasets, plus "a different tree"; none when the target
+/// holds no dataset of the plugin's scheme.
+fn dataset_options(
+    probe: &ImportTargetProbe,
+    existing: &impl Fn(&str) -> String,
+    new_label: &str,
+) -> Vec<SelectChoice> {
+    if probe.datasets.is_empty() {
+        return Vec::new();
+    }
+    let mut options = Vec::with_capacity(probe.datasets.len() + 1);
+    for dataset in &probe.datasets {
+        options.push(SelectChoice {
+            value: dataset.id.clone(),
+            label: existing(&dataset.label),
+        });
+    }
+    options.push(SelectChoice {
+        value: NEW_DATASET.to_owned(),
+        label: new_label.to_owned(),
+    });
+    options
+}
+
+/// The confirm dialog for an existing target: shown while [`PendingRun`] is armed. Cancel drops the
+/// pending run; "Import anyway" launches it with the chosen dataset.
 fn confirm_modal(
     chrome: &Chrome,
     mut pending: Signal<Option<PendingRun>>,
+    mut dataset: Signal<String>,
     session: Signal<BulkImportSession>,
     cancel: Signal<Option<Arc<AtomicBool>>>,
 ) -> Element {
     let Some(run) = pending() else {
         return rsx! {};
     };
+    let body = if run.count == 0 {
+        chrome.bulk_import_confirm_datasets_body(&run.workspace)
+    } else {
+        chrome.bulk_import_confirm_body(&run.workspace, run.count)
+    };
     let labels = BulkConfirmLabels {
         title: chrome.bulk_import_confirm_title(&run.workspace),
-        body: chrome.bulk_import_confirm_body(&run.workspace, run.count),
+        body,
+        dataset: chrome.bulk_import_dataset_label(),
+        dataset_placeholder: chrome.bulk_import_dataset_placeholder(),
         cancel: chrome.bulk_import_confirm_cancel(),
         run: chrome.bulk_import_confirm_run(),
         dismiss: chrome.dismiss(),
     };
+    let datasets = run.datasets.clone();
+    rsx! {
+        BulkConfirmDialog {
+            labels,
+            datasets,
+            dataset,
+            oncancel: move |()| {
+                dataset.set(String::new());
+                pending.set(None);
+            },
+            onrun: move |chosen: String| {
+                dataset.set(String::new());
+                pending.set(None);
+                let bulk = BulkRun {
+                    services: run.services.clone(),
+                    plugin_id: run.plugin_id.clone(),
+                    source: run.source.clone(),
+                    target: ImportTargetChoice::Existing { workspace: run.workspace.clone() },
+                    dataset: dataset_choice(&chosen),
+                    unknown_failure: run.unknown_failure.clone(),
+                };
+                launch_bulk_import(bulk, session, cancel);
+            },
+        }
+    }
+}
+
+/// The existing-target confirm dialog: names the target and what it already holds and — when the
+/// target has datasets of the plugin's scheme — asks which tree the file belongs to (ADR 0037 §3).
+/// The import waits for that choice: guessing would silently merge one file's records into another's.
+/// `onrun` receives the chosen value: empty when there was nothing to choose, `new`, or a dataset id.
+#[component]
+pub fn BulkConfirmDialog(
+    labels: BulkConfirmLabels,
+    datasets: Vec<SelectChoice>,
+    mut dataset: Signal<String>,
+    oncancel: EventHandler<()>,
+    onrun: EventHandler<String>,
+) -> Element {
+    let needs_choice = !datasets.is_empty();
+    let chosen = dataset();
+    let blocked = needs_choice && chosen.is_empty();
+    let mut options = Vec::with_capacity(datasets.len() + 1);
+    if needs_choice {
+        options.push(SelectChoice {
+            value: String::new(),
+            label: labels.dataset_placeholder.clone(),
+        });
+        options.extend(datasets);
+    }
     rsx! {
         Modal {
             title: labels.title,
             open: true,
             close_label: labels.dismiss,
-            onclose: move |()| pending.set(None),
+            onclose: move |()| oncancel.call(()),
             footer: rsx! {
                 Button {
                     label: labels.cancel,
                     variant: ButtonVariant::Ghost,
-                    onclick: move |_| pending.set(None),
+                    onclick: move |_| oncancel.call(()),
                 }
                 Button {
                     label: labels.run,
                     variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        pending.set(None);
-                        launch_bulk_import(
-                            run.services.clone(),
-                            run.plugin_id.clone(),
-                            run.source.clone(),
-                            ImportTargetChoice::Existing { workspace: run.workspace.clone() },
-                            session,
-                            cancel,
-                            run.unknown_failure.clone(),
-                        );
-                    },
+                    disabled: blocked,
+                    onclick: move |_| onrun.call(dataset()),
                 }
             },
             p { "{labels.body}" }
+            if needs_choice {
+                Select {
+                    label: labels.dataset,
+                    name: "import-dataset".to_owned(),
+                    value: Some(chosen),
+                    options,
+                    onchange: move |event: FormEvent| dataset.set(event.value()),
+                }
+            }
         }
     }
 }
@@ -711,19 +845,23 @@ fn bulk_restart(mut session: Signal<BulkImportSession>) {
 /// decides whether a success should [`request_restart`] (only when it names the workspace already
 /// open this session — a different or freshly created target is not what is currently displayed).
 fn launch_bulk_import(
-    services: Services,
-    plugin_id: String,
-    source: PathBuf,
-    target: ImportTargetChoice,
+    run: BulkRun,
     mut session: Signal<BulkImportSession>,
     mut cancel: Signal<Option<Arc<AtomicBool>>>,
-    unknown_failure: String,
 ) {
+    let BulkRun {
+        services,
+        plugin_id,
+        source,
+        target,
+        dataset,
+        unknown_failure,
+    } = run;
     let refresh =
         matches!(&target, ImportTargetChoice::Existing { workspace } if *workspace == services.open_workspace);
     let source_display = source.display().to_string();
     session.write().start();
-    let (handle, future) = start_bulk_import(services, plugin_id, source, target);
+    let (handle, future) = start_bulk_import(services, plugin_id, source, target, dataset);
     cancel.set(Some(Arc::clone(&handle.cancel)));
     spawn(future);
     spawn(bulk_drive(handle, session, source_display, refresh, unknown_failure));

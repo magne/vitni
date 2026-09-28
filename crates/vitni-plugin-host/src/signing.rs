@@ -14,6 +14,7 @@ use ed25519_dalek::{Signer, Verifier};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+use vitni_app::DatasetSpec;
 
 pub use ed25519_dalek::{Signature, SignatureError, SigningKey, VerifyingKey};
 
@@ -36,6 +37,10 @@ pub struct PluginManifest {
     /// The host capabilities the plugin declares it needs (the interface names from the WIT world it
     /// implements, e.g. `log`, `commands`).
     pub capabilities: Vec<String>,
+    /// The dataset an importer writes into (ADR 0037 §3); required of the import roles, absent
+    /// otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dataset: Option<DatasetSpec>,
 }
 
 /// Domain separator mixed into every bundle digest so a digest can never be confused with a hash
@@ -204,9 +209,10 @@ mod tests {
             id: "gedcom-import".to_owned(),
             version: "0.1.0".to_owned(),
             publisher: "vitni-project".to_owned(),
-            host_api: "0.23.0".to_owned(),
+            host_api: "0.24.0".to_owned(),
             role: "bulk-import".to_owned(),
             capabilities: vec!["log".to_owned(), "commands".to_owned()],
+            dataset: None,
         };
         toml::to_string(&manifest)
             .expect("serialize sample manifest")

@@ -22,6 +22,8 @@ pub struct HistoryEntry {
     pub undo_text: String,
     /// The already-localized accessible label for the undo control (e.g. `Undo: Name asserted`).
     pub undo_label: String,
+    /// An import-run row's already-localized count (e.g. `4 changes`), shown muted beside `what`.
+    pub count: Option<String>,
 }
 
 /// A vertical audit timeline of change-log entries; undoable entries carry an undo control.
@@ -37,7 +39,12 @@ pub fn HistoryTimeline(
             for entry in entries.iter() {
                 div { class: "tl-item",
                     div { class: "tl-when", "{entry.when}" }
-                    div { class: "tl-what", "{entry.what}" }
+                    div { class: "tl-what",
+                        "{entry.what}"
+                        if let Some(count) = &entry.count {
+                            span { class: "muted tl-count", "{count}" }
+                        }
+                    }
                     div { class: "tl-who", "{entry.who}" }
                     if let Some(why) = &entry.why {
                         div { class: "tl-why", "{why}" }

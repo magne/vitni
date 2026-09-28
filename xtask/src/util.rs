@@ -74,6 +74,8 @@ pub struct PluginMetadata {
     pub capabilities: Vec<String>,
     #[serde(default)]
     pub publisher: Option<String>,
+    #[serde(default)]
+    pub dataset: Option<vitni_core::origin::DatasetSpec>,
 }
 
 /// A `Cargo.toml` `[lib]` table (only the crate type is read).

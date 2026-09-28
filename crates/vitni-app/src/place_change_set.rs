@@ -271,6 +271,7 @@ mod tests {
                     confidence: Some(Confidence::High),
                     rationale: Some("gazetteer".to_owned()),
                     evidence_analysis: None,
+                    origin: None,
                 },
                 ..draft(PlaceType::City)
             },

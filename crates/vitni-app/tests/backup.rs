@@ -15,8 +15,9 @@ use time::macros::datetime;
 use uuid::Uuid;
 use vitni_app::backup::{BackupError, BackupRequest, RestoreRequest, create_backup, restore_backup};
 use vitni_app::{
-    AppDefaults, AppError, NewMedia, NewNote, NewPerson, OperatorConfig, PersonNameParts, Provenance, Session,
-    Workspace, WorkspaceDefaults, create_media, create_note, create_person,
+    AppDefaults, AppError, DatasetId, ImportCounts, NewImportRun, NewMedia, NewNote, NewPerson, OperatorConfig,
+    PersonNameParts, Provenance, RecordOrigin, Session, Workspace, WorkspaceDefaults, create_media, create_note,
+    create_person, finish_import_run, list_datasets, list_import_runs, start_import_run,
 };
 use vitni_core::enums::EvidenceLevel;
 use vitni_core::ids::AgentId;
@@ -561,4 +562,90 @@ async fn a_manifest_that_does_not_list_the_log_is_refused() {
         "{error:?}"
     );
     assert_nothing_created(fixture.home.path(), &target);
+}
+
+/// The record origin on every event of `workspace`, in log order.
+async fn origins(workspace: &Workspace) -> Vec<Option<vitni_core::origin::RecordOrigin>> {
+    #[derive(serde::Deserialize)]
+    struct Header {
+        context: vitni_core::provenance::EventContext,
+    }
+    let rows = workspace.store().read_raw_events(None, 1000).await.expect("rows");
+    rows.into_iter()
+        .map(|row| {
+            let header: Header = serde_json::from_value(row.payload).expect("decode envelope");
+            header.context.origin.map(|origin| *origin)
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_backup_keeps_every_record_origin_and_import_run() {
+    let home = tempfile::tempdir().expect("tempdir");
+    let dir = home.path().join("source");
+    Workspace::init(&dir, &operator(), &AppDefaults::default(), None).expect("init");
+    let source = Workspace::open(&dir, &operator(), &WorkspaceDefaults::default())
+        .await
+        .expect("open");
+    let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+    let run = NewImportRun {
+        plugin: "gedcom-import".to_owned(),
+        plugin_version: "0.1.0".to_owned(),
+        dataset: dataset.clone(),
+        dataset_label: "tree.ged".to_owned(),
+        source_label: "tree.ged".to_owned(),
+        file_asserted_at: None,
+    };
+    let run = start_import_run(&source, &session(), run).await.expect("start");
+    let importer = Session::software("gedcom-import", "0.1.0");
+    let provenance = Provenance {
+        origin: Some(RecordOrigin {
+            dataset,
+            record: "I1".to_owned(),
+            item: None,
+            digest: None,
+            run,
+        }),
+        ..Provenance::default()
+    };
+    let person = NewPerson {
+        human_id: None,
+        name: Some(PersonNameParts::simple(Some("Ada".to_owned()), None)),
+        evidence_level: EvidenceLevel::Persona,
+        external_ids: Vec::new(),
+    };
+    create_person(&source, &importer, person, provenance, &[])
+        .await
+        .expect("person");
+    finish_import_run(&source, &session(), run, Vec::new(), ImportCounts::default())
+        .await
+        .expect("finish");
+
+    let archive = home.path().join("gen.vitni-backup");
+    create_backup(&source, &backup_request(&archive, false))
+        .await
+        .expect("backup");
+    let target = home.path().join("restored");
+    let config = home.path().join("config.toml");
+    restore_backup(&restore_request(&config, &archive, &target))
+        .await
+        .expect("restore");
+    let restored = open(&target).await;
+
+    let kept = origins(&restored).await;
+    assert_eq!(kept, origins(&source).await, "every origin survives, event for event");
+    assert_eq!(
+        kept.iter().flatten().count(),
+        2,
+        "the person's creation and name carry theirs"
+    );
+    assert_eq!(
+        list_import_runs(&restored).await.expect("runs"),
+        list_import_runs(&source).await.expect("runs"),
+        "the run comes back with its operator, dataset and end"
+    );
+    assert_eq!(
+        list_datasets(&restored).await.expect("datasets"),
+        list_datasets(&source).await.expect("datasets")
+    );
 }

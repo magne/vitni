@@ -38,6 +38,9 @@ macro_rules! app_error {
             /// (ADR 0041).
             #[error(transparent)]
             Backup(#[from] crate::backup::BackupError),
+            /// An import's dataset choice could not be resolved (ADR 0037 §3).
+            #[error(transparent)]
+            Dataset(#[from] crate::import_run::DatasetError),
             $(
                 #[doc = concat!("No ", $noun, " exists with the given identifier.")]
                 #[error($msg)]

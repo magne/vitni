@@ -265,6 +265,7 @@ mod tests {
                     confidence: Some(Confidence::High),
                     rationale: Some("primary source".to_owned()),
                     evidence_analysis: None,
+                    origin: None,
                 },
                 ..draft()
             },

@@ -13,6 +13,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
+use crate::run::{ActiveRun, ImportRunSpec, WriteRefusal};
 use vitni_app::{
     Address, Age, AgeBound, AiConfig, AssociationRole, Attribute, Calendar, Confidence, DateInput, DateModifier,
     DatePoint, DateQuality, ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MediaRefInput,
@@ -62,6 +63,9 @@ pub struct HostState {
     /// `commands.begin-import` before any per-record command. `None` until then, or if the guest
     /// never calls it (equivalent to a `none` argument — today's additive-only behavior, §3).
     file_asserted_at: Option<Timestamp>,
+    /// The import run this invocation writes (ADR 0037 §5); `None` outside an import, where writes
+    /// carry no origin and are not refused for lacking one.
+    run: Option<ActiveRun>,
 }
 
 impl HostState {
@@ -97,12 +101,23 @@ impl HostState {
             source: None,
             sink: None,
             file_asserted_at: None,
+            run: None,
         }
+    }
+
+    /// Makes this invocation an import that writes the run `spec` describes (ADR 0037 §5).
+    pub(crate) fn begin_run(&mut self, spec: ImportRunSpec) {
+        self.run = Some(ActiveRun::new(spec));
     }
 
     /// Recovers the workspace once the instance has run (the store is consumed afterwards).
     pub fn into_workspace(self) -> Workspace {
         self.workspace
+    }
+
+    /// Recovers the workspace and the import run, if any, once the instance has run.
+    pub(crate) fn into_parts(self) -> (Workspace, Option<ActiveRun>) {
+        (self.workspace, self.run)
     }
 }
 
@@ -190,14 +205,19 @@ impl commands::Host for HostState {
         std::future::ready(self.begin_import_now(file_asserted_at))
     }
 
+    fn set_origin(
+        &mut self,
+        origin: Option<types::OriginKey>,
+    ) -> impl Future<Output = Result<(), types::CapabilityError>> {
+        std::future::ready(self.set_origin_now(origin))
+    }
+
     async fn create_person(
         &mut self,
         name: Option<types::PersonName>,
         external_id: Option<types::ExternalId>,
     ) -> Result<types::ImportResult, types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         let name = name.map(to_person_name);
         // Without an external identity, always create (no record to resolve against).
         let Some(external_id) = external_id else {
@@ -210,13 +230,14 @@ impl commands::Host for HostState {
             let human_id = vitni_app::create_person(&self.workspace, &self.session, new, self.provenance(), &[])
                 .await
                 .map_err(|error| to_capability_error(&error))?;
+            self.record_created("person");
             return Ok(types::ImportResult {
                 human_id,
                 created: true,
             });
         };
         // Resolve-or-create against the external id (idempotent, additive re-import).
-        vitni_app::import_person(
+        let (human_id, created) = vitni_app::import_person(
             &self.workspace,
             &self.session,
             to_external_id(external_id),
@@ -224,12 +245,20 @@ impl commands::Host for HostState {
             self.provenance(),
         )
         .await
-        .map(|(human_id, created)| types::ImportResult { human_id, created })
-        .map_err(|error| to_capability_error(&error))
+        .map_err(|error| to_capability_error(&error))?;
+        if created {
+            self.record_created("person");
+        } else {
+            let view = self.workspace.store().find_person(&human_id).await;
+            let view = view.map_err(|error| types::CapabilityError::Backend(error.to_string()))?;
+            let person_id = view.and_then(|view| view.person_id());
+            self.record_resolved("person", person_id.map(|id| id.as_uuid()));
+        }
+        Ok(types::ImportResult { human_id, created })
     }
 
     async fn add_person_name(&mut self, person: String, name: types::PersonName) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::add_name(
             &self.workspace,
             &self.session,
@@ -245,33 +274,38 @@ impl commands::Host for HostState {
         &mut self,
         external_id: Option<types::ExternalId>,
     ) -> Result<types::ImportResult, types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         let Some(external_id) = external_id else {
             let human_id = vitni_app::create_family(&self.workspace, &self.session, self.provenance(), &[])
                 .await
                 .map_err(|error| to_capability_error(&error))?;
+            self.record_created("family");
             return Ok(types::ImportResult {
                 human_id,
                 created: true,
             });
         };
-        vitni_app::import_family(
+        let (human_id, created) = vitni_app::import_family(
             &self.workspace,
             &self.session,
             to_external_id(external_id),
             self.provenance(),
         )
         .await
-        .map(|(human_id, created)| types::ImportResult { human_id, created })
-        .map_err(|error| to_capability_error(&error))
+        .map_err(|error| to_capability_error(&error))?;
+        if created {
+            self.record_created("family");
+        } else {
+            let view = self.workspace.store().find_family(&human_id).await;
+            let view = view.map_err(|error| types::CapabilityError::Backend(error.to_string()))?;
+            let family_id = view.and_then(|view| view.family_id());
+            self.record_resolved("family", family_id.map(|id| id.as_uuid()));
+        }
+        Ok(types::ImportResult { human_id, created })
     }
 
     async fn add_partner(&mut self, family: String, person: String) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         vitni_app::import_add_partner(&self.workspace, &self.session, &family, &person, self.provenance())
             .await
             .map_err(|error| to_capability_error(&error))
@@ -283,9 +317,7 @@ impl commands::Host for HostState {
         child: String,
         relationships: Vec<types::ChildParentRel>,
     ) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         let child = vitni_app::ImportedChild {
             human_id: child,
             relationships: relationships
@@ -299,18 +331,14 @@ impl commands::Host for HostState {
     }
 
     async fn link_family_event(&mut self, family: String, event: String) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         vitni_app::link_family_event(&self.workspace, &self.session, &family, &event, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn assert_sex(&mut self, person: String, sex: types::Sex) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         // Reconciles against any existing value using this session's `file_asserted_at` (ADR 0029):
         // additive when the person has none yet, a no-op when it already matches, superseded only
         // when the file is at least as current — a strict superset of the pre-ADR-0029 plain assert,
@@ -334,9 +362,7 @@ impl commands::Host for HostState {
         value: Option<String>,
         date: Option<types::GenealogicalDate>,
     ) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         let date = date.map(to_genealogical_date);
         let new = vitni_app::NewFact {
             fact_type: to_fact_type(fact),
@@ -354,9 +380,7 @@ impl commands::Host for HostState {
         other: String,
         role: types::AssociationRole,
     ) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         vitni_app::assert_association(
             &self.workspace,
             &self.session,
@@ -370,10 +394,8 @@ impl commands::Host for HostState {
     }
 
     async fn create_place(&mut self, name: String) -> Result<String, types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
-        vitni_app::create_place(
+        self.begin_write().await?;
+        let human_id = vitni_app::create_place(
             &self.workspace,
             &self.session,
             NewPlace {
@@ -386,14 +408,14 @@ impl commands::Host for HostState {
             &[],
         )
         .await
-        .map_err(|error| to_capability_error(&error))
+        .map_err(|error| to_capability_error(&error))?;
+        self.record_created("place");
+        Ok(human_id)
     }
 
     async fn create_event(&mut self, kind: types::EventType) -> Result<String, types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
-        vitni_app::create_event(
+        self.begin_write().await?;
+        let human_id = vitni_app::create_event(
             &self.workspace,
             &self.session,
             NewEvent {
@@ -404,7 +426,9 @@ impl commands::Host for HostState {
             &[],
         )
         .await
-        .map_err(|error| to_capability_error(&error))
+        .map_err(|error| to_capability_error(&error))?;
+        self.record_created("event");
+        Ok(human_id)
     }
 
     async fn set_event_date(
@@ -412,9 +436,7 @@ impl commands::Host for HostState {
         event: String,
         date: types::GenealogicalDate,
     ) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         let date = to_genealogical_date(date);
         vitni_app::assert_event_date_value(&self.workspace, &self.session, &event, date, self.mutation_meta())
             .await
@@ -426,9 +448,7 @@ impl commands::Host for HostState {
         event: String,
         address: types::Address,
     ) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         vitni_app::assert_event_address(
             &self.workspace,
             &self.session,
@@ -441,9 +461,7 @@ impl commands::Host for HostState {
     }
 
     async fn link_event_place(&mut self, event: String, place: String) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         vitni_app::link_place(&self.workspace, &self.session, &event, &place, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
@@ -455,9 +473,7 @@ impl commands::Host for HostState {
         event: String,
         participation: types::ParticipationInput,
     ) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         let new = NewParticipation {
             role: to_role(participation.role),
             age: participation.age.map(to_age),
@@ -482,10 +498,8 @@ impl commands::Host for HostState {
     }
 
     async fn create_source(&mut self, title: Option<String>) -> Result<String, types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
-        vitni_app::create_source(
+        self.begin_write().await?;
+        let human_id = vitni_app::create_source(
             &self.workspace,
             &self.session,
             NewSource { human_id: None, title },
@@ -493,7 +507,9 @@ impl commands::Host for HostState {
             &[],
         )
         .await
-        .map_err(|error| to_capability_error(&error))
+        .map_err(|error| to_capability_error(&error))?;
+        self.record_created("source");
+        Ok(human_id)
     }
 
     async fn create_citation(
@@ -501,10 +517,8 @@ impl commands::Host for HostState {
         source: String,
         page: Option<String>,
     ) -> Result<String, types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
-        vitni_app::create_citation(
+        self.begin_write().await?;
+        let human_id = vitni_app::create_citation(
             &self.workspace,
             &self.session,
             NewCitation {
@@ -516,14 +530,14 @@ impl commands::Host for HostState {
             &[],
         )
         .await
-        .map_err(|error| to_capability_error(&error))
+        .map_err(|error| to_capability_error(&error))?;
+        self.record_created("citation");
+        Ok(human_id)
     }
 
     async fn create_media(&mut self, file: Option<String>) -> Result<String, types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
-        vitni_app::create_media(
+        self.begin_write().await?;
+        let human_id = vitni_app::create_media(
             &self.workspace,
             &self.session,
             NewMedia {
@@ -534,23 +548,21 @@ impl commands::Host for HostState {
             &[],
         )
         .await
-        .map_err(|error| to_capability_error(&error))
+        .map_err(|error| to_capability_error(&error))?;
+        self.record_created("media");
+        Ok(human_id)
     }
 
     async fn set_media_mime(&mut self, media: String, mime: String) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
+        self.begin_write().await?;
         vitni_app::set_media_mime(&self.workspace, &self.session, &media, mime, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn create_note(&mut self, text: String) -> Result<String, types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
-        vitni_app::create_note(
+        self.begin_write().await?;
+        let human_id = vitni_app::create_note(
             &self.workspace,
             &self.session,
             NewNote {
@@ -561,12 +573,14 @@ impl commands::Host for HostState {
             &[],
         )
         .await
-        .map_err(|error| to_capability_error(&error))
+        .map_err(|error| to_capability_error(&error))?;
+        self.record_created("note");
+        Ok(human_id)
     }
 
     async fn create_repository(&mut self, name: String) -> Result<String, types::CapabilityError> {
-        self.guard()?;
-        vitni_app::create_repository(
+        self.begin_write().await?;
+        let human_id = vitni_app::create_repository(
             &self.workspace,
             &self.session,
             vitni_app::NewRepository {
@@ -577,18 +591,22 @@ impl commands::Host for HostState {
             &[],
         )
         .await
-        .map_err(|error| to_capability_error(&error))
+        .map_err(|error| to_capability_error(&error))?;
+        self.record_created("repository");
+        Ok(human_id)
     }
 
     async fn create_tag(&mut self, name: String) -> Result<String, types::CapabilityError> {
-        self.guard()?;
-        vitni_app::create_tag(&self.workspace, &self.session, name, self.provenance(), &[])
+        self.begin_write().await?;
+        let human_id = vitni_app::create_tag(&self.workspace, &self.session, name, self.provenance(), &[])
             .await
-            .map_err(|error| to_capability_error(&error))
+            .map_err(|error| to_capability_error(&error))?;
+        self.record_created("tag");
+        Ok(human_id)
     }
 
     async fn attach_person_citation(&mut self, person: String, citation: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::add_person_citation(&self.workspace, &self.session, &person, &citation, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
@@ -601,7 +619,7 @@ impl commands::Host for HostState {
         crop: Option<types::MediaCrop>,
         caption: Option<String>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::attach_person_media(
             &self.workspace,
             &self.session,
@@ -615,7 +633,7 @@ impl commands::Host for HostState {
     }
 
     async fn set_note_type(&mut self, note: String, note_type: types::NoteType) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::set_note_type(
             &self.workspace,
             &self.session,
@@ -628,21 +646,21 @@ impl commands::Host for HostState {
     }
 
     async fn attach_citation_note(&mut self, citation: String, note: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::attach_citation_note(&self.workspace, &self.session, &citation, &note, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_person_note(&mut self, person: String, note: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::attach_person_note(&self.workspace, &self.session, &person, &note, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_family_citation(&mut self, family: String, citation: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::add_family_citation(&self.workspace, &self.session, &family, &citation, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
@@ -655,7 +673,7 @@ impl commands::Host for HostState {
         crop: Option<types::MediaCrop>,
         caption: Option<String>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::attach_family_media(
             &self.workspace,
             &self.session,
@@ -669,14 +687,14 @@ impl commands::Host for HostState {
     }
 
     async fn attach_family_note(&mut self, family: String, note: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::attach_family_note(&self.workspace, &self.session, &family, &note, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_event_citation(&mut self, event: String, citation: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::add_event_citation(&self.workspace, &self.session, &event, &citation, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
@@ -689,7 +707,7 @@ impl commands::Host for HostState {
         crop: Option<types::MediaCrop>,
         caption: Option<String>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::import_attach_event_media(
             &self.workspace,
             &self.session,
@@ -705,14 +723,14 @@ impl commands::Host for HostState {
     }
 
     async fn attach_event_note(&mut self, event: String, note: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::import_attach_event_note(&self.workspace, &self.session, &event, &note, self.provenance())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn apply_person_tag(&mut self, person: String, tag: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::tag_person(
             &self.workspace,
             &self.session,
@@ -726,7 +744,7 @@ impl commands::Host for HostState {
     }
 
     async fn apply_family_tag(&mut self, family: String, tag: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::tag_family(
             &self.workspace,
             &self.session,
@@ -740,7 +758,7 @@ impl commands::Host for HostState {
     }
 
     async fn apply_event_tag(&mut self, event: String, tag: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::tag_event(
             &self.workspace,
             &self.session,
@@ -754,21 +772,21 @@ impl commands::Host for HostState {
     }
 
     async fn set_source_author(&mut self, source: String, author: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::set_source_author(&self.workspace, &self.session, &source, author, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn set_source_pub_info(&mut self, source: String, pub_info: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::set_source_pub_info(&self.workspace, &self.session, &source, pub_info, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn set_source_abbrev(&mut self, source: String, abbrev: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::set_source_abbrev(&self.workspace, &self.session, &source, abbrev, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
@@ -781,7 +799,7 @@ impl commands::Host for HostState {
         call_number: Option<String>,
         media_type: types::SourceMediaType,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::link_source_repository(
             &self.workspace,
             &self.session,
@@ -800,7 +818,7 @@ impl commands::Host for HostState {
         citation: String,
         confidence: types::Confidence,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::set_citation_confidence(
             &self.workspace,
             &self.session,
@@ -817,7 +835,7 @@ impl commands::Host for HostState {
         place: String,
         place_type: types::PlaceType,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::set_place_type(
             &self.workspace,
             &self.session,
@@ -830,7 +848,7 @@ impl commands::Host for HostState {
     }
 
     async fn set_place_enclosed_by(&mut self, place: String, enclosing: String) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::assert_place_enclosed_by(&self.workspace, &self.session, &place, &enclosing, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
@@ -841,7 +859,7 @@ impl commands::Host for HostState {
         person: String,
         restrictions: Vec<types::Restriction>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::person::set_restrictions(
             &self.workspace,
             &self.session,
@@ -858,7 +876,7 @@ impl commands::Host for HostState {
         family: String,
         restrictions: Vec<types::Restriction>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::family::set_restrictions(
             &self.workspace,
             &self.session,
@@ -875,7 +893,7 @@ impl commands::Host for HostState {
         event: String,
         restrictions: Vec<types::Restriction>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::event::set_restrictions(
             &self.workspace,
             &self.session,
@@ -892,7 +910,7 @@ impl commands::Host for HostState {
         source: String,
         restrictions: Vec<types::Restriction>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::source::set_restrictions(
             &self.workspace,
             &self.session,
@@ -909,7 +927,7 @@ impl commands::Host for HostState {
         citation: String,
         restrictions: Vec<types::Restriction>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::citation::set_restrictions(
             &self.workspace,
             &self.session,
@@ -926,7 +944,7 @@ impl commands::Host for HostState {
         media: String,
         restrictions: Vec<types::Restriction>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::media::set_restrictions(
             &self.workspace,
             &self.session,
@@ -943,7 +961,7 @@ impl commands::Host for HostState {
         note: String,
         restrictions: Vec<types::Restriction>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::note::set_restrictions(
             &self.workspace,
             &self.session,
@@ -960,7 +978,7 @@ impl commands::Host for HostState {
         repository: String,
         restrictions: Vec<types::Restriction>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::repository::set_restrictions(
             &self.workspace,
             &self.session,
@@ -977,7 +995,7 @@ impl commands::Host for HostState {
         place: String,
         restrictions: Vec<types::Restriction>,
     ) -> Result<(), types::CapabilityError> {
-        self.guard()?;
+        self.begin_write().await?;
         vitni_app::place::set_restrictions(
             &self.workspace,
             &self.session,
@@ -991,20 +1009,65 @@ impl commands::Host for HostState {
 }
 
 impl HostState {
-    /// Rejects a `commands` call when the instance lacks the [`Capability::Commands`] grant.
-    fn guard(&self) -> Result<(), types::CapabilityError> {
-        if self.grants.allows(Capability::Commands) {
-            Ok(())
-        } else {
-            Err(types::CapabilityError::Denied)
+    /// Admits one `commands` write: rejects it when the instance lacks the [`Capability::Commands`]
+    /// grant and, during an import run, when the guest has declared no origin (ADR 0037 §1). The
+    /// run's first admitted write starts it.
+    async fn begin_write(&mut self) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let Some(run) = self.run.as_mut() else {
+            return Ok(());
+        };
+        run.admit_write(&self.workspace, self.file_asserted_at)
+            .await
+            .map_err(|refusal| match refusal {
+                WriteRefusal::NoOrigin => types::CapabilityError::InvalidInput(
+                    "no origin set: call set-origin with the source record before writing (ADR 0037)".to_owned(),
+                ),
+                WriteRefusal::Start(error) => to_capability_error(&error),
+            })
+    }
+
+    /// Records the source record later writes are stamped with (see [`commands::Host`]). Outside an
+    /// import run there is nothing to stamp, so the call has no effect.
+    fn set_origin_now(&mut self, origin: Option<types::OriginKey>) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        if let Some(run) = self.run.as_mut() {
+            run.set_origin(origin.map(|key| (key.record, key.item)));
+        }
+        Ok(())
+    }
+
+    /// Records that the current item resolved onto an existing aggregate of `kind`. A resolved
+    /// aggregate with no projected id is logged and left out of the run's resolutions.
+    fn record_resolved(&mut self, kind: &str, aggregate_id: Option<uuid::Uuid>) {
+        let Some(run) = self.run.as_mut() else {
+            return;
+        };
+        let Some(aggregate_id) = aggregate_id else {
+            tracing::warn!(kind, "a resolved import item's aggregate could not be read back");
+            return;
+        };
+        run.resolved(kind, aggregate_id);
+    }
+
+    /// Counts an aggregate of `kind` the current import run created.
+    fn record_created(&mut self, kind: &str) {
+        if let Some(run) = self.run.as_mut() {
+            run.created(kind);
         }
     }
 
     /// The provenance stamped on a `create_*` command: the instance's confidence template (ADR 0017
-    /// §7), no rationale or evidence analysis. `None` confidence keeps the pre-assisted behavior.
+    /// §7) and, during an import, the record the guest is writing from; no rationale or evidence
+    /// analysis. `None` confidence keeps the pre-assisted behavior.
     fn provenance(&self) -> Provenance {
         Provenance {
             confidence: self.provenance_confidence,
+            origin: self.run.as_ref().and_then(ActiveRun::origin),
             ..Provenance::default()
         }
     }
@@ -1992,6 +2055,11 @@ impl HostState {
             return Err(types::CapabilityError::Denied);
         }
         let control = (self.io.progress)(ProgressUpdate { step, processed, total });
+        if control == ProgressControl::Cancel
+            && let Some(run) = self.run.as_mut()
+        {
+            run.cancel();
+        }
         Ok(match control {
             ProgressControl::Proceed => progress::Control::Proceed,
             ProgressControl::Cancel => progress::Control::Cancel,

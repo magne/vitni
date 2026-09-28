@@ -8,11 +8,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.23.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.23.0": vitni_plugin_api::log,
-        "vitni:host-api/commands@0.23.0": vitni_plugin_api::commands,
-        "vitni:host-api/progress@0.23.0": vitni_plugin_api::progress,
-        "vitni:host-api/import-source@0.23.0": vitni_plugin_api::import_source,
+        "vitni:host-api/types@0.24.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.24.0": vitni_plugin_api::log,
+        "vitni:host-api/commands@0.24.0": vitni_plugin_api::commands,
+        "vitni:host-api/progress@0.24.0": vitni_plugin_api::progress,
+        "vitni:host-api/import-source@0.24.0": vitni_plugin_api::import_source,
     },
 });
 
@@ -26,6 +26,7 @@ use vitni_plugin_api::commands;
 use vitni_plugin_api::convert;
 use vitni_plugin_api::types;
 use vitni_plugin_api::types::{ChildParentRel, ExternalId, ParticipantRole, ParticipationInput};
+use vitni_plugin_api::with_origin;
 
 struct Importer;
 
@@ -64,82 +65,93 @@ impl Guest for Importer {
         let mut repositories: HashMap<String, String> = HashMap::new();
         // Media file -> created media human id, so a shared media object is created once.
         let mut media: HashMap<String, String> = HashMap::new();
-        // Associations resolved after every person exists (the other person may be a forward ref).
-        let mut pending_associations: Vec<(String, Association)> = Vec::new();
+        // Associations resolved after every person exists (the other person may be a forward ref),
+        // each with the xref of the record that declared it.
+        let mut pending_associations: Vec<(String, String, Association)> = Vec::new();
         // Event-level ASSO witnesses reference another person by xref (a forward ref) and are
         // asserted on that witness person, so they are flushed once every person and event exists.
-        let mut pending_event_witnesses: Vec<(String, EventAssociation)> = Vec::new();
+        let mut pending_event_witnesses: Vec<PendingWitness> = Vec::new();
         let mut imported: u32 = 0;
 
         for (index, individual) in tree.individuals.iter().enumerate() {
-            let person = commands::create_person(
-                individual.names.first().map(convert::name_to_wit).as_ref(),
-                Some(&external_id(individual.uid.as_deref(), &individual.xref)),
-            )
-            .map_err(|error| format!("create-person failed: {error:?}"))?;
-            // `assert-sex` is called for every person, new or already-existing: the host reconciles
-            // against any live value using this session's file-asserted-at date (ADR 0029), so a
-            // re-import can pick up a corrected sex the way a plain additive assert never could.
-            if let Some(sex) = individual.sex {
-                commands::assert_sex(&person.human_id, convert::sex_to_wit(sex))
-                    .map_err(|error| format!("assert-sex failed: {error:?}"))?;
-            }
-            // Every other owned attribute/event is written only on first creation, so re-import
-            // stays additive for them (true merge for the rest is deferred — ADR 0029 §4).
-            if person.created {
-                // The first NAME became the primary above; a second-or-later NAME is a distinct
-                // assertion, not a clobber (data-model §17 round-trip gaps).
-                for name in individual.names.iter().skip(1) {
-                    commands::add_person_name(&person.human_id, &convert::name_to_wit(name))
-                        .map_err(|error| format!("add-person-name failed: {error:?}"))?;
+            let record = individual.xref.as_str();
+            let person = with_origin(record, None, || {
+                let person = commands::create_person(
+                    individual.names.first().map(convert::name_to_wit).as_ref(),
+                    Some(&external_id(individual.uid.as_deref(), &individual.xref)),
+                )
+                .map_err(|error| format!("create-person failed: {error:?}"))?;
+                // `assert-sex` is called for every person, new or already-existing: the host reconciles
+                // against any live value using this session's file-asserted-at date (ADR 0029), so a
+                // re-import can pick up a corrected sex the way a plain additive assert never could.
+                if let Some(sex) = individual.sex {
+                    commands::assert_sex(&person.human_id, convert::sex_to_wit(sex))
+                        .map_err(|error| format!("assert-sex failed: {error:?}"))?;
                 }
-                for event in &individual.events {
-                    import_event(
-                        event,
-                        std::slice::from_ref(&person.human_id),
-                        std::slice::from_ref(&event.age),
-                        &mut places,
-                        &mut pending_event_witnesses,
-                    )?;
-                }
-                for fact in &individual.facts {
-                    import_fact(&person.human_id, fact)?;
-                }
-                for citation in &individual.citations {
-                    let source_id = source_human_id(
-                        &citation.source_xref,
-                        &source_index,
-                        &mut sources,
-                        &repository_index,
-                        &mut repositories,
-                    )?;
-                    let citation_id = create_citation(&source_id, citation)?;
-                    commands::attach_person_citation(&person.human_id, &citation_id)
-                        .map_err(|error| format!("attach-person-citation failed: {error:?}"))?;
-                }
-                for object in &individual.media {
-                    if let Some(media_id) = media_human_id(object, &mut media)? {
-                        commands::attach_person_media(&person.human_id, &media_id, None, object.caption.as_deref())
-                            .map_err(|error| format!("attach-person-media failed: {error:?}"))?;
+                // Every other owned attribute/event is written only on first creation, so re-import
+                // stays additive for them (true merge for the rest is deferred — ADR 0029 §4).
+                if person.created {
+                    // The first NAME became the primary above; a second-or-later NAME is a distinct
+                    // assertion, not a clobber (data-model §17 round-trip gaps).
+                    for name in individual.names.iter().skip(1) {
+                        commands::add_person_name(&person.human_id, &convert::name_to_wit(name))
+                            .map_err(|error| format!("add-person-name failed: {error:?}"))?;
+                    }
+                    let mut events = EventKeys::default();
+                    for event in &individual.events {
+                        import_event(
+                            EventSite {
+                                record,
+                                item: &events.next(event),
+                            },
+                            event,
+                            std::slice::from_ref(&person.human_id),
+                            std::slice::from_ref(&event.age),
+                            &mut places,
+                            &mut pending_event_witnesses,
+                        )?;
+                    }
+                    for fact in &individual.facts {
+                        import_fact(&person.human_id, fact)?;
+                    }
+                    for (n, citation) in individual.citations.iter().enumerate() {
+                        let source_id = source_human_id(
+                            &citation.source_xref,
+                            &source_index,
+                            &mut sources,
+                            &repository_index,
+                            &mut repositories,
+                        )?;
+                        let citation_id = create_citation(record, &format!("citation:{n}"), &source_id, citation)?;
+                        commands::attach_person_citation(&person.human_id, &citation_id)
+                            .map_err(|error| format!("attach-person-citation failed: {error:?}"))?;
+                    }
+                    for object in &individual.media {
+                        if let Some(media_id) = media_human_id(object, &mut media)? {
+                            commands::attach_person_media(&person.human_id, &media_id, None, object.caption.as_deref())
+                                .map_err(|error| format!("attach-person-media failed: {error:?}"))?;
+                        }
+                    }
+                    for (n, note) in individual.notes.iter().enumerate() {
+                        let note_id = with_origin(record, Some(&format!("note:{n}")), || {
+                            commands::create_note(note).map_err(|error| format!("create-note failed: {error:?}"))
+                        })?;
+                        commands::attach_person_note(&person.human_id, &note_id)
+                            .map_err(|error| format!("attach-person-note failed: {error:?}"))?;
+                    }
+                    for association in &individual.associations {
+                        pending_associations.push((record.to_owned(), person.human_id.clone(), association.clone()));
+                    }
+                    if !individual.restrictions.is_empty() {
+                        commands::set_person_restrictions(
+                            &person.human_id,
+                            &convert::restrictions_to_wit(&individual.restrictions),
+                        )
+                        .map_err(|error| format!("set-person-restrictions failed: {error:?}"))?;
                     }
                 }
-                for note in &individual.notes {
-                    let note_id =
-                        commands::create_note(note).map_err(|error| format!("create-note failed: {error:?}"))?;
-                    commands::attach_person_note(&person.human_id, &note_id)
-                        .map_err(|error| format!("attach-person-note failed: {error:?}"))?;
-                }
-                for association in &individual.associations {
-                    pending_associations.push((person.human_id.clone(), association.clone()));
-                }
-                if !individual.restrictions.is_empty() {
-                    commands::set_person_restrictions(
-                        &person.human_id,
-                        &convert::restrictions_to_wit(&individual.restrictions),
-                    )
-                    .map_err(|error| format!("set-person-restrictions failed: {error:?}"))?;
-                }
-            }
+                Ok(person)
+            })?;
             xref_to_human.insert(individual.xref.clone(), person.human_id);
             imported += 1;
             if !vitni_plugin_api::report("persons", index as u32 + 1, Some(individuals))? {
@@ -148,96 +160,108 @@ impl Guest for Importer {
         }
 
         // Associations reference another person by xref; resolve now that every person exists.
-        for (person, association) in &pending_associations {
+        for (record, person, association) in &pending_associations {
             if let Some(other) = xref_to_human.get(&association.other_xref) {
-                commands::assert_association(
-                    person,
-                    other,
-                    &convert::association_role_to_wit(association.role.as_ref()),
-                )
-                .map_err(|error| format!("assert-association failed: {error:?}"))?;
+                with_origin(record, None, || {
+                    commands::assert_association(
+                        person,
+                        other,
+                        &convert::association_role_to_wit(association.role.as_ref()),
+                    )
+                    .map_err(|error| format!("assert-association failed: {error:?}"))
+                })?;
             }
         }
 
         for (index, family) in tree.families.iter().enumerate() {
-            let family_record = commands::create_family(Some(&external_id(family.uid.as_deref(), &family.xref)))
-                .map_err(|error| format!("create-family failed: {error:?}"))?;
-            let mut partner_ids = Vec::new();
-            for partner in &family.partners {
-                if let Some(human_id) = xref_to_human.get(partner) {
-                    commands::add_partner(&family_record.human_id, human_id)
-                        .map_err(|error| format!("add-partner failed: {error:?}"))?;
-                    partner_ids.push(human_id.clone());
-                }
-            }
-            for child in &family.children {
-                if let Some(human_id) = xref_to_human.get(&child.xref) {
-                    let mut relationships = Vec::new();
-                    if let (Some(father), Some(frel)) = (partner_ids.first(), &child.father_relationship) {
-                        relationships.push(ChildParentRel {
-                            partner: father.clone(),
-                            relationship: convert::child_relationship_to_wit(frel),
-                        });
+            let record = family.xref.as_str();
+            with_origin(record, None, || {
+                let family_record = commands::create_family(Some(&external_id(family.uid.as_deref(), &family.xref)))
+                    .map_err(|error| format!("create-family failed: {error:?}"))?;
+                let mut partner_ids = Vec::new();
+                for partner in &family.partners {
+                    if let Some(human_id) = xref_to_human.get(partner) {
+                        commands::add_partner(&family_record.human_id, human_id)
+                            .map_err(|error| format!("add-partner failed: {error:?}"))?;
+                        partner_ids.push(human_id.clone());
                     }
-                    if let (Some(mother), Some(mrel)) = (partner_ids.get(1), &child.mother_relationship) {
-                        relationships.push(ChildParentRel {
-                            partner: mother.clone(),
-                            relationship: convert::child_relationship_to_wit(mrel),
-                        });
+                }
+                for child in &family.children {
+                    if let Some(human_id) = xref_to_human.get(&child.xref) {
+                        let mut relationships = Vec::new();
+                        if let (Some(father), Some(frel)) = (partner_ids.first(), &child.father_relationship) {
+                            relationships.push(ChildParentRel {
+                                partner: father.clone(),
+                                relationship: convert::child_relationship_to_wit(frel),
+                            });
+                        }
+                        if let (Some(mother), Some(mrel)) = (partner_ids.get(1), &child.mother_relationship) {
+                            relationships.push(ChildParentRel {
+                                partner: mother.clone(),
+                                relationship: convert::child_relationship_to_wit(mrel),
+                            });
+                        }
+                        commands::add_child(&family_record.human_id, human_id, &relationships)
+                            .map_err(|error| format!("add-child failed: {error:?}"))?;
                     }
-                    commands::add_child(&family_record.human_id, human_id, &relationships)
-                        .map_err(|error| format!("add-child failed: {error:?}"))?;
                 }
-            }
-            if family_record.created {
-                for event in &family.events {
-                    let event_id = import_event(
-                        event,
-                        &partner_ids,
-                        &[event.husband_age.clone(), event.wife_age.clone()],
-                        &mut places,
-                        &mut pending_event_witnesses,
-                    )?;
-                    commands::link_family_event(&family_record.human_id, &event_id)
-                        .map_err(|error| format!("link-family-event failed: {error:?}"))?;
-                }
-                if !family.restrictions.is_empty() {
-                    commands::set_family_restrictions(
-                        &family_record.human_id,
-                        &convert::restrictions_to_wit(&family.restrictions),
-                    )
-                    .map_err(|error| format!("set-family-restrictions failed: {error:?}"))?;
-                }
-                for citation in &family.citations {
-                    let source_id = source_human_id(
-                        &citation.source_xref,
-                        &source_index,
-                        &mut sources,
-                        &repository_index,
-                        &mut repositories,
-                    )?;
-                    let citation_id = create_citation(&source_id, citation)?;
-                    commands::attach_family_citation(&family_record.human_id, &citation_id)
-                        .map_err(|error| format!("attach-family-citation failed: {error:?}"))?;
-                }
-                for object in &family.media {
-                    if let Some(media_id) = media_human_id(object, &mut media)? {
-                        commands::attach_family_media(
+                if family_record.created {
+                    let mut events = EventKeys::default();
+                    for event in &family.events {
+                        let event_id = import_event(
+                            EventSite {
+                                record,
+                                item: &events.next(event),
+                            },
+                            event,
+                            &partner_ids,
+                            &[event.husband_age.clone(), event.wife_age.clone()],
+                            &mut places,
+                            &mut pending_event_witnesses,
+                        )?;
+                        commands::link_family_event(&family_record.human_id, &event_id)
+                            .map_err(|error| format!("link-family-event failed: {error:?}"))?;
+                    }
+                    if !family.restrictions.is_empty() {
+                        commands::set_family_restrictions(
                             &family_record.human_id,
-                            &media_id,
-                            None,
-                            object.caption.as_deref(),
+                            &convert::restrictions_to_wit(&family.restrictions),
                         )
-                        .map_err(|error| format!("attach-family-media failed: {error:?}"))?;
+                        .map_err(|error| format!("set-family-restrictions failed: {error:?}"))?;
+                    }
+                    for (n, citation) in family.citations.iter().enumerate() {
+                        let source_id = source_human_id(
+                            &citation.source_xref,
+                            &source_index,
+                            &mut sources,
+                            &repository_index,
+                            &mut repositories,
+                        )?;
+                        let citation_id = create_citation(record, &format!("citation:{n}"), &source_id, citation)?;
+                        commands::attach_family_citation(&family_record.human_id, &citation_id)
+                            .map_err(|error| format!("attach-family-citation failed: {error:?}"))?;
+                    }
+                    for object in &family.media {
+                        if let Some(media_id) = media_human_id(object, &mut media)? {
+                            commands::attach_family_media(
+                                &family_record.human_id,
+                                &media_id,
+                                None,
+                                object.caption.as_deref(),
+                            )
+                            .map_err(|error| format!("attach-family-media failed: {error:?}"))?;
+                        }
+                    }
+                    for (n, note) in family.notes.iter().enumerate() {
+                        let note_id = with_origin(record, Some(&format!("note:{n}")), || {
+                            commands::create_note(note).map_err(|error| format!("create-note failed: {error:?}"))
+                        })?;
+                        commands::attach_family_note(&family_record.human_id, &note_id)
+                            .map_err(|error| format!("attach-family-note failed: {error:?}"))?;
                     }
                 }
-                for note in &family.notes {
-                    let note_id =
-                        commands::create_note(note).map_err(|error| format!("create-note failed: {error:?}"))?;
-                    commands::attach_family_note(&family_record.human_id, &note_id)
-                        .map_err(|error| format!("attach-family-note failed: {error:?}"))?;
-                }
-            }
+                Ok(())
+            })?;
             imported += 1;
             if !vitni_plugin_api::report("families", index as u32 + 1, Some(families))? {
                 return Ok(imported);
@@ -246,16 +270,24 @@ impl Guest for Importer {
 
         // Event-level ASSO witnesses: now every person and event exists, resolve each witness's
         // xref and assert their participation (role + notes + citations→envelope) on the witness.
-        for (event_id, association) in &pending_event_witnesses {
+        for pending in &pending_event_witnesses {
+            let PendingWitness {
+                record,
+                item,
+                event_id,
+                association,
+            } = pending;
             let Some(witness) = xref_to_human.get(&association.other_xref) else {
                 continue;
             };
             let mut notes = Vec::with_capacity(association.notes.len());
-            for note in &association.notes {
-                notes.push(commands::create_note(note).map_err(|error| format!("create-note failed: {error:?}"))?);
+            for (n, note) in association.notes.iter().enumerate() {
+                notes.push(with_origin(record, Some(&format!("{item}:note:{n}")), || {
+                    commands::create_note(note).map_err(|error| format!("create-note failed: {error:?}"))
+                })?);
             }
             let mut citations = Vec::with_capacity(association.citations.len());
-            for citation in &association.citations {
+            for (n, citation) in association.citations.iter().enumerate() {
                 let source_id = source_human_id(
                     &citation.source_xref,
                     &source_index,
@@ -263,7 +295,12 @@ impl Guest for Importer {
                     &repository_index,
                     &mut repositories,
                 )?;
-                citations.push(create_citation(&source_id, citation)?);
+                citations.push(create_citation(
+                    record,
+                    &format!("{item}:citation:{n}"),
+                    &source_id,
+                    citation,
+                )?);
             }
             let input = ParticipationInput {
                 role: convert::association_kind_to_participant_role(association.role.as_ref()),
@@ -272,24 +309,81 @@ impl Guest for Importer {
                 notes,
                 citations,
             };
-            commands::add_event_participant(witness, event_id, &input)
-                .map_err(|error| format!("add-participant (witness) failed: {error:?}"))?;
+            with_origin(record, Some(item), || {
+                commands::add_event_participant(witness, event_id, &input)
+                    .map_err(|error| format!("add-participant (witness) failed: {error:?}"))
+            })?;
         }
 
         Ok(imported)
     }
 }
 
+/// An event-level `ASSO` witness waiting for every person to exist: the record and event item that
+/// declared it, the event, and the association.
+struct PendingWitness {
+    record: String,
+    item: String,
+    event_id: String,
+    association: EventAssociation,
+}
+
+/// Where an event sits: the record that holds it and its item key there (`event:BIRT:0`).
+struct EventSite<'a> {
+    record: &'a str,
+    item: &'a str,
+}
+
+/// Numbers a record's events per tag, so an event's item key (`event:BIRT:0`, `event:BIRT:1`) stays
+/// the same when events of another kind are added before it.
+#[derive(Default)]
+struct EventKeys {
+    seen: HashMap<&'static str, usize>,
+}
+
+impl EventKeys {
+    fn next(&mut self, event: &Event) -> String {
+        let tag = vitni_gedcom::event_tag(event.kind);
+        let n = self.seen.entry(tag).or_insert(0);
+        let key = format!("event:{tag}:{n}");
+        *n += 1;
+        key
+    }
+}
+
 /// Creates an event, sets its date, place, and address, and links each participant as the primary
-/// with their age (`ages[i]` aligns with `participants[i]`; a missing entry is no age). The place is
-/// deduped by name through `places`. Event-level `ASSO` witnesses are queued in `witnesses` for the
-/// caller to flush once every person exists (the witness may be a forward xref).
+/// with their age (`ages[i]` aligns with `participants[i]`; a missing entry is no age), all under the
+/// event's own origin. The place is deduped by name through `places` and carries its own origin.
+/// Event-level `ASSO` witnesses are queued in `witnesses` for the caller to flush once every person
+/// exists (the witness may be a forward xref).
 fn import_event(
+    site: EventSite<'_>,
     event: &Event,
     participants: &[String],
     ages: &[Option<Age>],
     places: &mut HashMap<String, String>,
-    witnesses: &mut Vec<(String, EventAssociation)>,
+    witnesses: &mut Vec<PendingWitness>,
+) -> Result<String, String> {
+    let event_id = with_origin(site.record, Some(site.item), || {
+        write_event(event, participants, ages, places)
+    })?;
+    for (n, association) in event.associations.iter().enumerate() {
+        witnesses.push(PendingWitness {
+            record: site.record.to_owned(),
+            item: format!("{}:asso:{n}", site.item),
+            event_id: event_id.clone(),
+            association: association.clone(),
+        });
+    }
+    Ok(event_id)
+}
+
+/// The writes of one event, under whatever origin the caller set.
+fn write_event(
+    event: &Event,
+    participants: &[String],
+    ages: &[Option<Age>],
+    places: &mut HashMap<String, String>,
 ) -> Result<String, String> {
     let event_id = commands::create_event(convert::event_type_to_wit(event.kind))
         .map_err(|error| format!("create-event failed: {error:?}"))?;
@@ -304,8 +398,10 @@ fn import_event(
         let place_id = match places.get(place_name) {
             Some(place_id) => place_id.clone(),
             None => {
-                let place_id =
-                    commands::create_place(place_name).map_err(|error| format!("create-place failed: {error:?}"))?;
+                // GEDCOM places have no record of their own: the place name is the key.
+                let place_id = with_origin(&format!("plac:{place_name}"), None, || {
+                    commands::create_place(place_name).map_err(|error| format!("create-place failed: {error:?}"))
+                })?;
                 places.insert(place_name.clone(), place_id.clone());
                 place_id
             }
@@ -328,9 +424,6 @@ fn import_event(
         commands::add_event_participant(person, &event_id, &input)
             .map_err(|error| format!("add-participant failed: {error:?}"))?;
     }
-    for association in &event.associations {
-        witnesses.push((event_id.clone(), association.clone()));
-    }
     Ok(event_id)
 }
 
@@ -347,18 +440,24 @@ fn import_fact(person: &str, fact: &Fact) -> Result<(), String> {
 }
 
 /// Creates a citation of `source_id` with its page, then records each `DATA.TEXT` transcription as a
-/// `Transcript` note attached to it (data-model §6). Returns the citation's human id.
-fn create_citation(source_id: &str, citation: &Citation) -> Result<String, String> {
-    let citation_id = commands::create_citation(source_id, citation.page.as_deref())
-        .map_err(|error| format!("create-citation failed: {error:?}"))?;
-    for text in &citation.transcriptions {
-        let note_id = commands::create_note(text).map_err(|error| format!("create-note failed: {error:?}"))?;
-        commands::set_note_type(&note_id, &types::NoteType::Transcript)
-            .map_err(|error| format!("set-note-type failed: {error:?}"))?;
-        commands::attach_citation_note(&citation_id, &note_id)
-            .map_err(|error| format!("attach-citation-note failed: {error:?}"))?;
-    }
-    Ok(citation_id)
+/// `Transcript` note attached to it (data-model §6), under the origin `item` of `record` (each
+/// transcript as `<item>:transcript:<n>`). Returns the citation's human id.
+fn create_citation(record: &str, item: &str, source_id: &str, citation: &Citation) -> Result<String, String> {
+    with_origin(record, Some(item), || {
+        let citation_id = commands::create_citation(source_id, citation.page.as_deref())
+            .map_err(|error| format!("create-citation failed: {error:?}"))?;
+        for (n, text) in citation.transcriptions.iter().enumerate() {
+            let note_id = with_origin(record, Some(&format!("{item}:transcript:{n}")), || {
+                let note_id = commands::create_note(text).map_err(|error| format!("create-note failed: {error:?}"))?;
+                commands::set_note_type(&note_id, &types::NoteType::Transcript)
+                    .map_err(|error| format!("set-note-type failed: {error:?}"))?;
+                Ok(note_id)
+            })?;
+            commands::attach_citation_note(&citation_id, &note_id)
+                .map_err(|error| format!("attach-citation-note failed: {error:?}"))?;
+        }
+        Ok(citation_id)
+    })
 }
 
 /// Returns the human id of the source for `source_xref`, creating it (titled from the parsed
@@ -374,7 +473,19 @@ fn source_human_id(
     if let Some(human_id) = sources.get(source_xref) {
         return Ok(human_id.clone());
     }
-    let source = index.get(source_xref).copied();
+    let human_id = with_origin(source_xref, None, || {
+        write_source(index.get(source_xref).copied(), repository_index, repositories)
+    })?;
+    sources.insert(source_xref.to_owned(), human_id.clone());
+    Ok(human_id)
+}
+
+/// The writes that create one top-level `SOUR` record, under the source's origin.
+fn write_source(
+    source: Option<&Source>,
+    repository_index: &HashMap<&str, &Repository>,
+    repositories: &mut HashMap<String, String>,
+) -> Result<String, String> {
     let title = source.and_then(|source| source.title.as_deref());
     let human_id = commands::create_source(title).map_err(|error| format!("create-source failed: {error:?}"))?;
     if let Some(source) = source {
@@ -402,7 +513,6 @@ fn source_human_id(
                 .map_err(|error| format!("link-source-repository failed: {error:?}"))?;
         }
     }
-    sources.insert(source_xref.to_owned(), human_id.clone());
     Ok(human_id)
 }
 
@@ -437,7 +547,9 @@ fn repository_human_id(
         .get(repository_xref)
         .and_then(|repo| repo.name.as_deref())
         .unwrap_or_default();
-    let human_id = commands::create_repository(name).map_err(|error| format!("create-repository failed: {error:?}"))?;
+    let human_id = with_origin(repository_xref, None, || {
+        commands::create_repository(name).map_err(|error| format!("create-repository failed: {error:?}"))
+    })?;
     repositories.insert(repository_xref.to_owned(), human_id.clone());
     Ok(human_id)
 }
@@ -452,10 +564,14 @@ fn media_human_id(media: &MediaObject, media_cache: &mut HashMap<String, String>
     if let Some(media_id) = media_cache.get(file) {
         return Ok(Some(media_id.clone()));
     }
-    let media_id = commands::create_media(Some(file)).map_err(|error| format!("create-media failed: {error:?}"))?;
-    if let Some(mime) = &media.mime {
-        commands::set_media_mime(&media_id, mime).map_err(|error| format!("set-media-mime failed: {error:?}"))?;
-    }
+    // A media file has no record of its own here: its path is the key.
+    let media_id = with_origin(&format!("file:{file}"), None, || {
+        let media_id = commands::create_media(Some(file)).map_err(|error| format!("create-media failed: {error:?}"))?;
+        if let Some(mime) = &media.mime {
+            commands::set_media_mime(&media_id, mime).map_err(|error| format!("set-media-mime failed: {error:?}"))?;
+        }
+        Ok(media_id)
+    })?;
     media_cache.insert(file.clone(), media_id.clone());
     Ok(Some(media_id))
 }

@@ -33,6 +33,7 @@ use crate::capability::{Capability, Grants};
 use crate::error::PluginError;
 use crate::signing::PluginManifest;
 use crate::trust::{self, TrustRoots, TrustTier};
+use vitni_app::DatasetSpec;
 
 /// The plugin role a component implements, inferred from the entry point(s) it exports (ADR 0011
 /// §1's per-role worlds).
@@ -58,6 +59,8 @@ pub enum PluginRole {
 pub struct PluginInfo {
     /// The plugin's id (the manifest's `id`; the bundle directory is named after it).
     pub id: String,
+    /// The plugin's own version (the manifest's `version`), recorded on every import run it makes.
+    pub version: String,
     /// The role, verified to match both the manifest's `role` and the component's exported entry
     /// point.
     pub role: PluginRole,
@@ -73,6 +76,8 @@ pub struct PluginInfo {
     pub trust: TrustTier,
     /// The bundle directory, so a caller can `load_bundle` the resolved plugin (ADR 0014 §2).
     pub bundle_dir: PathBuf,
+    /// The dataset an importer writes into (ADR 0037 §3); `None` for every other role.
+    pub dataset: Option<DatasetSpec>,
 }
 
 impl PluginInfo {
@@ -224,6 +229,16 @@ fn cross_check(id: &str, manifest: &PluginManifest, inspected: &Inspected) -> Re
         )));
     }
 
+    let imports = match declared_role {
+        PluginRole::BulkImport | PluginRole::AssistedImport => true,
+        PluginRole::BulkExport | PluginRole::UiPanel | PluginRole::TestFixture | PluginRole::Unknown => false,
+    };
+    if imports && manifest.dataset.is_none() {
+        return Err(PluginError::Runtime(format!(
+            "plugin {id} imports records but its manifest declares no dataset (ADR 0037 §3)"
+        )));
+    }
+
     let mut declared = Vec::with_capacity(manifest.capabilities.len());
     for name in &manifest.capabilities {
         let capability = Capability::from_interface_name(name).ok_or_else(|| {
@@ -280,11 +295,13 @@ impl PluginHost {
 
         Ok(PluginInfo {
             id: manifest.id,
+            version: manifest.version,
             role: inspected.role,
             host_api_version: inspected.host_api_version,
             capabilities,
             trust,
             bundle_dir: bundle_dir.to_path_buf(),
+            dataset: manifest.dataset,
         })
     }
 
@@ -327,11 +344,13 @@ mod tests {
     fn info(trust: TrustTier, capabilities: Vec<Capability>) -> PluginInfo {
         PluginInfo {
             id: "sample".to_owned(),
+            version: "0.1.0".to_owned(),
             role: PluginRole::BulkImport,
-            host_api_version: "0.23.0".to_owned(),
+            host_api_version: "0.24.0".to_owned(),
             capabilities,
             trust,
             bundle_dir: PathBuf::from("/tmp/sample"),
+            dataset: None,
         }
     }
 

@@ -671,3 +671,77 @@ fn plugin_grant_then_revoke_round_trips_through_the_manifest() {
         .success()
         .stdout(predicate::str::contains("query").and(predicate::str::contains("commands").not()));
 }
+
+const TREE: &str = "\
+0 HEAD
+1 SOUR test
+0 @I1@ INDI
+1 NAME John /Smith/
+0 TRLR
+";
+
+/// Runs `vitni import gedcom-import <file> --into gen --yes` plus `extra`.
+fn import_tree(dir: &Path, extra: &[&str]) -> assert_cmd::assert::Assert {
+    let file = dir.join("tree.ged");
+    std::fs::write(&file, TREE).unwrap();
+    vitni(dir)
+        .args(["import", "gedcom-import"])
+        .arg(&file)
+        .args(["--into", "gen", "--yes"])
+        .args(extra)
+        .assert()
+}
+
+#[test]
+fn a_second_import_of_a_lineage_format_must_name_its_dataset() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    import_tree(dir.path(), &[]).success();
+
+    import_tree(dir.path(), &[]).failure().stderr(
+        predicate::str::contains("--dataset")
+            .and(predicate::str::contains("--new-dataset"))
+            .and(predicate::str::contains("tree.ged")),
+    );
+    import_tree(dir.path(), &["--dataset", "tree.ged"]).success();
+    import_tree(dir.path(), &["--new-dataset"]).success();
+
+    vitni(dir.path())
+        .args(["import-run", "datasets"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("tree.ged  2 runs").and(predicate::str::contains("tree.ged  1 run")));
+    let listed = vitni(dir.path()).args(["import-run", "list"]).assert().success();
+    let stdout = String::from_utf8(listed.get_output().stdout.clone()).unwrap();
+    assert_eq!(
+        stdout.lines().filter(|line| line.contains("finished")).count(),
+        3,
+        "{stdout}"
+    );
+}
+
+#[test]
+fn dataset_and_new_dataset_are_mutually_exclusive() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    import_tree(dir.path(), &["--dataset", "tree.ged", "--new-dataset"]).failure();
+}
+
+#[test]
+fn a_new_workspace_is_not_created_for_an_import_naming_a_dataset() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("tree.ged");
+    std::fs::write(&file, TREE).unwrap();
+    let target = dir.path().join("fresh");
+    vitni(dir.path())
+        .args(["import", "gedcom-import"])
+        .arg(&file)
+        .arg("--new")
+        .arg("fresh")
+        .arg(&target)
+        .args(["--dataset", "tree.ged"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--dataset"));
+    assert!(!target.exists(), "nothing is created when the dataset cannot exist");
+}

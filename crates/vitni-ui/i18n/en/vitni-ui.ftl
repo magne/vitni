@@ -137,6 +137,10 @@ history-pub-info-set = Publication info set
 history-abbrev-set = Abbreviation set
 history-repository-linked = Repository linked
 history-tag-created = Tag created
+history-import-run-started = Import started
+history-item-resolved = Imported record matched an existing one
+history-import-run-finished = Import finished
+history-import-run-abandoned = Import stopped before it finished
 history-tag-renamed = Tag renamed
 history-tag-color-set = Tag colour set
 history-tag-priority-set = Tag priority set
@@ -146,10 +150,18 @@ history-description-set = Description set
 history-place-linked = Place linked
 history-generic = Recorded a change
 
-# The record History tab's own phrase for a collapsed import run — by origin, not by how many
-# assertions the run left on this one record (issue #306). `dashboard-import-batch` below is the
-# Dashboard's activity-feed phrase for the same run, by record count.
-history-import-run = Imported from { $origin }
+# An import run's row, on the Dashboard and on a record's History tab (ADR 0037 §5): what it
+# imported, with a muted count beside it — the records a finished run imported on the Dashboard, the
+# changes it made to this one record on its History tab (issue #306).
+history-import-run = Imported from { $source }
+history-import-run-records = { $count ->
+    [one] 1 record
+   *[other] { $count } records
+}
+history-import-run-changes = { $count ->
+    [one] 1 change
+   *[other] { $count } changes
+}
 
 # Change-log operator line
 history-operator-human = { $name } · { $confidence }
@@ -422,7 +434,6 @@ dashboard-stat-evidence = Evidence health
 dashboard-stat-evidence-caption = facts with at least one source
 dashboard-stat-attention = Needs attention
 dashboard-recent-activity = Recent activity — who changed what
-dashboard-import-batch = { $count } records imported
 dashboard-jump-back = Jump back in
 dashboard-data-quality = Data quality
 dashboard-data-quality-loading = Checking data quality…
@@ -553,6 +564,10 @@ err-backup-unknown-format = backup format { $found } was not written by any vitn
 err-backup-invalid-event = the event on line { $line } of the backup is invalid: { $detail }
 err-backup-event-count = the backup's manifest records { $expected } events, but it holds { $found }
 err-backup-target-not-empty = { $path } is not empty; restore into a new or empty folder
+err-dataset-not-found = no dataset matches "{ $query }"
+err-dataset-ambiguous = "{ $query }" names more than one dataset
+err-dataset-required = this workspace already holds data of this kind; choose the tree this file belongs to, or a new one
+err-dataset-global = { $scheme } imports always use its one dataset
 err-backup-database-not-empty = the target database already holds events; restore into an empty database
 
 # Source · Repository slices (Phase 5 PR9)

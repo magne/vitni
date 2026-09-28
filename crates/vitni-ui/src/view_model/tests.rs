@@ -8,11 +8,12 @@ use crate::presentation::ConfidenceLevel;
 use crate::presentation::EvidenceAxis;
 use crate::presentation::RestrictionKind;
 use std::collections::BTreeSet;
+use vitni_app::ImportRunId;
 use vitni_app::{
     ActivityDetail, AssociationRole, AssociationSummary, Calendar, ChangeLogEntry, CitationSummary, Confidence,
     DateModifier, DatePoint, DateQuality, EvidenceAnalysis, EvidenceKind, EvidenceLevel, Fact, FactSummary, FactType,
     GenealogicalDate, GenealogicalDateBody, InformationKind, NameSummary, NameType, OperatorKind, PersonName,
-    PersonRow, PersonSummary, Restriction, Sex, SourceQuality, Surname, TagRef, WorkspaceCounts,
+    PersonRow, PersonSummary, Restriction, RunRef, Sex, SourceQuality, Surname, TagRef, WorkspaceCounts,
 };
 
 /// A change-log entry for the activity-feed tests.
@@ -32,28 +33,60 @@ fn log_entry(kind: &str, human_id: Option<&str>, operator: OperatorKind, who: &s
         evidence_analysis: None,
         detail: None,
         can_undo: false,
+        run: None,
     }
 }
 
+/// The import run the run-row tests fold entries under.
+fn run_ref(records: Option<u32>) -> RunRef {
+    RunRef {
+        id: ImportRunId::from_uuid(uuid::Uuid::from_u128(9)),
+        source_label: "tree.ged".to_owned(),
+        plugin: "gedcom-import".to_owned(),
+        records,
+    }
+}
+
+/// An entry the run wrote into `human_id`'s record.
+fn imported(human_id: &str, assertion_id: &str, can_undo: bool) -> ChangeLogEntry {
+    let mut entry = log_entry("person", Some(human_id), OperatorKind::Software, "gedcom-import");
+    entry.assertion_id = assertion_id.to_owned();
+    entry.can_undo = can_undo;
+    entry.run = Some(run_ref(Some(3)));
+    entry
+}
+
 #[test]
-fn dashboard_renders_a_collapsed_import_and_labels_records_by_name() {
+fn dashboard_renders_an_import_run_row_and_labels_records_by_name() {
     let loc = Localizer::for_test("en");
     // `summary()` is the person I0001 / "Ada Lovelace".
     let person = summary();
-    // The app pre-collapses an import burst into one ImportBatch row; then a human edit on a person.
+    // The app folds an import run into one row; then a human edit on a person.
+    let children = vec![imported("I0002", "c", false), imported("I0003", "b", false)];
     let mut import = log_entry("", None, OperatorKind::Software, "gedcom-import");
-    import.event_type = "ImportBatch".to_owned();
-    import.detail = Some(ActivityDetail::ImportBatch { count: 3 });
+    import.event_type = "ImportRun".to_owned();
+    import.detail = Some(ActivityDetail::ImportRun {
+        run: run_ref(Some(3)),
+        count: 2,
+        children,
+    });
     let activity = vec![import, log_entry("person", Some("I0001"), OperatorKind::Human, "magne")];
     let vm = DashboardVm::build(WorkspaceCounts::default(), &[person], &activity, &loc, 4);
 
     assert_eq!(vm.recent.len(), 2);
-    assert_eq!(vm.recent[0].what, "3 records imported");
-    assert!(vm.recent[0].record.is_none(), "a collapsed import spans many records");
+    assert_eq!(vm.recent[0].what, "Imported from tree.ged");
+    assert_eq!(
+        vm.recent[0].count.as_deref(),
+        Some("3 records"),
+        "the run's own record count, not the rows the window happened to read"
+    );
+    assert_eq!(vm.recent[0].children.len(), 2, "the row carries its children");
+    assert!(vm.recent[0].record.is_none(), "an import run spans many records");
     // The human edit links to the person by display name, not the human id.
     let linked = vm.recent[1].record.as_ref().expect("person record");
     assert_eq!(linked.label, "Ada Lovelace");
     assert_eq!(linked.human_id, "I0001");
+    assert_eq!(vm.recent[1].count, None);
     // Jump-back surfaces the same named record.
     assert_eq!(vm.jump_back.len(), 1);
     assert_eq!(vm.jump_back[0].record.label, "Ada Lovelace");
@@ -117,35 +150,33 @@ fn data_quality_reports_zero_counts_with_no_findings() {
 }
 
 #[test]
-fn history_collapses_consecutive_import_events() {
+fn history_folds_a_records_import_run_into_one_undoable_row() {
     use super::{collapse_history, first_undoable};
     let loc = Localizer::for_test("en");
-    // Newest-first order: "newest" is the more recent import, "older" the one behind it.
-    let mut newest_import = log_entry("person", Some("I0001"), OperatorKind::Software, "gedcom-import");
-    newest_import.assertion_id = "newest".to_owned();
-    newest_import.can_undo = true;
-    let mut older_import = log_entry("person", Some("I0001"), OperatorKind::Software, "gedcom-import");
-    older_import.assertion_id = "older".to_owned();
-    older_import.can_undo = true;
+    // Newest-first order: "newest" is the more recent imported assertion, "older" the one behind it.
     let entries = vec![
         log_entry("person", Some("I0001"), OperatorKind::Human, "magne"),
-        newest_import,
-        older_import,
+        imported("I0001", "newest", true),
+        imported("I0001", "older", true),
     ];
     let rows = collapse_history(&entries, &loc);
-    assert_eq!(rows.len(), 2, "the two import events collapse into one");
+    assert_eq!(rows.len(), 2, "the run's two entries fold into one row");
     assert_eq!(rows[0].what, "Person created", "the human edit stays an individual row");
     assert_eq!(
-        rows[1].what, "Imported from gedcom-import",
-        "the record tab describes the run by origin, not by record count"
-    );
-    assert!(
-        rows[1].can_undo,
-        "the collapsed row carries the newest entry's can_undo, so it stays undoable"
+        rows[1].what, "Imported from tree.ged",
+        "the row names what the run imported"
     );
     assert_eq!(
+        rows[1].count.as_deref(),
+        Some("2 changes"),
+        "on one record the count is of its own changes, not of records imported"
+    );
+    assert_eq!(rows[1].children.len(), 2, "the row lists its children");
+    assert_eq!(rows[1].children[0].assertion_id, "newest");
+    assert!(rows[1].can_undo, "the row carries the newest entry's can_undo");
+    assert_eq!(
         rows[1].assertion_id, "newest",
-        "the collapsed row carries the newest entry's assertion id as its undo target"
+        "the row's undo target is its newest assertion"
     );
     assert_eq!(
         first_undoable(&rows).map(|entry| entry.assertion_id.as_str()),
