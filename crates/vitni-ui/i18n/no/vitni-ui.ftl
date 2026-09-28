@@ -137,6 +137,10 @@ history-pub-info-set = Publiseringsinfo satt
 history-abbrev-set = Forkortelse satt
 history-repository-linked = Arkiv koblet
 history-tag-created = Etikett opprettet
+history-import-run-started = Import startet
+history-item-resolved = Importert post gjenkjent som en eksisterende
+history-import-run-finished = Import fullført
+history-import-run-abandoned = Import stanset før den var ferdig
 history-tag-renamed = Etikett omdøpt
 history-tag-color-set = Etikettfarge satt
 history-tag-priority-set = Etikettprioritet satt
@@ -553,6 +557,10 @@ err-backup-unknown-format = sikkerhetskopiformat { $found } er ikke skrevet av n
 err-backup-invalid-event = hendelsen på linje { $line } i sikkerhetskopien er ugyldig: { $detail }
 err-backup-event-count = manifestet i sikkerhetskopien oppgir { $expected } hendelser, men den inneholder { $found }
 err-backup-target-not-empty = { $path } er ikke tom; gjenopprett til en ny eller tom mappe
+err-dataset-not-found = ingen datasett passer til «{ $query }»
+err-dataset-ambiguous = «{ $query }» gjelder flere datasett
+err-dataset-required = arbeidsområdet har allerede data av denne typen; velg treet filen hører til, eller et nytt
+err-dataset-global = { $scheme }-importer bruker alltid det ene datasettet sitt
 err-backup-database-not-empty = måldatabasen har allerede hendelser; gjenopprett til en tom database
 
 # Source · Repository slices (Phase 5 PR9)

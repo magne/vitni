@@ -367,14 +367,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
         let current = current_id.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            let effective = Box::pin(apply_record_edits(
-                services,
-                edits,
-                prov,
-                current.clone(),
-                save_place_edit,
-            ))
-            .await;
+            let effective = apply_record_edits(services, edits, prov, current.clone(), save_place_edit).await;
             finish_record_save(effective, Category::Places, &current, record_nav, reload, &saved);
         });
     });

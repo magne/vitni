@@ -23,13 +23,14 @@ use rust_embed::RustEmbed;
 use unic_langid::LanguageIdentifier;
 use vitni_app::config;
 use vitni_app::{
-    AppError, BackupError, CitationError, CitationSummary, Confidence, DbError, DnaMatchError, DnaMatchSummary,
-    DnaProvider, DnaTestError, DnaTestSummary, DnaTestType, EventError, EventSummary, EventType, FamilyError,
-    FamilySummary, MatchStatus, MediaError, MediaSummary, NoteError, NoteSummary, NoteType, PersonError, PersonSummary,
-    PlaceError, PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType, ResearchNoteError,
-    ResearchNoteSummary, Restriction, Sex, SourceError, SourceSummary, SubjectRef, SuretyLabelOverrides, TagError,
-    TagSummary,
+    AbandonReason, AppError, BackupError, CitationError, CitationSummary, Confidence, DbError, DnaMatchError,
+    DnaMatchSummary, DnaProvider, DnaTestError, DnaTestSummary, DnaTestType, EventError, EventSummary, EventType,
+    FamilyError, FamilySummary, MatchStatus, MediaError, MediaSummary, NoteError, NoteSummary, NoteType, PersonError,
+    PersonSummary, PlaceError, PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType,
+    ResearchNoteError, ResearchNoteSummary, Restriction, Sex, SourceError, SourceSummary, SubjectRef,
+    SuretyLabelOverrides, TagError, TagSummary,
 };
+use vitni_app::{DatasetError, DatasetSummary, ImportRunError, ImportRunStatus, ImportRunSummary};
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 
 mod citation;
@@ -37,6 +38,7 @@ mod dna_match;
 mod dna_test;
 mod event;
 mod family;
+mod import_run;
 mod media;
 mod note;
 mod person;
@@ -404,6 +406,7 @@ impl Localizer {
             AppError::MediaNotFound(id) => fl!(self.loader, "err-media-not-found", id = id.clone()),
             AppError::TagNotFound(id) => fl!(self.loader, "err-tag-not-found", id = id.clone()),
             AppError::ResearchNoteNotFound(id) => fl!(self.loader, "err-research-note-not-found", id = id.clone()),
+            AppError::ImportRunNotFound(id) => fl!(self.loader, "err-import-run-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
             AppError::FamilyDomain(domain) => self.family_error(domain),
             AppError::PlaceDomain(domain) => self.place_error(domain),
@@ -417,6 +420,8 @@ impl Localizer {
             AppError::MediaDomain(domain) => self.media_error(domain),
             AppError::TagDomain(domain) => self.tag_error(domain),
             AppError::ResearchNoteDomain(domain) => self.research_note_error(domain),
+            AppError::ImportRunDomain(domain) => self.import_run_error(domain),
+            AppError::Dataset(dataset) => self.dataset_error(dataset),
             AppError::Backup(backup) => self.backup_error(backup),
             AppError::Db(db) => self.db_error(db),
         }

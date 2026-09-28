@@ -137,6 +137,10 @@ history-pub-info-set = Publication info set
 history-abbrev-set = Abbreviation set
 history-repository-linked = Repository linked
 history-tag-created = Tag created
+history-import-run-started = Import started
+history-item-resolved = Imported record matched an existing one
+history-import-run-finished = Import finished
+history-import-run-abandoned = Import stopped before it finished
 history-tag-renamed = Tag renamed
 history-tag-color-set = Tag colour set
 history-tag-priority-set = Tag priority set
@@ -553,6 +557,10 @@ err-backup-unknown-format = backup format { $found } was not written by any vitn
 err-backup-invalid-event = the event on line { $line } of the backup is invalid: { $detail }
 err-backup-event-count = the backup's manifest records { $expected } events, but it holds { $found }
 err-backup-target-not-empty = { $path } is not empty; restore into a new or empty folder
+err-dataset-not-found = no dataset matches "{ $query }"
+err-dataset-ambiguous = "{ $query }" names more than one dataset
+err-dataset-required = this workspace already holds data of this kind; choose the tree this file belongs to, or a new one
+err-dataset-global = { $scheme } imports always use its one dataset
 err-backup-database-not-empty = the target database already holds events; restore into an empty database
 
 # Source · Repository slices (Phase 5 PR9)

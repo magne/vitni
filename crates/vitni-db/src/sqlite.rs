@@ -19,8 +19,9 @@ use crate::sqlite_query;
 use crate::store::{CommandError, DbError, map_aggregate_error};
 use crate::tables::{
     ALL_VIEW_TABLES, CITATION_VIEW_TABLE, DNA_MATCH_VIEW_TABLE, DNA_TEST_VIEW_TABLE, EVENT_VIEW_TABLE,
-    FAMILY_VIEW_TABLE, HUMAN_ID_VIEW_TABLES, MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE,
-    REPOSITORY_VIEW_TABLE, RESEARCH_NOTE_VIEW_TABLE, SOURCE_VIEW_TABLE, TAG_VIEW_TABLE,
+    FAMILY_VIEW_TABLE, HUMAN_ID_VIEW_TABLES, IMPORT_RUN_VIEW_TABLE, MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE,
+    PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, REPOSITORY_VIEW_TABLE, RESEARCH_NOTE_VIEW_TABLE, SOURCE_VIEW_TABLE,
+    TAG_VIEW_TABLE,
 };
 
 /// Builds one aggregate's `CqrsFramework` in `open()`, matching the registry `wiring` column: a
@@ -66,13 +67,16 @@ macro_rules! sqlite_wire_place_indexes {
     };
 }
 
-/// Selects the read-model lookup for `find_*`, keyed by the registry `find_param` column: Tag is
-/// keyed by its own id (`find_view_by_id`), every other aggregate by its `human_id`.
+/// Selects the read-model lookup for `find_*`, keyed by the registry `find_param` column: Tag and
+/// `ImportRun` are keyed by their own id (`find_view_by_id`), every other aggregate by its `human_id`.
 macro_rules! sqlite_find_query {
     ($pool:expr, $table:expr, human_id, $value:expr) => {
         sqlite_query::find_view_by_human_id($pool, $table, $value)
     };
     ($pool:expr, $table:expr, tag_id, $value:expr) => {
+        sqlite_query::find_view_by_id($pool, $table, $value)
+    };
+    ($pool:expr, $table:expr, run_id, $value:expr) => {
         sqlite_query::find_view_by_id($pool, $table, $value)
     };
 }

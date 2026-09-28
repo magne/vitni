@@ -141,7 +141,8 @@ pub struct WorkspaceCounts {
     pub dna_match: u64,
 }
 
-/// The 13 aggregate kinds, as the `Aggregate::TYPE` strings the store keys on.
+/// The 13 record kinds the Dashboard counts, as the `Aggregate::TYPE` strings the store keys on: every
+/// aggregate but `import_run`, which records an import rather than genealogy.
 const AGGREGATE_KINDS: [&str; 13] = [
     "person",
     "family",

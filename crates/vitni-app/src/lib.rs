@@ -46,6 +46,7 @@ pub mod family_change_set;
 pub mod geography;
 pub mod history;
 pub mod import;
+pub mod import_run;
 pub mod map_source;
 pub mod media;
 pub mod media_change_set;
@@ -151,6 +152,10 @@ pub use history::{
 pub use import::{
     ImportedChild, import_add_child, import_add_partner, import_assert_sex, import_family, import_person,
 };
+pub use import_run::{
+    ChosenDataset, DatasetChoice, DatasetError, DatasetSummary, ImportRunSummary, abandon_import_run, choose_dataset,
+    find_import_run, finish_import_run, list_datasets, list_import_runs, start_import_run,
+};
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
 pub use media::{
     MediaAttributeRef, MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date,
@@ -236,6 +241,10 @@ pub use vitni_core::fact::Fact;
 pub use vitni_core::family::FamilyError;
 pub use vitni_core::geo::{GeoCoordinates, Microdegrees, PlaceGeometry};
 pub use vitni_core::ids::AgentId;
+pub use vitni_core::ids::ImportRunId;
+pub use vitni_core::import_run::{
+    AbandonReason, ImportCounts, ImportRunError, ImportRunStatus, NewImportRun, ResolutionDecision, ResolvedItem,
+};
 pub use vitni_core::media::MediaError;
 pub use vitni_core::media_path::MEDIA_DIR;
 pub use vitni_core::media_path::media_root_relative;
@@ -245,6 +254,7 @@ pub use vitni_core::media_path::mime_for_path;
 pub use vitni_core::media_path::workspace_media_path;
 pub use vitni_core::name::{NameType, PersonName, Surname};
 pub use vitni_core::note::NoteError;
+pub use vitni_core::origin::{ContentDigest, DatasetId, DatasetScope, DatasetSpec, RecordOrigin};
 pub use vitni_core::person::PersonError;
 pub use vitni_core::place::PlaceError;
 pub use vitni_core::provenance::{

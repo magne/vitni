@@ -21,8 +21,8 @@ use tracing::warn;
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
     ActivityDetail, Age, AgeBound, AppError, AssociationRole, BackupError, Calendar, ChangeLogEntry,
-    ChildParentRelationship, ChromosomeSide, CitingContext, DateModifier, DatePoint, DateQuality, DbError,
-    DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate,
+    ChildParentRelationship, ChromosomeSide, CitingContext, DatasetError, DateModifier, DatePoint, DateQuality,
+    DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate,
     GenealogicalDateBody, InformationKind, Kinship, MatchKind, MatchStatus, NameType, NoteType, OperatorKind,
     ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality, SuretyLabelOverrides, UsingKind, config,
 };
@@ -1885,6 +1885,10 @@ impl Localizer {
             "EventTypeSet" => fl!(self.loader, "history-event-type-set"),
             "DescriptionSet" => fl!(self.loader, "history-description-set"),
             "PlaceLinked" => fl!(self.loader, "history-place-linked"),
+            "ImportRunStarted" => fl!(self.loader, "history-import-run-started"),
+            "ItemResolved" => fl!(self.loader, "history-item-resolved"),
+            "ImportRunFinished" => fl!(self.loader, "history-import-run-finished"),
+            "ImportRunAbandoned" => fl!(self.loader, "history-import-run-abandoned"),
             _ => fl!(self.loader, "history-generic"),
         }
     }
@@ -2619,7 +2623,8 @@ impl Localizer {
             | AppError::NoteNotFound(id)
             | AppError::MediaNotFound(id)
             | AppError::TagNotFound(id)
-            | AppError::ResearchNoteNotFound(id) => fl!(self.loader, "err-not-found", id = id.clone()),
+            | AppError::ResearchNoteNotFound(id)
+            | AppError::ImportRunNotFound(id) => fl!(self.loader, "err-not-found", id = id.clone()),
             AppError::Domain(_)
             | AppError::FamilyDomain(_)
             | AppError::PlaceDomain(_)
@@ -2632,10 +2637,21 @@ impl Localizer {
             | AppError::NoteDomain(_)
             | AppError::MediaDomain(_)
             | AppError::TagDomain(_)
-            | AppError::ResearchNoteDomain(_) => fl!(self.loader, "err-domain"),
+            | AppError::ResearchNoteDomain(_)
+            | AppError::ImportRunDomain(_) => fl!(self.loader, "err-domain"),
             AppError::Plugin(detail) => fl!(self.loader, "err-plugin", detail = detail.clone()),
             AppError::Backup(backup) => self.backup_error(backup),
+            AppError::Dataset(dataset) => self.dataset_error(dataset),
             AppError::Db(db) => self.db_error(db),
+        }
+    }
+
+    fn dataset_error(&self, error: &DatasetError) -> String {
+        match error {
+            DatasetError::NotFound { query, .. } => fl!(self.loader, "err-dataset-not-found", query = query.clone()),
+            DatasetError::Ambiguous { query, .. } => fl!(self.loader, "err-dataset-ambiguous", query = query.clone()),
+            DatasetError::Required { .. } => fl!(self.loader, "err-dataset-required"),
+            DatasetError::Global { scheme } => fl!(self.loader, "err-dataset-global", scheme = scheme.clone()),
         }
     }
 
@@ -3166,7 +3182,7 @@ mod tests {
     use crate::presentation::ConfidenceLevel;
     use vitni_app::{AppError, ChangeLogEntry, Confidence, DbError, OperatorKind, Sex};
 
-    /// Every event variant's `type_name()` across the 12 aggregates (vitni-core `*/event.rs`).
+    /// Every event variant's `type_name()` across the 14 aggregates (vitni-core `*/event.rs`).
     /// Keep in sync when a new event variant lands — an unmapped type renders as "Recorded a change".
     const EVENT_TYPES: &[&str] = &[
         "PersonCreated",
@@ -3235,6 +3251,10 @@ mod tests {
         "AbbrevSet",
         "RepositoryLinked",
         "TagCreated",
+        "ImportRunStarted",
+        "ItemResolved",
+        "ImportRunFinished",
+        "ImportRunAbandoned",
         "TagRenamed",
         "TagColorSet",
         "TagPrioritySet",

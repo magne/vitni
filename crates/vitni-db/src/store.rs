@@ -100,13 +100,17 @@ pub(crate) fn map_aggregate_error<E: std::error::Error + 'static>(
 
 /// The backend a [`Store`] is bound to, chosen by the `database_url` scheme at `open()` time.
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
+///
+/// Each backend is boxed: it holds one `CqrsFramework` per aggregate, and a `Store` (inside a
+/// `Workspace`) is carried by value through many async use-cases, whose futures an inline backend
+/// would push past clippy's `large_futures` limit.
 enum Backend {
     /// The embedded SQLite backend.
     #[cfg(feature = "sqlite")]
-    Sqlite(crate::sqlite::SqliteStore),
+    Sqlite(Box<crate::sqlite::SqliteStore>),
     /// The server Postgres backend.
     #[cfg(feature = "postgres")]
-    Postgres(crate::postgres::PostgresStore),
+    Postgres(Box<crate::postgres::PostgresStore>),
 }
 
 /// A workspace event store, bound at open time to whichever backend the `database_url` selects.
@@ -148,7 +152,7 @@ impl Store {
         {
             let sqlite = crate::sqlite::SqliteStore::open(database_url).await?;
             Ok(Self {
-                backend: Backend::Sqlite(sqlite),
+                backend: Backend::Sqlite(Box::new(sqlite)),
             })
         }
         #[cfg(not(feature = "sqlite"))]
@@ -170,7 +174,7 @@ impl Store {
         {
             let postgres = crate::postgres::PostgresStore::open(database_url).await?;
             Ok(Self {
-                backend: Backend::Postgres(postgres),
+                backend: Backend::Postgres(Box::new(postgres)),
             })
         }
         #[cfg(not(feature = "postgres"))]
@@ -424,7 +428,7 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// [`DbError::Malformed`] if `aggregate_type` is not one of the 12 aggregates, [`DbError`] on a
+    /// [`DbError::Malformed`] if `aggregate_type` is not one of the 14 aggregates, [`DbError`] on a
     /// read failure, or [`DbError::Unsupported`] when no backend is compiled in.
     #[cfg_attr(
         not(any(feature = "sqlite", feature = "postgres")),
@@ -452,7 +456,7 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// [`DbError::Malformed`] if `aggregate_type` is not one of the 12 aggregates, [`DbError`] on a
+    /// [`DbError::Malformed`] if `aggregate_type` is not one of the 14 aggregates, [`DbError`] on a
     /// read failure, or [`DbError::Unsupported`] when no backend is compiled in.
     #[cfg_attr(
         not(any(feature = "sqlite", feature = "postgres")),

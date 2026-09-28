@@ -60,6 +60,25 @@ impl fmt::Display for DatasetId {
     }
 }
 
+/// How an importer's record ids are scoped (ADR 0037 §3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DatasetScope {
+    /// Ids are unique across the whole source (`digitalarkivet`): one dataset, never chosen.
+    Global,
+    /// Ids are local to one file lineage (`gedcom:<uuid>`): the operator picks or declares one.
+    Lineage,
+}
+
+/// The dataset an importer writes into: its scheme and how its record ids are scoped.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatasetSpec {
+    /// The dataset scheme (`gedcom`, `gramps`, `digitalarkivet`).
+    pub scheme: String,
+    /// How the importer's record ids are scoped.
+    pub scope: DatasetScope,
+}
+
 /// A digest of an item's canonical incoming fields, for no-op detection on re-import (ADR 0037 §4).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]

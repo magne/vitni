@@ -36,6 +36,7 @@ use crate::commands::dna_match::DnaMatchCmd;
 use crate::commands::dna_test::DnaTestCmd;
 use crate::commands::event::EventCmd;
 use crate::commands::family::FamilyCmd;
+use crate::commands::import_run::ImportRunCmd;
 use crate::commands::media::MediaCmd;
 use crate::commands::note::NoteCmd;
 use crate::commands::person::PersonCmd;
@@ -76,6 +77,7 @@ macro_rules! for_each_cli_command {
             (Media, media, "Operate on media objects.", MediaCmd),
             (Tag, tag, "Operate on tags.", TagCmd),
             (ResearchNote, research_note, "Operate on research notes (ADR 0028).", ResearchNoteCmd),
+            (ImportRun, import_run, "List import runs and the datasets they wrote into (ADR 0037).", ImportRunCmd),
         }
     };
 }

@@ -15,6 +15,7 @@ mod dna_match;
 mod dna_test;
 mod event;
 mod family;
+mod import_run;
 mod media;
 mod note;
 mod person;
@@ -166,6 +167,7 @@ fn build_log() -> Vec<RawEvent> {
     dna_test::events(&mut builder);
     dna_match::events(&mut builder);
     research_note::events(&mut builder);
+    import_run::events(&mut builder);
     builder.rows
 }
 

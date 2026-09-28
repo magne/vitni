@@ -67,6 +67,12 @@ impl Session {
         AssertionId::from_uuid(Uuid::now_v7())
     }
 
+    /// Mints the lineage id of a new file-lineage dataset (`gedcom:<uuid>` — ADR 0037 §3).
+    #[must_use]
+    pub fn new_dataset_lineage(&self) -> Uuid {
+        Uuid::now_v7()
+    }
+
     /// Reads the wall clock — for a record of *when* something ran that is not an assertion (a
     /// backup's creation time, ADR 0041), so the clock is still read here and nowhere else.
     #[must_use]
