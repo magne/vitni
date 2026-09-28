@@ -179,7 +179,7 @@ with a three-way outcome — "Yes, Merge/Request to Merge", "No, remove match", 
 shape FamilySearch and Ancestry converge on independently: **accept / reject / defer**, never a forced binary.
 
 **Gramps' "Find Possible Duplicate People"** tool (documented behaviour only; Gramps is GPLv2+ and its source is
-never to be copied into this AGPL-licensed codebase per `docs/CLAUDE.md`) computes a compounding "odds" score
+never to be copied into this AGPL-licensed codebase per the repository-root `CLAUDE.md`) computes a compounding "odds" score
 across matching fields and reports pairs whose score exceeds a user-chosen **Low/Medium/High** threshold
 (0.25 / 1.0 / 2.0), with Soundex matching as an optional toggle:
 

@@ -525,8 +525,10 @@ rule every bullet keeps is that only deterministic identity acts without the use
   recall on the hard cases. *Needs:* the matching core. *Exit:* the gate fails when a weight change
   loses a hard case. — #402
 - **`PersonsDistinguished` and the assessment on identity decisions** — ADR 0039 §1–§3.
-  `PersonsDistinguished`, plus `assessment: Option<MatchEvidence>` on `PersonsMerged`. `merge_persons`
-  stops hardcoding `Confidence::Normal` and its default rationale (`vitni-app/src/person.rs:778-816`).
+  `PersonsDistinguished`, plus `assessment: Option<MatchEvidence>` on `PersonsMerged`. `MatchEvidence`
+  is the fixed-point, `Eq`-safe snapshot of `MatchAssessment`, produced by `MatchAssessment::evidence()`
+  (ADR 0039 §2). `merge_persons` stops hardcoding `Confidence::Normal` and its default rationale
+  (`vitni-app/src/person.rs:778-816`).
   Decided pairs, either way, are excluded from every consumer. This amends data-model §11.3
   (suggestions are computed, not asserted). *Exit:* a rejected pair never reappears; the history shows
   the assessment behind a merge. — #403
@@ -541,9 +543,10 @@ rule every bullet keeps is that only deterministic identity acts without the use
   and `FamiliesMerged`/`FamiliesDistinguished`, redirected through `identity_links`. Participants of a
   merged event are unioned in the projection. *Needs:* persona clusters. *Exit:* two copies of one
   marriage merge into one event with every participant. — #405
-- **Merge and distinguish for Place, Source, Citation, Repository, Note, Media and Tag** — ADR 0039 §1,
-  §6. The same pair of variants per kind, and the same redirect. Place identity is named apart from
-  ADR 0026 succession in the UI. *Needs:* persona clusters. *Exit:* per-kind tests; an event whose
+- **Merge and distinguish for Place, Source, Citation, Repository, Note and Media** — ADR 0039 §1, §6.
+  The same pair of variants per kind, and the same redirect. Place identity is named apart from ADR
+  0026 succession in the UI. Tag is excluded: it has no assertion chain to retract, and it resolves by
+  its case-folded name. *Needs:* persona clusters. *Exit:* per-kind tests; an event whose
   place was merged shows the survivor. — #406
 - **Staged import: WIT record graph, `ImportPlan`, commit and resume** — ADR 0040 §1, §2, §5.
   `host-api@0.24.0` adds the `staging` interface (`begin-run`, `submit(record-graph)`) and removes
@@ -690,9 +693,12 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   and default codegen settings. `strip = true` plus a considered `lto`/`codegen-units` is the cheapest
   size win available before the first tag. — #214
 - **Remove the pre-1.0 backup upgraders and freeze backup format v1** — ADR 0041 §4. At the 1.0
-  release, delete `backup::upgrade::pre_release`; the format then in force becomes the permanent v1
-  baseline, and every later upgrader is permanent. The `xtask check` guard that forces this lands with
-  the backup bullet under *Backup & restore*. This bullet is only the deletion. — #392
+  release, freeze the pre-release format then in force (`0.K`) as v1, the same layout, and add the
+  permanent `0.K` → v1 alias. Then delete `backup::upgrade::pre_release` and its older `v0.*`
+  fixtures, keeping `v0.K` as the alias witness. An older `0.x` archive is refused with a message
+  naming the last 0.x release to restore and re-back-up on. Every later upgrader is permanent. The
+  `xtask check` guard that forces this lands with the backup bullet under *Backup & restore*. *Exit:*
+  the `v0.K` fixture restores on 1.0. — #392
 - **`release.yml` unverified end-to-end** — no version tag has been pushed, so the release workflow is
   zizmor / YAML / `bash -n` verified and its build/package steps reproduced locally, but has never run a
   full tag → AppImage → GitHub Release cycle. The first real tag is that verification, and wants
@@ -706,7 +712,8 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   media manifest. Restore inserts the rows as stored and rebuilds the projections, on either engine. A
   chain of upgraders runs at restore. Before 1.0 the window is the current format and two before it, in
   `backup::upgrade::pre_release`, and an archive older than that is refused with an actionable message.
-  Golden fixtures of invented data sit under `crates/vitni-app/tests/fixtures/backup/v<N>/`, and a
+  `format_version` is `0.N` before 1.0 (ADR 0041 §3). Golden fixtures of invented data sit under
+  `crates/vitni-app/tests/fixtures/backup/v<version>/`, and a
   coverage test requires every event variant in the current fixture. The `xtask check` guard fails at
   version ≥ 1.0.0 while `pre_release` still exists, and `docs/release.md` gains the checklist line.
   This lands early in `0.10` so every later event change in the milestone passes the fixture guard.

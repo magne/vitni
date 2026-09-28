@@ -107,6 +107,8 @@ dataset, which record in it, which entity in that record, and which run.
      - **Tombstone:** a field whose same-origin assertion was *retracted* is never re-asserted with the
        same value. A retraction is editorial judgement, and an import run does not overrule it. A
        *different* incoming value is still offered, because the source changed.
+       Tag setters have no assertion chain and cannot be retracted (data-model §8), so no tombstone
+       arises for Tag.
 
 5. **An import run is an aggregate: `ImportRun`.** It is the fourteenth, added through the
    `for_each_aggregate!` recipe. Its events:

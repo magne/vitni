@@ -71,7 +71,7 @@ All of that needs the host to see the whole incoming record, or the whole file, 
    - **Person, `Same`:**
      - a new `Persona` is created from the record, carrying the record's claims
      - it is linked to the chosen person with `PersonsMerged` (ADR 0039)
-     - the record's evidence stays a separate, unlinkable unit
+     - the record's evidence stays a separate unit, which can be unlinked later
    - **Other kinds, `Same`:**
      - the existing record is reused and nothing new is created (a second copy of a place or source
        carries no evidence of its own)
@@ -82,6 +82,11 @@ All of that needs the host to see the whole incoming record, or the whole file, 
      recorded, so the pair is never proposed again.
    - **`Decide later`:** the entity is created as `New`. The pair then appears in the computed review
      queue (ADR 0039 §3), filtered to this run.
+     - If the pair is later decided `Same`, the two are merged with `<Kind>sMerged` (ADR 0039 §1). The
+       record created at import becomes a cluster member, and references to it resolve to the
+       survivor. For a Person this is exactly the persona link above.
+     - No orphan duplicate remains, and the merge is retractable like any other.
+     - Tags are never deferred: a tag resolves by its case-folded name (ADR 0038 §6).
    - **Bulk actions are explicit:** *Treat all 312 Probable place matches as the same*, or *Decide
      the rest later*. They are still the user's decision, recorded per pair, with the assessment each
      was shown.

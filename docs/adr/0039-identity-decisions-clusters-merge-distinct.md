@@ -35,10 +35,15 @@ behave as one person, plus the equivalent for the other kinds.
 1. **Identity decisions are assertions on the survivor, one pair of event variants per kind.**
    - **Person** keeps `PersonsMerged { surviving, merged }` and gains `PersonsDistinguished { person,
      other }`.
-   - **Family, Event, Place, Source, Citation, Repository, Note, Media and Tag** gain the same pair:
+   - **Family, Event, Place, Source, Citation, Repository, Note and Media** gain the same pair:
      `<Kind>sMerged { surviving, merged }` and `<Kind>sDistinguished { <kind>, other }`, each emitted
      on the aggregate the user was reviewing.
    - **DnaTest, DnaMatch, ResearchNote and ImportRun get neither** (ADR 0038 §2).
+   - **Tag gets neither either.**
+     - Tag has no assertion chain (data-model §8), so a tag merge could not be undone by retraction.
+     - A tag *is* its name, so tags resolve deterministically by case-folded name (ADR 0038 §6) and
+       are never proposed as a pair.
+     - Two differently named tags meaning one thing are consolidated by re-tagging, as today.
 
    Both variants are ordinary assertions. They carry the `EventContext` operator, `confidence` and
    `rationale` the user supplied, and are undone by retracting their `AssertionId` (data-model §10).
@@ -46,8 +51,13 @@ behave as one person, plus the equivalent for the other kinds.
 
 2. **Each decision carries the evidence it was made on.**
    - Merge and distinguish variants gain an additive `assessment: Option<MatchEvidence>`: a snapshot
-     of the ADR 0038 assessment the user was shown. It holds the score, band, engine version,
+     of the ADR 0038 `MatchAssessment` the user was shown. It holds the score, band, engine version,
      cultures and the feature list with weights.
+   - `MatchEvidence` is defined in `vitni_core::matching` next to `MatchAssessment`, and
+     `MatchAssessment::evidence()` produces it. It carries the same fields, with the score and weights
+     in fixed point (basis points).
+   - It is a separate type because event payloads derive `Eq` and must encode stably (ADR 0004 §4),
+     which an `f64` score cannot.
    - The history then reads "matched at 87% by vitni-matching 1 (names agree after normalization,
      birth within census tolerance); confirmed by *operator*, confidence High". A later engine
      version cannot rewrite why the decision was taken.
@@ -132,7 +142,7 @@ behave as one person, plus the equivalent for the other kinds.
 
 ### Negative / costs
 
-- **Eighteen new event variants** (nine kinds × two), plus `PersonsDistinguished`, each with decide
+- **Sixteen new event variants** (eight kinds × two), plus `PersonsDistinguished`, each with decide
   rules, i18n and history rendering.
 - **Read-time composition** costs extra reads per detail view, one per cluster member. Lists pay a
   join against `identity_links`.

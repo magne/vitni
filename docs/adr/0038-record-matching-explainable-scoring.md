@@ -156,6 +156,7 @@ per name, not global.
      - the same record origin
      - the same `ExternalId`
      - a pair already decided `same` (ADR 0039)
+     - for Tag only, an equal case-folded name, because a tag is its name
    - A pair already decided *distinct* is not a candidate at all.
    - The other bands come from the score, against thresholds in `[matching]` config: `Probable`
      above one threshold, `Possible` above a lower one, `Unlikely` below it (not shown).

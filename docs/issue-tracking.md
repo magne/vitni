@@ -1,9 +1,10 @@
 # Issue tracking on GitHub
 
-- **Status:** **Applied 2026-07-27.** 42 labels and the issue-template forms exist, alongside
+- **Status:** **Applied 2026-07-27; updated 2026-09-27** with the `0.10` milestone and two area
+  labels. 42 labels and the issue-template forms exist, alongside
   `.github/labels.toml` and `cargo xtask issue-sync`. `0.8 — UI parity` shipped and is closed; the three
   remaining gates are `0.9`, `0.10` and `1.0`.
-- **Date:** 2026-07-27
+- **Date:** 2026-07-27 (updated 2026-09-27)
 - **Audience:** anyone filing, triaging, or closing an issue
 - **Companion:** [`issues.md`](issues.md) is the backlog this describes; [`roadmap.md`](roadmap.md)
   owns phase detail.

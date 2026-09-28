@@ -51,8 +51,9 @@ ADR 0010 §5). So a backup is the log.
      row.
 
 3. **The format is versioned, and restore upgrades.**
-   - `format_version` is an integer. It is bumped whenever an event encoding changes in a way an
-     older archive would not decode, or whenever the archive layout changes.
+   - `format_version` is `0.N` before 1.0 and an integer from `1` onward. It is bumped whenever an
+     event encoding changes in a way an older archive would not decode, or whenever the archive
+     layout changes.
    - Restore runs a chain of pure upgraders, `vN → vN+1`, over the manifest and the JSONL rows
      (`serde_json::Value` in, `Value` out), then inserts the upgraded rows.
    - An upgrader is the ADR 0010 upcaster idea moved to the backup boundary. It runs **once, at
@@ -68,17 +69,26 @@ ADR 0010 §5). So a backup is the log.
      - Pre-1.0 upgraders live in one module, `backup::upgrade::pre_release`, whose header marks it
        temporary.
    - **At 1.0:**
-     - The pre-release upgraders are deleted and the format then in force is frozen as **v1**, the
-       permanent baseline.
+     - The pre-release format in force at the release, `0.K`, is frozen as **v1**, the permanent
+       baseline. v1 has the same layout and encoding as `0.K`. The only difference is the manifest's
+       version number, so 1.0 reads a `0.K` archive as v1 through a permanent alias. That is a
+       version mapping, not an upgrader.
+     - The pre-release upgraders (`0.K−2 → 0.K−1 → 0.K`) are deleted, together with their fixtures.
+     - An archive in an older pre-release format is refused by 1.0, with a message naming the last
+       0.x release. The documented one-time path is to restore it on that release and back up again,
+       which yields `0.K` = v1.
+     - This is deliberate: the readable-forever promise begins at v1, and pre-1.0 archives get only
+       the two-version window.
      - `cargo xtask check` fails if the workspace version is ≥ 1.0.0 while
        `backup::upgrade::pre_release` still exists, so the deletion cannot be forgotten.
      - `docs/release.md` gains the matching checklist line.
-   - **After 1.0:** every format from v1 onward stays readable forever, and every upgrader is
-     permanent.
+   - **After 1.0:** every format from v1 onward, including the `0.K` alias, stays readable forever,
+     and every upgrader is permanent.
 
 5. **Golden fixtures are the compatibility guard.**
    - One committed backup archive per supported format version, of invented data, lives under
-     `crates/vitni-app/tests/fixtures/backup/v<N>/`, each with its expected projection digest.
+     `crates/vitni-app/tests/fixtures/backup/v<version>/`, each with its expected projection digest.
+     The `v0.K` fixture is kept after 1.0 as the witness for the v1 alias.
    - Every fixture must restore and reach its expected state.
    - The fixture for the current version must contain **every event variant of every aggregate**,
      enforced by a coverage test driven off `for_each_aggregate!`.
