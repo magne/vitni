@@ -389,6 +389,19 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   identity*. Without the index, dropping the xref and Gramps-id `ExternalId`s leaves nothing to resolve
   a re-import of an xref- or handle-keyed file by, so every re-import would duplicate its people.
   *Exit:* a test imports two different files that share `@I1@` and gets two persons. — #389
+- **Four import verbs drop the host's provenance template** — `import_add_partner` and
+  `import_add_child` (`vitni-app/src/import.rs`) and `import_attach_event_media` and
+  `import_attach_event_note` (`vitni-app/src/event.rs`) pass `MutationMeta::default()`. The plugin host
+  (`vitni-plugin-host/src/state.rs`) gives them no `Provenance`. `import_add_child` covers both the
+  child membership and each child-to-partner link. Every other `commands` verb stamps the invocation's
+  template (ADR 0017 §7). No data is wrong today: the bulk importers run with no template, and the
+  assisted Digitalarkivet plugin calls none of the four. It starts to matter with #393, which carries
+  `EventContext.origin` through `Provenance`, so these four would write the only imported assertions
+  without an origin. It also matters with #410, whose household import adds partners and children under
+  `Confidence::Low`. *Shape:* each use-case takes a `Provenance`, and the host passes
+  `self.provenance()`. `import_add_child` and `import_attach_event_media` already take five parameters,
+  so they need an argument struct. *Exit:* a test with the assisted template finds `Low` on the
+  partner, child membership, child relationship, event media and event note assertions. — #421
 - **Source merge/sync reconciliation prerequisite** — `set-source-title`/`set-source-abbrev` WIT verbs,
   GEDCOM `ABBR` / Gramps `<sabbrev>` round-trip, and a field-level `AssertionId` + `occurred_at` read
   path. The ADR 0029 timestamp-gated rule cannot target Source's bibliographic fields
@@ -444,10 +457,10 @@ in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and imp
 [0040](adr/0040-staged-import-plan-review-commit.md) (staged import) and
 [0041](adr/0041-workspace-backup-and-restore.md) (backup), with the survey in
 [`research/record-matching.md`](research/record-matching.md). The bullets are listed in dependency
-order, and each one's *Needs:* names its prerequisites. The import bug sits under its own area
-above, and backup under *Backup & restore*. The milestone opens with backup (#391). The
-xref-collision bug (#389) follows the index below, because it needs both origins and
-resolve-by-origin. The matching core has no origin prerequisite, so it can start alongside them.
+order, and each one's *Needs:* names its prerequisites. The import bugs sit under their own area
+above, and backup under *Backup & restore*. The milestone opens with the import-verbs provenance bug
+(#421) and backup (#391). The xref-collision bug (#389) follows the index below, because it needs
+both origins and resolve-by-origin. The matching core has no origin prerequisite, so it can start alongside them.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
@@ -457,7 +470,8 @@ does.
   `ImportRunStarted`/`ItemResolved`/`ImportRunFinished`/`ImportRunAbandoned`, and `Session` mints run
   ids. Datasets are a projection over runs. History renders a real run row with its count and
   children, which replaces `collapse_runs` and settles the *Collection history nodes* bullet's data
-  half. *Exit:* an import writes a run, and every imported assertion carries its origin; the History
+  half. *Needs:* the import-verbs provenance bullet (#421) under *Bulk import, export & sync*, or the
+  partner, child and event-attachment links carry no origin. *Exit:* an import writes a run, and every imported assertion carries its origin; the History
   run row lists its children. — #393
 - **`record_origins` index and resolve-by-origin for every aggregate** — ADR 0037 §4. The projection
   runs on SQLite and Postgres and is rebuildable. `field_key` is derived in `vitni-app`. Resolve-or-
