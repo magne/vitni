@@ -20,6 +20,12 @@ role = "assisted-import"
 host_api = "0.23.0"
 capabilities = ["log", "query", "commands", "progress", "net", "media-store", "ai", "present"]
 
+# ADR 0037 §3: the dataset this importer's record ids belong to. Archive record ids are unique
+# archive-wide, so the dataset is global: `digitalarkivet`, never chosen by the operator.
+[package.metadata.vitni-plugin.dataset]
+scheme = "digitalarkivet"
+scope = "global"
+
 [dependencies]
 wit-bindgen = "0.57.1"
 serde = { version = "1.0", features = ["derive"] }

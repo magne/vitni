@@ -21,6 +21,12 @@ role = "bulk-import"
 host_api = "0.23.0"
 capabilities = ["log", "commands", "progress", "import-source"]
 
+# ADR 0037 §3: the dataset this importer's record ids belong to. They are local to one file, so each
+# file lineage is its own dataset (`gedcom:<uuid>`), chosen or declared by the operator.
+[package.metadata.vitni-plugin.dataset]
+scheme = "gedcom"
+scope = "lineage"
+
 [dependencies]
 wit-bindgen = "0.57.1"
 vitni-plugin-api = { path = "../plugin-api" }

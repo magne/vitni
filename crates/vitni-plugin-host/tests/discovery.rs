@@ -10,6 +10,7 @@
 
 use std::path::PathBuf;
 
+use vitni_app::{DatasetScope, DatasetSpec};
 use vitni_plugin_host::signing::PluginManifest;
 use vitni_plugin_host::{Capability, PluginRole, TrustRoots, TrustTier};
 
@@ -315,4 +316,69 @@ fn a_manifest_over_declaring_a_capability_is_accepted() {
         info.capabilities.contains(&Capability::ExportSink),
         "the declared (over-declared) capability is reported"
     );
+}
+
+#[test]
+fn importers_declare_their_dataset_and_exporters_none() {
+    let found = common::discovered();
+    let dataset_of = |id: &str| {
+        found
+            .iter()
+            .find(|info| info.id == id)
+            .unwrap_or_else(|| panic!("{id} present"))
+            .dataset
+            .clone()
+    };
+    let lineage = |scheme: &str| {
+        Some(DatasetSpec {
+            scheme: scheme.to_owned(),
+            scope: DatasetScope::Lineage,
+        })
+    };
+    assert_eq!(dataset_of("gedcom-import"), lineage("gedcom"));
+    assert_eq!(dataset_of("gramps-import"), lineage("gramps"));
+    assert_eq!(
+        dataset_of("digitalarkivet-import"),
+        Some(DatasetSpec {
+            scheme: "digitalarkivet".to_owned(),
+            scope: DatasetScope::Global,
+        })
+    );
+    assert_eq!(dataset_of("gedcom-export"), None);
+}
+
+#[test]
+fn discovery_keeps_the_manifests_own_version() {
+    let found = common::discovered();
+    let info = found
+        .iter()
+        .find(|info| info.id == "gedcom-import")
+        .expect("gedcom-import present");
+    let manifest = std::fs::read_to_string(info.bundle_dir.join("plugin.toml")).expect("read manifest");
+    let manifest: PluginManifest = toml::from_str(&manifest).expect("parse manifest");
+    assert_eq!(info.version, manifest.version);
+}
+
+#[test]
+fn an_importer_manifest_without_a_dataset_fails_the_cross_check() {
+    let host = common::host();
+    let src = common::plugins_dir().join("gedcom-import");
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let bundle = tmp.path().join("gedcom-import");
+    std::fs::create_dir(&bundle).expect("bundle dir");
+    std::fs::copy(src.join("plugin.wasm"), bundle.join("plugin.wasm")).expect("copy component");
+    let text = std::fs::read_to_string(src.join("plugin.toml")).expect("read manifest");
+    let mut manifest: PluginManifest = toml::from_str(&text).expect("parse manifest");
+    manifest.dataset = None;
+    std::fs::write(
+        bundle.join("plugin.toml"),
+        toml::to_string(&manifest).expect("serialize"),
+    )
+    .expect("write manifest");
+
+    let result = host.discover_bundle(&bundle, &TrustRoots::embedded());
+    let Err(error) = result else {
+        panic!("an importer without a dataset must fail discovery");
+    };
+    assert!(error.to_string().contains("dataset"), "{error}");
 }

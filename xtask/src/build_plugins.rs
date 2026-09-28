@@ -242,6 +242,7 @@ fn plugin_manifest(plugin: &Plugin) -> Result<PluginManifest> {
         host_api: metadata.host_api.clone(),
         role: metadata.role.clone(),
         capabilities: metadata.capabilities.clone(),
+        dataset: metadata.dataset.clone(),
     })
 }
 
