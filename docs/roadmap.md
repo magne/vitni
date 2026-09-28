@@ -586,6 +586,11 @@ one at a time. They are immutable like every accepted ADR, so anything the imple
 is fixed by a superseding ADR, not by an edit. The work items are in
 [`issues.md`](issues.md#record-matching--identity), in dependency order.
 
+**Progress.** ✅ Workspace backup and restore (ADR 0041, #391): `vitni backup create|restore` and the
+Preferences *Backup & restore* card, the `0.1` format with its restore-time upgrader chain and window,
+the golden fixture of every event variant, and the cross-engine restore test. Every later event change
+in the milestone now passes through that fixture.
+
 ## Risk register
 
 Each frontier unknown maps to the spike that kills it.
