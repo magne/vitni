@@ -556,5 +556,10 @@ bulk-import-confirm-body = { $workspace } already has { $count ->
 } recorded. Importing may add duplicates.
 bulk-import-confirm-cancel = Cancel
 bulk-import-confirm-run = Import anyway
+bulk-import-confirm-datasets-body = { $workspace } already holds data imported from other files.
+bulk-import-dataset-label = This file is
+bulk-import-dataset-placeholder = Choose…
+bulk-import-dataset-existing = A later export of { $label }
+bulk-import-dataset-new = A different tree
 bulk-import-target-name-required = Enter a name for the new workspace.
 bulk-import-target-name-taken = A workspace with that name is already registered.

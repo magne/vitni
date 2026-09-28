@@ -19,7 +19,11 @@
       --into NAME)</span> — or <b>Assisted online import</b>, the Digitalarkivet wizard below. Bulk
       import's target radio reuses the Preferences "Register workspace…" fields for a brand-new
       workspace, and confirms first (a <span class="mono">Modal</span>, no <span class="mono">--yes</span>
-      equivalent) before writing into an existing workspace that already holds persons.
+      equivalent) before writing into an existing workspace that already holds persons. When that
+      workspace already holds earlier imports in the same format, the confirm also asks <b>which tree
+      the file belongs to</b> — a later export of one of them, or a different tree — and waits for the
+      answer (ADR 0037 §3; the CLI's <span class="mono">--dataset</span> /
+      <span class="mono">--new-dataset</span>). Every import is recorded as an import run.
     </div>
 
     <!-- Mode switch -->
@@ -163,6 +167,29 @@
         <div class="m-foot">
           <button class="btn">Cancel</button>
           <button class="btn primary">Import anyway</button>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:var(--sp-6)">Which tree is this file? <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, the same confirm when the target already holds imports in this format; Import anyway stays disabled until a tree is chosen</span></h3>
+    <div class="overlay" style="position:relative;inset:auto;display:block;background:transparent;padding:0;margin-top:var(--sp-2)">
+      <div class="modal" style="width:min(480px,96vw)">
+        <div class="m-head">Import into slekt?</div>
+        <div class="m-body">
+          <p>slekt already has 3 902 persons recorded. Importing may add duplicates.</p>
+          <div class="field">
+            <label for="bi-dataset">This file is</label>
+            <select class="in" id="bi-dataset">
+              <option selected>Choose…</option>
+              <option>A later export of hansen-tree.ged</option>
+              <option>A later export of berg-slekt.ged</option>
+              <option>A different tree</option>
+            </select>
+          </div>
+        </div>
+        <div class="m-foot">
+          <button class="btn">Cancel</button>
+          <button class="btn primary" disabled>Import anyway</button>
         </div>
       </div>
     </div>

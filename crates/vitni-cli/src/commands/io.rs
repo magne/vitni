@@ -4,39 +4,101 @@
 
 use std::path::{Path, PathBuf};
 
-use vitni_app::{AiConfig, AppError, ConfigStore, FileConfigStore, Session, Workspace};
+use vitni_app::{AiConfig, AppError, ConfigStore, DatasetChoice, FileConfigStore, Session, Workspace};
 use vitni_plugin_host::{
-    ExportTarget, Grants, Invocation, NetPolicy, PluginHost, ProgressControl, ProgressUpdate, ResourceBudget,
-    TrustRoots, resolve_trust_roots,
+    ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginHost, PluginInfo, ProgressControl,
+    ProgressUpdate, ResourceBudget, TrustRoots, resolve_trust_roots,
 };
 
 use crate::i18n::Localizer;
 
-/// Runs a bulk import plugin against the open workspace, streaming `file` in and reporting progress
-/// to stderr (ADR 0013). The plugin is attributed to a Software operator.
-pub async fn import(workspace: Workspace, localizer: &Localizer, plugin: &str, file: PathBuf) -> Result<(), AppError> {
-    let host = PluginHost::new().map_err(|error| AppError::Plugin(error.to_string()))?;
-    let bundle = resolve_bundle_dir(workspace.dir(), plugin)?;
-    let grants = effective_grants(&host, &bundle, workspace.dir())?;
-    let component = host
-        .load_bundle(&bundle)
-        .map_err(|error| AppError::Plugin(error.to_string()))?;
-    let run = Invocation {
-        workspace,
-        session: Session::software(plugin, env!("CARGO_PKG_VERSION")),
-        grants,
-        budget: ResourceBudget::default(),
-        net_policy: NetPolicy::deny_all(),
-        ai_config: AiConfig::default(),
-        provenance_confidence: None,
-        import: None,
-    };
-    let (count, _workspace) = host
-        .run_bulk_import(&component, run, file, render_progress)
-        .await
-        .map_err(|error| AppError::Plugin(error.to_string()))?;
-    println!("{}", localizer.import_success(count, plugin));
-    Ok(())
+/// A bulk import resolved up to the point of running: the plugin, its grants, and the import run it
+/// will write (ADR 0037 §3, §5). Resolving it first lets a dataset choice be refused before anything
+/// is asked or written.
+pub struct ImportPlan {
+    host: PluginHost,
+    bundle: PathBuf,
+    grants: Grants,
+    run: ImportRunSpec,
+}
+
+impl ImportPlan {
+    /// Resolves the plugin and the dataset `choice` for importing `file` into `workspace`, with
+    /// `operator` as the run's operator.
+    ///
+    /// # Errors
+    /// [`AppError::Plugin`] if the plugin cannot be found, verified, or declares no dataset;
+    /// [`AppError::Dataset`] if the choice cannot be resolved.
+    pub async fn prepare(
+        workspace: &Workspace,
+        plugin: &str,
+        file: &Path,
+        choice: DatasetChoice,
+        operator: Session,
+    ) -> Result<Self, AppError> {
+        let host = PluginHost::new().map_err(|error| AppError::Plugin(error.to_string()))?;
+        let bundle = resolve_bundle_dir(workspace.dir(), plugin)?;
+        let info = discover(&host, &bundle)?;
+        let grants = effective_grants(&info, workspace.dir());
+        let Some(spec) = info.dataset.clone() else {
+            return Err(AppError::Plugin(format!(
+                "plugin {plugin:?} declares no dataset, so it cannot import"
+            )));
+        };
+        let source_label = file.file_name().map_or_else(
+            || file.display().to_string(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        let dataset = vitni_app::choose_dataset(workspace, &operator, &spec, choice, &source_label).await?;
+        let run = ImportRunSpec {
+            operator,
+            dataset: dataset.id,
+            dataset_label: dataset.label,
+            source_label,
+            plugin: info.id,
+            plugin_version: info.version,
+        };
+        Ok(Self {
+            host,
+            bundle,
+            grants,
+            run,
+        })
+    }
+
+    /// Runs the import, streaming `file` in and reporting progress to stderr (ADR 0013). The plugin's
+    /// claims are attributed to a Software operator; the run to the invoking human.
+    ///
+    /// # Errors
+    /// [`AppError::Plugin`] if the component cannot be loaded or the import fails.
+    pub async fn run(self, workspace: Workspace, localizer: &Localizer, file: PathBuf) -> Result<(), AppError> {
+        let Self {
+            host,
+            bundle,
+            grants,
+            run,
+        } = self;
+        let component = host
+            .load_bundle(&bundle)
+            .map_err(|error| AppError::Plugin(error.to_string()))?;
+        let plugin = run.plugin.clone();
+        let invocation = Invocation {
+            workspace,
+            session: Session::software(&run.plugin, &run.plugin_version),
+            grants,
+            budget: ResourceBudget::default(),
+            net_policy: NetPolicy::deny_all(),
+            ai_config: AiConfig::default(),
+            provenance_confidence: None,
+            import: Some(run),
+        };
+        let (count, _workspace) = host
+            .run_bulk_import(&component, invocation, file, render_progress)
+            .await
+            .map_err(|error| AppError::Plugin(error.to_string()))?;
+        println!("{}", localizer.import_success(count, &plugin));
+        Ok(())
+    }
 }
 
 /// Runs a bulk export plugin against the open workspace, writing to `output` (or the workspace
@@ -50,7 +112,8 @@ pub async fn export(
 ) -> Result<(), AppError> {
     let host = PluginHost::new().map_err(|error| AppError::Plugin(error.to_string()))?;
     let bundle = resolve_bundle_dir(workspace.dir(), plugin)?;
-    let grants = effective_grants(&host, &bundle, workspace.dir())?;
+    let info = discover(&host, &bundle)?;
+    let grants = effective_grants(&info, workspace.dir());
     let component = host
         .load_bundle(&bundle)
         .map_err(|error| AppError::Plugin(error.to_string()))?;
@@ -64,7 +127,7 @@ pub async fn export(
     };
     let run = Invocation {
         workspace,
-        session: Session::software(plugin, env!("CARGO_PKG_VERSION")),
+        session: Session::software(plugin, &info.version),
         grants,
         budget: ResourceBudget::default(),
         net_policy: NetPolicy::deny_all(),
@@ -113,18 +176,20 @@ pub(crate) fn trust_roots() -> Result<TrustRoots, AppError> {
     resolve_trust_roots(&pins).map_err(|error| AppError::Plugin(error.to_string()))
 }
 
-/// The effective capability grant for the bundle at `bundle_dir` (ADR 0014 §5): discovers and
-/// classifies it against the trust roots, then intersects its declared capabilities with the open
-/// workspace's persisted approval. With no recorded decision a sanctioned/user-trusted plugin grants
-/// all its declared capabilities (unchanged for the first-party fleet) and an untrusted plugin grants
-/// nothing until explicitly approved.
-fn effective_grants(host: &PluginHost, bundle_dir: &Path, workspace_dir: &Path) -> Result<Grants, AppError> {
+/// Discovers and classifies the bundle at `bundle_dir` against the trust roots (ADR 0014 §3).
+fn discover(host: &PluginHost, bundle_dir: &Path) -> Result<PluginInfo, AppError> {
     let roots = trust_roots()?;
-    let info = host
-        .discover_bundle(bundle_dir, &roots)
-        .map_err(|error| AppError::Plugin(error.to_string()))?;
+    host.discover_bundle(bundle_dir, &roots)
+        .map_err(|error| AppError::Plugin(error.to_string()))
+}
+
+/// The effective capability grant for a discovered plugin (ADR 0014 §5): its declared capabilities
+/// intersected with the open workspace's persisted approval. With no recorded decision a
+/// sanctioned/user-trusted plugin grants all its declared capabilities (unchanged for the first-party
+/// fleet) and an untrusted plugin grants nothing until explicitly approved.
+fn effective_grants(info: &PluginInfo, workspace_dir: &Path) -> Grants {
     let prefs = vitni_app::read_plugin_preferences(workspace_dir);
-    Ok(info.effective_grants(prefs.approved_grants(&info.id)))
+    info.effective_grants(prefs.approved_grants(&info.id))
 }
 
 /// Renders a plugin progress update to stderr and tells the plugin to proceed. The `step` is the

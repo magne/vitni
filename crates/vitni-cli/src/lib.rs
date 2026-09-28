@@ -28,7 +28,9 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use vitni_app::config;
-use vitni_app::{AppError, Config, ConfigStore, FileConfigStore, Session, Workspace, read_resolved_locale};
+use vitni_app::{
+    AppError, Config, ConfigStore, DatasetChoice, FileConfigStore, Session, Workspace, read_resolved_locale,
+};
 
 use crate::commands::backup::BackupCmd;
 use crate::commands::citation::CitationCmd;
@@ -121,6 +123,13 @@ macro_rules! cli_command_enum {
                 /// Skip the confirmation prompt when importing into a non-empty workspace.
                 #[arg(long)]
                 yes: bool,
+                /// Import into the existing dataset with this label or id: the file is a later
+                /// export of a tree imported before (ADR 0037 §3). See `import-run datasets`.
+                #[arg(long, value_name = "LABEL_OR_ID", conflicts_with = "new_dataset")]
+                dataset: Option<String>,
+                /// Import as a new dataset: the file is a different tree from any imported before.
+                #[arg(long)]
+                new_dataset: bool,
             },
             /// Export the workspace through a bulk export plugin (ADR 0013).
             Export {
@@ -243,10 +252,25 @@ async fn run_command(cli: Cli) -> ExitCode {
         new,
         into,
         yes,
+        dataset,
+        new_dataset,
     } = cli.command
     {
+        let choice = match (dataset, new_dataset) {
+            (Some(dataset), _) => DatasetChoice::Existing(dataset),
+            (None, true) => DatasetChoice::New,
+            (None, false) => DatasetChoice::Unspecified,
+        };
+        let request = ImportRequest {
+            plugin,
+            file,
+            new,
+            into,
+            yes,
+            choice,
+        };
         // The import future is large (Wasmtime store + workspace); box it.
-        return Box::pin(import(plugin, file, new, into, yes)).await;
+        return Box::pin(import(request)).await;
     }
 
     // Restore creates its own target workspace, so like import it runs before the generic open.
@@ -390,12 +414,32 @@ struct ImportTarget {
     localizer: Localizer,
     name: String,
     created: bool,
+    /// The invoking human, the operator of the import run (ADR 0037 §5).
+    operator: Session,
+}
+
+/// What `vitni import` was asked to do.
+struct ImportRequest {
+    plugin: String,
+    file: PathBuf,
+    new: Option<Vec<String>>,
+    into: Option<String>,
+    yes: bool,
+    choice: DatasetChoice,
 }
 
 /// Imports through a bulk plugin (ADR 0013) into a fresh `--new` workspace or an existing `--into`
 /// one. A non-empty existing workspace is confirmed first unless `--yes`. Clap guarantees exactly one
 /// of `new`/`into` is set (the `import_target` group).
-async fn import(plugin: String, file: PathBuf, new: Option<Vec<String>>, into: Option<String>, yes: bool) -> ExitCode {
+async fn import(request: ImportRequest) -> ExitCode {
+    let ImportRequest {
+        plugin,
+        file,
+        new,
+        into,
+        yes,
+        choice,
+    } = request;
     let baseline = Localizer::baseline();
     let target = match prepare_import_target(new, into).await {
         Ok(target) => target,
@@ -406,7 +450,15 @@ async fn import(plugin: String, file: PathBuf, new: Option<Vec<String>>, into: O
         localizer,
         name,
         created,
+        operator,
     } = target;
+
+    // The dataset is resolved before any prompt, so an import that must name its dataset is refused
+    // before the operator is asked to confirm it.
+    let plan = match commands::io::ImportPlan::prepare(&workspace, &plugin, &file, choice, operator).await {
+        Ok(plan) => plan,
+        Err(error) => return report(&localizer, Err(error)),
+    };
 
     // Importing into a workspace that already holds data is confirmed first (unless --yes); a fresh
     // --new workspace is always empty, so it never prompts.
@@ -422,10 +474,7 @@ async fn import(plugin: String, file: PathBuf, new: Option<Vec<String>>, into: O
     }
 
     // The plugin-host future is large (Wasmtime store + workspace); box it.
-    report(
-        &localizer,
-        Box::pin(commands::io::import(workspace, &localizer, &plugin, file)).await,
-    )
+    report(&localizer, Box::pin(plan.run(workspace, &localizer, file)).await)
 }
 
 /// Resolves the import target: `--new NAME PATH` creates and registers a fresh workspace; `--into
@@ -453,6 +502,7 @@ async fn prepare_import_target(new: Option<Vec<String>>, into: Option<String>) -
             localizer,
             name,
             created: true,
+            operator: Session::new(config.operator_agent()),
         });
     }
 
@@ -468,6 +518,7 @@ async fn prepare_import_target(new: Option<Vec<String>>, into: Option<String>) -
         localizer,
         name,
         created: false,
+        operator: Session::new(config.operator_agent()),
     })
 }
 

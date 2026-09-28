@@ -8,11 +8,12 @@ use std::path::PathBuf;
 
 use dioxus::prelude::*;
 use vitni_ui::BulkImportProgress;
-use vitni_ui_dioxus::components::{Button, ButtonVariant, Modal, SelectChoice};
+use vitni_ui_dioxus::components::SelectChoice;
 use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::screens::{
-    BulkRunningLabels, BulkRunningStage, BulkSourceLabels, BulkSourceStage, BulkSummaryLabels, BulkSummaryStage,
-    ImportModeLabels, ImportModeSwitch, NoticeStage, RegisterFields, WizardNoticeTone, register_fields_form,
+    BulkConfirmDialog, BulkConfirmLabels, BulkRunningLabels, BulkRunningStage, BulkSourceLabels, BulkSourceStage,
+    BulkSummaryLabels, BulkSummaryStage, ImportModeLabels, ImportModeSwitch, NoticeStage, RegisterFields,
+    WizardNoticeTone, register_fields_form,
 };
 
 fn render(view: fn() -> Element) -> String {
@@ -365,17 +366,14 @@ fn a_cancelled_bulk_import_is_a_status_not_an_alert() {
 
 fn confirm_modal_view() -> Element {
     let chrome = Chrome::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let dataset = use_signal(String::new);
     rsx! {
-        Modal {
-            title: chrome.bulk_import_confirm_title("family"),
-            open: true,
-            close_label: chrome.dismiss(),
-            onclose: |()| {},
-            footer: rsx! {
-                Button { label: chrome.bulk_import_confirm_cancel(), variant: ButtonVariant::Ghost, onclick: |_| {} }
-                Button { label: chrome.bulk_import_confirm_run(), variant: ButtonVariant::Primary, onclick: |_| {} }
-            },
-            p { "{chrome.bulk_import_confirm_body(\"family\", 3)}" }
+        BulkConfirmDialog {
+            labels: confirm_labels(&chrome),
+            datasets: Vec::new(),
+            dataset,
+            oncancel: |()| {},
+            onrun: |_: String| {},
         }
     }
 }
@@ -432,4 +430,109 @@ fn the_bulk_wizard_localizes_into_norwegian() {
     let html = render(norwegian_source_view);
     assert!(html.contains("Importformat"), "plugin label in Norwegian: {html}");
     assert!(html.contains("Importer"), "run action in Norwegian: {html}");
+}
+
+// ----- Which dataset the file belongs to (ADR 0037 §3) -----
+
+fn confirm_labels(chrome: &Chrome) -> BulkConfirmLabels {
+    BulkConfirmLabels {
+        title: chrome.bulk_import_confirm_title("family"),
+        body: chrome.bulk_import_confirm_body("family", 3),
+        dataset: chrome.bulk_import_dataset_label(),
+        dataset_placeholder: chrome.bulk_import_dataset_placeholder(),
+        cancel: chrome.bulk_import_confirm_cancel(),
+        run: chrome.bulk_import_confirm_run(),
+        dismiss: chrome.dismiss(),
+    }
+}
+
+fn dataset_choices(chrome: &Chrome) -> Vec<SelectChoice> {
+    vec![
+        SelectChoice {
+            value: "gedcom:0199".to_owned(),
+            label: chrome.bulk_import_dataset_existing("tree.ged"),
+        },
+        SelectChoice {
+            value: "new".to_owned(),
+            label: chrome.bulk_import_dataset_new(),
+        },
+    ]
+}
+
+fn dataset_unchosen_view() -> Element {
+    let chrome = Chrome::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let dataset = use_signal(String::new);
+    rsx! {
+        BulkConfirmDialog {
+            labels: confirm_labels(&chrome),
+            datasets: dataset_choices(&chrome),
+            dataset,
+            oncancel: |()| {},
+            onrun: |_: String| {},
+        }
+    }
+}
+
+fn dataset_chosen_view() -> Element {
+    let chrome = Chrome::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let dataset = use_signal(|| "gedcom:0199".to_owned());
+    rsx! {
+        BulkConfirmDialog {
+            labels: confirm_labels(&chrome),
+            datasets: dataset_choices(&chrome),
+            dataset,
+            oncancel: |()| {},
+            onrun: |_: String| {},
+        }
+    }
+}
+
+fn no_datasets_view() -> Element {
+    let chrome = Chrome::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let dataset = use_signal(String::new);
+    rsx! {
+        BulkConfirmDialog {
+            labels: confirm_labels(&chrome),
+            datasets: Vec::new(),
+            dataset,
+            oncancel: |()| {},
+            onrun: |_: String| {},
+        }
+    }
+}
+
+/// The confirm action's `<button …>` opening tag, or the empty string when there is none.
+fn run_button(html: &str) -> &str {
+    let Some(label) = html.find("Import anyway") else {
+        return "";
+    };
+    let start = html[..label].rfind("<button").unwrap_or(label);
+    &html[start..label]
+}
+
+#[test]
+fn a_target_with_earlier_imports_asks_which_tree_the_file_belongs_to() {
+    let html = render(dataset_unchosen_view);
+    assert!(html.contains("This file is"), "the dataset question: {html}");
+    assert!(html.contains("A later export of tree.ged"), "each earlier tree: {html}");
+    assert!(html.contains("A different tree"), "a new tree: {html}");
+    assert!(
+        run_button(&html).contains("disabled"),
+        "nothing is guessed: the import waits for a choice: {html}"
+    );
+}
+
+#[test]
+fn a_chosen_tree_enables_the_import() {
+    let html = render(dataset_chosen_view);
+    assert!(run_button(&html).starts_with("<button"), "{html}");
+    assert!(!run_button(&html).contains("disabled"), "{html}");
+}
+
+#[test]
+fn a_target_without_earlier_imports_asks_nothing_about_trees() {
+    let html = render(no_datasets_view);
+    assert!(!html.contains("This file is"), "{html}");
+    assert!(run_button(&html).starts_with("<button"), "{html}");
+    assert!(!run_button(&html).contains("disabled"), "{html}");
 }

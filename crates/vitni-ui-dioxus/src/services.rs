@@ -18,15 +18,17 @@ use i18n_embed::DesktopLanguageRequester;
 use tokio::sync::{mpsc, oneshot};
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
-    AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults,
-    MapConfig, MapProvider, MapSource, PluginTrust, PluginTrustConfig, PreferenceLayers, ResolvedLocale, RestoreReport,
-    RestoreRequest, Session, ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts,
-    WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers, read_resolved_locale,
-    read_resolved_surety_labels, read_surety_label_overrides, workspace_counts,
+    AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetScope,
+    FileConfigStore, IdFormats, LocaleDefaults, MapConfig, MapProvider, MapSource, PluginTrust, PluginTrustConfig,
+    PreferenceLayers, ResolvedLocale, RestoreReport, RestoreRequest, Session, ShortcutConfig, SuretyLabelOverrides,
+    TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
+    read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides,
+    workspace_counts,
 };
 use vitni_plugin_host::{
-    Capability, ExportTarget, Grants, HostPattern, Invocation, NetPolicy, PluginHost, PluginRole, PresentError,
-    Presenter, ProgressControl, ProgressUpdate, ResourceBudget, TrustRoots, TrustTier, resolve_trust_roots,
+    Capability, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PluginHost, PluginInfo,
+    PluginRole, PresentError, Presenter, ProgressControl, ProgressUpdate, ResourceBudget, TrustRoots, TrustTier,
+    resolve_trust_roots,
 };
 use vitni_ui::{
     Category, CitationChangeSetRequest, DataQualityVm, DnaMatchChangeSetRequest, DnaTestChangeSetRequest,
@@ -164,14 +166,61 @@ impl Services {
     /// plugin grants nothing until explicitly approved. Callers narrow this ceiling to each
     /// invocation's needs with [`invocation_grants`].
     fn effective_grants(&self, bundle_dir: &Path) -> Result<Grants, String> {
+        let info = self.plugin_info(bundle_dir)?;
+        Ok(self.grants_for(&info))
+    }
+
+    /// Discovers and classifies the bundle at `bundle_dir` against the trust roots (ADR 0014 §3).
+    fn plugin_info(&self, bundle_dir: &Path) -> Result<PluginInfo, String> {
         let chrome = self.chrome();
         let roots = self.trust_roots()?;
-        let info = self
-            .host
+        self.host
             .discover_bundle(bundle_dir, &roots)
-            .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+            .map_err(|error| chrome.plugin_error(&error.to_string()))
+    }
+
+    /// A discovered plugin's effective grant (see [`Self::effective_grants`]).
+    fn grants_for(&self, info: &PluginInfo) -> Grants {
         let prefs = vitni_app::read_plugin_preferences(&self.dir);
-        Ok(info.effective_grants(prefs.approved_grants(&info.id)))
+        info.effective_grants(prefs.approved_grants(&info.id))
+    }
+
+    /// Resolves plugin `id` to its bundle and discovered metadata.
+    fn resolve_plugin(&self, id: &str) -> Result<(PathBuf, PluginInfo), String> {
+        let bundle = self.plugin_bundle(id).ok_or_else(|| {
+            self.chrome()
+                .plugin_error(&format!("no plugin bundle found for {id:?}"))
+        })?;
+        let info = self.plugin_info(&bundle)?;
+        Ok((bundle, info))
+    }
+
+    /// The import run `info`'s import into `workspace` writes (ADR 0037 §3, §5), its dataset resolved
+    /// from `choice`, with the configured human operator as the run's operator.
+    async fn import_run_spec(
+        &self,
+        workspace: &Workspace,
+        info: &PluginInfo,
+        choice: DatasetChoice,
+        source_label: String,
+    ) -> Result<ImportRunSpec, String> {
+        let Some(spec) = &info.dataset else {
+            return Err(self
+                .chrome()
+                .plugin_error(&format!("plugin {:?} declares no dataset", info.id)));
+        };
+        let operator = Session::new(self.config.operator_agent());
+        let dataset = vitni_app::choose_dataset(workspace, &operator, spec, choice, &source_label)
+            .await
+            .map_err(|error| self.localizer().error(&error))?;
+        Ok(ImportRunSpec {
+            operator,
+            dataset: dataset.id,
+            dataset_label: dataset.label,
+            source_label,
+            plugin: info.id.clone(),
+            plugin_version: info.version.clone(),
+        })
     }
 }
 
@@ -863,24 +912,30 @@ async fn run_assisted_session(
 ) -> Result<String, String> {
     let chrome = services.chrome();
     let loc = services.localizer();
-    let bundle = services
-        .plugin_bundle(&plugin_id)
-        .ok_or_else(|| chrome.plugin_error(&format!("no plugin bundle found for {plugin_id:?}")))?;
-    let grants = services.effective_grants(&bundle)?;
+    let (bundle, info) = services.resolve_plugin(&plugin_id)?;
+    let grants = services.grants_for(&info);
     let component = services
         .host
         .load_bundle(&bundle)
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let run = services
+        .import_run_spec(
+            &workspace,
+            &info,
+            DatasetChoice::Unspecified,
+            assisted_source_label(&request),
+        )
+        .await?;
     let invocation = Invocation {
-        session: Session::software(plugin_id.clone(), env!("CARGO_PKG_VERSION")),
+        session: Session::software(plugin_id.clone(), info.version.clone()),
         net_policy: assisted_net_policy(&plugin_id),
         workspace,
         grants,
         budget: ResourceBudget::assisted(),
         ai_config: ai_config(&services),
         provenance_confidence: Some(Confidence::Low),
-        import: None,
+        import: Some(run),
     };
     let (summary, _workspace) = services
         .host
@@ -890,6 +945,20 @@ async fn run_assisted_session(
         .await
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     Ok(summary)
+}
+
+/// What an assisted session imports from, for its run's source label: the request's URL, or the
+/// request itself when it names none.
+fn assisted_source_label(request: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(request)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("url")
+                .and_then(serde_json::Value::as_str)
+                .map(ToOwned::to_owned)
+        })
+        .unwrap_or_else(|| request.to_owned())
 }
 
 /// The AI provider inventory for the assisted flow: the client-scope `[ai]` config for the open
@@ -1111,13 +1180,20 @@ pub fn start_bulk_import(
     plugin_id: String,
     source: PathBuf,
     target: ImportTargetChoice,
+    dataset: DatasetChoice,
 ) -> (BulkImportHandle, impl Future<Output = ()>) {
     let (progress_tx, progress_rx) = mpsc::channel::<ProgressUpdate>(BULK_PROGRESS_BUFFER);
     let (outcome_tx, outcome_rx) = oneshot::channel();
     let cancel = Arc::new(AtomicBool::new(false));
     let sink = bulk_progress_sink(progress_tx, Arc::clone(&cancel));
     let future = async move {
-        let outcome = run_bulk_import_session(services, plugin_id, source, target, sink).await;
+        let request = BulkImportRequest {
+            plugin_id,
+            source,
+            target,
+            dataset,
+        };
+        let outcome = run_bulk_import_session(services, request, sink).await;
         // A dropped receiver just means the wizard closed first; nothing else needs the outcome.
         drop(outcome_tx.send(outcome));
     };
@@ -1145,20 +1221,62 @@ async fn open_workspace_by_name(services: &Services, name: &str) -> Result<Works
         .map_err(|error| loc.error(&error))
 }
 
-/// Counts the persons already in a registered workspace, opening it fresh by name. The bulk-import
-/// target stage runs this before an import into an *existing* workspace and confirms in a `Modal` when
-/// it is non-empty — the GUI shape of the CLI's own confirm (`main.rs:350-359`). A freshly registered
+/// One dataset an existing target already holds (ADR 0037 §3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DatasetOption {
+    /// The dataset id.
+    pub id: String,
+    /// Its label (the file its first run imported).
+    pub label: String,
+}
+
+/// What an existing bulk-import target already holds: its persons, and the datasets of the chosen
+/// plugin's scheme — the trees an incoming file might be a later export of.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportTargetProbe {
+    /// How many persons the target holds.
+    pub persons: usize,
+    /// The target's datasets of the plugin's scheme, in the order they were first imported.
+    pub datasets: Vec<DatasetOption>,
+}
+
+/// Probes a registered workspace, opening it fresh by name, before an import of `plugin_id` into it.
+/// The bulk-import target stage confirms in a `Modal` when the target is non-empty — the GUI shape of
+/// the CLI's own confirm — and, when it holds datasets of the plugin's scheme, asks which tree the
+/// file belongs to (the CLI's `--dataset`/`--new-dataset`). A freshly registered
 /// (`ImportTargetChoice::New`) workspace is always empty, so it is never probed.
 ///
 /// # Errors
-/// A localized error if the workspace cannot be resolved or opened, or its persons cannot be listed.
-pub async fn count_workspace_persons(services: &Services, workspace: &str) -> Result<usize, String> {
+/// A localized error if the plugin or workspace cannot be resolved or opened, or it cannot be read.
+pub async fn probe_import_target(
+    services: &Services,
+    workspace: &str,
+    plugin_id: &str,
+) -> Result<ImportTargetProbe, String> {
     let loc = services.localizer();
+    let (_, info) = services.resolve_plugin(plugin_id)?;
     let opened = open_workspace_by_name(services, workspace).await?;
     let persons = vitni_app::list_persons(&opened)
         .await
-        .map_err(|error| loc.error(&error))?;
-    Ok(persons.len())
+        .map_err(|error| loc.error(&error))?
+        .len();
+    let mut datasets = Vec::new();
+    if let Some(spec) = &info.dataset
+        && spec.scope == DatasetScope::Lineage
+    {
+        let all = vitni_app::list_datasets(&opened)
+            .await
+            .map_err(|error| loc.error(&error))?;
+        for dataset in all {
+            if dataset.id.scheme() == spec.scheme {
+                datasets.push(DatasetOption {
+                    id: dataset.id.to_string(),
+                    label: dataset.label,
+                });
+            }
+        }
+    }
+    Ok(ImportTargetProbe { persons, datasets })
 }
 
 /// Opens the bulk import's target workspace: an already-registered one by name, or a freshly
@@ -1196,32 +1314,49 @@ async fn open_import_target(services: &Services, target: &ImportTargetChoice) ->
 /// currently open workspace's plugin layers, same as the bulk-export and assisted-import wizards),
 /// take the operator's effective grant, open the *target* workspace (which may differ from the one
 /// currently open), and run the plugin under a Software session.
-async fn run_bulk_import_session(
-    services: Services,
+/// What the bulk-import wizard asked to run.
+struct BulkImportRequest {
     plugin_id: String,
     source: PathBuf,
     target: ImportTargetChoice,
+    dataset: DatasetChoice,
+}
+
+async fn run_bulk_import_session(
+    services: Services,
+    request: BulkImportRequest,
     progress: impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
 ) -> Result<u32, String> {
+    let BulkImportRequest {
+        plugin_id,
+        source,
+        target,
+        dataset,
+    } = request;
     let chrome = services.chrome();
-    let bundle = services
-        .plugin_bundle(&plugin_id)
-        .ok_or_else(|| chrome.plugin_error(&format!("no plugin bundle found for {plugin_id:?}")))?;
-    let grants = services.effective_grants(&bundle)?;
+    let (bundle, info) = services.resolve_plugin(&plugin_id)?;
+    let grants = services.grants_for(&info);
     let component = services
         .host
         .load_bundle(&bundle)
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     let workspace = open_import_target(&services, &target).await?;
+    let source_label = source.file_name().map_or_else(
+        || source.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let run = services
+        .import_run_spec(&workspace, &info, dataset, source_label)
+        .await?;
     let invocation = Invocation {
-        session: Session::software(plugin_id, env!("CARGO_PKG_VERSION")),
+        session: Session::software(plugin_id, info.version.clone()),
         net_policy: NetPolicy::deny_all(),
         workspace,
         grants,
         budget: ResourceBudget::default(),
         ai_config: AiConfig::default(),
         provenance_confidence: None,
-        import: None,
+        import: Some(run),
     };
     let (records, _workspace) = services
         .host
