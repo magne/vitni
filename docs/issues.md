@@ -240,6 +240,18 @@ which is what makes them worth fixing in the shared code rather than per screen.
   Tag's Name came out wrong 3 runs in 4 (`TR-7Olo` for "TRee-7 Oslo"). At 30 ms apart none were lost.
   The suspected cause, unconfirmed, is the controlled input's round trip: a key landing before the
   re-render writes the old `value` back is overwritten. Needs a check on a real desktop. — #382
+- **Attaching a note or media on seven record kinds discards the attach form's provenance.** The attach
+  side panel (`attach_link_form`) shows the provenance fields, and every dispatch arm receives the
+  filled `ProvenanceDraft`. Person, Family and Citation pass it on (`prov.meta()`). Ten arms in
+  `vitni-ui/src/intent.rs` drop it: media and note on Event, Place and Source, and note on
+  Repository, Media, DnaTest and DnaMatch. They call the `import_attach_*` wrappers, which take no
+  metadata and write `MutationMeta::default()`, so the reason, surety and citations a user enters never
+  reach History. `vitni-ui` has to use these wrappers because the picker returns `human_id`s and it
+  cannot name `NoteId`/`MediaId` (ADR 0008). `dispatch_provenance.rs` says the draft reaches "every
+  mutation" but tests only Person. *Shape:* each wrapper takes a `MutationMeta`, as
+  `attach_person_note` does. The ten arms pass `prov.meta()`, and the plugin host's two event verbs
+  pass `mutation_meta()`. *Exit:* a dispatch test per kind attaches a note (and media, where the kind
+  has it) with a filled draft and finds its rationale and confidence in that record's change log. — #424
 
 ### Lists, search & scale
 

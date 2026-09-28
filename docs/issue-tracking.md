@@ -192,7 +192,7 @@ arithmetic.
 The remaining pre-1.0 gates, itemized from `issues.md` as they stand. Each is small enough to groom,
 which is the point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (13 open)
+### `0.9 — UI stabilization` (14 open)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended, and the 2026-08-12
 walkthrough is the proof.** Every issue in the previous round closed, leaving the milestone empty — and
@@ -203,6 +203,7 @@ stylesheet or the webview rather than what the view logic decided. Treat the cou
 | Item | Why it gates a release |
 | --- | --- |
 | [A save run whose target leaves the strip hangs](https://github.com/magne/vitni/issues/302) | Save all can wedge the quit/close path with no way out and no message |
+| [Attaching a note or media on seven record kinds discards the attach form's provenance](https://github.com/magne/vitni/issues/424) | The reason, surety and citations a user enters are silently lost from History, so the audit trail records less than the user asserted |
 | [The shared record tabs have no common layout contract](https://github.com/magne/vitni/issues/303) | Explanations below buttons, gone entirely when empty, and an add bar with no CSS rule at all — on all 13 screens |
 | [Attached records have four different presentations](https://github.com/magne/vitni/issues/304) | An attached note can be neither read nor opened from the record that references it |
 | [A ghost row action disappears on the hovered row](https://github.com/magne/vitni/issues/305) | Detach/Remove lose every visual affordance at the moment they are being aimed at |
@@ -225,6 +226,9 @@ The other simplification findings from the same 2026-08-13 code read carry no mi
 cleanups whose absence changes nothing a user sees. The **design questions** that came out of the
 walkthrough are filed *without* a milestone, because each needs a call before it needs code — the
 Attach-versus-Add model (#314) among them.
+
+#424 came later, from code reading while closing #421 rather than from the walkthrough. It sits second
+because it silently drops data the user entered, which only the hang outranks.
 
 **The previous round closed in full** — #200, #201, #203–#209, #231–#233, #239, #240, #244, #247,
 #252–#261, #266, #279, #281–#285 — and their bullets left `issues.md` per §6. What those closures
