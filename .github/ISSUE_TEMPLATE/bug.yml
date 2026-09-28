@@ -30,11 +30,13 @@ body:
         - frontend/gui-cli-parity
         - import/bulk
         - import/assisted
+        - import/matching
         - import/round-trip
         - plugins/ui-vocabulary
         - plugins/trust
         - platform/perf
         - platform/packaging
+        - platform/backup
         - platform/deps
         - docs
         - i18n

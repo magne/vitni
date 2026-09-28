@@ -550,6 +550,42 @@ client carries no local config file. The embedded build keeps the file backend u
 > These three pieces are deliberately additive: the embedded build keeps working unchanged, the
 > server is a new frontend over `vitni-app`, and the web client reuses `vitni-ui`.
 
+## Phase 14 — Record matching & identity
+
+**Sequenced before 1.0**, as the GitHub milestone `0.10 — Record matching`
+([`issue-tracking.md`](issue-tracking.md) §4). It comes ahead of Phases 12–13 despite its number,
+because import corrupts data today:
+- a re-import duplicates places and sources
+- a second, unrelated GEDCOM file resolves its people onto the first file's people
+- two Digitalarkivet records naming one individual import as two persons
+
+The goal: importing the same record twice is a no-op; two records naming one individual become one,
+never by guessing; and when the system is less than certain, the user decides, seeing both records side
+by side with the reasons.
+
+The design is five ADRs, written together because each builds on the one before:
+
+- [ADR 0037](adr/0037-record-origin-and-import-runs.md) — **record origin**: which dataset, record and
+  item every imported assertion came from, plus a persisted `ImportRun` aggregate. It is internal: kept
+  in backups, never exported.
+- [ADR 0038](adr/0038-record-matching-explainable-scoring.md) — **matching**. A pure, explainable
+  Fellegi–Sunter engine with graded comparators: names tolerate spelling variants through data-driven
+  *name-culture packs*, and dates tolerate census ages that are several years off. One engine serves
+  every consumer.
+- [ADR 0039](adr/0039-identity-decisions-clusters-merge-distinct.md) — **identity decisions**. Persona
+  clusters, merge and "not the same" for every matchable kind, and a computed review queue.
+- [ADR 0040](adr/0040-staged-import-plan-review-commit.md) — **staged import**. Importers submit record
+  graphs, the host plans every entity, the user reviews candidates, and commit is resumable.
+- [ADR 0041](adr/0041-workspace-backup-and-restore.md) — **backup and restore** with a versioned format:
+  two previous versions are readable before 1.0, the format is frozen as v1 at 1.0, and it stays
+  readable forever after.
+
+The five ADRs were accepted on 2026-09-28, together and ahead of their implementation. That departs
+from the sequencing rule under *New ADRs required*: they depend on each other too closely to accept
+one at a time. They are immutable like every accepted ADR, so anything the implementation proves wrong
+is fixed by a superseding ADR, not by an edit. The work items are in
+[`issues.md`](issues.md#record-matching--identity), in dependency order.
+
 ## Risk register
 
 Each frontier unknown maps to the spike that kills it.
@@ -596,6 +632,11 @@ they are confirmed when the ADR is written.
 | [ADR 0034](adr/0034-licence-split-agpl-application-permissive-interchange.md) — **accepted** | Per-crate licence split: `MIT OR Apache-2.0` interchange crates, `AGPL-3.0-or-later` application with the §7 permission for `vitni:host-api` plugin components, DCO + a licence-grant CLA | 0.9.5 — public release | ADR 0007, 0011, 0014 |
 | [ADR 0035](adr/0035-launcher-binary-over-cli-and-gui.md) — **accepted** | A `vitni` launcher binary over the CLI and GUI libraries: GUI with no arguments, CLI with any, in-process; `vitni-cli` renamed, `vitni-ui-dioxus` library-only | 0.9.5 — public release | ADR 0008 |
 | [ADR 0036](adr/0036-api-keys-from-env-files.md) — **accepted** | API keys named by `api-key-env`/`api_key_env` resolve from the environment, then `<workspace>/.env`, then `~/.config/vitni/.env`, looked up at use time and never loaded into the process environment | Packaging (#296) | ADR 0017, 0033, 0005 |
+| [ADR 0037](adr/0037-record-origin-and-import-runs.md) — **accepted** | Record origin on `EventContext` (dataset, record, item, digest, run), dataset-scoped file-local keys, the `record_origins` index, tombstones, and the `ImportRun` aggregate | Phase 14 (`0.10`) | ADR 0004, 0013, 0029 |
+| [ADR 0038](adr/0038-record-matching-explainable-scoring.md) — **accepted** | Explainable Fellegi–Sunter matching: graded comparators, name-culture packs selected by place/time/language/lineage, the deterministic-only band, loose blocking, one engine for every consumer | Phase 14 (`0.10`) | data-model §11.3, §17 |
+| [ADR 0039](adr/0039-identity-decisions-clusters-merge-distinct.md) — **accepted** | Identity decisions: survivor-side merge and distinct for every matchable kind, the assessment snapshot, `identity_links` clusters with read-time composition, a computed review queue | Phase 14 (`0.10`) | data-model §9, §11.3; ADR 0019 |
+| [ADR 0040](adr/0040-staged-import-plan-review-commit.md) — **accepted** | Staged import: WIT record graphs, the host `ImportPlan`, per-kind decision semantics, host-owned match stages, resumable commit | Phase 14 (`0.10`) | ADR 0013, 0017 |
+| [ADR 0041](adr/0041-workspace-backup-and-restore.md) — **accepted** | Workspace backup and restore: the event-log archive, restore-time upgraders, the pre-1.0 two-version window, the v1 freeze at 1.0, golden fixtures | Phase 14 (`0.10`), `1.0` | ADR 0010, 0018 §3 |
 | ADR 0031 | Place model for real-world administrative geography: reopen the `Multi*` geometry variant, add a civil/ecclesiastical/judicial `relation` to `PlaceRef`, and carry positional accuracy separately from `Confidence` | Phase 9 residual closure | ADR 0024, 0026, 0027 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 

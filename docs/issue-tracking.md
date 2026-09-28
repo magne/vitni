@@ -1,9 +1,10 @@
 # Issue tracking on GitHub
 
-- **Status:** **Applied 2026-07-27.** 40 labels and the issue-template forms exist, alongside
-  `.github/labels.toml` and `cargo xtask issue-sync`. `0.8 — UI parity` shipped and is closed; the two
-  remaining gates are `0.9` and `1.0`.
-- **Date:** 2026-07-27
+- **Status:** **Applied 2026-07-27; updated 2026-09-27** with the `0.10` milestone and two area
+  labels. 42 labels and the issue-template forms exist, alongside
+  `.github/labels.toml` and `cargo xtask issue-sync`. `0.8 — UI parity` shipped and is closed; the three
+  remaining gates are `0.9`, `0.10` and `1.0`.
+- **Date:** 2026-07-27 (updated 2026-09-27)
 - **Audience:** anyone filing, triaging, or closing an issue
 - **Companion:** [`issues.md`](issues.md) is the backlog this describes; [`roadmap.md`](roadmap.md)
   owns phase detail.
@@ -64,14 +65,19 @@ deliberately among those extras.
 `records/person-family`, `records/places`, `records/notes`, `records/tags`, `records/media`,
 `records/dna`, `records/cross-aggregate`, `frontend/shell`, `frontend/records`, `frontend/lists`,
 `frontend/keyboard`, `frontend/pedigree`, `frontend/geography`, `frontend/gui-cli-parity`,
-`import/bulk`, `import/assisted`, `import/round-trip`, `plugins/ui-vocabulary`, `plugins/trust`,
-`platform/perf`, `platform/packaging`, `platform/deps`.
+`import/bulk`, `import/assisted`, `import/matching`, `import/round-trip`, `plugins/ui-vocabulary`,
+`plugins/trust`, `platform/perf`, `platform/packaging`, `platform/backup`, `platform/deps`.
 
 `frontend/records` and its H3 (*Record detail & shared tabs*) were added on 2026-08-12: the 13 detail
 screens share their tab bodies, so a defect in one lands on every aggregate at once, and folding those
 into `frontend/shell` would have put the app tabstrip and the in-record tabs — two unrelated surfaces —
 behind one label. `records/tags` gained its first H3 in the same pass, having been declared with no
 home since the taxonomy was applied.
+
+`import/matching` (*Record matching & identity*) and `platform/backup` (*Backup & restore*) were added
+on 2026-09-27 with the `0.10 — Record matching` milestone (§4). Matching spans the importers, the core
+and the UI, and has its own ADRs (0037–0040), so filing it under `import/bulk` would hide it inside
+reconciliation. Backup is the project's one compatibility surface (ADR 0041), not a packaging concern.
 
 The area reorganization is what makes this mapping 1:1 and mechanical — an item's label follows from
 where it already sits in the doc. Add `docs` and `i18n` as cross-cutting extras.
@@ -83,7 +89,7 @@ became H3s to satisfy markdownlint MD036, not because they name areas: a naive "
 would invent `area/model-interchange` and `area/architecture` for two headings with no work behind them,
 and a second near-duplicate keyboard label. The rule is **one label per H3 under the four backlog H2s**
 (*Records & data model*, *Frontend & interaction*, *Import, export & plugins*, *Platform & operations*)
-— which is exactly the 22 above. Separately, **`## Bugs`** is a pointer section, not a place bullets
+— which is exactly the 24 above. Separately, **`## Bugs`** is a pointer section, not a place bullets
 live: an open bug sits under the `###` area it affects and takes that `area/*` label plus `type/bug`.
 `cargo xtask issue-sync` enforces that — a bullet directly under `## Bugs` is reported as misplaced,
 with the area H3 named as the fix.
@@ -153,8 +159,15 @@ export, cannot import a file, and silently discards an in-progress edit would be
 shipping later. So the packaging work sequences **last** — it is the least valuable milestone to reach
 early, because there is no point packaging an interface that isn't finished.
 
-The workspace is at `0.1.0` with no tags yet, so the two gates are numbered to make their order
-unambiguous in GitHub's milestone list.
+The workspace is at `0.1.0` with no tags yet, so the gates are numbered to make their order
+unambiguous. The numbers are versions, not strings: `0.10` follows `0.9`, even where a title sort in
+GitHub's milestone list shows it first. The order is the one in the table below.
+
+**`0.10 — Record matching` is a pre-1.0 gate because import currently corrupts data.** A second,
+unrelated GEDCOM file silently resolves its people onto the first file's people, and a re-import
+duplicates every place and source. A user of the Digitalarkivet flow reports duplicated persons as
+well. A 1.0 whose import can merge strangers is worse than a later 1.0. The milestone also delivers the
+backup format that 1.0 freezes (ADR 0041), so it must land before the `1.0` release mechanics.
 
 `0.8 — UI parity` shipped and is closed on GitHub; its narrative lives in
 [`archive/completed-work.md`](archive/completed-work.md). A closed gate is dropped from this table
@@ -163,7 +176,8 @@ rather than kept as history — the archive is the record.
 | Milestone | Contents |
 | --- | --- |
 | **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: a save run that hangs when its target leaves the strip (#302), and the shared record tabs having no common layout contract (#303). |
-| **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end on the first real tag, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. |
+| **`0.10 — Record matching`** | Import that never duplicates and never guesses: record origins and import runs, the matching engine, identity decisions, staged import with side-by-side review, and versioned workspace backup (ADRs 0037–0041). Groomed in full in §4, in dependency order. |
+| **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end on the first real tag, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. Also the deletion of the pre-1.0 backup upgraders, which freezes backup format v1 (#392, ADR 0041 §4). |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
 server/web work, the plugin-UI vocabulary tail, the ADR 0014 plugin-trust out-of-scope list, round-trip
@@ -175,8 +189,8 @@ arithmetic.
 
 ## 4. Milestone contents
 
-The remaining pre-1.0 gate, itemized from `issues.md` as it stands. Small enough to groom, which is the
-point of filing only what is being worked on.
+The remaining pre-1.0 gates, itemized from `issues.md` as they stand. Each is small enough to groom,
+which is the point of filing only what is being worked on.
 
 ### `0.9 — UI stabilization` (13 open)
 
@@ -220,7 +234,30 @@ a hit-test bug (#285), the map needs a repaint rather than a resize (#252), and 
 ever blanked the canvas. The code changes themselves are in the PRs and the commit log, which is where
 §6 says they belong.
 
-### Not in either milestone
+### `0.10 — Record matching` (29 open)
+
+Ordered by dependency, not severity. The three bugs go first because they corrupt data today. Backup
+goes next, so every later event change passes its fixture guard. Then come the origins, the engine
+and the identity decisions, which the import rewrite and the UI build on. The design is ADRs
+0037–0041. Every bullet is in `issues.md`: the bugs under *Bulk import, export & sync*, backup under
+*Backup & restore*, and the rest under
+[*Record matching & identity*](issues.md#record-matching--identity).
+
+| Stage | Items | Why it gates |
+| --- | --- | --- |
+| Bugs (#389–#390) | GEDCOM/Gramps external ids collide across files; person/family created in two commits without the provenance template | Import writes wrong data today: people from two files merged, and a failed import leaves a person without its key |
+| Backup (ADR 0041, #391) | Versioned backup and restore, with golden fixtures and the pre-1.0 window | Internal ids must survive; the format 1.0 freezes has to exist |
+| Origin (ADR 0037, #393–#395) | `RecordOrigin` + `ImportRun`; the `record_origins` index and resolve-by-origin; tombstones | A re-import is a no-op for every kind; retractions survive re-import |
+| Engine (ADR 0038, #396–#402) | Matching core with culture packs; person profile; Family/Event profiles; the other kinds' profiles; `match_keys` + `find_similar`; duplicate check through the engine; evaluation corpus + `match-eval` | One explainable answer to "are these the same?" |
+| Identity (ADR 0039, #403–#406) | `PersonsDistinguished` + assessment; persona clusters; Event/Family merge; the other kinds' merge | A confirmed match behaves as one record; a rejected one never returns |
+| Staged import (ADR 0040, #407–#410) | WIT record graph + `ImportPlan`; GEDCOM/Gramps port; Digitalarkivet port; Digitalarkivet events, places, households | The host resolves identically for every importer, before writing |
+| UI & CLI (#411–#416) | Shared compare view; assisted match stage; bulk Plan/Review + `--plan`; review queue; similar-record hint; linked records | The user decides side by side; with nothing to ask, nothing is shown |
+| Plugins (#417) | `find-similar` WIT query | Plugins reuse the engine instead of re-implementing it |
+
+The count is 29 because the *More name-culture packs* bullet is unfiled by design, and the backup
+freeze (v1, #392) is filed in `1.0`. Within each stage, issues are numbered in dependency order.
+
+### Not in any milestone
 
 DNA depth, round-trip gaps, performance/scale, the ADR 0014 plugin-trust out-of-scope list, the
 plugin-UI vocabulary tail, upstream-blocked dependencies, assisted-import residuals, saved searches /
