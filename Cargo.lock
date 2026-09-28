@@ -11888,14 +11888,19 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cqrs-es",
  "resvg",
  "serde",
  "serde_json",
  "sqlx",
+ "tempfile",
  "time",
  "tokio",
  "toml 1.1.6+spec-1.1.0",
+ "uuid",
+ "vitni-app",
  "vitni-core",
+ "vitni-db",
  "vitni-plugin-host",
  "x11rb 0.14.0",
 ]

@@ -76,7 +76,8 @@ pub mod workspace;
 pub mod workspace_registry;
 
 pub use backup::{
-    BackupError, BackupReport, BackupRequest, RestoreReport, RestoreRequest, create_backup, restore_backup,
+    BackupError, BackupReport, BackupRequest, RestoreReport, RestoreRequest, create_backup, projection_digest,
+    restore_backup,
 };
 pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
 pub use checks::{CheckFinding, CheckKind, check_persons, run_checks};

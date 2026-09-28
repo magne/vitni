@@ -96,6 +96,30 @@ pub struct RestoreReport {
     pub media_mismatched: Vec<String>,
 }
 
+/// The backup format this version writes, as text (`0.1`).
+#[must_use]
+pub fn current_format_version() -> String {
+    upgrade::current().to_string()
+}
+
+/// A digest of every projection row, the state a golden fixture must restore to (ADR 0041 §5).
+///
+/// Each row is hashed as one canonical JSON line — `[table, view_id, version, payload]`, object keys
+/// sorted — so the digest depends on what the projections hold, not on the engine's JSON text.
+///
+/// # Errors
+///
+/// [`AppError::Db`] if a projection cannot be read.
+pub async fn projection_digest(workspace: &Workspace) -> Result<String, AppError> {
+    let mut hasher = <sha2::Sha256 as sha2::Digest>::new();
+    for row in workspace.store().projection_rows().await? {
+        let line = serde_json::json!([row.table, row.view_id, row.version, row.payload]);
+        sha2::Digest::update(&mut hasher, line.to_string().as_bytes());
+        sha2::Digest::update(&mut hasher, b"\n");
+    }
+    Ok(archive::checksum_text(hasher))
+}
+
 /// Writes a backup of `workspace` (ADR 0041 §1). A failed backup removes its partial archive.
 ///
 /// # Errors
