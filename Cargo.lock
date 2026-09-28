@@ -8934,6 +8934,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "strum"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
+dependencies = [
+ "strum_macros",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
+]
+
+[[package]]
 name = "subsecond"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9131,7 +9152,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
  "windows-sys 0.61.2",
@@ -9795,6 +9816,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10071,6 +10098,7 @@ dependencies = [
  "sha2 0.11.0",
  "sqlx",
  "tempfile",
+ "test-containers-util",
  "thiserror 2.0.20",
  "time",
  "tokio",
@@ -10081,6 +10109,7 @@ dependencies = [
  "vitni-core",
  "vitni-db",
  "whoami 2.1.3",
+ "zip",
 ]
 
 [[package]]
@@ -10117,6 +10146,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+ "strum",
  "thiserror 2.0.20",
  "time",
  "tokio",
@@ -11858,14 +11888,19 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cqrs-es",
  "resvg",
  "serde",
  "serde_json",
  "sqlx",
+ "tempfile",
  "time",
  "tokio",
  "toml 1.1.6+spec-1.1.0",
+ "uuid",
+ "vitni-app",
  "vitni-core",
+ "vitni-db",
  "vitni-plugin-host",
  "x11rb 0.14.0",
 ]
@@ -12049,6 +12084,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.118",
+]
+
+[[package]]
+name = "zip"
+version = "8.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap 2.14.0",
+ "memchr",
+ "typed-path",
 ]
 
 [[package]]

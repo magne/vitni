@@ -62,6 +62,30 @@ pub async fn register_workspace(
     dir: Option<&Path>,
     database_url: Option<&str>,
 ) -> Result<WorkspaceSummary, AppError> {
+    Ok(register_new_workspace(config_path, name, dir, database_url)
+        .await?
+        .summary)
+}
+
+/// A workspace [`register_new_workspace`] created, with what [`unregister_workspace`] needs to undo
+/// the registration.
+pub(crate) struct Registration {
+    /// The registered workspace.
+    pub(crate) summary: WorkspaceSummary,
+    /// The default workspace before this one replaced it.
+    pub(crate) previous_default: Option<String>,
+    /// Whether the directory existed before the registration.
+    pub(crate) dir_preexisted: bool,
+}
+
+/// [`register_workspace`], keeping what is needed to roll the registration back if a later step of
+/// the caller fails (a restore that cannot finish).
+pub(crate) async fn register_new_workspace(
+    config_path: &Path,
+    name: &str,
+    dir: Option<&Path>,
+    database_url: Option<&str>,
+) -> Result<Registration, AppError> {
     let store = FileConfigStore::new(config_path.to_path_buf(), None);
     let mut config = store.load_or_bootstrap_config()?;
     let name = name.trim();
@@ -80,33 +104,53 @@ pub async fn register_workspace(
     Workspace::init(&dir, &config.operator, &config.defaults, database_url)?;
     config.register_workspace(name.to_owned(), dir.clone());
     store.store_config(&config)?;
+    let engine = manifest_engine(&dir);
+    let registration = Registration {
+        summary: WorkspaceSummary {
+            name: name.to_owned(),
+            path: dir,
+            is_default: true,
+            engine,
+        },
+        previous_default,
+        dir_preexisted,
+    };
     // Open once to create the database file and record the operator in the manifest.
-    if let Err(error) = Workspace::open(&dir, &config.operator, &config.workspace_defaults).await {
-        config.workspaces.remove(name);
-        config.default = previous_default;
-        if let Err(rollback_error) = store.store_config(&config) {
-            tracing::warn!(
-                %rollback_error,
-                workspace = name,
-                "could not roll back the config after a failed workspace open"
-            );
-        }
-        if !dir_preexisted && let Err(remove_error) = std::fs::remove_dir_all(&dir) {
+    if let Err(error) = Workspace::open(&registration.summary.path, &config.operator, &config.workspace_defaults).await
+    {
+        unregister_workspace(config_path, &registration);
+        if !registration.dir_preexisted
+            && let Err(remove_error) = std::fs::remove_dir_all(&registration.summary.path)
+        {
             tracing::warn!(
                 %remove_error,
-                path = %dir.display(),
+                path = %registration.summary.path.display(),
                 "could not remove the workspace directory after a failed open"
             );
         }
         return Err(error);
     }
-    let engine = manifest_engine(&dir);
-    Ok(WorkspaceSummary {
-        name: name.to_owned(),
-        path: dir,
-        is_default: true,
-        engine,
-    })
+    Ok(registration)
+}
+
+/// Removes `registration`'s workspace from the config and restores the previous default. Best
+/// effort: the caller is already reporting a failure, so a rollback failure is logged, not returned.
+/// The directory is left to the caller.
+pub(crate) fn unregister_workspace(config_path: &Path, registration: &Registration) {
+    let store = FileConfigStore::new(config_path.to_path_buf(), None);
+    let name = registration.summary.name.as_str();
+    let result = store.load_or_bootstrap_config().and_then(|mut config| {
+        config.workspaces.remove(name);
+        config.default.clone_from(&registration.previous_default);
+        store.store_config(&config)
+    });
+    if let Err(rollback_error) = result {
+        tracing::warn!(
+            %rollback_error,
+            workspace = name,
+            "could not roll back the config after a failed workspace registration"
+        );
+    }
 }
 
 #[cfg(test)]

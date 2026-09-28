@@ -54,6 +54,7 @@ cargo deny --all-features check                                      # advisorie
 cargo xtask check                                                    # every static check, in one pass
 cargo xtask build-plugins                                            # plugins/* → target/plugins
 cargo xtask icons                                                    # SVG icon sources → installed PNGs
+cargo xtask backup-fixture                                           # regenerate the golden backup fixture
 prek run                                                             # the git hooks, by hand
 ```
 
@@ -69,7 +70,7 @@ cargo bench -p vitni-db --features sqlite
 ```
 
 `cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`,
-`licence-check`, `icons --check`) plus `issue-sync`, `labels`, `package` (the Linux release tarball)
+`licence-check`, `icons --check`, `backup-guard`) plus `issue-sync`, `labels`, `package` (the Linux release tarball)
 and `screenshots` (the README images, below).
 
 ## The app icon and the brand art
@@ -179,6 +180,28 @@ The demo workspace is **invented data**, seeded from scratch on every run: seven
 generations, two families, eleven dated and placed events, and one archive → source → citations chain
 whose surety deliberately varies. No personal genealogy belongs in the repository, and the fixture is
 isolated (`target/screenshots/`, a throwaway `XDG_CONFIG_HOME`) so a run cannot reach real data.
+
+## Backups and the backup fixtures
+
+The backup archive is the project's one compatibility surface (ADR 0041). `vitni backup create
+[--with-media] <file>` writes the event log, a portable `workspace.toml` and the media manifest into a
+`.vitni-backup` zip; `vitni backup restore <file> --new NAME PATH [--database-url URL]` restores it
+into a new workspace on either engine. The GUI has the same pair in Preferences → *Backup & restore*.
+
+- **The format** is `0.N` before 1.0 (`crates/vitni-app/src/backup/format.rs`). Bump it whenever an
+  event would no longer decode from an older archive, or the archive layout changes: append a record
+  to `backup/upgrade/pre_release.rs`, give the previous one its `vN → vN+1` upgrader (pure functions
+  over `serde_json::Value`), and add the new fixture. A restore reads the current format and the two
+  before it.
+- **The fixtures** under `crates/vitni-app/tests/fixtures/backup/v<format>/` are invented data. Each is
+  an archive plus the projection digest it must restore to. `cargo xtask backup-fixture` rewrites the
+  current format's archive from `xtask/src/backup_fixture/` (one module per aggregate, fixed ids and
+  instants, so two runs produce no diff) and refreshes every fixture's digest; never rewrite an older
+  archive. A digest diff means the projections changed: check that was intended.
+- **A new event variant** fails `the_current_fixture_holds_every_event_variant_of_every_aggregate` until
+  its aggregate's fixture module pushes it and the fixture is regenerated.
+- **The cross-engine test** (`crates/vitni-app/tests/backup_postgres.rs`) needs Docker, like
+  `vitni-db`'s Postgres tests: `cargo test -p vitni-app --features postgres --test backup_postgres`.
 
 ## Repository conventions
 

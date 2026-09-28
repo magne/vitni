@@ -460,7 +460,7 @@ in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and imp
 [0041](adr/0041-workspace-backup-and-restore.md) (backup), with the survey in
 [`research/record-matching.md`](research/record-matching.md). The bullets are listed in dependency
 order, and each one's *Needs:* names its prerequisites. The import bug sits under its own area
-above, and backup under *Backup & restore*. The milestone opens with backup (#391). The
+above. The milestone opened with backup (#391), which has landed. The
 xref-collision bug (#389) follows the index below, because it needs both origins and
 resolve-by-origin. The matching core has no origin prerequisite, so it can start alongside them.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
@@ -472,8 +472,11 @@ does.
   `ImportRunStarted`/`ItemResolved`/`ImportRunFinished`/`ImportRunAbandoned`, and `Session` mints run
   ids. Datasets are a projection over runs. History renders a real run row with its count and
   children, which replaces `collapse_runs` and settles the *Collection history nodes* bullet's data
-  half. *Exit:* an import writes a run, and every imported assertion carries its origin; the History
-  run row lists its children. — #393
+  half. Still to do here: the new variants must join the backup fixture (`cargo xtask
+  backup-fixture`; its coverage test fails until they do), and `crates/vitni-app/tests/backup.rs` needs
+  an origin-bearing round trip, the one ADR 0041 promises: a backup keeps every origin, an export has
+  none. Today's backup tests carry no origins, since none exist yet. *Exit:* an import writes a run, and every imported
+  assertion carries its origin; the History run row lists its children. — #393
 - **`record_origins` index and resolve-by-origin for every aggregate** — ADR 0037 §4. The projection
   runs on SQLite and Postgres and is rebuildable. `field_key` is derived in `vitni-app`. Resolve-or-
   create by `(dataset, record, item)` or by a recorded `ItemResolved`. A same-digest item is a no-op,
@@ -697,7 +700,7 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   permanent `0.K` → v1 alias. Then delete `backup::upgrade::pre_release` and its older `v0.*`
   fixtures, keeping `v0.K` as the alias witness. An older `0.x` archive is refused with a message
   naming the last 0.x release to restore and re-back-up on. Every later upgrader is permanent. The
-  `xtask check` guard that forces this lands with the backup bullet under *Backup & restore*. *Exit:*
+  `backup-guard` in `cargo xtask check` fails at 1.0.0 until this is done. *Exit:*
   the `v0.K` fixture restores on 1.0. — #392
 - **`release.yml` unverified end-to-end** — no version tag has been pushed, so the release workflow is
   zizmor / YAML / `bash -n` verified and its build/package steps reproduced locally, but has never run a
@@ -706,19 +709,16 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 ### Backup & restore
 
-- **Workspace backup and restore, with a versioned format** — ADR 0041. `vitni backup create
-  [--with-media]` / `restore --new NAME PATH`, plus a GUI *Back up…* / *Restore…* entry. The archive is a
-  `.vitni-backup` zip holding the manifest (`format_version`), `events.jsonl`, `workspace.toml` and a
-  media manifest. Restore inserts the rows as stored and rebuilds the projections, on either engine. A
-  chain of upgraders runs at restore. Before 1.0 the window is the current format and two before it, in
-  `backup::upgrade::pre_release`, and an archive older than that is refused with an actionable message.
-  `format_version` is `0.N` before 1.0 (ADR 0041 §3). Golden fixtures of invented data sit under
-  `crates/vitni-app/tests/fixtures/backup/v<version>/`, and a
-  coverage test requires every event variant in the current fixture. The `xtask check` guard fails at
-  version ≥ 1.0.0 while `pre_release` still exists, and `docs/release.md` gains the checklist line.
-  This lands early in `0.10` so every later event change in the milestone passes the fixture guard.
-  The origin bullet then extends the round-trip test: a backup keeps origins, an export has none.
-  *Exit:* backup, restore into the other engine, and projections equal row for row. — #391
+- **Restore a backup into the current workspace** — needs a new ADR: ADR 0041 §2 restores only into a
+  new workspace, and replacing the open one discards its event log. `vitni backup restore <archive>
+  --replace` and a Preferences *Backup & restore* option replace the open workspace: its events and
+  projections are removed, the archive's rows inserted as stored, the projections rebuilt — on Postgres
+  in one transaction. A red danger modal names what is lost and makes the operator type the workspace
+  name (CLI: `--replace` needs `--yes`). The safety net is per-workspace configuration: by default an
+  automatic pre-restore backup into `backups/`, and the replace aborts if it fails; a disposable
+  development workspace can switch that off and keep only the typed confirmation. *Exit:* a replace
+  leaves projections row for row equal to the archive's, and the pre-restore backup restores the
+  previous state. — #426
 
 ### Dependencies blocked upstream
 

@@ -19,7 +19,7 @@ use crate::text::{ExternalId, MediaRef};
 pub type FamilyEvent = Envelope<FamilyEventBody>;
 
 /// The Family claim variants (data-model §10).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum FamilyEventBody {
     /// A family aggregate was created.

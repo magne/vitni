@@ -224,6 +224,37 @@ impl PostgresStore {
         postgres_query::read_recent_events(&self.pool, limit).await
     }
 
+    pub(crate) async fn read_raw_events(
+        &self,
+        after: Option<&crate::raw::RawEventKey>,
+        limit: u32,
+    ) -> Result<Vec<crate::raw::RawEvent>, DbError> {
+        postgres_query::read_raw_events(&self.pool, after, limit).await
+    }
+
+    pub(crate) async fn insert_raw_events(
+        &self,
+        rows: impl IntoIterator<Item = Result<crate::raw::RawEvent, DbError>>,
+    ) -> Result<u64, DbError> {
+        postgres_query::insert_raw_events(&self.pool, rows).await
+    }
+
+    pub(crate) async fn discard_all_events(&self) -> Result<(), DbError> {
+        postgres_query::discard_all_events(&self.pool).await
+    }
+
+    pub(crate) async fn event_count(&self) -> Result<u64, DbError> {
+        postgres_query::event_count(&self.pool).await
+    }
+
+    pub(crate) async fn projection_rows(&self) -> Result<Vec<crate::raw::ProjectionRow>, DbError> {
+        let mut rows = Vec::new();
+        for &table in ALL_VIEW_TABLES {
+            rows.extend(postgres_query::projection_rows(&self.pool, table).await?);
+        }
+        Ok(rows)
+    }
+
     pub(crate) async fn human_id_index(&self, table: &str) -> Result<Vec<(String, String)>, DbError> {
         postgres_query::human_id_index(&self.pool, table).await
     }

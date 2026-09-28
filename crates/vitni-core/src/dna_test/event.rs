@@ -13,7 +13,7 @@ use crate::ids::{AssertionId, DnaTestId, HumanId, NoteId, PersonId, TagId};
 pub type DnaTestEvent = Envelope<DnaTestEventBody>;
 
 /// The `DnaTest` claim variants (data-model §10, §12).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum DnaTestEventBody {
     /// A DNA test aggregate was created, anchored to a person.

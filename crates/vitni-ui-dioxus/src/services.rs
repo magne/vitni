@@ -18,11 +18,11 @@ use i18n_embed::DesktopLanguageRequester;
 use tokio::sync::{mpsc, oneshot};
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
-    AiConfig, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, MapConfig, MapProvider,
-    MapSource, PluginTrust, PluginTrustConfig, PreferenceLayers, ResolvedLocale, Session, ShortcutConfig,
-    SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
-    read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides,
-    workspace_counts,
+    AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults,
+    MapConfig, MapProvider, MapSource, PluginTrust, PluginTrustConfig, PreferenceLayers, ResolvedLocale, RestoreReport,
+    RestoreRequest, Session, ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts,
+    WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers, read_resolved_locale,
+    read_resolved_surety_labels, read_surety_label_overrides, workspace_counts,
 };
 use vitni_plugin_host::{
     Capability, ExportTarget, Grants, HostPattern, Invocation, NetPolicy, PluginHost, PluginRole, PresentError,
@@ -1363,6 +1363,57 @@ pub async fn register_workspace(
     vitni_app::register_workspace(&path, name, dir.as_deref(), database_url)
         .await
         .map(|_summary| ())
+        .map_err(|error| loc.error(&error))
+}
+
+/// The file a Back up in the Preferences Backup card suggests: `<workspace>/backups/<name>-<date>`
+/// with the `.vitni-backup` extension, dated today by the session clock (ADR 0041).
+#[must_use]
+pub fn default_backup_path(services: &Services) -> PathBuf {
+    let today = Session::new(services.config.operator_agent()).now().date();
+    services
+        .dir
+        .join("backups")
+        .join(format!("{}-{today}.vitni-backup", services.open_workspace))
+}
+
+/// Backs the open workspace up to `path` (ADR 0041), returning what the archive holds or a localized
+/// error. The Preferences Backup card's counterpart to `vitni backup create`.
+pub async fn create_backup(services: Services, path: PathBuf, with_media: bool) -> Result<BackupReport, String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let request = BackupRequest {
+        workspace_name: &services.open_workspace,
+        destination: &path,
+        with_media,
+        created_at: Session::new(services.config.operator_agent()).now(),
+    };
+    vitni_app::create_backup(&workspace, &request)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Restores the backup at `archive` into a new workspace `name` (ADR 0041), registered and made the
+/// default, returning the restore's report or a localized error. `dir` and `database_url` follow
+/// [`register_workspace`]. The Preferences Backup card's counterpart to `vitni backup restore`.
+pub async fn restore_backup(
+    services: Services,
+    archive: PathBuf,
+    name: String,
+    dir: Option<PathBuf>,
+    database_url: Option<String>,
+) -> Result<RestoreReport, String> {
+    let loc = services.localizer();
+    let config_path = config::config_path().map_err(|error| loc.error(&error))?;
+    let request = RestoreRequest {
+        config_path: &config_path,
+        archive: &archive,
+        name: &name,
+        dir: dir.as_deref(),
+        database_url: database_url.as_deref(),
+    };
+    vitni_app::restore_backup(&request)
+        .await
         .map_err(|error| loc.error(&error))
 }
 

@@ -21,6 +21,14 @@ vitni-plugin-host = { workspace = true }
 # via `vitni-plugin-host`.
 vitni-core = { workspace = true }
 
+# `backup-fixture` builds the golden backup fixtures (ADR 0041 §5) from typed events of every
+# variant, through the same store and backup use-cases a user runs, so a fixture is a real archive.
+vitni-app = { workspace = true }
+vitni-db = { workspace = true }
+cqrs-es = { workspace = true }
+uuid = { workspace = true }
+tempfile = { workspace = true }
+
 # `gui-pass`'s `wm-close` step: `xdotool windowclose` is `XDestroyWindow`, which never reaches the
 # app, so a window-manager close is scripted as a `WM_DELETE_WINDOW` ClientMessage instead. This is a
 # second copy in the graph: global-hotkey, which dioxus-desktop pulls in, still pins x11rb 0.13.

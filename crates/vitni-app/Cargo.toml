@@ -27,6 +27,8 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 # Media checksums (#359): a file-path write hashes the media-library file it names.
 sha2 = { workspace = true }
+# The `.vitni-backup` archive (ADR 0041 §1).
+zip = { workspace = true }
 unic-langid = { workspace = true, features = ["serde"] }
 # The Google Map Tiles adapter (ADR 0033): session/tile/viewport-copyright requests. Map network I/O
 # stays in the app layer (ADR 0008) — the renderer never fetches.
@@ -36,7 +38,10 @@ reqwest = { workspace = true }
 tokio = { workspace = true }
 tempfile = { workspace = true }
 # Failure injection (#390): a test installs a SQLite trigger that aborts one event insert.
-sqlx = { workspace = true }
+sqlx = { workspace = true, features = ["migrate"] }
+# The cross-engine backup test (feature = "postgres"; ADR 0041 §2): one reused container, a fresh
+# database per test. The `migrate` feature above provides the empty `Migrator` the helper requires.
+test-containers-util = { version = "0.1.4", features = ["pg-sqlx"] }
 
 [lints]
 workspace = true

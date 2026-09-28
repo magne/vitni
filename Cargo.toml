@@ -60,6 +60,11 @@ ed25519-dalek = "=3.0.0-pre.6"
 # media-library storage with SHA-256 checksums, and content-type sniffing.
 reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "gzip", "stream", "json"] }
 sha2 = "0.11.0"
+# the `.vitni-backup` archive (vitni-app; ADR 0041 §1). Deflate only, through the flate2 already in the
+# tree; no default features, so no encryption, bzip2/zstd/lzma or clock-dependent timestamps.
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2"] }
+# event-variant names for the backup fixture coverage test (vitni-core; ADR 0041 §5).
+strum = { version = "0.28.0", default-features = false, features = ["derive"] }
 mime_guess = "2.0.5"
 # base64-encodes the media file into the OpenAI-compatible vision request (ADR 0017 §4).
 base64 = "0.23.0"

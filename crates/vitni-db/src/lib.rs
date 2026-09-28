@@ -24,6 +24,7 @@ mod place_succession_index;
 mod postgres;
 #[cfg(feature = "postgres")]
 mod postgres_query;
+mod raw;
 mod registry;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod resolver;
@@ -37,4 +38,5 @@ mod store;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod tables;
 
+pub use raw::{ProjectionRow, RawEvent, RawEventKey, decode_raw_event, event_variants};
 pub use store::{CommandError, DbError, PlaceSuccessionRecord, Store, StoredEvent};

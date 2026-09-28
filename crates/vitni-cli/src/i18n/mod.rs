@@ -23,10 +23,10 @@ use rust_embed::RustEmbed;
 use unic_langid::LanguageIdentifier;
 use vitni_app::config;
 use vitni_app::{
-    AppError, CitationError, CitationSummary, Confidence, DbError, DnaMatchError, DnaMatchSummary, DnaProvider,
-    DnaTestError, DnaTestSummary, DnaTestType, EventError, EventSummary, EventType, FamilyError, FamilySummary,
-    MatchStatus, MediaError, MediaSummary, NoteError, NoteSummary, NoteType, PersonError, PersonSummary, PlaceError,
-    PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType, ResearchNoteError,
+    AppError, BackupError, CitationError, CitationSummary, Confidence, DbError, DnaMatchError, DnaMatchSummary,
+    DnaProvider, DnaTestError, DnaTestSummary, DnaTestType, EventError, EventSummary, EventType, FamilyError,
+    FamilySummary, MatchStatus, MediaError, MediaSummary, NoteError, NoteSummary, NoteType, PersonError, PersonSummary,
+    PlaceError, PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType, ResearchNoteError,
     ResearchNoteSummary, Restriction, Sex, SourceError, SourceSummary, SubjectRef, SuretyLabelOverrides, TagError,
     TagSummary,
 };
@@ -129,6 +129,55 @@ impl Localizer {
     #[must_use]
     pub fn config_line(&self, path: &str) -> String {
         fl!(self.loader, "config-line", path = path)
+    }
+
+    /// `Backed up N events to <path>.`
+    #[must_use]
+    pub fn backup_created(&self, events: u64, path: &str) -> String {
+        fl!(self.loader, "backup-created", events = events, path = path)
+    }
+
+    /// `Included N media file(s).`
+    #[must_use]
+    pub fn backup_media_files(&self, count: usize) -> String {
+        fl!(self.loader, "backup-media-files", count = count)
+    }
+
+    /// `Media file not found, so not backed up: <path>`.
+    #[must_use]
+    pub fn backup_media_missing(&self, path: &str) -> String {
+        fl!(self.loader, "backup-media-missing", path = path)
+    }
+
+    /// `Restored N events into workspace "<name>" at <path> (backup format <format>).`
+    #[must_use]
+    pub fn restore_success(&self, events: u64, name: &str, path: &str, format: &str) -> String {
+        fl!(
+            self.loader,
+            "restore-success",
+            events = events,
+            name = name,
+            path = path,
+            format = format
+        )
+    }
+
+    /// `Restored N media file(s).`
+    #[must_use]
+    pub fn restore_media_restored(&self, count: usize) -> String {
+        fl!(self.loader, "restore-media-restored", count = count)
+    }
+
+    /// `Media file missing after the restore: <path>`.
+    #[must_use]
+    pub fn restore_media_missing(&self, path: &str) -> String {
+        fl!(self.loader, "restore-media-missing", path = path)
+    }
+
+    /// `Media file differs from the one backed up: <path>`.
+    #[must_use]
+    pub fn restore_media_mismatched(&self, path: &str) -> String {
+        fl!(self.loader, "restore-media-mismatched", path = path)
     }
 
     /// `Rebuilt all projections from the event log.`
@@ -368,7 +417,67 @@ impl Localizer {
             AppError::MediaDomain(domain) => self.media_error(domain),
             AppError::TagDomain(domain) => self.tag_error(domain),
             AppError::ResearchNoteDomain(domain) => self.research_note_error(domain),
+            AppError::Backup(backup) => self.backup_error(backup),
             AppError::Db(db) => self.db_error(db),
+        }
+    }
+
+    fn backup_error(&self, error: &BackupError) -> String {
+        match error {
+            BackupError::DestinationExists(path) => {
+                fl!(
+                    self.loader,
+                    "err-backup-destination-exists",
+                    path = path.display().to_string()
+                )
+            }
+            BackupError::Archive(detail) => fl!(self.loader, "err-backup-archive", detail = detail.clone()),
+            BackupError::NotABackup(detail) => fl!(self.loader, "err-backup-not-a-backup", detail = detail.clone()),
+            BackupError::MissingMember(member) => {
+                fl!(self.loader, "err-backup-missing-member", member = member.clone())
+            }
+            BackupError::UnexpectedMember(member) => {
+                fl!(self.loader, "err-backup-unexpected-member", member = member.clone())
+            }
+            BackupError::ChecksumMismatch(member) => fl!(self.loader, "err-backup-checksum", member = member.clone()),
+            BackupError::FormatTooOld {
+                found,
+                oldest_supported,
+                readable_before,
+            } => fl!(
+                self.loader,
+                "err-backup-too-old",
+                found = found.clone(),
+                oldest = oldest_supported.clone(),
+                before = readable_before.clone()
+            ),
+            BackupError::FormatTooNew { found, current } => fl!(
+                self.loader,
+                "err-backup-too-new",
+                found = found.clone(),
+                current = current.clone()
+            ),
+            BackupError::UnknownFormat(found) => fl!(self.loader, "err-backup-unknown-format", found = found.clone()),
+            BackupError::InvalidEvent { line, detail } => fl!(
+                self.loader,
+                "err-backup-invalid-event",
+                line = line.to_string(),
+                detail = detail.clone()
+            ),
+            BackupError::EventCountMismatch { expected, found } => fl!(
+                self.loader,
+                "err-backup-event-count",
+                expected = expected.to_string(),
+                found = found.to_string()
+            ),
+            BackupError::TargetNotEmpty(path) => {
+                fl!(
+                    self.loader,
+                    "err-backup-target-not-empty",
+                    path = path.display().to_string()
+                )
+            }
+            BackupError::DatabaseNotEmpty => fl!(self.loader, "err-backup-database-not-empty"),
         }
     }
 

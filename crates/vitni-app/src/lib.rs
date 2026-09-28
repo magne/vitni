@@ -8,7 +8,9 @@
 //! - **the impure inputs** — clock, UUID v7 ids, operator [`Agent`](vitni_core::provenance::Agent)
 //!   — isolated in [`Session`] (ADR 0004 §3),
 //! - **workspace directories** — manifest, database, `exports/ backups/ media/` ([`workspace`]),
-//! - **use-cases** returning frontend-neutral DTOs ([`person`]).
+//! - **use-cases** returning frontend-neutral DTOs ([`person`]),
+//! - **backup and restore** of a workspace's event log, the one versioned format ([`backup`], ADR
+//!   0041).
 //!
 //! The decision core stays pure and the database engine stays hidden in `vitni-db`; this is the
 //! only layer that reads a clock or generates an id.
@@ -22,6 +24,7 @@
 //! work. Such a component is not required to be licensed under the GNU AGPL.
 
 mod aggregates;
+pub mod backup;
 pub mod change_set;
 pub mod checks;
 pub mod citation;
@@ -72,6 +75,10 @@ mod use_case;
 pub mod workspace;
 pub mod workspace_registry;
 
+pub use backup::{
+    BackupError, BackupReport, BackupRequest, RestoreReport, RestoreRequest, create_backup, projection_digest,
+    restore_backup,
+};
 pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
 pub use checks::{CheckFinding, CheckKind, check_persons, run_checks};
 pub use citation::{

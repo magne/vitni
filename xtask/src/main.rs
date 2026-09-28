@@ -15,8 +15,13 @@
 //!   no permissive crate reaches an `AGPL-3.0-or-later` one (ADR 0034).
 //! - `icons` — rasterise the committed SVG art into the installed icon PNG sizes and the brand
 //!   lockups' PNGs; `--check` verifies the committed rasters instead of rewriting them (#326).
+//! - `backup-fixture` — regenerate the golden backup fixture of every event variant under
+//!   `crates/vitni-app/tests/fixtures/backup/`, and refresh every fixture's projection digest
+//!   (ADR 0041 §5).
+//! - `backup-guard` — fail once the workspace version reaches 1.0.0 while the temporary pre-1.0
+//!   backup upgraders (`backup::upgrade::pre_release`) still exist (ADR 0041 §4).
 //! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`,
-//!   `licence-check`, `icons --check`) in one pass, reporting all failures rather than stopping at
+//!   `licence-check`, `icons --check`, `issue-sync`, `backup-guard`) in one pass, reporting all failures rather than stopping at
 //!   the first.
 //! - `issue-sync` — verify the `docs/issues.md` ↔ GitHub Issues linkage: references well-formed and
 //!   unique, every backlog bullet inside an `###` area. `--online` also reconciles against `gh`.
@@ -38,6 +43,8 @@
 //! version of that world), the licensor grants you additional permission to convey the resulting
 //! work. Such a component is not required to be licensed under the GNU AGPL.
 
+mod backup_fixture;
+mod backup_guard;
 mod build_plugins;
 mod css_check;
 mod gui_pass;
@@ -71,6 +78,8 @@ fn main() -> Result<()> {
         Some("package") => package::run(),
         Some("gui-pass") => gui_pass::run(&env::args().skip(2).collect::<Vec<String>>()),
         Some("screenshots") => screenshots::run(&env::args().skip(2).collect::<Vec<String>>()),
+        Some("backup-fixture") => backup_fixture::run(),
+        Some("backup-guard") => backup_guard::run(),
         Some("check") => check(),
         Some(other) => {
             print_usage();
@@ -85,13 +94,14 @@ fn main() -> Result<()> {
 
 /// Runs every static check, reporting all failures (never stopping at the first).
 fn check() -> Result<()> {
-    let checks: [Check; 6] = [
+    let checks: [Check; 7] = [
         ("i18n-check", i18n_check::run),
         ("css-check", css_check::run),
         ("input-guard", input_guard::run),
         ("licence-check", licence_check::run),
         ("icons", icons::check),
         ("issue-sync", issue_sync::run),
+        ("backup-guard", backup_guard::run),
     ];
     let mut failed = Vec::new();
     for (name, run) in checks {
@@ -121,8 +131,10 @@ fn print_usage() {
     println!("                 [--check]      verify the committed rasters instead of rewriting them");
     println!("  issue-sync     verify the docs/issues.md <-> GitHub Issues linkage (--online to reconcile)");
     println!("  labels         reconcile GitHub labels with .github/labels.toml (--apply to write)");
+    println!("  backup-fixture regenerate the golden backup fixture and refresh every fixture digest");
+    println!("  backup-guard   fail at 1.0.0 while the pre-1.0 backup upgraders still exist");
     println!(
-        "  check          run every static check (i18n-check, css-check, input-guard, licence-check, icons, issue-sync)"
+        "  check          run every static check (i18n-check, css-check, input-guard, licence-check, icons, issue-sync,\n                 backup-guard)"
     );
     println!("  package        assemble a Linux release tarball (binaries + signed plugins) in target/dist");
     println!("  gui-pass       run GUI scenarios on a headless Xvfb display, asserting over screenshots");

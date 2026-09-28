@@ -60,6 +60,12 @@ sanctioned trust root.
 ## Cutting a release
 
 1. Bump the workspace version (`Cargo.toml` `[workspace.package] version`) and land it.
+   - **For 1.0.0, first freeze the backup format** (ADR 0041 §4, #392): the pre-release format in
+     force becomes v1 through a permanent `0.K` → v1 alias, `backup::upgrade::pre_release` is deleted
+     with its older `v0.*` fixtures, and `v0.K` stays as the alias witness. `cargo xtask check` fails
+     at 1.0.0 while `pre_release` still exists.
+   - Any other bump that changed an event encoding non-additively has already bumped the backup
+     format, with an upgrader and a new fixture (`cargo xtask backup-fixture`).
 2. Ensure the release secrets are configured on the repository: `VITNI_PLUGIN_SIGNING_KEY` and
    `VITNI_PROJECT_PUBLIC_KEY`.
 3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.

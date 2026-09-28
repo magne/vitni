@@ -13,7 +13,7 @@ use crate::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId, NoteId, TagId};
 pub type DnaMatchEvent = Envelope<DnaMatchEventBody>;
 
 /// The `DnaMatch` claim variants (data-model §10, §12).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum DnaMatchEventBody {
     /// A match between two tests was observed (the create event).

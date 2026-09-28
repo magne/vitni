@@ -2,6 +2,7 @@
 //! against an open [`Workspace`](vitni_app::Workspace). `main` opens the workspace once and
 //! dispatches here, keeping each aggregate's surface in its own file as the model grows.
 
+pub mod backup;
 pub mod citation;
 pub mod dna_match;
 pub mod dna_test;

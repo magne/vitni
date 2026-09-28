@@ -14,7 +14,7 @@ use crate::text::RichText;
 pub type ResearchNoteEvent = Envelope<ResearchNoteEventBody>;
 
 /// The `ResearchNote` claim variants (ADR 0028 §2, data-model §10).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum ResearchNoteEventBody {
     /// A research-note aggregate was created.

@@ -1358,6 +1358,132 @@ impl Chrome {
         fl!(self.loader, "prefs-rebuild-success")
     }
 
+    /// The Backup card's title (ADR 0041).
+    #[must_use]
+    pub fn prefs_backup_title(&self) -> String {
+        fl!(self.loader, "prefs-backup-title")
+    }
+
+    /// The Backup card's explanation of what a backup is.
+    #[must_use]
+    pub fn prefs_backup_intro(&self) -> String {
+        fl!(self.loader, "prefs-backup-intro")
+    }
+
+    /// The "Back up this workspace" sub-heading.
+    #[must_use]
+    pub fn prefs_backup_heading(&self) -> String {
+        fl!(self.loader, "prefs-backup-heading")
+    }
+
+    /// The backup file field's label.
+    #[must_use]
+    pub fn prefs_backup_path_label(&self) -> String {
+        fl!(self.loader, "prefs-backup-path-label")
+    }
+
+    /// The hint under the backup file field.
+    #[must_use]
+    pub fn prefs_backup_path_hint(&self) -> String {
+        fl!(self.loader, "prefs-backup-path-hint")
+    }
+
+    /// The "Include media files" checkbox label.
+    #[must_use]
+    pub fn prefs_backup_with_media(&self) -> String {
+        fl!(self.loader, "prefs-backup-with-media")
+    }
+
+    /// The Back up button's idle label.
+    #[must_use]
+    pub fn prefs_backup_run(&self) -> String {
+        fl!(self.loader, "prefs-backup-run")
+    }
+
+    /// The Back up button's busy label.
+    #[must_use]
+    pub fn prefs_backup_busy(&self) -> String {
+        fl!(self.loader, "prefs-backup-busy")
+    }
+
+    /// The notice when Back up is pressed with no file.
+    #[must_use]
+    pub fn prefs_backup_path_required(&self) -> String {
+        fl!(self.loader, "prefs-backup-path-required")
+    }
+
+    /// The notice after a backup: how many events went where.
+    #[must_use]
+    pub fn prefs_backup_done(&self, events: u64, path: &str) -> String {
+        fl!(self.loader, "prefs-backup-done", events = events, path = path)
+    }
+
+    /// The notice's addendum when media files were not found.
+    #[must_use]
+    pub fn prefs_backup_media_missing(&self, count: usize) -> String {
+        fl!(self.loader, "prefs-backup-media-missing", count = count)
+    }
+
+    /// The "Restore a backup" sub-heading.
+    #[must_use]
+    pub fn prefs_restore_heading(&self) -> String {
+        fl!(self.loader, "prefs-restore-heading")
+    }
+
+    /// The archive field's label.
+    #[must_use]
+    pub fn prefs_restore_archive_label(&self) -> String {
+        fl!(self.loader, "prefs-restore-archive-label")
+    }
+
+    /// The Restore button's idle label.
+    #[must_use]
+    pub fn prefs_restore_run(&self) -> String {
+        fl!(self.loader, "prefs-restore-run")
+    }
+
+    /// The Restore button's busy label.
+    #[must_use]
+    pub fn prefs_restore_busy(&self) -> String {
+        fl!(self.loader, "prefs-restore-busy")
+    }
+
+    /// The notice when Restore is pressed with no archive.
+    #[must_use]
+    pub fn prefs_restore_archive_required(&self) -> String {
+        fl!(self.loader, "prefs-restore-archive-required")
+    }
+
+    /// The restore summary's first line.
+    #[must_use]
+    pub fn prefs_restore_done(&self, events: u64, name: &str) -> String {
+        fl!(self.loader, "prefs-restore-done", events = events, name = name)
+    }
+
+    /// The restore summary's media-restored line.
+    #[must_use]
+    pub fn prefs_restore_media_restored(&self, count: usize) -> String {
+        fl!(self.loader, "prefs-restore-media-restored", count = count)
+    }
+
+    /// The restore summary's line for a missing media file.
+    #[must_use]
+    pub fn prefs_restore_media_missing(&self, path: &str) -> String {
+        fl!(self.loader, "prefs-restore-media-missing", path = path)
+    }
+
+    /// The restore summary's line for a media file whose checksum differs.
+    #[must_use]
+    pub fn prefs_restore_media_mismatched(&self, path: &str) -> String {
+        fl!(self.loader, "prefs-restore-media-mismatched", path = path)
+    }
+
+    /// The summary's "Open restored workspace" action.
+    #[must_use]
+    pub fn prefs_restore_open(&self) -> String {
+        fl!(self.loader, "prefs-restore-open")
+    }
+
     /// The "Reset to defaults" button label.
     #[must_use]
     pub fn prefs_reset(&self) -> String {
