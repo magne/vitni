@@ -384,9 +384,11 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   (`plugins/gedcom-import/src/lib.rs:466`, `plugins/gramps-import/src/lib.rs:505`). Importing a second,
   unrelated file therefore resolves its `@I1@` onto the first file's `@I1@` person, and silently attaches
   one person's names and facts to another. *Shape:* ADR 0037 §3. Datasets scope file-local keys, and xrefs
-  and Gramps ids become origin records rather than `ExternalId`s. This lands with the `RecordOrigin`
-  bullet under *Record matching & identity*, which carries the dataset. *Exit:* a test imports two
-  different files that share `@I1@` and gets two persons. — #389
+  and Gramps ids become origin records rather than `ExternalId`s. *Needs:* the `RecordOrigin` bullet
+  (the dataset) and the `record_origins` index (resolve-by-origin), both under *Record matching &
+  identity*. Without the index, dropping the xref and Gramps-id `ExternalId`s leaves nothing to resolve
+  a re-import of an xref- or handle-keyed file by, so every re-import would duplicate its people.
+  *Exit:* a test imports two different files that share `@I1@` and gets two persons. — #389
 - **Import creates a person or family and its `ExternalId` in two commits, and drops the provenance
   template** — `import_person`/`import_family` (`vitni-app/src/import.rs:53-65, 88-89`) run
   `create_*`, then `add_external_id`, as separate commands. A failure between the two leaves a keyless
@@ -451,8 +453,12 @@ in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and imp
 [0040](adr/0040-staged-import-plan-review-commit.md) (staged import) and
 [0041](adr/0041-workspace-backup-and-restore.md) (backup), with the survey in
 [`research/record-matching.md`](research/record-matching.md). The bullets are listed in dependency
-order. The three import bugs sit under their own areas above, and backup under *Backup & restore*. The
-rule every bullet keeps is that only deterministic identity acts without the user. A score never does.
+order, and each one's *Needs:* names its prerequisites. The import bugs sit under their own area
+above, and backup under *Backup & restore*. The milestone opens with the provenance bug (#390) and
+backup (#391). The xref-collision bug (#389) follows the index below, because it needs both origins
+and resolve-by-origin. The matching core has no origin prerequisite, so it can start alongside them.
+The rule every bullet keeps is that only deterministic identity acts without the user. A score never
+does.
 
 - **`RecordOrigin` and the `ImportRun` aggregate** — ADR 0037 §1, §3, §5, §6. `EventContext.origin`
   (dataset, record, item, digest, run) is additive and threaded through `Provenance` / `AssertionMeta`.
@@ -486,8 +492,8 @@ rule every bullet keeps is that only deterministic identity acts without the use
 - **Person profile with relationship context** — ADR 0038 §2, §4. `vitni-app` builds the person
   profile from views: names, sex, vital intervals, places, occupations, and parents, partners and
   children with their names and birth intervals. A patronymic is checked against the candidate
-  father. Two different items of one record are a hard conflict. *Needs:* the matching core.
-  *Exit:* two same-named people born the same year separate on their fathers. — #397
+  father. Two different items of one record are a hard conflict. *Needs:* the matching core, and the
+  `RecordOrigin` bullet for the items. *Exit:* two same-named people born the same year separate on their fathers. — #397
 - **Family and Event profiles** — ADR 0038 §2. A family by its partners, children and marriage. An event
   by type, date, place and participants. These carry the census and marriage cases. *Needs:* the person
   profile. *Exit:* the same marriage from a church book and a GEDCOM file scores Probable. — #398
@@ -500,12 +506,6 @@ rule every bullet keeps is that only deterministic identity acts without the use
   target, min_band, limit)` and `assess` become the only entry points, and `duplicates.rs` is removed,
   together with its `AggRef.id` set to the human id (`duplicates.rs:191`). *Needs:* the profiles.
   *Exit:* a bench at 100k persons; recall on the corpus is not lost to blocking. — #400
-- **The duplicate check scores through the engine** — ADR 0038 §8. `PossibleDuplicates` covers every
-  matchable kind with the engine's score, band and features, and excludes decided pairs. The
-  Dashboard data-quality card and the palette's *Find duplicates* show the probability and the
-  reasons. This supersedes the duplicate half of *Data-quality checks are person-only*. *Needs:*
-  `find_similar`, and distinct decisions. *Exit:* a place duplicate appears on the Dashboard with its
-  reasons. — #401
 - **Evaluation corpus and `cargo xtask match-eval`** — ADR 0038 §9. Labelled pairs: invented ones, plus
   public census and church records over 100 years old. The corpus deliberately holds the hard true
   matches: spelling variants, a surname changed after a move, a census age off by one to five years,
@@ -518,8 +518,14 @@ rule every bullet keeps is that only deterministic identity acts without the use
   (ADR 0039 §2). `merge_persons` stops hardcoding `Confidence::Normal` and its default rationale
   (`vitni-app/src/person.rs:778-816`).
   Decided pairs, either way, are excluded from every consumer. This amends data-model §11.3
-  (suggestions are computed, not asserted). *Exit:* a rejected pair never reappears; the history shows
-  the assessment behind a merge. — #403
+  (suggestions are computed, not asserted). *Needs:* the matching core. *Exit:* a rejected pair never
+  reappears; the history shows the assessment behind a merge. — #403
+- **The duplicate check scores through the engine** — ADR 0038 §8. `PossibleDuplicates` covers every
+  matchable kind with the engine's score, band and features, and excludes decided pairs. The
+  Dashboard data-quality card and the palette's *Find duplicates* show the probability and the
+  reasons. This supersedes the duplicate half of *Data-quality checks are person-only*. *Needs:*
+  `find_similar`, and distinct decisions. *Exit:* a place duplicate appears on the Dashboard with its
+  reasons. — #401
 - **Persona clusters** — ADR 0039 §4, §5. `identity_links(kind, member, root)` holds the transitive
   closure, refusing cycles and blocking a merge on a live distinct decision. Read-time composition in
   `vitni-app`: the root's detail is the union of every member's claims, each still attributed, and a
