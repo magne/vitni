@@ -419,18 +419,6 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
 
 Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none blocks the flow.
 
-- **Re-importing a Digitalarkivet census person duplicates it in the GUI** — reported from real use.
-  `import_person` resolves by the `digitalarkivet` `ExternalId`, and
-  `re_running_the_same_url_imports_no_duplicates` (`vitni-plugin-host/tests/assisted_digitalarkivet.rs:437`)
-  passes, so the failing path is one the test does not cover. The root cause is not known. None of the
-  hypotheses to check is confirmed: a stale installed plugin build shadowing the fresh one; an `og:url`
-  variant changing the record id (`vitni-digitalarkivet/src/html.rs:42`); the two-commit
-  create-then-key window (under *Bulk import, export & sync*); and the GUI's workspace/store wiring
-  (`vitni-ui-dioxus/src/services.rs:858`). Also check whether church-book participants share one
-  `pd…` id and collapse onto one person, which is the opposite failure. *Exit:* a regression test on the
-  actual failing path; a re-run sweep over census person, census household, church-book, GEDCOM and
-  Gramps. — #388
-
 - **Assisted session survives navigation.** The assisted-import session is screen-local — navigating
   away from the `Tool::Import` wizard cancels the run (the documented cancel-on-navigate path, ADR
   0017 §5). A root-owned driver that keeps the invocation alive across navigation is a design
@@ -830,6 +818,20 @@ decision, not a gap.
   keydown dispatcher and is `inert` under any of those (`shell/root.rs`, the ARIA APG modal pattern), so
   no `Global` chord reaches it — deliberate, and the palette already offers `Create` commands as a
   from-under-a-modal path (#300).
+
+### Assisted import
+
+- **Two Digitalarkivet records of one individual import as two persons, until record matching.** A
+  person resolves by the `digitalarkivet` `ExternalId`, which is the record id: a re-run of the same
+  record is a no-op (`re_running_the_same_url_imports_no_duplicates`), but the 1900 census, the 1910
+  census and a church-book entry for one individual carry three ids, so they make three persons.
+  Recognising them as one is the 0.10 record-matching milestone (ADRs 0037–0040), not an import fix.
+  #388 reported this as a re-import duplicate. The reporter could not reproduce it, and none of the
+  suspected paths is at fault: a stale plugin build (every build resolves by `ExternalId`), an
+  `og:url` variant (the record id is the last path segment), the GUI's workspace wiring (the same
+  directory the Explorer reads), or church-book participants sharing a `pd…` id (each has its own).
+  The two-commit create-then-key window can still duplicate after a failure between the commits;
+  that one is #390.
 
 ### Model & interchange
 

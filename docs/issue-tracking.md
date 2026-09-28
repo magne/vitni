@@ -239,13 +239,13 @@ ever blanked the canvas. The code changes themselves are in the PRs and the comm
 Ordered by dependency, not severity. The three bugs go first because they corrupt data today. Backup
 goes next, so every later event change passes its fixture guard. Then come the origins, the engine
 and the identity decisions, which the import rewrite and the UI build on. The design is ADRs
-0037–0041. Every bullet is in `issues.md`: the bugs under *Bulk import, export & sync* and *Assisted
-import*, backup under *Backup & restore*, and the rest under
+0037–0041. Every bullet is in `issues.md`: the bugs under *Bulk import, export & sync*, backup under
+*Backup & restore*, and the rest under
 [*Record matching & identity*](issues.md#record-matching--identity).
 
 | Stage | Items | Why it gates |
 | --- | --- | --- |
-| Bugs (#388–#390) | Digitalarkivet census re-import duplicates in the GUI; GEDCOM/Gramps external ids collide across files; person/family created in two commits without the provenance template | Import writes wrong data today: duplicates, and people from two files merged |
+| Bugs (#389–#390) | GEDCOM/Gramps external ids collide across files; person/family created in two commits without the provenance template | Import writes wrong data today: people from two files merged, and a failed import leaves a person without its key |
 | Backup (ADR 0041, #391) | Versioned backup and restore, with golden fixtures and the pre-1.0 window | Internal ids must survive; the format 1.0 freezes has to exist |
 | Origin (ADR 0037, #393–#395) | `RecordOrigin` + `ImportRun`; the `record_origins` index and resolve-by-origin; tombstones | A re-import is a no-op for every kind; retractions survive re-import |
 | Engine (ADR 0038, #396–#402) | Matching core with culture packs; person profile; Family/Event profiles; the other kinds' profiles; `match_keys` + `find_similar`; duplicate check through the engine; evaluation corpus + `match-eval` | One explainable answer to "are these the same?" |

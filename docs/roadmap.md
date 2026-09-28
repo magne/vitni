@@ -557,7 +557,7 @@ client carries no local config file. The embedded build keeps the file backend u
 because import corrupts data today:
 - a re-import duplicates places and sources
 - a second, unrelated GEDCOM file resolves its people onto the first file's people
-- a Digitalarkivet user reports duplicated persons
+- two Digitalarkivet records naming one individual import as two persons
 
 The goal: importing the same record twice is a no-op; two records naming one individual become one,
 never by guessing; and when the system is less than certain, the user decides, seeing both records side
