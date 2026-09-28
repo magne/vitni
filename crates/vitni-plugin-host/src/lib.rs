@@ -817,8 +817,6 @@ impl PluginHost {
     }
 }
 
-/// Interprets a guest call that returns `result<T, string>`: a host trap (fuel/instantiation), the
-/// guest's own error, or success.
 /// Closes the invocation's import run, if it started one (ADR 0037 §5).
 ///
 /// When the import itself succeeded, failing to record its end is the invocation's error. When the
@@ -847,6 +845,8 @@ async fn close_run(
     Ok(())
 }
 
+/// Interprets a guest call that returns `result<T, string>`: a host trap (fuel/instantiation), the
+/// guest's own error, or success.
 fn interpret_result<T>(outcome: wasmtime::Result<Result<T, String>>) -> Result<T, PluginError> {
     match outcome {
         Ok(Ok(value)) => Ok(value),
