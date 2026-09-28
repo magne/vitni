@@ -124,8 +124,9 @@ macro_rules! cli_command_enum {
                 #[arg(long)]
                 yes: bool,
                 /// Import into the existing dataset with this label or id: the file is a later
-                /// export of a tree imported before (ADR 0037 §3). See `import-run datasets`.
-                #[arg(long, value_name = "LABEL_OR_ID", conflicts_with = "new_dataset")]
+                /// export of a tree imported before (ADR 0037 §3). See `import-run datasets`. Not
+                /// with `--new`: a fresh workspace holds no dataset to name.
+                #[arg(long, value_name = "LABEL_OR_ID", conflicts_with_all = ["new_dataset", "new"])]
                 dataset: Option<String>,
                 /// Import as a new dataset: the file is a different tree from any imported before.
                 #[arg(long)]

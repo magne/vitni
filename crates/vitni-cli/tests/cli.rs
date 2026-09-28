@@ -726,3 +726,22 @@ fn dataset_and_new_dataset_are_mutually_exclusive() {
     init(dir.path());
     import_tree(dir.path(), &["--dataset", "tree.ged", "--new-dataset"]).failure();
 }
+
+#[test]
+fn a_new_workspace_is_not_created_for_an_import_naming_a_dataset() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("tree.ged");
+    std::fs::write(&file, TREE).unwrap();
+    let target = dir.path().join("fresh");
+    vitni(dir.path())
+        .args(["import", "gedcom-import"])
+        .arg(&file)
+        .arg("--new")
+        .arg("fresh")
+        .arg(&target)
+        .args(["--dataset", "tree.ged"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--dataset"));
+    assert!(!target.exists(), "nothing is created when the dataset cannot exist");
+}
