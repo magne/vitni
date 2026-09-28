@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use crate::ids::{AgentId, AssertionId, CitationId, DnaMatchId};
+use crate::origin::RecordOrigin;
 
 /// An assertion timestamp (the moment a claim was recorded), serialized as RFC 3339.
 ///
@@ -188,6 +189,12 @@ pub struct EventContext {
     pub citations: Vec<EvidenceRef>,
     /// The optional Evidence Explained analysis for this claim.
     pub evidence_analysis: Option<EvidenceAnalysis>,
+    /// The source record an importer read this claim from (ADR 0037 §1). `None` for a claim made at
+    /// the keyboard, and for every event written before origins existed. Boxed because an
+    /// `EventContext` is held across the awaits of every use-case future, and an inline origin would
+    /// push those past clippy's `large_futures` limit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<Box<RecordOrigin>>,
 }
 
 impl EventContext {
@@ -221,7 +228,8 @@ mod tests {
         Agent, AgentKind, AssertionMeta, Confidence, EventContext, EvidenceAnalysis, EvidenceKind, InformationKind,
         SourceQuality, Timestamp,
     };
-    use crate::ids::{AgentId, AssertionId};
+    use crate::ids::{AgentId, AssertionId, ImportRunId};
+    use crate::origin::{DatasetId, RecordOrigin};
     use time::macros::datetime;
     use uuid::Uuid;
 
@@ -243,6 +251,7 @@ mod tests {
                     information: InformationKind::Primary,
                     evidence: EvidenceKind::Direct,
                 }),
+                origin: None,
             },
         }
     }
@@ -324,5 +333,31 @@ mod tests {
         let json = serde_json::to_string(&meta).unwrap();
         let back: AssertionMeta = serde_json::from_str(&json).unwrap();
         assert_eq!(meta, back);
+    }
+
+    #[test]
+    fn an_origin_round_trips_through_json() {
+        let mut meta = sample_meta();
+        meta.context.origin = Some(Box::new(RecordOrigin {
+            dataset: DatasetId::global("digitalarkivet"),
+            record: "pf01073902000464".to_owned(),
+            item: Some("citation".to_owned()),
+            digest: None,
+            run: ImportRunId::from_uuid(Uuid::from_u128(3)),
+        }));
+        let json = serde_json::to_string(&meta).unwrap();
+        let back: AssertionMeta = serde_json::from_str(&json).unwrap();
+        assert_eq!(meta, back);
+    }
+
+    #[test]
+    fn a_context_without_an_origin_omits_the_field_and_decodes_as_none() {
+        let value = serde_json::to_value(sample_meta().context).unwrap();
+        assert!(
+            value.get("origin").is_none(),
+            "an absent origin is not serialized, so pre-origin archives keep their bytes"
+        );
+        let context: EventContext = serde_json::from_value(value).unwrap();
+        assert_eq!(context.origin, None);
     }
 }

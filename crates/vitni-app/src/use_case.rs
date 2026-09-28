@@ -10,6 +10,7 @@ use uuid::Uuid;
 use vitni_core::assertions::Attributed;
 use vitni_core::enums::NoteType;
 use vitni_core::ids::{AssertionId, NoteId};
+use vitni_core::origin::RecordOrigin;
 use vitni_core::provenance::{Confidence, EvidenceAnalysis, EvidenceRef};
 use vitni_core::text::Rect;
 use vitni_db::{CommandError, DbError, Store};
@@ -29,6 +30,21 @@ pub struct Provenance {
     pub rationale: Option<String>,
     /// The optional Evidence Explained analysis (source · information · evidence) for this claim.
     pub evidence_analysis: Option<EvidenceAnalysis>,
+    /// The source record an importer read this claim from (ADR 0037 §1); `None` at the keyboard.
+    pub origin: Option<RecordOrigin>,
+}
+
+impl Provenance {
+    /// The provenance for a mechanical follow-up write a use-case issues after its creating command
+    /// (a title, a name, a path): no surety judgment (ADR 0021 §5), but the same origin, since the
+    /// value was read from the same record.
+    #[must_use]
+    pub fn follow_up(&self) -> Self {
+        Self {
+            origin: self.origin.clone(),
+            ..Self::default()
+        }
+    }
 }
 
 /// The operator-intent inputs a non-create mutation carries: the [`Provenance`], the citation

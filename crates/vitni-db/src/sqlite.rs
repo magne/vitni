@@ -386,6 +386,7 @@ mod tests {
                 confidence: Some(Confidence::Normal),
                 citations: Vec::new(),
                 evidence_analysis: None,
+                origin: None,
             },
         }
     }
@@ -408,6 +409,7 @@ mod tests {
                     confidence: Some(Confidence::High),
                     citations: Vec::new(),
                     evidence_analysis: None,
+                    origin: None,
                 },
             },
             command: PersonCommand::CreatePerson {
@@ -539,6 +541,7 @@ mod tests {
                     confidence: Some(Confidence::High),
                     citations: Vec::new(),
                     evidence_analysis: None,
+                    origin: None,
                 },
             },
             command: FamilyCommand::CreateFamily {

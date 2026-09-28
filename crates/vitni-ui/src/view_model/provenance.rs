@@ -59,6 +59,7 @@ impl ProvenanceDraft {
             confidence: self.confidence.map(Into::into),
             rationale,
             evidence_analysis,
+            origin: None,
         }
     }
 

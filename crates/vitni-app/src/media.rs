@@ -103,6 +103,7 @@ pub async fn create_media(
     provenance: Provenance,
     citations: &[String],
 ) -> Result<String, AppError> {
+    let follow_up = provenance.follow_up();
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -140,7 +141,7 @@ pub async fn create_media(
                 media_id,
                 path: MediaPath::File(path),
             },
-            Provenance::default(),
+            follow_up,
             Vec::new(),
         )
         .await?;

@@ -49,6 +49,7 @@ pub mod media;
 pub mod media_path;
 pub mod name;
 pub mod note;
+pub mod origin;
 pub mod person;
 pub mod place;
 pub mod place_geometry;

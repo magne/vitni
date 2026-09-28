@@ -38,6 +38,7 @@ fn meta(assertion: u128) -> AssertionMeta {
             confidence: Some(Confidence::Normal),
             citations: Vec::new(),
             evidence_analysis: None,
+            origin: None,
         },
     }
 }

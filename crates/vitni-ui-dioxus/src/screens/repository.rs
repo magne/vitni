@@ -236,7 +236,14 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
         let current = current_id.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            let effective = apply_record_edits(services, edits, prov, current.clone(), save_repository_edit).await;
+            let effective = Box::pin(apply_record_edits(
+                services,
+                edits,
+                prov,
+                current.clone(),
+                save_repository_edit,
+            ))
+            .await;
             finish_record_save(effective, Category::Repositories, &current, record_nav, reload, &saved);
         });
     });

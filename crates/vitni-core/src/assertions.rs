@@ -229,6 +229,7 @@ mod tests {
             confidence,
             citations: Vec::new(),
             evidence_analysis: None,
+            origin: None,
         }
     }
 

@@ -101,6 +101,10 @@ uuid_newtype!(
     ResearchNoteId
 );
 uuid_newtype!(
+    /// Identity of an `ImportRun` aggregate (ADR 0037 §5).
+    ImportRunId
+);
+uuid_newtype!(
     /// Identity of a single assertion (one event), carried in the payload so a correction
     /// can target it portably (ADR 0004 §2).
     AssertionId

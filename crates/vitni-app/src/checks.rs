@@ -216,6 +216,7 @@ mod tests {
                     confidence: Some(Confidence::Normal),
                     rationale: None,
                     evidence_analysis: None,
+                    origin: None,
                 },
                 citations: &[],
                 dna_matches: &[],

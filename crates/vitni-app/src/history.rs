@@ -974,6 +974,7 @@ fn undo_provenance(rationale: Option<String>) -> Provenance {
         confidence: None,
         rationale: Some(rationale.unwrap_or_else(|| "Undo".to_owned())),
         evidence_analysis: None,
+        origin: None,
     }
 }
 
@@ -1507,6 +1508,7 @@ mod tests {
                     confidence: Some(Confidence::High),
                     rationale: None,
                     evidence_analysis: None,
+                    origin: None,
                 },
                 citations: &[],
                 dna_matches: &[],

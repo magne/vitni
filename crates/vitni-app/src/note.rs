@@ -84,6 +84,7 @@ pub async fn create_note(
     provenance: Provenance,
     citations: &[String],
 ) -> Result<String, AppError> {
+    let follow_up = provenance.follow_up();
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -120,7 +121,7 @@ pub async fn create_note(
                 note_id,
                 text: markdown(text),
             },
-            Provenance::default(),
+            follow_up,
             Vec::new(),
         )
         .await?;

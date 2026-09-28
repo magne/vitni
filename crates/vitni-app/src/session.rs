@@ -90,6 +90,7 @@ impl Session {
                 confidence: provenance.confidence,
                 citations,
                 evidence_analysis: provenance.evidence_analysis,
+                origin: provenance.origin.map(Box::new),
             },
         }
     }
@@ -119,6 +120,7 @@ mod tests {
             confidence: Some(Confidence::Normal),
             rationale: Some("note".to_owned()),
             evidence_analysis: None,
+            origin: None,
         };
         let meta = session().new_meta(provenance, Vec::new());
         assert_eq!(meta.context.operator.id, AgentId::from_uuid(Uuid::from_u128(42)));
@@ -145,6 +147,7 @@ mod tests {
             confidence: Some(Confidence::High),
             rationale: None,
             evidence_analysis: Some(analysis),
+            origin: None,
         };
         let meta = session().new_meta(provenance, Vec::new());
         assert_eq!(
