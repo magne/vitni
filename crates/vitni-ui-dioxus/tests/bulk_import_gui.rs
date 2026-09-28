@@ -115,7 +115,7 @@ fn source_new_view() -> Element {
     let source_typed = use_signal(|| "family.ged".to_owned());
     let target_mode = use_signal(|| "new".to_owned());
     let target_workspace = use_signal(String::new);
-    let new_workspace_fields = rsx! { {register_fields_form(&chrome, register_fields())} };
+    let new_workspace_fields = rsx! { {register_fields_form(&chrome, register_fields(), "register")} };
     rsx! {
         BulkSourceStage {
             labels: source_labels(),

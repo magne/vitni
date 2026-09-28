@@ -20,7 +20,8 @@ use vitni_app::{
 use vitni_core::ids::AgentId;
 use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::screens::{
-    LocaleFields, MaintenanceFields, RegisterFields, ShortcutFields, SuretyFields, SuretyScope, preferences_view,
+    BackupActions, BackupFields, LocaleFields, MaintenanceFields, RegisterFields, RestoredSummary, ShortcutFields,
+    SuretyFields, SuretyScope, preferences_view,
 };
 use vitni_ui_dioxus::services::PreferencesData;
 
@@ -190,6 +191,7 @@ fn view_with_status_and_locale(
         false,
         false,
         false,
+        BackupSeed::default(),
     )
 }
 
@@ -212,6 +214,7 @@ fn render_prefs(
     register_open: bool,
     maintenance_confirm_open: bool,
     maintenance_running: bool,
+    backup_seed: BackupSeed,
 ) -> Element {
     let data = PreferencesData {
         config,
@@ -266,6 +269,12 @@ fn render_prefs(
         confirm_open: use_signal(move || maintenance_confirm_open),
         running: use_signal(move || maintenance_running),
     };
+    let backup = backup_fields(backup_seed);
+    let backup_actions = BackupActions {
+        onbackup: EventHandler::new(|_| {}),
+        onrestore: EventHandler::new(|_| {}),
+        onopen: EventHandler::new(|_| {}),
+    };
     let loc = vitni_ui::Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let shortcuts_vm_value = vitni_ui::shortcuts_vm(&data.shortcuts, &loc);
     preferences_view(
@@ -289,6 +298,8 @@ fn render_prefs(
         |_| {},
         maintenance,
         |_| {},
+        backup,
+        backup_actions,
     )
 }
 
@@ -420,6 +431,7 @@ fn workspace_unreadable_manifest() -> Element {
         false,
         false,
         false,
+        BackupSeed::default(),
     )
 }
 
@@ -440,6 +452,7 @@ fn open_differs_from_default() -> Element {
         false,
         false,
         false,
+        BackupSeed::default(),
     )
 }
 
@@ -466,6 +479,7 @@ fn one_workspace_with_surety_override() -> Element {
         false,
         false,
         false,
+        BackupSeed::default(),
     )
 }
 
@@ -494,6 +508,7 @@ fn one_workspace_with_shared_default_surety_only() -> Element {
         false,
         false,
         false,
+        BackupSeed::default(),
     )
 }
 
@@ -519,6 +534,7 @@ fn one_workspace_with_shortcut_override_and_rejection() -> Element {
         false,
         false,
         false,
+        BackupSeed::default(),
     )
 }
 
@@ -539,6 +555,7 @@ fn register_form_open() -> Element {
         true,
         false,
         false,
+        BackupSeed::default(),
     )
 }
 
@@ -559,6 +576,7 @@ fn maintenance_running() -> Element {
         false,
         false,
         true,
+        BackupSeed::default(),
     )
 }
 
@@ -579,7 +597,88 @@ fn maintenance_confirm_open() -> Element {
         false,
         true,
         false,
+        BackupSeed::default(),
     )
+}
+
+/// The Backup card's signals, seeded from `seed` (called during a component render, like
+/// `render_prefs`).
+fn backup_fields(seed: BackupSeed) -> BackupFields {
+    let BackupSeed {
+        running,
+        restoring,
+        restored,
+    } = seed;
+    BackupFields {
+        path: use_signal(|| "/data/gen/backups/gen-2026-09-28.vitni-backup".to_owned()),
+        with_media: use_signal(|| false),
+        running: use_signal(move || running),
+        archive: use_signal(String::new),
+        restore: RegisterFields {
+            open: use_signal(|| true),
+            name: use_signal(String::new),
+            directory: use_signal(String::new),
+            database_url: use_signal(String::new),
+        },
+        restoring: use_signal(move || restoring),
+        restored: use_signal(move || restored),
+    }
+}
+
+/// What the Backup card's signals start at in a render: idle, unless a test arms a state.
+#[derive(Debug, Clone, Default)]
+struct BackupSeed {
+    running: bool,
+    restoring: bool,
+    restored: Option<RestoredSummary>,
+}
+
+/// Renders the default one-workspace screen with the Backup card seeded to `seed`.
+fn with_backup(seed: BackupSeed) -> Element {
+    let config = config_with_one_workspace();
+    let workspaces = summaries(&config, Some(Engine::Sqlite));
+    let open = config.default.clone().unwrap_or_default();
+    render_prefs(
+        config,
+        layers_falling_back_to_shared_default(),
+        resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        SuretyLabelOverrides::default(),
+        vitni_app::ShortcutConfig::default(),
+        None,
+        workspaces,
+        open,
+        false,
+        false,
+        false,
+        seed,
+    )
+}
+
+fn backup_running() -> Element {
+    with_backup(BackupSeed {
+        running: true,
+        ..BackupSeed::default()
+    })
+}
+
+fn restore_running() -> Element {
+    with_backup(BackupSeed {
+        restoring: true,
+        ..BackupSeed::default()
+    })
+}
+
+fn restore_finished() -> Element {
+    with_backup(BackupSeed {
+        restored: Some(RestoredSummary {
+            name: "copy".to_owned(),
+            lines: vec![
+                "Restored 42 events into workspace \"copy\".".to_owned(),
+                "Missing media file: media/scan.png".to_owned(),
+            ],
+        }),
+        ..BackupSeed::default()
+    })
 }
 
 /// Renders a component to an HTML string.
@@ -1101,4 +1200,93 @@ fn maintenance_confirm_modal_shows_confirm_and_cancel() {
     assert!(html.contains("Rebuild projections?"), "the modal title:\n{html}");
     assert!(html.contains(">Rebuild<"), "the confirm action:\n{html}");
     assert!(html.contains(">Cancel<"), "the cancel action:\n{html}");
+}
+
+/// The Backup card (ADR 0041) offers both directions: the backup file (prefilled under the
+/// workspace's `backups/`), the media toggle and Back up; the archive, the new workspace's fields and
+/// Restore.
+#[test]
+fn backup_card_renders_back_up_and_restore() {
+    let html = render(one_workspace_fallback);
+    for needle in [
+        "Backup &#38; restore",
+        "Back up this workspace",
+        "Backup file",
+        r#"value="/data/gen/backups/gen-2026-09-28.vitni-backup""#,
+        r#"type="checkbox""#,
+        "Include media files",
+        ">Back up<",
+        "Restore a backup",
+        "Backup file to restore",
+        r#"name="restore-name""#,
+        ">Restore into a new workspace<",
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
+    assert!(
+        !html.contains("Open restored workspace"),
+        "no summary before a restore:\n{html}"
+    );
+}
+
+#[test]
+fn a_running_backup_disables_its_button_and_shows_the_busy_label() {
+    let html = render(backup_running);
+    assert!(html.contains("Backing up…"), "{html}");
+    assert!(!html.contains(">Back up<"), "{html}");
+}
+
+#[test]
+fn a_running_restore_disables_its_button_and_shows_the_busy_label() {
+    let html = render(restore_running);
+    assert!(html.contains("Restoring…"), "{html}");
+    assert!(!html.contains(">Restore into a new workspace<"), "{html}");
+}
+
+/// After a restore the card reports what came back, in a live region, and offers to open the new
+/// workspace.
+#[test]
+fn a_finished_restore_reports_and_offers_to_open_the_workspace() {
+    let html = render(restore_finished);
+    assert!(
+        html.contains("Restored 42 events into workspace &#34;copy&#34;."),
+        "{html}"
+    );
+    assert!(html.contains("Missing media file: media/scan.png"), "{html}");
+    assert!(html.contains("Open restored workspace"), "{html}");
+    assert!(html.contains(r#"role="status""#), "{html}");
+}
+
+fn backup_card_in_norwegian() -> Element {
+    let signals = BackupFields {
+        path: use_signal(String::new),
+        with_media: use_signal(|| true),
+        running: use_signal(|| false),
+        archive: use_signal(String::new),
+        restore: RegisterFields {
+            open: use_signal(|| true),
+            name: use_signal(String::new),
+            directory: use_signal(String::new),
+            database_url: use_signal(String::new),
+        },
+        restoring: use_signal(|| false),
+        restored: use_signal(|| None),
+    };
+    let actions = BackupActions {
+        onbackup: EventHandler::new(|_| {}),
+        onrestore: EventHandler::new(|_| {}),
+        onopen: EventHandler::new(|_| {}),
+    };
+    vitni_ui_dioxus::screens::backup_card(&chrome("no"), signals, actions)
+}
+
+#[test]
+fn the_backup_card_is_localized() {
+    let html = render(backup_card_in_norwegian);
+    assert!(html.contains("Sikkerhetskopi og gjenoppretting"), "{html}");
+    assert!(html.contains("Ta med mediefiler"), "{html}");
+    assert!(
+        html.contains(r#"id="backup-with-media" name="backup-with-media" checked=true"#),
+        "the media toggle renders checked:\n{html}"
+    );
 }

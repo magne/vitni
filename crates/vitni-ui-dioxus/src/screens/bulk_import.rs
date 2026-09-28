@@ -243,7 +243,7 @@ fn bulk_source_body(
         default_dir.to_path_buf(),
         registered_names,
     );
-    let new_workspace_fields = rsx! { {register_fields_form(chrome, register)} };
+    let new_workspace_fields = rsx! { {register_fields_form(chrome, register, "register")} };
     rsx! {
         BulkSourceStage {
             labels: bulk_source_labels(chrome),

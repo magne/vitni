@@ -300,6 +300,51 @@
         </div>
       </div>
 
+      <!-- Backup & restore (ADR 0041, #391) — no sub-nav entry, same as Maintenance above. Acts
+           immediately, outside the batched Save; a restore registers a new workspace and never touches
+           the open one, so neither direction has a confirm step. -->
+      <h2 id="backup" style="border:0;margin:24px 0 12px">Backup &amp; restore</h2>
+      <div class="card">
+        <h3>Backup &amp; restore</h3>
+        <div class="muted" style="font-size:var(--fs-sm);margin-bottom:12px">
+          A backup is the whole event log in one <span class="mono">.vitni-backup</span> file, with where
+          every record came from. Restore it into a new workspace, on either database engine. An export
+          cannot do this: it leaves that provenance out.
+        </div>
+        <h3>Back up this workspace</h3>
+        <div class="stack">
+          <div class="field"><label>Backup file</label><input class="in" value="~/genealogy/gen/backups/gen-2026-09-28.vitni-backup"></div>
+          <div class="muted" style="font-size:var(--fs-sm)">A new file. An existing file is never overwritten.</div>
+          <div class="field"><label class="inline"><input type="checkbox"> <span>Include media files</span></label></div>
+          <div class="row-actions"><button class="btn sm primary">Back up</button></div>
+        </div>
+        <h3 style="margin-top:16px">Restore a backup</h3>
+        <div class="stack">
+          <div class="field"><label>Backup file to restore</label><input class="in" placeholder="~/genealogy/gen-2026-09-28.vitni-backup"></div>
+          <div class="field"><label>Name</label><input class="in" placeholder="e.g. family-tree"></div>
+          <div class="field"><label>Directory</label><input class="in" placeholder="~/genealogy/family-tree"></div>
+          <div class="muted" style="font-size:var(--fs-sm)">Optional — defaults to the app data directory.</div>
+          <div class="field"><label>Database URL</label><input class="in" placeholder="postgres://host/db">
+            <div class="field-hint">Optional — leave blank for the default SQLite engine.</div>
+          </div>
+          <div class="row-actions"><button class="btn sm primary">Restore into a new workspace</button></div>
+        </div>
+        <div class="muted" style="font-size:var(--fs-sm);margin-top:6px">While either runs, its button reads
+          <b>Backing up…</b> / <b>Restoring…</b> and is disabled. A finished backup raises the shell notice
+          <i>Backed up 1 204 events to …</i>, adding how many media files were not found; a failure raises an
+          error notice naming why (the file exists, the archive is damaged, its format is too old or too new).</div>
+      </div>
+
+      <h3 style="margin-top:var(--sp-6)">Restore summary <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, the card's live region after a restore</span></h3>
+      <div class="card">
+        <div role="status" class="stack">
+          <div>Restored 1 204 events into workspace "gen-copy".</div>
+          <div>3 media file(s) restored.</div>
+          <div>Missing media file: /home/me/scans/census-1865.png</div>
+          <div class="row-actions"><button class="btn sm">Open restored workspace</button></div>
+        </div>
+      </div>
+
       <div class="row-actions" style="justify-content:flex-end;margin-top:8px">
         <button class="btn">Reset to defaults</button>
         <button class="btn primary">Save preferences</button>

@@ -36,8 +36,10 @@ pub struct RegisterFields {
 
 /// The reusable workspace-registration field set: Name, Directory (with a default-data-dir hint), and
 /// an opt-in Database URL behind the `postgres` feature. No submit action of its own — the caller
-/// (Preferences' disclosure, or the bulk-import wizard's Run button) supplies that.
-pub fn register_fields_form(chrome: &Chrome, register: RegisterFields) -> Element {
+/// (Preferences' disclosure, the Backup card's restore, or the bulk-import wizard's Run button)
+/// supplies that. `id_prefix` names the fields (`<prefix>-name`, …), so two forms on one screen keep
+/// distinct element ids.
+pub fn register_fields_form(chrome: &Chrome, register: RegisterFields, id_prefix: &str) -> Element {
     let RegisterFields {
         mut name,
         mut directory,
@@ -47,18 +49,18 @@ pub fn register_fields_form(chrome: &Chrome, register: RegisterFields) -> Elemen
     rsx! {
         Input {
             label: chrome.prefs_register_name_label(),
-            name: "register-name".to_owned(),
+            name: format!("{id_prefix}-name"),
             value: Some(name()),
             oninput: move |event: FormEvent| name.set(event.value()),
         }
         Input {
             label: chrome.prefs_register_path_label(),
-            name: "register-directory".to_owned(),
+            name: format!("{id_prefix}-directory"),
             value: Some(directory()),
             oninput: move |event: FormEvent| directory.set(event.value()),
         }
         div { class: "muted", style: "font-size:var(--fs-sm)", "{chrome.prefs_register_path_hint()}" }
-        {database_url_field(chrome, database_url)}
+        {database_url_field(chrome, database_url, id_prefix)}
     }
 }
 
@@ -68,11 +70,11 @@ pub fn register_fields_form(chrome: &Chrome, register: RegisterFields) -> Elemen
 /// unless the binary was built to support it. The shipped `vitni` launcher turns it on, because it
 /// links Postgres through `vitni-cli` either way (ADR 0035 §5).
 #[cfg(feature = "postgres")]
-fn database_url_field(chrome: &Chrome, mut database_url: Signal<String>) -> Element {
+fn database_url_field(chrome: &Chrome, mut database_url: Signal<String>, id_prefix: &str) -> Element {
     rsx! {
         Input {
             label: chrome.prefs_register_database_url_label(),
-            name: "register-database-url".to_owned(),
+            name: format!("{id_prefix}-database-url"),
             value: Some(database_url()),
             oninput: move |event: FormEvent| database_url.set(event.value()),
         }
@@ -83,7 +85,7 @@ fn database_url_field(chrome: &Chrome, mut database_url: Signal<String>) -> Elem
 /// The `postgres`-off counterpart of [`database_url_field`]: renders nothing, so [`register_fields_form`]
 /// stays unconditional while the field itself disappears from a default build.
 #[cfg(not(feature = "postgres"))]
-fn database_url_field(_chrome: &Chrome, _database_url: Signal<String>) -> Element {
+fn database_url_field(_chrome: &Chrome, _database_url: Signal<String>, _id_prefix: &str) -> Element {
     rsx! {}
 }
 

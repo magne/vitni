@@ -29,12 +29,12 @@ use vitni_ui::{ShortcutBindingVm, ShortcutGroup, ShortcutsVm, resolved_shortcuts
 
 use super::prelude::*;
 use crate::app::{open_workspace, request_restart};
-use crate::components::{Badge, LabeledValue, Modal, TextField};
+use crate::components::{Badge, Checkbox, LabeledValue, Modal, TextField};
 use crate::i18n::Chrome;
 use crate::services::{
-    PreferencesData, load_preferences, make_default_workspace, rebuild_projections, register_workspace,
-    save_id_format_defaults, save_locale_defaults, save_operator_identity, save_shortcuts, save_surety_defaults,
-    save_surety_workspace_overrides,
+    PreferencesData, Services, create_backup, default_backup_path, load_preferences, make_default_workspace,
+    rebuild_projections, register_workspace, restore_backup, save_id_format_defaults, save_locale_defaults,
+    save_operator_identity, save_shortcuts, save_surety_defaults, save_surety_workspace_overrides,
 };
 use crate::shell::ShortcutsCtx;
 
@@ -192,6 +192,22 @@ pub fn PreferencesScreen() -> Element {
         });
     };
 
+    let backup = BackupFields {
+        path: use_signal(|| default_backup_path(&services).display().to_string()),
+        with_media: use_signal(|| false),
+        running: use_signal(|| false),
+        archive: use_signal(String::new),
+        restore: RegisterFields {
+            open: use_signal(|| true),
+            name: use_signal(String::new),
+            directory: use_signal(String::new),
+            database_url: use_signal(String::new),
+        },
+        restoring: use_signal(|| false),
+        restored: use_signal(|| None),
+    };
+    let backup_actions = backup_actions(&services, &chrome, &backup, data, nav);
+
     // Discards unsaved edits by re-seeding the fields from the last-loaded (on-disk) data, without
     // writing anything — the counterpart to `onsave`.
     let onreset = move |_| {
@@ -239,7 +255,81 @@ pub fn PreferencesScreen() -> Element {
         onregister,
         maintenance,
         onrebuild,
+        backup,
+        backup_actions,
     )
+}
+
+/// Wires the Backup card's actions: each runs off the render and reports through the shell notice
+/// (a backup) or the card's own summary (a restore, which also refreshes the Workspaces table).
+fn backup_actions(
+    services: &Services,
+    chrome: &Rc<Chrome>,
+    backup: &BackupFields,
+    mut data: Signal<PreferencesData>,
+    mut nav: NavState,
+) -> BackupActions {
+    let backup = *backup;
+    let mut running = backup.running;
+    let mut restoring = backup.restoring;
+    let mut restored = backup.restored;
+    let backup_services = services.clone();
+    let backup_chrome = Rc::clone(chrome);
+    let onbackup = EventHandler::new(move |_: MouseEvent| {
+        let path = backup.path.peek().trim().to_owned();
+        if path.is_empty() {
+            nav.notify_error(backup_chrome.prefs_backup_path_required());
+            return;
+        }
+        running.set(true);
+        let services = backup_services.clone();
+        let chrome = Rc::clone(&backup_chrome);
+        let with_media = *backup.with_media.peek();
+        spawn(async move {
+            let outcome = Box::pin(create_backup(services, PathBuf::from(path), with_media)).await;
+            running.set(false);
+            match outcome {
+                Ok(report) => nav.notify(backup_notice(&chrome, &report)),
+                Err(message) => nav.notify_error(message),
+            }
+        });
+    });
+    let restore_services = services.clone();
+    let restore_chrome = Rc::clone(chrome);
+    let onrestore = EventHandler::new(move |_: MouseEvent| {
+        let archive = backup.archive.peek().trim().to_owned();
+        let name = backup.restore.name.peek().trim().to_owned();
+        if archive.is_empty() {
+            nav.notify_error(restore_chrome.prefs_restore_archive_required());
+            return;
+        }
+        if name.is_empty() {
+            nav.notify_error(restore_chrome.prefs_register_name_required());
+            return;
+        }
+        let directory = non_empty(backup.restore.directory.peek().clone()).map(PathBuf::from);
+        let database_url = non_empty(backup.restore.database_url.peek().clone());
+        restoring.set(true);
+        let services = restore_services.clone();
+        let chrome = Rc::clone(&restore_chrome);
+        spawn(async move {
+            let restore = restore_backup(services.clone(), PathBuf::from(archive), name, directory, database_url);
+            let outcome = Box::pin(restore).await;
+            restoring.set(false);
+            match outcome {
+                Ok(report) => {
+                    restored.set(Some(restored_summary(&chrome, &report)));
+                    data.set(load_preferences(&services));
+                }
+                Err(message) => nav.notify_error(message),
+            }
+        });
+    });
+    BackupActions {
+        onbackup,
+        onrestore,
+        onopen: EventHandler::new(open_workspace),
+    }
 }
 
 /// The chord-string value each rebindable ([`ShortcutGroup::Global`]) action's field seeds to: the
@@ -443,6 +533,46 @@ pub struct MaintenanceFields {
     pub running: Signal<bool>,
 }
 
+/// The Backup card's state (ADR 0041): the backup file and media toggle, the archive to restore and
+/// the new workspace's fields, whether either direction is running, and the last restore's summary.
+#[derive(Debug, Clone, Copy)]
+pub struct BackupFields {
+    /// The backup file to write.
+    pub path: Signal<String>,
+    /// Whether to carry the media library files too.
+    pub with_media: Signal<bool>,
+    /// Whether a backup is running.
+    pub running: Signal<bool>,
+    /// The archive to restore.
+    pub archive: Signal<String>,
+    /// The new workspace a restore registers (its `open` flag is unused).
+    pub restore: RegisterFields,
+    /// Whether a restore is running.
+    pub restoring: Signal<bool>,
+    /// The last successful restore, reported in the card until the workspace is opened.
+    pub restored: Signal<Option<RestoredSummary>>,
+}
+
+/// What the last restore produced, already localized: the new workspace's name and one line per fact.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestoredSummary {
+    /// The restored workspace's registry name, for *Open restored workspace*.
+    pub name: String,
+    /// The summary lines: the event count, then any media restored, missing or changed.
+    pub lines: Vec<String>,
+}
+
+/// The Backup card's actions: Back up, Restore, and Open (with the restored workspace's name).
+#[derive(Clone, Copy)]
+pub struct BackupActions {
+    /// Starts a backup.
+    pub onbackup: EventHandler<MouseEvent>,
+    /// Starts a restore.
+    pub onrestore: EventHandler<MouseEvent>,
+    /// Opens the named restored workspace.
+    pub onopen: EventHandler<String>,
+}
+
 /// Renders the settings sub-nav + every card. A pure function of its inputs (data, the current
 /// theme mode, the editable-field signals, and plain callbacks) so the SSR test can exercise it with
 /// hand-built fixtures — no `AppCtx`/plugin host required (mirrors `dashboard_view`).
@@ -471,6 +601,8 @@ pub fn preferences_view(
     onregister: impl FnMut(MouseEvent) + 'static,
     maintenance: MaintenanceFields,
     onrebuild: impl FnMut(MouseEvent) + 'static,
+    backup: BackupFields,
+    backup_actions: BackupActions,
 ) -> Element {
     rsx! {
         div { style: "display:grid;grid-template-columns:200px 1fr;height:100%;min-height:0",
@@ -492,6 +624,7 @@ pub fn preferences_view(
                 {defaults_card(chrome, data, person_id_format)}
                 {workspaces_card(chrome, data, register, onopen, onmakedefault, onregister)}
                 {maintenance_card(chrome, maintenance, onrebuild)}
+                {backup_card(chrome, backup, backup_actions)}
                 div { class: "row-actions", style: "justify-content:flex-end;margin-top:8px",
                     Button { label: chrome.prefs_reset(), variant: ButtonVariant::Default, onclick: onreset }
                     Button { label: chrome.prefs_save(), variant: ButtonVariant::Primary, onclick: onsave }
@@ -1137,7 +1270,7 @@ fn register_form(chrome: &Chrome, register: RegisterFields, onregister: impl FnM
         }
         if open() {
             div { class: "stack", style: "margin-top:8px",
-                {register_fields_form(chrome, register)}
+                {register_fields_form(chrome, register, "register")}
                 div { class: "row-actions",
                     Button {
                         label: chrome.prefs_register_submit(),
@@ -1206,6 +1339,127 @@ fn maintenance_card(
             p { "{chrome.prefs_rebuild_confirm_body()}" }
         }
     }
+}
+
+/// The "Backup & restore" card (ADR 0041): the GUI counterpart of `vitni backup create` and `vitni
+/// backup restore`. Like Maintenance it acts immediately, outside the batched Save. A restore never
+/// touches the open workspace — it registers a new one — so neither direction needs a confirm step.
+pub fn backup_card(chrome: &Chrome, backup: BackupFields, actions: BackupActions) -> Element {
+    let BackupFields {
+        mut path,
+        mut with_media,
+        running,
+        mut archive,
+        restore,
+        restoring,
+        restored,
+    } = backup;
+    let backup_label = if running() {
+        chrome.prefs_backup_busy()
+    } else {
+        chrome.prefs_backup_run()
+    };
+    let restore_label = if restoring() {
+        chrome.prefs_restore_busy()
+    } else {
+        chrome.prefs_restore_run()
+    };
+    rsx! {
+        Card { title: chrome.prefs_backup_title(),
+            div { class: "muted", style: "font-size:var(--fs-sm);margin-bottom:12px", "{chrome.prefs_backup_intro()}" }
+            h3 { "{chrome.prefs_backup_heading()}" }
+            div { class: "stack",
+                Input {
+                    label: chrome.prefs_backup_path_label(),
+                    name: "backup-path".to_owned(),
+                    value: Some(path()),
+                    oninput: move |event: FormEvent| path.set(event.value()),
+                }
+                div { class: "muted", style: "font-size:var(--fs-sm)", "{chrome.prefs_backup_path_hint()}" }
+                Checkbox {
+                    label: chrome.prefs_backup_with_media(),
+                    name: "backup-with-media".to_owned(),
+                    checked: with_media(),
+                    onchange: move |event: FormEvent| with_media.set(event.checked()),
+                }
+                div { class: "row-actions",
+                    Button {
+                        label: backup_label,
+                        variant: ButtonVariant::Primary,
+                        small: true,
+                        disabled: running(),
+                        onclick: move |event| actions.onbackup.call(event),
+                    }
+                }
+            }
+            h3 { style: "margin-top:16px", "{chrome.prefs_restore_heading()}" }
+            div { class: "stack",
+                Input {
+                    label: chrome.prefs_restore_archive_label(),
+                    name: "restore-archive".to_owned(),
+                    value: Some(archive()),
+                    oninput: move |event: FormEvent| archive.set(event.value()),
+                }
+                {register_fields_form(chrome, restore, "restore")}
+                div { class: "row-actions",
+                    Button {
+                        label: restore_label,
+                        variant: ButtonVariant::Primary,
+                        small: true,
+                        disabled: restoring(),
+                        onclick: move |event| actions.onrestore.call(event),
+                    }
+                }
+                div { role: "status", aria_live: "polite",
+                    if let Some(summary) = restored() {
+                        div { class: "stack",
+                            for line in summary.lines.iter() {
+                                div { "{line}" }
+                            }
+                            div { class: "row-actions",
+                                Button {
+                                    label: chrome.prefs_restore_open(),
+                                    variant: ButtonVariant::Default,
+                                    small: true,
+                                    onclick: move |_| actions.onopen.call(summary.name.clone()),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The summary lines a finished restore reports in the Backup card.
+fn restored_summary(chrome: &Chrome, report: &vitni_app::RestoreReport) -> RestoredSummary {
+    let mut lines = vec![chrome.prefs_restore_done(report.events, &report.workspace.name)];
+    if report.media_restored > 0 {
+        lines.push(chrome.prefs_restore_media_restored(report.media_restored));
+    }
+    for path in &report.media_missing {
+        lines.push(chrome.prefs_restore_media_missing(path));
+    }
+    for path in &report.media_mismatched {
+        lines.push(chrome.prefs_restore_media_mismatched(path));
+    }
+    RestoredSummary {
+        name: report.workspace.name.clone(),
+        lines,
+    }
+}
+
+/// The notice a finished backup raises: where it went, and how many media files it could not find.
+fn backup_notice(chrome: &Chrome, report: &vitni_app::BackupReport) -> String {
+    let done = chrome.prefs_backup_done(report.events, &report.destination.display().to_string());
+    if report.media_missing.is_empty() {
+        return done;
+    }
+    format!(
+        "{done} {}",
+        chrome.prefs_backup_media_missing(report.media_missing.len())
+    )
 }
 
 #[cfg(test)]
