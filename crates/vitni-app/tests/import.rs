@@ -5,8 +5,9 @@
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, ExternalId, OperatorConfig, PersonNameParts, Session, Workspace, WorkspaceDefaults,
-    import_add_partner, import_family, import_person, list_families, list_persons, show_person,
+    AppDefaults, Confidence, ExternalId, OperatorConfig, PersonNameParts, Provenance, Session, Workspace,
+    WorkspaceDefaults, change_log_for_family, change_log_for_person, import_add_partner, import_family, import_person,
+    list_families, list_persons, show_person,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
@@ -55,14 +56,26 @@ async fn re_importing_the_same_person_resolves_to_the_existing_one() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let (first, created) = import_person(&ws, &session, uid("P-1"), Some(name("Ada", "Lovelace")))
-        .await
-        .expect("first import");
+    let (first, created) = import_person(
+        &ws,
+        &session,
+        uid("P-1"),
+        Some(name("Ada", "Lovelace")),
+        Provenance::default(),
+    )
+    .await
+    .expect("first import");
     assert!(created, "first import creates the person");
 
-    let (second, created_again) = import_person(&ws, &session, uid("P-1"), Some(name("Ada", "Lovelace")))
-        .await
-        .expect("second import");
+    let (second, created_again) = import_person(
+        &ws,
+        &session,
+        uid("P-1"),
+        Some(name("Ada", "Lovelace")),
+        Provenance::default(),
+    )
+    .await
+    .expect("second import");
     assert!(!created_again, "second import resolves the existing person");
     assert_eq!(first, second, "same human_id");
 
@@ -77,13 +90,25 @@ async fn a_new_name_on_an_existing_person_is_added_additively() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let (human_id, _) = import_person(&ws, &session, uid("P-1"), Some(name("Ada", "Lovelace")))
-        .await
-        .expect("import");
+    let (human_id, _) = import_person(
+        &ws,
+        &session,
+        uid("P-1"),
+        Some(name("Ada", "Lovelace")),
+        Provenance::default(),
+    )
+    .await
+    .expect("import");
     // Re-import the same record but with a different name: it is added, not overwritten.
-    import_person(&ws, &session, uid("P-1"), Some(name("Augusta Ada", "King")))
-        .await
-        .expect("re-import with new name");
+    import_person(
+        &ws,
+        &session,
+        uid("P-1"),
+        Some(name("Augusta Ada", "King")),
+        Provenance::default(),
+    )
+    .await
+    .expect("re-import with new name");
 
     assert_eq!(list_persons(&ws).await.expect("list").len(), 1, "still one person");
     let view = show_person(&ws, &human_id).await.expect("show").expect("present");
@@ -96,15 +121,29 @@ async fn re_importing_a_family_and_its_partners_is_idempotent() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let (husband, _) = import_person(&ws, &session, uid("I-1"), Some(name("John", "Smith")))
-        .await
-        .expect("husband");
-    let (wife, _) = import_person(&ws, &session, uid("I-2"), Some(name("Jane", "Doe")))
-        .await
-        .expect("wife");
+    let (husband, _) = import_person(
+        &ws,
+        &session,
+        uid("I-1"),
+        Some(name("John", "Smith")),
+        Provenance::default(),
+    )
+    .await
+    .expect("husband");
+    let (wife, _) = import_person(
+        &ws,
+        &session,
+        uid("I-2"),
+        Some(name("Jane", "Doe")),
+        Provenance::default(),
+    )
+    .await
+    .expect("wife");
 
     for _ in 0..2 {
-        let (family, _) = import_family(&ws, &session, uid("F-1")).await.expect("family");
+        let (family, _) = import_family(&ws, &session, uid("F-1"), Provenance::default())
+            .await
+            .expect("family");
         import_add_partner(&ws, &session, &family, &husband)
             .await
             .expect("partner husband");
@@ -116,4 +155,112 @@ async fn re_importing_a_family_and_its_partners_is_idempotent() {
     let families = list_families(&ws).await.expect("list families");
     assert_eq!(families.len(), 1, "re-import creates no duplicate family");
     assert_eq!(families[0].partners.len(), 2, "partners added once, not duplicated");
+}
+
+/// Installs a trigger that aborts every insert of an `event_type` event, so the store fails at
+/// exactly that point of a command — the injected failure behind the atomicity tests (#390).
+async fn abort_inserts_of(dir: &tempfile::TempDir, event_type: &str) {
+    let url = format!("sqlite://{}", dir.path().join("ws").join("vitni.sqlite3").display());
+    let pool = sqlx::SqlitePool::connect(&url)
+        .await
+        .expect("connect to the workspace database");
+    sqlx::query(&format!(
+        "CREATE TRIGGER abort_{event_type} BEFORE INSERT ON events WHEN NEW.event_type = '{event_type}' \
+         BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
+    ))
+    .execute(&pool)
+    .await
+    .expect("install the failure trigger");
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn a_failed_external_id_write_leaves_no_keyless_person() {
+    let (ws, dir) = workspace().await;
+    abort_inserts_of(&dir, "ExternalIdAdded").await;
+
+    let result = import_person(
+        &ws,
+        &session(),
+        uid("P-1"),
+        Some(name("Ada", "Lovelace")),
+        Provenance::default(),
+    )
+    .await;
+
+    assert!(result.is_err(), "the injected failure surfaces: {result:?}");
+    assert!(
+        list_persons(&ws).await.expect("list").is_empty(),
+        "the person and its key commit together, so neither remains"
+    );
+}
+
+#[tokio::test]
+async fn a_failed_external_id_write_leaves_no_keyless_family() {
+    let (ws, dir) = workspace().await;
+    abort_inserts_of(&dir, "ExternalIdAdded").await;
+
+    let result = import_family(&ws, &session(), uid("F-1"), Provenance::default()).await;
+
+    assert!(result.is_err(), "the injected failure surfaces: {result:?}");
+    assert!(
+        list_families(&ws).await.expect("list").is_empty(),
+        "the family and its key commit together, so neither remains"
+    );
+}
+
+fn low() -> Provenance {
+    Provenance {
+        confidence: Some(Confidence::Low),
+        ..Provenance::default()
+    }
+}
+
+#[tokio::test]
+async fn an_assisted_import_stamps_its_template_on_every_person_assertion() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let (human_id, _) = import_person(&ws, &session, uid("P-1"), Some(name("Ada", "Lovelace")), low())
+        .await
+        .expect("import");
+    import_person(&ws, &session, uid("P-1"), Some(name("Augusta Ada", "King")), low())
+        .await
+        .expect("re-import with a new name");
+
+    let log = change_log_for_person(&ws, &human_id).await.expect("change log");
+    let mut kinds: Vec<&str> = log.iter().map(|entry| entry.event_type.as_str()).collect();
+    kinds.sort_unstable();
+    assert_eq!(
+        kinds,
+        ["ExternalIdAdded", "NameAsserted", "NameAsserted", "PersonCreated"]
+    );
+    for entry in &log {
+        assert_eq!(
+            entry.confidence,
+            Some(Confidence::Low),
+            "{} carries the template",
+            entry.event_type
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_assisted_import_stamps_its_template_on_the_family_and_its_key() {
+    let (ws, _dir) = workspace().await;
+
+    let (human_id, _) = import_family(&ws, &session(), uid("F-1"), low()).await.expect("import");
+
+    let log = change_log_for_family(&ws, &human_id).await.expect("change log");
+    let mut kinds: Vec<&str> = log.iter().map(|entry| entry.event_type.as_str()).collect();
+    kinds.sort_unstable();
+    assert_eq!(kinds, ["ExternalIdAdded", "FamilyCreated"]);
+    for entry in &log {
+        assert_eq!(
+            entry.confidence,
+            Some(Confidence::Low),
+            "{} carries the template",
+            entry.event_type
+        );
+    }
 }

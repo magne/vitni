@@ -88,6 +88,7 @@ fn create_person_produces_person_created_through_the_adapter() {
                 person_id: pid(100),
                 human_id: HumanId::new("I1"),
                 evidence_level: EvidenceLevel::Conclusion,
+                external_ids: Vec::new(),
             },
         ))
         .then_expect_events(vec![created_event(1, 100)]);

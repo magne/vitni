@@ -71,6 +71,7 @@ fn person(given: &str) -> NewPerson {
             Some("Lovelace".to_owned()),
         )),
         evidence_level: EvidenceLevel::Conclusion,
+        external_ids: Vec::new(),
     }
 }
 

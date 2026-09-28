@@ -181,6 +181,22 @@ pub async fn create_family(
     provenance: Provenance,
     citations: &[String],
 ) -> Result<String, AppError> {
+    create_family_with_external_ids(workspace, session, Vec::new(), provenance, citations).await
+}
+
+/// Creates a family carrying `external_ids`, so the family and its keys commit together
+/// (data-model §11) — what [`crate::import::import_family`] needs to never leave a keyless family.
+///
+/// # Errors
+///
+/// As [`create_family`].
+pub(crate) async fn create_family_with_external_ids(
+    workspace: &Workspace,
+    session: &Session,
+    external_ids: Vec<ExternalId>,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = store.next_family_human_id(&workspace.family_id_format()?).await?;
     let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
@@ -193,6 +209,7 @@ pub async fn create_family(
         FamilyCommand::CreateFamily {
             family_id,
             human_id: HumanId::new(&human_id),
+            external_ids: use_case::attribute_each(session, external_ids),
         },
         provenance,
         citation_refs,

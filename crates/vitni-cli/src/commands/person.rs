@@ -133,6 +133,7 @@ pub async fn run(
                     human_id: id,
                     name: Some(PersonNameParts::simple(given, surname)),
                     evidence_level: evidence.into(),
+                    external_ids: Vec::new(),
                 },
                 Provenance::default(),
                 &[],

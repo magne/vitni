@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 
 use uuid::Uuid;
+use vitni_core::assertions::Attributed;
 use vitni_core::enums::NoteType;
 use vitni_core::ids::{AssertionId, NoteId};
 use vitni_core::provenance::{Confidence, EvidenceAnalysis, EvidenceRef};
@@ -14,6 +15,7 @@ use vitni_core::text::Rect;
 use vitni_db::{CommandError, DbError, Store};
 
 use crate::error::AppError;
+use crate::session::Session;
 
 /// The operator's surety in, reason for, and evidence analysis of a single assertion — the
 /// per-assertion provenance the frontend supplies (data-model §8). Defaults to no surety judgment
@@ -167,6 +169,19 @@ pub(crate) fn parse_assertion_id(id: &str) -> Result<AssertionId, AppError> {
     Uuid::parse_str(id)
         .map(AssertionId::from_uuid)
         .map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))
+}
+
+/// Pairs each value with a freshly minted [`AssertionId`], for the assertions a create command carries
+/// beyond its own (its external ids) — each one then corrects independently of the creation.
+pub(crate) fn attribute_each<T>(session: &Session, values: Vec<T>) -> Vec<Attributed<T>> {
+    let mut attributed = Vec::with_capacity(values.len());
+    for value in values {
+        attributed.push(Attributed {
+            assertion_id: session.new_assertion_id(),
+            value,
+        });
+    }
+    attributed
 }
 
 /// Normalizes a caller-supplied new `human_id` for a rename: trims surrounding whitespace and treats

@@ -19,8 +19,8 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use uuid::Uuid;
 use vitni_app::{
-    AiConfig, AppDefaults, Confidence, OperatorConfig, Rect, Session, Workspace, WorkspaceDefaults, list_citations,
-    list_media, list_persons, list_repositories, list_sources,
+    AiConfig, AppDefaults, Confidence, OperatorConfig, Rect, Session, Workspace, WorkspaceDefaults,
+    change_log_for_person, list_citations, list_media, list_persons, list_repositories, list_sources,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
@@ -359,6 +359,7 @@ async fn assert_census_import(root: &Path) {
         }),
         "the user's line region became the media ref crop"
     );
+    assert_every_assertion_is_low(&workspace, &person.human_id).await;
 
     assert_eq!(
         list_sources(&workspace).await.expect("sources").len(),
@@ -429,6 +430,26 @@ async fn assert_census_import(root: &Path) {
         events_contain(root, "Software").await,
         "the operator is a Software agent"
     );
+}
+
+/// The invocation's `Low` template reaches every assertion on the imported person, the creation and
+/// its key included (#390).
+async fn assert_every_assertion_is_low(workspace: &Workspace, human_id: &str) {
+    let log = change_log_for_person(workspace, human_id)
+        .await
+        .expect("person change log");
+    assert!(
+        log.iter().any(|entry| entry.event_type == "PersonCreated"),
+        "the change log covers the creation: {log:?}"
+    );
+    for entry in &log {
+        assert_eq!(
+            entry.confidence,
+            Some(Confidence::Low),
+            "{} carries the assisted template",
+            entry.event_type
+        );
+    }
 }
 
 // ----- re-run idempotence -----

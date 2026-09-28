@@ -234,6 +234,7 @@ async fn create_person_graph(
             person_id,
             human_id: HumanId::new(human_id),
             evidence_level: EvidenceLevel::Conclusion,
+            external_ids: Vec::new(),
         },
         change_set.provenance.clone(),
         Vec::new(),

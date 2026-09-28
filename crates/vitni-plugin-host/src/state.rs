@@ -205,6 +205,7 @@ impl commands::Host for HostState {
                 human_id: None,
                 name,
                 evidence_level: EvidenceLevel::Persona,
+                external_ids: Vec::new(),
             };
             let human_id = vitni_app::create_person(&self.workspace, &self.session, new, self.provenance(), &[])
                 .await
@@ -215,10 +216,16 @@ impl commands::Host for HostState {
             });
         };
         // Resolve-or-create against the external id (idempotent, additive re-import).
-        vitni_app::import_person(&self.workspace, &self.session, to_external_id(external_id), name)
-            .await
-            .map(|(human_id, created)| types::ImportResult { human_id, created })
-            .map_err(|error| to_capability_error(&error))
+        vitni_app::import_person(
+            &self.workspace,
+            &self.session,
+            to_external_id(external_id),
+            name,
+            self.provenance(),
+        )
+        .await
+        .map(|(human_id, created)| types::ImportResult { human_id, created })
+        .map_err(|error| to_capability_error(&error))
     }
 
     async fn add_person_name(&mut self, person: String, name: types::PersonName) -> Result<(), types::CapabilityError> {
@@ -250,10 +257,15 @@ impl commands::Host for HostState {
                 created: true,
             });
         };
-        vitni_app::import_family(&self.workspace, &self.session, to_external_id(external_id))
-            .await
-            .map(|(human_id, created)| types::ImportResult { human_id, created })
-            .map_err(|error| to_capability_error(&error))
+        vitni_app::import_family(
+            &self.workspace,
+            &self.session,
+            to_external_id(external_id),
+            self.provenance(),
+        )
+        .await
+        .map(|(human_id, created)| types::ImportResult { human_id, created })
+        .map_err(|error| to_capability_error(&error))
     }
 
     async fn add_partner(&mut self, family: String, person: String) -> Result<(), types::CapabilityError> {

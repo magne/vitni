@@ -482,6 +482,12 @@ decision core is `decide(state, command) -> Result<Vec<Event>, Error>`
 the `EventContext` (operator `Agent`, clock, generated `AssertionId`) onto the command before
 `decide` runs, keeping `decide` pure (ADR 0004 §3).
 
+`CreatePerson` and `CreateFamily` also carry the record's initial `ExternalId`s (§11), so one
+`decide` emits the created event and an `ExternalIdAdded` per distinct `(authority, value)`, and they
+commit together: an import never leaves a record its re-run cannot resolve. Each `ExternalIdAdded`
+has its own `AssertionId`, minted by the application layer alongside the create's, so a key is
+retracted without touching the creation.
+
 Representative **commands** (not exhaustive):
 
 - **Person:** `CreatePerson`, `AssertName`, `AssertSex`, `AssertFact`, `AssertParticipation`,
@@ -878,7 +884,7 @@ pub enum PersonEvent {
 /// Imperative operator intent (§10). The application layer attaches the `EventContext`
 /// (operator, clock, generated `AssertionId`) before `decide` runs (ADR 0004 §3).
 pub enum PersonCommand {
-    CreatePerson { human_id: HumanId, evidence_level: EvidenceLevel },
+    CreatePerson { human_id: HumanId, evidence_level: EvidenceLevel, external_ids: Vec<Attributed<ExternalId>> },
     AssertName { person_id: PersonId, name: PersonName },
     AssertFact { person_id: PersonId, fact: Fact },
     RetractAssertion { person_id: PersonId, target: AssertionId },

@@ -61,6 +61,7 @@ fn new_person(given: &str, surname: &str) -> NewPerson {
             Some(surname.to_owned()),
         )),
         evidence_level: EvidenceLevel::Conclusion,
+        external_ids: Vec::new(),
     }
 }
 
@@ -103,6 +104,7 @@ async fn create_honors_a_supplied_id_then_rejects_a_duplicate() {
             Some("Hopper".to_owned()),
         )),
         evidence_level: EvidenceLevel::Conclusion,
+        external_ids: Vec::new(),
     };
     let assigned = create_person(&ws, &session, supplied.clone(), Provenance::default(), &[])
         .await
@@ -125,6 +127,7 @@ async fn show_reflects_an_added_name() {
             human_id: None,
             name: Some(PersonNameParts::simple(Some("Ada".to_owned()), None)),
             evidence_level: EvidenceLevel::Conclusion,
+            external_ids: Vec::new(),
         },
         Provenance::default(),
         &[],
@@ -1243,6 +1246,7 @@ async fn superseding_a_name_replaces_it_and_logs_a_supersession() {
             human_id: None,
             name: None,
             evidence_level: EvidenceLevel::Conclusion,
+            external_ids: Vec::new(),
         },
         Provenance::default(),
         &[],

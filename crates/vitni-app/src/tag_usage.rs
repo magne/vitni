@@ -543,6 +543,7 @@ mod tests {
             human_id: None,
             name: Some(name(given, surname)),
             evidence_level: EvidenceLevel::Conclusion,
+            external_ids: Vec::new(),
         };
         let alice = create_person(
             workspace,

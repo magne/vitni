@@ -283,6 +283,7 @@ mod tests {
                 person_id: pid(person),
                 human_id: HumanId::new("I1"),
                 evidence_level: EvidenceLevel::Conclusion,
+                external_ids: Vec::new(),
             },
         )
     }

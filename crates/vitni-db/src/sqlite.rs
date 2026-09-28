@@ -383,6 +383,7 @@ mod tests {
                 person_id,
                 human_id: HumanId::new("I0001"),
                 evidence_level: EvidenceLevel::Conclusion,
+                external_ids: Vec::new(),
             },
         };
         store.execute_person(&person_id.to_string(), envelope).await.unwrap();
@@ -413,6 +414,7 @@ mod tests {
                 person_id,
                 human_id: HumanId::new("I0001"),
                 evidence_level: EvidenceLevel::Conclusion,
+                external_ids: Vec::new(),
             },
         };
         store.execute_person(&person_id.to_string(), envelope).await.unwrap();
@@ -445,6 +447,7 @@ mod tests {
                     person_id,
                     human_id: HumanId::new("I0001"),
                     evidence_level: EvidenceLevel::Conclusion,
+                    external_ids: Vec::new(),
                 },
             ),
             (
@@ -510,6 +513,7 @@ mod tests {
             command: FamilyCommand::CreateFamily {
                 family_id,
                 human_id: HumanId::new("F0001"),
+                external_ids: Vec::new(),
             },
         };
         store.execute_family(&family_id.to_string(), envelope).await.unwrap();
@@ -543,6 +547,7 @@ mod tests {
                 person_id,
                 human_id: HumanId::new("I0001"),
                 evidence_level: EvidenceLevel::Persona,
+                external_ids: Vec::new(),
             },
             PersonCommand::AddExternalId {
                 person_id,
@@ -899,6 +904,7 @@ mod tests {
                     command: FamilyCommand::CreateFamily {
                         family_id,
                         human_id: HumanId::new("F0001"),
+                        external_ids: Vec::new(),
                     },
                 },
             )
@@ -1442,6 +1448,7 @@ mod tests {
                         person_id,
                         human_id: HumanId::new("I0001"),
                         evidence_level: EvidenceLevel::Conclusion,
+                        external_ids: Vec::new(),
                     },
                 },
             )
@@ -1511,6 +1518,7 @@ mod tests {
                             person_id,
                             human_id: HumanId::new(person_human),
                             evidence_level: EvidenceLevel::Conclusion,
+                            external_ids: Vec::new(),
                         },
                     },
                 )
@@ -1688,6 +1696,7 @@ mod tests {
                             person_id,
                             human_id: HumanId::new(format!("I000{n}")),
                             evidence_level: EvidenceLevel::Conclusion,
+                            external_ids: Vec::new(),
                         },
                     },
                 )
@@ -1771,6 +1780,7 @@ mod tests {
                         person_id,
                         human_id: HumanId::new("I0001"),
                         evidence_level: EvidenceLevel::Conclusion,
+                        external_ids: Vec::new(),
                     },
                 },
             )
@@ -1842,6 +1852,7 @@ mod tests {
                         person_id,
                         human_id: HumanId::new("I0001"),
                         evidence_level: EvidenceLevel::Conclusion,
+                        external_ids: Vec::new(),
                     },
                 },
             )

@@ -8,6 +8,7 @@
 use std::collections::BTreeSet;
 
 use crate::age::Age;
+use crate::assertions::Attributed;
 use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Restriction, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
@@ -26,6 +27,10 @@ pub enum PersonCommand {
         human_id: HumanId,
         /// Whether this is a persona or a conclusion.
         evidence_level: EvidenceLevel,
+        /// External identifiers recorded in the same decision (data-model §11), each with the
+        /// application-minted `AssertionId` its `ExternalIdAdded` carries — so an import's person and
+        /// its resolution key commit together, and the key still corrects independently.
+        external_ids: Vec<Attributed<ExternalId>>,
     },
     /// Assert a name.
     AssertName {
