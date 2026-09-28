@@ -7,6 +7,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::assertions::Attributed;
 use crate::enums::{ChildParentRelationship, Restriction};
 use crate::ids::{AssertionId, CitationId, EventId, FamilyId, HumanId, NoteId, PersonId, TagId};
 use crate::provenance::AssertionMeta;
@@ -21,6 +22,10 @@ pub enum FamilyCommand {
         family_id: FamilyId,
         /// The user-facing identifier.
         human_id: HumanId,
+        /// External identifiers recorded in the same decision (data-model §11), each with the
+        /// application-minted `AssertionId` its `ExternalIdAdded` carries — so an import's family and
+        /// its resolution key commit together, and the key still corrects independently.
+        external_ids: Vec<Attributed<ExternalId>>,
     },
     /// Add a partner (neutral role) to the family.
     AddPartner {

@@ -116,6 +116,7 @@ pub async fn commit_family_change_set(
         FamilyCommand::CreateFamily {
             family_id,
             human_id: HumanId::new(&human_id),
+            external_ids: Vec::new(),
         },
         change_set.provenance.clone(),
         Vec::new(),
@@ -252,6 +253,7 @@ mod tests {
                 human_id: None,
                 name: None,
                 evidence_level: EvidenceLevel::Conclusion,
+                external_ids: Vec::new(),
             },
             Provenance::default(),
             &[],

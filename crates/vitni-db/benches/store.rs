@@ -121,6 +121,7 @@ async fn add_person(store: &Store, i: usize, counter: &mut u128) -> u64 {
             person_id,
             human_id: HumanId::new(format!("I{:07}", i + 1)),
             evidence_level: EvidenceLevel::Conclusion,
+            external_ids: Vec::new(),
         },
         PersonCommand::AssertName {
             person_id,
@@ -234,6 +235,7 @@ async fn add_family(store: &Store, i: usize, persons: usize, counter: &mut u128)
         FamilyCommand::CreateFamily {
             family_id,
             human_id: HumanId::new(format!("F{:07}", i + 1)),
+            external_ids: Vec::new(),
         },
         FamilyCommand::AddPartner {
             family_id,

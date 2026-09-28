@@ -35,6 +35,8 @@ reqwest = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true }
 tempfile = { workspace = true }
+# Failure injection (#390): a test installs a SQLite trigger that aborts one event insert.
+sqlx = { workspace = true }
 
 [lints]
 workspace = true

@@ -205,6 +205,7 @@ mod tests {
                 human_id: None,
                 name: None,
                 evidence_level: EvidenceLevel::Conclusion,
+                external_ids: Vec::new(),
             },
             Provenance::default(),
             &[],

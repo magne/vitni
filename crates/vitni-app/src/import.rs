@@ -29,7 +29,12 @@ use crate::{family, person};
 ///
 /// An existing person (resolved by the identifier) keeps its identity; the incoming name is added
 /// only if it is not already asserted (additive — a divergent name is left as a separate name, never
-/// an overwrite). A new person is created with the name and tagged with the identifier.
+/// an overwrite). A new person is created with the name and tagged with the identifier; the person
+/// and its identifier commit together, so a failed import never leaves a person the next run cannot
+/// resolve.
+///
+/// `provenance` is the caller's confidence template (ADR 0017 §7 — `None` for a plain bulk import,
+/// `Some(Confidence::Low)` for an assisted-import session), stamped on every assertion this makes.
 ///
 /// # Errors
 ///
@@ -39,6 +44,7 @@ pub async fn import_person(
     session: &Session,
     external_id: ExternalId,
     name: Option<person::PersonNameParts>,
+    provenance: Provenance,
 ) -> Result<(String, bool), AppError> {
     let store = workspace.store();
     if let Some(view) = store
@@ -46,7 +52,7 @@ pub async fn import_person(
         .await?
     {
         let human_id = human_id_of(view.human_id(), "person")?;
-        ensure_name(workspace, session, &view, &human_id, name).await?;
+        ensure_name(workspace, session, &view, name, provenance).await?;
         return Ok((human_id, false));
     }
 
@@ -57,17 +63,20 @@ pub async fn import_person(
             human_id: None,
             name,
             evidence_level: EvidenceLevel::Persona,
+            external_ids: vec![external_id],
         },
-        Provenance::default(),
+        provenance,
         &[],
     )
     .await?;
-    person::add_external_id(workspace, session, &human_id, external_id, MutationMeta::default()).await?;
     Ok((human_id, true))
 }
 
 /// Resolves a family by `external_id`, or creates one — returning its `human_id` and whether it was
 /// newly created.
+///
+/// A new family and its identifier commit together, stamped with `provenance` (as
+/// [`import_person`]).
 ///
 /// # Errors
 ///
@@ -76,6 +85,7 @@ pub async fn import_family(
     workspace: &Workspace,
     session: &Session,
     external_id: ExternalId,
+    provenance: Provenance,
 ) -> Result<(String, bool), AppError> {
     let store = workspace.store();
     if let Some(view) = store
@@ -85,8 +95,8 @@ pub async fn import_family(
         return Ok((human_id_of(view.human_id(), "family")?, false));
     }
 
-    let human_id = family::create_family(workspace, session, Provenance::default(), &[]).await?;
-    family::add_external_id(workspace, session, &human_id, external_id, MutationMeta::default()).await?;
+    let human_id =
+        family::create_family_with_external_ids(workspace, session, vec![external_id], provenance, &[]).await?;
     Ok((human_id, true))
 }
 
@@ -174,8 +184,8 @@ async fn ensure_name(
     workspace: &Workspace,
     session: &Session,
     view: &PersonView,
-    human_id: &str,
     name: Option<person::PersonNameParts>,
+    provenance: Provenance,
 ) -> Result<(), AppError> {
     let Some(name) = name.filter(|parts| !parts.is_empty()) else {
         return Ok(());
@@ -184,7 +194,12 @@ async fn ensure_name(
     if view.names().into_iter().any(|existing| *existing == candidate) {
         return Ok(());
     }
-    person::add_name(workspace, session, human_id, name, MutationMeta::default()).await
+    let human_id = human_id_of(view.human_id(), "person")?;
+    let meta = MutationMeta {
+        provenance,
+        ..MutationMeta::default()
+    };
+    person::add_name(workspace, session, &human_id, name, meta).await
 }
 
 /// Asserts a person's sex during import, reconciling against any existing value using the file's

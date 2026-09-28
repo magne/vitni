@@ -12,6 +12,7 @@ use crate::person::error::PersonError;
 use crate::person::event::{PersonEvent, PersonEventBody};
 use crate::person::state::{Association, Participation, PersonState};
 use crate::provenance::AssertionMeta;
+use crate::text::distinct_external_ids;
 
 /// Decides the events a command produces, or rejects it with a domain error.
 ///
@@ -30,18 +31,31 @@ pub fn decide(
             person_id,
             human_id,
             evidence_level,
+            external_ids,
         } => {
             if state.exists {
                 return Err(PersonError::AlreadyExists(person_id));
             }
-            Ok(one(
+            let mut events = one(
                 meta,
                 PersonEventBody::PersonCreated {
                     person_id,
                     human_id,
                     evidence_level,
                 },
-            ))
+            );
+            for keyed in distinct_external_ids(external_ids) {
+                let key_meta = AssertionMeta {
+                    assertion_id: keyed.assertion_id,
+                    context: meta.context.clone(),
+                };
+                let external_id = keyed.value;
+                events.push(PersonEvent::new(
+                    &key_meta,
+                    PersonEventBody::ExternalIdAdded { person_id, external_id },
+                ));
+            }
+            Ok(events)
         }
         PersonCommand::RetractAssertion { person_id, target } => {
             ensure_exists(state, person_id)?;
@@ -413,6 +427,7 @@ mod tests {
                 person_id: pid(person),
                 human_id: HumanId::new("I1"),
                 evidence_level: EvidenceLevel::Conclusion,
+                external_ids: Vec::new(),
             },
             &meta(1),
         )
@@ -486,6 +501,7 @@ mod tests {
                 person_id: pid(100),
                 human_id: HumanId::new("I1"),
                 evidence_level: EvidenceLevel::Persona,
+                external_ids: Vec::new(),
             },
             &meta(1),
         )
@@ -503,6 +519,7 @@ mod tests {
                 person_id: pid(100),
                 human_id: HumanId::new("I1"),
                 evidence_level: EvidenceLevel::Conclusion,
+                external_ids: Vec::new(),
             },
             &meta(2),
         )
@@ -791,6 +808,92 @@ mod tests {
         )
         .unwrap();
         assert_eq!(re_add.len(), 1);
+    }
+
+    fn keyed(assertion: u128, value: &str) -> crate::assertions::Attributed<ExternalId> {
+        crate::assertions::Attributed {
+            assertion_id: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+            value: external_id(value),
+        }
+    }
+
+    #[test]
+    fn creating_with_external_ids_emits_each_key_under_its_own_assertion() {
+        let state = PersonState::default();
+        let events = decide(
+            &state,
+            PersonCommand::CreatePerson {
+                person_id: pid(100),
+                human_id: HumanId::new("I1"),
+                evidence_level: EvidenceLevel::Persona,
+                external_ids: vec![keyed(20, "ABC"), keyed(21, "ABC"), keyed(22, "DEF")],
+            },
+            &meta(1),
+        )
+        .unwrap();
+
+        assert_eq!(
+            events.len(),
+            3,
+            "the created event plus one per distinct key: {events:?}"
+        );
+        assert!(matches!(events[0].body, PersonEventBody::PersonCreated { .. }));
+        assert_eq!(events[0].assertion_id, AssertionId::from_uuid(Uuid::from_u128(1)));
+        let mut keys = Vec::new();
+        for event in &events[1..] {
+            let PersonEventBody::ExternalIdAdded { external_id, .. } = &event.body else {
+                panic!("expected ExternalIdAdded, got {:?}", event.body);
+            };
+            assert_eq!(
+                event.context, events[0].context,
+                "the key shares the create's provenance"
+            );
+            keys.push((event.assertion_id, external_id.value.clone()));
+        }
+        assert_eq!(
+            keys,
+            [
+                (AssertionId::from_uuid(Uuid::from_u128(20)), "ABC".to_owned()),
+                (AssertionId::from_uuid(Uuid::from_u128(22)), "DEF".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn retracting_a_key_added_at_creation_leaves_the_creation_live() {
+        let mut state = PersonState::default();
+        let create = decide(
+            &state,
+            PersonCommand::CreatePerson {
+                person_id: pid(100),
+                human_id: HumanId::new("I1"),
+                evidence_level: EvidenceLevel::Persona,
+                external_ids: vec![keyed(20, "ABC")],
+            },
+            &meta(1),
+        )
+        .unwrap();
+        apply_all(&mut state, &create);
+        assert!(state.has_external_id("gedcom-uid", "ABC"));
+
+        let retract = decide(
+            &state,
+            PersonCommand::RetractAssertion {
+                person_id: pid(100),
+                target: AssertionId::from_uuid(Uuid::from_u128(20)),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+
+        assert!(state.external_ids.is_empty());
+        assert!(
+            state
+                .live_assertions
+                .contains(&AssertionId::from_uuid(Uuid::from_u128(1))),
+            "the creation is its own assertion"
+        );
     }
 
     #[test]

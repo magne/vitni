@@ -284,7 +284,8 @@ impl PersonNameParts {
     }
 }
 
-/// What to create a person with (the auto/override `human_id` and an optional initial name).
+/// What to create a person with (the auto/override `human_id`, an optional initial name, and the
+/// external identifiers an import resolves it by).
 #[derive(Debug, Clone)]
 pub struct NewPerson {
     /// A caller-supplied `human_id`; `None` auto-allocates the next free one.
@@ -293,12 +294,16 @@ pub struct NewPerson {
     pub name: Option<PersonNameParts>,
     /// Whether this is a persona or a conclusion.
     pub evidence_level: EvidenceLevel,
+    /// External identifiers recorded in the same commit as the person (data-model §11), so an
+    /// interrupted import never leaves a person its re-run cannot resolve.
+    pub external_ids: Vec<ExternalId>,
 }
 
 /// Creates a person, returning the assigned `human_id`.
 ///
 /// Resolves the `human_id` (auto-allocated via the workspace format, or validated-unique if
-/// supplied), then emits `CreatePerson` and — if a name was given — `AssertName`.
+/// supplied), then emits `CreatePerson` — carrying `new.external_ids`, so the person and its keys
+/// commit together — and, if a name was given, `AssertName`.
 ///
 /// # Errors
 ///
@@ -334,6 +339,7 @@ pub async fn create_person(
             person_id,
             human_id: HumanId::new(&human_id),
             evidence_level: new.evidence_level,
+            external_ids: use_case::attribute_each(session, new.external_ids),
         },
         provenance.clone(),
         Vec::new(),

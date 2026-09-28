@@ -49,6 +49,7 @@ async fn person(ws: &Workspace, session: &Session, given: &str, surname: &str) -
                 Some(surname.to_owned()),
             )),
             evidence_level: EvidenceLevel::Conclusion,
+            external_ids: Vec::new(),
         },
         Provenance::default(),
         &[],

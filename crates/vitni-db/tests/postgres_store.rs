@@ -78,6 +78,7 @@ async fn create(store: &Store, n: u128, human_id: &str) {
                     person_id,
                     human_id: HumanId::new(human_id),
                     evidence_level: EvidenceLevel::Conclusion,
+                    external_ids: Vec::new(),
                 },
             },
         )
@@ -219,6 +220,7 @@ async fn a_domain_rejection_is_distinct_from_an_infrastructure_error() {
                     person_id,
                     human_id: HumanId::new("I0001"),
                     evidence_level: EvidenceLevel::Conclusion,
+                    external_ids: Vec::new(),
                 },
             },
         )

@@ -389,15 +389,6 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   identity*. Without the index, dropping the xref and Gramps-id `ExternalId`s leaves nothing to resolve
   a re-import of an xref- or handle-keyed file by, so every re-import would duplicate its people.
   *Exit:* a test imports two different files that share `@I1@` and gets two persons. — #389
-- **Import creates a person or family and its `ExternalId` in two commits, and drops the provenance
-  template** — `import_person`/`import_family` (`vitni-app/src/import.rs:53-65, 88-89`) run
-  `create_*`, then `add_external_id`, as separate commands. A failure between the two leaves a keyless
-  record that the next run duplicates. Both also pass `Provenance::default()`, so the assisted flow's
-  `Confidence::Low` template (ADR 0017 §7) never reaches the persons and families it creates, unlike
-  every other command in the same run. *Shape:* the create command carries its external ids, so one
-  `decide` emits both events in one transaction, and the host's provenance is threaded through.
-  *Exit:* a test injects a failure after creation and proves no keyless person remains; the assisted
-  test asserts `Low` on the created person. — #390
 - **Source merge/sync reconciliation prerequisite** — `set-source-title`/`set-source-abbrev` WIT verbs,
   GEDCOM `ABBR` / Gramps `<sabbrev>` round-trip, and a field-level `AssertionId` + `occurred_at` read
   path. The ADR 0029 timestamp-gated rule cannot target Source's bibliographic fields
@@ -453,10 +444,10 @@ in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and imp
 [0040](adr/0040-staged-import-plan-review-commit.md) (staged import) and
 [0041](adr/0041-workspace-backup-and-restore.md) (backup), with the survey in
 [`research/record-matching.md`](research/record-matching.md). The bullets are listed in dependency
-order, and each one's *Needs:* names its prerequisites. The import bugs sit under their own area
-above, and backup under *Backup & restore*. The milestone opens with the provenance bug (#390) and
-backup (#391). The xref-collision bug (#389) follows the index below, because it needs both origins
-and resolve-by-origin. The matching core has no origin prerequisite, so it can start alongside them.
+order, and each one's *Needs:* names its prerequisites. The import bug sits under its own area
+above, and backup under *Backup & restore*. The milestone opens with backup (#391). The
+xref-collision bug (#389) follows the index below, because it needs both origins and
+resolve-by-origin. The matching core has no origin prerequisite, so it can start alongside them.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
@@ -836,8 +827,6 @@ decision, not a gap.
   suspected paths is at fault: a stale plugin build (every build resolves by `ExternalId`), an
   `og:url` variant (the record id is the last path segment), the GUI's workspace wiring (the same
   directory the Explorer reads), or church-book participants sharing a `pd…` id (each has its own).
-  The two-commit create-then-key window can still duplicate after a failure between the commits;
-  that one is #390.
 
 ### Model & interchange
 

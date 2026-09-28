@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::assertions::Attributed;
 use crate::ids::MediaId;
 use crate::name::LanguageTag;
 use crate::provenance::EvidenceRef;
@@ -109,6 +110,22 @@ pub struct ExternalId {
     pub kind: Option<String>,
     /// An optional URL to the origin record.
     pub url: Option<String>,
+}
+
+/// Drops every repeat of an `(authority, value)` pair — the identity a re-import resolves by — keeping
+/// the first, so a create that carries its external ids records each key once, as `AddExternalId`
+/// would.
+pub(crate) fn distinct_external_ids(external_ids: Vec<Attributed<ExternalId>>) -> Vec<Attributed<ExternalId>> {
+    let mut distinct: Vec<Attributed<ExternalId>> = Vec::new();
+    for keyed in external_ids {
+        let seen = distinct
+            .iter()
+            .any(|kept| kept.value.authority == keyed.value.authority && kept.value.value == keyed.value.value);
+        if !seen {
+            distinct.push(keyed);
+        }
+    }
+    distinct
 }
 
 #[cfg(test)]

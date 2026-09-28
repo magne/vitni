@@ -60,6 +60,13 @@ impl Session {
         })
     }
 
+    /// Mints an [`AssertionId`] for an assertion a command carries beyond its own — an external id
+    /// recorded at creation (UUID v7, ADR 0004 §5).
+    #[must_use]
+    pub fn new_assertion_id(&self) -> AssertionId {
+        AssertionId::from_uuid(Uuid::now_v7())
+    }
+
     /// Builds the supplied non-deterministic inputs for one command (ADR 0004 §3).
     ///
     /// Generates a fresh [`AssertionId`], reads the clock for `occurred_at`, copies in the configured
@@ -68,7 +75,7 @@ impl Session {
     #[must_use]
     pub fn new_meta(&self, provenance: Provenance, citations: Vec<EvidenceRef>) -> AssertionMeta {
         AssertionMeta {
-            assertion_id: AssertionId::from_uuid(Uuid::now_v7()),
+            assertion_id: self.new_assertion_id(),
             context: EventContext {
                 operator: self.operator.clone(),
                 occurred_at: Timestamp::new(OffsetDateTime::now_utc()),

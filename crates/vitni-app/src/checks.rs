@@ -157,6 +157,7 @@ mod tests {
                     Some(surname.to_owned()),
                 )),
                 evidence_level: EvidenceLevel::Conclusion,
+                external_ids: Vec::new(),
             },
             Provenance::default(),
             &[],

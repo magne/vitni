@@ -59,6 +59,7 @@ async fn person(ws: &Workspace, session: &Session, given: &str) -> String {
                 Some("Smith".to_owned()),
             )),
             evidence_level: EvidenceLevel::Conclusion,
+            external_ids: Vec::new(),
         },
         Provenance::default(),
         &[],
