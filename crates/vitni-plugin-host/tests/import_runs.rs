@@ -17,8 +17,8 @@ use vitni_app::{
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, EventContext};
 use vitni_plugin_host::{
-    Capability, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, ProgressControl, ProgressUpdate,
-    ResourceBudget,
+    Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, ProgressControl,
+    ProgressUpdate, ResourceBudget,
 };
 
 mod common;
@@ -363,4 +363,51 @@ async fn an_import_without_a_run_stamps_no_origin() {
         .expect("import");
     assert!(list_import_runs(&workspace).await.expect("runs").is_empty());
     assert!(origin_keys(&workspace).await.is_empty());
+}
+
+#[tokio::test]
+async fn exports_carry_no_record_origin() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let workspace = workspace(dir.path()).await;
+    let source = write_file(dir.path(), "tree.ged", GEDCOM);
+    let lineage = Uuid::from_u128(0x5eed);
+    let dataset = DatasetId::lineage("gedcom", lineage);
+    let (_, mut workspace) = common::host()
+        .run_bulk_import(
+            &common::component("gedcom-import"),
+            invocation(workspace, Some(spec("gedcom-import", dataset, "tree.ged"))),
+            source,
+            proceed,
+        )
+        .await
+        .expect("import");
+    let run = only_run(&workspace).await.id;
+
+    for exporter in ["gedcom-export", "gramps-export"] {
+        let target = dir.path().join(format!("{exporter}.out"));
+        let export = Invocation {
+            grants: Grants::none()
+                .with(Capability::Query)
+                .with(Capability::Log)
+                .with(Capability::Progress)
+                .with(Capability::ExportSink),
+            ..invocation(workspace, None)
+        };
+        let (_, reopened) = common::host()
+            .run_bulk_export(
+                &common::component(exporter),
+                export,
+                ExportTarget::File(target.clone()),
+                proceed,
+            )
+            .await
+            .expect("export");
+        workspace = reopened;
+        let written = std::fs::read(&target).expect("read export");
+        let written = String::from_utf8_lossy(&written);
+        assert!(written.contains("John"), "{exporter} exported the person");
+        for leaked in [lineage.to_string(), run.to_string(), "plac:Mandal".to_owned()] {
+            assert!(!written.contains(&leaked), "{exporter} leaked {leaked:?} (ADR 0037 §2)");
+        }
+    }
 }

@@ -388,6 +388,11 @@ researcher/rationale/surety, made mandatory by the architecture rather than opti
   carry no citation lists. (`MediaRef.citations` is unaffected — it is per-use context for a media
   attachment, not evidence for a claim.)
 - optional `evidence_analysis` — the *Evidence Explained* axes for this claim.
+- optional `origin` — **where an imported claim was read from** (ADR 0037 §1): a `RecordOrigin` of
+  the dataset, the record's id within it, the entity within that record (`item`, when a record
+  yields several), an optional digest of its incoming fields, and the import run that wrote it (§11).
+  Every assertion an importer derives from a record carries one; a claim made at the keyboard carries
+  none. It is internal provenance: in the log and so in every backup, never in an export.
 
 Because the context lives on the event, surety and provenance are **per assertion**, fixing the
 Gramps limitation where confidence lives only on the citation and quality is a single value.
@@ -435,9 +440,11 @@ not retractable.
 
 We use `cqrs-es` fixed aggregates with per-stream `(aggregate, sequence)` optimistic concurrency
 (ADR 0002). An aggregate is a thing with an independent lifecycle, identity, and within-stream
-invariants. There are **twelve** — the ten Gramps primaries plus two for DNA (§12):
+invariants. There are **fourteen** — the ten Gramps primaries, two for DNA (§12), the research note
+(ADR 0028) and the import run (ADR 0037, §11):
 
-**Person, Family, Event, Place, Source, Citation, Repository, Media, Note, Tag, DnaTest, DnaMatch.**
+**Person, Family, Event, Place, Source, Citation, Repository, Media, Note, Tag, DnaTest, DnaMatch,
+ResearchNote, ImportRun.**
 
 Boundary notes:
 
@@ -468,6 +475,9 @@ Boundary notes:
 - **`DnaMatch` is owned by neither person.** It is a pairwise observation between two `DnaTest`s
   (referenced by id, self-contained) that genealogists research over time — so it is its own
   aggregate, not a value on a Person. `DnaTest` is anchored to one Person. See §12.
+- **`ImportRun` records an import, not genealogy.** It starts once and ends once, finished or
+  abandoned, and its operator is the human who ran the import while every assertion it wrote keeps
+  the importer's `Software` agent. It has no `HumanId`, no record screen and no assertion chain.
 - **Cross-aggregate invariants** (e.g. "an Event's `place_id` must exist") are checked against
   possibly-lagging projections, not transactionally — the accepted `cqrs-es` "aggregate tax"
   (ADR 0002). Genealogy invariants are largely within-aggregate.
@@ -604,6 +614,16 @@ around evidence and provenance.
    engine*, with a confidence. It enters as a low-confidence assertion in the evidence layer
    attributed to a `Software` agent (§7, §8); the user's **confirm** or **reject** is itself an
    audited event. Nothing is silently merged into the conclusion layer.
+
+4. **Every import is a run, and every imported claim names its record (ADR 0037).** An import writes
+   an `ImportRun` (`ImportRunStarted`, `ItemResolved` for an item resolved onto an existing aggregate,
+   then `ImportRunFinished` or `ImportRunAbandoned`), and each assertion it derives carries an
+   `EventContext.origin` (§8) naming the run. A **dataset** scopes record ids: `digitalarkivet` is
+   global, while `gedcom:<uuid>` and `gramps:<uuid>` each name one file lineage — the same tree
+   re-exported over time — which the operator picks or declares on import. Datasets are a projection
+   over runs, labelled by the earliest. File-local keys (a GEDCOM xref, a Gramps handle) are origin
+   records; `ExternalId` is for identifiers that mean something outside the file. Until re-import
+   resolves by origin, the importers still also write the xref and Gramps id as `ExternalId`s.
 
 The upshot: external APIs add the `ExternalId` value object and exercise the `Agent` generalisation,
 but the evidence/conclusion architecture absorbs imports and machine matches without new structure.
@@ -783,6 +803,7 @@ pub struct EventContext {
     pub confidence: Option<Confidence>, // None = no surety judgment recorded (ADR 0021 §5)
     pub citations: Vec<CitationRef>,
     pub evidence_analysis: Option<EvidenceAnalysis>,
+    pub origin: Option<Box<RecordOrigin>>, // the source record an import read this from (ADR 0037)
 }
 
 pub enum Calendar {

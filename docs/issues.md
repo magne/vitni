@@ -225,17 +225,15 @@ which is what makes them worth fixing in the shared code rather than per screen.
   local fix. Found while re-measuring `picker-sees-new-record` for #310: the succession form's
   provenance block runs past a 1200px window because of it, so that scenario now scrolls its panel
   before clicking.
-- **Collection history nodes cannot be expanded and show no count.** (ADR 0037's `ImportRun`, under
-  *Record matching & identity*, persists the run's children and count, which is this bullet's data
-  half.) `collapse_runs`
-  (`vitni-app/src/history.rs:247-302`) folds a software run into one synthetic
-  `ActivityDetail::ImportBatch { count }` row and **discards the children**, and `ActivityVm`
-  (`view_model/history.rs:99-122`) has no count field either — the number survives only baked into the
-  localized sentence. Wanted: keep the children, show the count muted beside the node, and make the
-  node disclose — two levels on the Dashboard's Recent Activity (collection → record → that record's
-  entries), one on a record's History tab. There is no disclosure primitive to build on: no
-  `Disclosure` component and no `<details>` anywhere in `components/`, only ad-hoc `aria-expanded` on
-  four unrelated widgets.
+- **Import run rows cannot be expanded.** An import run is one History row (#393): `group_runs`
+  (`vitni-app/src/history.rs`) folds a run's entries into `ActivityDetail::ImportRun`, whose `children`
+  the `ActivityVm`/`HistoryEntryVm` carry, and the row shows its count muted beside it. Nothing renders
+  the children yet. Wanted: make the row disclose them — two levels on the Dashboard's Recent Activity
+  (run → record → that record's entries), one on a record's History tab. There is no disclosure
+  primitive to build on: no `Disclosure` component and no `<details>` anywhere in `components/`, only
+  ad-hoc `aria-expanded` on four unrelated widgets. The Dashboard's children are the run's entries
+  within the feed's scan window (`MAX_ACTIVITY_SCAN`), so disclosing a large run needs a read of its
+  entries by run.
 - **Fast typing can lose characters in record text fields.** Under Xvfb, keys 12 ms apart into a new
   Tag's Name came out wrong 3 runs in 4 (`TR-7Olo` for "TRee-7 Oslo"). At 30 ms apart none were lost.
   The suspected cause, unconfirmed, is the controlled input's round trip: a key landing before the
@@ -399,9 +397,9 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   (`plugins/gedcom-import/src/lib.rs:466`, `plugins/gramps-import/src/lib.rs:505`). Importing a second,
   unrelated file therefore resolves its `@I1@` onto the first file's `@I1@` person, and silently attaches
   one person's names and facts to another. *Shape:* ADR 0037 §3. Datasets scope file-local keys, and xrefs
-  and Gramps ids become origin records rather than `ExternalId`s. *Needs:* the `RecordOrigin` bullet
-  (the dataset) and the `record_origins` index (resolve-by-origin), both under *Record matching &
-  identity*. Without the index, dropping the xref and Gramps-id `ExternalId`s leaves nothing to resolve
+  and Gramps ids become origin records rather than `ExternalId`s: the importers already stamp them as
+  origins (#393) but still write them as `ExternalId`s too. *Needs:* the `record_origins` index
+  (resolve-by-origin), under *Record matching & identity*. Without the index, dropping the xref and Gramps-id `ExternalId`s leaves nothing to resolve
   a re-import of an xref- or handle-keyed file by, so every re-import would duplicate its people.
   *Exit:* a test imports two different files that share `@I1@` and gets two persons. — #389
 - **Source merge/sync reconciliation prerequisite** — `set-source-title`/`set-source-abbrev` WIT verbs,
@@ -460,28 +458,19 @@ in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and imp
 [0041](adr/0041-workspace-backup-and-restore.md) (backup), with the survey in
 [`research/record-matching.md`](research/record-matching.md). The bullets are listed in dependency
 order, and each one's *Needs:* names its prerequisites. The import bug sits under its own area
-above. The milestone opened with backup (#391), which has landed. The
+above. The milestone opened with backup (#391) and record origins with import runs (#393), which have
+landed. The
 xref-collision bug (#389) follows the index below, because it needs both origins and
 resolve-by-origin. The matching core has no origin prerequisite, so it can start alongside them.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
-- **`RecordOrigin` and the `ImportRun` aggregate** — ADR 0037 §1, §3, §5, §6. `EventContext.origin`
-  (dataset, record, item, digest, run) is additive and threaded through `Provenance` / `AssertionMeta`.
-  `ImportRun` becomes the fourteenth aggregate via the `for_each_aggregate!` recipe, with
-  `ImportRunStarted`/`ItemResolved`/`ImportRunFinished`/`ImportRunAbandoned`, and `Session` mints run
-  ids. Datasets are a projection over runs. History renders a real run row with its count and
-  children, which replaces `collapse_runs` and settles the *Collection history nodes* bullet's data
-  half. Still to do here: the new variants must join the backup fixture (`cargo xtask
-  backup-fixture`; its coverage test fails until they do), and `crates/vitni-app/tests/backup.rs` needs
-  an origin-bearing round trip, the one ADR 0041 promises: a backup keeps every origin, an export has
-  none. Today's backup tests carry no origins, since none exist yet. *Exit:* an import writes a run, and every imported
-  assertion carries its origin; the History run row lists its children. — #393
 - **`record_origins` index and resolve-by-origin for every aggregate** — ADR 0037 §4. The projection
   runs on SQLite and Postgres and is rebuildable. `field_key` is derived in `vitni-app`. Resolve-or-
   create by `(dataset, record, item)` or by a recorded `ItemResolved`. A same-digest item is a no-op,
-  and a changed digest reconciles per field (ADR 0029). This closes the Source and Place duplication on
-  re-import. *Needs:* the `RecordOrigin` bullet. *Exit:* re-importing an unchanged GEDCOM and Gramps file
+  and a changed digest reconciles per field (ADR 0029). The importers start computing
+  `RecordOrigin.digest` here: the field exists but stays unset until an item's canonical fields are
+  defined. This closes the Source and Place duplication on re-import. *Exit:* re-importing an unchanged GEDCOM and Gramps file
   emits zero events, and every aggregate count is unchanged. — #394
 - **Tombstones by origin** — ADR 0037 §4. A value whose same-origin assertion the user retracted is never
   re-asserted by a later run. A different incoming value is still offered. This replaces the old
@@ -552,15 +541,16 @@ does.
   its case-folded name. *Needs:* persona clusters. *Exit:* per-kind tests; an event whose
   place was merged shows the survivor. — #406
 - **Staged import: WIT record graph, `ImportPlan`, commit and resume** — ADR 0040 §1, §2, §5.
-  `host-api@0.24.0` adds the `staging` interface (`begin-run`, `submit(record-graph)`) and removes
+  `host-api@0.25.0` adds the `staging` interface (`begin-run`, `submit(record-graph)`) and removes
   the imperative create verbs from the import worlds. `vitni-app` plans every entity as Unchanged,
   Update, Link, Candidates or New, with graph-aware resolution. Commit is dependency-ordered and
   origin-stamped, with atomic per-aggregate creation, and resumes by re-run. *Needs:* the index and
   `find_similar`. *Exit:* an interrupted commit finishes on re-run with no duplicates. — #407
 - **Port the GEDCOM and Gramps importers to record graphs** — ADR 0040 §1, ADR 0037 §3. Parsers emit
   graphs with stable item keys and dataset-scoped origins, with places and sources keyed. The dataset
-  is proposed from the header fingerprint and key overlap, and the user confirms (CLI `--dataset` /
-  `--new-dataset`). *Needs:* staged import. *Exit:* a re-run fixture per importer proves stable item
+  is proposed from the header fingerprint and key overlap, and the user confirms. The explicit choice
+  it proposes into already exists (#393): the CLI's `--dataset` / `--new-dataset` and the bulk-import
+  confirm's *This file is* select. *Needs:* staged import. *Exit:* a re-run fixture per importer proves stable item
   keys. — #408
 - **Port the Digitalarkivet importer to record graphs** — ADR 0040 §1, §4. The census-person, household
   and church-book pages become graphs, and the owner-gated `record_claims` path and the title/path
