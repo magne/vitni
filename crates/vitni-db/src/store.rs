@@ -334,6 +334,37 @@ impl Store {
         }
     }
 
+    /// Deletes every event and empties every projection, leaving the store as a fresh one.
+    ///
+    /// Only for undoing a restore that failed after [`Self::insert_raw_events`] wrote into a store that
+    /// held nothing before (ADR 0041 §2): a server database outlives the workspace directory the
+    /// restore removes. It is never part of normal operation — the log is otherwise append-only.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] if the log cannot be cleared or the projections rebuilt, or
+    /// [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn discard_all_events(&self) -> Result<(), DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.discard_all_events().await?,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.discard_all_events().await?,
+            }
+            self.rebuild_projections().await
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
     /// Counts every event in the log.
     ///
     /// # Errors

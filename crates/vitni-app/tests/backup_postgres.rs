@@ -176,3 +176,82 @@ async fn a_restore_into_a_database_that_holds_events_is_refused() {
         "the occupied database is untouched"
     );
 }
+
+/// Rewrites the archive at `from` into `to` with two extra, correctly listed media members, `media/a`
+/// and `media/a/b`. The archive passes every check, but extracting the second fails because the
+/// first is a file — a failure that comes after the rows are already in the database.
+fn with_colliding_media(from: &Path, to: &Path) {
+    use std::fmt::Write as _;
+    use std::io::{Read, Write};
+
+    use sha2::Digest;
+
+    let mut archive = zip::ZipArchive::new(std::fs::File::open(from).expect("open")).expect("zip");
+    let mut members = Vec::new();
+    for index in 0..archive.len() {
+        let mut file = archive.by_index(index).expect("member");
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes).expect("read");
+        members.push((file.name().to_owned(), bytes));
+    }
+    let extra = [
+        ("media/a".to_owned(), b"one".to_vec()),
+        ("media/a/b".to_owned(), b"two".to_vec()),
+    ];
+    for (name, bytes) in &mut members {
+        if name == "manifest.json" {
+            let mut manifest: serde_json::Value = serde_json::from_slice(bytes).expect("manifest");
+            for (extra_name, extra_bytes) in &extra {
+                let mut digest = String::new();
+                for byte in sha2::Sha256::digest(extra_bytes) {
+                    let _ = write!(digest, "{byte:02x}");
+                }
+                manifest["members"][extra_name] = format!("sha256:{digest}").into();
+            }
+            *bytes = serde_json::to_vec(&manifest).expect("bytes");
+        }
+    }
+    members.extend(extra);
+    let mut writer = zip::ZipWriter::new(std::fs::File::create(to).expect("create"));
+    for (name, bytes) in members {
+        writer
+            .start_file(name, zip::write::SimpleFileOptions::default())
+            .expect("start");
+        writer.write_all(&bytes).expect("write");
+    }
+    writer.finish().expect("finish");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_restore_that_fails_after_inserting_leaves_the_database_empty() {
+    let home = tempfile::tempdir().expect("tempdir");
+    let source = workspace(&home.path().join("source"), None).await;
+    seed(&source).await;
+    let archive = home.path().join("gen.vitni-backup");
+    back_up(&source, &archive).await;
+    let colliding = home.path().join("colliding.vitni-backup");
+    with_colliding_media(&archive, &colliding);
+
+    let db = PostgresTestDb::create(CONTAINER, &MIGRATIONS, None, None).await;
+    let config = home.path().join("config.toml");
+    let dir = home.path().join("pg");
+    let request = RestoreRequest {
+        config_path: &config,
+        archive: &colliding,
+        name: "pg",
+        dir: Some(&dir),
+        database_url: Some(db.dsn()),
+    };
+    let result = restore_backup(&request).await;
+    assert!(
+        matches!(
+            result,
+            Err(vitni_app::AppError::Backup(vitni_app::BackupError::Archive(_)))
+        ),
+        "{result:?}"
+    );
+    assert!(!dir.exists(), "the half-made workspace was rolled back");
+
+    let restored = restore(home.path(), &archive, "pg", Some(db.dsn())).await;
+    assert_same_workspace(&source, &restored).await;
+}

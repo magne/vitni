@@ -352,7 +352,10 @@ fn check_events(archive: &mut ArchiveReader, chain: &Chain, manifest: &BackupMan
             first_invalid = Some(BackupError::InvalidEvent { line: count, detail });
         }
     }
-    if reader.into_inner().checksum() != manifest.members[EVENTS] {
+    let Some(expected) = manifest.members.get(EVENTS) else {
+        return Err(BackupError::MissingMember(EVENTS.to_owned()));
+    };
+    if reader.into_inner().checksum() != *expected {
         return Err(BackupError::ChecksumMismatch(EVENTS.to_owned()));
     }
     if let Some(invalid) = first_invalid {
@@ -382,9 +385,17 @@ async fn populate(
         return Err(BackupError::DatabaseNotEmpty.into());
     }
     let events = insert_events(&workspace, archive, &checked.chain).await?;
-    workspace.rebuild_projections().await?;
-    let media_restored = media::extract(archive, &checked.media_members, dir)?;
-    let verification = media::verify(&checked.media, dir)?;
+    let finished = finish_restore(&workspace, archive, checked, dir).await;
+    let (media_restored, verification) = match finished {
+        Ok(finished) => finished,
+        Err(error) => {
+            // A server database outlives the directory `roll_back` removes, so empty it here.
+            if let Err(discard_error) = workspace.store().discard_all_events().await {
+                tracing::warn!(%discard_error, "could not empty the database after a failed restore");
+            }
+            return Err(error);
+        }
+    };
     Ok(RestoreReport {
         workspace: registration.summary.clone(),
         format_version: checked.format_version.clone(),
@@ -393,6 +404,19 @@ async fn populate(
         media_missing: verification.missing,
         media_mismatched: verification.mismatched,
     })
+}
+
+/// The steps after the rows are in: rebuild the projections, put the media back and check it.
+async fn finish_restore(
+    workspace: &Workspace,
+    archive: &mut ArchiveReader,
+    checked: &CheckedArchive,
+    dir: &Path,
+) -> Result<(usize, media::Verification), AppError> {
+    workspace.rebuild_projections().await?;
+    let media_restored = media::extract(archive, &checked.media_members, dir)?;
+    let verification = media::verify(&checked.media, dir)?;
+    Ok((media_restored, verification))
 }
 
 /// Streams `events.jsonl` into the store in one transaction.

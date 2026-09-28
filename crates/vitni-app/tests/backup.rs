@@ -539,3 +539,26 @@ async fn an_empty_existing_target_directory_is_used() {
         .expect("restore");
     assert!(target.join("workspace.toml").exists());
 }
+
+#[tokio::test]
+async fn a_manifest_that_does_not_list_the_log_is_refused() {
+    let fixture = backed_up(false).await;
+    let unlisted = fixture.home.path().join("unlisted.vitni-backup");
+    rewrite(&fixture.archive, &unlisted, |name, bytes| {
+        if name == "manifest.json" {
+            return edit_manifest(&bytes, |manifest| {
+                if let Some(members) = manifest["members"].as_object_mut() {
+                    members.remove("events.jsonl");
+                }
+            });
+        }
+        bytes
+    });
+    let target = fixture.home.path().join("restored");
+    let error = backup_error(restore_backup(&restore_request(&fixture.config, &unlisted, &target)).await);
+    assert!(
+        matches!(&error, BackupError::UnexpectedMember(member) if member == "events.jsonl"),
+        "{error:?}"
+    );
+    assert_nothing_created(fixture.home.path(), &target);
+}

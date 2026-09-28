@@ -362,3 +362,14 @@ async fn an_error_from_the_row_source_rolls_the_insert_back() {
     assert!(error.to_string().contains("line 2"), "{error}");
     assert_eq!(target.event_count().await.unwrap(), 0);
 }
+
+#[tokio::test]
+async fn discarding_every_event_empties_the_log_and_the_projections() {
+    let (store, _dir) = store().await;
+    create(&store, 1, "I0001").await;
+    name(&store, 1, "Ada", "Lovelace").await;
+    store.discard_all_events().await.unwrap();
+    assert_eq!(store.event_count().await.unwrap(), 0);
+    assert!(store.projection_rows().await.unwrap().is_empty());
+    assert!(store.find_person("I0001").await.unwrap().is_none());
+}

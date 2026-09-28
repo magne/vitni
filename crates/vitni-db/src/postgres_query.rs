@@ -416,6 +416,15 @@ pub(crate) async fn insert_raw_events(
     Ok(inserted)
 }
 
+/// Deletes every stored event row.
+pub(crate) async fn discard_all_events(pool: &Pool<Postgres>) -> Result<(), DbError> {
+    sqlx::query("DELETE FROM events")
+        .execute(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+    Ok(())
+}
+
 /// Counts every stored event row.
 pub(crate) async fn event_count(pool: &Pool<Postgres>) -> Result<u64, DbError> {
     count_rows(pool, "events").await

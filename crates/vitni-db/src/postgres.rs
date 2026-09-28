@@ -239,6 +239,10 @@ impl PostgresStore {
         postgres_query::insert_raw_events(&self.pool, rows).await
     }
 
+    pub(crate) async fn discard_all_events(&self) -> Result<(), DbError> {
+        postgres_query::discard_all_events(&self.pool).await
+    }
+
     pub(crate) async fn event_count(&self) -> Result<u64, DbError> {
         postgres_query::event_count(&self.pool).await
     }

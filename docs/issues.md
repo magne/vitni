@@ -472,9 +472,10 @@ does.
   `ImportRunStarted`/`ItemResolved`/`ImportRunFinished`/`ImportRunAbandoned`, and `Session` mints run
   ids. Datasets are a projection over runs. History renders a real run row with its count and
   children, which replaces `collapse_runs` and settles the *Collection history nodes* bullet's data
-  half. The new variants join the backup fixture (`cargo xtask backup-fixture`; its coverage test
-  fails until they do), and `crates/vitni-app/tests/backup.rs` gains the round trip ADR 0041 promises:
-  a backup keeps every origin, an export has none. *Exit:* an import writes a run, and every imported
+  half. Still to do here: the new variants must join the backup fixture (`cargo xtask
+  backup-fixture`; its coverage test fails until they do), and `crates/vitni-app/tests/backup.rs` needs
+  an origin-bearing round trip, the one ADR 0041 promises: a backup keeps every origin, an export has
+  none. Today's backup tests carry no origins, since none exist yet. *Exit:* an import writes a run, and every imported
   assertion carries its origin; the History run row lists its children. — #393
 - **`record_origins` index and resolve-by-origin for every aggregate** — ADR 0037 §4. The projection
   runs on SQLite and Postgres and is rebuildable. `field_key` is derived in `vitni-app`. Resolve-or-
