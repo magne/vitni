@@ -236,26 +236,32 @@ ever blanked the canvas. The code changes themselves are in the PRs and the comm
 
 ### `0.10 — Record matching` (29 open)
 
-Ordered by dependency, not severity. The three bugs go first because they corrupt data today. Backup
-goes next, so every later event change passes its fixture guard. Then come the origins, the engine
-and the identity decisions, which the import rewrite and the UI build on. The design is ADRs
-0037–0041. Every bullet is in `issues.md`: the bugs under *Bulk import, export & sync*, backup under
-*Backup & restore*, and the rest under
-[*Record matching & identity*](issues.md#record-matching--identity).
+Ordered by dependency, not severity. The provenance bug goes first because it corrupts data today
+and needs nothing else. Backup goes next, so every later event change passes its fixture guard. Then
+come the origins, and the xref-collision bug with them, because its fix *is* the origin model: it
+needs datasets and resolve-by-origin. The engine needs no origin work except the person profile, so it
+can start alongside Backup and Origin. The identity decisions, the import rewrite and the UI build on
+all of these. The design is ADRs 0037–0041. Every bullet is in `issues.md`: the bugs under *Bulk
+import, export & sync*, backup under *Backup & restore*, and the rest under
+[*Record matching & identity*](issues.md#record-matching--identity), whose *Needs:* lines are the
+per-issue prerequisites.
 
-| Stage | Items | Why it gates |
-| --- | --- | --- |
-| Bugs (#389–#390) | GEDCOM/Gramps external ids collide across files; person/family created in two commits without the provenance template | Import writes wrong data today: people from two files merged, and a failed import leaves a person without its key |
-| Backup (ADR 0041, #391) | Versioned backup and restore, with golden fixtures and the pre-1.0 window | Internal ids must survive; the format 1.0 freezes has to exist |
-| Origin (ADR 0037, #393–#395) | `RecordOrigin` + `ImportRun`; the `record_origins` index and resolve-by-origin; tombstones | A re-import is a no-op for every kind; retractions survive re-import |
-| Engine (ADR 0038, #396–#402) | Matching core with culture packs; person profile; Family/Event profiles; the other kinds' profiles; `match_keys` + `find_similar`; duplicate check through the engine; evaluation corpus + `match-eval` | One explainable answer to "are these the same?" |
-| Identity (ADR 0039, #403–#406) | `PersonsDistinguished` + assessment; persona clusters; Event/Family merge; the other kinds' merge | A confirmed match behaves as one record; a rejected one never returns |
-| Staged import (ADR 0040, #407–#410) | WIT record graph + `ImportPlan`; GEDCOM/Gramps port; Digitalarkivet port; Digitalarkivet events, places, households | The host resolves identically for every importer, before writing |
-| UI & CLI (#411–#416) | Shared compare view; assisted match stage; bulk Plan/Review + `--plan`; review queue; similar-record hint; linked records | The user decides side by side; with nothing to ask, nothing is shown |
-| Plugins (#417) | `find-similar` WIT query | Plugins reuse the engine instead of re-implementing it |
+| Stage | Items, in order | Needs (other stages) | Why it gates |
+| --- | --- | --- | --- |
+| Bug (#390) | Person/family created in two commits without the provenance template | — | Import writes wrong data today: a failed import leaves a person without its key |
+| Backup (ADR 0041, #391) | Versioned backup and restore, with golden fixtures and the pre-1.0 window | — | Internal ids must survive; the format 1.0 freezes has to exist |
+| Origin (ADR 0037, #393, #394, #389, #395) | `RecordOrigin` + `ImportRun`; the `record_origins` index and resolve-by-origin; GEDCOM/Gramps external ids collide across files; tombstones | Backup | A re-import is a no-op for every kind; two unrelated files no longer merge their people; retractions survive re-import |
+| Engine (ADR 0038, #396–#400, #402) | Matching core with culture packs; person profile; Family/Event profiles; the other kinds' profiles; `match_keys` + `find_similar`; evaluation corpus + `match-eval` | Only the person profile (#397) needs Origin (#393) | One explainable answer to "are these the same?" |
+| Identity (ADR 0039, #403, #401, #404–#406) | `PersonsDistinguished` + assessment; duplicate check through the engine; persona clusters; Event/Family merge; the other kinds' merge | Engine | A confirmed match behaves as one record; a rejected one never returns |
+| Staged import (ADR 0040, #407–#410) | WIT record graph + `ImportPlan`; GEDCOM/Gramps port; Digitalarkivet port; Digitalarkivet events, places, households | Origin (#394), Engine (#400) | The host resolves identically for every importer, before writing |
+| UI & CLI (#411–#416) | Shared compare view; assisted match stage; bulk Plan/Review + `--plan`; review queue; similar-record hint; linked records | Engine, Identity, Staged import | The user decides side by side; with nothing to ask, nothing is shown |
+| Plugins (#417) | `find-similar` WIT query | Engine (#400) | Plugins reuse the engine instead of re-implementing it |
 
 The count is 29 because the *More name-culture packs* bullet is unfiled by design, and the backup
-freeze (v1, #392) is filed in `1.0`. Within each stage, issues are numbered in dependency order.
+freeze (v1, #392) is filed in `1.0`. Issues were numbered before the order was checked, so two sit
+out of sequence. #389 follows #394, because once xrefs and Gramps ids stop being `ExternalId`s only
+resolve-by-origin can find a re-imported person. #401 follows #403, because the duplicate check
+excludes decided pairs. Every other stage is in number order.
 
 ### Not in any milestone
 
