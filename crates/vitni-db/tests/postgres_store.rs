@@ -642,3 +642,60 @@ async fn a_legacy_view_table_is_dropped_and_rebuilt_from_the_log_on_reopen() {
         "a second reopen must not duplicate or drop the row"
     );
 }
+
+/// Reads the whole log through the keyset pages, `page` rows at a time.
+async fn read_all_raw(store: &Store, page: u32) -> Vec<vitni_db::RawEvent> {
+    let mut rows = Vec::new();
+    let mut after = None;
+    loop {
+        let batch = store.read_raw_events(after.as_ref(), page).await.unwrap();
+        let Some(last) = batch.last() else {
+            break;
+        };
+        after = Some(last.key());
+        rows.extend(batch);
+    }
+    rows
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn raw_rows_round_trip_between_engines() {
+    let (postgres, _db) = store().await;
+    create(&postgres, 2, "I0002").await;
+    create(&postgres, 1, "I0001").await;
+    name(&postgres, 1, "Ada", "Lovelace").await;
+    let rows = read_all_raw(&postgres, 2).await;
+    assert_eq!(rows.len(), 3);
+    let keys: Vec<_> = rows.iter().map(vitni_db::RawEvent::key).collect();
+    let mut sorted = keys.clone();
+    sorted.sort();
+    assert_eq!(keys, sorted, "Postgres pages in the bytewise order SQLite uses");
+
+    let dir = tempfile::tempdir().unwrap();
+    let sqlite = Store::open(&format!("sqlite://{}", dir.path().join("ws.sqlite3").display()))
+        .await
+        .unwrap();
+    sqlite.insert_raw_events(rows.iter().cloned().map(Ok)).await.unwrap();
+    sqlite.rebuild_projections().await.unwrap();
+    assert_eq!(
+        sqlite.projection_rows().await.unwrap(),
+        postgres.projection_rows().await.unwrap()
+    );
+
+    let (restored, _restored_db) = store().await;
+    restored
+        .insert_raw_events(read_all_raw(&sqlite, 100).await.into_iter().map(Ok))
+        .await
+        .unwrap();
+    restored.rebuild_projections().await.unwrap();
+    assert_eq!(read_all_raw(&restored, 100).await, rows);
+    assert_eq!(
+        restored.projection_rows().await.unwrap(),
+        postgres.projection_rows().await.unwrap()
+    );
+    assert!(
+        restored.insert_raw_events(rows.iter().cloned().map(Ok)).await.is_err(),
+        "a duplicate key fails"
+    );
+    assert_eq!(restored.event_count().await.unwrap(), 3);
+}

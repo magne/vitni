@@ -12,6 +12,7 @@ use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row, Sqlite, SqliteConnection};
 use vitni_core::id_format::IdFormat;
 
+use crate::raw::{ProjectionRow, RawEvent, RawEventKey};
 use crate::store::{DbError, StoredEvent};
 
 /// How many candidate ids a `next_human_id` length-group page fetches at a time; a page is
@@ -363,4 +364,106 @@ fn stored_event(row: &sqlx::sqlite::SqliteRow) -> StoredEvent {
 /// Deserializes a stored projection payload, mapping failures to [`DbError::Backend`].
 fn deserialize_view<V: DeserializeOwned>(table: &str, payload: &str) -> Result<V, DbError> {
     serde_json::from_str(payload).map_err(|e| DbError::Backend(format!("decoding {table} payload: {e}")))
+}
+
+/// Reads up to `limit` raw event rows after `after`, in primary-key order — one keyset page of
+/// the whole log (ADR 0041 §1).
+pub(crate) async fn read_raw_events(
+    pool: &Pool<Sqlite>,
+    after: Option<&RawEventKey>,
+    limit: u32,
+) -> Result<Vec<RawEvent>, DbError> {
+    let (aggregate_type, aggregate_id, sequence) = after.map_or(("", "", 0), |key| {
+        (key.aggregate_type.as_str(), key.aggregate_id.as_str(), key.sequence)
+    });
+    let rows = sqlx::query(
+        "SELECT aggregate_type, aggregate_id, sequence, event_type, event_version, payload, metadata \
+         FROM events WHERE (aggregate_type, aggregate_id, sequence) > (?, ?, ?) \
+         ORDER BY aggregate_type, aggregate_id, sequence LIMIT ?",
+    )
+    .bind(aggregate_type)
+    .bind(aggregate_id)
+    .bind(sequence)
+    .bind(i64::from(limit))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(e.to_string()))?;
+    let mut events = Vec::with_capacity(rows.len());
+    for row in &rows {
+        events.push(RawEvent {
+            aggregate_type: row.get("aggregate_type"),
+            aggregate_id: row.get("aggregate_id"),
+            sequence: row.get("sequence"),
+            event_type: row.get("event_type"),
+            event_version: row.get("event_version"),
+            payload: parse_json("events.payload", row.get("payload"))?,
+            metadata: parse_json("events.metadata", row.get("metadata"))?,
+        });
+    }
+    Ok(events)
+}
+
+/// Inserts `rows` as stored, in one transaction: a failing row (a duplicate key, or an `Err` the
+/// iterator yields) rolls every row back.
+pub(crate) async fn insert_raw_events(
+    pool: &Pool<Sqlite>,
+    rows: impl IntoIterator<Item = Result<RawEvent, DbError>>,
+) -> Result<u64, DbError> {
+    let mut tx = pool.begin().await.map_err(|e| DbError::Backend(e.to_string()))?;
+    let mut inserted = 0_u64;
+    for row in rows {
+        let row = row?;
+        sqlx::query(
+            "INSERT INTO events \
+             (aggregate_type, aggregate_id, sequence, event_type, event_version, payload, metadata) \
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&row.aggregate_type)
+        .bind(&row.aggregate_id)
+        .bind(row.sequence)
+        .bind(&row.event_type)
+        .bind(&row.event_version)
+        .bind(row.payload.to_string())
+        .bind(row.metadata.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            DbError::Backend(format!(
+                "inserting {} {} #{}: {e}",
+                row.aggregate_type, row.aggregate_id, row.sequence
+            ))
+        })?;
+        inserted += 1;
+    }
+    tx.commit().await.map_err(|e| DbError::Backend(e.to_string()))?;
+    Ok(inserted)
+}
+
+/// Counts every stored event row.
+pub(crate) async fn event_count(pool: &Pool<Sqlite>) -> Result<u64, DbError> {
+    count_rows(pool, "events").await
+}
+
+/// Reads every row of `table` as a [`ProjectionRow`].
+pub(crate) async fn projection_rows(pool: &Pool<Sqlite>, table: &str) -> Result<Vec<ProjectionRow>, DbError> {
+    let sql = format!("SELECT view_id, version, payload FROM {table}");
+    let rows = sqlx::query(&sql)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+    let mut projections = Vec::with_capacity(rows.len());
+    for row in &rows {
+        projections.push(ProjectionRow {
+            table: table.to_owned(),
+            view_id: row.get("view_id"),
+            version: row.get("version"),
+            payload: parse_json(table, row.get("payload"))?,
+        });
+    }
+    Ok(projections)
+}
+
+/// Parses a stored JSON text column, naming `column` on failure.
+fn parse_json(column: &str, text: &str) -> Result<serde_json::Value, DbError> {
+    serde_json::from_str(text).map_err(|e| DbError::Backend(format!("decoding {column}: {e}")))
 }

@@ -8,6 +8,7 @@
 //! engine per workspace at runtime (ADR 0002). Its per-aggregate operations are generated from the
 //! [`registry`](crate::registry); the backend delegation pattern is identical for every aggregate.
 
+use crate::raw::{ProjectionRow, RawEvent, RawEventKey};
 use crate::registry::{for_each_db_aggregate, for_each_db_external_id_aggregate, for_each_db_human_id_aggregate};
 
 /// One stored event, read raw from the log for the audit/change-log path (Phase 5 PR 5).
@@ -267,6 +268,122 @@ impl Store {
         #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
         {
             let _ = limit;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Reads up to `limit` raw event rows after `after` (or from the start), ordered by the
+    /// primary key `(aggregate_type, aggregate_id, sequence)` compared bytewise on both engines.
+    /// Paging with the last row's [`RawEvent::key`] reads the whole log in flat memory (ADR 0041).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn read_raw_events(&self, after: Option<&RawEventKey>, limit: u32) -> Result<Vec<RawEvent>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.read_raw_events(after, limit).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.read_raw_events(after, limit).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = (after, limit);
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Inserts `rows` into the log exactly as given, in one transaction, returning how many were
+    /// written. No command is decided and no projection is updated: the restore path (ADR 0041
+    /// §2) checks each row with [`crate::decode_raw_event`] first and rebuilds afterwards. The rows
+    /// are pulled one at a time, so a restore streams them without holding the log in memory.
+    ///
+    /// # Errors
+    ///
+    /// The first `Err` the iterator yields, or [`DbError::Backend`] if a row cannot be written (a
+    /// duplicate key); either way none of `rows` is kept. [`DbError::Unsupported`] when no backend
+    /// is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn insert_raw_events(
+        &self,
+        rows: impl IntoIterator<Item = Result<RawEvent, DbError>>,
+    ) -> Result<u64, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.insert_raw_events(rows).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.insert_raw_events(rows).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = rows;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Counts every event in the log.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn event_count(&self) -> Result<u64, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.event_count().await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.event_count().await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Every row of every projection table, ordered by table then `view_id` bytewise, with each
+    /// payload parsed so two stores compare equal whatever JSON text their engine kept — the "row
+    /// for row" comparison a restore is checked by (ADR 0041 §2).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn projection_rows(&self) -> Result<Vec<ProjectionRow>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            let mut rows = match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.projection_rows().await?,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.projection_rows().await?,
+            };
+            rows.sort_by(|a, b| (&a.table, &a.view_id).cmp(&(&b.table, &b.view_id)));
+            Ok(rows)
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
     }

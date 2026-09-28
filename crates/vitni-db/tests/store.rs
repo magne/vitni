@@ -12,7 +12,7 @@ use vitni_core::ids::{AgentId, AssertionId, HumanId, PersonId};
 use vitni_core::name::{NameType, PersonName, Surname};
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
-use vitni_db::{CommandError, DbError, Store};
+use vitni_db::{CommandError, DbError, RawEvent, Store};
 
 async fn store() -> (Store, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
@@ -210,4 +210,155 @@ async fn postgres_url_is_reported_unsupported() {
 async fn an_unknown_scheme_is_malformed() {
     let err = Store::open("mysql://localhost/x").await;
     assert!(matches!(err, Err(DbError::Malformed(_))));
+}
+
+/// Reads the whole log through the keyset pages, `page` rows at a time.
+async fn read_all_raw(store: &Store, page: u32) -> Vec<RawEvent> {
+    let mut rows = Vec::new();
+    let mut after = None;
+    loop {
+        let batch = store.read_raw_events(after.as_ref(), page).await.unwrap();
+        let Some(last) = batch.last() else {
+            break;
+        };
+        after = Some(last.key());
+        rows.extend(batch);
+    }
+    rows
+}
+
+#[tokio::test]
+async fn raw_event_pages_cover_the_log_in_primary_key_order() {
+    let (store, _dir) = store().await;
+    create(&store, 2, "I0002").await;
+    create(&store, 1, "I0001").await;
+    name(&store, 1, "Ada", "Lovelace").await;
+
+    let rows = read_all_raw(&store, 2).await;
+    assert_eq!(rows.len(), 3);
+    assert_eq!(store.event_count().await.unwrap(), 3);
+    let keys: Vec<_> = rows.iter().map(RawEvent::key).collect();
+    let mut sorted = keys.clone();
+    sorted.sort();
+    assert_eq!(
+        keys, sorted,
+        "pages come back in (aggregate_type, aggregate_id, sequence) order"
+    );
+    let first = &rows[0];
+    assert_eq!(first.aggregate_type, "person");
+    assert_eq!(first.event_type, "PersonCreated");
+    assert_eq!(first.event_version, "1.0");
+    assert_eq!(first.sequence, 1);
+    assert_eq!(first.metadata, serde_json::json!({}));
+    assert_eq!(first.payload["context"]["occurred_at"], "2026-06-18T12:00:00Z");
+}
+
+#[tokio::test]
+async fn inserted_raw_rows_rebuild_into_identical_projections() {
+    let (source, _source_dir) = store().await;
+    create(&source, 1, "I0001").await;
+    name(&source, 1, "Ada", "Lovelace").await;
+    create(&source, 2, "I0002").await;
+    let rows = read_all_raw(&source, 100).await;
+    for row in &rows {
+        vitni_db::decode_raw_event(row).unwrap();
+    }
+
+    let (target, _target_dir) = store().await;
+    assert_eq!(target.insert_raw_events(rows.iter().cloned().map(Ok)).await.unwrap(), 3);
+    target.rebuild_projections().await.unwrap();
+
+    assert_eq!(
+        read_all_raw(&target, 100).await,
+        rows,
+        "rows are stored exactly as read"
+    );
+    assert_eq!(
+        target.projection_rows().await.unwrap(),
+        source.projection_rows().await.unwrap()
+    );
+    assert_eq!(
+        target
+            .find_person("I0001")
+            .await
+            .unwrap()
+            .unwrap()
+            .human_id()
+            .map(|id| id.as_str().to_owned()),
+        Some("I0001".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn inserting_a_row_that_already_exists_fails() {
+    let (store, _dir) = store().await;
+    create(&store, 1, "I0001").await;
+    let rows = read_all_raw(&store, 10).await;
+    assert!(matches!(
+        store.insert_raw_events(rows.iter().cloned().map(Ok)).await,
+        Err(DbError::Backend(_))
+    ));
+    assert_eq!(
+        store.event_count().await.unwrap(),
+        1,
+        "the failed batch left nothing behind"
+    );
+}
+
+#[tokio::test]
+async fn projection_rows_are_ordered_and_hold_every_view() {
+    let (store, _dir) = store().await;
+    create(&store, 2, "I0002").await;
+    create(&store, 1, "I0001").await;
+    let rows = store.projection_rows().await.unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].table, "person_view");
+    assert!(rows[0].view_id < rows[1].view_id);
+    assert_eq!(rows[0].version, 1);
+    assert_eq!(rows[0].payload["state"]["human_id"], "I0001");
+}
+
+#[tokio::test]
+async fn decode_rejects_unknown_aggregates_and_undecodable_payloads() {
+    let (store, _dir) = store().await;
+    create(&store, 1, "I0001").await;
+    let row = read_all_raw(&store, 10).await.remove(0);
+
+    let mut unknown = row.clone();
+    unknown.aggregate_type = "nonesuch".to_owned();
+    let error = vitni_db::decode_raw_event(&unknown).unwrap_err();
+    assert!(matches!(error, DbError::Malformed(_)), "{error}");
+    assert!(error.to_string().contains("nonesuch"));
+
+    let mut broken = row;
+    broken.payload["type"] = serde_json::json!("NoSuchVariant");
+    let error = vitni_db::decode_raw_event(&broken).unwrap_err();
+    assert!(matches!(error, DbError::Malformed(_)), "{error}");
+    assert!(error.to_string().contains("person"), "{error}");
+}
+
+#[test]
+fn event_variants_list_every_aggregate() {
+    let variants = vitni_db::event_variants();
+    assert_eq!(variants.len(), 13);
+    let (_, person) = variants.iter().find(|(kind, _)| *kind == "person").unwrap();
+    assert!(person.contains(&"PersonCreated"));
+}
+
+#[tokio::test]
+async fn an_error_from_the_row_source_rolls_the_insert_back() {
+    let (source, _source_dir) = store().await;
+    create(&source, 1, "I0001").await;
+    create(&source, 2, "I0002").await;
+    let rows = read_all_raw(&source, 10).await;
+
+    let (target, _target_dir) = store().await;
+    let failing = vec![
+        Ok(rows[0].clone()),
+        Err(DbError::Malformed("line 2".to_owned())),
+        Ok(rows[1].clone()),
+    ];
+    let error = target.insert_raw_events(failing).await.unwrap_err();
+    assert!(error.to_string().contains("line 2"), "{error}");
+    assert_eq!(target.event_count().await.unwrap(), 0);
 }
