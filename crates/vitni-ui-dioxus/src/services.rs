@@ -880,6 +880,7 @@ async fn run_assisted_session(
         budget: ResourceBudget::assisted(),
         ai_config: ai_config(&services),
         provenance_confidence: Some(Confidence::Low),
+        import: None,
     };
     let (summary, _workspace) = services
         .host
@@ -1071,6 +1072,7 @@ async fn run_export_session(
         budget: ResourceBudget::default(),
         ai_config: AiConfig::default(),
         provenance_confidence: None,
+        import: None,
     };
     let (records, _workspace) = services
         .host
@@ -1219,6 +1221,7 @@ async fn run_bulk_import_session(
         budget: ResourceBudget::default(),
         ai_config: AiConfig::default(),
         provenance_confidence: None,
+        import: None,
     };
     let (records, _workspace) = services
         .host

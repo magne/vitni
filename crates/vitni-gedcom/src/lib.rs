@@ -13,7 +13,7 @@ mod emit;
 mod model;
 mod parse;
 
-pub use emit::emit;
+pub use emit::{emit, event_tag};
 pub use model::{
     Address, Age, AgeBound, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint,
     DateQuality, Event, EventAssociation, EventKind, Fact, FactKind, Family, Header, Individual, MediaObject, Name,

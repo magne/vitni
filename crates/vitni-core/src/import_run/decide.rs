@@ -291,7 +291,7 @@ mod tests {
     fn an_abandoned_run_keeps_its_reason_and_counts() {
         let mut state = running();
         let counts = ImportCounts {
-            assertions: 4,
+            commands: 4,
             ..ImportCounts::default()
         };
         apply(

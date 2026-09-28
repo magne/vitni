@@ -44,9 +44,9 @@ pub struct ImportCounts {
     /// Incoming items resolved onto existing aggregates.
     #[serde(default)]
     pub resolved: u32,
-    /// Write commands that succeeded.
+    /// Write commands the importer issued.
     #[serde(default)]
-    pub assertions: u32,
+    pub commands: u32,
     /// The importer's own record count, when it reports one (a bulk import's return value).
     #[serde(default)]
     pub records: Option<u32>,

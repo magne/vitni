@@ -21,15 +21,15 @@ wit_bindgen::generate!({
     world: "assisted-import",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.23.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.23.0": vitni_plugin_api::log,
-        "vitni:host-api/query@0.23.0": vitni_plugin_api::query,
-        "vitni:host-api/commands@0.23.0": vitni_plugin_api::commands,
-        "vitni:host-api/progress@0.23.0": vitni_plugin_api::progress,
-        "vitni:host-api/net@0.23.0": vitni_plugin_api::net,
-        "vitni:host-api/media-store@0.23.0": vitni_plugin_api::media_store,
-        "vitni:host-api/ai@0.23.0": vitni_plugin_api::ai,
-        "vitni:host-api/present@0.23.0": vitni_plugin_api::present,
+        "vitni:host-api/types@0.24.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.24.0": vitni_plugin_api::log,
+        "vitni:host-api/query@0.24.0": vitni_plugin_api::query,
+        "vitni:host-api/commands@0.24.0": vitni_plugin_api::commands,
+        "vitni:host-api/progress@0.24.0": vitni_plugin_api::progress,
+        "vitni:host-api/net@0.24.0": vitni_plugin_api::net,
+        "vitni:host-api/media-store@0.24.0": vitni_plugin_api::media_store,
+        "vitni:host-api/ai@0.24.0": vitni_plugin_api::ai,
+        "vitni:host-api/present@0.24.0": vitni_plugin_api::present,
     },
 });
 
@@ -38,7 +38,7 @@ use vitni_digitalarkivet::{
     parse_person_page, parse_residence_page, parse_viewer_page, slugify, suggest_filename,
 };
 use vitni_plugin_api::types::{Confidence, ExternalId, FactType, MediaCrop, NameType, PersonName, SourceMediaType};
-use vitni_plugin_api::{commands, log_info, log_warn, media_store, query, report};
+use vitni_plugin_api::{commands, log_info, log_warn, media_store, query, report, with_origin};
 
 mod contract;
 
@@ -167,7 +167,10 @@ fn residence_flow(url: &str, session: &mut Session) -> Result<(), String> {
         if action != "select" {
             return Ok(()); // "done" (or any non-select) finishes the session
         }
-        let Some(record) = values.row.and_then(|row| records.iter().find(|r| r.external_id.value == row)) else {
+        let Some(record) = values
+            .row
+            .and_then(|row| records.iter().find(|r| r.external_id.value == row))
+        else {
             continue;
         };
         let scan_url = resolve_scan_url(record);
@@ -186,9 +189,9 @@ fn fetch_household(links: &[String]) -> Result<Vec<PersonRecord>, String> {
         if !report("fetching household", index as u32, Some(total))? {
             break; // the frontend cancelled the fetch
         }
-        match fetch(link).and_then(|html| {
-            parse_person_page(&html, link).map_err(|error| format!("parsing {link} failed: {error}"))
-        }) {
+        match fetch(link)
+            .and_then(|html| parse_person_page(&html, link).map_err(|error| format!("parsing {link} failed: {error}")))
+        {
             Ok(record) => records.push(record),
             Err(error) => log_warn(&format!("skipping a household member: {error}")),
         }
@@ -246,11 +249,14 @@ fn import(
     };
 
     let name = field_value(values, "name").unwrap_or_else(|| record.name.clone());
-    let person = commands::create_person(person_name(&name).as_ref(), Some(&external_id(record)))
-        .map_err(|error| format!("create-person failed: {error:?}"))?;
-    if person.created {
-        record_claims(&person.human_id, record, effective, values, stored.as_ref(), session)?;
-    }
+    let person = with_origin(&record.external_id.value, None, || {
+        let person = commands::create_person(person_name(&name).as_ref(), Some(&external_id(record)))
+            .map_err(|error| format!("create-person failed: {error:?}"))?;
+        if person.created {
+            record_claims(&person.human_id, record, effective, values, stored.as_ref(), session)?;
+        }
+        Ok(person)
+    })?;
     session.imported.push((person.human_id, name));
     Ok(Outcome::Imported)
 }
@@ -270,13 +276,17 @@ fn record_claims(
             .map_err(|error| format!("assert-fact failed: {error:?}"))?;
     }
     let source = ensure_source(record, session)?;
-    let citation = commands::create_citation(&source, Some(&citation_locator(record, scan_url)))
-        .map_err(|error| format!("create-citation failed: {error:?}"))?;
-    commands::set_citation_confidence(&citation, confidence(values.confidence.as_deref()))
-        .map_err(|error| format!("set-citation-confidence failed: {error:?}"))?;
-    commands::attach_person_citation(person, &citation).map_err(|error| format!("attach-citation failed: {error:?}"))?;
+    let citation = with_origin(&record.external_id.value, Some("citation"), || {
+        let citation = commands::create_citation(&source, Some(&citation_locator(record, scan_url)))
+            .map_err(|error| format!("create-citation failed: {error:?}"))?;
+        commands::set_citation_confidence(&citation, confidence(values.confidence.as_deref()))
+            .map_err(|error| format!("set-citation-confidence failed: {error:?}"))?;
+        Ok(citation)
+    })?;
+    commands::attach_person_citation(person, &citation)
+        .map_err(|error| format!("attach-citation failed: {error:?}"))?;
     if let Some(stored) = stored {
-        let media = ensure_media(stored, session)?;
+        let media = ensure_media(stored, scan_url, session)?;
         let crop = values.region.map(to_crop);
         commands::attach_person_media(person, &media, crop, None)
             .map_err(|error| format!("attach-media failed: {error:?}"))?;
@@ -332,16 +342,23 @@ fn ensure_source(record: &PersonRecord, session: &mut Session) -> Result<String,
     }
     let title = record.source.title.clone().unwrap_or_else(|| record.record_url.clone());
     if let Ok(sources) = query::list_sources()
-        && let Some(existing) = sources.iter().find(|source| source.title.as_deref() == Some(title.as_str()))
+        && let Some(existing) = sources
+            .iter()
+            .find(|source| source.title.as_deref() == Some(title.as_str()))
     {
         session.source = Some(existing.human_id.clone());
         return Ok(existing.human_id.clone());
     }
-    let source = commands::create_source(Some(&title)).map_err(|error| format!("create-source failed: {error:?}"))?;
-    let repository = ensure_repository(session)?;
-    // No call number or medium concept in a Digitalarkivet page; both default (unspecified).
-    commands::link_source_repository(&source, &repository, None, &SourceMediaType::Custom(String::new()))
-        .map_err(|error| format!("link-source-repository failed: {error:?}"))?;
+    // A listing's source has no record id on the page: its title is the key.
+    let source = with_origin(&format!("source:{title}"), None, || {
+        let source =
+            commands::create_source(Some(&title)).map_err(|error| format!("create-source failed: {error:?}"))?;
+        let repository = ensure_repository(session)?;
+        // No call number or medium concept in a Digitalarkivet page; both default (unspecified).
+        commands::link_source_repository(&source, &repository, None, &SourceMediaType::Custom(String::new()))
+            .map_err(|error| format!("link-source-repository failed: {error:?}"))?;
+        Ok(source)
+    })?;
     session.source = Some(source.clone());
     Ok(source)
 }
@@ -352,30 +369,45 @@ fn ensure_repository(session: &mut Session) -> Result<String, String> {
         return Ok(repository.clone());
     }
     if let Ok(repositories) = query::list_repositories()
-        && let Some(existing) = repositories.iter().find(|repo| repo.name.as_deref() == Some(REPOSITORY))
+        && let Some(existing) = repositories
+            .iter()
+            .find(|repo| repo.name.as_deref() == Some(REPOSITORY))
     {
         session.repository = Some(existing.human_id.clone());
         return Ok(existing.human_id.clone());
     }
-    let repository = commands::create_repository(REPOSITORY).map_err(|error| format!("create-repository failed: {error:?}"))?;
+    let repository = with_origin("repository:arkivverket", None, || {
+        commands::create_repository(REPOSITORY).map_err(|error| format!("create-repository failed: {error:?}"))
+    })?;
     session.repository = Some(repository.clone());
     Ok(repository)
 }
 
 /// Resolves-or-creates the media object for the stored scan, deduping by path (within the run and
-/// against existing media), and setting its MIME type.
-fn ensure_media(stored: &StoredScan, session: &mut Session) -> Result<String, String> {
+/// against existing media), and setting its MIME type. Its origin is the scan's URL, since the
+/// filing path is the operator's choice and changes between runs.
+fn ensure_media(stored: &StoredScan, scan_url: Option<&str>, session: &mut Session) -> Result<String, String> {
     if let Some(media) = &session.media {
         return Ok(media.clone());
     }
     if let Ok(objects) = query::list_media()
-        && let Some(existing) = objects.iter().find(|media| media.path.as_deref() == Some(stored.relative_path.as_str()))
+        && let Some(existing) = objects
+            .iter()
+            .find(|media| media.path.as_deref() == Some(stored.relative_path.as_str()))
     {
         session.media = Some(existing.human_id.clone());
         return Ok(existing.human_id.clone());
     }
-    let media = commands::create_media(Some(&stored.relative_path)).map_err(|error| format!("create-media failed: {error:?}"))?;
-    commands::set_media_mime(&media, &stored.mime).map_err(|error| format!("set-media-mime failed: {error:?}"))?;
+    let key = match scan_url {
+        Some(url) => format!("scan:{url}"),
+        None => format!("file:{}", stored.relative_path),
+    };
+    let media = with_origin(&key, None, || {
+        let media = commands::create_media(Some(&stored.relative_path))
+            .map_err(|error| format!("create-media failed: {error:?}"))?;
+        commands::set_media_mime(&media, &stored.mime).map_err(|error| format!("set-media-mime failed: {error:?}"))?;
+        Ok(media)
+    })?;
     log_info(&format!("stored scan {} ({})", stored.relative_path, stored.checksum));
     session.media = Some(media.clone());
     Ok(media)

@@ -22,7 +22,7 @@ pub(crate) fn events(builder: &mut Builder) {
         bodies.push(ImportRunEventBody::ItemResolved {
             run_id: finished,
             dataset: dataset.clone(),
-            record: "@I1@".to_owned(),
+            record: "I1".to_owned(),
             item: None,
             kind: "person".to_owned(),
             aggregate_id: person.as_uuid(),
@@ -31,7 +31,7 @@ pub(crate) fn events(builder: &mut Builder) {
     }
     let mut counts = ImportCounts {
         resolved: 1,
-        assertions: 2,
+        commands: 2,
         records: Some(2),
         ..ImportCounts::default()
     };
@@ -102,7 +102,7 @@ fn push_imported_note(builder: &mut Builder, run: ImportRunId, dataset: &Dataset
         let mut meta = builder.meta();
         meta.context.origin = Some(Box::new(RecordOrigin {
             dataset: dataset.clone(),
-            record: "@N1@".to_owned(),
+            record: "N1".to_owned(),
             item: None,
             digest: None,
             run,

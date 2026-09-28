@@ -200,6 +200,7 @@ fn invocation(workspace: Workspace, grants: Grants) -> Invocation {
         net_policy: NetPolicy::deny_all(),
         ai_config: AiConfig::default(),
         provenance_confidence: None,
+        import: None,
     }
 }
 

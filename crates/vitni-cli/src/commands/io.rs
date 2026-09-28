@@ -29,6 +29,7 @@ pub async fn import(workspace: Workspace, localizer: &Localizer, plugin: &str, f
         net_policy: NetPolicy::deny_all(),
         ai_config: AiConfig::default(),
         provenance_confidence: None,
+        import: None,
     };
     let (count, _workspace) = host
         .run_bulk_import(&component, run, file, render_progress)
@@ -69,6 +70,7 @@ pub async fn export(
         net_policy: NetPolicy::deny_all(),
         ai_config: AiConfig::default(),
         provenance_confidence: None,
+        import: None,
     };
     let (count, _workspace) = host
         .run_bulk_export(&component, run, target, render_progress)

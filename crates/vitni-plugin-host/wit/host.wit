@@ -166,7 +166,14 @@
 // `citation-dto` gains `notes` (the attached notes' human ids, in attachment order); `commands` gains
 // `set-note-type` and `attach-citation-note`. A breaking change to `note-dto` and `citation-dto`;
 // additive to `commands`.
-package vitni:host-api@0.23.0;
+//
+// Version 0.24.0 records which source record every imported assertion came from (ADR 0037 §1). A new
+// `origin-key` record names a record within the importer's dataset and, optionally, the entity within
+// it; `commands` gains `set-origin`, which sets the key the host stamps on every later write until the
+// next call. During an import run the host refuses a write while no origin is set, so no imported
+// claim can lose its record. The dataset and the run are the host's, never the guest's. Additive to
+// `commands`.
+package vitni:host-api@0.24.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `vitni_core::name::NameType`.
@@ -476,6 +483,15 @@ interface types {
         privacy,
     }
 
+    // The source record an import is writing from (ADR 0037 §1): the record's id within the importer's
+    // dataset (a GEDCOM xref, a Gramps handle, a Digitalarkivet record id), and — when one record
+    // yields several entities — the importer's stable key for the one being written (`event:BIRT:0`,
+    // `citation:1`). The same record and item must produce the same key on every run of the importer.
+    record origin-key {
+        %record: string,
+        item: option<string>,
+    }
+
     // The outcome of a resolve-or-create command: the aggregate's human id, and whether it was newly
     // created (false = an existing aggregate was resolved by external id). An importer uses `created`
     // to attach owned records (events, places) only on first import, keeping re-import idempotent.
@@ -723,7 +739,7 @@ interface query {
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{external-id, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, media-crop, source-media-type, note-type, capability-error};
+    use types.{external-id, origin-key, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, media-crop, source-media-type, note-type, capability-error};
 
     // Declares the file's own asserted-as-of date (its export/header date, RFC 3339) for the rest of
     // this import session — the input the app-layer timestamp-gated reconciliation rule gates on
@@ -731,6 +747,11 @@ interface commands {
     // format/document has no such date or it could not be resolved to a specific day (ADR 0029 §3).
     // Not calling it at all is equivalent to calling it with `none` (today's additive-only behavior).
     begin-import: func(file-asserted-at: option<string>) -> result<_, capability-error>;
+    // Sets the source record every later write in this import is stamped with (ADR 0037 §1), until the
+    // next call; `none` clears it. During an import run a write with no origin set is refused with
+    // `invalid-input`. Outside a run (an invocation the frontend started without one) the call has no
+    // effect.
+    set-origin: func(origin: option<origin-key>) -> result<_, capability-error>;
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
     // person is returned (`created = false`) and the name is asserted only if not already present
     // (idempotent, additive re-import); otherwise a new person is created (`created = true`). When

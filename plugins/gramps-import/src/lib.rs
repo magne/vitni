@@ -11,11 +11,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.23.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.23.0": vitni_plugin_api::log,
-        "vitni:host-api/commands@0.23.0": vitni_plugin_api::commands,
-        "vitni:host-api/progress@0.23.0": vitni_plugin_api::progress,
-        "vitni:host-api/import-source@0.23.0": vitni_plugin_api::import_source,
+        "vitni:host-api/types@0.24.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.24.0": vitni_plugin_api::log,
+        "vitni:host-api/commands@0.24.0": vitni_plugin_api::commands,
+        "vitni:host-api/progress@0.24.0": vitni_plugin_api::progress,
+        "vitni:host-api/import-source@0.24.0": vitni_plugin_api::import_source,
     },
 });
 
@@ -30,6 +30,7 @@ use vitni_plugin_api::types::{
     Attribute, ChildParentRel, Confidence, ExternalId, MediaCrop, NoteType, ParticipantRole, ParticipationInput,
     PlaceType, Sex,
 };
+use vitni_plugin_api::with_origin;
 
 /// Maps a Gramps `<region>` crop (top-left origin + extent, percent) onto the host `media-crop`
 /// record threaded through `attach-person-media` (ADR 0017 §9).
@@ -78,75 +79,82 @@ impl Guest for Importer {
         let mut resolver = Resolver::new(&db);
         // Gramps handle -> created person human id, for resolving family members and associations.
         let mut handle_to_human: HashMap<String, String> = HashMap::new();
-        let mut pending_associations: Vec<(String, String, Option<AssociationKind>)> = Vec::new();
+        // (declaring person's handle, their human id, the other person's handle, the relation)
+        let mut pending_associations: Vec<(String, String, String, Option<AssociationKind>)> = Vec::new();
         // (person, event) pairs already asserted, so a partner whose person-side eventref carries a
         // payload is not double-asserted by the family loop (`AssertParticipation` is not idempotent).
         let mut asserted_participants: HashSet<(String, String)> = HashSet::new();
         let mut imported = 0u32;
 
         for (index, person) in db.people.iter().enumerate() {
-            let record = commands::create_person(
-                person.names.first().map(convert::name_to_wit).as_ref(),
-                Some(&external_id(person.gramps_id.as_deref(), &person.handle)),
-            )
-            .map_err(|error| format!("create-person failed: {error:?}"))?;
-            if record.created {
-                // The first <name> became the primary above; any alternate is a distinct assertion,
-                // not a clobber (data-model §17 round-trip gaps).
-                for name in person.names.iter().skip(1) {
-                    commands::add_person_name(&record.human_id, &convert::name_to_wit(name))
-                        .map_err(|error| format!("add-person-name failed: {error:?}"))?;
-                }
-                if let Some(gender) = person.gender {
-                    commands::assert_sex(&record.human_id, gender_to_sex(gender))
-                        .map_err(|error| format!("assert-sex failed: {error:?}"))?;
-                }
-                for event_ref in &person.event_refs {
-                    if let Some(event) = resolver.ensure_event(&event_ref.hlink)? {
-                        let input = participation_input(&mut resolver, event_ref)?;
-                        if asserted_participants.insert((record.human_id.clone(), event.clone())) {
-                            commands::add_event_participant(&record.human_id, &event, &input)
-                                .map_err(|error| format!("add-participant failed: {error:?}"))?;
+            let record = with_origin(&person.handle, None, || {
+                let record = commands::create_person(
+                    person.names.first().map(convert::name_to_wit).as_ref(),
+                    Some(&external_id(person.gramps_id.as_deref(), &person.handle)),
+                )
+                .map_err(|error| format!("create-person failed: {error:?}"))?;
+                if record.created {
+                    // The first <name> became the primary above; any alternate is a distinct assertion,
+                    // not a clobber (data-model §17 round-trip gaps).
+                    for name in person.names.iter().skip(1) {
+                        commands::add_person_name(&record.human_id, &convert::name_to_wit(name))
+                            .map_err(|error| format!("add-person-name failed: {error:?}"))?;
+                    }
+                    if let Some(gender) = person.gender {
+                        commands::assert_sex(&record.human_id, gender_to_sex(gender))
+                            .map_err(|error| format!("assert-sex failed: {error:?}"))?;
+                    }
+                    for event_ref in &person.event_refs {
+                        if let Some(event) = resolver.ensure_event(&event_ref.hlink)? {
+                            let input = participation_input(&mut resolver, event_ref)?;
+                            if asserted_participants.insert((record.human_id.clone(), event.clone())) {
+                                with_origin(&person.handle, Some(&format!("eventref:{}", event_ref.hlink)), || {
+                                    commands::add_event_participant(&record.human_id, &event, &input)
+                                        .map_err(|error| format!("add-participant failed: {error:?}"))
+                                })?;
+                            }
                         }
                     }
-                }
-                for handle in &person.citation_refs {
-                    if let Some(citation) = resolver.ensure_citation(handle)? {
-                        commands::attach_person_citation(&record.human_id, &citation)
-                            .map_err(|error| format!("attach-person-citation failed: {error:?}"))?;
+                    for handle in &person.citation_refs {
+                        if let Some(citation) = resolver.ensure_citation(handle)? {
+                            commands::attach_person_citation(&record.human_id, &citation)
+                                .map_err(|error| format!("attach-person-citation failed: {error:?}"))?;
+                        }
+                    }
+                    for handle in &person.note_refs {
+                        if let Some(note) = resolver.ensure_note(handle)? {
+                            commands::attach_person_note(&record.human_id, &note)
+                                .map_err(|error| format!("attach-person-note failed: {error:?}"))?;
+                        }
+                    }
+                    for media_ref in &person.media_refs {
+                        if let Some(media) = resolver.ensure_media(&media_ref.hlink)? {
+                            let crop = media_ref.region.map(region_to_crop);
+                            commands::attach_person_media(&record.human_id, &media, crop, None)
+                                .map_err(|error| format!("attach-person-media failed: {error:?}"))?;
+                        }
+                    }
+                    for person_ref in &person.person_refs {
+                        pending_associations.push((
+                            person.handle.clone(),
+                            record.human_id.clone(),
+                            person_ref.hlink.clone(),
+                            person_ref.rel.clone(),
+                        ));
+                    }
+                    for handle in &person.tag_refs {
+                        if let Some(tag) = resolver.ensure_tag(handle)? {
+                            commands::apply_person_tag(&record.human_id, &tag)
+                                .map_err(|error| format!("apply-person-tag failed: {error:?}"))?;
+                        }
+                    }
+                    if person.private {
+                        commands::set_person_restrictions(&record.human_id, &convert::private_to_wit(person.private))
+                            .map_err(|error| format!("set-person-restrictions failed: {error:?}"))?;
                     }
                 }
-                for handle in &person.note_refs {
-                    if let Some(note) = resolver.ensure_note(handle)? {
-                        commands::attach_person_note(&record.human_id, &note)
-                            .map_err(|error| format!("attach-person-note failed: {error:?}"))?;
-                    }
-                }
-                for media_ref in &person.media_refs {
-                    if let Some(media) = resolver.ensure_media(&media_ref.hlink)? {
-                        let crop = media_ref.region.map(region_to_crop);
-                        commands::attach_person_media(&record.human_id, &media, crop, None)
-                            .map_err(|error| format!("attach-person-media failed: {error:?}"))?;
-                    }
-                }
-                for person_ref in &person.person_refs {
-                    pending_associations.push((
-                        record.human_id.clone(),
-                        person_ref.hlink.clone(),
-                        person_ref.rel.clone(),
-                    ));
-                }
-                for handle in &person.tag_refs {
-                    if let Some(tag) = resolver.ensure_tag(handle)? {
-                        commands::apply_person_tag(&record.human_id, &tag)
-                            .map_err(|error| format!("apply-person-tag failed: {error:?}"))?;
-                    }
-                }
-                if person.private {
-                    commands::set_person_restrictions(&record.human_id, &convert::private_to_wit(person.private))
-                        .map_err(|error| format!("set-person-restrictions failed: {error:?}"))?;
-                }
-            }
+                Ok(record)
+            })?;
             handle_to_human.insert(person.handle.clone(), record.human_id);
             imported += 1;
             if !vitni_plugin_api::report("people", index as u32 + 1, Some(people))? {
@@ -154,75 +162,83 @@ impl Guest for Importer {
             }
         }
 
-        for (person, other_handle, rel) in &pending_associations {
+        for (owner, person, other_handle, rel) in &pending_associations {
             if let Some(other) = handle_to_human.get(other_handle) {
-                commands::assert_association(person, other, &convert::association_role_to_wit(rel.as_ref()))
-                    .map_err(|error| format!("assert-association failed: {error:?}"))?;
+                with_origin(owner, None, || {
+                    commands::assert_association(person, other, &convert::association_role_to_wit(rel.as_ref()))
+                        .map_err(|error| format!("assert-association failed: {error:?}"))
+                })?;
             }
         }
 
         for (index, family) in db.families.iter().enumerate() {
-            let record = commands::create_family(Some(&external_id(family.gramps_id.as_deref(), &family.handle)))
-                .map_err(|error| format!("create-family failed: {error:?}"))?;
-            let mut partner_ids = Vec::new();
-            for handle in family.father.iter().chain(family.mother.iter()) {
-                if let Some(human_id) = handle_to_human.get(handle) {
-                    commands::add_partner(&record.human_id, human_id)
-                        .map_err(|error| format!("add-partner failed: {error:?}"))?;
-                    partner_ids.push(human_id.clone());
-                }
-            }
-            for child in &family.child_refs {
-                if let Some(human_id) = handle_to_human.get(&child.hlink) {
-                    let mut relationships = Vec::new();
-                    if let (Some(frel), Some(father)) = (
-                        &child.father_relationship,
-                        family.father.as_ref().and_then(|h| handle_to_human.get(h)),
-                    ) {
-                        relationships.push(ChildParentRel {
-                            partner: father.clone(),
-                            relationship: convert::child_relationship_to_wit(frel),
-                        });
+            with_origin(&family.handle, None, || {
+                let record = commands::create_family(Some(&external_id(family.gramps_id.as_deref(), &family.handle)))
+                    .map_err(|error| format!("create-family failed: {error:?}"))?;
+                let mut partner_ids = Vec::new();
+                for handle in family.father.iter().chain(family.mother.iter()) {
+                    if let Some(human_id) = handle_to_human.get(handle) {
+                        commands::add_partner(&record.human_id, human_id)
+                            .map_err(|error| format!("add-partner failed: {error:?}"))?;
+                        partner_ids.push(human_id.clone());
                     }
-                    if let (Some(mrel), Some(mother)) = (
-                        &child.mother_relationship,
-                        family.mother.as_ref().and_then(|h| handle_to_human.get(h)),
-                    ) {
-                        relationships.push(ChildParentRel {
-                            partner: mother.clone(),
-                            relationship: convert::child_relationship_to_wit(mrel),
-                        });
-                    }
-                    commands::add_child(&record.human_id, human_id, &relationships)
-                        .map_err(|error| format!("add-child failed: {error:?}"))?;
                 }
-            }
-            if record.created {
-                for event_ref in &family.event_refs {
-                    if let Some(event) = resolver.ensure_event(&event_ref.hlink)? {
-                        commands::link_family_event(&record.human_id, &event)
-                            .map_err(|error| format!("link-family-event failed: {error:?}"))?;
-                        for partner in &partner_ids {
-                            // A partner whose own eventref already asserted this participation (with a
-                            // payload) is not re-asserted here as a bare primary.
-                            if asserted_participants.insert((partner.clone(), event.clone())) {
-                                commands::add_event_participant(partner, &event, &primary_participation())
-                                    .map_err(|error| format!("add-participant failed: {error:?}"))?;
+                for child in &family.child_refs {
+                    if let Some(human_id) = handle_to_human.get(&child.hlink) {
+                        let mut relationships = Vec::new();
+                        if let (Some(frel), Some(father)) = (
+                            &child.father_relationship,
+                            family.father.as_ref().and_then(|h| handle_to_human.get(h)),
+                        ) {
+                            relationships.push(ChildParentRel {
+                                partner: father.clone(),
+                                relationship: convert::child_relationship_to_wit(frel),
+                            });
+                        }
+                        if let (Some(mrel), Some(mother)) = (
+                            &child.mother_relationship,
+                            family.mother.as_ref().and_then(|h| handle_to_human.get(h)),
+                        ) {
+                            relationships.push(ChildParentRel {
+                                partner: mother.clone(),
+                                relationship: convert::child_relationship_to_wit(mrel),
+                            });
+                        }
+                        commands::add_child(&record.human_id, human_id, &relationships)
+                            .map_err(|error| format!("add-child failed: {error:?}"))?;
+                    }
+                }
+                if record.created {
+                    for event_ref in &family.event_refs {
+                        if let Some(event) = resolver.ensure_event(&event_ref.hlink)? {
+                            commands::link_family_event(&record.human_id, &event)
+                                .map_err(|error| format!("link-family-event failed: {error:?}"))?;
+                            for partner in &partner_ids {
+                                // A partner whose own eventref already asserted this participation (with a
+                                // payload) is not re-asserted here as a bare primary.
+                                if asserted_participants.insert((partner.clone(), event.clone())) {
+                                    let item = format!("eventref:{}", event_ref.hlink);
+                                    with_origin(&family.handle, Some(&item), || {
+                                        commands::add_event_participant(partner, &event, &primary_participation())
+                                            .map_err(|error| format!("add-participant failed: {error:?}"))
+                                    })?;
+                                }
                             }
                         }
                     }
-                }
-                if family.private {
-                    commands::set_family_restrictions(&record.human_id, &convert::private_to_wit(family.private))
-                        .map_err(|error| format!("set-family-restrictions failed: {error:?}"))?;
-                }
-                for handle in &family.tag_refs {
-                    if let Some(tag) = resolver.ensure_tag(handle)? {
-                        commands::apply_family_tag(&record.human_id, &tag)
-                            .map_err(|error| format!("apply-family-tag failed: {error:?}"))?;
+                    if family.private {
+                        commands::set_family_restrictions(&record.human_id, &convert::private_to_wit(family.private))
+                            .map_err(|error| format!("set-family-restrictions failed: {error:?}"))?;
+                    }
+                    for handle in &family.tag_refs {
+                        if let Some(tag) = resolver.ensure_tag(handle)? {
+                            commands::apply_family_tag(&record.human_id, &tag)
+                                .map_err(|error| format!("apply-family-tag failed: {error:?}"))?;
+                        }
                     }
                 }
-            }
+                Ok(())
+            })?;
             imported += 1;
             if !vitni_plugin_api::report("families", index as u32 + 1, Some(families))? {
                 return Ok(imported);
@@ -269,19 +285,22 @@ impl<'a> Resolver<'a> {
         let Some(event) = self.events.get(handle).copied() else {
             return Ok(None);
         };
-        let human_id = commands::create_event(convert::event_type_to_wit(event.kind))
-            .map_err(|error| format!("create-event failed: {error:?}"))?;
-        if let Some(date) = &event.date {
-            commands::set_event_date(&human_id, &convert::date_to_wit(date))
-                .map_err(|error| format!("set-event-date failed: {error:?}"))?;
-        }
-        if let Some(place_handle) = &event.place_ref
-            && let Some(place) = self.ensure_place(place_handle)?
-        {
-            commands::link_event_place(&human_id, &place).map_err(|error| format!("link-place failed: {error:?}"))?;
-        }
-        self.created_events.insert(handle.to_owned(), human_id.clone());
-        Ok(Some(human_id))
+        with_origin(handle, None, || {
+            let human_id = commands::create_event(convert::event_type_to_wit(event.kind))
+                .map_err(|error| format!("create-event failed: {error:?}"))?;
+            if let Some(date) = &event.date {
+                commands::set_event_date(&human_id, &convert::date_to_wit(date))
+                    .map_err(|error| format!("set-event-date failed: {error:?}"))?;
+            }
+            if let Some(place_handle) = &event.place_ref
+                && let Some(place) = self.ensure_place(place_handle)?
+            {
+                commands::link_event_place(&human_id, &place)
+                    .map_err(|error| format!("link-place failed: {error:?}"))?;
+            }
+            self.created_events.insert(handle.to_owned(), human_id.clone());
+            Ok(Some(human_id))
+        })
     }
 
     /// Creates the place for `handle` (once), its type, and its enclosing-place chain.
@@ -292,20 +311,22 @@ impl<'a> Resolver<'a> {
         let Some(place) = self.places.get(handle).copied() else {
             return Ok(None);
         };
-        let human_id = commands::create_place(place.name.as_deref().unwrap_or_default())
-            .map_err(|error| format!("create-place failed: {error:?}"))?;
-        self.created_places.insert(handle.to_owned(), human_id.clone());
-        if let Some(place_type) = &place.place_type {
-            commands::set_place_type(&human_id, &place_type_of(place_type))
-                .map_err(|error| format!("set-place-type failed: {error:?}"))?;
-        }
-        for enclosing_handle in &place.enclosed_by {
-            if let Some(enclosing) = self.ensure_place(enclosing_handle)? {
-                commands::set_place_enclosed_by(&human_id, &enclosing)
-                    .map_err(|error| format!("set-place-enclosed-by failed: {error:?}"))?;
+        with_origin(handle, None, || {
+            let human_id = commands::create_place(place.name.as_deref().unwrap_or_default())
+                .map_err(|error| format!("create-place failed: {error:?}"))?;
+            self.created_places.insert(handle.to_owned(), human_id.clone());
+            if let Some(place_type) = &place.place_type {
+                commands::set_place_type(&human_id, &place_type_of(place_type))
+                    .map_err(|error| format!("set-place-type failed: {error:?}"))?;
             }
-        }
-        Ok(Some(human_id))
+            for enclosing_handle in &place.enclosed_by {
+                if let Some(enclosing) = self.ensure_place(enclosing_handle)? {
+                    commands::set_place_enclosed_by(&human_id, &enclosing)
+                        .map_err(|error| format!("set-place-enclosed-by failed: {error:?}"))?;
+                }
+            }
+            Ok(Some(human_id))
+        })
     }
 
     /// Creates the source for `handle` (once), its author/pub-info/abbreviation, and its
@@ -317,34 +338,41 @@ impl<'a> Resolver<'a> {
         let Some(source) = self.sources.get(handle).copied() else {
             return Ok(None);
         };
-        let human_id = commands::create_source(source.title.as_deref())
-            .map_err(|error| format!("create-source failed: {error:?}"))?;
-        self.created_sources.insert(handle.to_owned(), human_id.clone());
-        if let Some(author) = &source.author {
-            commands::set_source_author(&human_id, author)
-                .map_err(|error| format!("set-source-author failed: {error:?}"))?;
-        }
-        if let Some(pub_info) = &source.pub_info {
-            commands::set_source_pub_info(&human_id, pub_info)
-                .map_err(|error| format!("set-source-pub-info failed: {error:?}"))?;
-        }
-        if let Some(abbrev) = &source.abbrev {
-            commands::set_source_abbrev(&human_id, abbrev)
-                .map_err(|error| format!("set-source-abbrev failed: {error:?}"))?;
-        }
-        for reporef in &source.repository_refs {
-            if let Some(repository) = self.ensure_repository(&reporef.hlink)? {
-                let media_type = reporef
-                    .medium
-                    .as_ref()
-                    .map_or(types::SourceMediaType::Custom(String::new()), |medium| {
-                        convert::source_media_kind_to_wit(medium)
-                    });
-                commands::link_source_repository(&human_id, &repository, reporef.call_number.as_deref(), &media_type)
-                    .map_err(|error| format!("link-source-repository failed: {error:?}"))?;
+        with_origin(handle, None, || {
+            let human_id = commands::create_source(source.title.as_deref())
+                .map_err(|error| format!("create-source failed: {error:?}"))?;
+            self.created_sources.insert(handle.to_owned(), human_id.clone());
+            if let Some(author) = &source.author {
+                commands::set_source_author(&human_id, author)
+                    .map_err(|error| format!("set-source-author failed: {error:?}"))?;
             }
-        }
-        Ok(Some(human_id))
+            if let Some(pub_info) = &source.pub_info {
+                commands::set_source_pub_info(&human_id, pub_info)
+                    .map_err(|error| format!("set-source-pub-info failed: {error:?}"))?;
+            }
+            if let Some(abbrev) = &source.abbrev {
+                commands::set_source_abbrev(&human_id, abbrev)
+                    .map_err(|error| format!("set-source-abbrev failed: {error:?}"))?;
+            }
+            for reporef in &source.repository_refs {
+                if let Some(repository) = self.ensure_repository(&reporef.hlink)? {
+                    let media_type = reporef
+                        .medium
+                        .as_ref()
+                        .map_or(types::SourceMediaType::Custom(String::new()), |medium| {
+                            convert::source_media_kind_to_wit(medium)
+                        });
+                    commands::link_source_repository(
+                        &human_id,
+                        &repository,
+                        reporef.call_number.as_deref(),
+                        &media_type,
+                    )
+                    .map_err(|error| format!("link-source-repository failed: {error:?}"))?;
+                }
+            }
+            Ok(Some(human_id))
+        })
     }
 
     /// Creates the citation for `handle` (once), its source, page, confidence, and attached notes — a
@@ -356,27 +384,29 @@ impl<'a> Resolver<'a> {
         let Some(citation) = self.citations.get(handle).copied() else {
             return Ok(None);
         };
-        let source = match &citation.source_ref {
-            Some(source_handle) => self.ensure_source(source_handle)?,
-            None => None,
-        };
-        let Some(source) = source else {
-            return Ok(None);
-        };
-        let human_id = commands::create_citation(&source, citation.page.as_deref())
-            .map_err(|error| format!("create-citation failed: {error:?}"))?;
-        self.created_citations.insert(handle.to_owned(), human_id.clone());
-        if let Some(confidence) = citation.confidence {
-            commands::set_citation_confidence(&human_id, confidence_of(confidence))
-                .map_err(|error| format!("set-citation-confidence failed: {error:?}"))?;
-        }
-        for note_handle in &citation.note_refs {
-            if let Some(note) = self.ensure_note(note_handle)? {
-                commands::attach_citation_note(&human_id, &note)
-                    .map_err(|error| format!("attach-citation-note failed: {error:?}"))?;
+        with_origin(handle, None, || {
+            let source = match &citation.source_ref {
+                Some(source_handle) => self.ensure_source(source_handle)?,
+                None => None,
+            };
+            let Some(source) = source else {
+                return Ok(None);
+            };
+            let human_id = commands::create_citation(&source, citation.page.as_deref())
+                .map_err(|error| format!("create-citation failed: {error:?}"))?;
+            self.created_citations.insert(handle.to_owned(), human_id.clone());
+            if let Some(confidence) = citation.confidence {
+                commands::set_citation_confidence(&human_id, confidence_of(confidence))
+                    .map_err(|error| format!("set-citation-confidence failed: {error:?}"))?;
             }
-        }
-        Ok(Some(human_id))
+            for note_handle in &citation.note_refs {
+                if let Some(note) = self.ensure_note(note_handle)? {
+                    commands::attach_citation_note(&human_id, &note)
+                        .map_err(|error| format!("attach-citation-note failed: {error:?}"))?;
+                }
+            }
+            Ok(Some(human_id))
+        })
     }
 
     /// Creates the note for `handle` (once), with its type.
@@ -387,14 +417,16 @@ impl<'a> Resolver<'a> {
         let Some(note) = self.notes.get(handle).copied() else {
             return Ok(None);
         };
-        let human_id = commands::create_note(note.text.as_deref().unwrap_or_default())
-            .map_err(|error| format!("create-note failed: {error:?}"))?;
-        self.created_notes.insert(handle.to_owned(), human_id.clone());
-        if let Some(note_type) = &note.note_type {
-            commands::set_note_type(&human_id, &note_type_of(note_type))
-                .map_err(|error| format!("set-note-type failed: {error:?}"))?;
-        }
-        Ok(Some(human_id))
+        with_origin(handle, None, || {
+            let human_id = commands::create_note(note.text.as_deref().unwrap_or_default())
+                .map_err(|error| format!("create-note failed: {error:?}"))?;
+            self.created_notes.insert(handle.to_owned(), human_id.clone());
+            if let Some(note_type) = &note.note_type {
+                commands::set_note_type(&human_id, &note_type_of(note_type))
+                    .map_err(|error| format!("set-note-type failed: {error:?}"))?;
+            }
+            Ok(Some(human_id))
+        })
     }
 
     /// Creates the media object for `handle` (once).
@@ -402,16 +434,19 @@ impl<'a> Resolver<'a> {
         if let Some(human_id) = self.created_media.get(handle) {
             return Ok(Some(human_id.clone()));
         }
-        let Some(file) = self.media_file.get(handle) else {
+        let Some(file) = self.media_file.get(handle).cloned() else {
             return Ok(None);
         };
-        let human_id =
-            commands::create_media(file.as_deref()).map_err(|error| format!("create-media failed: {error:?}"))?;
-        if let Some(Some(mime)) = self.media_mime.get(handle) {
-            commands::set_media_mime(&human_id, mime).map_err(|error| format!("set-media-mime failed: {error:?}"))?;
-        }
-        self.created_media.insert(handle.to_owned(), human_id.clone());
-        Ok(Some(human_id))
+        with_origin(handle, None, || {
+            let human_id =
+                commands::create_media(file.as_deref()).map_err(|error| format!("create-media failed: {error:?}"))?;
+            if let Some(Some(mime)) = self.media_mime.get(handle) {
+                commands::set_media_mime(&human_id, mime)
+                    .map_err(|error| format!("set-media-mime failed: {error:?}"))?;
+            }
+            self.created_media.insert(handle.to_owned(), human_id.clone());
+            Ok(Some(human_id))
+        })
     }
 
     /// Creates the repository for `handle` (once).
@@ -419,13 +454,15 @@ impl<'a> Resolver<'a> {
         if let Some(human_id) = self.created_repositories.get(handle) {
             return Ok(Some(human_id.clone()));
         }
-        let Some(name) = self.repository_name.get(handle) else {
+        let Some(name) = self.repository_name.get(handle).cloned() else {
             return Ok(None);
         };
-        let human_id = commands::create_repository(name.as_deref().unwrap_or_default())
-            .map_err(|error| format!("create-repository failed: {error:?}"))?;
-        self.created_repositories.insert(handle.to_owned(), human_id.clone());
-        Ok(Some(human_id))
+        with_origin(handle, None, || {
+            let human_id = commands::create_repository(name.as_deref().unwrap_or_default())
+                .map_err(|error| format!("create-repository failed: {error:?}"))?;
+            self.created_repositories.insert(handle.to_owned(), human_id.clone());
+            Ok(Some(human_id))
+        })
     }
 
     /// Creates the tag for `handle` (once).
@@ -433,13 +470,15 @@ impl<'a> Resolver<'a> {
         if let Some(id) = self.created_tags.get(handle) {
             return Ok(Some(id.clone()));
         }
-        let Some(name) = self.tag_name.get(handle) else {
+        let Some(name) = self.tag_name.get(handle).cloned() else {
             return Ok(None);
         };
-        let id = commands::create_tag(name.as_deref().unwrap_or_default())
-            .map_err(|error| format!("create-tag failed: {error:?}"))?;
-        self.created_tags.insert(handle.to_owned(), id.clone());
-        Ok(Some(id))
+        with_origin(handle, None, || {
+            let id = commands::create_tag(name.as_deref().unwrap_or_default())
+                .map_err(|error| format!("create-tag failed: {error:?}"))?;
+            self.created_tags.insert(handle.to_owned(), id.clone());
+            Ok(Some(id))
+        })
     }
 }
 

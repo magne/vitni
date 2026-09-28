@@ -401,7 +401,8 @@ fn emit_address(out: &mut String, address: &Address) {
 }
 
 /// The canonical GEDCOM tag for an event kind.
-fn event_tag(kind: EventKind) -> &'static str {
+#[must_use]
+pub fn event_tag(kind: EventKind) -> &'static str {
     match kind {
         EventKind::Birth => "BIRT",
         EventKind::Death => "DEAT",
