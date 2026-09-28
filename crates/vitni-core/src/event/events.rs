@@ -18,7 +18,7 @@ use crate::text::MediaRef;
 pub type EventEvent = Envelope<EventEventBody>;
 
 /// The Event claim variants (data-model §10).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum EventEventBody {
     /// An event aggregate was created.

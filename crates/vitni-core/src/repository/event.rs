@@ -14,7 +14,7 @@ use crate::text::Url;
 pub type RepositoryEvent = Envelope<RepositoryEventBody>;
 
 /// The Repository claim variants (data-model §10).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum RepositoryEventBody {
     /// A repository aggregate was created.

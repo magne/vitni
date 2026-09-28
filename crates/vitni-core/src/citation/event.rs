@@ -15,7 +15,7 @@ use crate::text::{Attribute, MediaRef};
 pub type CitationEvent = Envelope<CitationEventBody>;
 
 /// The Citation claim variants (data-model §10).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum CitationEventBody {
     /// A citation aggregate was created, pointing at a source.

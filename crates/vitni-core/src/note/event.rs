@@ -13,7 +13,7 @@ use crate::text::RichText;
 pub type NoteEvent = Envelope<NoteEventBody>;
 
 /// The Note claim variants (data-model §10).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum NoteEventBody {
     /// A note aggregate was created.

@@ -21,7 +21,7 @@ use crate::text::MediaRef;
 pub type PlaceEvent = Envelope<PlaceEventBody>;
 
 /// The Place claim variants (data-model §10).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum PlaceEventBody {
     /// A place aggregate was created.

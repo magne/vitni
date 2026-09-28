@@ -15,7 +15,7 @@ use crate::text::Attribute;
 pub type MediaEvent = Envelope<MediaEventBody>;
 
 /// The Media claim variants (data-model §10).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum MediaEventBody {
     /// A media aggregate was created.

@@ -14,7 +14,7 @@ use crate::text::{Attribute, MediaRef};
 pub type SourceEvent = Envelope<SourceEventBody>;
 
 /// The Source claim variants (data-model §10).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum SourceEventBody {
     /// A source aggregate was created.

@@ -13,7 +13,7 @@ pub type TagEvent = Envelope<TagEventBody>;
 
 /// The Tag claim variants (data-model §10). Setters are last-writer-wins; there is no
 /// retract/supersede pair (a tag definition has no assertion chain to correct).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum TagEventBody {
     /// A tag aggregate was created.

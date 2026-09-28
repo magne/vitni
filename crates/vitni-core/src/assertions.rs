@@ -71,7 +71,8 @@ impl<T> Asserted<T> {
 /// `type_name` is the `cqrs-es` event type (the variant name). `version` is the **per-variant**
 /// payload schema version: a variant is bumped only when its own payload changes additively, so
 /// an unevolved variant stays `"1.0"` while a sibling advances (see `event::EventEventBody`).
-pub trait EventBody {
+/// `VariantNames` lists every variant, so a backup fixture can prove it covers them (ADR 0041 §5).
+pub trait EventBody: strum::VariantNames {
     /// The variant name, used as the `cqrs-es` event type.
     fn type_name(&self) -> &'static str;
     /// The payload schema version of this variant.
@@ -103,6 +104,14 @@ impl<B> Envelope<B> {
             context: meta.context.clone(),
             body,
         }
+    }
+}
+
+impl<B: EventBody> Envelope<B> {
+    /// Every variant name of the body, as stored in the `cqrs-es` event type column.
+    #[must_use]
+    pub fn variant_names() -> &'static [&'static str] {
+        B::VARIANTS
     }
 }
 
@@ -233,5 +242,44 @@ mod tests {
     fn from_context_passes_none_confidence_through() {
         let asserted: Asserted<&str> = Asserted::from_context("v", &context(None));
         assert_eq!(asserted.confidence, None);
+    }
+
+    /// Every name `variant_names` reports must be a `type` tag serde recognizes: decoding a bare
+    /// `{"type": name}` fails on a missing field, never on an unknown variant.
+    fn assert_variant_names_are_serde_tags<B: super::EventBody + serde::de::DeserializeOwned>() {
+        let names = super::Envelope::<B>::variant_names();
+        assert!(!names.is_empty());
+        for name in names {
+            let Err(error) = serde_json::from_value::<B>(serde_json::json!({ "type": name })) else {
+                continue;
+            };
+            let message = error.to_string();
+            assert!(!message.contains("unknown variant"), "{name}: {message}");
+        }
+    }
+
+    #[test]
+    fn variant_names_match_the_serde_tags_of_every_body() {
+        assert_variant_names_are_serde_tags::<crate::citation::CitationEventBody>();
+        assert_variant_names_are_serde_tags::<crate::dna_match::DnaMatchEventBody>();
+        assert_variant_names_are_serde_tags::<crate::dna_test::DnaTestEventBody>();
+        assert_variant_names_are_serde_tags::<crate::event::EventEventBody>();
+        assert_variant_names_are_serde_tags::<crate::family::FamilyEventBody>();
+        assert_variant_names_are_serde_tags::<crate::media::MediaEventBody>();
+        assert_variant_names_are_serde_tags::<crate::note::NoteEventBody>();
+        assert_variant_names_are_serde_tags::<crate::person::PersonEventBody>();
+        assert_variant_names_are_serde_tags::<crate::place::PlaceEventBody>();
+        assert_variant_names_are_serde_tags::<crate::repository::RepositoryEventBody>();
+        assert_variant_names_are_serde_tags::<crate::research_note::ResearchNoteEventBody>();
+        assert_variant_names_are_serde_tags::<crate::source::SourceEventBody>();
+        assert_variant_names_are_serde_tags::<crate::tag::TagEventBody>();
+    }
+
+    #[test]
+    fn variant_names_list_every_media_variant() {
+        let names = super::Envelope::<crate::media::MediaEventBody>::variant_names();
+        assert_eq!(names.len(), 14);
+        assert!(names.contains(&"MediaCreated"));
+        assert!(names.contains(&"HumanIdChanged"));
     }
 }

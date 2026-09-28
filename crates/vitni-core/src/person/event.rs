@@ -22,7 +22,7 @@ use crate::text::{Attribute, ExternalId, MediaRef};
 pub type PersonEvent = Envelope<PersonEventBody>;
 
 /// The Person claim variants (data-model §10).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::VariantNames)]
 #[serde(tag = "type")]
 pub enum PersonEventBody {
     /// A person aggregate was created (as a persona or a conclusion).
