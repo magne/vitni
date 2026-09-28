@@ -67,6 +67,13 @@ impl Session {
         AssertionId::from_uuid(Uuid::now_v7())
     }
 
+    /// Reads the wall clock — for a record of *when* something ran that is not an assertion (a
+    /// backup's creation time, ADR 0041), so the clock is still read here and nowhere else.
+    #[must_use]
+    pub fn now(&self) -> OffsetDateTime {
+        OffsetDateTime::now_utc()
+    }
+
     /// Builds the supplied non-deterministic inputs for one command (ADR 0004 §3).
     ///
     /// Generates a fresh [`AssertionId`], reads the clock for `occurred_at`, copies in the configured

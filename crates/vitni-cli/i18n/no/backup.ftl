@@ -1,5 +1,15 @@
 # Sikkerhetskopi og gjenoppretting (ADR 0041)
 
+## Kommandoutdata
+backup-created = Sikkerhetskopierte { $events } hendelser til { $path }.
+backup-media-files = Tok med { $count } mediefil(er).
+backup-media-missing = Fant ikke mediefilen, så den ble ikke sikkerhetskopiert: { $path }
+restore-success = Gjenopprettet { $events } hendelser i arbeidsområdet "{ $name }" i { $path } (sikkerhetskopiformat { $format }).
+restore-media-restored = Gjenopprettet { $count } mediefil(er).
+restore-media-missing = Mediefilen mangler etter gjenopprettingen: { $path }
+restore-media-mismatched = Mediefilen er ulik den som ble sikkerhetskopiert: { $path }
+
+## Feil
 err-backup-destination-exists = { $path } finnes allerede; velg et nytt filnavn
 err-backup-archive = feil med sikkerhetskopifilen: { $detail }
 err-backup-not-a-backup = ikke en vitni-sikkerhetskopi: { $detail }

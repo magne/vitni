@@ -30,6 +30,7 @@ use clap::{Parser, Subcommand};
 use vitni_app::config;
 use vitni_app::{AppError, Config, ConfigStore, FileConfigStore, Session, Workspace, read_resolved_locale};
 
+use crate::commands::backup::BackupCmd;
 use crate::commands::citation::CitationCmd;
 use crate::commands::dna_match::DnaMatchCmd;
 use crate::commands::dna_test::DnaTestCmd;
@@ -127,6 +128,11 @@ macro_rules! cli_command_enum {
                 #[arg(long, value_name = "FILE")]
                 output: Option<PathBuf>,
             },
+            /// Back up the workspace, or restore a backup into a new workspace (ADR 0041).
+            Backup {
+                #[command(subcommand)]
+                command: BackupCmd,
+            },
             /// Inspect plugin trust tiers and manage capability grants (ADR 0014).
             Plugin {
                 #[command(subcommand)]
@@ -158,7 +164,11 @@ macro_rules! cli_dispatch_fn {
         ) -> Result<(), AppError> {
             match command {
                 Command::Init { .. } => unreachable!("handled in run_command() before the workspace opens"),
-                Command::Rebuild | Command::Import { .. } | Command::Export { .. } | Command::Plugin { .. } => {
+                Command::Rebuild
+                | Command::Import { .. }
+                | Command::Export { .. }
+                | Command::Backup { .. }
+                | Command::Plugin { .. } => {
                     unreachable!("handled in run_command() before/after the workspace opens")
                 }
                 $(
@@ -203,6 +213,8 @@ pub async fn run() -> ExitCode {
 /// The open workspace plus the per-command inputs and the workspace-aware localizer.
 struct Context {
     workspace: Workspace,
+    /// The workspace's registry name.
+    name: String,
     dir: PathBuf,
     session: Session,
     localizer: Localizer,
@@ -235,6 +247,22 @@ async fn run_command(cli: Cli) -> ExitCode {
         return Box::pin(import(plugin, file, new, into, yes)).await;
     }
 
+    // Restore creates its own target workspace, so like import it runs before the generic open.
+    if let Command::Backup {
+        command: BackupCmd::Restore {
+            archive,
+            new,
+            database_url,
+        },
+    } = &cli.command
+    {
+        let localizer = Localizer::baseline();
+        return report(
+            &localizer,
+            commands::backup::restore(archive, new, database_url.as_deref(), &localizer).await,
+        );
+    }
+
     // `plugin` operates on config + the workspace manifest/plugin layer (no DB workspace open), so it
     // is handled here rather than through the generic open below.
     if let Command::Plugin { command } = cli.command {
@@ -254,12 +282,16 @@ async fn run_command(cli: Cli) -> ExitCode {
     };
     let Context {
         workspace,
+        name,
         dir,
         session,
         localizer,
     } = context;
     let result = match cli.command {
         Command::Rebuild => rebuild(&workspace, &localizer).await,
+        Command::Backup {
+            command: BackupCmd::Create { path, with_media },
+        } => commands::backup::create(&workspace, &session, &name, &path, with_media, &localizer).await,
         // The plugin-host future is large (Wasmtime store + workspace); box it so the top-level
         // command future stays small.
         Command::Export { plugin, output } => {
@@ -288,6 +320,7 @@ async fn open_workspace(workspace: Option<String>) -> Result<Context, Box<(Local
         Ok(resolved) => resolved,
         Err(error) => return Err(Box::new((Localizer::baseline(), error))),
     };
+    let name = workspace.or_else(|| config.default.clone()).unwrap_or_default();
     let config_ui_language = read_resolved_locale(&dir, &config.workspace_defaults).ui_language;
     let localizer = Localizer::for_workspace(&dir, config_ui_language.as_ref());
     match Workspace::open(&dir, &config.operator, &config.workspace_defaults).await {
@@ -297,6 +330,7 @@ async fn open_workspace(workspace: Option<String>) -> Result<Context, Box<(Local
             let localizer = localizer.with_surety_overrides(workspace.surety_labels().clone());
             Ok(Context {
                 workspace,
+                name,
                 dir,
                 session: Session::new(config.operator_agent()),
                 localizer,

@@ -131,6 +131,55 @@ impl Localizer {
         fl!(self.loader, "config-line", path = path)
     }
 
+    /// `Backed up N events to <path>.`
+    #[must_use]
+    pub fn backup_created(&self, events: u64, path: &str) -> String {
+        fl!(self.loader, "backup-created", events = events, path = path)
+    }
+
+    /// `Included N media file(s).`
+    #[must_use]
+    pub fn backup_media_files(&self, count: usize) -> String {
+        fl!(self.loader, "backup-media-files", count = count)
+    }
+
+    /// `Media file not found, so not backed up: <path>`.
+    #[must_use]
+    pub fn backup_media_missing(&self, path: &str) -> String {
+        fl!(self.loader, "backup-media-missing", path = path)
+    }
+
+    /// `Restored N events into workspace "<name>" at <path> (backup format <format>).`
+    #[must_use]
+    pub fn restore_success(&self, events: u64, name: &str, path: &str, format: &str) -> String {
+        fl!(
+            self.loader,
+            "restore-success",
+            events = events,
+            name = name,
+            path = path,
+            format = format
+        )
+    }
+
+    /// `Restored N media file(s).`
+    #[must_use]
+    pub fn restore_media_restored(&self, count: usize) -> String {
+        fl!(self.loader, "restore-media-restored", count = count)
+    }
+
+    /// `Media file missing after the restore: <path>`.
+    #[must_use]
+    pub fn restore_media_missing(&self, path: &str) -> String {
+        fl!(self.loader, "restore-media-missing", path = path)
+    }
+
+    /// `Media file differs from the one backed up: <path>`.
+    #[must_use]
+    pub fn restore_media_mismatched(&self, path: &str) -> String {
+        fl!(self.loader, "restore-media-mismatched", path = path)
+    }
+
     /// `Rebuilt all projections from the event log.`
     #[must_use]
     pub fn rebuild_success(&self) -> String {

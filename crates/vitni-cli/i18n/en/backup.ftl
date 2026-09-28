@@ -1,5 +1,15 @@
 # Backup and restore (ADR 0041)
 
+## Command output
+backup-created = Backed up { $events } events to { $path }.
+backup-media-files = Included { $count } media file(s).
+backup-media-missing = Media file not found, so not backed up: { $path }
+restore-success = Restored { $events } events into workspace "{ $name }" at { $path } (backup format { $format }).
+restore-media-restored = Restored { $count } media file(s).
+restore-media-missing = Media file missing after the restore: { $path }
+restore-media-mismatched = Media file differs from the one backed up: { $path }
+
+## Errors
 err-backup-destination-exists = { $path } already exists; choose a new file name
 err-backup-archive = backup file error: { $detail }
 err-backup-not-a-backup = not a vitni backup: { $detail }
