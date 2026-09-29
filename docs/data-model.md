@@ -623,9 +623,10 @@ around evidence and provenance.
    `EventContext.origin` (§8) naming the run. A **dataset** scopes record ids: `digitalarkivet` is
    global, while `gedcom:<uuid>` and `gramps:<uuid>` each name one file lineage — the same tree
    re-exported over time — which the operator picks or declares on import. Datasets are a projection
-   over runs, labelled by the earliest. File-local keys (a GEDCOM xref, a Gramps handle) are origin
-   records; `ExternalId` is for identifiers that mean something outside the file. The importers still
-   also write the xref and Gramps id as `ExternalId`s, until #389 drops them.
+   over runs, labelled by the earliest. File-local keys (a GEDCOM xref, a Gramps id or handle) are
+   origin records only, never `ExternalId`s, so two unrelated files that both hold an `@I1@` import
+   two people. `ExternalId` is for identifiers that mean something outside the file: a GEDCOM `_UID`,
+   a Digitalarkivet record id.
 
 5. **Re-import resolves by origin (ADR 0037 §4).** The `record_origins` projection index (both
    engines, rebuilt by replay) holds one row per imported event: its origin, the aggregate it landed
@@ -1017,7 +1018,7 @@ For import/export fidelity. "—" means no direct equivalent.
 | `Address`                                              | Address                           | `ADDR` (`ADR1-3`/`CITY`/`STAE`/`POST`/`CTRY` + `PHON`/`EMAIL`/`FAX`/`WWW`) | Address                                  |
 | `ParticipantRole` / `AssociationRole`                  | `EventRef` role                   | `ASSO`.`ROLE` (full set, both contexts)                                    | role in Fact                             |
 | `restrictions` (`Restriction` set)                     | `private` flag (boolean, lossy)   | `RESN` (`CONFIDENTIAL`/`LOCKED`/`PRIVACY`)                                 | —                                        |
-| `ExternalId`                                           | `gramps_id` / handle              | `EXID` / `UID`                                                             | `identifiers` (Primary/Persistent)       |
+| `ExternalId`                                           | — (`gramps_id`/handle: origin)    | `EXID` / `UID`                                                             | `identifiers` (Primary/Persistent)       |
 | `Agent`                                                | — (change author only)            | `SUBM` / `_UID` author                                                     | `Agent` / `Attribution.contributor`      |
 | `DnaTest`                                              | DNATest (native DNA model)        | —                                                                          | —                                        |
 | `DnaMatch` (+ `DnaSegment`)                            | DNAMatch + DNASegment             | proposed `DNA_MATCH`; FTM `_DNA`                                           | —                                        |

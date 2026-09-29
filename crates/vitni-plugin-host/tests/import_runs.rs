@@ -322,20 +322,59 @@ async fn re_importing_an_unchanged_file_into_its_dataset_writes_nothing() {
 }
 
 #[tokio::test]
+async fn unrelated_files_sharing_record_ids_import_as_separate_people() {
+    let other_gedcom = "0 HEAD\n1 SOUR test\n0 @I1@ INDI\n1 NAME Kari /Nordmann/\n1 SEX F\n0 TRLR\n";
+    let other_gramps = r#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_other" id="I0001">
+<gender>F</gender>
+<name><first>Kari</first><surname>Nordmann</surname></name>
+</person>
+</people>
+</database>
+"#;
+    for (plugin, name, first, second) in [
+        ("gedcom-import", "tree.ged", GEDCOM, other_gedcom),
+        ("gramps-import", "tree.gramps", GRAMPS, other_gramps),
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = import_as(workspace(dir.path()).await, plugin, 5, dir.path(), name, first).await;
+        let before = workspace_counts(&workspace).await.expect("counts").person;
+        let workspace = import_as(workspace, plugin, 6, dir.path(), name, second).await;
+        assert_eq!(
+            workspace_counts(&workspace).await.expect("counts").person,
+            before + 1,
+            "{plugin}: the second file's first person is a new person"
+        );
+    }
+}
+
+/// Imports `text` with `plugin` into its own dataset, `gedcom:<n>` / `gramps:<n>`.
+async fn import_as(workspace: Workspace, plugin: &str, n: u128, dir: &Path, name: &str, text: &str) -> Workspace {
+    let dataset = DatasetId::lineage(plugin, Uuid::from_u128(n));
+    import(workspace, plugin, &dataset, dir, name, text).await
+}
+
+#[tokio::test]
 async fn a_reimport_into_another_dataset_records_what_it_resolved_and_then_resolves_by_it() {
     let dir = tempfile::tempdir().expect("tempdir");
     let first = DatasetId::lineage("gedcom", Uuid::from_u128(5));
     let second = DatasetId::lineage("gedcom", Uuid::from_u128(6));
+    let text = GEDCOM
+        .replace("0 @I1@ INDI\n", "0 @I1@ INDI\n1 _UID U-I1\n")
+        .replace("0 @I2@ INDI\n", "0 @I2@ INDI\n1 _UID U-I2\n")
+        .replace("0 @F1@ FAM\n", "0 @F1@ FAM\n1 _UID U-F1\n");
     let workspace = import(
         workspace(dir.path()).await,
         "gedcom-import",
         &first,
         dir.path(),
         "tree.ged",
-        GEDCOM,
+        &text,
     )
     .await;
-    let workspace = import(workspace, "gedcom-import", &second, dir.path(), "tree.ged", GEDCOM).await;
+    let workspace = import(workspace, "gedcom-import", &second, dir.path(), "tree.ged", &text).await;
     let runs = list_import_runs(&workspace).await.expect("runs");
     assert_eq!(runs.len(), 2);
     assert_eq!(
@@ -351,7 +390,7 @@ async fn a_reimport_into_another_dataset_records_what_it_resolved_and_then_resol
     assert_eq!(workspace_counts(&workspace).await.expect("counts").person, 2);
 
     let events = event_count(&workspace).await;
-    let workspace = import(workspace, "gedcom-import", &second, dir.path(), "tree.ged", GEDCOM).await;
+    let workspace = import(workspace, "gedcom-import", &second, dir.path(), "tree.ged", &text).await;
     assert_eq!(
         event_count(&workspace).await,
         events,

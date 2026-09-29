@@ -28,7 +28,7 @@ use vitni_plugin_api::commands;
 use vitni_plugin_api::convert;
 use vitni_plugin_api::types;
 use vitni_plugin_api::types::{
-    Attribute, ChildParentRel, Confidence, ExternalId, MediaCrop, NoteType, ParticipantRole, ParticipationInput,
+    Attribute, ChildParentRel, Confidence, MediaCrop, NoteType, ParticipantRole, ParticipationInput,
     PlaceType, Sex,
 };
 use vitni_plugin_api::with_origin;
@@ -91,7 +91,7 @@ impl Guest for Importer {
             let record = with_origin(&person.handle, None, || {
                 let record = commands::create_person(
                     person.names.first().map(convert::name_to_wit).as_ref(),
-                    Some(&external_id(person.gramps_id.as_deref(), &person.handle)),
+                    None,
                 )
                 .map_err(|error| format!("create-person failed: {error:?}"))?;
                 if record.created {
@@ -174,7 +174,7 @@ impl Guest for Importer {
 
         for (index, family) in db.families.iter().enumerate() {
             with_origin(&family.handle, None, || {
-                let record = commands::create_family(Some(&external_id(family.gramps_id.as_deref(), &family.handle)))
+                let record = commands::create_family(None)
                     .map_err(|error| format!("create-family failed: {error:?}"))?;
                 let mut partner_ids = Vec::new();
                 for handle in family.father.iter().chain(family.mother.iter()) {
@@ -538,25 +538,6 @@ fn primary_participation() -> ParticipationInput {
 /// Builds a `handle -> &record` index.
 fn index<T>(records: &[T], handle: impl Fn(&T) -> &String) -> HashMap<String, &T> {
     records.iter().map(|record| (handle(record).clone(), record)).collect()
-}
-
-/// Builds the external id a record is resolved by on re-import: the stable `gramps-id` when present,
-/// else the per-file `gramps-handle`.
-fn external_id(gramps_id: Option<&str>, handle: &str) -> ExternalId {
-    match gramps_id {
-        Some(id) => ExternalId {
-            authority: "gramps-id".to_owned(),
-            value: id.to_owned(),
-            kind: None,
-            url: None,
-        },
-        None => ExternalId {
-            authority: "gramps-handle".to_owned(),
-            value: handle.to_owned(),
-            kind: None,
-            url: None,
-        },
-    }
 }
 
 /// Maps a Gramps gender onto the host `sex` enum.

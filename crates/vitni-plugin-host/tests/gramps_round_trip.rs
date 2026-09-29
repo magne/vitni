@@ -12,13 +12,15 @@ use std::sync::{Arc, Mutex};
 
 use uuid::Uuid;
 use vitni_app::{
-    AiConfig, AppDefaults, NoteType, OperatorConfig, ParticipantRole, PersonSummary, Session, Workspace,
-    WorkspaceDefaults, list_citations, list_events, list_families, list_media, list_notes, list_persons, list_places,
-    list_sources, list_tags,
+    AgentKind, AiConfig, AppDefaults, DatasetId, NoteType, OperatorConfig, ParticipantRole, PersonSummary, Session,
+    Workspace, WorkspaceDefaults, list_citations, list_events, list_families, list_media, list_notes, list_persons,
+    list_places, list_sources, list_tags,
 };
 use vitni_core::ids::AgentId;
+use vitni_core::provenance::Agent;
 use vitni_plugin_host::{
-    Capability, ExportTarget, Grants, Invocation, NetPolicy, ProgressControl, ProgressUpdate, ResourceBudget,
+    Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, ProgressControl, ProgressUpdate,
+    ResourceBudget,
 };
 
 mod common;
@@ -143,6 +145,26 @@ fn invocation(workspace: Workspace, grants: Grants) -> Invocation {
         ai_config: AiConfig::default(),
         provenance_confidence: None,
         import: None,
+    }
+}
+
+/// An import [`Invocation`] under a run into one fixed dataset, so a re-import resolves by origin.
+fn run_invocation(workspace: Workspace) -> Invocation {
+    let operator = Session::new(Agent {
+        kind: AgentKind::Human,
+        id: AgentId::from_uuid(Uuid::from_u128(1)),
+        display: Some("Tester".to_owned()),
+    });
+    Invocation {
+        import: Some(ImportRunSpec {
+            operator,
+            dataset: DatasetId::lineage("gramps", Uuid::from_u128(5)),
+            dataset_label: "in.gramps".to_owned(),
+            source_label: "in.gramps".to_owned(),
+            plugin: "gramps-import".to_owned(),
+            plugin_version: "0.1.0".to_owned(),
+        }),
+        ..invocation(workspace, import_grants())
     }
 }
 
@@ -411,7 +433,7 @@ async fn re_importing_the_same_gramps_file_emits_no_new_events() {
     let (count, workspace) = host
         .run_bulk_import(
             &importer,
-            invocation(workspace, import_grants()),
+            run_invocation(workspace),
             source.clone(),
             |_: ProgressUpdate| ProgressControl::Proceed,
         )
@@ -425,7 +447,7 @@ async fn re_importing_the_same_gramps_file_emits_no_new_events() {
     let (_, workspace) = host
         .run_bulk_import(
             &importer,
-            invocation(open_workspace(&root).await, import_grants()),
+            run_invocation(open_workspace(&root).await),
             source,
             |_: ProgressUpdate| ProgressControl::Proceed,
         )

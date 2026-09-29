@@ -78,7 +78,7 @@ impl Guest for Importer {
             let person = with_origin(record, None, || {
                 let person = commands::create_person(
                     individual.names.first().map(convert::name_to_wit).as_ref(),
-                    Some(&external_id(individual.uid.as_deref(), &individual.xref)),
+                    individual.uid.as_deref().map(uid_external_id).as_ref(),
                 )
                 .map_err(|error| format!("create-person failed: {error:?}"))?;
                 // `assert-sex` is called for every person, new or already-existing: the host reconciles
@@ -178,7 +178,7 @@ impl Guest for Importer {
         for (index, family) in tree.families.iter().enumerate() {
             let record = family.xref.as_str();
             with_origin(record, None, || {
-                let family_record = commands::create_family(Some(&external_id(family.uid.as_deref(), &family.xref)))
+                let family_record = commands::create_family(family.uid.as_deref().map(uid_external_id).as_ref())
                     .map_err(|error| format!("create-family failed: {error:?}"))?;
                 let mut partner_ids = Vec::new();
                 for partner in &family.partners {
@@ -578,23 +578,15 @@ fn media_human_id(media: &MediaObject, media_cache: &mut HashMap<String, String>
     Ok(Some(media_id))
 }
 
-/// Builds the external id a record is resolved by on re-import: the stable `_UID` when present
-/// (authority `gedcom-uid`), else the per-file cross-reference (authority `gedcom-xref`). Either is
-/// stable across re-exports of the same document, so an unchanged record resolves to itself.
-fn external_id(uid: Option<&str>, xref: &str) -> ExternalId {
-    match uid {
-        Some(uid) => ExternalId {
-            authority: "gedcom-uid".to_owned(),
-            value: uid.to_owned(),
-            kind: None,
-            url: None,
-        },
-        None => ExternalId {
-            authority: "gedcom-xref".to_owned(),
-            value: xref.to_owned(),
-            kind: None,
-            url: None,
-        },
+/// Builds the external id a `_UID` names (authority `gedcom-uid`). A `_UID` means the same person or
+/// family in every file that carries it, so another dataset's copy resolves onto it. The xref is
+/// file-local and never becomes an external id: it is the record's origin only (ADR 0037 §3).
+fn uid_external_id(uid: &str) -> ExternalId {
+    ExternalId {
+        authority: "gedcom-uid".to_owned(),
+        value: uid.to_owned(),
+        kind: None,
+        url: None,
     }
 }
 

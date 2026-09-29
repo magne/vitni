@@ -392,16 +392,6 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   `parse` to the person loop and never reads `db.header`, though `vitni-gramps-xml/src/parse.rs:400`
   does parse the date — so a Gramps re-import gets no timestamp gating at all. Found while verifying
   the Phase 10 completion claim, which described both formats as wired.
-- **GEDCOM and Gramps external ids collide across files** — the importers resolve by authority
-  `gedcom-xref` with the bare xref (`@I1@`), and by `gramps-id` (`I0001`), neither scoped to a file
-  (`plugins/gedcom-import/src/lib.rs:466`, `plugins/gramps-import/src/lib.rs:505`). Importing a second,
-  unrelated file therefore resolves its `@I1@` onto the first file's `@I1@` person, and silently attaches
-  one person's names and facts to another. *Shape:* ADR 0037 §3. Datasets scope file-local keys, and xrefs
-  and Gramps ids become origin records rather than `ExternalId`s: the importers already stamp them as
-  origins (#393) but still write them as `ExternalId`s too. Re-import now resolves by origin
-  (#394), so the xref and Gramps-id `ExternalId`s can be dropped without a re-import of the same file
-  losing its people.
-  *Exit:* a test imports two different files that share `@I1@` and gets two persons. — #389
 - **Source merge/sync reconciliation prerequisite** — `set-source-title`/`set-source-abbrev` WIT verbs,
   GEDCOM `ABBR` / Gramps `<sabbrev>` round-trip, and a field-level `AssertionId` + `occurred_at` read
   path. The ADR 0029 timestamp-gated rule cannot target Source's bibliographic fields
@@ -461,8 +451,8 @@ in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and imp
 [`research/record-matching.md`](research/record-matching.md). The bullets are listed in dependency
 order, and each one's *Needs:* names its prerequisites. The import bug sits under its own area
 above. The milestone opened with backup (#391), record origins with import runs (#393) and
-resolve-by-origin (#394), which have landed; the xref-collision bug (#389) needed both, and is
-unblocked. The matching core has no origin prerequisite.
+resolve-by-origin (#394), then the xref-collision fix (#389) that needed both, which have landed. The
+matching core has no origin prerequisite.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
