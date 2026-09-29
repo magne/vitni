@@ -119,7 +119,7 @@ fn upcast_and_decode<A: Aggregate>(
 /// Generates [`decode_serialized`] and [`event_variants`] from the registry: the `snake` column is
 /// the stored `Aggregate::TYPE`.
 macro_rules! raw_event_registry {
-    ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $execute:ident, $find:ident, $find_param:ident, $list:ident, $wiring:tt, $upcasters:expr,)),+ $(,)?) => {
+    ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $execute:ident, $find:ident, $find_param:ident, $list:ident, $preview:ident, $wiring:tt, $upcasters:expr,)),+ $(,)?) => {
         /// Dispatches `serialized` to its aggregate's decoder by `aggregate_type`.
         fn decode_serialized(row: &RawEvent, serialized: SerializedEvent) -> Result<(), DbError> {
             match row.aggregate_type.as_str() {

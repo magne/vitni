@@ -319,6 +319,17 @@ pub(crate) async fn read_recent_events(pool: &Pool<Sqlite>, limit: u32) -> Resul
     Ok(rows.iter().map(stored_event).collect())
 }
 
+/// The `human_id` of the view `view_id` in `table`, if it exists and has one.
+pub(crate) async fn human_id_of(pool: &Pool<Sqlite>, table: &str, view_id: &str) -> Result<Option<String>, DbError> {
+    let sql = format!("SELECT human_id FROM {table} WHERE view_id = ?");
+    let row = sqlx::query(&sql)
+        .bind(view_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+    Ok(row.and_then(|row| row.get::<Option<String>, _>("human_id")))
+}
+
 /// Maps each `view_id` (the aggregate id PK) in `table` to its `human_id`, skipping rows without one.
 ///
 /// Lets the change-log resolve an event's `aggregate_id` (a UUID) to the user-facing id a frontend
