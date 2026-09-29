@@ -60,6 +60,7 @@ mod origin_gate;
 pub mod pedigree;
 pub mod person;
 pub mod person_change_set;
+pub mod person_profile;
 pub mod place;
 pub mod place_change_set;
 mod place_hierarchy;
@@ -185,6 +186,7 @@ pub use person::{
     update_person_media_ref,
 };
 pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
+pub use person_profile::person_profile;
 pub use place::{
     NewPlace, PlaceEnclosingRef, PlaceGeometryRef, PlaceNameRef, PlaceSuccessionInput, PlaceSuccessionRef,
     PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,

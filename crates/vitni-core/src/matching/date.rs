@@ -191,8 +191,10 @@ pub(crate) fn interval(date: &GenealogicalDate) -> Option<DayInterval> {
     }
 }
 
-/// The year a date falls in, for choosing a region's period.
-pub(crate) fn year(date: &GenealogicalDate) -> Option<i32> {
+/// The year a date falls in, for choosing a region's period or computing a birth from an age; `None`
+/// for a text-only or yearless date.
+#[must_use]
+pub fn year(date: &GenealogicalDate) -> Option<i32> {
     let GenealogicalDateBody::Structured(modifier) = &date.modifier else {
         return None;
     };
