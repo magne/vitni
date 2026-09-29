@@ -449,20 +449,13 @@ in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and imp
 [0040](adr/0040-staged-import-plan-review-commit.md) (staged import) and
 [0041](adr/0041-workspace-backup-and-restore.md) (backup), with the survey in
 [`research/record-matching.md`](research/record-matching.md). The bullets are listed in dependency
-order, and each one's *Needs:* names its prerequisites. The import bug sits under its own area
-above. The milestone opened with backup (#391), record origins with import runs (#393) and
-resolve-by-origin (#394), then the xref-collision fix (#389) that needed both, which have landed. The
-matching core has no origin prerequisite.
+order, and each one's *Needs:* names its prerequisites. The milestone opened with backup (#391),
+record origins with import runs (#393) and resolve-by-origin (#394), then the xref-collision fix
+(#389) and tombstones by origin (#395), which have landed. The matching core has no origin
+prerequisite.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
-- **Tombstones by origin** — ADR 0037 §4. A value whose same-origin assertion the user retracted is never
-  re-asserted by a later run. A different incoming value is still offered. This replaces the old
-  *Retraction resurrection blocks recurring imports* bullet: re-asserting a retracted value destroyed
-  editorial judgement under a routine-looking Software agent. Single-valued fields already keep a
-  retraction or correction of an imported value (the origin gate, #394); the list-valued fields (names,
-  facts, citations) do not yet. *Exit:* retract an
-  imported occupation, re-import, and the occupation stays retracted. — #395
 - **An interrupted `record_origins` backfill is never resumed** — when a workspace whose log predates
   the index is opened, `Store::open` creates the table and replays the log into it
   (`vitni-db/src/sqlite.rs`, `postgres.rs`, `origins_are_new`). "New" is "the table did not exist", so

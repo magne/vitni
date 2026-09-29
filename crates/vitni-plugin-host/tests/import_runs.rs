@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use vitni_app::{
     AbandonReason, AgentKind, AiConfig, AppDefaults, DatasetId, ImportRunStatus, ImportRunSummary, OperatorConfig,
-    Session, Workspace, WorkspaceDefaults, list_import_runs, workspace_counts,
+    Session, Workspace, WorkspaceDefaults, list_import_runs, undo_assertion, workspace_counts,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, EventContext};
@@ -457,6 +457,46 @@ async fn a_new_fact_on_an_imported_person_lands_on_reimport() {
         1,
         "the occupation added in the file reached the person"
     );
+}
+
+#[tokio::test]
+async fn an_occupation_the_user_retracted_stays_retracted_on_reimport() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+    let text = GEDCOM.replace("1 SEX M\n", "1 SEX M\n1 OCCU Farmer\n");
+    let workspace = import(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        &dataset,
+        dir.path(),
+        "tree.ged",
+        &text,
+    )
+    .await;
+    let person = workspace
+        .store()
+        .find_person("I0001")
+        .await
+        .expect("find")
+        .expect("person");
+    let [fact] = person.facts_with_assertions() else {
+        panic!("expected the occupation: {:?}", person.facts_with_assertions());
+    };
+    undo_assertion(&workspace, &human(), "I0001", &fact.assertion_id.to_string(), None)
+        .await
+        .expect("retract");
+    let events = event_count(&workspace).await;
+
+    let workspace = import(workspace, "gedcom-import", &dataset, dir.path(), "tree.ged", &text).await;
+    let person = workspace
+        .store()
+        .find_person("I0001")
+        .await
+        .expect("find")
+        .expect("person");
+    assert!(person.facts().is_empty(), "the retracted occupation came back");
+    assert_eq!(event_count(&workspace).await, events, "the re-import wrote nothing");
+    assert_eq!(list_import_runs(&workspace).await.expect("runs").len(), 1);
 }
 
 /// The GEDCOM fixture with a header export date and John's birth on `birth`.

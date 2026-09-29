@@ -646,7 +646,9 @@ around evidence and provenance.
      imported one when the file's export date is at or after it and after the field's current value,
      whoever set it (ADR 0029 §1). It is left alone when the file is older or undated, and when the
      user already retracted or superseded that imported value;
-   - a new value in a list-valued field (a name, a fact) is added.
+   - a new value in a list-valued field (a name, a fact) is added, unless the user retracted or
+     superseded that same value from the same item: that row is a **tombstone**, and no later run
+     re-asserts the value. A different incoming value is still added, because the source changed.
 
    An import run is started by its first write that goes ahead, so re-importing an unchanged file
    writes no events at all, not even a run. A record resolved onto an aggregate another dataset made
