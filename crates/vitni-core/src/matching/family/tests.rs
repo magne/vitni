@@ -106,6 +106,21 @@ fn one_marriage_from_a_church_book_and_a_gedcom_file_is_probable() {
 }
 
 #[test]
+fn a_family_recording_only_its_husband_is_not_paired_against_one_recording_only_its_wife() {
+    let mut husband_only = church_book();
+    husband_only.partners.truncate(1);
+    let mut wife_only = gedcom();
+    wife_only.partners.remove(0);
+    let assessment = assess(&husband_only, &wife_only);
+    assert_eq!(partners(&assessment), [(Outcome::Missing, 0.0)], "{assessment:#?}");
+    assert!(assessment.parts.is_empty());
+    assert!(
+        assessment.features.iter().all(|f| f.outcome != Outcome::Conflict),
+        "{assessment:#?}"
+    );
+}
+
+#[test]
 fn a_partner_term_weighs_what_its_part_weighs_up_to_the_support_cap() {
     let assessment = assess(&church_book(), &gedcom());
     let mut remarried = gedcom();

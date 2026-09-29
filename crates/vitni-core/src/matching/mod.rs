@@ -614,6 +614,14 @@ fn asserted(sex: Option<&Sex>) -> Option<Sex> {
     }
 }
 
+/// Whether two records of these sexes can be one person: not when their asserted sexes differ.
+fn may_be_one(x: Option<&Sex>, y: Option<&Sex>) -> bool {
+    match (asserted(x), asserted(y)) {
+        (Some(s), Some(t)) => s == t,
+        (None, _) | (_, None) => true,
+    }
+}
+
 /// A side's estimate of a date: of a birth or death, the event itself when dated, else its stand-in
 /// (baptism for birth, burial for death), whose interval reaches back by the typical offset; of any other
 /// event, its recorded date.

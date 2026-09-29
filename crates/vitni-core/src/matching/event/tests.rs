@@ -72,6 +72,19 @@ fn principals_of_different_sexes_are_not_paired() {
 }
 
 #[test]
+fn the_baptism_of_a_boy_and_of_a_girl_are_two_events() {
+    let baptism = |given: &str, sex: Sex| EventProfile {
+        event_type: Some(EventType::Baptism),
+        participants: vec![taking_part(ParticipantRole::Primary, given, "Olsen", sex)],
+        ..marriage(("", ""), ("", ""))
+    };
+    let assessment = assess(&baptism("Ole", Sex::Male), &baptism("Kari", Sex::Female));
+    let principal = feature(&assessment, Feature::Principal);
+    assert_eq!(principal.outcome, Outcome::Disagree, "{assessment:#?}");
+    assert!(assessment.band < MatchBand::Probable, "{assessment:#?}");
+}
+
+#[test]
 fn a_different_event_type_is_a_conflict_and_a_christening_is_a_baptism() {
     let church = marriage(("Ole", "Olsen"), ("Kari", "Hansdatter"));
     let baptism = EventProfile {

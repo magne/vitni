@@ -18,8 +18,8 @@ use crate::matching::select::{Signals, comparison_cultures};
 use crate::matching::weights;
 use crate::matching::{
     CultureId, Feature, FeatureComparison, FeatureValue, Identity, MatchAssessment, MatchBand, MatchData,
-    MatchSettings, Outcome, applied, compare_dates, compare_places, conclude, estimate, event_estimate, missing,
-    pair_up, person_assessment,
+    MatchSettings, Outcome, applied, compare_dates, compare_places, conclude, estimate, event_estimate, may_be_one,
+    missing, pair_up, person_assessment,
 };
 
 /// Compares two family profiles.
@@ -73,7 +73,9 @@ fn compare_partners(
     for (i, x) in a.partners.iter().enumerate() {
         for (j, y) in b.partners.iter().enumerate() {
             let assessment = person_assessment(x, y, cultures.to_vec(), applied, settings);
-            candidates.push((assessment.score, i, j));
+            if may_be_one(x.sex.as_ref(), y.sex.as_ref()) {
+                candidates.push((assessment.score, i, j));
+            }
             assessed.push(Some(assessment));
         }
     }

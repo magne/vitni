@@ -16,7 +16,7 @@ use crate::matching::select::{Signals, comparison_cultures};
 use crate::matching::weights;
 use crate::matching::{
     Feature, FeatureComparison, FeatureValue, Identity, MatchAssessment, MatchData, MatchSettings, Outcome, applied,
-    asserted, compare_dates, compare_places, conclude, event_estimate, grade, missing, pair_up,
+    compare_dates, compare_places, conclude, event_estimate, grade, may_be_one, missing, pair_up,
 };
 
 /// The participants who are not principals.
@@ -127,20 +127,12 @@ fn participants(event: &EventProfile) -> (Vec<&Relative>, Vec<&Relative>) {
     (principals, others)
 }
 
-/// Whether two participants can be one person: not when their asserted sexes differ.
-fn may_be_one(x: &Relative, y: &Relative) -> bool {
-    match (asserted(x.sex.as_ref()), asserted(y.sex.as_ref())) {
-        (Some(s), Some(t)) => s == t,
-        (None, _) | (_, None) => true,
-    }
-}
-
 /// Pairs the principals and grades each pair; a single missing term when none can be paired.
 fn compare_principals(left: &[&Relative], right: &[&Relative], applied: &Applied<'_>) -> Vec<FeatureComparison> {
     let mut candidates = Vec::new();
     for (i, x) in left.iter().enumerate() {
         for (j, y) in right.iter().enumerate() {
-            if !may_be_one(x, y) {
+            if !may_be_one(x.sex.as_ref(), y.sex.as_ref()) {
                 continue;
             }
             if let Some(similarity) = relative::similarity(x, y, applied) {
@@ -164,9 +156,24 @@ fn compare_principals(left: &[&Relative], right: &[&Relative], applied: &Applied
     }
     if terms.is_empty() {
         let first = |side: &[&Relative]| side.first().map(|r| relative::value(r));
-        terms.push(missing(Feature::Principal, first(left), first(right)));
+        let mut term = missing(Feature::Principal, first(left), first(right));
+        if sexed_apart(left, right) {
+            term.outcome = Outcome::Disagree;
+            term.weight = weights::PRINCIPAL.disagree;
+        }
+        terms.push(term);
     }
     terms
+}
+
+/// Whether both events state principals and none of one can be any of the other's by asserted sex: the
+/// baptism of a boy and of a girl are two events.
+fn sexed_apart(left: &[&Relative], right: &[&Relative]) -> bool {
+    !left.is_empty()
+        && !right.is_empty()
+        && left
+            .iter()
+            .all(|x| right.iter().all(|y| !may_be_one(x.sex.as_ref(), y.sex.as_ref())))
 }
 
 #[cfg(test)]
