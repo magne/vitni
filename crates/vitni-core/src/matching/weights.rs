@@ -64,6 +64,33 @@ pub(crate) const PLACE: Weights = Weights {
     disagree: -1.5,
 };
 
+/// A father or a mother: a stated parent who cannot be the other's is strong evidence of two people.
+pub(crate) const PARENT: Weights = Weights {
+    agree: 4.0,
+    disagree: -8.0,
+};
+
+/// A partner: sources list different partners, so only agreement counts.
+pub(crate) const PARTNER: Weights = Weights {
+    agree: 4.0,
+    disagree: 0.0,
+};
+
+/// A child: sources list different children, so only agreement counts.
+pub(crate) const CHILD: Weights = Weights {
+    agree: 3.0,
+    disagree: 0.0,
+};
+
+/// A patronymic checked against the other record's father.
+pub(crate) const PATRONYMIC: Weights = Weights {
+    agree: 2.0,
+    disagree: -3.0,
+};
+
+/// An occupation in common: weak, and occupations change, so a difference is not evidence.
+pub(crate) const OCCUPATION_AGREE: f64 = 1.0;
+
 /// The weight of a hard conflict: overwhelming, whatever else agrees.
 pub(crate) const CONFLICT: f64 = -20.0;
 

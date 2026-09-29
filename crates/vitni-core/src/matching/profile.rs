@@ -11,7 +11,8 @@ use crate::origin::RecordOrigin;
 use crate::place_name::PlaceName;
 use crate::text::ExternalId;
 
-/// A person's own evidence: names, sex, vital events and the places that select name cultures.
+/// A person's evidence: names, sex, vital events, occupations, the places that select name cultures, and
+/// the relatives that tell two same-named people apart.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PersonProfile {
     /// Every name the person is recorded under, with its data language.
@@ -23,10 +24,30 @@ pub struct PersonProfile {
     /// Places tied to the person beyond the vital events — residences, and the places of parents and
     /// ancestors (lineage) — which select name cultures but are not compared.
     pub lineage: Vec<PlaceMention>,
-    /// The record origins the person was imported from (ADR 0037 §1).
+    /// What the person worked as, as recorded.
+    pub occupations: Vec<String>,
+    /// The person's parents.
+    pub parents: Vec<Relative>,
+    /// The person's partners.
+    pub partners: Vec<Relative>,
+    /// The person's children.
+    pub children: Vec<Relative>,
+    /// The origins of the assertions that created the person (ADR 0037 §1) — never those of its
+    /// participations, which a record's father, mother and child share.
     pub origins: Vec<RecordOrigin>,
     /// Identifiers the person carries in external systems.
     pub external_ids: Vec<ExternalId>,
+}
+
+/// A relative as the matcher sees one: names, sex and birth.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Relative {
+    /// Every name the relative is recorded under.
+    pub names: Vec<PersonName>,
+    /// The relative's asserted sex, which tells a father from a mother.
+    pub sex: Option<Sex>,
+    /// The relative's birth, or the baptism standing in for it.
+    pub birth: Option<VitalEvent>,
 }
 
 /// The kind of a vital event. Baptism stands in for an unrecorded birth, and burial for death.

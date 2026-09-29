@@ -220,6 +220,10 @@ rejected and a pack's `id` must equal its file name.
   `~/.local/share/vitni/matching/cultures/`): same name replaces, new name adds.
 - **A change to a rule, class or weight** changes scores, so bump `ENGINE_VERSION` in
   `crates/vitni-core/src/matching/mod.rs`.
+- **A patronymic** is read with the pack's `male_suffixes`/`female_suffixes`: the stem left once the
+  suffix is removed must equal the father's given name (or a name in its class) after both drop a
+  genitive `s` and one final vowel (`Olsdatter` ↔ `Ole`, `Andreassen` ↔ `Andreas`). A culture whose
+  patronymics are formed otherwise needs a comparator change, not only a pack.
 
 ## Repository conventions
 

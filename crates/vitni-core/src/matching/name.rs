@@ -191,6 +191,38 @@ impl<'a> Applied<'a> {
         None
     }
 
+    /// The patronymic key of `surname` — its stem once the patronymic suffix is removed, keyed by
+    /// [`patronymic_key`] — or `None` when no applied culture reads it as a patronymic.
+    pub fn surname_patronymic_key(&self, surname: &str) -> Option<String> {
+        let tokens = self.tokens(surname);
+        let last = tokens.last()?;
+        for (_, variants) in &self.patronymics {
+            for variant in variants {
+                if let Some(stem) = last.strip_suffix(variant.as_str())
+                    && stem.chars().count() >= MIN_STEM
+                {
+                    return Some(patronymic_key(stem));
+                }
+            }
+        }
+        None
+    }
+
+    /// The patronymic keys a father's given name forms: its own, and those of every name in its
+    /// equivalence classes (*Ole* also forms *Olavsen*).
+    pub fn father_patronymic_keys(&self, given: &str) -> Vec<String> {
+        let mut keys = Vec::new();
+        for token in self.tokens(given) {
+            keys.push(patronymic_key(&token));
+            for members in &self.classes {
+                if members.contains(&token) {
+                    keys.extend(members.iter().map(|member| patronymic_key(member)));
+                }
+            }
+        }
+        keys
+    }
+
     /// Whether two residence names differ only by a definite-article ending.
     fn same_residence(&self, a: &str, b: &str) -> bool {
         self.definite_suffixes
@@ -208,6 +240,24 @@ fn collapse_doubles(text: &str) -> String {
         }
     }
     collapsed
+}
+
+/// The form a given name and a patronymic stem share: without a genitive `s`, then without one final
+/// vowel (*Hans* and *Han-sen* → `han`, *Ole* and *Ol-sen* → `ol`).
+fn patronymic_key(name: &str) -> String {
+    let long_enough = |rest: &str| rest.chars().count() >= MIN_STEM;
+    let mut key = name;
+    if let Some(rest) = key.strip_suffix('s')
+        && long_enough(rest)
+    {
+        key = rest;
+    }
+    if let Some(rest) = key.strip_suffix(['a', 'e', 'i', 'o', 'u', 'y'])
+        && long_enough(rest)
+    {
+        key = rest;
+    }
+    key.to_owned()
 }
 
 /// A coarse phonetic key: the first letter, then the consonants, with repeats collapsed.
