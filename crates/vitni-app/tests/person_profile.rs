@@ -165,10 +165,19 @@ impl Records {
 
     /// A family of `partners` with `children`, each child born to every partner.
     async fn family(&self, partners: &[&str], children: &[&str]) {
+        let partners: Vec<(&str, ChildParentRelationship)> = partners
+            .iter()
+            .map(|partner| (*partner, ChildParentRelationship::Birth))
+            .collect();
+        self.family_of(&partners, children).await;
+    }
+
+    /// A family of `partners` with `children`, each child related to each partner as it states.
+    async fn family_of(&self, partners: &[(&str, ChildParentRelationship)], children: &[&str]) {
         let family = create_family(&self.workspace, &self.session, Provenance::default(), &[])
             .await
             .expect("create family");
-        for partner in partners {
+        for (partner, _) in partners {
             add_partner(
                 &self.workspace,
                 &self.session,
@@ -182,7 +191,7 @@ impl Records {
         for child in children {
             let relationships = partners
                 .iter()
-                .map(|partner| ((*partner).to_owned(), ChildParentRelationship::Birth))
+                .map(|(partner, relationship)| ((*partner).to_owned(), relationship.clone()))
                 .collect();
             add_child(
                 &self.workspace,
@@ -311,6 +320,29 @@ async fn the_profile_carries_vitals_places_occupations_and_relatives() {
     assert_eq!(profile.partners[0].names[0].given.as_deref(), Some("Kari"));
     assert_eq!(profile.children.len(), 1);
     assert!(profile.children[0].birth.is_some());
+}
+
+#[tokio::test]
+async fn a_step_father_is_not_a_parent() {
+    let records = Records::new().await;
+    let ole = records.person("Ole", "Olsen", Sex::Male).await;
+    let (mother, step_father) = (
+        records.person("Marte", "Pedersdatter", Sex::Female).await,
+        records.person("Hans", "Nilsen", Sex::Male).await,
+    );
+    records
+        .family_of(
+            &[
+                (&mother, ChildParentRelationship::Birth),
+                (&step_father, ChildParentRelationship::Step),
+            ],
+            &[&ole],
+        )
+        .await;
+    let profile = records.profile(&ole).await;
+    let parents: Vec<Option<&str>> = profile.parents.iter().map(|p| p.names[0].given.as_deref()).collect();
+    assert_eq!(parents, [Some("Marte")]);
+    assert!(records.profile(&step_father).await.children.is_empty());
 }
 
 #[tokio::test]

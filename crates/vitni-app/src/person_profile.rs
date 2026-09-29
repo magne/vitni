@@ -15,9 +15,9 @@
 use std::collections::{HashMap, HashSet};
 
 use vitni_core::date::{DateQuality, GenealogicalDate};
-use vitni_core::enums::{EventType, FactType, ParticipantRole, PlaceType};
+use vitni_core::enums::{ChildParentRelationship, EventType, FactType, ParticipantRole, PlaceType};
 use vitni_core::event::EventView;
-use vitni_core::family::FamilyView;
+use vitni_core::family::{ChildEntry, FamilyView};
 use vitni_core::ids::{EventId, PersonId, PlaceId};
 use vitni_core::matching::DateBasis;
 use vitni_core::matching::date::year;
@@ -118,19 +118,23 @@ impl ProfileLookups {
         Ok(lookups)
     }
 
-    /// Records the partner, parent and child links of one family.
+    /// Records the partner, parent and child links of one family. A child is linked only to the partners
+    /// it is a birth (or unspecified) child of: an adoptive, foster or step parent is not the parent a
+    /// record of the child's birth names.
     fn add_family(&mut self, family: &FamilyView) {
         let partners = family.partners();
-        let children: Vec<PersonId> = family.children().iter().map(|child| child.child_id).collect();
+        let children = family.children();
         for &partner in &partners {
             for &other in &partners {
                 if other != partner {
                     link(&mut self.partners_of, partner, other);
                 }
             }
-            for &child in &children {
-                link(&mut self.parents_of, child, partner);
-                link(&mut self.children_of, partner, child);
+            for child in &children {
+                if is_birth_child(child, partner) {
+                    link(&mut self.parents_of, child.child_id, partner);
+                    link(&mut self.children_of, partner, child.child_id);
+                }
             }
         }
     }
@@ -175,7 +179,7 @@ impl ProfileLookups {
         let vitals = self.vitals(view);
         let birth = [VitalKind::Birth, VitalKind::Baptism]
             .into_iter()
-            .find_map(|kind| vitals.iter().find(|vital| vital.kind == kind && vital.date.is_some()))
+            .find_map(|kind| vitals.iter().find(|vital| vital.kind == kind && is_dated(vital)))
             .cloned();
         Some(Relative {
             names: view.names().into_iter().cloned().collect(),
@@ -210,7 +214,7 @@ impl ProfileLookups {
                 VitalKind::Birth | VitalKind::Baptism => true,
                 VitalKind::Death | VitalKind::Burial => false,
             };
-            birth && vital.date.is_some()
+            birth && is_dated(vital)
         });
         if !born {
             vitals.extend(self.birth_from_age(view));
@@ -334,6 +338,26 @@ fn vital_kind(event_type: &EventType) -> Option<VitalKind> {
         | EventType::MarriageSettlement
         | EventType::Custom(_) => None,
     }
+}
+
+/// Whether `child` is a birth child of `partner`: the relationship is a birth, unknown, or unstated.
+fn is_birth_child(child: &ChildEntry, partner: PersonId) -> bool {
+    let Some((_, relationship)) = child.relationships.iter().find(|(parent, _)| *parent == partner) else {
+        return true;
+    };
+    match relationship {
+        ChildParentRelationship::Birth | ChildParentRelationship::Unknown => true,
+        ChildParentRelationship::Adopted
+        | ChildParentRelationship::Foster
+        | ChildParentRelationship::Step
+        | ChildParentRelationship::Sealed
+        | ChildParentRelationship::Custom(_) => false,
+    }
+}
+
+/// Whether a vital event carries a date with a year, the least the matcher can compare.
+fn is_dated(vital: &VitalEvent) -> bool {
+    vital.date.as_ref().and_then(year).is_some()
 }
 
 /// The country a vital event's place lies in, as a lineage mention.

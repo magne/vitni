@@ -400,6 +400,18 @@ fn fathers_of_different_given_names_disagree() {
 }
 
 #[test]
+fn a_fathers_name_similarity_is_scaled_from_the_name_floor() {
+    let father_weight = |left: &str, right: &str| {
+        let a = with_parents(ole_olsen(), vec![relative(left, "Hansen", Sex::Male, None)]);
+        let b = with_parents(ole_olsen(), vec![relative(right, "Hansen", Sex::Male, None)]);
+        feature(&assess(&a, &b), Feature::Father).weight
+    };
+    let same = father_weight("Anders", "Anders");
+    let similar = father_weight("Anders", "Andreas");
+    assert!(similar < same / 2.0, "{similar} against {same}");
+}
+
+#[test]
 fn an_undated_father_of_the_same_name_is_partial_support() {
     let father = || relative("Ole", "Hansen", Sex::Male, None);
     let a = with_parents(ole_olsen(), vec![father()]);

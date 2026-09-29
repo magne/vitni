@@ -1,7 +1,8 @@
 //! Relatives as evidence (ADR 0038 §4): the "family match" that separates two *Ole Olsen*s born the same
 //! year, and the patronymic read against the candidate father.
 //!
-//! Two relatives are as similar as their given names, limited by their birth dates when both are dated.
+//! Two relatives are as similar as their given names — scaled from the name floor, so a barely similar
+//! name is as far from agreement as a different one — limited by their birth dates when both are dated.
 //! A father or mother both records state and who cannot be one person disagrees. Partners and children
 //! only ever support a pair, because sources list different subsets of them. A patronymic is checked
 //! against the other record's father only where its own record states none: where both do, the fathers
@@ -49,6 +50,7 @@ fn similarity(a: &Relative, b: &Relative, applied: &Applied<'_>) -> Option<f64> 
     if named < weights::NAME_FLOOR {
         return Some(0.0);
     }
+    let named = (named - weights::NAME_FLOOR) / (1.0 - weights::NAME_FLOOR);
     let dated = match (birth(a), birth(b)) {
         (Some(x), Some(y)) => date_similarity(x.interval.gap(y.interval), x.tolerance.max(y.tolerance)),
         (Some(_) | None, None) | (None, Some(_)) => UNDATED_SIMILARITY,
