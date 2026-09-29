@@ -10,6 +10,8 @@
 //!   [`fact`], [`geo`], [`dna`], [`address`], [`place_ref`], [`repo_ref`], [`media_path`]) — the immutable
 //!   value objects (data-model §7) that event payloads and projections are built from. [`fixed`]
 //!   backs the scaled-integer decimals.
+//! - **Matching** ([`matching`]) — the pure, explainable record-matching engine (ADR 0038): graded
+//!   comparators, name-culture packs as data, and the Fellegi–Sunter assessment.
 //! - **Aggregates** (e.g. [`person`]) — each owns a pure decision core
 //!   `decide(state, command, meta) -> Result<Vec<Event>, Error>` plus an `evolve` fold, and a thin
 //!   `cqrs-es` adapter. The `decide`/`evolve` functions are framework-agnostic (ADR 0002); only
@@ -46,6 +48,7 @@ pub mod geo;
 pub mod id_format;
 pub mod ids;
 pub mod import_run;
+pub mod matching;
 pub mod media;
 pub mod media_path;
 pub mod name;

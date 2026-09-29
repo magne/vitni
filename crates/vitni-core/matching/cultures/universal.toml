@@ -1,0 +1,16 @@
+# The `universal` name-culture pack (ADR 0038 §5). It applies to every comparison.
+#
+# Case folding, diacritic stripping (é → e, å → a, ö → o), Jaro–Winkler and the phonetic key are the
+# engine's own. This pack adds only the letters that carry no separable diacritic, spelled out so they
+# fold too. Rewrites see lower-cased, diacritic-stripped text and apply in order.
+id = "universal"
+rewrites = [
+    ["ø", "o"],
+    ["æ", "ae"],
+    ["œ", "oe"],
+    ["ß", "ss"],
+    ["ł", "l"],
+    ["đ", "d"],
+    ["ð", "d"],
+    ["þ", "th"],
+]

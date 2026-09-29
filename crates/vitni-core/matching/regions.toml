@@ -1,0 +1,43 @@
+# Which name-culture packs a place selects, by country and period (ADR 0038 §5).
+#
+# A region is matched by any of its `names` (case and diacritics folded). A period applies from its
+# `from` year (inclusive) until its `until` year (exclusive); either end may be open. A date with no
+# year selects every period of its region.
+
+[[region]]
+id = "norway"
+names = ["Norge", "Noreg", "Norway", "Norwegen"]
+# Norwegian was written in Danish orthography until the 1907 reform.
+[[region.period]]
+until = 1907
+packs = ["no", "da"]
+[[region.period]]
+from = 1907
+packs = ["no"]
+
+[[region]]
+id = "denmark"
+names = ["Danmark", "Denmark", "Dänemark"]
+[[region.period]]
+packs = ["da"]
+
+[[region]]
+id = "english"
+names = [
+    "England",
+    "Scotland",
+    "Wales",
+    "Ireland",
+    "Great Britain",
+    "United Kingdom",
+    "Storbritannia",
+    "USA",
+    "United States",
+    "United States of America",
+    "Amerika",
+    "Canada",
+    "Australia",
+    "New Zealand",
+]
+[[region.period]]
+packs = ["en"]

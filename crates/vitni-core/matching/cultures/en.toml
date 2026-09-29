@@ -1,0 +1,43 @@
+# The English name-culture pack (ADR 0038 §5).
+#
+# English surnames are inherited, so a surname mismatch is real evidence against a match. Given names
+# vary by diminutive (Bill for William) and by Latinized church spelling.
+id = "en"
+languages = ["en"]
+rewrites = [
+    ["ph", "f"],
+]
+given_classes = [
+    ["John", "Johannes", "Jack"],
+    ["Mary", "Maria", "Polly", "Molly"],
+    ["Elizabeth", "Elisabeth", "Eliza", "Betty", "Bess", "Beth", "Lizzie"],
+    ["Catherine", "Katherine", "Kathryn", "Kate", "Kitty"],
+    ["Stephen", "Steven"],
+]
+[abbreviations]
+"Wm." = "William"
+"Jno." = "John"
+"Thos." = "Thomas"
+"Chas." = "Charles"
+"Geo." = "George"
+"Jas." = "James"
+"Eliz." = "Elizabeth"
+
+[diminutives]
+William = ["Bill", "Will", "Billy", "Willie"]
+Robert = ["Bob", "Rob", "Bobby", "Robin"]
+Richard = ["Dick", "Rick"]
+Margaret = ["Peggy", "Maggie", "Meg", "Madge"]
+Edward = ["Ted", "Ed", "Ned", "Eddie"]
+Henry = ["Harry", "Hal"]
+James = ["Jim", "Jimmy", "Jem"]
+Thomas = ["Tom", "Tommy"]
+Sarah = ["Sally", "Sadie"]
+Ann = ["Anne", "Anna", "Nancy", "Nan"]
+
+[surnames]
+patronymic = false
+residence = false
+male_suffixes = []
+female_suffixes = []
+definite_suffixes = []

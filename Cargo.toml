@@ -38,6 +38,9 @@ thiserror = "2.0.19"
 time = { version = "0.3.54", features = ["serde", "serde-well-known", "macros"] }
 sqlx = { version = "0.8.6", features = ["sqlite", "postgres", "runtime-tokio", "json"] }
 tracing = "0.1.41"
+# record matching (ADR 0038): Jaro–Winkler and diacritic folding; both already in the tree via clap/url.
+strsim = "0.11.1"
+unicode-normalization = "0.1.25"
 # percent-encodes the served `/media/<rel>` URL space (vitni-core `media_path`), so a stored media
 # filename carrying `æøå`, a space or a URL-special character still resolves to its file.
 percent-encoding = "2.3.2"

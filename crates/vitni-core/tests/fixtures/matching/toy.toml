@@ -1,0 +1,4 @@
+# A toy name-culture pack for tests: proves a pack loaded as data changes a score with no code change.
+id = "toy"
+languages = ["tq"]
+given_classes = [["Zorbo", "Quimble"]]
