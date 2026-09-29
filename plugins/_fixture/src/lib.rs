@@ -56,7 +56,12 @@ impl Guest for Fixture {
     /// the host's `denied`/policy error is surfaced as the error string.
     fn try_fetch(url: String) -> Result<String, String> {
         match net::fetch(&url) {
-            Ok(response) => Ok(format!("{} {} {}", response.status, response.final_url, response.body.len())),
+            Ok(response) => Ok(format!(
+                "{} {} {}",
+                response.status,
+                response.final_url,
+                response.body.len()
+            )),
             Err(error) => Err(format!("{error:?}")),
         }
     }

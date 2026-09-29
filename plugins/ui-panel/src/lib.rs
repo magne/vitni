@@ -54,7 +54,8 @@ impl Guest for UiPanelPlugin {
     /// name. Returns a `submit-result` JSON string; a validation problem is a `failure`, an actual
     /// capability denial is a technical `err`.
     fn handle_action(action: String, values: String) -> Result<String, String> {
-        let values: Value = serde_json::from_str(&values).map_err(|error| format!("invalid values payload: {error}"))?;
+        let values: Value =
+            serde_json::from_str(&values).map_err(|error| format!("invalid values payload: {error}"))?;
         match action.as_str() {
             "save" => save_note(&values),
             "preview" => Ok(preview(&values)),

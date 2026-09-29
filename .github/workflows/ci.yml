@@ -56,8 +56,8 @@ jobs:
       # 10 GB GHA backend). One stable toolchain and the default `./target` are all that need caching;
       # the plugin `plugins/*/target` dirs are small wasm builds, intentionally left uncached.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - name: rustfmt
-        run: cargo fmt --all --check
+      - name: rustfmt (workspace + plugins)
+        run: cargo xtask fmt --check
       - name: clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: static checks (i18n, css, input-guard)

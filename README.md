@@ -137,7 +137,7 @@ via `cargo xtask build-plugins`.
 cargo build --workspace
 cargo nextest run --workspace --all-features --lib --bins --tests
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo fmt --all
+cargo xtask fmt                          # rustfmt the workspace and plugins/*
 cargo deny --all-features check          # advisories, licences, bans
 cargo xtask check                        # i18n completeness, CSS tokens, input-handling guard
 cargo xtask build-plugins

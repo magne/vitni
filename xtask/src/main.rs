@@ -5,6 +5,8 @@
 //!
 //! - `i18n-check` — verify every locale catalogue is complete against the English baseline and that
 //!   `fl!()` key usage matches the catalogue (ADR 0003).
+//! - `fmt` — format the workspace and every `plugins/*` crate, which `cargo fmt --all` cannot reach;
+//!   `--check` verifies instead of rewriting.
 //! - `build-plugins` — lint + build the WASM plugin components, collecting them in `target/plugins`
 //!   (ADR 0007, 0011).
 //! - `css-check` — verify the bundled component CSS hardcodes no colour literals (every colour comes
@@ -47,6 +49,7 @@ mod backup_fixture;
 mod backup_guard;
 mod build_plugins;
 mod css_check;
+mod fmt;
 mod gui_pass;
 mod i18n_check;
 mod icons;
@@ -68,6 +71,7 @@ type Check = (&'static str, fn() -> Result<()>);
 fn main() -> Result<()> {
     match env::args().nth(1).as_deref() {
         Some("i18n-check") => i18n_check::run(),
+        Some("fmt") => fmt::run(&env::args().skip(2).collect::<Vec<String>>()),
         Some("build-plugins") => build_plugins::run(),
         Some("css-check") => css_check::run(),
         Some("input-guard") => input_guard::run(),
@@ -123,6 +127,7 @@ fn print_usage() {
     println!();
     println!("commands:");
     println!("  i18n-check     verify locale catalogues are complete and used keys are defined");
+    println!("  fmt            format the workspace and every plugins/* crate [--check] to verify instead");
     println!("  build-plugins  lint + build the WASM plugin components, collecting them in target/plugins");
     println!("  css-check      verify bundled component CSS hardcodes no colour literals");
     println!("  input-guard    verify no RSX form element is rendered outside the input primitives");
