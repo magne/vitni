@@ -616,6 +616,13 @@ and parents, partners and children with their names and births. The engine compa
 mothers (a stated parent who cannot be the other's disagrees), partners and children (support only),
 a patronymic against the other record's father, and occupations; two items of one source record are a
 hard conflict. Two *Ole Olsen*s born the same year separate on their fathers.
+✅ Family and event profiles (ADR 0038 §2, #398): `vitni_app::family_profile` and `event_profile` build the
+other two profiles the census and marriage cases need. The engine pairs a family's partners by their
+person assessments under the cultures the two families select together, summarises each pair as one
+term — its support capped, since a remarriage shares a partner — and keeps the pair's assessment in
+`MatchAssessment::parts`; children and the marriage's date and place follow. An event is compared by
+type (a different one is a conflict), date, place, its principals pair by pair, and its other
+participants as support only. The same marriage from a church book and a GEDCOM file scores Probable.
 
 ## Risk register
 
