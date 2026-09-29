@@ -1,0 +1,46 @@
+# The Danish name-culture pack (ADR 0038 §5).
+#
+# Danish records share the Norwegian patronymic system (-sen / -datter) until surnames were fixed by
+# law in 1828 and 1856, and Norway wrote Danish until 1907, so the two packs overlap. Rewrites see
+# lower-cased, diacritic-stripped text and apply in order.
+id = "da"
+languages = ["da"]
+rewrites = [
+    ["aa", "a"],
+    ["ph", "f"],
+    ["th", "t"],
+    ["dt", "t"],
+    ["ch", "k"],
+    ["ck", "k"],
+    ["ce", "se"],
+    ["ci", "si"],
+    ["c", "k"],
+    ["q", "k"],
+    ["w", "v"],
+    ["x", "ks"],
+    ["z", "s"],
+]
+given_classes = [
+    ["Peder", "Peter", "Per"],
+    ["Johannes", "Johan", "Jens", "Hans", "Jan"],
+    ["Kristian", "Christian", "Christen", "Kristen"],
+    ["Anne", "Ane", "Anna"],
+    ["Lars", "Laurs", "Lauritz", "Laurits"],
+    ["Knud", "Knut"],
+    ["Karen", "Kirsten", "Kristine", "Christine"],
+    ["Mette", "Margrethe", "Maren"],
+    ["Søren", "Severin"],
+    ["Niels", "Nils", "Nicolai"],
+]
+[abbreviations]
+"Joh." = "Johannes"
+"Chr." = "Christian"
+"-sd." = "sdatter"
+"-dtr." = "datter"
+
+[surnames]
+patronymic = true
+residence = false
+male_suffixes = ["sen", "søn", "son", "ssen", "ssøn"]
+female_suffixes = ["datter", "dotter", "dtr", "dr"]
+definite_suffixes = []

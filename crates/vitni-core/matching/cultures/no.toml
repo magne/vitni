@@ -1,0 +1,58 @@
+# The Norwegian name-culture pack (ADR 0038 §5).
+#
+# Norwegian records use a given name, a patronymic (-sen / -datter) and a farm name that changes with
+# every move, so surnames are weak evidence. Spelling followed Danish until the 1907 reform and changed
+# again in 1917 (aa → å), which is why `regions.toml` pairs this pack with `da` before 1907.
+#
+# Rewrites see lower-cased, diacritic-stripped text (å has already become a) and apply in order.
+id = "no"
+languages = ["no", "nb", "nn"]
+rewrites = [
+    ["aa", "a"],
+    ["ph", "f"],
+    ["th", "t"],
+    ["dt", "t"],
+    ["ch", "k"],
+    ["ck", "k"],
+    ["ce", "se"],
+    ["ci", "si"],
+    ["c", "k"],
+    ["qu", "kv"],
+    ["q", "k"],
+    ["w", "v"],
+    ["x", "ks"],
+    ["z", "s"],
+]
+given_classes = [
+    ["Peder", "Petter", "Per", "Peter", "Pedar"],
+    ["Johannes", "Johan", "Jon", "Jan", "Hans"],
+    ["Kristian", "Christian", "Kristen", "Christen"],
+    ["Anne", "Ane", "Anna"],
+    ["Lars", "Laurs", "Lauritz", "Laurits"],
+    ["Gulbrand", "Guldbrand", "Gudbrand", "Gulbran", "Gudbrant"],
+    ["Ole", "Ola", "Olav", "Olaf", "Oluf"],
+    ["Knut", "Knud"],
+    ["Marte", "Martha", "Marta"],
+    ["Kari", "Karen", "Kathrine", "Karine"],
+    ["Halvor", "Halvard", "Haldor"],
+    ["Iver", "Ivar", "Ingvar"],
+    ["Eli", "Elin", "Elen", "Helene", "Ellen"],
+    ["Mathias", "Matias", "Matthias"],
+    ["Mathilde", "Matilde"],
+]
+[abbreviations]
+"Joh." = "Johannes"
+"Chr." = "Christian"
+"Kr." = "Kristian"
+"Ped." = "Peder"
+# A leading "-" marks a suffix abbreviation: "Olsd." → "Olsdatter", "Hanss." → "Hanssøn".
+"-sd." = "sdatter"
+"-dtr." = "datter"
+"-ss." = "ssøn"
+
+[surnames]
+patronymic = true
+residence = true
+male_suffixes = ["sen", "søn", "son", "ssen", "ssøn", "sson"]
+female_suffixes = ["datter", "dotter", "dtr", "dr", "dattr"]
+definite_suffixes = ["en", "et", "a"]
