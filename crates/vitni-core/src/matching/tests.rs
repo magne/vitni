@@ -9,7 +9,7 @@ use crate::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDa
 use crate::enums::Sex;
 use crate::ids::ImportRunId;
 use crate::matching::pack::PackSource;
-use crate::matching::profile::{PersonProfile, PlaceProfile, VitalEvent, VitalKind};
+use crate::matching::profile::{PersonProfile, PlaceProfile, Relative, VitalEvent, VitalKind};
 use crate::matching::{
     CultureId, DateBasis, ENGINE_VERSION, Feature, FeatureComparison, MatchAssessment, MatchBand, MatchData,
     MatchSettings, Outcome, assess_persons,
@@ -338,6 +338,213 @@ fn every_score_is_bounded_and_the_band_follows_the_thresholds() {
     assert_eq!(assess_persons(&a, &b, &DATA, &lax).band, MatchBand::Probable);
 }
 
+fn relative(given: &str, surname: &str, sex: Sex, birth: Option<GenealogicalDate>) -> Relative {
+    Relative {
+        names: vec![name(given, surname)],
+        sex: Some(sex),
+        birth: birth.map(|date| vital(VitalKind::Birth, date, DateBasis::Recorded, None)),
+    }
+}
+
+fn ole_olsen() -> PersonProfile {
+    person("Ole", "Olsen", Sex::Male, born(on(1850, 3, 4), Some("Norge")))
+}
+
+fn with_parents(mut profile: PersonProfile, parents: Vec<Relative>) -> PersonProfile {
+    profile.parents = parents;
+    profile
+}
+
+#[test]
+fn two_ole_olsens_born_the_same_year_separate_on_their_fathers() {
+    let (a, b) = (ole_olsen(), ole_olsen());
+    assert_eq!(
+        assess(&a, &b).band,
+        MatchBand::Probable,
+        "with no parents they look alike"
+    );
+
+    let father = relative("Ole", "Hansen", Sex::Male, Some(on(1815, 5, 1)));
+    let same = assess(
+        &with_parents(a.clone(), vec![father.clone()]),
+        &with_parents(b.clone(), vec![father.clone()]),
+    );
+    assert_eq!(same.band, MatchBand::Probable, "{same:#?}");
+    assert_eq!(feature(&same, Feature::Father).outcome, Outcome::Agree);
+
+    let other = relative("Ole", "Nilsen", Sex::Male, Some(on(1830, 9, 12)));
+    let apart = assess(
+        &with_parents(a.clone(), vec![father.clone()]),
+        &with_parents(b.clone(), vec![other.clone()]),
+    );
+    assert_eq!(feature(&apart, Feature::Father).outcome, Outcome::Disagree);
+    assert!(apart.band < MatchBand::Probable, "{apart:#?}");
+    assert!(apart.score < same.score);
+
+    let mothers = |given: &str, year: i32| relative(given, "Olsdatter", Sex::Female, Some(on(year, 2, 2)));
+    let both = assess(
+        &with_parents(a, vec![father, mothers("Marte", 1820)]),
+        &with_parents(b, vec![other, mothers("Kari", 1826)]),
+    );
+    assert_eq!(feature(&both, Feature::Mother).outcome, Outcome::Disagree);
+    assert_eq!(both.band, MatchBand::Unlikely, "{both:#?}");
+}
+
+#[test]
+fn fathers_of_different_given_names_disagree() {
+    let child = || person("John", "Smith", Sex::Male, born(on(1850, 3, 4), Some("England")));
+    let a = with_parents(child(), vec![relative("William", "Smith", Sex::Male, None)]);
+    let b = with_parents(child(), vec![relative("George", "Smith", Sex::Male, None)]);
+    let father = feature(&assess(&a, &b), Feature::Father).clone();
+    assert_eq!(father.outcome, Outcome::Disagree, "{father:?}");
+}
+
+#[test]
+fn an_undated_father_of_the_same_name_is_partial_support() {
+    let father = || relative("Ole", "Hansen", Sex::Male, None);
+    let a = with_parents(ole_olsen(), vec![father()]);
+    let b = with_parents(ole_olsen(), vec![father()]);
+    let assessment = assess(&a, &b);
+    let father = feature(&assessment, Feature::Father);
+    assert!(matches!(father.outcome, Outcome::Partial(_)), "{father:?}");
+    assert!(father.weight > 0.0);
+    assert_eq!(feature(&assessment, Feature::Mother).outcome, Outcome::Missing);
+}
+
+#[test]
+fn a_parent_of_unknown_sex_is_neither_father_nor_mother() {
+    let parent = || relative("Ole", "Hansen", Sex::Unknown, Some(on(1815, 5, 1)));
+    let a = with_parents(ole_olsen(), vec![parent()]);
+    let b = with_parents(ole_olsen(), vec![parent()]);
+    let assessment = assess(&a, &b);
+    assert_eq!(feature(&assessment, Feature::Father).outcome, Outcome::Missing);
+    assert_eq!(feature(&assessment, Feature::Mother).outcome, Outcome::Missing);
+}
+
+#[test]
+fn a_patronymic_is_checked_against_the_candidate_father() {
+    let census = ole_olsen();
+    let patronymic = |father: &str| {
+        let b = with_parents(ole_olsen(), vec![relative(father, "Hansen", Sex::Male, None)]);
+        feature(&assess(&census, &b), Feature::Patronymic).clone()
+    };
+    assert_eq!(patronymic("Ole").outcome, Outcome::Agree);
+    assert_eq!(patronymic("Olav").outcome, Outcome::Agree, "Olav is in Ole's class");
+    let hans = patronymic("Hans");
+    assert_eq!(hans.outcome, Outcome::Disagree, "{hans:?}");
+    assert!(hans.weight < 0.0);
+}
+
+#[test]
+fn patronymic_stems_meet_their_fathers_names() {
+    for (surname, father) in [
+        ("Hansen", "Hans"),
+        ("Olsdatter", "Ole"),
+        ("Pedersen", "Peder"),
+        ("Johannesen", "Johannes"),
+        ("Andreassen", "Andreas"),
+        ("Rasmussen", "Rasmus"),
+        ("Knudsen", "Knut"),
+    ] {
+        let a = person("Anne", surname, Sex::Female, born(on(1850, 3, 4), Some("Norge")));
+        let b = with_parents(
+            person("Anne", surname, Sex::Female, born(on(1850, 3, 4), Some("Norge"))),
+            vec![relative(father, "", Sex::Male, None)],
+        );
+        let outcome = feature(&assess(&a, &b), Feature::Patronymic).outcome;
+        assert_eq!(outcome, Outcome::Agree, "{surname} ↔ {father}");
+    }
+}
+
+#[test]
+fn a_patronymic_is_not_checked_where_both_sides_state_a_father_or_no_culture_is_patronymic() {
+    let father = || relative("Hans", "Olsen", Sex::Male, None);
+    let a = with_parents(ole_olsen(), vec![father()]);
+    let b = with_parents(ole_olsen(), vec![father()]);
+    assert_eq!(feature(&assess(&a, &b), Feature::Patronymic).outcome, Outcome::Missing);
+    let english = person("John", "Johnson", Sex::Male, born(on(1850, 3, 4), Some("England")));
+    let with_father = with_parents(english.clone(), vec![relative("William", "Johnson", Sex::Male, None)]);
+    assert_eq!(
+        feature(&assess(&english, &with_father), Feature::Patronymic).outcome,
+        Outcome::Missing
+    );
+}
+
+#[test]
+fn a_shared_child_supports_the_pair_and_disjoint_children_are_no_evidence() {
+    let with_children = |children: Vec<Relative>| PersonProfile {
+        children,
+        ..ole_olsen()
+    };
+    let anne = || relative("Anne", "Olsdatter", Sex::Female, Some(on(1880, 1, 9)));
+    let kari = || relative("Kari", "Olsdatter", Sex::Female, Some(on(1884, 7, 1)));
+    let shared = assess(&with_children(vec![anne(), kari()]), &with_children(vec![kari()]));
+    let children = feature(&shared, Feature::Children);
+    assert_eq!(children.outcome, Outcome::Agree, "{children:?}");
+    assert!(children.weight > 0.0);
+    let disjoint = assess(&with_children(vec![anne()]), &with_children(vec![kari()]));
+    let children = feature(&disjoint, Feature::Children);
+    assert_eq!(children.outcome, Outcome::Missing, "{children:?}");
+    assert!(children.weight.abs() < f64::EPSILON);
+}
+
+#[test]
+fn a_shared_partner_supports_the_pair() {
+    let with_partner = |given: &str| PersonProfile {
+        partners: vec![relative(given, "Hansdatter", Sex::Female, Some(on(1852, 4, 4)))],
+        ..ole_olsen()
+    };
+    let assessment = assess(&with_partner("Marte"), &with_partner("Martha"));
+    assert!(feature(&assessment, Feature::Partners).weight > 0.0);
+    assert_eq!(
+        feature(
+            &assess(&with_partner("Marte"), &with_partner("Ingeborg")),
+            Feature::Partners
+        )
+        .outcome,
+        Outcome::Missing
+    );
+}
+
+#[test]
+fn an_occupation_in_common_is_weak_support_and_a_different_one_is_no_evidence() {
+    let working = |occupation: &str| PersonProfile {
+        occupations: vec![occupation.to_owned()],
+        ..ole_olsen()
+    };
+    let same = feature(&assess(&working("Husmann"), &working("husmann")), Feature::Occupation).clone();
+    assert_eq!(same.outcome, Outcome::Agree);
+    assert!(same.weight > 0.0);
+    let other = feature(&assess(&working("Husmann"), &working("Skomaker")), Feature::Occupation).clone();
+    assert_eq!(other.outcome, Outcome::Missing);
+}
+
+fn household(item: Option<&str>) -> RecordOrigin {
+    RecordOrigin {
+        dataset: DatasetId::global("digitalarkivet"),
+        record: "bf01036389000123".to_owned(),
+        item: item.map(ToOwned::to_owned),
+        digest: None,
+        run: ImportRunId::from_uuid(Uuid::now_v7()),
+    }
+}
+
+#[test]
+fn two_items_of_one_record_are_different_people() {
+    let (mut a, mut b) = (ole_olsen(), ole_olsen());
+    a.origins.push(household(Some("person:1")));
+    b.origins.push(household(Some("person:2")));
+    let assessment = assess(&a, &b);
+    assert_eq!(feature(&assessment, Feature::Record).outcome, Outcome::Conflict);
+    assert_eq!(assessment.band, MatchBand::Unlikely);
+    assert!(assessment.score <= 0.01);
+
+    b.origins = vec![household(Some("person:1"))];
+    let same = assess(&a, &b);
+    assert_eq!(same.band, MatchBand::Deterministic);
+    assert!(same.features.iter().all(|f| f.feature != Feature::Record));
+}
+
 fn given_name() -> impl Strategy<Value = &'static str> {
     prop::sample::select(vec![
         "",
@@ -386,8 +593,9 @@ fn a_date() -> impl Strategy<Value = GenealogicalDate> {
 fn profile() -> impl Strategy<Value = PersonProfile> {
     let birth = prop::option::of((a_date(), basis(), prop::bool::ANY));
     let lifespan = prop::option::of(0i32..95);
-    (given_name(), surname(), sex(), country(), birth, lifespan).prop_map(
-        |(given, surname, sex, country, birth, lifespan)| {
+    let father = prop::option::of((given_name(), prop::option::of(a_date())));
+    (given_name(), surname(), sex(), country(), birth, lifespan, father).prop_map(
+        |(given, surname, sex, country, birth, lifespan, father)| {
             let mut vitals = Vec::new();
             if let Some((date, basis, baptism)) = birth {
                 let kind = if baptism { VitalKind::Baptism } else { VitalKind::Birth };
@@ -401,7 +609,11 @@ fn profile() -> impl Strategy<Value = PersonProfile> {
                 }
                 vitals.push(vital(kind, date, basis, country));
             }
-            person(given, surname, sex, vitals)
+            let mut profile = person(given, surname, sex, vitals);
+            profile
+                .parents
+                .extend(father.map(|(given, born)| relative(given, "", Sex::Male, born)));
+            profile
         },
     )
 }

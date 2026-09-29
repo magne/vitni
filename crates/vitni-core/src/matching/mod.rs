@@ -1,14 +1,16 @@
 //! Record matching: explainable Fellegi–Sunter scoring (ADR 0038).
 //!
 //! [`assess_persons`] compares two [`PersonProfile`]s and returns a [`MatchAssessment`]. Each
-//! comparator grades one feature — names, sex, birth and death dates, their places — as `Agree`,
-//! `Partial`, `Disagree`, `Missing` or `Conflict`, with a log-likelihood weight. The weights sum to the
+//! comparator grades one feature — names, sex, birth and death dates, their places, occupations, and the
+//! relatives: fathers, mothers, partners, children and a patronymic read against the candidate father —
+//! as `Agree`, `Partial`, `Disagree`, `Missing` or `Conflict`, with a log-likelihood weight. The weights sum to the
 //! match weight, which maps to a score in `0..1` and a [`MatchBand`]. Every term is kept, so the
 //! features *are* the explanation.
 //!
 //! Comparators are graded, never binary: a near miss lowers the score but keeps the candidate, only an
 //! implausible distance disagrees, and only a logical impossibility (a different asserted sex, a death
-//! before the other's birth) is a conflict, which caps the score. [`MatchBand::Deterministic`] is never
+//! before the other's birth, two different items of one source record) is a conflict, which caps the
+//! score. [`MatchBand::Deterministic`] is never
 //! earned by a score: only a shared record origin or external id establishes identity (§6).
 //!
 //! The name rules are data — [`pack`]s selected per comparison from places, dates, data languages and
@@ -20,6 +22,7 @@ mod name;
 pub mod pack;
 mod place;
 pub mod profile;
+mod relative;
 pub mod select;
 mod weights;
 
@@ -28,8 +31,10 @@ use crate::matching::date::{DayInterval, SLIP_SIMILARITY, Tolerance, interval, i
 use crate::matching::name::Applied;
 use crate::matching::pack::{CulturePacks, PackError, PackSource};
 use crate::matching::profile::{PersonProfile, PlaceProfile, VitalEvent, VitalKind};
+use crate::matching::relative::{compare_patronymic, compare_relatives};
 use crate::matching::select::{RegionTable, comparison_cultures};
 use crate::matching::weights::Weights;
+use crate::origin::RecordOrigin;
 
 pub use crate::matching::date::DateBasis;
 
@@ -56,7 +61,7 @@ impl CultureId {
 pub struct EngineVersion(pub u32);
 
 /// The engine version of this build. Bump it when a comparator, weight or shipped pack changes scores.
-pub const ENGINE_VERSION: EngineVersion = EngineVersion(1);
+pub const ENGINE_VERSION: EngineVersion = EngineVersion(2);
 
 /// How sure the engine is that two records describe one individual.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -105,6 +110,20 @@ pub enum Feature {
     DeathPlace,
     /// One side's death against the other's birth.
     Lifespan,
+    /// The fathers.
+    Father,
+    /// The mothers.
+    Mother,
+    /// The partners.
+    Partners,
+    /// The children.
+    Children,
+    /// One side's patronymic against the other side's father.
+    Patronymic,
+    /// The occupations.
+    Occupation,
+    /// Two different items of one source record, which are by construction different people.
+    Record,
 }
 
 /// A value shown beside a feature, as the record states it.
@@ -123,6 +142,17 @@ pub enum FeatureValue {
     Place(String),
     /// A sex.
     Sex(Sex),
+    /// A relative's name, with their birth date.
+    Relative {
+        /// The relative's name, as written.
+        name: String,
+        /// The relative's birth date, if known.
+        born: Option<crate::date::GenealogicalDate>,
+    },
+    /// Free text, such as an occupation.
+    Text(String),
+    /// The source record an item was imported from.
+    Origin(RecordOrigin),
 }
 
 /// One term of the match weight: the feature, its outcome and weight, and the values compared.
@@ -221,8 +251,14 @@ pub fn assess_persons(
 ) -> MatchAssessment {
     let cultures = comparison_cultures(a, b, data, settings);
     let applied = Applied::new(cultures.iter().filter_map(|id| data.packs.get(id)).collect());
-    let (birth_a, birth_b) = (estimate(a, VitalKind::Birth), estimate(b, VitalKind::Birth));
-    let (death_a, death_b) = (estimate(a, VitalKind::Death), estimate(b, VitalKind::Death));
+    let (birth_a, birth_b) = (
+        estimate(&a.vitals, VitalKind::Birth),
+        estimate(&b.vitals, VitalKind::Birth),
+    );
+    let (death_a, death_b) = (
+        estimate(&a.vitals, VitalKind::Death),
+        estimate(&b.vitals, VitalKind::Death),
+    );
     let mut features = vec![
         compare_given(a, b, &applied),
         compare_surname(a, b, &applied),
@@ -242,9 +278,15 @@ pub fn assess_persons(
             &applied,
         ),
     ];
+    features.extend(compare_relatives(a, b, &applied));
+    features.push(compare_patronymic(a, b, &applied));
+    features.push(compare_occupations(a, b, &applied));
     features.extend(lifespan_conflict(death_a.as_ref(), birth_b.as_ref()));
     features.extend(lifespan_conflict(death_b.as_ref(), birth_a.as_ref()));
     let identified = shares_identity(a, b);
+    if !identified {
+        features.extend(same_record_conflict(a, b));
+    }
     conclude(features, cultures, identified, settings)
 }
 
@@ -296,6 +338,51 @@ fn shares_identity(a: &PersonProfile, b: &PersonProfile) -> bool {
             .any(|y| x.authority == y.authority && x.value == y.value)
     });
     same_origin || same_external
+}
+
+/// A conflict when the two profiles were created from different items of one source record — two
+/// members of one household, say — who are by construction different people (ADR 0037 §1).
+fn same_record_conflict(a: &PersonProfile, b: &PersonProfile) -> Option<FeatureComparison> {
+    for x in &a.origins {
+        for y in &b.origins {
+            if x.dataset == y.dataset && x.record == y.record && x.item != y.item {
+                return Some(FeatureComparison {
+                    feature: Feature::Record,
+                    outcome: Outcome::Conflict,
+                    weight: weights::CONFLICT,
+                    left: Some(FeatureValue::Origin(x.clone())),
+                    right: Some(FeatureValue::Origin(y.clone())),
+                });
+            }
+        }
+    }
+    None
+}
+
+/// Compares the occupations: one in common, after normalization, is weak support; a different one is
+/// no evidence, because occupations change over a life.
+fn compare_occupations(a: &PersonProfile, b: &PersonProfile, applied: &Applied<'_>) -> FeatureComparison {
+    let text = |occupation: &String| FeatureValue::Text(occupation.clone());
+    for x in &a.occupations {
+        let normalized = applied.tokens(x);
+        if normalized.is_empty() {
+            continue;
+        }
+        if let Some(y) = b.occupations.iter().find(|y| applied.tokens(y) == normalized) {
+            return FeatureComparison {
+                feature: Feature::Occupation,
+                outcome: Outcome::Agree,
+                weight: weights::OCCUPATION_AGREE,
+                left: Some(text(x)),
+                right: Some(text(y)),
+            };
+        }
+    }
+    missing(
+        Feature::Occupation,
+        a.occupations.first().map(text),
+        b.occupations.first().map(text),
+    )
 }
 
 /// A graded similarity turned into an outcome and weight: at `1` it agrees, below `floor` (or at `0`)
@@ -454,26 +541,22 @@ const BAPTISM_OFFSET_DAYS: i32 = 365;
 /// How far a burial may follow the death it stands in for.
 const BURIAL_OFFSET_DAYS: i32 = 30;
 
-/// The estimate of `kind` (birth or death) for `profile`.
-fn estimate(profile: &PersonProfile, kind: VitalKind) -> Option<Estimate<'_>> {
+/// The estimate of `kind` (birth or death) among `vitals`.
+fn estimate(vitals: &[VitalEvent], kind: VitalKind) -> Option<Estimate<'_>> {
     let (proxy, offset) = match kind {
         VitalKind::Birth | VitalKind::Baptism => (VitalKind::Baptism, BAPTISM_OFFSET_DAYS),
         VitalKind::Death | VitalKind::Burial => (VitalKind::Burial, BURIAL_OFFSET_DAYS),
     };
     let dated = |wanted: VitalKind| {
-        profile
-            .vitals
-            .iter()
-            .filter(move |v| v.kind == wanted)
-            .find_map(|vital| {
-                let date = vital.date.as_ref()?;
-                Some(Estimate {
-                    vital,
-                    date,
-                    interval: interval(date)?,
-                    tolerance: Tolerance::of(date, vital.basis),
-                })
+        vitals.iter().filter(move |v| v.kind == wanted).find_map(|vital| {
+            let date = vital.date.as_ref()?;
+            Some(Estimate {
+                vital,
+                date,
+                interval: interval(date)?,
+                tolerance: Tolerance::of(date, vital.basis),
             })
+        })
     };
     dated(kind).or_else(|| {
         dated(proxy).map(|estimate| Estimate {
