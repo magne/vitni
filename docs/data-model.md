@@ -642,9 +642,9 @@ around evidence and provenance.
    - every write is previewed before it is made (`Store::preview_<aggregate>`), and one whose field
      already carries a live row with the same digest, from the same item, is not written;
    - a changed value in a single-valued field (an event's date, a source's title) supersedes the
-     imported one when the file's export date is at or after it (ADR 0029 §1). It is left alone when
-     the file is older or undated, and when the user already retracted or superseded that imported
-     value;
+     imported one when the file's export date is at or after it and after the field's current value,
+     whoever set it (ADR 0029 §1). It is left alone when the file is older or undated, and when the
+     user already retracted or superseded that imported value;
    - a new value in a list-valued field (a name, a fact) is added.
 
    An import run is started by its first write that goes ahead, so re-importing an unchanged file

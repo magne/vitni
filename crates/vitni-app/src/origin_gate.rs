@@ -8,8 +8,8 @@
 //!
 //! - **Already asserted.** A live row with the same digest: the write is a no-op.
 //! - **Changed, single-valued field.** The latest live row differs: the file's claim supersedes it when
-//!   the file is at least as recent as that assertion (ADR 0029 §1). When the file is older, or has no
-//!   export date (§3), the write is skipped.
+//!   the file is at least as recent as that assertion and as the field's current value, whoever set it
+//!   (ADR 0029 §1). When the file is older, or has no export date (§3), the write is skipped.
 //! - **Corrected by the user.** Single-valued rows exist but none is live: the user's correction stands.
 //! - **Otherwise** (a new item, a new value in a list-valued field): the write goes ahead.
 //!
@@ -173,7 +173,11 @@ pub(crate) async fn gate<E: GatedEnvelope>(
         return Ok(Some(envelope));
     }
     let previewed = E::preview(store, aggregate_id, envelope.clone()).await?;
-    let decision = decide(store, session, envelope.meta(), &previewed, E::KIND).await?;
+    let target = Target {
+        kind: E::KIND,
+        aggregate_id,
+    };
+    let decision = decide(store, session, envelope.meta(), &previewed, target).await?;
     let envelope = match decision {
         Decision::Skip => return Ok(None),
         Decision::Write => envelope,
@@ -188,17 +192,24 @@ pub(crate) async fn gate<E: GatedEnvelope>(
     Ok(Some(envelope))
 }
 
+/// The aggregate instance a gated write lands on.
+#[derive(Clone, Copy)]
+struct Target<'a> {
+    kind: &'static str,
+    aggregate_id: &'a str,
+}
+
 async fn decide<B: EventBody + Serialize>(
     store: &Store,
     session: &Session,
     meta: &mut AssertionMeta,
     previewed: &[Envelope<B>],
-    kind: &str,
+    target: Target<'_>,
 ) -> Result<Decision, AppError> {
     let mut bodies = Vec::with_capacity(previewed.len());
     let mut primary = None;
     for event in previewed {
-        let Some(field) = vitni_db::indexed_field(kind, &event.body)? else {
+        let Some(field) = vitni_db::indexed_field(target.kind, &event.body)? else {
             continue;
         };
         bodies.push(&event.body);
@@ -232,10 +243,16 @@ async fn decide<B: EventBody + Serialize>(
             Decision::Skip
         });
     };
-    let file_asserted_at = session.import_run().and_then(|run| run.file_asserted_at());
-    Ok(match file_asserted_at {
-        Some(file_asserted_at) if latest.occurred_at <= file_asserted_at => Decision::Supersede(latest.assertion_id),
-        _ => Decision::Skip,
+    let Some(file_asserted_at) = session.import_run().and_then(|run| run.file_asserted_at()) else {
+        return Ok(Decision::Skip);
+    };
+    let current_at =
+        crate::history::field_asserted_at(store, target.kind, target.aggregate_id, &field.field_key).await?;
+    let current_is_older = current_at.is_none_or(|current_at| current_at <= file_asserted_at);
+    Ok(if latest.occurred_at <= file_asserted_at && current_is_older {
+        Decision::Supersede(latest.assertion_id)
+    } else {
+        Decision::Skip
     })
 }
 
@@ -672,6 +689,34 @@ mod tests {
         let (session, run) = importer(Some(Timestamp::new(datetime!(2100-01-01 00:00 UTC))));
         describe(&workspace, &session, &run, &event, "at church").await;
         assert_eq!(events(&workspace).await, before, "the user's correction stands");
+    }
+
+    #[tokio::test]
+    async fn a_value_the_user_set_after_the_file_was_exported_is_not_superseded() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let (session, run) = importer(None);
+        let event = event(&workspace, &session, &run).await;
+        describe(&workspace, &session, &run, &event, "at home").await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        let exported = Timestamp::new(time::OffsetDateTime::now_utc());
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        let keyboard = Session::software("keyboard", "0");
+        set_event_description(
+            &workspace,
+            &keyboard,
+            &event,
+            "in the barn".to_owned(),
+            MutationMeta::default(),
+        )
+        .await
+        .expect("user edit");
+        let before = events(&workspace).await;
+
+        let (session, rerun) = importer(Some(exported));
+        describe(&workspace, &session, &rerun, &event, "at church").await;
+        assert_eq!(description(&workspace, &event).await.as_deref(), Some("in the barn"));
+        assert_eq!(events(&workspace).await, before, "the user's later value stands");
     }
 
     #[tokio::test]

@@ -473,6 +473,13 @@ does.
   retraction or correction of an imported value (the origin gate, #394); the list-valued fields (names,
   facts, citations) do not yet. *Exit:* retract an
   imported occupation, re-import, and the occupation stays retracted. — #395
+- **An interrupted `record_origins` backfill is never resumed** — when a workspace whose log predates
+  the index is opened, `Store::open` creates the table and replays the log into it
+  (`vitni-db/src/sqlite.rs`, `postgres.rs`, `origins_are_new`). "New" is "the table did not exist", so
+  if that open fails or is killed mid-replay, the next open finds the table and skips the backfill;
+  re-import then misses the earlier imports' origins until `vitni rebuild`. *Shape:* a completion
+  marker written after the replay, or the backfill in one transaction. *Exit:* a test that interrupts
+  the backfill and reopens gets the full index.
 - **Matching core: graded comparators and Fellegi–Sunter assessment** — ADR 0038 §1, §3–§6, in
   `vitni_core::matching`. It covers name comparison driven by name-culture packs (the TOML schema,
   loader and workspace override, shipping `universal`/`no`/`da`/`en`); pack selection from places
