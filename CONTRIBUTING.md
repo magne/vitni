@@ -21,7 +21,7 @@ Participation is under the [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) (Contribut
 ## What a good pull request looks like
 
 - One logical change per commit; imperative subject line, 72 characters or fewer.
-- `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and
+- `cargo xtask fmt`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and
   `cargo nextest run --workspace --all-features --lib --bins --tests` all clean. The workspace denies
   `unwrap_used`, `panic`, `todo` and friends, and silencing a lint with `#[allow(…)]` is itself
   denied — fix the code.

@@ -49,7 +49,7 @@ cargo run -p vitni-cli                                           # the CLI alone
 cargo nextest run --workspace --all-features --lib --bins --tests    # tests
 cargo test -p vitni-core <name>                                  # one test in one crate
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo fmt --all
+cargo xtask fmt                                                      # rustfmt the workspace + plugins/* (--check)
 cargo deny --all-features check                                      # advisories, licences, bans
 cargo xtask check                                                    # every static check, in one pass
 cargo xtask build-plugins                                            # plugins/* → target/plugins
