@@ -137,9 +137,19 @@ async fn every_event_a_create_writes_carries_the_callers_origin() {
     assert!(events.len() >= 14, "every create and its follow-ups are in the log");
     for event in events {
         let header: Header = serde_json::from_str(&event.payload).expect("decode envelope");
+        let mut stamped = header
+            .context
+            .origin
+            .unwrap_or_else(|| panic!("{} {} lost its origin", event.aggregate_type, event.event_type));
+        assert!(
+            stamped.digest.take().is_some(),
+            "{} {} carries the digest of what it asserted",
+            event.aggregate_type,
+            event.event_type
+        );
         assert_eq!(
-            header.context.origin.as_deref(),
-            Some(&origin()),
+            *stamped,
+            origin(),
             "{} {} lost its origin",
             event.aggregate_type,
             event.event_type

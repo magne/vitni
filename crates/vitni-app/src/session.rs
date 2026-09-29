@@ -6,18 +6,22 @@
 //! is recorded identically for every frontend. Keep this type deliberately small: everything that
 //! is hard to test lives here and nowhere else.
 
+use std::sync::Arc;
+
 use time::OffsetDateTime;
 use uuid::Uuid;
 use vitni_core::ids::{AgentId, AssertionId};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, EventContext, EvidenceRef, Timestamp};
 
 use crate::aggregates::for_each_aggregate;
+use crate::origin_gate::PendingRun;
 use crate::use_case::Provenance;
 
 /// Per-invocation context carrying the operator identity and the impure id/clock sources.
 #[derive(Debug, Clone)]
 pub struct Session {
     operator: Agent,
+    import_run: Option<Arc<PendingRun>>,
 }
 
 /// Generates one UUID-v7 id minter per aggregate (ADR 0004 §5) from the canonical registry.
@@ -41,7 +45,24 @@ impl Session {
     /// Creates a session for `operator` (resolved from configuration, ADR 0005).
     #[must_use]
     pub fn new(operator: Agent) -> Self {
-        Self { operator }
+        Self {
+            operator,
+            import_run: None,
+        }
+    }
+
+    /// This session, writing as part of `run`: every write the origin gate lets through starts the
+    /// run if it has not started yet (ADR 0037 §5).
+    #[must_use]
+    pub fn with_import_run(mut self, run: Arc<PendingRun>) -> Self {
+        self.import_run = Some(run);
+        self
+    }
+
+    /// The import run this session writes as part of, if any.
+    #[must_use]
+    pub fn import_run(&self) -> Option<&Arc<PendingRun>> {
+        self.import_run.as_ref()
     }
 
     /// Creates a session whose operator is a software agent (ADR 0007 §7): every change a plugin
