@@ -28,8 +28,7 @@ use vitni_plugin_api::commands;
 use vitni_plugin_api::convert;
 use vitni_plugin_api::types;
 use vitni_plugin_api::types::{
-    Attribute, ChildParentRel, Confidence, MediaCrop, NoteType, ParticipantRole, ParticipationInput,
-    PlaceType, Sex,
+    Attribute, ChildParentRel, Confidence, MediaCrop, NoteType, ParticipantRole, ParticipationInput, PlaceType, Sex,
 };
 use vitni_plugin_api::with_origin;
 
@@ -89,11 +88,8 @@ impl Guest for Importer {
 
         for (index, person) in db.people.iter().enumerate() {
             let record = with_origin(&person.handle, None, || {
-                let record = commands::create_person(
-                    person.names.first().map(convert::name_to_wit).as_ref(),
-                    None,
-                )
-                .map_err(|error| format!("create-person failed: {error:?}"))?;
+                let record = commands::create_person(person.names.first().map(convert::name_to_wit).as_ref(), None)
+                    .map_err(|error| format!("create-person failed: {error:?}"))?;
                 if record.created {
                     // The first <name> became the primary above; any alternate is a distinct assertion,
                     // not a clobber (data-model §17 round-trip gaps).
@@ -174,8 +170,8 @@ impl Guest for Importer {
 
         for (index, family) in db.families.iter().enumerate() {
             with_origin(&family.handle, None, || {
-                let record = commands::create_family(None)
-                    .map_err(|error| format!("create-family failed: {error:?}"))?;
+                let record =
+                    commands::create_family(None).map_err(|error| format!("create-family failed: {error:?}"))?;
                 let mut partner_ids = Vec::new();
                 for handle in family.father.iter().chain(family.mother.iter()) {
                     if let Some(human_id) = handle_to_human.get(handle) {

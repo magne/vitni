@@ -623,9 +623,9 @@ around evidence and provenance.
    `EventContext.origin` (§8) naming the run. A **dataset** scopes record ids: `digitalarkivet` is
    global, while `gedcom:<uuid>` and `gramps:<uuid>` each name one file lineage — the same tree
    re-exported over time — which the operator picks or declares on import. Datasets are a projection
-   over runs, labelled by the earliest. File-local keys (a GEDCOM xref, a Gramps id or handle) are
-   origin records only, never `ExternalId`s, so two unrelated files that both hold an `@I1@` import
-   two people. `ExternalId` is for identifiers that mean something outside the file: a GEDCOM `_UID`,
+   over runs, labelled by the earliest. File-local keys (a GEDCOM xref, a Gramps handle) are origin
+   records only, and neither they nor a Gramps id (`I0001`) become `ExternalId`s, so two unrelated
+   files that both hold an `@I1@` import two people. `ExternalId` is for identifiers that mean something outside the file: a GEDCOM `_UID`,
    a Digitalarkivet record id.
 
 5. **Re-import resolves by origin (ADR 0037 §4).** The `record_origins` projection index (both

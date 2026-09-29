@@ -597,9 +597,9 @@ and one History row per run with its children. ✅ Resolve-by-origin (ADR 0037 �
 `record_origins` index on both engines, every `create-*` resolving an item its dataset already
 imported, writes already on record skipped and changed single-valued fields reconciled by the file's
 export date, so re-importing an unchanged GEDCOM or Gramps file writes no events and duplicates no
-Source or Place. ✅ Dataset-scoped record ids (ADR 0037 §3, #389): GEDCOM xrefs and Gramps ids and
-handles are origin records only, no longer `ExternalId`s, so two unrelated files that share `@I1@`
-import two people; a GEDCOM `_UID` still resolves across datasets.
+Source or Place. ✅ Dataset-scoped record ids (ADR 0037 §3, #389): GEDCOM xrefs and Gramps handles
+are origin records only, and neither they nor Gramps ids are `ExternalId`s any more, so two
+unrelated files that share `@I1@` import two people; a GEDCOM `_UID` still resolves across datasets.
 
 ## Risk register
 

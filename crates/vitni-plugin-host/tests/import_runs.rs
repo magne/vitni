@@ -352,7 +352,8 @@ async fn unrelated_files_sharing_record_ids_import_as_separate_people() {
 
 /// Imports `text` with `plugin` into its own dataset, `gedcom:<n>` / `gramps:<n>`.
 async fn import_as(workspace: Workspace, plugin: &str, n: u128, dir: &Path, name: &str, text: &str) -> Workspace {
-    let dataset = DatasetId::lineage(plugin, Uuid::from_u128(n));
+    let scheme = plugin.trim_end_matches("-import");
+    let dataset = DatasetId::lineage(scheme, Uuid::from_u128(n));
     import(workspace, plugin, &dataset, dir, name, text).await
 }
 
