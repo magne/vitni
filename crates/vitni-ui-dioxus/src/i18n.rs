@@ -2183,6 +2183,12 @@ impl Chrome {
         fl!(self.loader, "bulk-import-dataset-placeholder")
     }
 
+    /// The note under the dataset select once an earlier tree is chosen (ADR 0037 §4).
+    #[must_use]
+    pub fn bulk_import_dataset_later_export(&self) -> String {
+        fl!(self.loader, "bulk-import-dataset-later-export")
+    }
+
     /// A dataset choice naming an earlier import: "A later export of {label}".
     #[must_use]
     pub fn bulk_import_dataset_existing(&self, label: &str) -> String {

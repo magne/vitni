@@ -877,6 +877,9 @@ async fn execute(
         meta: session.new_meta(provenance, citations),
         command,
     };
+    let Some(envelope) = crate::origin_gate::gate(store, session, aggregate_id, envelope).await? else {
+        return Ok(());
+    };
     store
         .execute_event(aggregate_id, envelope)
         .await

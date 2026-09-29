@@ -223,8 +223,9 @@ fn review(record: &PersonRecord, scan_url: Option<&str>, session: &mut Session) 
 }
 
 /// Records a confirmed record: files the scan first (so cancelling the save dialog aborts before any
-/// write), then resolves-or-creates the person by `ExternalId` and — only on first creation — the
-/// source, citation, and media, keeping a re-run idempotent.
+/// write), then resolves-or-creates the person and — when it is this dataset's own — records the
+/// source, citation, and media under the record's origin, so a re-run writes only what changed
+/// (ADR 0037 §4).
 fn import(
     record: &PersonRecord,
     scan_url: Option<&str>,

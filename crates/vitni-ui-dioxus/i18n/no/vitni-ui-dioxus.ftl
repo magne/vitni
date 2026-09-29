@@ -558,6 +558,7 @@ bulk-import-confirm-run = Importer likevel
 bulk-import-confirm-datasets-body = { $workspace } har allerede data importert fra andre filer.
 bulk-import-dataset-label = Denne filen er
 bulk-import-dataset-placeholder = Velg …
+bulk-import-dataset-later-export = Poster som allerede er importert fra dette treet, blir oppdatert, ikke duplisert.
 bulk-import-dataset-existing = En senere eksport av { $label }
 bulk-import-dataset-new = Et annet tre
 bulk-import-target-name-required = Skriv inn et navn for det nye arbeidsområdet.

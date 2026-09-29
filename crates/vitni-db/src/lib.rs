@@ -25,6 +25,8 @@ mod postgres;
 #[cfg(feature = "postgres")]
 mod postgres_query;
 mod raw;
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+mod record_origins;
 mod registry;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod resolver;
@@ -39,4 +41,8 @@ mod store;
 mod tables;
 
 pub use raw::{ProjectionRow, RawEvent, RawEventKey, decode_raw_event, event_variants};
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+pub use record_origins::{
+    IndexedField, OriginRow, created_key, digest, field_key, indexed_field, resolved_key, single_valued,
+};
 pub use store::{CommandError, DbError, PlaceSuccessionRecord, Store, StoredEvent};

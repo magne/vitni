@@ -440,6 +440,7 @@ fn confirm_labels(chrome: &Chrome) -> BulkConfirmLabels {
         body: chrome.bulk_import_confirm_body("family", 3),
         dataset: chrome.bulk_import_dataset_label(),
         dataset_placeholder: chrome.bulk_import_dataset_placeholder(),
+        later_export: chrome.bulk_import_dataset_later_export(),
         cancel: chrome.bulk_import_confirm_cancel(),
         run: chrome.bulk_import_confirm_run(),
         dismiss: chrome.dismiss(),
@@ -498,6 +499,38 @@ fn no_datasets_view() -> Element {
             oncancel: |()| {},
             onrun: |_: String| {},
         }
+    }
+}
+
+fn dataset_new_view() -> Element {
+    let chrome = Chrome::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let dataset = use_signal(|| "new".to_owned());
+    rsx! {
+        BulkConfirmDialog {
+            labels: confirm_labels(&chrome),
+            datasets: dataset_choices(&chrome),
+            dataset,
+            oncancel: |()| {},
+            onrun: |_: String| {},
+        }
+    }
+}
+
+const LATER_EXPORT_NOTE: &str = "Records already imported from this tree are updated, not duplicated.";
+
+#[test]
+fn choosing_a_later_export_says_its_records_are_updated_not_duplicated() {
+    let html = render(dataset_chosen_view);
+    assert!(
+        html.contains(&format!(r#"<p class="muted">{LATER_EXPORT_NOTE}</p>"#)),
+        "the note under the select: {html}"
+    );
+    for (view, why) in [
+        (dataset_unchosen_view as fn() -> Element, "no tree chosen"),
+        (dataset_new_view, "a different tree"),
+        (no_datasets_view, "no earlier imports"),
+    ] {
+        assert!(!render(view).contains(LATER_EXPORT_NOTE), "no note for {why}");
     }
 }
 

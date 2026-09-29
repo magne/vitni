@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use cqrs_es::persist::{EventUpcaster, GenericQuery, PersistedEventStore, QueryReplay};
-use cqrs_es::{Aggregate, CqrsFramework, View};
+use cqrs_es::{Aggregate, AggregateContext as _, CqrsFramework, EventStore as _, View};
 use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool, sqlite_cqrs};
 use sqlx::{Pool, Sqlite};
 
@@ -67,6 +67,20 @@ macro_rules! sqlite_wire_place_indexes {
     };
 }
 
+/// The `Services` an aggregate's `handle` needs outside its framework, matching the registry
+/// `wiring` column — for [`SqliteStore`]'s previews.
+macro_rules! sqlite_services {
+    ($pool:expr, (plain)) => {
+        ()
+    };
+    ($pool:expr, (resolver $resolver:path)) => {
+        <$resolver>::new(SqliteRefStore::shared($pool.clone()))
+    };
+    ($pool:expr, (event $resolver:path)) => {
+        <$resolver>::new(SqliteRefStore::shared($pool.clone()))
+    };
+}
+
 /// Selects the read-model lookup for `find_*`, keyed by the registry `find_param` column: Tag and
 /// `ImportRun` are keyed by their own id (`find_view_by_id`), every other aggregate by its `human_id`.
 macro_rules! sqlite_find_query {
@@ -85,7 +99,7 @@ macro_rules! sqlite_find_query {
 /// `open()` wiring, the command/find/list methods, and the rebuild loop. The projection-table
 /// constants come from [`crate::tables`].
 macro_rules! sqlite_store {
-    ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $execute:ident, $find:ident, $find_param:ident, $list:ident, $wiring:tt, $upcasters:expr,)),+ $(,)?) => {
+    ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $execute:ident, $find:ident, $find_param:ident, $list:ident, $preview:ident, $wiring:tt, $upcasters:expr,)),+ $(,)?) => {
         /// A SQLite-backed store: one command framework per aggregate, sharing the read-model pool.
         pub(crate) struct SqliteStore {
             $(
@@ -120,16 +134,26 @@ macro_rules! sqlite_store {
                 crate::place_succession_index::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating place succession index: {e}")))?;
+                // The record origins index (ADR 0037 §4) is fed by every aggregate. A workspace
+                // whose log predates it gets it filled from that log below.
+                let origins_are_new = crate::record_origins::sqlite::create_tables(&pool)
+                    .await
+                    .map_err(|e| DbError::Backend(format!("creating record origins index: {e}")))?;
                 $(
                     let repo = Arc::new(SqliteViewRepository::<$View, $State>::new($table_const, pool.clone()));
                     let $snake = sqlite_open_cqrs!(pool, repo, $wiring);
-                    let $snake = sqlite_wire_place_indexes!($snake, pool, $snake);
+                    let $snake = sqlite_wire_place_indexes!($snake, pool, $snake).append_query(Box::new(
+                        crate::record_origins::sqlite::RecordOriginsQuery::new(pool.clone(), $table_const),
+                    ));
                     if stale_tables.contains(&$table_const) {
                         tracing::info!(
                             table = $table_const,
                             "projection table predated the human_id column; rebuilding from the event log"
                         );
                         rebuild_view::<$State, $View>(&pool, $table_const, $upcasters).await?;
+                    }
+                    if origins_are_new {
+                        replay_record_origins::<$State>(&pool, $table_const, $upcasters).await?;
                     }
                 )+
                 Ok(Self { $($snake,)+ pool })
@@ -151,6 +175,26 @@ macro_rules! sqlite_store {
                 pub(crate) async fn $list(&self) -> Result<Vec<$View>, DbError> {
                     sqlite_query::list_views(&self.pool, $table_const).await
                 }
+
+                /// The events `command` would emit against the aggregate's current state, without
+                /// committing them: the aggregate is loaded and handled exactly as `execute` does.
+                pub(crate) async fn $preview(
+                    &self,
+                    aggregate_id: &str,
+                    command: $Cmd,
+                ) -> Result<Vec<<$State as Aggregate>::Event>, CommandError<$Err>> {
+                    let store = PersistedEventStore::<SqliteEventRepository, $State>::new_event_store(SqliteEventRepository::new(self.pool.clone()))
+                        .with_upcasters($upcasters);
+                    let mut context = store.load_aggregate(aggregate_id).await.map_err(map_aggregate_error)?;
+                    let services: <$State as Aggregate>::Services = sqlite_services!(self.pool, $wiring);
+                    let sink = cqrs_es::event_sink::EventSink::default();
+                    context
+                        .aggregate()
+                        .handle(command, &services, &sink)
+                        .await
+                        .map_err(CommandError::Rejected)?;
+                    Ok(sink.collect().await)
+                }
             )+
 
             /// Rebuilds every projection from the event log (ADR 0010): each view table is cleared,
@@ -166,6 +210,12 @@ macro_rules! sqlite_store {
                 // above, not replayed from raw events themselves.
                 crate::geo_index::rebuild_index(&self.pool).await?;
                 crate::place_succession_index::sqlite::rebuild_index(&self.pool).await?;
+                // The record origins index is replayed from the raw events, after the projections
+                // its `live` flags are read from.
+                crate::record_origins::sqlite::clear_table(&self.pool).await?;
+                $(
+                    replay_record_origins::<$State>(&self.pool, $table_const, $upcasters).await?;
+                )+
                 Ok(())
             }
         }
@@ -251,6 +301,10 @@ impl SqliteStore {
         Ok(rows)
     }
 
+    pub(crate) async fn human_id_of(&self, table: &str, view_id: &str) -> Result<Option<String>, DbError> {
+        sqlite_query::human_id_of(&self.pool, table, view_id).await
+    }
+
     pub(crate) async fn human_id_index(&self, table: &str) -> Result<Vec<(String, String)>, DbError> {
         sqlite_query::human_id_index(&self.pool, table).await
     }
@@ -287,6 +341,34 @@ impl SqliteStore {
         place_id: &str,
     ) -> Result<Vec<crate::store::PlaceSuccessionRecord>, DbError> {
         crate::place_succession_index::sqlite::predecessors(&self.pool, place_id).await
+    }
+
+    /// Every record origins row for `(dataset, record, item)` under `field_key` (ADR 0037 §4).
+    pub(crate) async fn origin_rows(
+        &self,
+        dataset: &str,
+        record: &str,
+        item: Option<&str>,
+        field_key: &str,
+    ) -> Result<Vec<crate::record_origins::OriginRow>, DbError> {
+        crate::record_origins::sqlite::rows(&self.pool, dataset, record, item, field_key).await
+    }
+
+    /// The aggregate of `kind` that `(dataset, record, item)` resolves onto, if any (ADR 0037 §4).
+    pub(crate) async fn resolve_origin(
+        &self,
+        dataset: &str,
+        record: &str,
+        item: Option<&str>,
+        kind: &str,
+    ) -> Result<Option<crate::record_origins::OriginResolution>, DbError> {
+        crate::record_origins::sqlite::resolve(&self.pool, dataset, record, item, kind).await
+    }
+
+    /// Every record origins row, as text columns in a stable order — for comparing a live index to
+    /// a rebuilt one.
+    pub(crate) async fn record_origins_dump(&self) -> Result<Vec<Vec<String>>, DbError> {
+        crate::record_origins::sqlite::all_rows(&self.pool).await
     }
 
     /// Every research note whose `subjects` set names the subject serialized under `subject_kind`
@@ -328,6 +410,26 @@ async fn migrate_sqlite_view_tables(pool: &Pool<Sqlite>) -> Result<Vec<&'static 
             .map_err(|e| DbError::Backend(format!("creating human_id indexes for {table}: {e}")))?;
     }
     Ok(stale_tables)
+}
+
+/// Replays aggregate `A`'s full event log through the record origins index (ADR 0037 §4), whose
+/// rows are derived from the events themselves; `view_table` is `A`'s projection, which the index
+/// reads `live` flags from.
+async fn replay_record_origins<A>(
+    pool: &Pool<Sqlite>,
+    view_table: &'static str,
+    upcasters: Vec<Box<dyn EventUpcaster>>,
+) -> Result<(), DbError>
+where
+    A: Aggregate,
+    crate::record_origins::sqlite::RecordOriginsQuery: cqrs_es::Query<A>,
+{
+    let query = crate::record_origins::sqlite::RecordOriginsQuery::new(pool.clone(), view_table);
+    QueryReplay::new(SqliteEventRepository::new(pool.clone()), query)
+        .with_upcasters(upcasters)
+        .replay_all()
+        .await
+        .map_err(|e| DbError::Backend(format!("rebuilding record origins from {view_table}: {e}")))
 }
 
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).

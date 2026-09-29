@@ -390,7 +390,9 @@ researcher/rationale/surety, made mandatory by the architecture rather than opti
 - optional `evidence_analysis` — the *Evidence Explained* axes for this claim.
 - optional `origin` — **where an imported claim was read from** (ADR 0037 §1): a `RecordOrigin` of
   the dataset, the record's id within it, the entity within that record (`item`, when a record
-  yields several), an optional digest of its incoming fields, and the import run that wrote it (§11).
+  yields several), the digest of what it asserts, and the import run that wrote it (§11). The digest
+  is SHA-256 over the JSON encoding of the assertion's event bodies (its corrections excluded),
+  computed by `vitni-app` when the write is made, not by the importer.
   Every assertion an importer derives from a record carries one; a claim made at the keyboard carries
   none. It is internal provenance: in the log and so in every backup, never in an export.
 
@@ -622,8 +624,33 @@ around evidence and provenance.
    global, while `gedcom:<uuid>` and `gramps:<uuid>` each name one file lineage — the same tree
    re-exported over time — which the operator picks or declares on import. Datasets are a projection
    over runs, labelled by the earliest. File-local keys (a GEDCOM xref, a Gramps handle) are origin
-   records; `ExternalId` is for identifiers that mean something outside the file. Until re-import
-   resolves by origin, the importers still also write the xref and Gramps id as `ExternalId`s.
+   records; `ExternalId` is for identifiers that mean something outside the file. The importers still
+   also write the xref and Gramps id as `ExternalId`s, until #389 drops them.
+
+5. **Re-import resolves by origin (ADR 0037 §4).** The `record_origins` projection index (both
+   engines, rebuilt by replay) holds one row per imported event: its origin, the aggregate it landed
+   on, its `AssertionId`, a **field key**, the digest of its body, when it was asserted, and whether it
+   is still live (neither retracted nor superseded). The field key is derived from the event, never
+   stored in it: `<aggregate>.<EventType>`, with the fact type appended for a person fact
+   (`person.FactAsserted.Occupation`); a creating event is `<aggregate>.created`, and an `ItemResolved`
+   files `<kind>.resolved` under its payload's record, so a recorded resolution resolves the same item
+   in later runs. Field key and digest are computed in `vitni-db` (`indexed_field`), next to the index
+   that stores them, and `vitni-app` calls the same function. On import:
+   - every `create-*` under an origin first looks the item up, and an item an earlier run of the same
+     dataset created from resolves onto that aggregate instead of creating another (Place and Source
+     included);
+   - every write is previewed before it is made (`Store::preview_<aggregate>`), and one whose field
+     already carries a live row with the same digest, from the same item, is not written;
+   - a changed value in a single-valued field (an event's date, a source's title) supersedes the
+     imported one when the file's export date is at or after it and after the field's current value,
+     whoever set it (ADR 0029 §1). It is left alone when the file is older or undated, and when the
+     user already retracted or superseded that imported value;
+   - a new value in a list-valued field (a name, a fact) is added.
+
+   An import run is started by its first write that goes ahead, so re-importing an unchanged file
+   writes no events at all, not even a run. A record resolved onto an aggregate another dataset made
+   (by `ExternalId`, or by a recorded resolution) is not that dataset's to fill: the importers write a
+   record's owned contents only for their own dataset's records.
 
 The upshot: external APIs add the `ExternalId` value object and exercise the `Agent` generalisation,
 but the evidence/conclusion architecture absorbs imports and machine matches without new structure.

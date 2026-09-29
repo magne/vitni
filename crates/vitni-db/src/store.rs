@@ -452,6 +452,35 @@ impl Store {
         }
     }
 
+    /// The `human_id` of the `aggregate_type` instance `aggregate_id`, if it exists and has one (Tag
+    /// and `ImportRun` have none).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError::Malformed`] if `aggregate_type` is not one of the 14 aggregates, [`DbError`] on a
+    /// read failure, or [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn human_id_of(&self, aggregate_type: &str, aggregate_id: &str) -> Result<Option<String>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            let table = Self::view_table(aggregate_type)?;
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.human_id_of(table, aggregate_id).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.human_id_of(table, aggregate_id).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = (aggregate_type, aggregate_id);
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
     /// Counts the projected instances of `aggregate_type` (the per-category record count).
     ///
     /// # Errors
@@ -586,6 +615,66 @@ impl Store {
         }
     }
 
+    /// Every record origins row for `(dataset, record, item)` under `field_key`, oldest first
+    /// (ADR 0037 §4): what earlier imports asserted into that field from that item.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn origin_rows(
+        &self,
+        dataset: &str,
+        record: &str,
+        item: Option<&str>,
+        field_key: &str,
+    ) -> Result<Vec<crate::record_origins::OriginRow>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.origin_rows(dataset, record, item, field_key).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.origin_rows(dataset, record, item, field_key).await,
+        }
+    }
+
+    /// The aggregate of `kind` that `(dataset, record, item)` resolves onto (ADR 0037 §4): the one an
+    /// earlier import created from it, or the one a run recorded resolving it onto.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn resolve_origin(
+        &self,
+        dataset: &str,
+        record: &str,
+        item: Option<&str>,
+        kind: &str,
+    ) -> Result<Option<crate::record_origins::OriginResolution>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.resolve_origin(dataset, record, item, kind).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.resolve_origin(dataset, record, item, kind).await,
+        }
+    }
+
+    /// Every record origins row as text columns, in an order independent of insertion — for tests
+    /// comparing a live index with a rebuilt one.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn record_origins_dump(&self) -> Result<Vec<Vec<String>>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.record_origins_dump().await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.record_origins_dump().await,
+        }
+    }
+
     /// Every research note whose `subjects` set names `subject` — "which arguments exist about this
     /// Person/Family/Event/Place" (ADR 0028 §5), via the reverse-by-subject index over the
     /// `research_note_view` projection.
@@ -636,7 +725,7 @@ fn subject_key_value(subject: vitni_core::research_note::subject::SubjectRef) ->
 /// Generates the per-aggregate command/find/list facade methods, each delegating to the active
 /// backend or reporting `Unsupported` when no backend is compiled in.
 macro_rules! store_methods {
-    ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $execute:ident, $find:ident, $find_param:ident, $list:ident, $wiring:tt, $upcasters:expr,)),+ $(,)?) => {
+    ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $execute:ident, $find:ident, $find_param:ident, $list:ident, $preview:ident, $wiring:tt, $upcasters:expr,)),+ $(,)?) => {
         impl Store {
             $(
                 #[doc = concat!("Executes one ", stringify!($snake), " command against the aggregate instance `aggregate_id`.")]
@@ -683,6 +772,35 @@ macro_rules! store_methods {
                     {
                         let _ = $find_param;
                         Err(DbError::Unsupported("no backend compiled in".to_owned()))
+                    }
+                }
+
+                #[doc = concat!("The events one ", stringify!($snake), " command would emit against `aggregate_id`, without committing them.")]
+                ///
+                /// # Errors
+                ///
+                /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on
+                /// an infrastructure failure.
+                pub async fn $preview(
+                    &self,
+                    aggregate_id: &str,
+                    command: $Cmd,
+                ) -> Result<Vec<<$State as cqrs_es::Aggregate>::Event>, CommandError<$Err>> {
+                    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+                    {
+                        match &self.backend {
+                            #[cfg(feature = "sqlite")]
+                            Backend::Sqlite(s) => s.$preview(aggregate_id, command).await,
+                            #[cfg(feature = "postgres")]
+                            Backend::Postgres(p) => p.$preview(aggregate_id, command).await,
+                        }
+                    }
+                    #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+                    {
+                        let _ = (aggregate_id, command);
+                        Err(CommandError::Store(DbError::Unsupported(
+                            "no backend compiled in".to_owned(),
+                        )))
                     }
                 }
 

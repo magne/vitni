@@ -1144,6 +1144,42 @@ pub(crate) async fn assertion_occurred_at(
     Ok(None)
 }
 
+/// The `occurred_at` of the most recent uncorrected assertion into the field `field_key` (see
+/// `vitni_db::field_key`) of `aggregate_type`'s instance `aggregate_id`, whoever made it — the
+/// workspace's current value of a single-valued field, which a re-import's timestamp rule compares
+/// the file's export date against (ADR 0029 §1). `None` when no live assertion sets the field.
+///
+/// # Errors
+///
+/// [`AppError`] on a store/parse failure.
+pub(crate) async fn field_asserted_at(
+    store: &Store,
+    aggregate_type: &str,
+    aggregate_id: &str,
+    field_key: &str,
+) -> Result<Option<Timestamp>, AppError> {
+    let events = store.read_aggregate_events(aggregate_type, aggregate_id).await?;
+    let corrected = retracted_targets(&events)?;
+    let mut latest = None;
+    for event in &events {
+        let value: serde_json::Value = serde_json::from_str(&event.payload).map_err(|e| {
+            AppError::Db(DbError::Backend(format!(
+                "decoding {} event: {e}",
+                event.aggregate_type
+            )))
+        })?;
+        if vitni_db::field_key(aggregate_type, &value).as_deref() != Some(field_key) {
+            continue;
+        }
+        let header = parse_header(event)?;
+        if corrected.contains(&header.assertion_id.to_string()) {
+            continue;
+        }
+        latest = Some(header.context.occurred_at);
+    }
+    Ok(latest)
+}
+
 /// Collects the `AssertionId`s targeted by any retraction or supersession in the stream.
 fn retracted_targets(events: &[StoredEvent]) -> Result<BTreeSet<String>, AppError> {
     let mut targets = BTreeSet::new();

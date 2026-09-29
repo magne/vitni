@@ -300,6 +300,17 @@ pub(crate) async fn read_recent_events(pool: &Pool<Postgres>, limit: u32) -> Res
     Ok(rows.iter().map(stored_event).collect())
 }
 
+/// The `human_id` of the view `view_id` in `table`, if it exists and has one.
+pub(crate) async fn human_id_of(pool: &Pool<Postgres>, table: &str, view_id: &str) -> Result<Option<String>, DbError> {
+    let sql = format!("SELECT human_id FROM {table} WHERE view_id = $1");
+    let row = sqlx::query(&sql)
+        .bind(view_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+    Ok(row.and_then(|row| row.get::<Option<String>, _>("human_id")))
+}
+
 /// Maps each `view_id` in `table` to its `human_id`, skipping rows without one — the Postgres twin
 /// of [`crate::sqlite_query::human_id_index`].
 pub(crate) async fn human_id_index(pool: &Pool<Postgres>, table: &str) -> Result<Vec<(String, String)>, DbError> {

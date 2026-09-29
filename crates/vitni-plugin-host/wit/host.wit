@@ -492,9 +492,12 @@ interface types {
         item: option<string>,
     }
 
-    // The outcome of a resolve-or-create command: the aggregate's human id, and whether it was newly
-    // created (false = an existing aggregate was resolved by external id). An importer uses `created`
-    // to attach owned records (events, places) only on first import, keeping re-import idempotent.
+    // The outcome of a resolve-or-create command: the aggregate's human id, and whether the record is
+    // this dataset's own — newly created, or created from the same origin by an earlier run of the same
+    // dataset (ADR 0037 §4). `false` means the record resolved onto an aggregate another dataset or the
+    // user made (by external id, or by a resolution an earlier run recorded). An importer uses
+    // `created` to write a record's owned contents (events, citations, notes) only when they are its
+    // dataset's to write; the host makes whatever of them is already on record a no-op.
     record import-result {
         human-id: string,
         created: bool,
@@ -750,7 +753,11 @@ interface commands {
     // Sets the source record every later write in this import is stamped with (ADR 0037 §1), until the
     // next call; `none` clears it. During an import run a write with no origin set is refused with
     // `invalid-input`. Outside a run (an invocation the frontend started without one) the call has no
-    // effect.
+    // effect. During a run the origin is also what re-import resolves by (ADR 0037 §4): every
+    // `create-*` under an origin an earlier run of the same dataset created from returns that
+    // aggregate instead, a write that asserts what the same origin already asserted is a no-op, and a
+    // changed single-valued field is reconciled by the file's export date (ADR 0029). An unchanged
+    // file therefore writes nothing.
     set-origin: func(origin: option<origin-key>) -> result<_, capability-error>;
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
     // person is returned (`created = false`) and the name is asserted only if not already present

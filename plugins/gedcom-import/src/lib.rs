@@ -88,8 +88,10 @@ impl Guest for Importer {
                     commands::assert_sex(&person.human_id, convert::sex_to_wit(sex))
                         .map_err(|error| format!("assert-sex failed: {error:?}"))?;
                 }
-                // Every other owned attribute/event is written only on first creation, so re-import
-                // stays additive for them (true merge for the rest is deferred — ADR 0029 §4).
+                // Every other owned attribute/event is written only when the person is this dataset's
+                // own: new, or created by an earlier run of the same dataset, where the host makes
+                // what is already on record a no-op (ADR 0037 §4). A person another dataset made keeps
+                // that dataset's contents.
                 if person.created {
                     // The first NAME became the primary above; a second-or-later NAME is a distinct
                     // assertion, not a clobber (data-model §17 round-trip gaps).
