@@ -111,6 +111,8 @@ pub struct BulkConfirmLabels {
     pub dataset: String,
     /// The select's first, unchosen entry.
     pub dataset_placeholder: String,
+    /// The note shown once an earlier tree is chosen: its records are updated, not duplicated.
+    pub later_export: String,
     /// The Cancel action label.
     pub cancel: String,
     /// The "Import anyway" action label.
@@ -487,6 +489,7 @@ fn confirm_modal(
         body,
         dataset: chrome.bulk_import_dataset_label(),
         dataset_placeholder: chrome.bulk_import_dataset_placeholder(),
+        later_export: chrome.bulk_import_dataset_later_export(),
         cancel: chrome.bulk_import_confirm_cancel(),
         run: chrome.bulk_import_confirm_run(),
         dismiss: chrome.dismiss(),
@@ -533,6 +536,7 @@ pub fn BulkConfirmDialog(
     let needs_choice = !datasets.is_empty();
     let chosen = dataset();
     let blocked = needs_choice && chosen.is_empty();
+    let later_export = needs_choice && !chosen.is_empty() && chosen != NEW_DATASET;
     let mut options = Vec::with_capacity(datasets.len() + 1);
     if needs_choice {
         options.push(SelectChoice {
@@ -569,6 +573,9 @@ pub fn BulkConfirmDialog(
                     options,
                     onchange: move |event: FormEvent| dataset.set(event.value()),
                 }
+            }
+            if later_export {
+                p { class: "muted", "{labels.later_export}" }
             }
         }
     }
