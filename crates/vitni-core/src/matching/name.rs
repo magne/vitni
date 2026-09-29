@@ -37,12 +37,50 @@ pub(crate) fn fold(text: &str) -> String {
 #[derive(Debug, Clone)]
 pub(crate) struct Applied<'a> {
     packs: Vec<&'a CulturePack>,
+    /// Every applied given-name equivalence class, its members normalized.
+    classes: Vec<Vec<String>>,
+    /// Per patronymic suffix list (male, then female, pack by pack): the normalized canonical suffix
+    /// and its normalized variants, longest first.
+    patronymics: Vec<(String, Vec<String>)>,
+    /// The normalized definite-article endings of every residence-name culture.
+    definite_suffixes: Vec<String>,
 }
 
 impl<'a> Applied<'a> {
     /// The rules of `packs`, applied in the order given.
     pub fn new(packs: Vec<&'a CulturePack>) -> Self {
-        Self { packs }
+        let mut applied = Self {
+            packs,
+            classes: Vec::new(),
+            patronymics: Vec::new(),
+            definite_suffixes: Vec::new(),
+        };
+        let (mut classes, mut patronymics, mut definite_suffixes) = (Vec::new(), Vec::new(), Vec::new());
+        for pack in &applied.packs {
+            for class in pack.given_classes() {
+                classes.push(class.iter().map(|name| applied.normalize_word(name)).collect());
+            }
+            let system = pack.surnames();
+            if system.patronymic {
+                for suffixes in [&system.male_suffixes, &system.female_suffixes] {
+                    let Some(first) = suffixes.first() else {
+                        continue;
+                    };
+                    let mut variants: Vec<String> = suffixes.iter().map(|s| applied.normalize_word(s)).collect();
+                    variants.sort_by_key(|variant| std::cmp::Reverse(variant.len()));
+                    patronymics.push((applied.normalize_word(first), variants));
+                }
+            }
+            if system.residence {
+                for suffix in &system.definite_suffixes {
+                    definite_suffixes.push(applied.normalize_word(suffix));
+                }
+            }
+        }
+        applied.classes = classes;
+        applied.patronymics = patronymics;
+        applied.definite_suffixes = definite_suffixes;
+        applied
     }
 
     /// Whether any applied culture treats surnames as patronymic or residence names, which makes a
@@ -111,15 +149,9 @@ impl<'a> Applied<'a> {
 
     /// Whether two normalized tokens share a given-name equivalence class in any applied pack.
     fn same_class(&self, x: &str, y: &str) -> bool {
-        for pack in &self.packs {
-            for class in pack.given_classes() {
-                let members: Vec<String> = class.iter().map(|name| self.normalize_word(name)).collect();
-                if members.iter().any(|m| m == x) && members.iter().any(|m| m == y) {
-                    return true;
-                }
-            }
-        }
-        false
+        self.classes
+            .iter()
+            .any(|members| members.iter().any(|m| m == x) && members.iter().any(|m| m == y))
     }
 
     /// The similarity in `0..=1` of two surnames, or `None` when either is empty.
@@ -147,23 +179,12 @@ impl<'a> Applied<'a> {
 
     /// `token` with its patronymic suffix replaced by the canonical suffix of its gender.
     fn canonical_patronymic(&self, token: &str) -> Option<String> {
-        for pack in &self.packs {
-            let system = pack.surnames();
-            if !system.patronymic {
-                continue;
-            }
-            for suffixes in [&system.male_suffixes, &system.female_suffixes] {
-                let Some(canonical) = suffixes.first().map(|first| self.normalize_word(first)) else {
-                    continue;
-                };
-                let mut variants: Vec<String> = suffixes.iter().map(|s| self.normalize_word(s)).collect();
-                variants.sort_by_key(|variant| std::cmp::Reverse(variant.len()));
-                for variant in variants {
-                    if let Some(stem) = token.strip_suffix(variant.as_str())
-                        && stem.chars().count() >= MIN_STEM
-                    {
-                        return Some(format!("{stem}{canonical}"));
-                    }
+        for (canonical, variants) in &self.patronymics {
+            for variant in variants {
+                if let Some(stem) = token.strip_suffix(variant.as_str())
+                    && stem.chars().count() >= MIN_STEM
+                {
+                    return Some(format!("{stem}{canonical}"));
                 }
             }
         }
@@ -172,19 +193,9 @@ impl<'a> Applied<'a> {
 
     /// Whether two residence names differ only by a definite-article ending.
     fn same_residence(&self, a: &str, b: &str) -> bool {
-        for pack in &self.packs {
-            if !pack.surnames().residence {
-                continue;
-            }
-            for suffix in &pack.surnames().definite_suffixes {
-                let suffix = self.normalize_word(suffix);
-                let strip = |s: &'_ str| s.strip_suffix(suffix.as_str()).map(str::to_owned);
-                if strip(a).as_deref() == Some(b) || strip(b).as_deref() == Some(a) {
-                    return true;
-                }
-            }
-        }
-        false
+        self.definite_suffixes
+            .iter()
+            .any(|suffix| a.strip_suffix(suffix.as_str()) == Some(b) || b.strip_suffix(suffix.as_str()) == Some(a))
     }
 }
 
