@@ -239,9 +239,13 @@ fn calendar_jdn(calendar: Calendar, year: i32, month: u8, day: u8) -> Option<i32
     }
 }
 
+/// The largest year magnitude the engine converts: far past any genealogical date, and small enough
+/// that the day-number arithmetic (and a century of widening) cannot overflow an `i32`.
+const MAX_YEAR: i32 = 1_000_000;
+
 /// The year and month shifted to a March-based year, as the day-number formulas need.
 fn march_based(year: i32, month: u8, day: u8) -> Option<(i32, i32, i32)> {
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+    if !(-MAX_YEAR..=MAX_YEAR).contains(&year) || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
         return None;
     }
     let month = i32::from(month);
@@ -314,6 +318,14 @@ mod tests {
     fn an_out_of_range_month_or_day_has_no_day_number() {
         assert_eq!(gregorian_jdn(1850, 13, 1), None);
         assert_eq!(gregorian_jdn(1850, 1, 0), None);
+    }
+
+    #[test]
+    fn an_absurd_year_has_no_day_number_rather_than_overflowing() {
+        assert_eq!(gregorian_jdn(2_000_000_000, 1, 1), None);
+        assert_eq!(julian_jdn(i32::MIN, 1, 1), None);
+        let absurd = date(Calendar::Gregorian, DateModifier::None(point(i32::MAX, None, None)));
+        assert_eq!(interval(&absurd), None);
     }
 
     #[test]
