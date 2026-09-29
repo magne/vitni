@@ -398,21 +398,23 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   unrelated file therefore resolves its `@I1@` onto the first file's `@I1@` person, and silently attaches
   one person's names and facts to another. *Shape:* ADR 0037 §3. Datasets scope file-local keys, and xrefs
   and Gramps ids become origin records rather than `ExternalId`s: the importers already stamp them as
-  origins (#393) but still write them as `ExternalId`s too. *Needs:* the `record_origins` index
-  (resolve-by-origin), under *Record matching & identity*. Without the index, dropping the xref and Gramps-id `ExternalId`s leaves nothing to resolve
-  a re-import of an xref- or handle-keyed file by, so every re-import would duplicate its people.
+  origins (#393) but still write them as `ExternalId`s too. Re-import now resolves by origin
+  (#394), so the xref and Gramps-id `ExternalId`s can be dropped without a re-import of the same file
+  losing its people.
   *Exit:* a test imports two different files that share `@I1@` and gets two persons. — #389
 - **Source merge/sync reconciliation prerequisite** — `set-source-title`/`set-source-abbrev` WIT verbs,
   GEDCOM `ABBR` / Gramps `<sabbrev>` round-trip, and a field-level `AssertionId` + `occurred_at` read
   path. The ADR 0029 timestamp-gated rule cannot target Source's bibliographic fields
-  (`title`/`author`/`pub_info`/`abbrev`) without them. Resolve-or-create itself (a re-import today
-  duplicates the Source) moves to ADR 0037's origin index, under *Record matching & identity*.
+  (`title`/`author`/`pub_info`/`abbrev`) without them. Resolve-or-create itself is done by origin
+  (#394), and an imported value is now reconciled against the earlier import's assertion, whose id
+  and time `record_origins` holds; a value the user typed has no origin row, so the gap is reconciling
+  against that.
 - **Place merge/sync reconciliation prerequisite** — the same remaining gaps for Place: no WIT verbs for
   most Place fields, and no read path exposing a field's live `AssertionId` **together with** that
   assertion's `occurred_at`, without which the timestamp gate cannot be evaluated at all. Place's dated
   multi-valued fields do have the natural match key `Fact` lacks: the effective-from `date`. See
-  [`research/gis-norway.md`](research/gis-norway.md). Resolve-or-create itself (a re-import today
-  duplicates every place) moves to ADR 0037's origin index, under *Record matching & identity*.
+  [`research/gis-norway.md`](research/gis-norway.md). Resolve-or-create itself is done by origin
+  (#394): a re-import no longer duplicates its places.
 - **Lift `prepare_import_target`** into `vitni-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
 - **No merge/conflict mockup for reconciled fields** — the Phase 10 plan required a merge/conflict view
@@ -458,24 +460,18 @@ in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and imp
 [0041](adr/0041-workspace-backup-and-restore.md) (backup), with the survey in
 [`research/record-matching.md`](research/record-matching.md). The bullets are listed in dependency
 order, and each one's *Needs:* names its prerequisites. The import bug sits under its own area
-above. The milestone opened with backup (#391) and record origins with import runs (#393), which have
-landed. The
-xref-collision bug (#389) follows the index below, because it needs both origins and
-resolve-by-origin. The matching core has no origin prerequisite, so it can start alongside them.
+above. The milestone opened with backup (#391), record origins with import runs (#393) and
+resolve-by-origin (#394), which have landed; the xref-collision bug (#389) needed both, and is
+unblocked. The matching core has no origin prerequisite.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
-- **`record_origins` index and resolve-by-origin for every aggregate** — ADR 0037 §4. The projection
-  runs on SQLite and Postgres and is rebuildable. `field_key` is derived in `vitni-app`. Resolve-or-
-  create by `(dataset, record, item)` or by a recorded `ItemResolved`. A same-digest item is a no-op,
-  and a changed digest reconciles per field (ADR 0029). The importers start computing
-  `RecordOrigin.digest` here: the field exists but stays unset until an item's canonical fields are
-  defined. This closes the Source and Place duplication on re-import. *Exit:* re-importing an unchanged GEDCOM and Gramps file
-  emits zero events, and every aggregate count is unchanged. — #394
 - **Tombstones by origin** — ADR 0037 §4. A value whose same-origin assertion the user retracted is never
   re-asserted by a later run. A different incoming value is still offered. This replaces the old
   *Retraction resurrection blocks recurring imports* bullet: re-asserting a retracted value destroyed
-  editorial judgement under a routine-looking Software agent. *Needs:* the index. *Exit:* retract an
+  editorial judgement under a routine-looking Software agent. Single-valued fields already keep a
+  retraction or correction of an imported value (the origin gate, #394); the list-valued fields (names,
+  facts, citations) do not yet. *Exit:* retract an
   imported occupation, re-import, and the occupation stays retracted. — #395
 - **Matching core: graded comparators and Fellegi–Sunter assessment** — ADR 0038 §1, §3–§6, in
   `vitni_core::matching`. It covers name comparison driven by name-culture packs (the TOML schema,
@@ -544,8 +540,7 @@ does.
   `host-api@0.25.0` adds the `staging` interface (`begin-run`, `submit(record-graph)`) and removes
   the imperative create verbs from the import worlds. `vitni-app` plans every entity as Unchanged,
   Update, Link, Candidates or New, with graph-aware resolution. Commit is dependency-ordered and
-  origin-stamped, with atomic per-aggregate creation, and resumes by re-run. *Needs:* the index and
-  `find_similar`. *Exit:* an interrupted commit finishes on re-run with no duplicates. — #407
+  origin-stamped, with atomic per-aggregate creation, and resumes by re-run. *Needs:* `find_similar`. *Exit:* an interrupted commit finishes on re-run with no duplicates. — #407
 - **Port the GEDCOM and Gramps importers to record graphs** — ADR 0040 §1, ADR 0037 §3. Parsers emit
   graphs with stable item keys and dataset-scoped origins, with places and sources keyed. The dataset
   is proposed from the header fingerprint and key overlap, and the user confirms. The explicit choice

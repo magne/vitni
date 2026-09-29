@@ -593,7 +593,11 @@ in the milestone now passes through that fixture. ✅ Record origins and import 
 §5, §6, #393): `EventContext.origin`, the fourteenth aggregate `ImportRun`, host-api 0.24.0's
 `set-origin` with every importer stamping stable record and item keys, the explicit dataset choice
 (`vitni import --dataset` / `--new-dataset`, the bulk-import confirm), `vitni import-run list|datasets`,
-and one History row per run with its children.
+and one History row per run with its children. ✅ Resolve-by-origin (ADR 0037 §4, #394): the
+`record_origins` index on both engines, every `create-*` resolving an item its dataset already
+imported, writes already on record skipped and changed single-valued fields reconciled by the file's
+export date, so re-importing an unchanged GEDCOM or Gramps file writes no events and duplicates no
+Source or Place.
 
 ## Risk register
 
