@@ -19,12 +19,16 @@ pub fn run(args: &[String]) -> Result<()> {
         _ => bail!("usage: cargo xtask fmt [--check]"),
     };
     let mode: &[&str] = if check { &["--check"] } else { &[] };
+    let plugins = Path::new("plugins");
+    if !plugins.is_dir() {
+        bail!("fmt: no plugins/ directory here; run `cargo xtask fmt` from the repository root");
+    }
 
     let mut failed = Vec::new();
     if util::run_cargo(&[&["fmt", "--all"], mode].concat()).is_err() {
         failed.push("workspace".to_owned());
     }
-    for dir in util::child_dirs(Path::new("plugins"))? {
+    for dir in util::child_dirs(plugins)? {
         let manifest = dir.join("Cargo.toml");
         if !manifest.exists() {
             continue;
