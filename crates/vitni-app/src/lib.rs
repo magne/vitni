@@ -60,11 +60,11 @@ mod origin_gate;
 pub mod pedigree;
 pub mod person;
 pub mod person_change_set;
-pub mod person_profile;
 pub mod place;
 pub mod place_change_set;
 mod place_hierarchy;
 pub mod plugins;
+pub mod profile;
 pub mod repository;
 pub mod repository_change_set;
 pub mod research_note;
@@ -186,7 +186,6 @@ pub use person::{
     update_person_media_ref,
 };
 pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
-pub use person_profile::person_profile;
 pub use place::{
     NewPlace, PlaceEnclosingRef, PlaceGeometryRef, PlaceNameRef, PlaceSuccessionInput, PlaceSuccessionRef,
     PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
@@ -198,6 +197,7 @@ pub use place::{
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
 pub use plugins::{PluginTrust, plugin_layers, resolve_bundle, resolve_bundles};
 pub use plugins::{embedded_plugins_dir, resolve_embedded_plugins_dir};
+pub use profile::{event_profile, family_profile, person_profile};
 pub use repository::{
     NewRepository, RepositoryAddressRef, RepositorySummary, RepositoryUrlRef, add_repository_address,
     add_repository_url, attach_repository_note, create_repository, import_attach_repository_note, list_repositories,

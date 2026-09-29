@@ -1,5 +1,6 @@
-//! The person profile built from the workspace's views (ADR 0038 §2), and the relatives that separate
-//! two same-named people born the same year (§4).
+//! The person, family and event profiles built from the workspace's views (ADR 0038 §2): the relatives
+//! that separate two same-named people born the same year (§4), and one marriage from a church book and
+//! from a GEDCOM file.
 
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
@@ -8,14 +9,17 @@ use vitni_app::{
     AppDefaults, ChildParentRelationship, DateParts, MutationMeta, NewEvent, NewFact, NewParticipation, NewPerson,
     NewPlace, OperatorConfig, PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults, add_child,
     add_partner, assert_event_date, assert_fact, assert_participation, assert_place_enclosed_by, assert_sex,
-    create_event, create_family, create_person, create_place, link_place, person_profile,
+    create_event, create_family, create_person, create_place, event_profile, family_profile, link_family_event,
+    link_place, person_profile,
 };
 use vitni_core::age::Age;
 use vitni_core::date::DateQuality;
 use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, PlaceType, Sex};
 use vitni_core::ids::{AgentId, ImportRunId, PlaceId};
-use vitni_core::matching::profile::{PersonProfile, VitalKind};
-use vitni_core::matching::{DateBasis, Feature, MatchBand, MatchData, MatchSettings, Outcome, assess_persons};
+use vitni_core::matching::profile::{FamilyProfile, PersonProfile, VitalKind};
+use vitni_core::matching::{
+    DateBasis, Feature, MatchBand, MatchData, MatchSettings, Outcome, assess_events, assess_families, assess_persons,
+};
 use vitni_core::origin::{DatasetId, RecordOrigin};
 use vitni_core::provenance::{Agent, AgentKind};
 
@@ -125,7 +129,23 @@ impl Records {
         event_type: EventType,
         (year, place): (i32, Option<&str>),
         participation: NewParticipation,
-    ) {
+    ) -> String {
+        let date = DateParts {
+            year,
+            month: Some(6),
+            day: Some(1),
+        };
+        self.event_on(person, event_type, (date, place), participation).await
+    }
+
+    /// An event of `event_type` on `date`, at `place`, with `person` taking part in `participation`.
+    async fn event_on(
+        &self,
+        person: &str,
+        event_type: EventType,
+        (date, place): (DateParts, Option<&str>),
+        participation: NewParticipation,
+    ) -> String {
         let new = NewEvent {
             human_id: None,
             event_type,
@@ -133,11 +153,6 @@ impl Records {
         let event = create_event(&self.workspace, &self.session, new, Provenance::default(), &[])
             .await
             .expect("create event");
-        let date = DateParts {
-            year,
-            month: Some(6),
-            day: Some(1),
-        };
         assert_event_date(&self.workspace, &self.session, &event, date, MutationMeta::default())
             .await
             .expect("date event");
@@ -146,11 +161,16 @@ impl Records {
                 .await
                 .expect("link place");
         }
+        self.participate(person, &event, participation).await;
+        event
+    }
+
+    async fn participate(&self, person: &str, event: &str, participation: NewParticipation) {
         assert_participation(
             &self.workspace,
             &self.session,
             person,
-            &event,
+            event,
             participation,
             MutationMeta::default(),
         )
@@ -163,18 +183,28 @@ impl Records {
         self.event(person, EventType::Birth, (year, place), primary).await;
     }
 
+    async fn born_on(&self, person: &str, date: DateParts, place: Option<&str>) {
+        let primary = NewParticipation::with_role(ParticipantRole::Primary);
+        self.event_on(person, EventType::Birth, (date, place), primary).await;
+    }
+
     /// A family of `partners` with `children`, each child born to every partner.
-    async fn family(&self, partners: &[&str], children: &[&str]) {
+    async fn family(&self, partners: &[&str], children: &[&str]) -> String {
         let partners: Vec<(&str, ChildParentRelationship)> = partners
             .iter()
             .map(|partner| (*partner, ChildParentRelationship::Birth))
             .collect();
-        self.family_of(&partners, children).await;
+        self.family_of(&partners, children, Provenance::default()).await
     }
 
     /// A family of `partners` with `children`, each child related to each partner as it states.
-    async fn family_of(&self, partners: &[(&str, ChildParentRelationship)], children: &[&str]) {
-        let family = create_family(&self.workspace, &self.session, Provenance::default(), &[])
+    async fn family_of(
+        &self,
+        partners: &[(&str, ChildParentRelationship)],
+        children: &[&str],
+        provenance: Provenance,
+    ) -> String {
+        let family = create_family(&self.workspace, &self.session, provenance, &[])
             .await
             .expect("create family");
         for (partner, _) in partners {
@@ -204,6 +234,7 @@ impl Records {
             .await
             .expect("add child");
         }
+        family
     }
 
     async fn profile(&self, person: &str) -> PersonProfile {
@@ -337,6 +368,7 @@ async fn a_step_father_is_not_a_parent() {
                 (&step_father, ChildParentRelationship::Step),
             ],
             &[&ole],
+            Provenance::default(),
         )
         .await;
     let profile = records.profile(&ole).await;
@@ -433,5 +465,274 @@ async fn an_unknown_person_is_not_found() {
     assert!(
         matches!(error, vitni_app::AppError::PersonNotFound(ref id) if id == "I9999"),
         "{error:?}"
+    );
+}
+
+fn on(year: i32, month: u8, day: u8) -> DateParts {
+    DateParts {
+        year,
+        month: Some(month),
+        day: Some(day),
+    }
+}
+
+fn from(dataset: &str, record: &str, item: &str) -> Provenance {
+    Provenance {
+        origin: Some(RecordOrigin {
+            dataset: DatasetId::global(dataset),
+            record: record.to_owned(),
+            item: Some(item.to_owned()),
+            digest: None,
+            run: ImportRunId::from_uuid(Uuid::from_u128(9)),
+        }),
+        ..Provenance::default()
+    }
+}
+
+fn aged(role: ParticipantRole, years: u16) -> NewParticipation {
+    NewParticipation {
+        age: Some(Age {
+            years: Some(years),
+            ..Age::default()
+        }),
+        ..NewParticipation::with_role(role)
+    }
+}
+
+impl Records {
+    /// The Ringsaker church book's entry for the 1877 marriage: the groom and bride with their ages and
+    /// fathers, all items of one record.
+    async fn church_book(&self, parish: &str) -> String {
+        let entry = |item: &str| from("digitalarkivet", "vi01036389000412", item);
+        let groom = self
+            .person_from("Guldbrand", "Olsen", Sex::Male, entry("person:1"))
+            .await;
+        let bride = self
+            .person_from("Marte", "Pedersdtr.", Sex::Female, entry("person:2"))
+            .await;
+        let groom_father = self.person_from("Ole", "", Sex::Male, entry("person:3")).await;
+        let bride_father = self.person_from("Peder", "", Sex::Male, entry("person:4")).await;
+        self.family(&[&groom_father], &[&groom]).await;
+        self.family(&[&bride_father], &[&bride]).await;
+        let wedding = self
+            .event_on(
+                &groom,
+                EventType::Marriage,
+                (on(1877, 10, 14), Some(parish)),
+                aged(ParticipantRole::Groom, 27),
+            )
+            .await;
+        self.participate(&bride, &wedding, aged(ParticipantRole::Bride, 24))
+            .await;
+        let couple = [
+            (groom.as_str(), ChildParentRelationship::Birth),
+            (bride.as_str(), ChildParentRelationship::Birth),
+        ];
+        let family = self.family_of(&couple, &[], entry("family:1")).await;
+        self.link_marriage(&family, &wedding).await;
+        family
+    }
+
+    /// The same marriage in a GEDCOM file: exact births in the parish, the partners as the marriage's
+    /// primary participants.
+    async fn gedcom(&self, parish: &str) -> String {
+        let record = |xref: &str| from("gedcom:3f2a", xref, "");
+        let husband = self.person_from("Gulbrand", "Olsøn", Sex::Male, record("@I1@")).await;
+        self.born_on(&husband, on(1850, 3, 4), Some(parish)).await;
+        let wife = self
+            .person_from("Marthe", "Pedersdatter", Sex::Female, record("@I2@"))
+            .await;
+        self.born_on(&wife, on(1853, 5, 2), Some(parish)).await;
+        let primary = || NewParticipation::with_role(ParticipantRole::Primary);
+        let wedding = self
+            .event_on(
+                &husband,
+                EventType::Marriage,
+                (on(1877, 10, 14), Some(parish)),
+                primary(),
+            )
+            .await;
+        self.participate(&wife, &wedding, primary()).await;
+        let family = self.family(&[&husband, &wife], &[]).await;
+        self.link_marriage(&family, &wedding).await;
+        family
+    }
+
+    async fn link_marriage(&self, family: &str, event: &str) {
+        link_family_event(&self.workspace, &self.session, family, event, MutationMeta::default())
+            .await
+            .expect("link marriage");
+    }
+
+    async fn family_profile(&self, family: &str) -> FamilyProfile {
+        family_profile(&self.workspace, family).await.expect("family profile")
+    }
+}
+
+#[tokio::test]
+async fn one_marriage_from_a_church_book_and_a_gedcom_file_is_probable() {
+    let records = Records::new().await;
+    let norge = records.place("Norge", PlaceType::Country, None).await;
+    let parish = records.place("Ringsaker", PlaceType::Parish, Some(&norge)).await;
+    let church = records.family_profile(&records.church_book(&parish).await).await;
+    let gedcom = records.family_profile(&records.gedcom(&parish).await).await;
+    let data = MatchData::embedded().expect("embedded match data");
+    let assessment = assess_families(&church, &gedcom, &data, &MatchSettings::default());
+    assert_eq!(assessment.band, MatchBand::Probable, "{assessment:#?}");
+    assert_eq!(assessment.parts.len(), 2, "{assessment:#?}");
+    let marriage = assessment
+        .features
+        .iter()
+        .find(|f| f.feature == Feature::Marriage)
+        .expect("marriage compared");
+    assert_eq!(marriage.outcome, Outcome::Agree);
+
+    let (church_event, gedcom_event) = (
+        church.marriage.expect("church-book marriage"),
+        gedcom.marriage.expect("GEDCOM marriage"),
+    );
+    let events = assess_events(&church_event, &gedcom_event, &data, &MatchSettings::default());
+    assert_eq!(events.band, MatchBand::Probable, "{events:#?}");
+}
+
+#[tokio::test]
+async fn the_family_profile_carries_partners_children_and_the_marriage() {
+    let records = Records::new().await;
+    let norge = records.place("Norge", PlaceType::Country, None).await;
+    let parish = records.place("Ringsaker", PlaceType::Parish, Some(&norge)).await;
+    let family = records.church_book(&parish).await;
+    let child = records.person("Anne", "Guldbrandsdatter", Sex::Female).await;
+    records.born(&child, 1878, Some(&parish)).await;
+    add_child(
+        &records.workspace,
+        &records.session,
+        &family,
+        &child,
+        Vec::new(),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("add child");
+    let profile = records.family_profile(&family).await;
+
+    let given: Vec<Option<&str>> = profile.partners.iter().map(|p| p.names[0].given.as_deref()).collect();
+    assert_eq!(given, [Some("Guldbrand"), Some("Marte")]);
+    for partner in &profile.partners {
+        assert!(partner.partners.is_empty(), "the family compares partners itself");
+        assert!(partner.children.is_empty(), "the family compares children itself");
+        assert_eq!(partner.parents.len(), 1, "a partner keeps their father");
+        assert_eq!(partner.vitals[0].basis, DateBasis::FromAge);
+    }
+    let groom_origins: Vec<Option<&str>> = profile.partners[0].origins.iter().map(|o| o.item.as_deref()).collect();
+    assert_eq!(groom_origins, [Some("person:1")]);
+    let children: Vec<Option<&str>> = profile.children.iter().map(|c| c.names[0].given.as_deref()).collect();
+    assert_eq!(children, [Some("Anne")]);
+    assert!(profile.children[0].birth.is_some());
+    let origins: Vec<Option<&str>> = profile.origins.iter().map(|o| o.item.as_deref()).collect();
+    assert_eq!(origins, [Some("family:1")]);
+
+    let marriage = profile.marriage.expect("the linked marriage");
+    assert_eq!(marriage.event_type, Some(EventType::Marriage));
+    assert_eq!(marriage.place.and_then(|p| p.country).as_deref(), Some("Norge"));
+    let roles: Vec<(ParticipantRole, Option<&str>)> = marriage
+        .participants
+        .iter()
+        .map(|p| (p.role.clone(), p.person.names[0].given.as_deref()))
+        .collect();
+    assert_eq!(
+        roles,
+        [
+            (ParticipantRole::Groom, Some("Guldbrand")),
+            (ParticipantRole::Bride, Some("Marte"))
+        ]
+    );
+}
+
+#[tokio::test]
+async fn the_event_profile_carries_type_date_place_and_participants() {
+    let records = Records::new().await;
+    let norge = records.place("Norge", PlaceType::Country, None).await;
+    let parish = records.place("Ringsaker", PlaceType::Parish, Some(&norge)).await;
+    let ole = records.person("Ole", "Olsen", Sex::Male).await;
+    records.born(&ole, 1850, None).await;
+    let census = records
+        .event(
+            &ole,
+            EventType::Census,
+            (1865, Some(&parish)),
+            aged(ParticipantRole::Primary, 15),
+        )
+        .await;
+    let neighbour = records.person("Anders", "Haugen", Sex::Male).await;
+    records
+        .participate(
+            &neighbour,
+            &census,
+            NewParticipation::with_role(ParticipantRole::Neighbour),
+        )
+        .await;
+    let origin = from("digitalarkivet", "bf01036389000123", "event:1");
+    let recorded = create_event(
+        &records.workspace,
+        &records.session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Census,
+        },
+        origin,
+        &[],
+    )
+    .await
+    .expect("create event");
+
+    let profile = event_profile(&records.workspace, &census).await.expect("event profile");
+    assert_eq!(profile.event_type, Some(EventType::Census));
+    let year = profile.date.as_ref().and_then(vitni_core::matching::date::year);
+    assert_eq!(year, Some(1865));
+    let place = profile.place.expect("census place");
+    assert_eq!(place.id, Some(records.place_id(&parish).await));
+    assert_eq!(place.country.as_deref(), Some("Norge"));
+    let participants: Vec<(ParticipantRole, Option<&str>, bool)> = profile
+        .participants
+        .iter()
+        .map(|p| {
+            (
+                p.role.clone(),
+                p.person.names[0].given.as_deref(),
+                p.person.birth.is_some(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        participants,
+        [
+            (ParticipantRole::Primary, Some("Ole"), true),
+            (ParticipantRole::Neighbour, Some("Anders"), false)
+        ]
+    );
+    assert!(profile.origins.is_empty());
+    let recorded = event_profile(&records.workspace, &recorded)
+        .await
+        .expect("event profile");
+    let items: Vec<Option<&str>> = recorded.origins.iter().map(|o| o.item.as_deref()).collect();
+    assert_eq!(items, [Some("event:1")]);
+}
+
+#[tokio::test]
+async fn an_unknown_family_or_event_is_not_found() {
+    let records = Records::new().await;
+    let family = family_profile(&records.workspace, "F9999")
+        .await
+        .expect_err("no such family");
+    assert!(
+        matches!(family, vitni_app::AppError::FamilyNotFound(ref id) if id == "F9999"),
+        "{family:?}"
+    );
+    let event = event_profile(&records.workspace, "E9999")
+        .await
+        .expect_err("no such event");
+    assert!(
+        matches!(event, vitni_app::AppError::EventNotFound(ref id) if id == "E9999"),
+        "{event:?}"
     );
 }
