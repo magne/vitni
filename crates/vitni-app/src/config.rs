@@ -703,6 +703,16 @@ pub fn shared_plugins_dir() -> Result<PathBuf, AppError> {
     Ok(project_dirs()?.data_dir().join("plugins"))
 }
 
+/// The shared application directory holding user-installed name-culture packs and region table, e.g.
+/// `~/.local/share/vitni/matching` (ADR 0038 §5 — layered like [`shared_i18n_dir`]).
+///
+/// # Errors
+///
+/// [`AppError::Config`] if no home directory can be determined.
+pub fn shared_matching_dir() -> Result<PathBuf, AppError> {
+    Ok(project_dirs()?.data_dir().join("matching"))
+}
+
 /// Best-effort display name for the OS user, used only as the bootstrap default.
 fn os_display_name() -> Option<String> {
     whoami::realname().ok().or_else(|| whoami::username().ok())
