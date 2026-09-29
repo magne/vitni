@@ -2,7 +2,7 @@
 //! the app layer from views and handed in as values.
 
 use crate::date::GenealogicalDate;
-use crate::enums::Sex;
+use crate::enums::{EventType, ParticipantRole, Sex};
 use crate::geo::GeoCoordinates;
 use crate::ids::PlaceId;
 use crate::matching::date::DateBasis;
@@ -98,4 +98,44 @@ pub struct PlaceMention {
     pub country: String,
     /// When the person (or the ancestor) was there.
     pub date: Option<GenealogicalDate>,
+}
+
+/// A family's evidence: its partners, its children and its marriage.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FamilyProfile {
+    /// The partners' person profiles, without their partners and children: the family compares those
+    /// itself, so a partner's own profile carrying them would count them twice.
+    pub partners: Vec<PersonProfile>,
+    /// The family's children.
+    pub children: Vec<Relative>,
+    /// The family's marriage, if one is linked.
+    pub marriage: Option<EventProfile>,
+    /// The origins of the assertions that created the family (ADR 0037 §1).
+    pub origins: Vec<RecordOrigin>,
+    /// Identifiers the family carries in external systems.
+    pub external_ids: Vec<ExternalId>,
+}
+
+/// An event's evidence: its type, date, place and the people taking part.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EventProfile {
+    /// What happened, if known.
+    pub event_type: Option<EventType>,
+    /// When, if known.
+    pub date: Option<GenealogicalDate>,
+    /// Where, if known.
+    pub place: Option<PlaceProfile>,
+    /// Everyone taking part, with their roles.
+    pub participants: Vec<Participant>,
+    /// The origins of the assertions that created the event (ADR 0037 §1).
+    pub origins: Vec<RecordOrigin>,
+}
+
+/// Someone taking part in an event.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Participant {
+    /// The part they took.
+    pub role: ParticipantRole,
+    /// Who they are: names, sex and birth.
+    pub person: Relative,
 }

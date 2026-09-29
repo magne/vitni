@@ -6,29 +6,32 @@ use proptest::prelude::{Just, Strategy, prop, prop_assert, prop_assert_eq, prop_
 use uuid::Uuid;
 
 use crate::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
-use crate::enums::Sex;
+use crate::enums::{EventType, ParticipantRole, Sex};
 use crate::ids::ImportRunId;
 use crate::matching::pack::PackSource;
-use crate::matching::profile::{PersonProfile, PlaceProfile, Relative, VitalEvent, VitalKind};
+use crate::matching::profile::{
+    EventProfile, Participant, PersonProfile, PlaceProfile, Relative, VitalEvent, VitalKind,
+};
 use crate::matching::{
     CultureId, DateBasis, ENGINE_VERSION, Feature, FeatureComparison, MatchAssessment, MatchBand, MatchData,
     MatchSettings, Outcome, assess_persons,
 };
 use crate::name::{LanguageTag, NameType, PersonName, Surname};
 use crate::origin::{DatasetId, RecordOrigin};
+use crate::place_name::PlaceName;
 use crate::text::ExternalId;
 
-static DATA: LazyLock<MatchData> = LazyLock::new(|| MatchData::embedded().unwrap());
+pub(super) static DATA: LazyLock<MatchData> = LazyLock::new(|| MatchData::embedded().unwrap());
 
 fn assess(a: &PersonProfile, b: &PersonProfile) -> MatchAssessment {
     assess_persons(a, b, &DATA, &MatchSettings::default())
 }
 
-fn feature(assessment: &MatchAssessment, wanted: Feature) -> &FeatureComparison {
+pub(super) fn feature(assessment: &MatchAssessment, wanted: Feature) -> &FeatureComparison {
     assessment.features.iter().find(|f| f.feature == wanted).unwrap()
 }
 
-fn point(year: i32, month: Option<u8>, day: Option<u8>) -> GenealogicalDate {
+pub(super) fn point(year: i32, month: Option<u8>, day: Option<u8>) -> GenealogicalDate {
     GenealogicalDate {
         calendar: Calendar::Gregorian,
         quality: DateQuality::Normal,
@@ -44,11 +47,11 @@ fn point(year: i32, month: Option<u8>, day: Option<u8>) -> GenealogicalDate {
     }
 }
 
-fn on(year: i32, month: u8, day: u8) -> GenealogicalDate {
+pub(super) fn on(year: i32, month: u8, day: u8) -> GenealogicalDate {
     point(year, Some(month), Some(day))
 }
 
-fn name(given: &str, surname: &str) -> PersonName {
+pub(super) fn name(given: &str, surname: &str) -> PersonName {
     let surnames = if surname.is_empty() {
         Vec::new()
     } else {
@@ -73,7 +76,7 @@ fn name(given: &str, surname: &str) -> PersonName {
     }
 }
 
-fn vital(kind: VitalKind, date: GenealogicalDate, basis: DateBasis, country: Option<&str>) -> VitalEvent {
+pub(super) fn vital(kind: VitalKind, date: GenealogicalDate, basis: DateBasis, country: Option<&str>) -> VitalEvent {
     let place = country.map(|c| PlaceProfile {
         country: Some(c.to_owned()),
         ..PlaceProfile::default()
@@ -86,7 +89,7 @@ fn vital(kind: VitalKind, date: GenealogicalDate, basis: DateBasis, country: Opt
     }
 }
 
-fn person(given: &str, surname: &str, sex: Sex, vitals: Vec<VitalEvent>) -> PersonProfile {
+pub(super) fn person(given: &str, surname: &str, sex: Sex, vitals: Vec<VitalEvent>) -> PersonProfile {
     PersonProfile {
         names: vec![name(given, surname)],
         sex: Some(sex),
@@ -95,7 +98,7 @@ fn person(given: &str, surname: &str, sex: Sex, vitals: Vec<VitalEvent>) -> Pers
     }
 }
 
-fn born(date: GenealogicalDate, country: Option<&str>) -> Vec<VitalEvent> {
+pub(super) fn born(date: GenealogicalDate, country: Option<&str>) -> Vec<VitalEvent> {
     vec![vital(VitalKind::Birth, date, DateBasis::Recorded, country)]
 }
 
@@ -338,7 +341,7 @@ fn every_score_is_bounded_and_the_band_follows_the_thresholds() {
     assert_eq!(assess_persons(&a, &b, &DATA, &lax).band, MatchBand::Probable);
 }
 
-fn relative(given: &str, surname: &str, sex: Sex, birth: Option<GenealogicalDate>) -> Relative {
+pub(super) fn relative(given: &str, surname: &str, sex: Sex, birth: Option<GenealogicalDate>) -> Relative {
     Relative {
         names: vec![name(given, surname)],
         sex: Some(sex),
@@ -531,7 +534,7 @@ fn an_occupation_in_common_is_weak_support_and_a_different_one_is_no_evidence() 
     assert_eq!(other.outcome, Outcome::Missing);
 }
 
-fn household(item: Option<&str>) -> RecordOrigin {
+pub(super) fn household(item: Option<&str>) -> RecordOrigin {
     RecordOrigin {
         dataset: DatasetId::global("digitalarkivet"),
         record: "bf01036389000123".to_owned(),
@@ -557,7 +560,42 @@ fn two_items_of_one_record_are_different_people() {
     assert!(same.features.iter().all(|f| f.feature != Feature::Record));
 }
 
-fn given_name() -> impl Strategy<Value = &'static str> {
+/// A Norwegian parish known by name only.
+pub(super) fn parish(name: &str) -> PlaceProfile {
+    PlaceProfile {
+        names: vec![PlaceName {
+            text: name.to_owned(),
+            language: None,
+            date: None,
+        }],
+        country: Some("Norge".to_owned()),
+        ..PlaceProfile::default()
+    }
+}
+
+/// Someone taking part in an event under `role`, known by name and sex only.
+pub(super) fn taking_part(role: ParticipantRole, given: &str, surname: &str, sex: Sex) -> Participant {
+    Participant {
+        role,
+        person: relative(given, surname, sex, None),
+    }
+}
+
+/// A marriage in Ringsaker on 14 October 1877 of a `groom` and a `bride`, as a church book records it.
+pub(super) fn marriage(groom: (&str, &str), bride: (&str, &str)) -> EventProfile {
+    EventProfile {
+        event_type: Some(EventType::Marriage),
+        date: Some(on(1877, 10, 14)),
+        place: Some(parish("Ringsaker")),
+        participants: vec![
+            taking_part(ParticipantRole::Groom, groom.0, groom.1, Sex::Male),
+            taking_part(ParticipantRole::Bride, bride.0, bride.1, Sex::Female),
+        ],
+        origins: Vec::new(),
+    }
+}
+
+pub(super) fn given_name() -> impl Strategy<Value = &'static str> {
     prop::sample::select(vec![
         "",
         "Ole",
@@ -572,7 +610,7 @@ fn given_name() -> impl Strategy<Value = &'static str> {
     ])
 }
 
-fn surname() -> impl Strategy<Value = &'static str> {
+pub(super) fn surname() -> impl Strategy<Value = &'static str> {
     prop::sample::select(vec![
         "",
         "Olsen",
@@ -585,11 +623,11 @@ fn surname() -> impl Strategy<Value = &'static str> {
     ])
 }
 
-fn sex() -> impl Strategy<Value = Sex> {
+pub(super) fn sex() -> impl Strategy<Value = Sex> {
     prop_oneof![Just(Sex::Male), Just(Sex::Female), Just(Sex::Unknown)]
 }
 
-fn country() -> impl Strategy<Value = Option<&'static str>> {
+pub(super) fn country() -> impl Strategy<Value = Option<&'static str>> {
     prop::sample::select(vec![None, Some("Norge"), Some("England"), Some("Danmark")])
 }
 
@@ -597,12 +635,12 @@ fn basis() -> impl Strategy<Value = DateBasis> {
     prop_oneof![Just(DateBasis::Recorded), Just(DateBasis::FromAge)]
 }
 
-fn a_date() -> impl Strategy<Value = GenealogicalDate> {
+pub(super) fn a_date() -> impl Strategy<Value = GenealogicalDate> {
     (1690i32..1910, prop::option::of((1u8..=12, prop::option::of(1u8..=28))))
         .prop_map(|(year, rest)| point(year, rest.map(|(m, _)| m), rest.and_then(|(_, d)| d)))
 }
 
-fn profile() -> impl Strategy<Value = PersonProfile> {
+pub(super) fn profile() -> impl Strategy<Value = PersonProfile> {
     let birth = prop::option::of((a_date(), basis(), prop::bool::ANY));
     let lifespan = prop::option::of(0i32..95);
     let father = prop::option::of((given_name(), prop::option::of(a_date())));

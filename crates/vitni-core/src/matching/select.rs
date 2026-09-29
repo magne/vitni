@@ -1,7 +1,9 @@
 //! Name-culture selection (ADR 0038 §5): which packs a comparison applies, chosen from the evidence.
 //!
-//! A side's cultures come from the places of its vital events and lineage, looked up by country and
-//! year in the region table (`matching/regions.toml`), and from its names' data languages. A side with
+//! A side's cultures come from its places, looked up by country and year in the region table
+//! (`matching/regions.toml`), and from its names' data languages. A person's places are those of its
+//! vital events and lineage; a family's are its partners' and its marriage's; an event's are its own and
+//! its participants' births. A side with
 //! no signal gets the workspace's default cultures. A comparison applies `universal`, the union of both
 //! sides' cultures, and every cross-culture pack that bridges cultures in that union.
 
@@ -9,11 +11,13 @@ use std::collections::BTreeSet;
 
 use serde::Deserialize;
 
+use crate::date::GenealogicalDate;
 use crate::matching::date::year;
 use crate::matching::name::fold;
 use crate::matching::pack::{PackError, PackSource};
-use crate::matching::profile::PersonProfile;
+use crate::matching::profile::{EventProfile, FamilyProfile, PersonProfile, PlaceProfile};
 use crate::matching::{CultureId, MatchData, MatchSettings};
+use crate::name::{LanguageTag, PersonName};
 
 /// The id of the pack every comparison applies.
 pub(crate) const UNIVERSAL: &str = "universal";
@@ -95,26 +99,89 @@ impl RegionTable {
     }
 }
 
+/// The evidence one side offers for choosing its cultures: the countries it is tied to, each with a
+/// year, and the data languages of its names.
+#[derive(Debug, Default)]
+pub(crate) struct Signals<'p> {
+    places: Vec<(&'p str, Option<i32>)>,
+    languages: Vec<&'p str>,
+}
+
+impl<'p> Signals<'p> {
+    /// A person's signals: the places of its vital events and lineage, and its names' languages.
+    pub fn person(profile: &'p PersonProfile) -> Self {
+        let mut signals = Self::default();
+        signals.add_person(profile);
+        signals
+    }
+
+    /// A family's signals: its partners' and its marriage's.
+    pub fn family(profile: &'p FamilyProfile) -> Self {
+        let mut signals = Self::default();
+        for partner in &profile.partners {
+            signals.add_person(partner);
+        }
+        if let Some(marriage) = &profile.marriage {
+            signals.add_event(marriage);
+        }
+        signals
+    }
+
+    /// An event's signals: its place and year, and its participants' names and birth places.
+    pub fn event(profile: &'p EventProfile) -> Self {
+        let mut signals = Self::default();
+        signals.add_event(profile);
+        signals
+    }
+
+    fn add_person(&mut self, profile: &'p PersonProfile) {
+        for vital in &profile.vitals {
+            self.add_place(vital.place.as_ref(), vital.date.as_ref());
+        }
+        for mention in &profile.lineage {
+            self.places
+                .push((mention.country.as_str(), mention.date.as_ref().and_then(year)));
+        }
+        self.add_names(&profile.names);
+    }
+
+    fn add_event(&mut self, profile: &'p EventProfile) {
+        self.add_place(profile.place.as_ref(), profile.date.as_ref());
+        for participant in &profile.participants {
+            self.add_names(&participant.person.names);
+            if let Some(birth) = &participant.person.birth {
+                self.add_place(birth.place.as_ref(), birth.date.as_ref());
+            }
+        }
+    }
+
+    fn add_place(&mut self, place: Option<&'p PlaceProfile>, date: Option<&GenealogicalDate>) {
+        if let Some(country) = place.and_then(|place| place.country.as_deref()) {
+            self.places.push((country, date.and_then(year)));
+        }
+    }
+
+    fn add_names(&mut self, names: &'p [PersonName]) {
+        self.languages.extend(
+            names
+                .iter()
+                .filter_map(|name| name.language.as_ref().map(LanguageTag::as_str)),
+        );
+    }
+}
+
 /// The cultures one side selects by its own evidence, or the default cultures when it has none.
-fn side_cultures(profile: &PersonProfile, data: &MatchData, settings: &MatchSettings) -> BTreeSet<CultureId> {
+fn side_cultures(signals: &Signals<'_>, data: &MatchData, settings: &MatchSettings) -> BTreeSet<CultureId> {
     let (packs, regions) = (&data.packs, &data.regions);
     let mut selected = BTreeSet::new();
-    let places = profile.vitals.iter().filter_map(|vital| {
-        let country = vital.place.as_ref()?.country.as_deref()?;
-        Some((country, vital.date.as_ref().and_then(year)))
-    });
-    let lineage = profile
-        .lineage
-        .iter()
-        .map(|mention| (mention.country.as_str(), mention.date.as_ref().and_then(year)));
-    for (country, year) in places.chain(lineage) {
-        selected.extend(regions.packs_for(country, year));
+    for (country, year) in &signals.places {
+        selected.extend(regions.packs_for(country, *year));
     }
-    for language in profile.names.iter().filter_map(|name| name.language.as_ref()) {
+    for language in &signals.languages {
         selected.extend(
             packs
                 .iter()
-                .filter(|pack| pack.speaks(language.as_str()))
+                .filter(|pack| pack.speaks(language))
                 .map(|pack| pack.id().clone()),
         );
     }
@@ -134,8 +201,8 @@ fn side_cultures(profile: &PersonProfile, data: &MatchData, settings: &MatchSett
 /// The cultures a comparison of `a` and `b` applies: `universal` first, then the union of both sides'
 /// cultures and the cross-culture packs bridging them, in id order.
 pub(crate) fn comparison_cultures(
-    a: &PersonProfile,
-    b: &PersonProfile,
+    a: &Signals<'_>,
+    b: &Signals<'_>,
     data: &MatchData,
     settings: &MatchSettings,
 ) -> Vec<CultureId> {
@@ -159,7 +226,7 @@ pub(crate) fn comparison_cultures(
 
 #[cfg(test)]
 mod tests {
-    use super::{RegionTable, comparison_cultures};
+    use super::{RegionTable, Signals, comparison_cultures};
     use crate::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
     use crate::matching::date::DateBasis;
     use crate::matching::pack::{CulturePacks, PackSource};
@@ -223,7 +290,7 @@ mod tests {
             packs: packs.clone(),
             regions: RegionTable::embedded().unwrap(),
         };
-        comparison_cultures(a, b, &data, settings)
+        comparison_cultures(&Signals::person(a), &Signals::person(b), &data, settings)
             .iter()
             .map(|id| id.as_str().to_owned())
             .collect()

@@ -8,27 +8,34 @@
 //! against the other record's father only where its own record states none: where both do, the fathers
 //! are compared directly.
 
+use crate::date::GenealogicalDate;
 use crate::enums::Sex;
 use crate::matching::date::similarity as date_similarity;
 use crate::matching::name::Applied;
 use crate::matching::profile::{PersonProfile, Relative, VitalKind};
 use crate::matching::weights::{self, Weights};
 use crate::matching::{Estimate, Feature, FeatureComparison, FeatureValue, Outcome, estimate, grade, missing};
+use crate::name::PersonName;
 
 /// The most an undated relative's name alone can agree: a name is shared by many.
 const UNDATED_SIMILARITY: f64 = 0.9;
 
 /// A relative's first name as shown beside a feature, with its birth date.
-fn value(relative: &Relative) -> FeatureValue {
-    let name = relative.names.first().map_or_else(String::new, |name| {
+pub(crate) fn value(relative: &Relative) -> FeatureValue {
+    shown(
+        &relative.names,
+        relative.birth.as_ref().and_then(|birth| birth.date.clone()),
+    )
+}
+
+/// Someone's first name, with a birth date, as shown beside a feature.
+pub(crate) fn shown(names: &[PersonName], born: Option<GenealogicalDate>) -> FeatureValue {
+    let name = names.first().map_or_else(String::new, |name| {
         let mut parts: Vec<&str> = name.given.iter().map(String::as_str).collect();
         parts.extend(name.surnames.iter().map(|s| s.surname.as_str()));
         parts.join(" ")
     });
-    FeatureValue::Relative {
-        name,
-        born: relative.birth.as_ref().and_then(|birth| birth.date.clone()),
-    }
+    FeatureValue::Relative { name, born }
 }
 
 /// A relative's birth estimate, a baptism standing in for it.
@@ -37,7 +44,7 @@ fn birth(relative: &Relative) -> Option<Estimate<'_>> {
 }
 
 /// How similar two relatives are, or `None` when their given names cannot be compared.
-fn similarity(a: &Relative, b: &Relative, applied: &Applied<'_>) -> Option<f64> {
+pub(crate) fn similarity(a: &Relative, b: &Relative, applied: &Applied<'_>) -> Option<f64> {
     let mut best: Option<f64> = None;
     for x in a.names.iter().filter_map(|n| n.given.as_deref()) {
         for y in b.names.iter().filter_map(|n| n.given.as_deref()) {
@@ -60,7 +67,7 @@ fn similarity(a: &Relative, b: &Relative, applied: &Applied<'_>) -> Option<f64> 
 
 /// What it means when no relative of one record can be any of the other's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Mismatch {
+pub(crate) enum Mismatch {
     /// The records disagree: each states the one relative of this kind a person has.
     Disagrees,
     /// No evidence: sources list different subsets of these relatives.
@@ -69,14 +76,21 @@ enum Mismatch {
 
 /// One kind of relative: the feature it is scored as, its weights, and what a mismatch means.
 #[derive(Debug, Clone, Copy)]
-struct Kind {
-    feature: Feature,
-    weights: Weights,
-    mismatch: Mismatch,
+pub(crate) struct Kind {
+    pub feature: Feature,
+    pub weights: Weights,
+    pub mismatch: Mismatch,
 }
 
+/// Children: sources list different subsets of them, so they only ever support a pair.
+pub(crate) const CHILDREN: Kind = Kind {
+    feature: Feature::Children,
+    weights: weights::CHILD,
+    mismatch: Mismatch::NoEvidence,
+};
+
 /// Compares one kind of relative by its best-matching pair.
-fn compare(kind: Kind, left: &[&Relative], right: &[&Relative], applied: &Applied<'_>) -> FeatureComparison {
+pub(crate) fn compare(kind: Kind, left: &[&Relative], right: &[&Relative], applied: &Applied<'_>) -> FeatureComparison {
     let feature = kind.feature;
     let mut best: Option<(f64, &Relative, &Relative)> = None;
     for x in left {
@@ -122,18 +136,11 @@ pub(crate) fn compare_relatives<'p>(
         weights: weights::PARENT,
         mismatch: Mismatch::Disagrees,
     };
-    let (partners, children) = (
-        Kind {
-            feature: Feature::Partners,
-            weights: weights::PARTNER,
-            mismatch: Mismatch::NoEvidence,
-        },
-        Kind {
-            feature: Feature::Children,
-            weights: weights::CHILD,
-            mismatch: Mismatch::NoEvidence,
-        },
-    );
+    let partners = Kind {
+        feature: Feature::Partners,
+        weights: weights::PARTNER,
+        mismatch: Mismatch::NoEvidence,
+    };
     let everyone = |relatives: &'p [Relative]| -> Vec<&'p Relative> { relatives.iter().collect() };
     vec![
         compare(
@@ -149,7 +156,7 @@ pub(crate) fn compare_relatives<'p>(
             applied,
         ),
         compare(partners, &everyone(&a.partners), &everyone(&b.partners), applied),
-        compare(children, &everyone(&a.children), &everyone(&b.children), applied),
+        compare(CHILDREN, &everyone(&a.children), &everyone(&b.children), applied),
     ]
 }
 

@@ -1,11 +1,16 @@
 //! Record matching: explainable Fellegi–Sunter scoring (ADR 0038).
 //!
-//! [`assess_persons`] compares two [`PersonProfile`]s and returns a [`MatchAssessment`]. Each
+//! [`assess_persons`] compares two [`PersonProfile`]s and returns a [`MatchAssessment`];
+//! [`assess_families`] and [`assess_events`] do the same for families and events. Each
 //! comparator grades one feature — names, sex, birth and death dates, their places, occupations, and the
 //! relatives: fathers, mothers, partners, children and a patronymic read against the candidate father —
 //! as `Agree`, `Partial`, `Disagree`, `Missing` or `Conflict`, with a log-likelihood weight. The weights sum to the
 //! match weight, which maps to a score in `0..1` and a [`MatchBand`]. Every term is kept, so the
 //! features *are* the explanation.
+//!
+//! A family is compared by its partners — each pair scored as persons, summarised as one term, with the
+//! pair's own assessment kept in [`MatchAssessment::parts`] — its children and its marriage. An event is
+//! compared by its type, date and place, its principals pair by pair, and its other participants.
 //!
 //! Comparators are graded, never binary: a near miss lowers the score but keeps the candidate, only an
 //! implausible distance disagrees, and only a logical impossibility (a different asserted sex, a death
@@ -18,6 +23,8 @@
 //! reads any workspace packs and hands them in through [`MatchData::layered`].
 
 pub mod date;
+mod event;
+mod family;
 mod name;
 pub mod pack;
 mod place;
@@ -32,11 +39,14 @@ use crate::matching::name::Applied;
 use crate::matching::pack::{CulturePacks, PackError, PackSource};
 use crate::matching::profile::{PersonProfile, PlaceProfile, VitalEvent, VitalKind};
 use crate::matching::relative::{compare_patronymic, compare_relatives};
-use crate::matching::select::{RegionTable, comparison_cultures};
+use crate::matching::select::{RegionTable, Signals, comparison_cultures};
 use crate::matching::weights::Weights;
 use crate::origin::RecordOrigin;
+use crate::text::ExternalId;
 
 pub use crate::matching::date::DateBasis;
+pub use crate::matching::event::assess_events;
+pub use crate::matching::family::assess_families;
 
 /// The id of a name-culture pack (`no`, `en`, `pl-en`).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -122,8 +132,24 @@ pub enum Feature {
     Patronymic,
     /// The occupations.
     Occupation,
-    /// Two different items of one source record, which are by construction different people.
+    /// Two different items of one source record, which are by construction different records.
     Record,
+    /// A family's partner, scored by the pair's own person assessment.
+    Partner,
+    /// A family's marriage date.
+    Marriage,
+    /// A family's marriage place.
+    MarriagePlace,
+    /// An event's type.
+    EventType,
+    /// An event's date.
+    Date,
+    /// An event's place.
+    Place,
+    /// A principal of an event — its primary participant, a husband, wife, spouse, groom or bride.
+    Principal,
+    /// An event's other participants: witnesses, godparents, parents, clergy.
+    Participants,
 }
 
 /// A value shown beside a feature, as the record states it.
@@ -140,6 +166,10 @@ pub enum FeatureValue {
     },
     /// A place's name.
     Place(String),
+    /// A date not of a vital event: a marriage's, or any event's.
+    When(crate::date::GenealogicalDate),
+    /// An event's type.
+    EventType(crate::enums::EventType),
     /// A sex.
     Sex(Sex),
     /// A relative's name, with their birth date.
@@ -181,6 +211,9 @@ pub struct MatchAssessment {
     pub features: Vec<FeatureComparison>,
     /// The name-culture packs applied, `universal` first.
     pub cultures: Vec<CultureId>,
+    /// The assessments a term summarises — a family's partner pairs, in the order of their
+    /// [`Feature::Partner`] terms; empty for persons and events.
+    pub parts: Vec<MatchAssessment>,
     /// The engine that produced the assessment.
     pub engine: EngineVersion,
 }
@@ -249,8 +282,24 @@ pub fn assess_persons(
     data: &MatchData,
     settings: &MatchSettings,
 ) -> MatchAssessment {
-    let cultures = comparison_cultures(a, b, data, settings);
-    let applied = Applied::new(cultures.iter().filter_map(|id| data.packs.get(id)).collect());
+    let cultures = comparison_cultures(&Signals::person(a), &Signals::person(b), data, settings);
+    let applied = applied(&cultures, data);
+    person_assessment(a, b, cultures, &applied, settings)
+}
+
+/// The packs of `cultures`, ready to apply.
+fn applied<'d>(cultures: &[CultureId], data: &'d MatchData) -> Applied<'d> {
+    Applied::new(cultures.iter().filter_map(|id| data.packs.get(id)).collect())
+}
+
+/// Compares two person profiles under cultures already chosen — a person's own, or a family's.
+fn person_assessment(
+    a: &PersonProfile,
+    b: &PersonProfile,
+    cultures: Vec<CultureId>,
+    applied: &Applied<'_>,
+    settings: &MatchSettings,
+) -> MatchAssessment {
     let (birth_a, birth_b) = (
         estimate(&a.vitals, VitalKind::Birth),
         estimate(&b.vitals, VitalKind::Birth),
@@ -260,8 +309,8 @@ pub fn assess_persons(
         estimate(&b.vitals, VitalKind::Death),
     );
     let mut features = vec![
-        compare_given(a, b, &applied),
-        compare_surname(a, b, &applied),
+        compare_given(a, b, applied),
+        compare_surname(a, b, applied),
         compare_sex(a.sex.as_ref(), b.sex.as_ref()),
         compare_dates(Feature::Birth, birth_a.as_ref(), birth_b.as_ref(), weights::BIRTH),
         compare_dates(Feature::Death, death_a.as_ref(), death_b.as_ref(), weights::DEATH),
@@ -269,34 +318,40 @@ pub fn assess_persons(
             Feature::BirthPlace,
             place_of(a, VitalKind::Birth),
             place_of(b, VitalKind::Birth),
-            &applied,
+            applied,
         ),
         compare_places(
             Feature::DeathPlace,
             place_of(a, VitalKind::Death),
             place_of(b, VitalKind::Death),
-            &applied,
+            applied,
         ),
     ];
-    features.extend(compare_relatives(a, b, &applied));
-    features.push(compare_patronymic(a, b, &applied));
-    features.push(compare_occupations(a, b, &applied));
+    features.extend(compare_relatives(a, b, applied));
+    features.push(compare_patronymic(a, b, applied));
+    features.push(compare_occupations(a, b, applied));
     features.extend(lifespan_conflict(death_a.as_ref(), birth_b.as_ref()));
     features.extend(lifespan_conflict(death_b.as_ref(), birth_a.as_ref()));
-    let identified = shares_identity(a, b);
-    if !identified {
-        features.extend(same_record_conflict(a, b));
-    }
-    conclude(features, cultures, identified, settings)
+    let sides = (
+        Identity::of(&a.origins, &a.external_ids),
+        Identity::of(&b.origins, &b.external_ids),
+    );
+    conclude(features, cultures, Vec::new(), sides, settings)
 }
 
-/// Sums the features into a score and band.
+/// Sums the features into a score and band. Identity established between the two `sides` makes the band
+/// deterministic; otherwise two items of one record add a conflict.
 fn conclude(
-    features: Vec<FeatureComparison>,
+    mut features: Vec<FeatureComparison>,
     cultures: Vec<CultureId>,
-    identified: bool,
+    parts: Vec<MatchAssessment>,
+    (left, right): (Identity<'_>, Identity<'_>),
     settings: &MatchSettings,
 ) -> MatchAssessment {
+    let identified = left.shared_with(right);
+    if !identified {
+        features.extend(left.same_record_conflict(right));
+    }
     let mut match_weight = weights::PRIOR;
     let mut conflict = false;
     for feature in &features {
@@ -321,42 +376,59 @@ fn conclude(
         band,
         features,
         cultures,
+        parts,
         engine: ENGINE_VERSION,
     }
 }
 
-/// Whether the two profiles share a record origin or an external id — identity already established.
-fn shares_identity(a: &PersonProfile, b: &PersonProfile) -> bool {
-    let same_origin = a.origins.iter().any(|x| {
-        b.origins
-            .iter()
-            .any(|y| x.dataset == y.dataset && x.record == y.record && x.item == y.item)
-    });
-    let same_external = a.external_ids.iter().any(|x| {
-        b.external_ids
-            .iter()
-            .any(|y| x.authority == y.authority && x.value == y.value)
-    });
-    same_origin || same_external
+/// What establishes a record's identity: the origins of the assertions that created it and its external
+/// ids.
+#[derive(Debug, Clone, Copy)]
+struct Identity<'p> {
+    origins: &'p [RecordOrigin],
+    external_ids: &'p [ExternalId],
 }
 
-/// A conflict when the two profiles were created from different items of one source record — two
-/// members of one household, say — who are by construction different people (ADR 0037 §1).
-fn same_record_conflict(a: &PersonProfile, b: &PersonProfile) -> Option<FeatureComparison> {
-    for x in &a.origins {
-        for y in &b.origins {
-            if x.dataset == y.dataset && x.record == y.record && x.item != y.item {
-                return Some(FeatureComparison {
-                    feature: Feature::Record,
-                    outcome: Outcome::Conflict,
-                    weight: weights::CONFLICT,
-                    left: Some(FeatureValue::Origin(x.clone())),
-                    right: Some(FeatureValue::Origin(y.clone())),
-                });
+impl<'p> Identity<'p> {
+    fn of(origins: &'p [RecordOrigin], external_ids: &'p [ExternalId]) -> Self {
+        Self { origins, external_ids }
+    }
+
+    /// Whether the two records share a record origin or an external id — identity already established.
+    fn shared_with(self, other: Self) -> bool {
+        let same_origin = self.origins.iter().any(|x| {
+            other
+                .origins
+                .iter()
+                .any(|y| x.dataset == y.dataset && x.record == y.record && x.item == y.item)
+        });
+        let same_external = self.external_ids.iter().any(|x| {
+            other
+                .external_ids
+                .iter()
+                .any(|y| x.authority == y.authority && x.value == y.value)
+        });
+        same_origin || same_external
+    }
+
+    /// A conflict when the two records were created from different items of one source record — two
+    /// members of one household, say — which are by construction different records (ADR 0037 §1).
+    fn same_record_conflict(self, other: Self) -> Option<FeatureComparison> {
+        for x in self.origins {
+            for y in other.origins {
+                if x.dataset == y.dataset && x.record == y.record && x.item != y.item {
+                    return Some(FeatureComparison {
+                        feature: Feature::Record,
+                        outcome: Outcome::Conflict,
+                        weight: weights::CONFLICT,
+                        left: Some(FeatureValue::Origin(x.clone())),
+                        right: Some(FeatureValue::Origin(y.clone())),
+                    });
+                }
             }
         }
+        None
     }
-    None
 }
 
 /// Compares the occupations: one in common, after normalization, is weak support; a different one is
@@ -429,6 +501,23 @@ fn best_pair<'v>(
         }
     }
     best
+}
+
+/// Pairs left items with right items, most similar first, each item at most once. A candidate is
+/// `(similarity, left index, right index)`; the pairs come back in the order they were chosen.
+fn pair_up(mut candidates: Vec<(f64, usize, usize)>) -> Vec<(f64, usize, usize)> {
+    candidates.sort_by(|x, y| y.0.total_cmp(&x.0));
+    let (mut left, mut right) = (Vec::new(), Vec::new());
+    let mut pairs = Vec::new();
+    for (similarity, i, j) in candidates {
+        if left.contains(&i) || right.contains(&j) {
+            continue;
+        }
+        left.push(i);
+        right.push(j);
+        pairs.push((similarity, i, j));
+    }
+    pairs
 }
 
 /// Compares every given name of `a` with every given name of `b`.
@@ -525,11 +614,13 @@ fn asserted(sex: Option<&Sex>) -> Option<Sex> {
     }
 }
 
-/// A side's estimate of a birth or death: the event itself when dated, else its stand-in (baptism for
-/// birth, burial for death), whose interval reaches back by the typical offset.
+/// A side's estimate of a date: of a birth or death, the event itself when dated, else its stand-in
+/// (baptism for birth, burial for death), whose interval reaches back by the typical offset; of any other
+/// event, its recorded date.
 #[derive(Debug, Clone)]
 struct Estimate<'p> {
-    vital: &'p VitalEvent,
+    /// The vital event the date is of, or `None` for any other event's date.
+    kind: Option<VitalKind>,
     date: &'p crate::date::GenealogicalDate,
     interval: DayInterval,
     tolerance: Tolerance,
@@ -551,7 +642,7 @@ fn estimate(vitals: &[VitalEvent], kind: VitalKind) -> Option<Estimate<'_>> {
         vitals.iter().filter(move |v| v.kind == wanted).find_map(|vital| {
             let date = vital.date.as_ref()?;
             Some(Estimate {
-                vital,
+                kind: Some(vital.kind),
                 date,
                 interval: interval(date)?,
                 tolerance: Tolerance::of(date, vital.basis),
@@ -566,6 +657,28 @@ fn estimate(vitals: &[VitalEvent], kind: VitalKind) -> Option<Estimate<'_>> {
     })
 }
 
+impl Estimate<'_> {
+    /// The date as shown beside a feature: with its vital kind, when it is of one.
+    fn value(&self) -> FeatureValue {
+        let date = self.date.clone();
+        match self.kind {
+            Some(kind) => FeatureValue::Date { kind, date },
+            None => FeatureValue::When(date),
+        }
+    }
+}
+
+/// The estimate of an event's recorded date.
+fn event_estimate(date: Option<&crate::date::GenealogicalDate>) -> Option<Estimate<'_>> {
+    let date = date?;
+    Some(Estimate {
+        kind: None,
+        date,
+        interval: interval(date)?,
+        tolerance: Tolerance::of(date, DateBasis::Recorded),
+    })
+}
+
 /// Compares two date estimates on the decay curve of the more lenient tolerance.
 fn compare_dates(
     feature: Feature,
@@ -573,16 +686,12 @@ fn compare_dates(
     b: Option<&Estimate<'_>>,
     weights: Weights,
 ) -> FeatureComparison {
-    let value = |e: &Estimate<'_>| FeatureValue::Date {
-        kind: e.vital.kind,
-        date: e.date.clone(),
-    };
-    let (left, right) = (a.map(value), b.map(value));
+    let (left, right) = (a.map(Estimate::value), b.map(Estimate::value));
     let (Some(a), Some(b)) = (a, b) else {
         return missing(feature, left, right);
     };
     let mut s = similarity(a.interval.gap(b.interval), a.tolerance.max(b.tolerance));
-    if a.vital.kind == b.vital.kind && is_clerical_slip(a.date, b.date) {
+    if a.kind == b.kind && is_clerical_slip(a.date, b.date) {
         s = s.max(SLIP_SIMILARITY);
     }
     let (outcome, weight) = grade(s, 0.0, weights);
@@ -606,14 +715,8 @@ fn lifespan_conflict(death: Option<&Estimate<'_>>, birth: Option<&Estimate<'_>>)
         feature: Feature::Lifespan,
         outcome: Outcome::Conflict,
         weight: weights::CONFLICT,
-        left: Some(FeatureValue::Date {
-            kind: death.vital.kind,
-            date: death.date.clone(),
-        }),
-        right: Some(FeatureValue::Date {
-            kind: birth.vital.kind,
-            date: birth.date.clone(),
-        }),
+        left: Some(death.value()),
+        right: Some(birth.value()),
     })
 }
 
