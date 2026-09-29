@@ -203,6 +203,24 @@ into a new workspace on either engine. The GUI has the same pair in Preferences 
 - **The cross-engine test** (`crates/vitni-app/tests/backup_postgres.rs`) needs Docker, like
   `vitni-db`'s Postgres tests: `cargo test -p vitni-app --features postgres --test backup_postgres`.
 
+## Name-culture packs
+
+Record matching (ADR 0038) takes its name rules from TOML packs in
+`crates/vitni-core/matching/cultures/<id>.toml`, embedded at build time, and picks them per comparison
+through `crates/vitni-core/matching/regions.toml` (country and period → packs) and the packs'
+`languages`. The schema is `CulturePack`'s in `crates/vitni-core/src/matching/pack.rs`; unknown keys are
+rejected and a pack's `id` must equal its file name.
+
+- **Adding a culture** is a new pack file, an entry in `EMBEDDED` in `pack.rs`, a region row if a
+  country selects it, and table cases in `crates/vitni-core/src/matching/tests.rs` showing the pair it
+  exists for. No comparator changes.
+- **Rewrites** see lower-cased text with diacritics already stripped (`å` is `a` by then) and apply in
+  order, `universal` first; doubled letters collapse after them.
+- **A workspace override** is the same file under `<workspace>/matching/cultures/` (or
+  `~/.local/share/vitni/matching/cultures/`): same name replaces, new name adds.
+- **A change to a rule, class or weight** changes scores, so bump `ENGINE_VERSION` in
+  `crates/vitni-core/src/matching/mod.rs`.
+
 ## Repository conventions
 
 The ones that will fail a review if missed:

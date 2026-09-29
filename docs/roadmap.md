@@ -602,6 +602,13 @@ are origin records only, and neither they nor Gramps ids are `ExternalId`s any m
 unrelated files that share `@I1@` import two people; a GEDCOM `_UID` still resolves across datasets.
 ✅ Tombstones by origin (ADR 0037 §4, #395): a name, fact or other list value the user retracted or
 superseded is not re-asserted by a later run of the same dataset, while a changed value still lands.
+✅ Matching core (ADR 0038 §1, §3–§6, #396): `vitni_core::matching` assesses two person profiles into
+an explainable `MatchAssessment` — graded name, sex, date and place comparators, dates as Julian Day
+intervals whose tolerance follows quality and census-age provenance, baptism and burial as stand-ins,
+hard conflicts that cap the score, and `Deterministic` only from a shared origin or external id. The
+`universal`, `no`, `da` and `en` name-culture packs and `regions.toml` are TOML data, selected per
+comparison from places, years, data languages and lineage; a workspace or the shared data directory
+overrides or adds packs (`load_match_data`).
 
 ## Risk register
 
