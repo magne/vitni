@@ -11,6 +11,8 @@
 //!   the file is at least as recent as that assertion and as the field's current value, whoever set it
 //!   (ADR 0029 §1). When the file is older, or has no export date (§3), the write is skipped.
 //! - **Corrected by the user.** Single-valued rows exist but none is live: the user's correction stands.
+//! - **Tombstoned.** A list-valued row with the same digest that is no longer live: the user retracted
+//!   or superseded that value, and a later run does not re-assert it.
 //! - **Otherwise** (a new item, a new value in a list-valued field): the write goes ahead.
 //!
 //! The digest the gate computes is stamped onto the command's origin, so the log records what was read.
@@ -230,10 +232,16 @@ async fn decide<B: EventBody + Serialize>(
             &field.field_key,
         )
         .await?;
-    if rows.iter().any(|row| row.live && row.digest == field.digest) {
+    let single_valued = vitni_db::single_valued(&field.field_key);
+    // A list value an import asserted is only ever retracted or superseded by the user (imports
+    // supersede single values only), so a dead row with the same value is a tombstone.
+    if rows
+        .iter()
+        .any(|row| row.digest == field.digest && (row.live || !single_valued))
+    {
         return Ok(Decision::Skip);
     }
-    if !vitni_db::single_valued(&field.field_key) {
+    if !single_valued {
         return Ok(Decision::Write);
     }
     let Some(latest) = rows.iter().rev().find(|row| row.live) else {
@@ -454,7 +462,7 @@ mod tests {
     use super::PendingRun;
     use crate::config::{AppDefaults, OperatorConfig, WorkspaceDefaults};
     use crate::event::{NewEvent, create_event, set_event_description};
-    use crate::history::undo_event_assertion;
+    use crate::history::{undo_assertion, undo_event_assertion};
     use crate::import_run::list_import_runs;
     use crate::person::{NewFact, NewPerson, assert_fact, create_person};
     use crate::session::Session;
@@ -602,6 +610,64 @@ mod tests {
             .expect("find")
             .expect("person");
         assert_eq!(view.facts().len(), 2);
+    }
+
+    /// Retracts, at the keyboard, the person's only live fact.
+    async fn retract_the_fact(workspace: &Workspace, person: &str) {
+        let view = workspace
+            .store()
+            .find_person(person)
+            .await
+            .expect("find")
+            .expect("person");
+        let [fact] = view.facts_with_assertions() else {
+            panic!("expected one fact: {:?}", view.facts_with_assertions());
+        };
+        let keyboard = Session::software("keyboard", "0");
+        undo_assertion(workspace, &keyboard, person, &fact.assertion_id.to_string(), None)
+            .await
+            .expect("retract");
+    }
+
+    async fn facts(workspace: &Workspace, person: &str) -> Vec<Option<String>> {
+        let view = workspace
+            .store()
+            .find_person(person)
+            .await
+            .expect("find")
+            .expect("person");
+        view.facts().iter().map(|fact| fact.value.value.clone()).collect()
+    }
+
+    #[tokio::test]
+    async fn a_list_value_the_user_retracted_is_not_reasserted_by_a_later_run() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let (session, run) = importer(None);
+        let person = person(&workspace, &session, &run).await;
+        occupation(&workspace, &session, &run, &person, "Farmer").await;
+        retract_the_fact(&workspace, &person).await;
+        let before = events(&workspace).await;
+
+        let (session, rerun) = importer(None);
+        occupation(&workspace, &session, &rerun, &person, "Farmer").await;
+        assert!(facts(&workspace, &person).await.is_empty(), "the retraction stands");
+        assert_eq!(events(&workspace).await, before);
+        assert!(!rerun.started(), "nothing was written, so no run");
+    }
+
+    #[tokio::test]
+    async fn a_different_list_value_is_still_added_after_a_retraction() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let (session, run) = importer(None);
+        let person = person(&workspace, &session, &run).await;
+        occupation(&workspace, &session, &run, &person, "Farmer").await;
+        retract_the_fact(&workspace, &person).await;
+
+        let (session, rerun) = importer(None);
+        occupation(&workspace, &session, &rerun, &person, "Smith").await;
+        assert_eq!(facts(&workspace, &person).await, [Some("Smith".to_owned())]);
     }
 
     #[tokio::test]

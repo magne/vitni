@@ -600,6 +600,8 @@ export date, so re-importing an unchanged GEDCOM or Gramps file writes no events
 Source or Place. ✅ Dataset-scoped record ids (ADR 0037 §3, #389): GEDCOM xrefs and Gramps handles
 are origin records only, and neither they nor Gramps ids are `ExternalId`s any more, so two
 unrelated files that share `@I1@` import two people; a GEDCOM `_UID` still resolves across datasets.
+✅ Tombstones by origin (ADR 0037 §4, #395): a name, fact or other list value the user retracted or
+superseded is not re-asserted by a later run of the same dataset, while a changed value still lands.
 
 ## Risk register
 
