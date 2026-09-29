@@ -44,11 +44,12 @@ percent-encoding = "2.3.2"
 # event-store backends (vitni-db, feature-gated)
 sqlite-es = "0.5.0"
 postgres-es = "0.5.0"
-# plugin host (vitni-plugin-host; ADR 0007, 0011). Floor held at 48.0.2: 47.0.3 carries
-# RUSTSEC-2026-0268 (guest-sized host allocation) and RUSTSEC-2026-0269 (filesystem sandbox escape), and
-# 47.0.2 RUSTSEC-2026-0222/0223 — each breaks isolation the sandbox relies on.
-wasmtime = "48.0.3"
-wasmtime-wasi = "48.0.3"
+# plugin host (vitni-plugin-host; ADR 0007, 0011). Keep the two in lockstep. Floor held at 49.0.1: 49.0.0
+# and 48.0.2 carry RUSTSEC-2026-0314/0315/0316 (host panic, fuel-accounting loss, allocation past the
+# hostcall fuel limit), 47.0.3 RUSTSEC-2026-0268/0269 and 47.0.2 RUSTSEC-2026-0222/0223 — each breaks
+# isolation the sandbox relies on.
+wasmtime = "49.0.1"
+wasmtime-wasi = "49.0.1"
 # plugin bundle signing (vitni-plugin-host, xtask; ADR 0014): ed25519 detached signatures over a
 # sha2 digest, verified against an embedded trust root. Held at the pre-release: 3.0.0 requires
 # curve25519-dalek ^5.0.0, while `russh` (via the `testcontainers` dev-dependency) requires
