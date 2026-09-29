@@ -1,12 +1,15 @@
 //! The import run an import invocation writes (ADR 0037 §5): who started it, over which dataset,
 //! the origin the guest last declared, and what the run has written so far.
 //!
-//! The run is started lazily, on the guest's first write, so an invocation that writes nothing (an
-//! assisted session the operator closes at once, an importer that fails while parsing) leaves no run
+//! The run is started lazily, by the first write the origin gate lets through (`vitni_app`'s
+//! [`PendingRun`]), so an invocation that writes nothing (an assisted session the operator closes at
+//! once, an importer that fails while parsing, a re-import of a file already on record) leaves no run
 //! behind. It is closed once the guest returns, finished or abandoned.
 
+use std::sync::Arc;
+
 use vitni_app::{
-    AbandonReason, DatasetId, ImportCounts, ImportRunId, NewImportRun, RecordOrigin, ResolutionDecision, ResolvedItem,
+    AbandonReason, DatasetId, ImportCounts, NewImportRun, PendingRun, RecordOrigin, ResolutionDecision, ResolvedItem,
     Session, Workspace,
 };
 
@@ -41,27 +44,32 @@ struct OriginKey {
 #[derive(Debug)]
 pub(crate) struct ActiveRun {
     spec: ImportRunSpec,
-    id: Option<ImportRunId>,
+    pending: Arc<PendingRun>,
     origin: Option<OriginKey>,
     counts: ImportCounts,
     resolved: Vec<ResolvedItem>,
     cancelled: bool,
 }
 
-/// Why a write was refused before it reached the workspace.
+/// Why a write was refused before it reached the workspace: the guest has not declared the record
+/// it is writing from.
 #[derive(Debug)]
-pub(crate) enum WriteRefusal {
-    /// The guest has not declared the record it is writing from.
-    NoOrigin,
-    /// The run could not be started.
-    Start(vitni_app::AppError),
-}
+pub(crate) struct NoOrigin;
 
 impl ActiveRun {
     pub(crate) fn new(spec: ImportRunSpec) -> Self {
+        let run = NewImportRun {
+            plugin: spec.plugin.clone(),
+            plugin_version: spec.plugin_version.clone(),
+            dataset: spec.dataset.clone(),
+            dataset_label: spec.dataset_label.clone(),
+            source_label: spec.source_label.clone(),
+            file_asserted_at: None,
+        };
+        let pending = Arc::new(PendingRun::new(spec.operator.clone(), run));
         Self {
             spec,
-            id: None,
+            pending,
             origin: None,
             counts: ImportCounts::default(),
             resolved: Vec::new(),
@@ -69,50 +77,33 @@ impl ActiveRun {
         }
     }
 
+    /// The pending run the plugin's session writes as part of.
+    pub(crate) fn pending(&self) -> &Arc<PendingRun> {
+        &self.pending
+    }
+
     /// Sets (or, with `None`, clears) the record later writes are stamped with.
     pub(crate) fn set_origin(&mut self, origin: Option<(String, Option<String>)>) {
         self.origin = origin.map(|(record, item)| OriginKey { record, item });
     }
 
-    /// Admits one write: refuses it while no origin is set, starts the run on the first one, and
-    /// counts it.
-    pub(crate) async fn admit_write(
-        &mut self,
-        workspace: &Workspace,
-        file_asserted_at: Option<vitni_app::Timestamp>,
-    ) -> Result<(), WriteRefusal> {
+    /// Admits one write: refuses it while no origin is set.
+    pub(crate) fn admit_write(&self) -> Result<(), NoOrigin> {
         if self.origin.is_none() {
-            return Err(WriteRefusal::NoOrigin);
+            return Err(NoOrigin);
         }
-        if self.id.is_none() {
-            let run = NewImportRun {
-                plugin: self.spec.plugin.clone(),
-                plugin_version: self.spec.plugin_version.clone(),
-                dataset: self.spec.dataset.clone(),
-                dataset_label: self.spec.dataset_label.clone(),
-                source_label: self.spec.source_label.clone(),
-                file_asserted_at,
-            };
-            let id = vitni_app::start_import_run(workspace, &self.spec.operator, run)
-                .await
-                .map_err(WriteRefusal::Start)?;
-            self.id = Some(id);
-        }
-        self.counts.commands = self.counts.commands.saturating_add(1);
         Ok(())
     }
 
-    /// The origin to stamp on the write being made, once the run has started.
+    /// The origin to stamp on the write being made.
     pub(crate) fn origin(&self) -> Option<RecordOrigin> {
-        let (Some(run), Some(key)) = (self.id, &self.origin) else {
-            return None;
-        };
+        let key = self.origin.as_ref()?;
         Some(RecordOrigin {
             dataset: self.spec.dataset.clone(),
             record: key.record.clone(),
             item: key.item.clone(),
             digest: None,
-            run,
+            run: self.pending.id(),
         })
     }
 
@@ -174,16 +165,19 @@ pub(crate) async fn close(
     ending: &Ending<'_>,
 ) -> Result<(), vitni_app::AppError> {
     let ActiveRun {
-        spec,
-        id,
+        pending,
         mut counts,
         resolved,
         cancelled,
         ..
     } = run;
-    let Some(id) = id else {
-        return Ok(());
-    };
+    if !pending.started() {
+        if resolved.is_empty() {
+            return Ok(());
+        }
+        pending.ensure_started(workspace.store()).await?;
+    }
+    counts.commands = pending.commands();
     let reason = match ending {
         Ending::Bulk(Ok(records)) => {
             counts.records = Some(*records);
@@ -192,9 +186,10 @@ pub(crate) async fn close(
         Ending::Assisted(Ok(_)) => None,
         Ending::Bulk(Err(error)) | Ending::Assisted(Err(error)) => Some(abandon_reason(error)),
     };
+    let (operator, id) = (pending.operator(), pending.id());
     match reason {
-        None => vitni_app::finish_import_run(workspace, &spec.operator, id, resolved, counts).await,
-        Some(reason) => vitni_app::abandon_import_run(workspace, &spec.operator, id, resolved, counts, reason).await,
+        None => vitni_app::finish_import_run(workspace, operator, id, resolved, counts).await,
+        Some(reason) => vitni_app::abandon_import_run(workspace, operator, id, resolved, counts, reason).await,
     }
 }
 
@@ -219,7 +214,7 @@ mod tests {
     use vitni_core::ids::AgentId;
     use vitni_core::provenance::Agent;
 
-    use super::{ActiveRun, ImportRunSpec, WriteRefusal};
+    use super::{ActiveRun, Ending, ImportRunSpec, NoOrigin, close};
 
     fn operator() -> OperatorConfig {
         OperatorConfig {
@@ -252,31 +247,52 @@ mod tests {
             .expect("open")
     }
 
-    #[tokio::test]
-    async fn a_write_before_any_origin_is_refused_and_starts_no_run() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let workspace = workspace(dir.path()).await;
-        let mut run = ActiveRun::new(spec());
-        let refused = run.admit_write(&workspace, None).await;
-        assert!(matches!(refused, Err(WriteRefusal::NoOrigin)), "{refused:?}");
-        assert!(list_import_runs(&workspace).await.expect("runs").is_empty());
+    #[test]
+    fn a_write_before_any_origin_is_refused() {
+        let run = ActiveRun::new(spec());
+        assert!(matches!(run.admit_write(), Err(NoOrigin)));
     }
 
     #[tokio::test]
-    async fn the_first_admitted_write_starts_the_run_and_stamps_its_origin() {
+    async fn an_origin_carries_the_pending_runs_id_before_anything_is_written() {
         let dir = tempfile::tempdir().expect("tempdir");
         let workspace = workspace(dir.path()).await;
         let mut run = ActiveRun::new(spec());
         run.set_origin(Some(("I1".to_owned(), Some("event:BIRT:0".to_owned()))));
-        assert_eq!(run.origin(), None, "nothing to stamp before the run starts");
-        run.admit_write(&workspace, None).await.expect("admitted");
+        run.admit_write().expect("admitted");
         let origin = run.origin().expect("stamped");
         assert_eq!(
             (origin.record.as_str(), origin.item.as_deref()),
             ("I1", Some("event:BIRT:0"))
         );
+        assert_eq!(origin.run, run.pending().id());
+        assert!(
+            list_import_runs(&workspace).await.expect("runs").is_empty(),
+            "no write, no run"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_run_that_wrote_nothing_is_not_recorded() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let run = ActiveRun::new(spec());
+        close(&workspace, run, &Ending::Bulk(&Ok(3))).await.expect("closed");
+        assert!(list_import_runs(&workspace).await.expect("runs").is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_run_that_only_resolved_items_is_recorded_with_them() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let mut run = ActiveRun::new(spec());
+        run.set_origin(Some(("I1".to_owned(), None)));
+        run.resolved("person", Uuid::from_u128(9));
+        let id = run.pending().id();
+        close(&workspace, run, &Ending::Bulk(&Ok(1))).await.expect("closed");
         let runs = list_import_runs(&workspace).await.expect("runs");
         assert_eq!(runs.len(), 1);
-        assert_eq!(runs[0].id, origin.run);
+        assert_eq!(runs[0].id, id);
+        assert_eq!(runs[0].counts.resolved, 1);
     }
 }

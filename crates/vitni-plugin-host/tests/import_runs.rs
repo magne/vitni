@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use vitni_app::{
     AbandonReason, AgentKind, AiConfig, AppDefaults, DatasetId, ImportRunStatus, ImportRunSummary, OperatorConfig,
-    Session, Workspace, WorkspaceDefaults, list_import_runs,
+    Session, Workspace, WorkspaceDefaults, list_import_runs, workspace_counts,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, EventContext};
@@ -266,24 +266,76 @@ async fn gedcom_and_gramps_item_keys_are_stable_across_runs_of_the_same_file() {
     }
 }
 
+/// Imports `text` (as `name`) with `plugin` into `workspace`, under `dataset`.
+async fn import(
+    workspace: Workspace,
+    plugin: &str,
+    dataset: &DatasetId,
+    dir: &Path,
+    name: &str,
+    text: &str,
+) -> Workspace {
+    let source = write_file(dir, name, text);
+    let (_, workspace) = common::host()
+        .run_bulk_import(
+            &common::component(plugin),
+            invocation(workspace, Some(spec(plugin, dataset.clone(), name))),
+            source,
+            proceed,
+        )
+        .await
+        .expect("import");
+    workspace
+}
+
+async fn event_count(workspace: &Workspace) -> u64 {
+    workspace.store().event_count().await.expect("event count")
+}
+
 #[tokio::test]
-async fn a_reimport_into_the_same_dataset_records_what_it_resolved() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let mut workspace = workspace(dir.path()).await;
-    let source = write_file(dir.path(), "tree.ged", GEDCOM);
-    let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
-    for _ in 0..2 {
-        let (_, reopened) = common::host()
-            .run_bulk_import(
-                &common::component("gedcom-import"),
-                invocation(workspace, Some(spec("gedcom-import", dataset.clone(), "tree.ged"))),
-                source.clone(),
-                proceed,
-            )
-            .await
-            .expect("import");
-        workspace = reopened;
+async fn re_importing_an_unchanged_file_into_its_dataset_writes_nothing() {
+    for (plugin, name, text) in [
+        ("gedcom-import", "tree.ged", GEDCOM),
+        ("gramps-import", "tree.gramps", GRAMPS),
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let dataset = DatasetId::lineage(plugin, Uuid::from_u128(5));
+        let workspace = import(workspace(dir.path()).await, plugin, &dataset, dir.path(), name, text).await;
+        let (events, counts) = (
+            event_count(&workspace).await,
+            workspace_counts(&workspace).await.expect("counts"),
+        );
+
+        let workspace = import(workspace, plugin, &dataset, dir.path(), name, text).await;
+        assert_eq!(
+            event_count(&workspace).await,
+            events,
+            "{plugin}: the re-import wrote events"
+        );
+        assert_eq!(workspace_counts(&workspace).await.expect("counts"), counts, "{plugin}");
+        assert_eq!(
+            list_import_runs(&workspace).await.expect("runs").len(),
+            1,
+            "{plugin}: no second run"
+        );
     }
+}
+
+#[tokio::test]
+async fn a_reimport_into_another_dataset_records_what_it_resolved_and_then_resolves_by_it() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let first = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+    let second = DatasetId::lineage("gedcom", Uuid::from_u128(6));
+    let workspace = import(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        &first,
+        dir.path(),
+        "tree.ged",
+        GEDCOM,
+    )
+    .await;
+    let workspace = import(workspace, "gedcom-import", &second, dir.path(), "tree.ged", GEDCOM).await;
     let runs = list_import_runs(&workspace).await.expect("runs");
     assert_eq!(runs.len(), 2);
     assert_eq!(
@@ -296,6 +348,132 @@ async fn a_reimport_into_the_same_dataset_records_what_it_resolved() {
         .filter(|(_, event_type, _)| event_type == "ItemResolved")
         .count();
     assert_eq!(resolutions, 3);
+    assert_eq!(workspace_counts(&workspace).await.expect("counts").person, 2);
+
+    let events = event_count(&workspace).await;
+    let workspace = import(workspace, "gedcom-import", &second, dir.path(), "tree.ged", GEDCOM).await;
+    assert_eq!(
+        event_count(&workspace).await,
+        events,
+        "the recorded resolutions resolve the re-run"
+    );
+}
+
+#[tokio::test]
+async fn a_new_record_citing_an_imported_source_and_place_reuses_them() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+    let workspace = import(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        &dataset,
+        dir.path(),
+        "tree.ged",
+        GEDCOM,
+    )
+    .await;
+    let grown = GEDCOM.replace(
+        "0 @S1@ SOUR",
+        "0 @I3@ INDI\n1 NAME Ola /Smith/\n1 BIRT\n2 DATE 1972\n2 PLAC Mandal\n1 SOUR @S1@\n2 PAGE p. 6\n0 @S1@ SOUR",
+    );
+    let workspace = import(workspace, "gedcom-import", &dataset, dir.path(), "tree.ged", &grown).await;
+    let counts = workspace_counts(&workspace).await.expect("counts");
+    assert_eq!(
+        (counts.person, counts.event),
+        (3, 3),
+        "the new person and its birth landed"
+    );
+    assert_eq!(
+        (counts.source, counts.place),
+        (1, 1),
+        "the source and place were resolved, not duplicated"
+    );
+    assert_eq!(counts.citation, 2);
+}
+
+#[tokio::test]
+async fn a_new_fact_on_an_imported_person_lands_on_reimport() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+    let workspace = import(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        &dataset,
+        dir.path(),
+        "tree.ged",
+        GEDCOM,
+    )
+    .await;
+    let grown = GEDCOM.replace("1 SEX M\n", "1 SEX M\n1 OCCU Farmer\n");
+    let workspace = import(workspace, "gedcom-import", &dataset, dir.path(), "tree.ged", &grown).await;
+    let person = workspace
+        .store()
+        .find_person("I0001")
+        .await
+        .expect("find")
+        .expect("person");
+    assert_eq!(
+        person.facts().len(),
+        1,
+        "the occupation added in the file reached the person"
+    );
+}
+
+/// The GEDCOM fixture with a header export date and John's birth on `birth`.
+fn dated(export: &str, birth: &str) -> String {
+    GEDCOM
+        .replace("1 SOUR test\n", &format!("1 SOUR test\n1 DATE {export}\n"))
+        .replace("2 DATE 5 APR 1970", &format!("2 DATE {birth}"))
+}
+
+async fn birth_date(workspace: &Workspace) -> String {
+    let events = workspace.store().list_events().await.expect("events");
+    let birth = events
+        .iter()
+        .find(|event| event.event_type() == Some(&vitni_core::enums::EventType::Birth))
+        .expect("birth");
+    format!("{:?}", birth.date())
+}
+
+#[tokio::test]
+async fn a_changed_date_supersedes_the_imported_one_only_when_the_file_is_newer() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+    let first = dated("1 JAN 2000", "5 APR 1970");
+    let workspace = import(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        &dataset,
+        dir.path(),
+        "tree.ged",
+        &first,
+    )
+    .await;
+    let imported = birth_date(&workspace).await;
+
+    let stale = dated("1 JAN 2001", "6 APR 1970");
+    let events = event_count(&workspace).await;
+    let workspace = import(workspace, "gedcom-import", &dataset, dir.path(), "tree.ged", &stale).await;
+    assert_eq!(
+        event_count(&workspace).await,
+        events,
+        "a file older than the import changes nothing"
+    );
+    assert_eq!(birth_date(&workspace).await, imported);
+
+    let newer = dated("1 JAN 2100", "6 APR 1970");
+    let workspace = import(workspace, "gedcom-import", &dataset, dir.path(), "tree.ged", &newer).await;
+    assert_ne!(
+        birth_date(&workspace).await,
+        imported,
+        "the newer file's date replaced it"
+    );
+    let superseded = log(&workspace)
+        .await
+        .into_iter()
+        .filter(|(kind, event_type, _)| kind == "event" && event_type == "AssertionSuperseded")
+        .count();
+    assert_eq!(superseded, 1, "the imported date was superseded, not overwritten");
 }
 
 #[tokio::test]

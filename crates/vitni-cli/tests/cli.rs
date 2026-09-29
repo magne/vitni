@@ -703,19 +703,22 @@ fn a_second_import_of_a_lineage_format_must_name_its_dataset() {
             .and(predicate::str::contains("--new-dataset"))
             .and(predicate::str::contains("tree.ged")),
     );
+    // The same file into its own dataset is already on record: it writes nothing, not even a run.
     import_tree(dir.path(), &["--dataset", "tree.ged"]).success();
     import_tree(dir.path(), &["--new-dataset"]).success();
 
-    vitni(dir.path())
-        .args(["import-run", "datasets"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("tree.ged  2 runs").and(predicate::str::contains("tree.ged  1 run")));
+    let datasets = vitni(dir.path()).args(["import-run", "datasets"]).assert().success();
+    let stdout = String::from_utf8(datasets.get_output().stdout.clone()).unwrap();
+    assert_eq!(
+        stdout.lines().filter(|line| line.contains("tree.ged  1 run")).count(),
+        2,
+        "{stdout}"
+    );
     let listed = vitni(dir.path()).args(["import-run", "list"]).assert().success();
     let stdout = String::from_utf8(listed.get_output().stdout.clone()).unwrap();
     assert_eq!(
         stdout.lines().filter(|line| line.contains("finished")).count(),
-        3,
+        2,
         "{stdout}"
     );
 }

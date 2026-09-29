@@ -4,8 +4,9 @@
 //! notes, media, repositories) into owned aggregates and attaching them to their owner.
 //!
 //! Owned records are created on first reference and cached by Gramps `handle`, and only while their
-//! owner is newly created, so re-importing the same `.gramps` file is idempotent (the person/family
-//! resolves by its `gramps-id` external id and its owned records are skipped).
+//! owner is this dataset's own (`created`: new, or made by an earlier run of the same dataset). Each is
+//! written under its own handle as origin, so re-importing the same `.gramps` file resolves every
+//! record onto what the first run made and writes nothing already on record (ADR 0037 §4).
 
 wit_bindgen::generate!({
     world: "bulk-import",
