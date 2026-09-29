@@ -609,6 +609,13 @@ hard conflicts that cap the score, and `Deterministic` only from a shared origin
 `universal`, `no`, `da` and `en` name-culture packs and `regions.toml` are TOML data, selected per
 comparison from places, years, data languages and lineage; a workspace or the shared data directory
 overrides or adds packs (`load_match_data`).
+✅ Person profile (ADR 0038 §2, §4, #397): `vitni_app::person_profile` builds a person's profile from the
+views — names, sex, occupations, primary vital events (a christening as a baptism) with each place's
+enclosing places and country, a birth computed from a recorded age when no birth or baptism is dated,
+and parents, partners and children with their names and births. The engine compares fathers and
+mothers (a stated parent who cannot be the other's disagrees), partners and children (support only),
+a patronymic against the other record's father, and occupations; two items of one source record are a
+hard conflict. Two *Ole Olsen*s born the same year separate on their fathers.
 
 ## Risk register
 
