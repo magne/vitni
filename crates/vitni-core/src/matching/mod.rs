@@ -44,10 +44,13 @@ mod source;
 mod tag;
 mod weights;
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, PoisonError};
+
 use crate::enums::Sex;
 use crate::matching::date::{DayInterval, SLIP_SIMILARITY, Tolerance, interval, is_clerical_slip, similarity};
-use crate::matching::name::Applied;
-use crate::matching::pack::{CulturePacks, PackError, PackSource};
+use crate::matching::name::{Applied, Rules};
+use crate::matching::pack::{CulturePack, CulturePacks, PackError, PackSource};
 use crate::matching::profile::{PersonProfile, PlaceProfile, VitalEvent, VitalKind};
 use crate::matching::relative::{compare_patronymic, compare_relatives};
 use crate::matching::select::{RegionTable, Signals, comparison_cultures};
@@ -302,15 +305,24 @@ pub struct MatchData {
     pub packs: CulturePacks,
     /// The region table.
     pub regions: RegionTable,
+    /// The packs' rules normalized per culture set, built on first use.
+    rules: RulesCache,
 }
 
 impl MatchData {
+    /// The data of `packs` and `regions`.
+    #[must_use]
+    pub fn new(packs: CulturePacks, regions: RegionTable) -> Self {
+        Self {
+            packs,
+            regions,
+            rules: RulesCache::default(),
+        }
+    }
+
     /// The packs and region table shipped with the engine.
     pub fn embedded() -> Result<Self, PackError> {
-        Ok(Self {
-            packs: CulturePacks::embedded()?,
-            regions: RegionTable::embedded()?,
-        })
+        Ok(Self::new(CulturePacks::embedded()?, RegionTable::embedded()?))
     }
 
     /// This data with `packs` layered over its packs, and `regions`, when given, replacing its table.
@@ -323,10 +335,40 @@ impl MatchData {
             Some(source) => RegionTable::from_source(source)?,
             None => self.regions,
         };
-        Ok(Self {
-            packs: self.packs.layered(packs)?,
-            regions,
-        })
+        Ok(Self::new(self.packs.layered(packs)?, regions))
+    }
+}
+
+/// The normalized rules of each culture set a comparison has applied, so a set's packs are normalized
+/// once rather than per comparison. A cache: it is empty when cloned and never tells two data apart.
+#[derive(Default)]
+struct RulesCache(Mutex<HashMap<Vec<CultureId>, Arc<Rules>>>);
+
+impl RulesCache {
+    /// The rules of `cultures`, built by `build` the first time they are asked for.
+    fn get(&self, cultures: &[CultureId], build: impl FnOnce() -> Rules) -> Arc<Rules> {
+        let mut cache = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        Arc::clone(cache.entry(cultures.to_vec()).or_insert_with(|| Arc::new(build())))
+    }
+}
+
+impl Clone for RulesCache {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for RulesCache {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for RulesCache {}
+
+impl std::fmt::Debug for RulesCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("RulesCache")
     }
 }
 
@@ -343,9 +385,11 @@ pub fn assess_persons(
     person_assessment(a, b, cultures, &applied, settings)
 }
 
-/// The packs of `cultures`, ready to apply.
+/// The packs of `cultures`, ready to apply, their rules normalized once per culture set.
 fn applied<'d>(cultures: &[CultureId], data: &'d MatchData) -> Applied<'d> {
-    Applied::new(cultures.iter().filter_map(|id| data.packs.get(id)).collect())
+    let packs: Vec<&CulturePack> = cultures.iter().filter_map(|id| data.packs.get(id)).collect();
+    let rules = data.rules.get(cultures, || Rules::of(&packs));
+    Applied::with_rules(packs, rules)
 }
 
 /// Compares two person profiles under cultures already chosen — a person's own, or a family's.
