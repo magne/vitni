@@ -23,7 +23,7 @@ use vitni_app::{
     ActivityDetail, Age, AgeBound, AppError, AssociationRole, BackupError, Calendar, ChangeLogEntry,
     ChildParentRelationship, ChromosomeSide, CitingContext, DatasetError, DateModifier, DatePoint, DateQuality,
     DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate,
-    GenealogicalDateBody, InformationKind, Kinship, MatchDataError, MatchKind, MatchStatus, NameType, NoteType,
+    GenealogicalDateBody, InformationKind, Kinship, MatchBand, MatchDataError, MatchStatus, NameType, NoteType,
     OperatorKind, PackError, ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality,
     SuretyLabelOverrides, UsingKind, config,
 };
@@ -2885,12 +2885,14 @@ impl Localizer {
         }
     }
 
-    /// The localized reason a possible-duplicate pair was flagged (Compare/merge screen, PR 19).
+    /// The label of a matching band — why a pair is shown as a possible duplicate.
     #[must_use]
-    pub fn duplicate_match_reason(&self, kind: &MatchKind) -> String {
-        match kind {
-            MatchKind::NameVariant => fl!(self.loader, "duplicate-reason-name-variant"),
-            MatchKind::SameBirthYear => fl!(self.loader, "duplicate-reason-same-birth-year"),
+    pub fn match_band(&self, band: MatchBand) -> String {
+        match band {
+            MatchBand::Deterministic => fl!(self.loader, "match-band-deterministic"),
+            MatchBand::Probable => fl!(self.loader, "match-band-probable"),
+            MatchBand::Possible => fl!(self.loader, "match-band-possible"),
+            MatchBand::Unlikely => fl!(self.loader, "match-band-unlikely"),
         }
     }
 

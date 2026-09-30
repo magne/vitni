@@ -10,13 +10,15 @@
 //! Two checks ship here:
 //! - [`CheckKind::DeathBeforeBirth`] — a per-person date-sanity scan flagging anyone whose known
 //!   death year precedes their known birth year.
-//! - [`CheckKind::PossibleDuplicates`] — delegated to [`find_duplicate_candidates`], one finding per
-//!   flagged pair (the same pairs the Compare/merge screen shows — the detector is built once there).
+//! - [`CheckKind::PossibleDuplicates`] — the matching engine's [`similar_pairs`] of persons at least
+//!   [`MatchBand::Possible`], one finding per pair (the same pairs the Compare/merge screen shows).
+
+use vitni_core::matching::{MatchBand, MatchableKind};
 
 use crate::dto::AggRef;
-use crate::duplicates::scan_duplicates;
 use crate::error::AppError;
 use crate::person::{PersonSummary, list_persons};
+use crate::similar::similar_pairs;
 use crate::workspace::Workspace;
 
 /// Which data-quality check produced a finding — a closed enum the frontend localizes to its own
@@ -43,34 +45,38 @@ pub struct CheckFinding {
 
 /// Runs every data-quality check against the workspace, returning one [`CheckFinding`] per flag.
 ///
-/// A pure scan over projections plus the duplicate detector — no new events, no I/O beyond the list
-/// scans. Findings for different [`CheckKind`]s are interleaved in check order; the caller groups by
-/// kind.
+/// A scan over projections plus the matching engine — no new events. Findings for different
+/// [`CheckKind`]s are interleaved in check order; the caller groups by kind.
 ///
 /// # Errors
 ///
-/// A store/read-model error from the underlying [`list_persons`] scan.
+/// A store/read-model error, or the matching engine's error when its data or settings cannot be
+/// loaded.
 pub async fn run_checks(workspace: &Workspace) -> Result<Vec<CheckFinding>, AppError> {
     let persons = list_persons(workspace).await?;
-    Ok(check_persons(&persons))
+    check_persons(workspace, &persons).await
 }
 
 /// Runs every data-quality check against an already-loaded person projection.
 ///
-/// The pure core of [`run_checks`], exposed so a caller that already holds the person list (the
-/// dashboard, which also needs it for evidence health and activity names) runs the checks without a
-/// second [`list_persons`] load. Findings for different [`CheckKind`]s are interleaved in check order;
-/// the caller groups by kind.
-#[must_use]
-pub fn check_persons(persons: &[PersonSummary]) -> Vec<CheckFinding> {
+/// The core of [`run_checks`], exposed so a caller that already holds the person list (the dashboard,
+/// which also needs it for evidence health and activity names) runs the checks without a second
+/// [`list_persons`] load. Findings for different [`CheckKind`]s are interleaved in check order; the
+/// caller groups by kind.
+///
+/// # Errors
+///
+/// A store/read-model error, or the matching engine's error when its data or settings cannot be
+/// loaded.
+pub async fn check_persons(workspace: &Workspace, persons: &[PersonSummary]) -> Result<Vec<CheckFinding>, AppError> {
     let mut findings = death_before_birth(persons);
-    for candidate in scan_duplicates(persons) {
+    for pair in similar_pairs(workspace, MatchableKind::Person, MatchBand::Possible).await? {
         findings.push(CheckFinding {
             kind: CheckKind::PossibleDuplicates,
-            records: vec![candidate.a, candidate.b],
+            records: vec![pair.a, pair.b],
         });
     }
-    findings
+    Ok(findings)
 }
 
 /// Flags each person whose known death year precedes their known birth year.
@@ -110,6 +116,7 @@ mod tests {
     use uuid::Uuid;
     use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole};
     use vitni_core::ids::AgentId;
+    use vitni_core::matching::{MatchBand, MatchableKind};
     use vitni_core::provenance::{Agent, AgentKind, Confidence};
 
     fn operator() -> OperatorConfig {
@@ -292,7 +299,7 @@ mod tests {
         let a = person(&workspace, &session, "John", "Smith").await;
         let b = person(&workspace, &session, "John", "Smyth").await;
 
-        let duplicates = crate::duplicates::find_duplicate_candidates(&workspace)
+        let duplicates = crate::similar::similar_pairs(&workspace, MatchableKind::Person, MatchBand::Possible)
             .await
             .expect("duplicates");
         let findings = run_checks(&workspace).await.expect("run checks");

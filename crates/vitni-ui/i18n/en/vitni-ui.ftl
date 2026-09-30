@@ -1045,8 +1045,10 @@ removed-twice = twice removed
 removed-n-times = { $n }× removed
 
 ## Compare / merge (Phase 5 PR 19) — the duplicates table and the compare/merge wizard.
-duplicate-reason-name-variant = name variant
-duplicate-reason-same-birth-year = identical name · birth years close
+match-band-deterministic = established identity
+match-band-probable = probable match
+match-band-possible = possible match
+match-band-unlikely = unlikely match
 merge-field-name = Name
 merge-field-birth = Birth
 merge-field-death = Death

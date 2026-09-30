@@ -91,32 +91,39 @@ impl MergeFailure {
     }
 }
 
-/// One flagged possible-duplicate pair (Phase 5 PR 19's Compare/merge screen): the two persons, why
-/// they were flagged (already localized), and the duplicate-detector's match score.
+/// One possible-duplicate pair (the Compare/merge screen): the two persons, the matching engine's band
+/// (already localized), and its score.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateCandidateVm {
     /// The first person.
     pub a: PedigreeNodeVm,
     /// The second person.
     pub b: PedigreeNodeVm,
-    /// The already-localized reason the pair was flagged.
+    /// The already-localized band the engine put the pair in (probable, possible).
     pub reason: String,
-    /// The duplicate-detector's raw match score (`0..=100`, higher = more likely a duplicate). This
-    /// is *not* an operator-asserted surety — it must never be rendered as the 5-level assertion
-    /// Confidence; the screen shows it as a plain `{score}%` badge (PR 30, `merge.html:24`).
+    /// The matching engine's score as a whole percentage (`0..=100`, higher = more likely one
+    /// person). This is *not* an operator-asserted surety — it must never be rendered as the 5-level
+    /// assertion Confidence; the screen shows it as a plain `{score}%` badge (`merge.html`).
     pub score: u8,
 }
 
 impl DuplicateCandidateVm {
-    /// Builds the view-model from an app [`DuplicateCandidate`](vitni_app::DuplicateCandidate),
-    /// localizing the match reason and carrying its raw `0..=100` score through verbatim.
+    /// Builds the view-model from the engine's [`SimilarPair`](vitni_app::SimilarPair), localizing its
+    /// band and rounding its `0..1` score to a percentage.
     #[must_use]
-    pub fn build(candidate: &vitni_app::DuplicateCandidate, loc: &Localizer) -> Self {
+    pub fn build(pair: &vitni_app::SimilarPair, loc: &Localizer) -> Self {
+        let percent = (pair.assessment.score * 100.0).round().clamp(0.0, 100.0);
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "clamped to 0..=100 just above"
+        )]
+        let score = percent as u8;
         Self {
-            a: node_ref(&candidate.a),
-            b: node_ref(&candidate.b),
-            reason: loc.duplicate_match_reason(&candidate.kind),
-            score: candidate.score,
+            a: node_ref(&pair.a),
+            b: node_ref(&pair.b),
+            reason: loc.match_band(pair.assessment.band),
+            score,
         }
     }
 }

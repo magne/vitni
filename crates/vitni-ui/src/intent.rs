@@ -34,6 +34,9 @@ use vitni_app::{
     commit_person_change_set, set_person_human_id,
 };
 use vitni_app::{
+    MatchBand, MatchableKind, ancestors, check_persons, descendants, merge_persons, relationship, similar_pairs,
+};
+use vitni_app::{
     NewResearchNote, NewResearchNoteSubject, add_subject_to_research_note, create_research_note, list_research_notes,
     list_research_notes_about, remove_subject_from_research_note, set_research_note_body,
     set_research_note_restrictions, show_research_note, tag_research_note,
@@ -45,7 +48,6 @@ use vitni_app::{
     list_tags, set_dna_match_restrictions, set_dna_match_status, set_dna_test_restrictions, show_dna_match,
     show_dna_test, show_tag, tag_dna_match, tag_dna_test, undo_dna_match_assertion, undo_dna_test_assertion,
 };
-use vitni_app::{ancestors, check_persons, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use vitni_app::{
     CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MediaChangeSet, NewPlaceEntry, NoteChangeSet,
@@ -290,17 +292,17 @@ async fn show_dashboard(workspace: &Workspace, loc: &Localizer) -> Result<Intent
 /// [`DataQualityVm`] the data-quality card renders.
 async fn show_data_quality(workspace: &Workspace) -> Result<IntentOutcome, AppError> {
     let persons = list_persons(workspace).await?;
-    let findings = check_persons(&persons);
+    let findings = check_persons(workspace, &persons).await?;
     let data_quality = DataQualityVm::build(&persons, &findings);
     Ok(IntentOutcome::DataQuality(Box::new(data_quality)))
 }
 
-/// Scans the workspace for possible-duplicate person pairs (the Merge tool's landing table).
+/// The matching engine's possible-duplicate person pairs (the Merge tool's landing table).
 async fn list_duplicate_candidates(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
-    let candidates = find_duplicate_candidates(workspace).await?;
-    let vms = candidates
+    let pairs = similar_pairs(workspace, MatchableKind::Person, MatchBand::Possible).await?;
+    let vms = pairs
         .iter()
-        .map(|candidate| DuplicateCandidateVm::build(candidate, loc))
+        .map(|pair| DuplicateCandidateVm::build(pair, loc))
         .collect();
     Ok(IntentOutcome::DuplicateCandidates(vms))
 }

@@ -1,7 +1,7 @@
 use super::{DuplicateCandidateVm, MergeCompareVm, MergeResultVm};
 use crate::i18n::Localizer;
 use std::collections::BTreeSet;
-use vitni_app::{AggRef, Confidence, DuplicateCandidate, FactSummary, MatchKind, MergeResult, PersonSummary};
+use vitni_app::{AggRef, Confidence, FactSummary, MatchAssessment, MatchBand, MergeResult, PersonSummary, SimilarPair};
 use vitni_app::{Fact, FactType};
 
 fn agg(human_id: &str) -> AggRef {
@@ -42,22 +42,25 @@ fn bare_summary(human_id: &str, display_name: Option<&str>) -> PersonSummary {
 }
 
 #[test]
-fn duplicate_candidate_exposes_the_raw_score_and_localizes_reason() {
+fn a_duplicate_pair_shows_the_engine_score_as_a_percentage_and_its_band() {
     let loc = Localizer::for_test("en");
-    let candidate = DuplicateCandidate {
+    let pair = SimilarPair {
         a: agg("I0042"),
         b: agg("I0099"),
-        kind: MatchKind::NameVariant,
-        score: 94,
+        assessment: MatchAssessment {
+            score: 0.936,
+            band: MatchBand::Possible,
+            features: Vec::new(),
+            cultures: Vec::new(),
+            parts: Vec::new(),
+            engine: vitni_app::ENGINE_VERSION,
+        },
     };
-    let vm = DuplicateCandidateVm::build(&candidate, &loc);
+    let vm = DuplicateCandidateVm::build(&pair, &loc);
     assert_eq!(vm.a.human_id, "I0042");
     assert_eq!(vm.b.human_id, "I0099");
-    assert_eq!(
-        vm.score, 94,
-        "the raw match score is carried through, not a confidence level"
-    );
-    assert!(!vm.reason.is_empty());
+    assert_eq!(vm.score, 94, "the engine score as a percentage, not a confidence level");
+    assert_eq!(vm.reason, "possible match");
 }
 
 #[test]

@@ -1045,8 +1045,10 @@ removed-twice = to ledd forskjøvet
 removed-n-times = { $n }× forskjøvet
 
 ## Sammenligne / slå sammen (Fase 5 PR 19) — dublett-tabellen og sammenligne/slå-sammen-veiviseren.
-duplicate-reason-name-variant = navnevariant
-duplicate-reason-same-birth-year = identisk navn · fødselsår nær hverandre
+match-band-deterministic = fastslått identitet
+match-band-probable = sannsynlig treff
+match-band-possible = mulig treff
+match-band-unlikely = lite sannsynlig treff
 merge-field-name = Navn
 merge-field-birth = Født
 merge-field-death = Død
