@@ -266,7 +266,7 @@ out of sequence. #389 follows #394, because once xrefs and Gramps ids stop being
 resolve-by-origin can find a re-imported person. #401 follows #403, because the duplicate check
 excludes decided pairs. Every other stage is in number order.
 
-### `0.9.1 — Fixture provenance` (3 open)
+### `0.9.1 — Fixture provenance` (2 open)
 
 The `vitni-digitalarkivet` tests parsed five Digitalarkivet pages saved as they were served: census and
 church-book transcriptions whose licences are unstated or unpublished, plus Arkivverket's own site
@@ -274,13 +274,12 @@ markup. The project's licences could not cover them. No scanned image was ever c
 rewritten (`issues.md`, *Decided*, *Publication*). The bullets are under *Assisted import* and *Docs &
 repo tooling*. [ADR 0042](adr/0042-test-fixture-provenance.md) (#445) sets the rule the four issues
 implement, and `development.md` holds its takedown procedure. The captures were replaced by invented
-pages in #446.
+pages in #446, and the real pages became the fetched external tier in #447.
 
 | Order | Item | Needs |
 | --- | --- | --- |
-| 1 | [External manifest, `cargo xtask fetch-fixtures`, opt-in live tests](https://github.com/magne/vitni/issues/447) | ADR 0042 |
 | 1 | [`cargo xtask fixture-guard`](https://github.com/magne/vitni/issues/448) | — |
-| 2 | [`cargo xtask regen-fixtures`: rebuild the synthetic pages from the fetched ones](https://github.com/magne/vitni/issues/449) | #447 |
+| 1 | [`cargo xtask regen-fixtures`: rebuild the synthetic pages from the fetched ones](https://github.com/magne/vitni/issues/449) | — |
 
 It is a gate of its own rather than part of `0.9` because it closes independently and touches no UI.
 It sits before `0.10` because #409/#410 port the Digitalarkivet importer, and those should build on

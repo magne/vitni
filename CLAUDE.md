@@ -113,6 +113,8 @@ cargo xtask build-plugins                                            # lint + bu
 cargo xtask icons                                                    # assets/icon/*.svg → the installed PNGs
 cargo xtask backup-fixture                                           # regenerate the golden backup fixture (ADR 0041)
 cargo xtask match-eval                                               # score the matching evaluation corpus (ADR 0038 §9)
+cargo xtask fetch-fixtures                                           # download the external Digitalarkivet pages (ADR 0042 §3)
+cargo nextest run -p vitni-digitalarkivet --run-ignored only         # …and check them against the live site (manual, pre-release)
 cargo xtask gui-pass                                                 # drive the real GUI headless (below)
 cargo xtask screenshots                                              # README images from the real GUI (below)
 prek run                                                             # run git hooks manually
@@ -278,8 +280,9 @@ Clippy still runs `--all-targets`, so the bench code stays linted. Run benches d
   - `licensed`: under a redistributable licence, with that licence recorded;
   - `transcribed-facts`: facts from public records, with source URLs.
 
-  Never save an archive's or website's page as a fixture. List it in the external manifest, fetched
-  locally, instead (#447). Removing a file from history is the takedown procedure in
+  Never save an archive's or website's page as a fixture. List it in the external manifest
+  (`crates/vitni-digitalarkivet/tests/external/manifest.toml`), fetched locally by
+  `cargo xtask fetch-fixtures`, instead. Removing a file from history is the takedown procedure in
   [`docs/development.md`](docs/development.md#takedown-removing-a-file-from-history).
 
 ## Code navigation
