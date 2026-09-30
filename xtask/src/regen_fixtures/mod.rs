@@ -41,13 +41,20 @@ pub fn run() -> Result<()> {
     let mut problems = Vec::new();
     for page in &manifest.page {
         let fetched = output_path(Path::new(OUT_DIR), &page.id);
-        let Ok(html) = fs::read_to_string(&fetched) else {
-            problems.push(format!(
-                "{}: {} is missing; run `cargo xtask fetch-fixtures` first",
-                page.id,
-                fetched.display()
-            ));
-            continue;
+        let html = match fs::read_to_string(&fetched) {
+            Ok(html) => html,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                problems.push(format!(
+                    "{}: {} is missing; run `cargo xtask fetch-fixtures` first",
+                    page.id,
+                    fetched.display()
+                ));
+                continue;
+            }
+            Err(error) => {
+                problems.push(format!("{}: reading {}: {error}", page.id, fetched.display()));
+                continue;
+            }
         };
         match pruner.regenerate(page, &html, &manifest.vocabulary) {
             Ok(output) => outputs.push((page.id.clone(), output)),

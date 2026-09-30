@@ -32,7 +32,8 @@ pub const FOCAL_HEADING: &str = "h4 a";
 pub const ORDINAL: &str = "span.de-emphasized";
 /// The scan-viewer button on a person page.
 pub const SCAN_LINK: &str = "a#scannedImageLink";
-/// A residence page's person links.
+/// A residence page's person links, matched on the raw `href`: the site writes them absolute or
+/// root-relative, so a path-relative link that only resolves to `/census/person/` is not one.
 pub const RESIDENCE_PERSON_LINK: &str = r#"a[href*="/census/person/"]"#;
 /// The legacy scan viewer's permanent image link.
 pub const PERMANENT_IMAGE: &str = "input#permanent_image_link";
