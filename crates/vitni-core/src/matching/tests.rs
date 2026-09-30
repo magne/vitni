@@ -203,6 +203,16 @@ fn a_birth_three_years_off_stays_possible() {
 }
 
 #[test]
+fn a_pair_whose_evidence_nets_to_nothing_is_not_shown() {
+    let a = person("Johannes", "Haugen", Sex::Male, born(point(1800, None, None), None));
+    let b = person("Johannes", "Haugen", Sex::Male, born(point(1821, None, None), None));
+    let assessment = assess(&a, &b);
+    assert_eq!(feature(&assessment, Feature::Birth).outcome, Outcome::Disagree);
+    assert!((assessment.score - 0.5).abs() < 1e-12, "{assessment:#?}");
+    assert_eq!(assessment.band, MatchBand::Unlikely, "{assessment:#?}");
+}
+
+#[test]
 fn a_clerical_slip_in_an_exact_date_scores_as_a_near_agreement() {
     let near = |x: GenealogicalDate, y: GenealogicalDate| {
         let a = person("Ole", "Olsen", Sex::Male, born(x, None));

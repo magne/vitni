@@ -271,7 +271,8 @@ by `similar.rs` before each lookup.
   (`similar::affected`). A new key that reads another record's data needs its dependency added there.
 - **`[matching]`** in `workspace.toml`, or `[workspace-defaults.matching]` in the global config, sets
   `default_cultures` (pack ids beside `universal`) and the `probable`/`possible` thresholds as whole
-  percentages; an unset field falls back field by field to the engine's defaults. A bad value, or a
+  percentages, which a pair must score above (a pair whose evidence nets to nothing sits exactly at the
+  default 50 and is not shown); an unset field falls back field by field to the engine's defaults. A bad value, or a
   pack that does not parse, fails the lookup that needs it, never the workspace open.
 
 ## The matching evaluation corpus

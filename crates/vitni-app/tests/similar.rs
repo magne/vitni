@@ -378,6 +378,8 @@ async fn blocking_loses_no_pair_a_score_of_every_pair_would_show() {
         ("Anne", "Hansen", Some(1900)),
         ("", "Hansen", None),
         ("Per", "Berg", Some(1800)),
+        ("Kristian", "Hansen", Some(1860)),
+        ("Christian", "Hansen", Some(1861)),
     ] {
         let person = match year {
             Some(year) => records.born(given, surname, year).await.0,

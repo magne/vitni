@@ -493,6 +493,14 @@ does.
   records like `match_keys`, or keep only the pair ids and score on display. *Needs:* the duplicate
   check through the engine (#401). *Exit:* the Dashboard opens a 100k-person workspace in under a
   second.
+- **Blocking loses a given name that is only similar, not keyed alike** — the proptest
+  `every_pair_the_engine_shows_meets` (`vitni-core/src/matching/keys/tests.rs`), at 2000 cases, finds
+  *Katherine Haugen* (born 1857 by a census age) and *Kari Olsen* (baptised 1853), both in Norway: the
+  engine scores the given names `Partial` by Jaro–Winkler and shows the pair as possible, but no key of
+  one meets the other — the names share no normalized, phonetic or class key and the patronymic
+  surnames differ. The default 256 cases rarely reach it. *Shape:* a key the Jaro–Winkler floor
+  implies (a short prefix of the normalized given name), or *Katherine* in the same class as *Kari*.
+  *Exit:* the proptest passes at 10 000 cases.
 - **Persona clusters** — ADR 0039 §4, §5. `identity_links(kind, member, root)` holds the transitive
   closure, refusing cycles and blocking a merge on a live distinct decision. Read-time composition in
   `vitni-app`: the root's detail is the union of every member's claims, each still attributed, and a

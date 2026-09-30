@@ -91,7 +91,7 @@ impl CultureId {
 pub struct EngineVersion(pub u32);
 
 /// The engine version of this build. Bump it when a comparator, weight or shipped pack changes scores.
-pub const ENGINE_VERSION: EngineVersion = EngineVersion(3);
+pub const ENGINE_VERSION: EngineVersion = EngineVersion(4);
 
 /// How sure the engine is that two records describe one individual.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -282,9 +282,10 @@ pub struct MatchAssessment {
 pub struct MatchSettings {
     /// The cultures a side with no place, language or lineage signal gets.
     pub default_cultures: Vec<CultureId>,
-    /// The score at or above which a pair is [`MatchBand::Probable`].
+    /// The score above which a pair is [`MatchBand::Probable`].
     pub probable: f64,
-    /// The score at or above which a pair is [`MatchBand::Possible`].
+    /// The score above which a pair is [`MatchBand::Possible`]. A pair exactly at it — evidence that
+    /// nets to nothing, a score of 0.5 at the default — is not shown.
     pub possible: f64,
 }
 
@@ -473,9 +474,9 @@ fn conclude(
     }
     let band = if identified {
         MatchBand::Deterministic
-    } else if score >= settings.probable {
+    } else if score > settings.probable {
         MatchBand::Probable
-    } else if score >= settings.possible {
+    } else if score > settings.possible {
         MatchBand::Possible
     } else {
         MatchBand::Unlikely
