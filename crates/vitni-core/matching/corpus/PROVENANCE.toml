@@ -1,0 +1,7 @@
+# Fixture provenance (ADR 0042), checked by `cargo xtask fixture-guard`. `invented.toml` holds made-up
+# pairs; `digitalarkivet.toml` holds facts transcribed from public records.
+origin = "invented"
+
+[files."digitalarkivet.toml"]
+origin = "transcribed-facts"
+sources = "each pair's `source` lists its records' Digitalarkivet URLs"

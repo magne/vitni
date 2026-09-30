@@ -1,0 +1,3 @@
+# Fixture provenance (ADR 0042), checked by `cargo xtask fixture-guard`. Invented pages reproducing only
+# the DOM `src/html.rs` reads; the real pages are in the external tier (tests/external/manifest.toml).
+origin = "invented"

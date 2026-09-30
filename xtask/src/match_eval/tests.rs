@@ -123,6 +123,14 @@ fn a_duplicate_id_across_files_is_rejected() {
 }
 
 #[test]
+fn the_provenance_declaration_is_not_a_corpus_file() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("a.toml"), CENSUS_AGE).unwrap();
+    std::fs::write(dir.path().join("PROVENANCE.toml"), "origin = \"invented\"\n").unwrap();
+    assert_eq!(load(dir.path()).unwrap().len(), 1);
+}
+
+#[test]
 fn an_empty_corpus_directory_is_rejected() {
     let dir = tempfile::tempdir().unwrap();
     assert!(load(dir.path()).is_err());
