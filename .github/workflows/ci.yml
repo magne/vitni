@@ -52,6 +52,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The container runs as root over a checkout the runner's user owns, so git refuses the repository
+      # ("dubious ownership"). `fixture-guard` lists tracked files with `git ls-files`, in `xtask check`
+      # and in its own test.
+      - name: trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       # rust-cache alone (no sccache: it would double-cache the same artifacts against the shared
       # 10 GB GHA backend). One stable toolchain and the default `./target` are all that need caching;
       # the plugin `plugins/*/target` dirs are small wasm builds, intentionally left uncached.
@@ -60,7 +65,7 @@ jobs:
         run: cargo xtask fmt --check
       - name: clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: static checks (i18n, css, input-guard, match-eval)
+      - name: static checks (i18n, css, input-guard, fixture-guard, match-eval)
         run: cargo xtask check
 
   test:
@@ -78,6 +83,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The container runs as root over a checkout the runner's user owns, so git refuses the repository
+      # ("dubious ownership"). `fixture-guard` lists tracked files with `git ls-files`, in `xtask check`
+      # and in its own test.
+      - name: trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # This job links every test binary in the workspace against the whole dependency tree, and ran
       # the runner's disk out from under the linker — `rust-lld` mmaps its output file, so a full disk
