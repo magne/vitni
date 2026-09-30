@@ -49,6 +49,10 @@ pub fn run() -> Result<()> {
             thread::sleep(CRAWL_DELAY);
         }
         let out = output_path(Path::new(OUT_DIR), &page.id);
+        // A page left over from an earlier run must not pass for this run's when this fetch fails.
+        if out.exists() {
+            fs::remove_file(&out).with_context(|| format!("removing the stale {}", out.display()))?;
+        }
         println!("fetch-fixtures: {} ← {}", out.display(), page.url);
         let status = Command::new("curl")
             .args(curl_args(&page.url, &out))
@@ -95,13 +99,15 @@ pub fn output_path(dir: &Path, id: &str) -> PathBuf {
     dir.join(format!("{id}.html"))
 }
 
-/// `curl`'s arguments for fetching `url` into `out`: fail on an HTTP error, follow redirects (the
-/// church-book viewer redirects to its new host), and give up after 30 seconds.
+/// `curl`'s arguments for fetching `url` into `out`: fail on an HTTP error, leave no partial file
+/// behind on any error, follow redirects (the church-book viewer redirects to its new host), and give
+/// up after 30 seconds.
 pub fn curl_args(url: &str, out: &Path) -> Vec<String> {
     vec![
         "--fail".to_owned(),
         "--silent".to_owned(),
         "--show-error".to_owned(),
+        "--remove-on-error".to_owned(),
         "--location".to_owned(),
         "--max-time".to_owned(),
         "30".to_owned(),
@@ -185,9 +191,9 @@ mod tests {
     }
 
     #[test]
-    fn curl_fails_on_http_errors_follows_redirects_and_names_itself() {
+    fn curl_fails_on_http_errors_leaves_no_partial_file_follows_redirects_and_names_itself() {
         let args = curl_args("https://goto.digitalarkivet.no/kb1", Path::new("out.html"));
-        for flag in ["--fail", "--location", "--max-time"] {
+        for flag in ["--fail", "--remove-on-error", "--location", "--max-time"] {
             assert!(args.iter().any(|a| a == flag), "missing {flag}: {args:?}");
         }
         let agent = args.iter().position(|a| a == "--user-agent").unwrap();

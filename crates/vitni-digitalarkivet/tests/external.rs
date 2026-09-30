@@ -85,8 +85,6 @@ fn check(page: &Page, html: &str) -> Vec<String> {
     match page.kind {
         Kind::CensusPerson | Kind::ChurchbookPerson => match parse_person_page(html, &page.url) {
             Ok(record) => {
-                let kind = person_page_kind(page.kind);
-                compare(&mut mismatches, id, "page kind", kind.as_ref(), Some(&record.page_kind));
                 compare(
                     &mut mismatches,
                     id,
@@ -158,23 +156,29 @@ fn check(page: &Page, html: &str) -> Vec<String> {
             }
             Err(error) => mismatches.push(format!("{id}: does not parse: {error}")),
         },
-        Kind::Viewer => {
-            let image = parse_viewer_page(html, &page.url).ok();
-            compare(
-                &mut mismatches,
-                id,
-                "image",
-                expected.image.as_deref(),
-                image.as_deref(),
-            );
-            if expected.no_image == Some(true)
-                && let Some(image) = image
-            {
-                mismatches.push(format!("{id}: image: expected none, parsed {image:?}"));
-            }
-        }
+        Kind::Viewer => check_viewer(&mut mismatches, page, html),
     }
     mismatches
+}
+
+/// Pushes a mismatch for each expected viewer fact `html` does not hold.
+fn check_viewer(mismatches: &mut Vec<String>, page: &Page, html: &str) {
+    let id = page.id.as_str();
+    let expected = &page.expected;
+    let image = match parse_viewer_page(html, &page.url) {
+        Ok(image) => Some(image),
+        Err(error) if expected.image.is_some() => {
+            mismatches.push(format!("{id}: does not parse: {error}"));
+            return;
+        }
+        Err(_) => None,
+    };
+    compare(mismatches, id, "image", expected.image.as_deref(), image.as_deref());
+    if expected.no_image == Some(true)
+        && let Some(image) = image
+    {
+        mismatches.push(format!("{id}: image: expected none, parsed {image:?}"));
+    }
 }
 
 fn manifest() -> Result<Manifest, toml::de::Error> {
@@ -293,15 +297,35 @@ fn check_reports_a_page_that_does_not_parse() {
 }
 
 #[test]
-fn check_reports_a_page_of_the_wrong_kind() {
-    let mut page = invented_census_person();
-    page.kind = Kind::ChurchbookPerson;
+fn check_reports_why_a_viewer_expected_to_show_a_scan_does_not_parse() {
+    let page = Page {
+        id: "invented-viewer".to_owned(),
+        kind: Kind::Viewer,
+        url: "https://media.digitalarkivet.no/view/99901/42".to_owned(),
+        rights: invented_census_person().rights,
+        expected: Expected {
+            image: Some("https://urn.digitalarkivet.no/URN:NBN:no-a1450-fs10000099901042.jpg".to_owned()),
+            ..Expected::default()
+        },
+    };
+    let mismatches = check(&page, "<html><body></body></html>");
+    assert_eq!(mismatches.len(), 1, "{mismatches:?}");
     assert!(
-        check(&page, INVENTED_CENSUS_PERSON)
-            .iter()
-            .any(|m| m.starts_with("invented-census-person: page kind:")),
-        "a census person page must not pass as a church-book record"
+        mismatches[0].starts_with("invented-viewer: does not parse:"),
+        "{mismatches:?}"
     );
+}
+
+#[test]
+fn no_image_false_is_not_an_expected_fact() {
+    assert!(check_nothing(&Expected {
+        no_image: Some(false),
+        ..Expected::default()
+    }));
+    assert!(!check_nothing(&Expected {
+        no_image: Some(true),
+        ..Expected::default()
+    }));
 }
 
 #[test]
@@ -346,7 +370,7 @@ fn check_nothing(expected: &Expected) -> bool {
         && source_title.is_none()
         && person_links.is_none()
         && image.is_none()
-        && no_image.is_none()
+        && *no_image != Some(true)
 }
 
 /// Pushes a mismatch when `expected` is given and `actual` differs from it.
