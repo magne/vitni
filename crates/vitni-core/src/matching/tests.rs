@@ -705,3 +705,27 @@ proptest! {
         prop_assert!(itself.score >= other.score, "self {} < other {}", itself.score, other.score);
     }
 }
+
+#[test]
+fn the_rules_of_a_culture_set_are_normalized_once_and_a_clone_starts_empty() {
+    let data = MatchData::embedded().unwrap();
+    let cultures = [CultureId::new("universal"), CultureId::new("no")];
+    let mut built = 0;
+    let first = data.rules.get(&cultures, || {
+        built += 1;
+        super::name::Rules::of(&[])
+    });
+    let again = data.rules.get(&cultures, || {
+        built += 1;
+        super::name::Rules::of(&[])
+    });
+    assert!(std::sync::Arc::ptr_eq(&first, &again));
+    assert_eq!(built, 1);
+    let copy = data.clone();
+    assert_eq!(copy, data, "the cache never tells two data apart");
+    let fresh = copy.rules.get(&cultures, || super::name::Rules::of(&[]));
+    assert!(
+        !std::sync::Arc::ptr_eq(&first, &fresh),
+        "a clone starts with an empty cache"
+    );
+}

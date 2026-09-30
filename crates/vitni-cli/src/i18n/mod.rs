@@ -30,7 +30,9 @@ use vitni_app::{
     ResearchNoteError, ResearchNoteSummary, Restriction, Sex, SourceError, SourceSummary, SubjectRef,
     SuretyLabelOverrides, TagError, TagSummary,
 };
-use vitni_app::{DatasetError, DatasetSummary, ImportRunError, ImportRunStatus, ImportRunSummary};
+use vitni_app::{
+    DatasetError, DatasetSummary, ImportRunError, ImportRunStatus, ImportRunSummary, MatchDataError, PackError,
+};
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 
 mod citation;
@@ -39,6 +41,7 @@ mod dna_test;
 mod event;
 mod family;
 mod import_run;
+mod matching;
 mod media;
 mod note;
 mod person;
@@ -422,6 +425,7 @@ impl Localizer {
             AppError::ResearchNoteDomain(domain) => self.research_note_error(domain),
             AppError::ImportRunDomain(domain) => self.import_run_error(domain),
             AppError::Dataset(dataset) => self.dataset_error(dataset),
+            AppError::MatchData(data) => self.match_data_error(data),
             AppError::Backup(backup) => self.backup_error(backup),
             AppError::Db(db) => self.db_error(db),
         }

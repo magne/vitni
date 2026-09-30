@@ -452,7 +452,8 @@ in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and imp
 order, and each one's *Needs:* names its prerequisites. The milestone opened with backup (#391),
 record origins with import runs (#393) and resolve-by-origin (#394), then the xref-collision fix
 (#389), tombstones by origin (#395), the matching core (#396), the person profile (#397), the
-family and event profiles (#398) and the other seven kinds' profiles (#399), which have landed.
+family and event profiles (#398), the other seven kinds' profiles (#399) and the `match_keys` blocking
+index with `find_similar` (#400), which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
@@ -463,15 +464,6 @@ does.
   re-import then misses the earlier imports' origins until `vitni rebuild`. *Shape:* a completion
   marker written after the replay, or the backfill in one transaction. *Exit:* a test that interrupts
   the backfill and reopens gets the full index.
-- **`match_keys` blocking index and `find_similar`** — ADR 0038 §7, §8. Loose keys: phonetic and
-  normalized given name, equivalence class across every installed pack, and the birth decade with its
-  neighbours. Surname is not required. A pack-set fingerprint triggers a rebuild. `find_similar(kind,
-  target, min_band, limit)` and `assess` become the only entry points, and `duplicates.rs` is removed,
-  together with its `AggRef.id` set to the human id (`duplicates.rs:191`). This first consumer also
-  adds the `[matching]` config (ADR 0038 §5, §6: default cultures and the band thresholds, today
-  `MatchSettings::default()`) and maps `MatchDataError` from `load_match_data` into `AppError` with its
-  Fluent strings. *Needs:* the profiles.
-  *Exit:* a bench at 100k persons; recall on the corpus is not lost to blocking. — #400
 - **Evaluation corpus and `cargo xtask match-eval`** — ADR 0038 §9. Labelled pairs: invented ones, plus
   public census and church records over 100 years old. The corpus deliberately holds the hard true
   matches: spelling variants, a surname changed after a move, a census age off by one to five years,
@@ -492,6 +484,20 @@ does.
   reasons. This supersedes the duplicate half of *Data-quality checks are person-only*. *Needs:*
   `find_similar`, and distinct decisions. *Exit:* a place duplicate appears on the Dashboard with its
   reasons. — #401
+- **`find_similar` reads every profile view** — each lookup builds its candidates' profiles from
+  `Profiles::load`, which lists every person, event, place and family (`vitni-app/src/profile.rs`), so
+  one lookup costs about 0.9 s at 100k persons (`cargo bench -p vitni-app --bench similar`) though it
+  scores only the few hundred candidates the index yields. A picker or a manual-entry hint needs it
+  sublinear. *Shape:* load the target's and the candidates' views, their events, places and family
+  links by id. *Exit:* `find_similar` at 100k persons under 100 ms in the bench.
+- **The all-pairs duplicate scan does not scale to 100k persons** — `similar_pairs` scores every
+  candidate pair (about 86 per person on the bench's name pools, rising with the workspace) and holds
+  every pair's `MatchAssessment`; at 100k persons one scan took 452 s on one core before it was spread
+  over the cores, and its pairs run to gigabytes. The Dashboard's data-quality card and the Merge
+  screen run it on every show. *Shape:* keep the pairs as a projection refreshed from the dirty
+  records like `match_keys`, or keep only the pair ids and score on display. *Needs:* the duplicate
+  check through the engine (#401). *Exit:* the Dashboard opens a 100k-person workspace in under a
+  second.
 - **Persona clusters** — ADR 0039 §4, §5. `identity_links(kind, member, root)` holds the transitive
   closure, refusing cycles and blocking a merge on a live distinct decision. Read-time composition in
   `vitni-app`: the root's detail is the union of every member's claims, each still attributed, and a

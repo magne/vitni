@@ -91,7 +91,7 @@ fn compare_types(a: Option<&EventType>, b: Option<&EventType>) -> FeatureCompari
 }
 
 /// Whether a role is one of an event's principals.
-fn is_principal(role: &ParticipantRole) -> bool {
+pub(crate) fn is_principal(role: &ParticipantRole) -> bool {
     match role {
         ParticipantRole::Primary
         | ParticipantRole::Husband

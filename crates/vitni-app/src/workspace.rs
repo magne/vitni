@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 use unic_langid::LanguageIdentifier;
@@ -16,10 +17,11 @@ use vitni_db::Store;
 
 use crate::aggregates::for_each_human_id_aggregate;
 use crate::config::{
-    AppDefaults, DateFormat, Engine, IdFormats, NumberFormat, OperatorConfig, SuretyLabelOverride,
-    SuretyLabelOverrides, ThemeMode, WorkspaceDefaults,
+    AppDefaults, DateFormat, Engine, IdFormats, MatchingConfig, NumberFormat, OperatorConfig, SuretyLabelOverride,
+    SuretyLabelOverrides, ThemeMode, WorkspaceDefaults, shared_matching_dir,
 };
 use crate::error::AppError;
+use crate::matching::Matching;
 
 /// The workspace manifest file name.
 const MANIFEST_FILE: &str = "workspace.toml";
@@ -112,6 +114,10 @@ pub struct WorkspaceManifest {
     /// global default, else the frontend's own Fluent-resolved default for that level.
     #[serde(default)]
     pub surety: SuretyLabelOverrides,
+    /// Per-workspace record-matching overrides (ADR 0038 §5, §6); absent fields fall back to the live
+    /// global default, else the engine's built-in settings.
+    #[serde(default)]
+    pub matching: MatchingConfig,
 }
 
 /// Per-workspace plugin enable/disable overrides (ADR 0007 §6; PR21).
@@ -661,6 +667,11 @@ pub struct Workspace {
     store: Store,
     id_formats: IdFormats,
     surety_labels: SuretyLabelOverrides,
+    /// The `[matching]` settings, the manifest's over the global defaults.
+    matching_config: MatchingConfig,
+    /// The name-culture packs and settings, loaded on first use so a bad workspace pack fails only
+    /// the matching that needs it (ADR 0038 §5).
+    matching: OnceLock<Matching>,
 }
 
 impl Workspace {
@@ -705,6 +716,7 @@ impl Workspace {
             locale: LocaleOverrides::default(),
             plugins: PluginPreferences::default(),
             surety: SuretyLabelOverrides::default(),
+            matching: MatchingConfig::default(),
         };
         write_manifest(dir, &manifest)?;
         Ok(manifest)
@@ -736,6 +748,8 @@ impl Workspace {
             store,
             id_formats,
             surety_labels,
+            matching_config: manifest.matching.or(&defaults.matching),
+            matching: OnceLock::new(),
         })
     }
 
@@ -750,6 +764,28 @@ impl Workspace {
     #[must_use]
     pub fn surety_labels(&self) -> &SuretyLabelOverrides {
         &self.surety_labels
+    }
+
+    /// The name-culture packs — embedded, then the shared directory's, then the workspace's — and the
+    /// resolved `[matching]` settings, loaded on first use (ADR 0038 §5, §6).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::MatchData`] if a pack or region file cannot be read or parsed, or
+    /// [`AppError::Config`] if the `[matching]` settings are invalid.
+    pub(crate) fn matching(&self) -> Result<&Matching, AppError> {
+        if let Some(matching) = self.matching.get() {
+            return Ok(matching);
+        }
+        let shared = match shared_matching_dir() {
+            Ok(dir) => Some(dir),
+            Err(error) => {
+                tracing::warn!(%error, "no shared data directory; skipping the shared matching layer");
+                None
+            }
+        };
+        let loaded = Matching::load(&self.dir, shared.as_deref(), &self.matching_config)?;
+        Ok(self.matching.get_or_init(|| loaded))
     }
 
     /// The workspace directory (ADR 0005): the root that holds the manifest, database, and the

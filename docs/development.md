@@ -67,7 +67,11 @@ skips everything else, including `xtask`.
 
 ```bash
 cargo bench -p vitni-db --features sqlite
+cargo bench -p vitni-app --bench similar    # record matching at 10k and 100k persons
 ```
+
+The matching bench seeds a 100k-person workspace of several gigabytes under `target/`, so it keeps it
+out of `/tmp`, which may be RAM-backed.
 
 `cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`,
 `licence-check`, `icons --check`, `backup-guard`) plus `issue-sync`, `labels`, `package` (the Linux release tarball)
@@ -240,6 +244,33 @@ rejected and a pack's `id` must equal its file name.
   its page by its numbers. **Media** match on the checksum exactly, with the file name as weak support;
   the aggregate has no description to compare. **A tag** pair with one case-folded name is
   `Deterministic` — the only band a compared value sets.
+
+## The matching index
+
+`find_similar`, `assess` and `similar_pairs` (`crates/vitni-app/src/similar.rs`) are the only matching
+entry points (ADR 0038 §8); a new consumer calls them rather than `assess_*` over profiles it builds
+itself. Candidates come from the `match_keys` index (ADR 0038 §7): the keys are computed in
+`crates/vitni-core/src/matching/keys.rs`, stored by `crates/vitni-db/src/match_keys/`, and kept current
+by `similar.rs` before each lookup.
+
+- **Keys are loose on purpose.** A person is keyed by each given-name and surname token — normalized
+  under every pack, by phonetic key and every phonetic key one letter shorter, and by the classes of
+  every installed pack — each qualified by the birth decade (`t:ole@185`, or `@?` when undated). A
+  `Probe` meets the neighbouring decades and the unknown one. Other kinds key their names, titles,
+  checksum or folded tag name, and every kind its record origins and external ids. The proptest
+  `every_pair_the_engine_shows_meets` and the app test `blocking_loses_no_pair_a_score_of_every_pair_would_show`
+  hold blocking to "no pair the engine would show is lost"; a key change that fails them loses recall.
+- **A change to how keys are made bumps `KEYS_VERSION`** in `keys.rs`. It is part of the fingerprint
+  stored with the index, so every workspace rebuilds its keys on next use; so does any change to the
+  installed packs, and `vitni rebuild`, which clears the fingerprint.
+- **Between rebuilds, commits mark records dirty** (`match_dirty`, fed on every commit of a matchable
+  aggregate). A lookup rekeys them together with the records whose keys carry theirs — an event's
+  principals, a person's events and families, a place's events, a source's citations
+  (`similar::affected`). A new key that reads another record's data needs its dependency added there.
+- **`[matching]`** in `workspace.toml`, or `[workspace-defaults.matching]` in the global config, sets
+  `default_cultures` (pack ids beside `universal`) and the `probable`/`possible` thresholds as whole
+  percentages; an unset field falls back field by field to the engine's defaults. A bad value, or a
+  pack that does not parse, fails the lookup that needs it, never the workspace open.
 
 ## Repository conventions
 

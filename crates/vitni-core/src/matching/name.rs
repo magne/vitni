@@ -7,6 +7,8 @@
 //! compared after its patronymic suffix is reduced to the canonical form (*Olsøn* → *Olsen*), and a
 //! residence name also without its definite ending (*Haugen* ↔ *Haug*).
 
+use std::sync::Arc;
+
 use strsim::jaro_winkler;
 use unicode_normalization::UnicodeNormalization;
 use unicode_normalization::char::is_combining_mark;
@@ -44,6 +46,14 @@ pub(crate) fn fold(text: &str) -> String {
 #[derive(Debug, Clone)]
 pub(crate) struct Applied<'a> {
     packs: Vec<&'a CulturePack>,
+    /// The packs' rules, normalized once per set of packs.
+    rules: Arc<Rules>,
+}
+
+/// The rules of a set of packs, normalized under the whole set — the costly part of applying packs, so
+/// it is built once per set ([`crate::matching::MatchData`] caches it) rather than per comparison.
+#[derive(Debug)]
+pub(crate) struct Rules {
     /// Every applied given-name equivalence class, its members normalized.
     classes: Vec<Vec<String>>,
     /// Per patronymic suffix list (male, then female, pack by pack): the normalized canonical suffix
@@ -53,19 +63,13 @@ pub(crate) struct Applied<'a> {
     definite_suffixes: Vec<String>,
 }
 
-impl<'a> Applied<'a> {
-    /// The rules of `packs`, applied in the order given.
-    pub fn new(packs: Vec<&'a CulturePack>) -> Self {
-        let mut applied = Self {
-            packs,
-            classes: Vec::new(),
-            patronymics: Vec::new(),
-            definite_suffixes: Vec::new(),
-        };
+impl Rules {
+    /// The rules of `packs`, normalized under all of them.
+    pub fn of(packs: &[&CulturePack]) -> Self {
         let (mut classes, mut patronymics, mut definite_suffixes) = (Vec::new(), Vec::new(), Vec::new());
-        for pack in &applied.packs {
+        for pack in packs {
             for class in pack.given_classes() {
-                classes.push(class.iter().map(|name| applied.normalize_word(name)).collect());
+                classes.push(class.iter().map(|name| normalize_word(packs, name)).collect());
             }
             let system = pack.surnames();
             if system.patronymic {
@@ -73,21 +77,35 @@ impl<'a> Applied<'a> {
                     let Some(first) = suffixes.first() else {
                         continue;
                     };
-                    let mut variants: Vec<String> = suffixes.iter().map(|s| applied.normalize_word(s)).collect();
+                    let mut variants: Vec<String> = suffixes.iter().map(|s| normalize_word(packs, s)).collect();
                     variants.sort_by_key(|variant| std::cmp::Reverse(variant.len()));
-                    patronymics.push((applied.normalize_word(first), variants));
+                    patronymics.push((normalize_word(packs, first), variants));
                 }
             }
             if system.residence {
                 for suffix in &system.definite_suffixes {
-                    definite_suffixes.push(applied.normalize_word(suffix));
+                    definite_suffixes.push(normalize_word(packs, suffix));
                 }
             }
         }
-        applied.classes = classes;
-        applied.patronymics = patronymics;
-        applied.definite_suffixes = definite_suffixes;
-        applied
+        Self {
+            classes,
+            patronymics,
+            definite_suffixes,
+        }
+    }
+}
+
+impl<'a> Applied<'a> {
+    /// The rules of `packs`, applied in the order given.
+    pub fn new(packs: Vec<&'a CulturePack>) -> Self {
+        let rules = Arc::new(Rules::of(&packs));
+        Self { packs, rules }
+    }
+
+    /// `packs` with their already-built `rules`.
+    pub fn with_rules(packs: Vec<&'a CulturePack>, rules: Arc<Rules>) -> Self {
+        Self { packs, rules }
     }
 
     /// Whether any applied culture treats surnames as patronymic or residence names, which makes a
@@ -114,19 +132,9 @@ impl<'a> Applied<'a> {
         tokens
     }
 
-    /// One word folded, stripped of punctuation, rewritten and with doubled letters collapsed. A number
-    /// is kept as written: *1882* and *182* are different years.
+    /// One word folded, stripped of punctuation, rewritten and with doubled letters collapsed.
     fn normalize_word(&self, word: &str) -> String {
-        let mut text: String = fold(word).chars().filter(|c| c.is_alphanumeric()).collect();
-        if is_number(&text) {
-            return text;
-        }
-        for pack in &self.packs {
-            for (from, to) in pack.rewrites() {
-                text = text.replace(from.as_str(), to);
-            }
-        }
-        collapse_doubles(&text)
+        normalize_word(&self.packs, word)
     }
 
     /// The similarity in `0..=1` of two given names, or `None` when either is empty.
@@ -158,9 +166,19 @@ impl<'a> Applied<'a> {
         }
     }
 
+    /// The equivalence classes a normalized token belongs to, each named by its first member.
+    pub fn classes_of<'s>(&'s self, token: &'s str) -> impl Iterator<Item = &'s str> + 's {
+        self.rules
+            .classes
+            .iter()
+            .filter(move |members| members.iter().any(|m| m == token))
+            .filter_map(|members| members.first().map(String::as_str))
+    }
+
     /// Whether two normalized tokens share a given-name equivalence class in any applied pack.
     fn same_class(&self, x: &str, y: &str) -> bool {
-        self.classes
+        self.rules
+            .classes
             .iter()
             .any(|members| members.iter().any(|m| m == x) && members.iter().any(|m| m == y))
     }
@@ -190,7 +208,7 @@ impl<'a> Applied<'a> {
 
     /// `token` with its patronymic suffix replaced by the canonical suffix of its gender.
     fn canonical_patronymic(&self, token: &str) -> Option<String> {
-        for (canonical, variants) in &self.patronymics {
+        for (canonical, variants) in &self.rules.patronymics {
             for variant in variants {
                 if let Some(stem) = token.strip_suffix(variant.as_str())
                     && stem.chars().count() >= MIN_STEM
@@ -207,7 +225,7 @@ impl<'a> Applied<'a> {
     pub fn surname_patronymic_key(&self, surname: &str) -> Option<String> {
         let tokens = self.tokens(surname);
         let last = tokens.last()?;
-        for (_, variants) in &self.patronymics {
+        for (_, variants) in &self.rules.patronymics {
             for variant in variants {
                 if let Some(stem) = last.strip_suffix(variant.as_str())
                     && stem.chars().count() >= MIN_STEM
@@ -225,7 +243,7 @@ impl<'a> Applied<'a> {
         let mut keys = Vec::new();
         for token in self.tokens(given) {
             keys.push(patronymic_key(&token));
-            for members in &self.classes {
+            for members in &self.rules.classes {
                 if members.contains(&token) {
                     keys.extend(members.iter().map(|member| patronymic_key(member)));
                 }
@@ -255,10 +273,26 @@ impl<'a> Applied<'a> {
 
     /// Whether two residence names differ only by a definite-article ending.
     fn same_residence(&self, a: &str, b: &str) -> bool {
-        self.definite_suffixes
+        self.rules
+            .definite_suffixes
             .iter()
             .any(|suffix| a.strip_suffix(suffix.as_str()) == Some(b) || b.strip_suffix(suffix.as_str()) == Some(a))
     }
+}
+
+/// One word folded, stripped of punctuation, rewritten by `packs` and with doubled letters collapsed.
+/// A number is kept as written: *1882* and *182* are different years.
+fn normalize_word(packs: &[&CulturePack], word: &str) -> String {
+    let mut text: String = fold(word).chars().filter(|c| c.is_alphanumeric()).collect();
+    if is_number(&text) {
+        return text;
+    }
+    for pack in packs {
+        for (from, to) in pack.rewrites() {
+            text = text.replace(from.as_str(), to);
+        }
+    }
+    collapse_doubles(&text)
 }
 
 /// The share of the letters of `a` and `b` in words of `a` matched, each to at most one word of `b`, in

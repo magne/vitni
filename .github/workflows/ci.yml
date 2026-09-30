@@ -99,14 +99,14 @@ jobs:
       # Everything except the postgres integration tests, which need a Docker daemon. GitHub blocks
       # `--network host` on container jobs and puts spawned testcontainers on an unreachable network,
       # so those run in the native `postgres` job below instead. `record_origins` runs every case on
-      # both engines, so only its `postgres::` module is excluded here.
+      # both engines, as does `match_keys`, so only their `postgres::` modules are excluded here.
       # `--lib --bins --tests` (not `--all-targets`) so nextest skips `benches/store.rs`: run
       # 30783699764 showed 15 `vitni-db::bench/store` entries at ~140 s each, ~18 minutes of
       # this job for benchmarks nobody asserts on in CI. The clippy job keeps `--all-targets`, so
       # the bench code still builds and lints; run it deliberately with
       # `cargo bench -p vitni-db --features sqlite`.
       - name: test
-        run: cargo nextest run --workspace --all-features --lib --bins --tests -E 'not binary_id(=vitni-db::postgres_store) and not binary_id(=vitni-app::backup_postgres) and not (binary_id(=vitni-db::record_origins) and test(/^postgres::/))'
+        run: cargo nextest run --workspace --all-features --lib --bins --tests -E 'not binary_id(=vitni-db::postgres_store) and not binary_id(=vitni-app::backup_postgres) and not ((binary_id(=vitni-db::record_origins) or binary_id(=vitni-db::match_keys)) and test(/^postgres::/))'
       # nextest does not run doctests; keep them a separate cargo step.
       - name: doctests
         run: cargo test --workspace --all-features --doc

@@ -630,6 +630,15 @@ Titles, names, addresses and notes are compared by the words they share; a citat
 assessed as a source and kept in `MatchAssessment::parts`, and by the numbers of its page. Media match
 exactly by checksum, with the file name as weak support, and a tag pair with one case-folded name is
 Deterministic.
+✅ Blocking index and `find_similar` (ADR 0038 §5–§8, #400): `vitni_app::find_similar`, `assess` and
+`similar_pairs` are the only matching entry points. Candidates come from the `match_keys` index: each
+record is keyed by its name tokens, phonetic keys (one letter's slip included) and the equivalence
+classes of every installed pack, qualified by the birth or event decade, and a probe meets the
+neighbouring decades and an unknown one; the surname is a key but never a required one. The index is
+rebuilt when the keying rules or the pack set change (a fingerprint) and after `vitni rebuild`, and
+otherwise rekeys the records committed to since, with the records whose keys carry theirs. The
+`[matching]` config sets the default cultures and the band thresholds. The duplicate check and the
+Merge screen score through the engine, and `duplicates.rs` is gone. A bench seeds 100k persons.
 
 ## Risk register
 

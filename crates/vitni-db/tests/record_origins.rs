@@ -138,6 +138,14 @@ async fn an_item_resolves_onto_the_aggregate_its_creating_event_made(store: &Sto
     assert_eq!(other_dataset, None, "datasets scope record ids");
 }
 
+async fn the_creating_origins_of_a_kind_are_read_at_once(store: &Store) {
+    create_person(store).await;
+    person(store, 11, Some(origin("I1", Some("x"))), assert_sex(Sex::Female)).await;
+    let created = store.created_origins("person").await.unwrap();
+    assert_eq!(created, [(person_id().to_string(), origin("I1", None))]);
+    assert!(store.created_origins("family").await.unwrap().is_empty());
+}
+
 async fn a_retraction_clears_the_rows_live_flag(store: &Store) {
     create_person(store).await;
     person(store, 11, Some(origin("I1", None)), assert_sex(Sex::Female)).await;
@@ -271,6 +279,7 @@ mod sqlite {
         an_originated_write_is_indexed_and_a_keyboard_write_is_not,
         an_item_resolves_onto_the_aggregate_its_creating_event_made,
         a_retraction_clears_the_rows_live_flag,
+        the_creating_origins_of_a_kind_are_read_at_once,
         a_recorded_resolution_resolves_the_item_in_later_runs,
         a_rebuild_reproduces_the_index,
         a_preview_returns_the_events_and_writes_nothing,
@@ -326,6 +335,7 @@ mod postgres {
         an_originated_write_is_indexed_and_a_keyboard_write_is_not,
         an_item_resolves_onto_the_aggregate_its_creating_event_made,
         a_retraction_clears_the_rows_live_flag,
+        the_creating_origins_of_a_kind_are_read_at_once,
         a_recorded_resolution_resolves_the_item_in_later_runs,
         a_rebuild_reproduces_the_index,
         a_preview_returns_the_events_and_writes_nothing,

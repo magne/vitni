@@ -230,6 +230,45 @@ pub struct WorkspaceDefaults {
     /// The surety-scheme label overrides workspaces fall back to (ADR 0027).
     #[serde(default)]
     pub surety: SuretyLabelOverrides,
+    /// The record-matching settings workspaces fall back to (ADR 0038 §5, §6).
+    #[serde(default)]
+    pub matching: MatchingConfig,
+}
+
+/// The `[matching]` settings (ADR 0038 §5, §6): the cultures a record with no name-culture signal gets,
+/// and the band thresholds.
+///
+/// Used both as the live global default (`WorkspaceDefaults::matching`) and as the per-workspace
+/// manifest override (`WorkspaceManifest::matching`, `vitni_app::workspace`); an unset field falls back
+/// field by field, then to the engine's built-in settings. Thresholds are whole percentages of the
+/// score, so `probable = 95` is a score of 0.95.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MatchingConfig {
+    /// The name-culture packs (by id) a record with no place, language or lineage signal gets, beside
+    /// `universal`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_cultures: Option<Vec<String>>,
+    /// The score, in percent, at or above which a pair is a probable match.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub probable: Option<u8>,
+    /// The score, in percent, at or above which a pair is a possible match.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub possible: Option<u8>,
+}
+
+impl MatchingConfig {
+    /// These settings, with every field this leaves unset taken from `fallback`.
+    #[must_use]
+    pub fn or(&self, fallback: &Self) -> Self {
+        Self {
+            default_cultures: self
+                .default_cultures
+                .clone()
+                .or_else(|| fallback.default_cultures.clone()),
+            probable: self.probable.or(fallback.probable),
+            possible: self.possible.or(fallback.possible),
+        }
+    }
 }
 
 /// The default per-request timeout for an AI provider, in seconds (ADR 0017 §4).
@@ -928,7 +967,7 @@ pub fn set_default_workspace(path: &Path, name: &str) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Config, DateFormat, Engine, IdFormats, LocaleDefaults, MapConfig, MapProvider, NumberFormat,
+        Config, DateFormat, Engine, IdFormats, LocaleDefaults, MapConfig, MapProvider, MatchingConfig, NumberFormat,
         SuretyLabelOverride, SuretyLabelOverrides, ThemeMode, add_trusted_publisher, load, load_or_bootstrap,
         remove_trusted_publisher, save, set_default_workspace, set_operator_identity, set_workspace_default_id_formats,
         set_workspace_default_locale, set_workspace_default_surety,
@@ -1512,6 +1551,27 @@ kind = "plugin"
         assert_eq!(
             loaded.operator.id, config.operator.id,
             "the operator survives the read-modify-write"
+        );
+    }
+
+    #[test]
+    fn matching_settings_fall_back_field_by_field() {
+        let workspace = MatchingConfig {
+            probable: Some(90),
+            ..MatchingConfig::default()
+        };
+        let shared = MatchingConfig {
+            default_cultures: Some(vec!["no".to_owned()]),
+            probable: Some(80),
+            possible: Some(40),
+        };
+        assert_eq!(
+            workspace.or(&shared),
+            MatchingConfig {
+                default_cultures: Some(vec!["no".to_owned()]),
+                probable: Some(90),
+                possible: Some(40),
+            }
         );
     }
 }

@@ -223,7 +223,8 @@ them is reachable through the `vitni` launcher too, which forwards anything with
 `--lib --bins --tests` deliberately excludes `benches/`: each `vitni-db` bench takes minutes, so
 running them under nextest multiplies a test run many times over for no coverage gain.
 Clippy still runs `--all-targets`, so the bench code stays linted. Run benches deliberately with
-`cargo bench -p vitni-db --features sqlite`.
+`cargo bench -p vitni-db --features sqlite`, and record matching at 10k and 100k persons with
+`cargo bench -p vitni-app --bench similar`.
 
 ## Git
 

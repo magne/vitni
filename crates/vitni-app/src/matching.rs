@@ -6,12 +6,18 @@
 //! then the packs embedded in `vitni-core`. Each layer may hold `cultures/<id>.toml` — replacing the
 //! pack of that id, or adding one — and a `regions.toml` replacing the region table. An absent layer
 //! contributes nothing; a file that cannot be read or parsed fails with its path.
+//!
+//! [`Matching`] pairs the loaded data with the `[matching]` settings (ADR 0038 §6), validated against
+//! it: the thresholds must be ordered percentages, and every default culture an installed pack.
 
 use std::io;
 use std::path::{Path, PathBuf};
 
-use vitni_core::matching::MatchData;
 use vitni_core::matching::pack::{PackError, PackSource};
+use vitni_core::matching::{CultureId, MatchData, MatchSettings};
+
+use crate::config::MatchingConfig;
+use crate::error::AppError;
 
 /// The directory of culture packs within a matching layer.
 const CULTURES_DIR: &str = "cultures";
@@ -34,6 +40,74 @@ pub enum MatchDataError {
     /// A pack or region file was rejected.
     #[error(transparent)]
     Pack(#[from] PackError),
+}
+
+/// A workspace's matching data and settings, ready for the engine.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Matching {
+    /// The installed packs and region table.
+    pub data: MatchData,
+    /// The thresholds and default cultures.
+    pub settings: MatchSettings,
+}
+
+impl Matching {
+    /// Loads the packs of the workspace at `workspace_dir` over the shared layer, and resolves `config`
+    /// against them.
+    pub(crate) fn load(
+        workspace_dir: &Path,
+        shared_dir: Option<&Path>,
+        config: &MatchingConfig,
+    ) -> Result<Self, AppError> {
+        let data = load_match_data(Some(workspace_dir), shared_dir)?;
+        let settings = match_settings(config, &data)?;
+        Ok(Self { data, settings })
+    }
+}
+
+/// The engine settings `config` describes, its unset fields taken from the engine's defaults.
+///
+/// # Errors
+///
+/// [`AppError::Config`] when a threshold is not a percentage in `1..=100`, `possible` is not below
+/// `probable`, or a default culture is not an installed pack.
+pub(crate) fn match_settings(config: &MatchingConfig, data: &MatchData) -> Result<MatchSettings, AppError> {
+    let defaults = MatchSettings::default();
+    let percent = |value: Option<u8>, default: f64, name: &str| -> Result<f64, AppError> {
+        let Some(value) = value else {
+            return Ok(default);
+        };
+        if !(1..=100).contains(&value) {
+            return Err(AppError::Config(format!(
+                "[matching] {name} = {value} is not a percentage from 1 to 100"
+            )));
+        }
+        Ok(f64::from(value) / 100.0)
+    };
+    let probable = percent(config.probable, defaults.probable, "probable")?;
+    let possible = percent(config.possible, defaults.possible, "possible")?;
+    if possible >= probable {
+        return Err(AppError::Config(format!(
+            "[matching] possible ({:.0}%) must be below probable ({:.0}%)",
+            possible * 100.0,
+            probable * 100.0
+        )));
+    }
+    let mut default_cultures = Vec::new();
+    for id in config.default_cultures.iter().flatten() {
+        let culture = CultureId::new(id.as_str());
+        if data.packs.get(&culture).is_none() {
+            return Err(AppError::Config(format!(
+                "[matching] default_cultures names {id:?}, which is not an installed name-culture pack"
+            )));
+        }
+        default_cultures.push(culture);
+    }
+    Ok(MatchSettings {
+        default_cultures,
+        probable,
+        possible,
+    })
 }
 
 /// The matching data with every override layered in.
@@ -109,7 +183,9 @@ mod tests {
     use vitni_core::matching::{CultureId, MatchData, MatchSettings, assess_persons};
     use vitni_core::name::{LanguageTag, NameType, PersonName};
 
-    use super::{MatchDataError, load_match_data};
+    use super::{MatchDataError, Matching, load_match_data, match_settings};
+    use crate::config::MatchingConfig;
+    use crate::error::AppError;
 
     const TOY: &str = include_str!("../../vitni-core/tests/fixtures/matching/toy.toml");
 
@@ -140,6 +216,67 @@ mod tests {
 
     fn score(data: &MatchData) -> f64 {
         assess_persons(&speaker("Zorbo"), &speaker("Quimble"), data, &MatchSettings::default()).score
+    }
+
+    fn config(probable: Option<u8>, possible: Option<u8>, cultures: &[&str]) -> MatchingConfig {
+        MatchingConfig {
+            default_cultures: (!cultures.is_empty()).then(|| cultures.iter().map(|c| (*c).to_owned()).collect()),
+            probable,
+            possible,
+        }
+    }
+
+    #[test]
+    fn unset_settings_are_the_engines_defaults() {
+        let data = MatchData::embedded().unwrap();
+        assert_eq!(
+            match_settings(&MatchingConfig::default(), &data).unwrap(),
+            MatchSettings::default()
+        );
+    }
+
+    #[test]
+    fn settings_are_read_as_percentages_and_cultures() {
+        let data = MatchData::embedded().unwrap();
+        let settings = match_settings(&config(Some(90), Some(40), &["no"]), &data).unwrap();
+        assert!((settings.probable - 0.9).abs() < 1e-12);
+        assert!((settings.possible - 0.4).abs() < 1e-12);
+        assert_eq!(settings.default_cultures, [CultureId::new("no")]);
+    }
+
+    #[test]
+    fn invalid_settings_are_refused_with_the_key_named() {
+        let data = MatchData::embedded().unwrap();
+        for (bad, key) in [
+            (config(Some(0), None, &[]), "probable"),
+            (config(None, Some(101), &[]), "possible"),
+            (config(Some(50), Some(50), &[]), "below probable"),
+            (config(None, Some(96), &[]), "below probable"),
+            (config(None, None, &["xx"]), "\"xx\""),
+        ] {
+            let error = match_settings(&bad, &data).unwrap_err();
+            assert!(matches!(error, AppError::Config(_)), "{error:?}");
+            assert!(error.to_string().contains(key), "{error}");
+        }
+    }
+
+    #[test]
+    fn a_default_culture_may_be_a_workspace_pack() {
+        let workspace = tempfile::tempdir().unwrap();
+        write(&workspace.path().join("matching/cultures/toy.toml"), TOY);
+        let matching = Matching::load(workspace.path(), None, &config(None, None, &["toy"])).unwrap();
+        assert_eq!(matching.settings.default_cultures, [CultureId::new("toy")]);
+    }
+
+    #[test]
+    fn a_malformed_pack_is_an_app_error() {
+        let workspace = tempfile::tempdir().unwrap();
+        write(&workspace.path().join("matching/cultures/xx.toml"), "id = ");
+        let error = Matching::load(workspace.path(), None, &MatchingConfig::default()).unwrap_err();
+        assert!(
+            matches!(error, AppError::MatchData(MatchDataError::Pack(_))),
+            "{error:?}"
+        );
     }
 
     #[test]

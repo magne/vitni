@@ -349,10 +349,7 @@ mod tests {
     }
 
     fn cultures(a: &PersonProfile, b: &PersonProfile, packs: &CulturePacks, settings: &MatchSettings) -> Vec<String> {
-        let data = MatchData {
-            packs: packs.clone(),
-            regions: RegionTable::embedded().unwrap(),
-        };
+        let data = MatchData::new(packs.clone(), RegionTable::embedded().unwrap());
         comparison_cultures(&Signals::person(a), &Signals::person(b), &data, settings)
             .iter()
             .map(|id| id.as_str().to_owned())

@@ -23,8 +23,9 @@ use vitni_app::{
     ActivityDetail, Age, AgeBound, AppError, AssociationRole, BackupError, Calendar, ChangeLogEntry,
     ChildParentRelationship, ChromosomeSide, CitingContext, DatasetError, DateModifier, DatePoint, DateQuality,
     DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate,
-    GenealogicalDateBody, InformationKind, Kinship, MatchKind, MatchStatus, NameType, NoteType, OperatorKind,
-    ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality, SuretyLabelOverrides, UsingKind, config,
+    GenealogicalDateBody, InformationKind, Kinship, MatchBand, MatchDataError, MatchStatus, NameType, NoteType,
+    OperatorKind, PackError, ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality,
+    SuretyLabelOverrides, UsingKind, config,
 };
 
 use crate::action::{ActionLabel, Affordance};
@@ -2636,7 +2637,28 @@ impl Localizer {
             AppError::Plugin(detail) => fl!(self.loader, "err-plugin", detail = detail.clone()),
             AppError::Backup(backup) => self.backup_error(backup),
             AppError::Dataset(dataset) => self.dataset_error(dataset),
+            AppError::MatchData(data) => self.match_data_error(data),
             AppError::Db(db) => self.db_error(db),
+        }
+    }
+
+    fn match_data_error(&self, error: &MatchDataError) -> String {
+        match error {
+            MatchDataError::Read { path, source } => fl!(
+                self.loader,
+                "err-match-data-read",
+                path = path.display().to_string(),
+                detail = source.to_string()
+            ),
+            MatchDataError::Pack(PackError::Parse { name, error }) => fl!(
+                self.loader,
+                "err-match-data-parse",
+                name = name.clone(),
+                detail = error.to_string()
+            ),
+            MatchDataError::Pack(PackError::IdMismatch { name, id }) => {
+                fl!(self.loader, "err-match-data-id", name = name.clone(), id = id.clone())
+            }
         }
     }
 
@@ -2863,12 +2885,14 @@ impl Localizer {
         }
     }
 
-    /// The localized reason a possible-duplicate pair was flagged (Compare/merge screen, PR 19).
+    /// The label of a matching band — why a pair is shown as a possible duplicate.
     #[must_use]
-    pub fn duplicate_match_reason(&self, kind: &MatchKind) -> String {
-        match kind {
-            MatchKind::NameVariant => fl!(self.loader, "duplicate-reason-name-variant"),
-            MatchKind::SameBirthYear => fl!(self.loader, "duplicate-reason-same-birth-year"),
+    pub fn match_band(&self, band: MatchBand) -> String {
+        match band {
+            MatchBand::Deterministic => fl!(self.loader, "match-band-deterministic"),
+            MatchBand::Probable => fl!(self.loader, "match-band-probable"),
+            MatchBand::Possible => fl!(self.loader, "match-band-possible"),
+            MatchBand::Unlikely => fl!(self.loader, "match-band-unlikely"),
         }
     }
 

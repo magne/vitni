@@ -568,6 +568,9 @@ err-dataset-not-found = no dataset matches "{ $query }"
 err-dataset-ambiguous = "{ $query }" names more than one dataset
 err-dataset-required = this workspace already holds data of this kind; choose the tree this file belongs to, or a new one
 err-dataset-global = { $scheme } imports always use its one dataset
+err-match-data-read = could not read the matching data at { $path }: { $detail }
+err-match-data-parse = the matching file { $name } is invalid: { $detail }
+err-match-data-id = the name-culture pack { $name } declares the id "{ $id }", which is not its file name
 err-backup-database-not-empty = the target database already holds events; restore into an empty database
 
 # Source · Repository slices (Phase 5 PR9)
@@ -1042,8 +1045,10 @@ removed-twice = twice removed
 removed-n-times = { $n }× removed
 
 ## Compare / merge (Phase 5 PR 19) — the duplicates table and the compare/merge wizard.
-duplicate-reason-name-variant = name variant
-duplicate-reason-same-birth-year = identical name · birth years close
+match-band-deterministic = established identity
+match-band-probable = probable match
+match-band-possible = possible match
+match-band-unlikely = unlikely match
 merge-field-name = Name
 merge-field-birth = Birth
 merge-field-death = Death
