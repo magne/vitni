@@ -158,6 +158,14 @@ impl<'a> Applied<'a> {
         }
     }
 
+    /// The equivalence classes a normalized token belongs to, each named by its first member.
+    pub fn classes_of<'s>(&'s self, token: &'s str) -> impl Iterator<Item = &'s str> + 's {
+        self.classes
+            .iter()
+            .filter(move |members| members.iter().any(|m| m == token))
+            .filter_map(|members| members.first().map(String::as_str))
+    }
+
     /// Whether two normalized tokens share a given-name equivalence class in any applied pack.
     fn same_class(&self, x: &str, y: &str) -> bool {
         self.classes

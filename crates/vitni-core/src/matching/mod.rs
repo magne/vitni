@@ -31,6 +31,7 @@
 pub mod date;
 mod event;
 mod family;
+pub mod keys;
 mod media;
 mod name;
 mod note;
@@ -57,6 +58,7 @@ use crate::text::ExternalId;
 pub use crate::matching::date::DateBasis;
 pub use crate::matching::event::assess_events;
 pub use crate::matching::family::assess_families;
+pub use crate::matching::keys::{BlockingKeys, MatchableKind, Probe};
 pub use crate::matching::media::assess_media;
 pub use crate::matching::note::assess_notes;
 pub use crate::matching::place::assess_places;
