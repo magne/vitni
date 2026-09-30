@@ -17,9 +17,9 @@ use crate::matching::relative::{self, CHILDREN};
 use crate::matching::select::{Signals, comparison_cultures};
 use crate::matching::weights;
 use crate::matching::{
-    CultureId, Feature, FeatureComparison, FeatureValue, Identity, MatchAssessment, MatchBand, MatchData,
-    MatchSettings, Outcome, applied, compare_dates, compare_places, conclude, estimate, event_estimate, may_be_one,
-    missing, pair_up, person_assessment,
+    CultureId, Feature, FeatureComparison, FeatureValue, Identity, MatchAssessment, MatchData, MatchSettings, applied,
+    compare_dates, compare_places, conclude, estimate, event_estimate, may_be_one, missing, pair_up, person_assessment,
+    summary_term,
 };
 
 /// Compares two family profiles.
@@ -97,32 +97,15 @@ fn compare_partners(
     (terms, parts)
 }
 
-/// The term summarising one partner pair's assessment: a conflict if the pair has one, agreement when it
-/// is probable (or established), disagreement when unlikely, and partial in between. Its weight is the
-/// pair's summed feature weights, capped at [`weights::PARTNER_SUPPORT`].
+/// The term summarising one partner pair's assessment, its support capped at
+/// [`weights::PARTNER_SUPPORT`].
 fn partner_term(x: &PersonProfile, y: &PersonProfile, part: &MatchAssessment) -> FeatureComparison {
-    let mut weight = 0.0;
-    let mut conflict = false;
-    for feature in &part.features {
-        weight += feature.weight;
-        conflict |= feature.outcome == Outcome::Conflict;
-    }
-    let outcome = if conflict {
-        Outcome::Conflict
-    } else {
-        match part.band {
-            MatchBand::Probable | MatchBand::Deterministic => Outcome::Agree,
-            MatchBand::Possible => Outcome::Partial(part.score),
-            MatchBand::Unlikely => Outcome::Disagree,
-        }
-    };
-    FeatureComparison {
-        feature: Feature::Partner,
-        outcome,
-        weight: weight.min(weights::PARTNER_SUPPORT),
-        left: Some(value(x)),
-        right: Some(value(y)),
-    }
+    summary_term(
+        Feature::Partner,
+        part,
+        weights::PARTNER_SUPPORT,
+        (Some(value(x)), Some(value(y))),
+    )
 }
 
 /// A partner as shown beside a feature: the first name, with the birth (or its stand-in).

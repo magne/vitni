@@ -1,12 +1,14 @@
 //! The profiles the matching engine compares (ADR 0038 §2): the evidence of one record, gathered by
 //! the app layer from views and handed in as values.
 
+use crate::address::Address;
 use crate::date::GenealogicalDate;
-use crate::enums::{EventType, ParticipantRole, Sex};
+use crate::enums::{EventType, ParticipantRole, PlaceType, Sex};
 use crate::geo::GeoCoordinates;
-use crate::ids::PlaceId;
+use crate::ids::{PlaceId, RepositoryId, SourceId};
 use crate::matching::date::DateBasis;
-use crate::name::PersonName;
+use crate::media_path::MediaPath;
+use crate::name::{LanguageTag, PersonName};
 use crate::origin::RecordOrigin;
 use crate::place_name::PlaceName;
 use crate::text::ExternalId;
@@ -76,19 +78,25 @@ pub struct VitalEvent {
     pub place: Option<PlaceProfile>,
 }
 
-/// A place as the matcher sees it: its names, the places enclosing it, its country and coordinates.
+/// A place as the matcher sees it: its names and type, the places enclosing it, its country and
+/// coordinates.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PlaceProfile {
     /// The place's aggregate id, when it is a workspace place.
     pub id: Option<PlaceId>,
     /// Every name of the place, dated and with language.
     pub names: Vec<PlaceName>,
+    /// What kind of place it is, if known.
+    pub place_type: Option<PlaceType>,
     /// Every place enclosing this one, transitively (farm → parish → county → country).
     pub enclosing: Vec<PlaceId>,
     /// The name of the country the place lies in, which selects name cultures by region.
     pub country: Option<String>,
     /// The place's coordinates, if known.
     pub coordinates: Option<GeoCoordinates>,
+    /// The origins of the assertions that created the place (ADR 0037 §1); empty where the place is
+    /// the place of another profile's event.
+    pub origins: Vec<RecordOrigin>,
 }
 
 /// A country a person is tied to at some date, for name-culture selection.
@@ -138,4 +146,78 @@ pub struct Participant {
     pub role: ParticipantRole,
     /// Who they are: names, sex and birth.
     pub person: Relative,
+}
+
+/// A source's evidence: its title, author and publication, and the repositories holding it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SourceProfile {
+    /// The source's aggregate id, when it is a workspace source: two citations of one source cite it
+    /// whatever its fields hold.
+    pub id: Option<SourceId>,
+    /// The title, if any.
+    pub title: Option<String>,
+    /// The author, if any.
+    pub author: Option<String>,
+    /// The publication information, if any.
+    pub publication: Option<String>,
+    /// The repositories holding the source.
+    pub repositories: Vec<RepositoryProfile>,
+    /// The origins of the assertions that created the source (ADR 0037 §1).
+    pub origins: Vec<RecordOrigin>,
+}
+
+/// A repository's evidence: its name and addresses.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RepositoryProfile {
+    /// The repository's aggregate id, when it is a workspace repository.
+    pub id: Option<RepositoryId>,
+    /// The name, if any.
+    pub name: Option<String>,
+    /// Every address of the repository.
+    pub addresses: Vec<Address>,
+    /// The origins of the assertions that created the repository (ADR 0037 §1).
+    pub origins: Vec<RecordOrigin>,
+}
+
+/// A citation's evidence: the source it cites, where in it, and the date of the cited entry.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CitationProfile {
+    /// The cited source, if it is known.
+    pub source: Option<SourceProfile>,
+    /// The page or locator within the source.
+    pub page: Option<String>,
+    /// The date of the cited entry.
+    pub date: Option<GenealogicalDate>,
+    /// The origins of the assertions that created the citation (ADR 0037 §1).
+    pub origins: Vec<RecordOrigin>,
+}
+
+/// A media object's evidence: its checksum, compared exactly, and its path as weak evidence. The
+/// aggregate records no description, so none is compared.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MediaProfile {
+    /// The checksum of the file's bytes, if recorded.
+    pub checksum: Option<String>,
+    /// Where the file lives.
+    pub path: Option<MediaPath>,
+    /// The origins of the assertions that created the media object (ADR 0037 §1).
+    pub origins: Vec<RecordOrigin>,
+}
+
+/// A note's evidence: its text and the text's language.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NoteProfile {
+    /// The note's text, if any.
+    pub text: Option<String>,
+    /// The language of the text, which selects name cultures.
+    pub language: Option<LanguageTag>,
+    /// The origins of the assertions that created the note (ADR 0037 §1).
+    pub origins: Vec<RecordOrigin>,
+}
+
+/// A tag's evidence: its name, which is its identity.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TagProfile {
+    /// The tag's name.
+    pub name: String,
 }

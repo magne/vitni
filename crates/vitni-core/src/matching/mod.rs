@@ -12,6 +12,12 @@
 //! pair's own assessment kept in [`MatchAssessment::parts`] — its children and its marriage. An event is
 //! compared by its type, date and place, its principals pair by pair, and its other participants.
 //!
+//! The other kinds have one function each: [`assess_places`] (names, type, where the place lies —
+//! a farm and its parish are partial — and coordinates), [`assess_sources`], [`assess_repositories`],
+//! [`assess_citations`] (its source summarised as one term, like a family's partner, and its page),
+//! [`assess_media`] (the checksum, exactly), [`assess_notes`] (the normalized text) and [`assess_tags`]
+//! (the case-folded name, which alone makes a tag pair deterministic).
+//!
 //! Comparators are graded, never binary: a near miss lowers the score but keeps the candidate, only an
 //! implausible distance disagrees, and only a logical impossibility (a different asserted sex, a death
 //! before the other's birth, two different items of one source record) is a conflict, which caps the
@@ -25,12 +31,16 @@
 pub mod date;
 mod event;
 mod family;
+mod media;
 mod name;
+mod note;
 pub mod pack;
 mod place;
 pub mod profile;
 mod relative;
 pub mod select;
+mod source;
+mod tag;
 mod weights;
 
 use crate::enums::Sex;
@@ -47,6 +57,11 @@ use crate::text::ExternalId;
 pub use crate::matching::date::DateBasis;
 pub use crate::matching::event::assess_events;
 pub use crate::matching::family::assess_families;
+pub use crate::matching::media::assess_media;
+pub use crate::matching::note::assess_notes;
+pub use crate::matching::place::assess_places;
+pub use crate::matching::source::{assess_citations, assess_repositories, assess_sources};
+pub use crate::matching::tag::assess_tags;
 
 /// The id of a name-culture pack (`no`, `en`, `pl-en`).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -150,6 +165,36 @@ pub enum Feature {
     Principal,
     /// An event's other participants: witnesses, godparents, parents, clergy.
     Participants,
+    /// A place's names.
+    PlaceName,
+    /// A place's type.
+    PlaceType,
+    /// Where a place lies: the same place, one enclosing the other, or the same enclosing place.
+    Enclosure,
+    /// A place's coordinates.
+    Coordinates,
+    /// A source's title.
+    Title,
+    /// A source's author.
+    Author,
+    /// A source's publication information.
+    Publication,
+    /// The repositories holding a source.
+    Repository,
+    /// A repository's or a tag's name.
+    Name,
+    /// A repository's addresses.
+    Address,
+    /// A citation's source, scored by the pair's own source assessment.
+    Source,
+    /// A citation's page or locator.
+    Page,
+    /// A media object's checksum.
+    Checksum,
+    /// A media object's file name.
+    Path,
+    /// A note's text.
+    Text,
 }
 
 /// A value shown beside a feature, as the record states it.
@@ -183,6 +228,14 @@ pub enum FeatureValue {
     Text(String),
     /// The source record an item was imported from.
     Origin(RecordOrigin),
+    /// A place's type.
+    PlaceType(crate::enums::PlaceType),
+    /// A place's coordinates.
+    Coordinates(crate::geo::GeoCoordinates),
+    /// A repository's address.
+    Address(crate::address::Address),
+    /// A media object's location.
+    Path(crate::media_path::MediaPath),
 }
 
 /// One term of the match weight: the feature, its outcome and weight, and the values compared.
@@ -212,7 +265,8 @@ pub struct MatchAssessment {
     /// The name-culture packs applied, `universal` first.
     pub cultures: Vec<CultureId>,
     /// The assessments a term summarises — a family's partner pairs, in the order of their
-    /// [`Feature::Partner`] terms; empty for persons and events.
+    /// [`Feature::Partner`] terms, or a citation's source pair behind its [`Feature::Source`] term;
+    /// empty for every other kind.
     pub parts: Vec<MatchAssessment>,
     /// The engine that produced the assessment.
     pub engine: EngineVersion,
@@ -383,6 +437,40 @@ fn conclude(
         cultures,
         parts,
         engine: ENGINE_VERSION,
+    }
+}
+
+/// The term summarising the assessment of a pair a record is compared through — a family's partners, a
+/// citation's sources: a conflict if the pair has one, agreement when it is probable (or established),
+/// disagreement when unlikely, and partial in between. Its weight is the pair's summed feature weights,
+/// its support capped at `cap`; a pair that is someone (or something) else is not capped.
+fn summary_term(
+    feature: Feature,
+    part: &MatchAssessment,
+    cap: f64,
+    (left, right): (Option<FeatureValue>, Option<FeatureValue>),
+) -> FeatureComparison {
+    let mut weight = 0.0;
+    let mut conflict = false;
+    for term in &part.features {
+        weight += term.weight;
+        conflict |= term.outcome == Outcome::Conflict;
+    }
+    let outcome = if conflict {
+        Outcome::Conflict
+    } else {
+        match part.band {
+            MatchBand::Probable | MatchBand::Deterministic => Outcome::Agree,
+            MatchBand::Possible => Outcome::Partial(part.score),
+            MatchBand::Unlikely => Outcome::Disagree,
+        }
+    };
+    FeatureComparison {
+        feature,
+        outcome,
+        weight: weight.min(cap),
+        left,
+        right,
     }
 }
 

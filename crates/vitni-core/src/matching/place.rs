@@ -1,17 +1,29 @@
-//! Place comparison for record matching (ADR 0038 §4): the same place, a place enclosing the other,
+//! Place comparison for record matching (ADR 0038 §2, §4): the same place, a place enclosing the other,
 //! nearby coordinates, or similar names.
 //!
-//! Identity and enclosure come first: a farm recorded in one source and its parish in another are a
-//! partial agreement, never a disagreement. Coordinates come next and decay with distance, so two farms
-//! of one name in different valleys disagree. Names, compared by the applied culture packs, are the
-//! fallback.
+//! As the place of a person's or an event's event ([`compare`]), a place is one graded term. Identity
+//! and enclosure come first: a farm recorded in one source and its parish in another are a partial
+//! agreement, never a disagreement. Coordinates come next and decay with distance, so two farms of one
+//! name in different valleys disagree. Names, compared by the applied culture packs, are the fallback.
+//!
+//! As a record of its own ([`assess_places`]), a place is compared feature by feature: its names — every
+//! dated, historical one among them — its type, where it lies and its coordinates. Where it lies is the
+//! same place, one place enclosing the other (a farm and its parish: partial), the same nearest
+//! enclosing place (agreement), one's nearest enclosing place in the other's chain (partial), or two
+//! different enclosing places (disagreement).
 
 use strsim::jaro_winkler;
 
+use crate::enums::PlaceType;
 use crate::geo::GeoCoordinates;
-use crate::matching::name::Applied;
+use crate::matching::name::{Applied, fold};
 use crate::matching::profile::PlaceProfile;
-use crate::matching::weights::PLACE_NAME_FLOOR;
+use crate::matching::select::{Signals, comparison_cultures};
+use crate::matching::weights::{self, PLACE_NAME_FLOOR};
+use crate::matching::{
+    Feature, FeatureComparison, FeatureValue, Identity, MatchAssessment, MatchData, MatchSettings, applied, conclude,
+    grade, missing,
+};
 
 /// The similarity of a place and a place enclosing it.
 pub(crate) const ENCLOSED_SIMILARITY: f64 = 0.8;
@@ -63,6 +75,107 @@ pub(crate) fn compare(a: &PlaceProfile, b: &PlaceProfile, applied: &Applied<'_>)
     })
 }
 
+/// Compares two place profiles.
+#[must_use]
+pub fn assess_places(
+    a: &PlaceProfile,
+    b: &PlaceProfile,
+    data: &MatchData,
+    settings: &MatchSettings,
+) -> MatchAssessment {
+    let cultures = comparison_cultures(&Signals::place(a), &Signals::place(b), data, settings);
+    let applied = applied(&cultures, data);
+    let features = vec![
+        compare_names(a, b, &applied),
+        compare_types(a.place_type.as_ref(), b.place_type.as_ref()),
+        compare_enclosure(a, b),
+        compare_coordinates(a.coordinates, b.coordinates),
+    ];
+    let sides = (Identity::of(&a.origins, &[]), Identity::of(&b.origins, &[]));
+    conclude(features, cultures, Vec::new(), sides, settings)
+}
+
+/// A term from a graded similarity, or a missing one when there is nothing to compare.
+fn term(
+    feature: Feature,
+    graded: Option<(f64, f64)>,
+    table: weights::Weights,
+    (left, right): (Option<FeatureValue>, Option<FeatureValue>),
+) -> FeatureComparison {
+    let Some((similarity, floor)) = graded else {
+        return missing(feature, left, right);
+    };
+    let (outcome, weight) = grade(similarity, floor, table);
+    FeatureComparison {
+        feature,
+        outcome,
+        weight,
+        left,
+        right,
+    }
+}
+
+/// Compares every name of `a` with every name of `b`.
+fn compare_names(a: &PlaceProfile, b: &PlaceProfile, applied: &Applied<'_>) -> FeatureComparison {
+    let value = |p: &PlaceProfile| p.names.first().map(|name| FeatureValue::Place(name.text.clone()));
+    let graded = names_similarity(a, b, applied).map(|similarity| (similarity, PLACE_NAME_FLOOR));
+    term(Feature::PlaceName, graded, weights::PLACE_NAME, (value(a), value(b)))
+}
+
+/// Compares two place types; a custom type is compared by its folded text.
+fn compare_types(a: Option<&PlaceType>, b: Option<&PlaceType>) -> FeatureComparison {
+    let key = |place_type: &PlaceType| {
+        if let PlaceType::Custom(text) = place_type {
+            Err(fold(text.trim()))
+        } else {
+            Ok(place_type.clone())
+        }
+    };
+    let graded = a.zip(b).map(|(x, y)| (if key(x) == key(y) { 1.0 } else { 0.0 }, 0.0));
+    let value = |place_type: &PlaceType| FeatureValue::PlaceType(place_type.clone());
+    term(
+        Feature::PlaceType,
+        graded,
+        weights::PLACE_TYPE,
+        (a.map(value), b.map(value)),
+    )
+}
+
+/// Compares where two places lie.
+fn compare_enclosure(a: &PlaceProfile, b: &PlaceProfile) -> FeatureComparison {
+    let enclosed = |x: &PlaceProfile, y: &PlaceProfile| y.id.is_some_and(|id| x.enclosing.contains(&id));
+    let similarity = if a.id.is_some() && a.id == b.id {
+        Some(1.0)
+    } else if enclosed(a, b) || enclosed(b, a) {
+        Some(ENCLOSED_SIMILARITY)
+    } else {
+        match (a.enclosing.first(), b.enclosing.first()) {
+            (Some(x), Some(y)) if x == y => Some(1.0),
+            (Some(x), Some(y)) if b.enclosing.contains(x) || a.enclosing.contains(y) => Some(ENCLOSED_SIMILARITY),
+            (Some(_), Some(_)) => Some(0.0),
+            (None, _) | (_, None) => None,
+        }
+    };
+    let value = |p: &PlaceProfile| p.names.first().map(|name| FeatureValue::Place(name.text.clone()));
+    term(
+        Feature::Enclosure,
+        similarity.map(|s| (s, 0.0)),
+        weights::ENCLOSURE,
+        (value(a), value(b)),
+    )
+}
+
+/// Compares two coordinates by their distance.
+fn compare_coordinates(a: Option<GeoCoordinates>, b: Option<GeoCoordinates>) -> FeatureComparison {
+    let graded = a.zip(b).map(|(x, y)| (distance_similarity(distance_km(x, y)), 0.0));
+    term(
+        Feature::Coordinates,
+        graded,
+        weights::COORDINATES,
+        (a.map(FeatureValue::Coordinates), b.map(FeatureValue::Coordinates)),
+    )
+}
+
 /// The best similarity between any name of `a` and any name of `b`.
 fn names_similarity(a: &PlaceProfile, b: &PlaceProfile, applied: &Applied<'_>) -> Option<f64> {
     let mut best: Option<f64> = None;
@@ -108,118 +221,4 @@ pub(crate) fn distance_km(a: GeoCoordinates, b: GeoCoordinates) -> f64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::LazyLock;
-
-    use proptest::prelude::{prop_assert, proptest};
-    use uuid::Uuid;
-
-    use super::{ENCLOSED_SIMILARITY, compare, distance_km, distance_similarity};
-    use crate::geo::{GeoCoordinates, Microdegrees};
-    use crate::ids::PlaceId;
-    use crate::matching::CultureId;
-    use crate::matching::name::Applied;
-    use crate::matching::pack::CulturePacks;
-    use crate::matching::profile::PlaceProfile;
-    use crate::place_name::PlaceName;
-
-    static PACKS: LazyLock<CulturePacks> = LazyLock::new(|| CulturePacks::embedded().unwrap());
-
-    fn norwegian() -> Applied<'static> {
-        Applied::new(
-            ["universal", "no"]
-                .iter()
-                .map(|id| PACKS.get(&CultureId::new(*id)).unwrap())
-                .collect(),
-        )
-    }
-
-    fn at(latitude: f64, longitude: f64) -> GeoCoordinates {
-        let micro = |degrees: f64| Microdegrees::from_microdegrees(format!("{:.0}", degrees * 1e6).parse().unwrap());
-        GeoCoordinates {
-            latitude: micro(latitude),
-            longitude: micro(longitude),
-        }
-    }
-
-    fn named(name: &str) -> PlaceProfile {
-        PlaceProfile {
-            names: vec![PlaceName {
-                text: name.to_owned(),
-                language: None,
-                date: None,
-            }],
-            ..PlaceProfile::default()
-        }
-    }
-
-    fn close(a: f64, b: f64) -> bool {
-        (a - b).abs() < f64::EPSILON
-    }
-
-    fn id() -> PlaceId {
-        PlaceId::from_uuid(Uuid::now_v7())
-    }
-
-    #[test]
-    fn the_same_place_agrees() {
-        let place = PlaceProfile {
-            id: Some(id()),
-            ..named("Nordaas")
-        };
-        assert!(close(
-            compare(&place, &place.clone(), &norwegian()).unwrap().similarity,
-            1.0
-        ));
-    }
-
-    #[test]
-    fn a_farm_in_its_parish_is_partial() {
-        let parish = PlaceProfile {
-            id: Some(id()),
-            ..named("Ringsaker")
-        };
-        let farm = PlaceProfile {
-            id: Some(id()),
-            enclosing: vec![parish.id.unwrap()],
-            ..named("Haugen")
-        };
-        let graded = compare(&farm, &parish, &norwegian()).unwrap();
-        assert!(close(graded.similarity, ENCLOSED_SIMILARITY));
-        assert_eq!(compare(&parish, &farm, &norwegian()), Some(graded));
-    }
-
-    #[test]
-    fn two_farms_of_one_name_far_apart_disagree() {
-        let east = PlaceProfile {
-            coordinates: Some(at(60.88, 10.70)),
-            ..named("Haugen")
-        };
-        let west = PlaceProfile {
-            coordinates: Some(at(60.39, 5.32)),
-            ..named("Haugen")
-        };
-        assert!(close(compare(&east, &west, &norwegian()).unwrap().similarity, 0.0));
-    }
-
-    #[test]
-    fn spelling_variants_of_a_place_name_agree() {
-        let graded = compare(&named("Nordaas"), &named("Nordås"), &norwegian()).unwrap();
-        assert!(close(graded.similarity, 1.0));
-        assert_eq!(compare(&named("Nordaas"), &PlaceProfile::default(), &norwegian()), None);
-    }
-
-    #[test]
-    fn oslo_to_bergen_is_about_three_hundred_km() {
-        let km = distance_km(at(59.91, 10.75), at(60.39, 5.32));
-        assert!((300.0..310.0).contains(&km), "{km}");
-    }
-
-    proptest! {
-        #[test]
-        fn distance_similarity_never_rises_with_distance(a in 0.0f64..200.0, b in 0.0f64..200.0) {
-            let (near, far) = if a <= b { (a, b) } else { (b, a) };
-            prop_assert!(distance_similarity(near) >= distance_similarity(far));
-        }
-    }
-}
+mod tests;
