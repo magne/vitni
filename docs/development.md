@@ -334,7 +334,8 @@ fixture with no declaration, naming it; on a malformed declaration, including an
 blank value, a non-https source or a `[files."…"]` table naming no tracked file beside it; and on a
 tracked page from the external manifest.
 The Digitalarkivet parser's own fixtures, under `crates/vitni-digitalarkivet/tests/fixtures/`, are
-invented pages that reproduce only the DOM `src/html.rs` reads; `tests/fallbacks.rs` covers each
+generated from the external tier's pages (below) and reproduce only the DOM `src/html.rs` reads, with
+invented values; `tests/fallbacks.rs` covers each
 fallback rung those pages cannot reach.
 
 ### The external tier: checking the parser against the live site
@@ -356,10 +357,34 @@ naming the command above.
 
 It is a manual check before a release, not a CI job: polling a public archive from CI is impolite, and
 would make CI depend on the archive's uptime. When it fails, decide which side moved. If the site's
-markup changed, fix `src/html.rs`, then update the invented pages under `tests/fixtures/` to the new
-shape so the bundled tests pin it. If the record's transcription was corrected, update the expected
-fact. The manifest's own shape, and the checking logic, are tested on every run over the invented
-pages.
+markup changed, fix `src/html.rs`, then regenerate the bundled pages so the bundled tests pin the new
+shape. If the record's transcription was corrected, update the expected fact. The manifest's own shape,
+and the checking logic, are tested on every run over the bundled pages.
+
+### Regenerating the bundled pages
+
+```bash
+cargo xtask regen-fixtures   # target/external-fixtures/digitalarkivet/ → tests/fixtures/
+```
+
+Each manifest page names its bundled `fixture`. The command fails closed (ADR 0042 §4), because a live
+page names more people than the one a test is about:
+
+1. **Prune.** Only the elements `vitni_digitalarkivet::html::PAGE_ELEMENTS` selects are kept, with their
+   subtrees and ancestors. Scripts, styles, comments, the logo and the site chrome fall away. So does
+   every attribute the parser does not read, and a `class`, `id` or `property` keeps only the names
+   the crate's selectors use. A new selector in `src/html.rs` belongs in `PAGE_ELEMENTS` (or
+   `NESTED_ELEMENTS`), or regeneration prunes away what it reads.
+2. **Substitute.** Every remaining text and `href`/`src`/`content`/`value` is replaced whole, after
+   whitespace normalization, through the page's `[page.substitute]` table (real → invented). A value
+   that names no one (a field label, a role code, the site's logo URL) goes in the shared
+   `vocabulary` and is kept verbatim. A value in neither fails the run, which lists every such value
+   by page.
+3. **Check.** A real value from any page's table that appears anywhere in any output fails the run.
+
+Nothing is written unless every page passes, and two runs over the same pages produce no diff. The
+bundled `tests/external.rs` repeats the check against the committed pages on every run, so a
+hand-edit that brings a real value back fails CI.
 
 ### Takedown: removing a file from history
 

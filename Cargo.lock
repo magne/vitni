@@ -11874,7 +11874,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cqrs-es",
+ "ego-tree",
  "resvg",
+ "scraper",
  "serde",
  "serde_json",
  "sqlx",
@@ -11886,6 +11888,7 @@ dependencies = [
  "vitni-app",
  "vitni-core",
  "vitni-db",
+ "vitni-digitalarkivet",
  "vitni-plugin-host",
  "x11rb 0.14.0",
 ]

@@ -106,6 +106,20 @@ pan/zoom feel or click latency:
 
 ## Completed features & phases
 
+- **`0.9.1 — Fixture provenance` (milestone complete).** *(Done — #445, #446, #447, #448, #449.)* The
+  `vitni-digitalarkivet` tests parsed five Digitalarkivet pages saved as the site served them: census and
+  church-book transcriptions with unstated or unpublished licences, plus Arkivverket's own markup, none
+  of which the project's licences could cover. [ADR 0042](../adr/0042-test-fixture-provenance.md) (#445)
+  set the rule: a committed fixture is `invented`, `generated`, `licensed` or `transcribed-facts`,
+  declared in a `PROVENANCE.toml`. The captures gave way to hand-written pages (#446); the real pages
+  moved to an external tier, listed in `tests/external/manifest.toml`, downloaded by `cargo xtask
+  fetch-fixtures` and checked by an opt-in live test (#447); `cargo xtask fixture-guard` made the
+  declarations mandatory in `check`, prek and CI (#448); and `cargo xtask regen-fixtures` rebuilt the
+  bundled pages from the fetched ones, failing closed — pruned to the selectors the crate exports,
+  every value substituted through the manifest, and no real value allowed to survive (#449). History
+  was not rewritten; `development.md` holds the tested takedown procedure should a rights holder ask.
+  Residual: drift the generated pages do not model surfaces only in the manual live check, which has
+  to be run before a release.
 - **`0.9.5 — public release` (milestone complete).** *(Done — #324, #325, #326, #327, #328, #331,
   #337.)* The repository was private, under a name that collided with an existing crates.io package,
   licensed as one undifferentiated whole, with a placeholder icon and README screenshots that could

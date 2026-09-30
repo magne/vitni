@@ -439,14 +439,6 @@ Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none 
   round-trips, but `vitni-plugin-host/src/ai.rs:73` returns `AiError::InvalidInput` for it, so a
   workspace configured with `kind = "plugin"` fails only at first use. Either implement it or reject it
   at config-load time.
-- **Resyncing the synthetic pages with the live site is manual.** When the external tests catch site
-  drift, the parser gets fixed and the committed pages from #446 have to follow. `cargo xtask
-  regen-fixtures` rebuilds them from the fetched pages, and it fails closed. It keeps only the elements
-  the parser's selectors reach (those selectors are exported from the crate) and drops scripts, styles
-  and site chrome. It replaces every remaining text, `href` and attribute value through a per-fixture
-  real → invented mapping in the manifest, treating an unmapped value as an error. And it fails if any
-  real value survives into the output. *Exit:* a regen reproduces fixtures the bundled tests pass on,
-  and an unmapped value fails the run by name. — #449
 
 ### Record matching & identity
 
