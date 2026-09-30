@@ -455,6 +455,14 @@ Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none 
   assert the expected facts: a manual drift check before a release, not a CI job, and with no hash
   pinning, since live HTML changes. *Needs:* ADR 0042. *Exit:* the tests pass against fetched pages
   and fail on a wrong expected fact. — #447
+- **Resyncing the synthetic pages with the live site is manual.** When #447's tests catch site drift,
+  the parser gets fixed and the committed pages from #446 have to follow. `cargo xtask regen-fixtures`
+  rebuilds them from the fetched pages, and it fails closed. It keeps only the elements the parser's
+  selectors reach (those selectors are exported from the crate) and drops scripts, styles and site
+  chrome. It replaces every remaining text, `href` and attribute value through a per-fixture
+  real → invented mapping in the manifest, treating an unmapped value as an error. And it fails if any
+  real value survives into the output. *Needs:* #446, #447. *Exit:* a regen reproduces fixtures the
+  bundled tests pass on, and an unmapped value fails the run by name. — #449
 
 ### Record matching & identity
 
