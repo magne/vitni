@@ -223,7 +223,9 @@ rejected and a pack's `id` must equal its file name.
 - **A patronymic** is read with the pack's `male_suffixes`/`female_suffixes`: the stem left once the
   suffix is removed must equal the father's given name (or a name in its class) after both drop a
   genitive `s` and one final vowel (`Olsdatter` ↔ `Ole`, `Andreassen` ↔ `Andreas`). A culture whose
-  patronymics are formed otherwise needs a comparator change, not only a pack.
+  patronymics are formed otherwise needs a comparator change, not only a pack. It is read only where
+  the two surnames do not already agree (the farm name that changed after a move): where they agree,
+  the check would read the other record's own surname against its own father and count one fact twice.
 - **A family** is scored through its partners: each pair is a person assessment under the families'
   shared cultures, summarised as one `Partner` term and kept whole in `MatchAssessment::parts`. A
   partner's support is capped (`PARTNER_SUPPORT`) because a remarriage shares a partner; only both
