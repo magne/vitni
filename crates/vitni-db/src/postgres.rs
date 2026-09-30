@@ -351,6 +351,14 @@ impl PostgresStore {
         crate::record_origins::postgres::resolve(&self.pool, dataset, record, item, kind).await
     }
 
+    /// The creating origin of every imported aggregate of `kind` (ADR 0037 §4).
+    pub(crate) async fn created_origins(
+        &self,
+        kind: &str,
+    ) -> Result<Vec<(String, vitni_core::origin::RecordOrigin)>, DbError> {
+        crate::record_origins::postgres::created(&self.pool, kind).await
+    }
+
     /// The fingerprint the match keys were built under, if any (ADR 0038 §7).
     pub(crate) async fn match_keys_fingerprint(&self) -> Result<Option<String>, DbError> {
         crate::match_keys::postgres::fingerprint(&self.pool).await

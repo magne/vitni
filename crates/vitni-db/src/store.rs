@@ -659,6 +659,26 @@ impl Store {
         }
     }
 
+    /// The origin of the creating event of every imported aggregate of `kind`, as `(aggregate_id,
+    /// origin)`, oldest first (ADR 0037 §4) — one read for many profiles. The origin carries no content
+    /// digest.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn created_origins(
+        &self,
+        kind: &str,
+    ) -> Result<Vec<(String, vitni_core::origin::RecordOrigin)>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.created_origins(kind).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.created_origins(kind).await,
+        }
+    }
+
     /// The fingerprint of the keying rules and packs the match keys index was built under (ADR 0038
     /// §7), or `None` when it must be built: a new workspace, or rebuilt projections.
     ///

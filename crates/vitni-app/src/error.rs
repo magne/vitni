@@ -41,6 +41,10 @@ macro_rules! app_error {
             /// An import's dataset choice could not be resolved (ADR 0037 §3).
             #[error(transparent)]
             Dataset(#[from] crate::import_run::DatasetError),
+            /// The record-matching data — a name-culture pack or the region table — could not be
+            /// read or parsed (ADR 0038 §5).
+            #[error(transparent)]
+            MatchData(#[from] crate::matching::MatchDataError),
             $(
                 #[doc = concat!("No ", $noun, " exists with the given identifier.")]
                 #[error($msg)]

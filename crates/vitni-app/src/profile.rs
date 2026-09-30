@@ -22,29 +22,36 @@
 //! a tag profile its name. Each carries the origin of the assertion that created its record, except a
 //! tag, which is its name.
 //!
-//! [`ProfileLookups`] reads every person, event, place and family once, so building many profiles costs
-//! one load.
+//! [`Profiles`] reads the views a set of kinds needs once — every person, event, place and family for
+//! the person, family and event profiles — and each kind's creating origins in one query, so building
+//! many profiles costs one load. The single-record builders below go through it too.
 
 use std::collections::{HashMap, HashSet};
 
+use uuid::Uuid;
+use vitni_core::citation::CitationView;
 use vitni_core::date::{DateQuality, GenealogicalDate};
 use vitni_core::enums::{ChildParentRelationship, EventType, FactType, ParticipantRole, PlaceType};
 use vitni_core::event::EventView;
 use vitni_core::family::{ChildEntry, FamilyView};
-use vitni_core::ids::{EventId, PersonId, PlaceId, RepositoryId};
-use vitni_core::matching::DateBasis;
+use vitni_core::ids::{
+    CitationId, EventId, FamilyId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId, TagId,
+};
 use vitni_core::matching::date::year;
 use vitni_core::matching::profile::{
     CitationProfile, EventProfile, FamilyProfile, MediaProfile, NoteProfile, Participant, PersonProfile, PlaceMention,
     PlaceProfile, Relative, RepositoryProfile, SourceProfile, TagProfile, VitalEvent, VitalKind,
 };
+use vitni_core::matching::{DateBasis, MatchableKind};
+use vitni_core::media::MediaView;
+use vitni_core::note::NoteView;
 use vitni_core::origin::RecordOrigin;
 use vitni_core::person::PersonView;
 use vitni_core::place::PlaceView;
-use vitni_core::provenance::EventContext;
 use vitni_core::repository::RepositoryView;
 use vitni_core::source::SourceView;
-use vitni_db::{DbError, Store};
+use vitni_core::tag::TagView;
+use vitni_db::Store;
 
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
@@ -60,10 +67,9 @@ use crate::workspace::Workspace;
 pub async fn person_profile(workspace: &Workspace, human_id: &str) -> Result<PersonProfile, AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id_public(store, human_id).await?;
-    let lookups = ProfileLookups::load(store).await?;
-    let origins = creating_origins(store, "person", &person_id.to_string()).await?;
-    lookups
-        .profile(person_id, origins)
+    let profiles = Profiles::load(store, &[MatchableKind::Person]).await?;
+    profiles
+        .person(person_id)
         .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))
 }
 
@@ -74,43 +80,10 @@ pub async fn person_profile(workspace: &Workspace, human_id: &str) -> Result<Per
 /// [`AppError::FamilyNotFound`] if no such family exists, or [`AppError`] on a store read failure.
 pub async fn family_profile(workspace: &Workspace, human_id: &str) -> Result<FamilyProfile, AppError> {
     let store = workspace.store();
-    let found = store.find_family(human_id).await?;
-    let Some((view, family_id)) = found.and_then(|view| view.family_id().map(|id| (view, id))) else {
-        return Err(AppError::FamilyNotFound(human_id.to_owned()));
-    };
-    let lookups = ProfileLookups::load(store).await?;
-    let mut partners = Vec::new();
-    for partner in view.partners() {
-        let origins = creating_origins(store, "person", &partner.to_string()).await?;
-        if let Some(mut profile) = lookups.profile(partner, origins) {
-            profile.partners.clear();
-            profile.children.clear();
-            partners.push(profile);
-        }
-    }
-    let children = view
-        .children()
-        .iter()
-        .filter_map(|child| lookups.relative(child.child_id))
-        .collect();
-    let marriage = view
-        .linked_events()
-        .into_iter()
-        .find(|event| lookups.events.get(event).and_then(EventView::event_type) == Some(&EventType::Marriage));
-    let marriage = match marriage {
-        Some(event) => {
-            let origins = creating_origins(store, "event", &event.to_string()).await?;
-            lookups.event(event, origins)
-        }
-        None => None,
-    };
-    Ok(FamilyProfile {
-        partners,
-        children,
-        marriage,
-        origins: creating_origins(store, "family", &family_id.to_string()).await?,
-        external_ids: view.external_ids().into_iter().cloned().collect(),
-    })
+    let not_found = || AppError::FamilyNotFound(human_id.to_owned());
+    let family_id = use_case::resolve_id(store.find_family(human_id).await?, FamilyView::family_id, not_found)?;
+    let profiles = Profiles::load(store, &[MatchableKind::Family]).await?;
+    profiles.family(family_id).ok_or_else(not_found)
 }
 
 /// Builds the matching profile of the event `human_id`.
@@ -122,9 +95,8 @@ pub async fn event_profile(workspace: &Workspace, human_id: &str) -> Result<Even
     let store = workspace.store();
     let not_found = || AppError::EventNotFound(human_id.to_owned());
     let event_id = use_case::resolve_id(store.find_event(human_id).await?, EventView::event_id, not_found)?;
-    let lookups = ProfileLookups::load(store).await?;
-    let origins = creating_origins(store, "event", &event_id.to_string()).await?;
-    lookups.event(event_id, origins).ok_or_else(not_found)
+    let profiles = Profiles::load(store, &[MatchableKind::Event]).await?;
+    profiles.event(event_id).ok_or_else(not_found)
 }
 
 /// Builds the matching profile of the place `human_id`.
@@ -136,9 +108,8 @@ pub async fn place_profile(workspace: &Workspace, human_id: &str) -> Result<Plac
     let store = workspace.store();
     let not_found = || AppError::PlaceNotFound(human_id.to_owned());
     let place_id = use_case::resolve_id(store.find_place(human_id).await?, PlaceView::place_id, not_found)?;
-    let mut profile = PlaceLookup::load(store).await?.place(place_id);
-    profile.origins = creating_origins(store, "place", &place_id.to_string()).await?;
-    Ok(profile)
+    let profiles = Profiles::load(store, &[MatchableKind::Place]).await?;
+    profiles.place(place_id).ok_or_else(not_found)
 }
 
 /// Builds the matching profile of the source `human_id`.
@@ -149,8 +120,9 @@ pub async fn place_profile(workspace: &Workspace, human_id: &str) -> Result<Plac
 pub async fn source_profile(workspace: &Workspace, human_id: &str) -> Result<SourceProfile, AppError> {
     let store = workspace.store();
     let not_found = || AppError::SourceNotFound(human_id.to_owned());
-    let view = store.find_source(human_id).await?.ok_or_else(not_found)?;
-    source_of(store, &view).await
+    let source_id = use_case::resolve_id(store.find_source(human_id).await?, SourceView::source_id, not_found)?;
+    let profiles = Profiles::load(store, &[MatchableKind::Source]).await?;
+    profiles.source(source_id).ok_or_else(not_found)
 }
 
 /// Builds the matching profile of the repository `human_id`.
@@ -162,8 +134,10 @@ pub async fn source_profile(workspace: &Workspace, human_id: &str) -> Result<Sou
 pub async fn repository_profile(workspace: &Workspace, human_id: &str) -> Result<RepositoryProfile, AppError> {
     let store = workspace.store();
     let not_found = || AppError::RepositoryNotFound(human_id.to_owned());
-    let view = store.find_repository(human_id).await?.ok_or_else(not_found)?;
-    repository_of(store, &view).await
+    let found = store.find_repository(human_id).await?;
+    let repository_id = use_case::resolve_id(found, RepositoryView::repository_id, not_found)?;
+    let profiles = Profiles::load(store, &[MatchableKind::Repository]).await?;
+    profiles.repository(repository_id).ok_or_else(not_found)
 }
 
 /// Builds the matching profile of the citation `human_id`.
@@ -174,25 +148,10 @@ pub async fn repository_profile(workspace: &Workspace, human_id: &str) -> Result
 pub async fn citation_profile(workspace: &Workspace, human_id: &str) -> Result<CitationProfile, AppError> {
     let store = workspace.store();
     let not_found = || AppError::CitationNotFound(human_id.to_owned());
-    let view = store.find_citation(human_id).await?.ok_or_else(not_found)?;
-    let citation_id = view.citation_id().ok_or_else(not_found)?;
-    let mut source = None;
-    if let Some(source_id) = view.source_id() {
-        let cited = store
-            .list_sources()
-            .await?
-            .into_iter()
-            .find(|candidate| candidate.source_id() == Some(source_id));
-        if let Some(cited) = cited {
-            source = Some(source_of(store, &cited).await?);
-        }
-    }
-    Ok(CitationProfile {
-        source,
-        page: view.page().map(ToOwned::to_owned),
-        date: view.date().cloned(),
-        origins: creating_origins(store, "citation", &citation_id.to_string()).await?,
-    })
+    let found = store.find_citation(human_id).await?;
+    let citation_id = use_case::resolve_id(found, CitationView::citation_id, not_found)?;
+    let profiles = Profiles::load(store, &[MatchableKind::Citation]).await?;
+    profiles.citation(citation_id).ok_or_else(not_found)
 }
 
 /// Builds the matching profile of the media object `human_id`.
@@ -203,13 +162,9 @@ pub async fn citation_profile(workspace: &Workspace, human_id: &str) -> Result<C
 pub async fn media_profile(workspace: &Workspace, human_id: &str) -> Result<MediaProfile, AppError> {
     let store = workspace.store();
     let not_found = || AppError::MediaNotFound(human_id.to_owned());
-    let view = store.find_media(human_id).await?.ok_or_else(not_found)?;
-    let media_id = view.media_id().ok_or_else(not_found)?;
-    Ok(MediaProfile {
-        checksum: view.checksum().map(ToOwned::to_owned),
-        path: view.path().cloned(),
-        origins: creating_origins(store, "media", &media_id.to_string()).await?,
-    })
+    let media_id = use_case::resolve_id(store.find_media(human_id).await?, MediaView::media_id, not_found)?;
+    let profiles = Profiles::load(store, &[MatchableKind::Media]).await?;
+    profiles.media(media_id).ok_or_else(not_found)
 }
 
 /// Builds the matching profile of the note `human_id`.
@@ -220,14 +175,9 @@ pub async fn media_profile(workspace: &Workspace, human_id: &str) -> Result<Medi
 pub async fn note_profile(workspace: &Workspace, human_id: &str) -> Result<NoteProfile, AppError> {
     let store = workspace.store();
     let not_found = || AppError::NoteNotFound(human_id.to_owned());
-    let view = store.find_note(human_id).await?.ok_or_else(not_found)?;
-    let note_id = view.note_id().ok_or_else(not_found)?;
-    let text = view.text();
-    Ok(NoteProfile {
-        text: text.map(|text| text.text.clone()),
-        language: text.and_then(|text| text.language.clone()),
-        origins: creating_origins(store, "note", &note_id.to_string()).await?,
-    })
+    let note_id = use_case::resolve_id(store.find_note(human_id).await?, NoteView::note_id, not_found)?;
+    let profiles = Profiles::load(store, &[MatchableKind::Note]).await?;
+    profiles.note(note_id).ok_or_else(not_found)
 }
 
 /// Builds the matching profile of the tag `id` — a tag has no human id.
@@ -236,86 +186,397 @@ pub async fn note_profile(workspace: &Workspace, human_id: &str) -> Result<NoteP
 ///
 /// [`AppError::TagNotFound`] if no such tag exists, or [`AppError`] on a store read failure.
 pub async fn tag_profile(workspace: &Workspace, id: &str) -> Result<TagProfile, AppError> {
-    let view = workspace.store().find_tag(id).await?;
-    let name = view.as_ref().and_then(|view| view.name());
-    let name = name.ok_or_else(|| AppError::TagNotFound(id.to_owned()))?;
-    Ok(TagProfile { name: name.to_owned() })
+    let not_found = || AppError::TagNotFound(id.to_owned());
+    let tag_id = Uuid::parse_str(id).map(TagId::from_uuid).map_err(|_| not_found())?;
+    let profiles = Profiles::load(workspace.store(), &[MatchableKind::Tag]).await?;
+    profiles.tag(tag_id).ok_or_else(not_found)
 }
 
-/// A source's profile, with every repository holding it.
-async fn source_of(store: &Store, view: &SourceView) -> Result<SourceProfile, AppError> {
-    let held: Vec<RepositoryId> = view.repositories().iter().map(|held| held.repository_id).collect();
-    let mut repositories = Vec::new();
-    if !held.is_empty() {
-        let mut views: HashMap<RepositoryId, RepositoryView> = HashMap::new();
-        for repository in store.list_repositories().await? {
-            if let Some(id) = repository.repository_id() {
-                views.insert(id, repository);
+/// A record's profile, tagged with its kind.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Profile {
+    Person(PersonProfile),
+    Family(FamilyProfile),
+    Event(EventProfile),
+    Place(PlaceProfile),
+    Source(SourceProfile),
+    Repository(RepositoryProfile),
+    Citation(CitationProfile),
+    Media(MediaProfile),
+    Note(NoteProfile),
+    Tag(TagProfile),
+}
+
+/// The views the profiles of a set of kinds are built from, and the creating origins of each record,
+/// read once.
+#[derive(Default)]
+pub(crate) struct Profiles {
+    people: Option<ProfileLookups>,
+    places: Option<PlaceLookup>,
+    sources: HashMap<SourceId, SourceView>,
+    repositories: HashMap<RepositoryId, RepositoryView>,
+    citations: HashMap<CitationId, CitationView>,
+    media: HashMap<MediaId, MediaView>,
+    notes: HashMap<NoteId, NoteView>,
+    tags: HashMap<TagId, TagView>,
+    /// The origin of the creating assertion of each imported record, by aggregate id.
+    origins: HashMap<String, Vec<RecordOrigin>>,
+}
+
+impl Profiles {
+    /// Reads what the profiles of `kinds` need.
+    pub(crate) async fn load(store: &Store, kinds: &[MatchableKind]) -> Result<Self, AppError> {
+        use MatchableKind::{Citation, Event, Family, Media, Note, Person, Place, Repository, Source, Tag};
+        let wants = |wanted: &[MatchableKind]| kinds.iter().any(|kind| wanted.contains(kind));
+        let mut profiles = Self::default();
+        let mut origin_kinds = Vec::new();
+        if wants(&[Person, Family, Event]) {
+            profiles.people = Some(ProfileLookups::load(store).await?);
+            origin_kinds.extend([Person, Family, Event]);
+        }
+        if wants(&[Place]) {
+            if profiles.people.is_none() {
+                profiles.places = Some(PlaceLookup::load(store).await?);
+            }
+            origin_kinds.push(Place);
+        }
+        if wants(&[Source, Citation, Repository]) {
+            profiles.sources = by_id(store.list_sources().await?, SourceView::source_id);
+            profiles.repositories = by_id(store.list_repositories().await?, RepositoryView::repository_id);
+            origin_kinds.extend([Source, Repository]);
+        }
+        if wants(&[Citation]) {
+            profiles.citations = by_id(store.list_citations().await?, CitationView::citation_id);
+            origin_kinds.push(Citation);
+        }
+        if wants(&[Media]) {
+            profiles.media = by_id(store.list_media().await?, MediaView::media_id);
+            origin_kinds.push(Media);
+        }
+        if wants(&[Note]) {
+            profiles.notes = by_id(store.list_notes().await?, NoteView::note_id);
+            origin_kinds.push(Note);
+        }
+        if wants(&[Tag]) {
+            profiles.tags = by_id(store.list_tags().await?, TagView::tag_id);
+        }
+        for kind in origin_kinds {
+            for (aggregate_id, origin) in store.created_origins(kind.as_str()).await? {
+                profiles.origins.entry(aggregate_id).or_insert_with(|| vec![origin]);
             }
         }
-        for id in held {
-            if let Some(repository) = views.get(&id) {
-                repositories.push(repository_of(store, repository).await?);
-            }
+        Ok(profiles)
+    }
+
+    /// The aggregate id of every record of `kind` read, in id order.
+    pub(crate) fn ids(&self, kind: MatchableKind) -> Vec<String> {
+        let mut ids: Vec<String> = match kind {
+            MatchableKind::Person => self
+                .people
+                .iter()
+                .flat_map(|p| p.persons.keys().map(ToString::to_string))
+                .collect(),
+            MatchableKind::Family => self
+                .people
+                .iter()
+                .flat_map(|p| p.families.keys().map(ToString::to_string))
+                .collect(),
+            MatchableKind::Event => self
+                .people
+                .iter()
+                .flat_map(|p| p.events.keys().map(ToString::to_string))
+                .collect(),
+            MatchableKind::Place => self
+                .place_lookup()
+                .iter()
+                .flat_map(|l| l.places.keys().map(ToString::to_string))
+                .collect(),
+            MatchableKind::Source => self.sources.keys().map(ToString::to_string).collect(),
+            MatchableKind::Repository => self.repositories.keys().map(ToString::to_string).collect(),
+            MatchableKind::Citation => self.citations.keys().map(ToString::to_string).collect(),
+            MatchableKind::Media => self.media.keys().map(ToString::to_string).collect(),
+            MatchableKind::Note => self.notes.keys().map(ToString::to_string).collect(),
+            MatchableKind::Tag => self.tags.keys().map(ToString::to_string).collect(),
+        };
+        ids.sort_unstable();
+        ids
+    }
+
+    /// The profile of the record `aggregate_id` of `kind`, or `None` when it was not read.
+    pub(crate) fn profile(&self, kind: MatchableKind, aggregate_id: &str) -> Option<Profile> {
+        let uuid = Uuid::parse_str(aggregate_id).ok()?;
+        match kind {
+            MatchableKind::Person => self.person(PersonId::from_uuid(uuid)).map(Profile::Person),
+            MatchableKind::Family => self.family(FamilyId::from_uuid(uuid)).map(Profile::Family),
+            MatchableKind::Event => self.event(EventId::from_uuid(uuid)).map(Profile::Event),
+            MatchableKind::Place => self.place(PlaceId::from_uuid(uuid)).map(Profile::Place),
+            MatchableKind::Source => self.source(SourceId::from_uuid(uuid)).map(Profile::Source),
+            MatchableKind::Repository => self.repository(RepositoryId::from_uuid(uuid)).map(Profile::Repository),
+            MatchableKind::Citation => self.citation(CitationId::from_uuid(uuid)).map(Profile::Citation),
+            MatchableKind::Media => self.media(MediaId::from_uuid(uuid)).map(Profile::Media),
+            MatchableKind::Note => self.note(NoteId::from_uuid(uuid)).map(Profile::Note),
+            MatchableKind::Tag => self.tag(TagId::from_uuid(uuid)).map(Profile::Tag),
         }
     }
-    let id = view.source_id();
-    let origins = match id {
-        Some(id) => creating_origins(store, "source", &id.to_string()).await?,
-        None => Vec::new(),
-    };
-    Ok(SourceProfile {
-        id,
-        title: view.title().map(ToOwned::to_owned),
-        author: view.author().map(ToOwned::to_owned),
-        publication: view.pub_info().map(ToOwned::to_owned),
-        repositories,
-        origins,
-    })
-}
 
-/// A repository's profile.
-async fn repository_of(store: &Store, view: &RepositoryView) -> Result<RepositoryProfile, AppError> {
-    let id = view.repository_id();
-    let origins = match id {
-        Some(id) => creating_origins(store, "repository", &id.to_string()).await?,
-        None => Vec::new(),
-    };
-    Ok(RepositoryProfile {
-        id,
-        name: view.name().map(ToOwned::to_owned),
-        addresses: view.addresses().into_iter().cloned().collect(),
-        origins,
-    })
-}
-
-/// The origin of the assertion that created a record — the first event of its aggregate's stream — as
-/// the profile's origins: none when it was not imported.
-async fn creating_origins(
-    store: &Store,
-    aggregate_type: &str,
-    aggregate_id: &str,
-) -> Result<Vec<RecordOrigin>, AppError> {
-    #[derive(serde::Deserialize)]
-    struct Header {
-        context: EventContext,
+    /// The user-facing identifier of the record `aggregate_id` of `kind` — a tag's name, since a tag has
+    /// no human id — or `None` when it was not read.
+    pub(crate) fn human_id(&self, kind: MatchableKind, aggregate_id: &str) -> Option<String> {
+        let uuid = Uuid::parse_str(aggregate_id).ok()?;
+        let human = |id: Option<&vitni_core::ids::HumanId>| id.map(ToString::to_string);
+        match kind {
+            MatchableKind::Person => human(
+                self.people
+                    .as_ref()?
+                    .persons
+                    .get(&PersonId::from_uuid(uuid))?
+                    .human_id(),
+            ),
+            MatchableKind::Family => human(
+                self.people
+                    .as_ref()?
+                    .families
+                    .get(&FamilyId::from_uuid(uuid))?
+                    .human_id(),
+            ),
+            MatchableKind::Event => human(self.people.as_ref()?.events.get(&EventId::from_uuid(uuid))?.human_id()),
+            MatchableKind::Place => human(self.place_lookup()?.places.get(&PlaceId::from_uuid(uuid))?.human_id()),
+            MatchableKind::Source => human(self.sources.get(&SourceId::from_uuid(uuid))?.human_id()),
+            MatchableKind::Repository => human(self.repositories.get(&RepositoryId::from_uuid(uuid))?.human_id()),
+            MatchableKind::Citation => human(self.citations.get(&CitationId::from_uuid(uuid))?.human_id()),
+            MatchableKind::Media => human(self.media.get(&MediaId::from_uuid(uuid))?.human_id()),
+            MatchableKind::Note => human(self.notes.get(&NoteId::from_uuid(uuid))?.human_id()),
+            MatchableKind::Tag => self.tags.get(&TagId::from_uuid(uuid))?.name().map(ToOwned::to_owned),
+        }
     }
-    let events = store.read_aggregate_events(aggregate_type, aggregate_id).await?;
-    let Some(created) = events.iter().min_by_key(|event| event.sequence) else {
-        return Ok(Vec::new());
-    };
-    let header: Header = serde_json::from_str(&created.payload).map_err(|e| {
-        AppError::Db(DbError::Backend(format!(
-            "decoding the creating event of {aggregate_type} {aggregate_id}: {e}"
-        )))
-    })?;
-    Ok(header.context.origin.map(|origin| *origin).into_iter().collect())
+
+    /// The aggregate id of the record of `kind` known to the user as `human_id` — for a tag, its id — or
+    /// `None` when there is none.
+    pub(crate) fn aggregate_id_of(&self, kind: MatchableKind, human_id: &str) -> Option<String> {
+        if kind == MatchableKind::Tag {
+            let id = Uuid::parse_str(human_id).ok().map(TagId::from_uuid)?;
+            return self.tags.contains_key(&id).then(|| id.to_string());
+        }
+        self.ids(kind)
+            .into_iter()
+            .find(|id| self.human_id(kind, id).as_deref() == Some(human_id))
+    }
+
+    /// The events that take place at any of `places`, whose keys carry the place's names.
+    pub(crate) fn events_at(&self, places: &HashSet<String>) -> Vec<String> {
+        let Some(people) = &self.people else {
+            return Vec::new();
+        };
+        let mut events = Vec::new();
+        for (id, view) in &people.events {
+            if view.place_id().is_some_and(|place| places.contains(&place.to_string())) {
+                events.push(id.to_string());
+            }
+        }
+        events
+    }
+
+    /// The events every person of `persons` takes part in, and the families they are partners of — the
+    /// records whose profiles carry theirs.
+    pub(crate) fn dependents_of_persons(&self, persons: &HashSet<String>) -> (Vec<String>, Vec<String>) {
+        let Some(people) = &self.people else {
+            return (Vec::new(), Vec::new());
+        };
+        let mut events = Vec::new();
+        for (event, taking_part) in &people.participants_of {
+            if taking_part
+                .iter()
+                .any(|(person, _)| persons.contains(&person.to_string()))
+            {
+                events.push(event.to_string());
+            }
+        }
+        let mut families = Vec::new();
+        for (family, view) in &people.families {
+            if view
+                .partners()
+                .iter()
+                .any(|partner| persons.contains(&partner.to_string()))
+            {
+                families.push(family.to_string());
+            }
+        }
+        (events, families)
+    }
+
+    /// The persons taking part in each of `events` as a principal, whose vital events come from them.
+    pub(crate) fn participants_of(&self, events: &HashSet<String>) -> Vec<String> {
+        let Some(people) = &self.people else {
+            return Vec::new();
+        };
+        let mut persons = Vec::new();
+        for (event, taking_part) in &people.participants_of {
+            if events.contains(&event.to_string()) {
+                persons.extend(taking_part.iter().map(|(person, _)| person.to_string()));
+            }
+        }
+        persons
+    }
+
+    /// The citations of each of `sources`, whose profiles carry the source's.
+    pub(crate) fn citations_of(&self, sources: &HashSet<String>) -> Vec<String> {
+        let mut citations = Vec::new();
+        for (id, view) in &self.citations {
+            if view
+                .source_id()
+                .is_some_and(|source| sources.contains(&source.to_string()))
+            {
+                citations.push(id.to_string());
+            }
+        }
+        citations
+    }
+
+    fn place_lookup(&self) -> Option<&PlaceLookup> {
+        self.people
+            .as_ref()
+            .map(|people| &people.places)
+            .or(self.places.as_ref())
+    }
+
+    fn origins_of(&self, aggregate_id: &impl ToString) -> Vec<RecordOrigin> {
+        self.origins.get(&aggregate_id.to_string()).cloned().unwrap_or_default()
+    }
+
+    /// The person profile of `person_id`.
+    pub(crate) fn person(&self, person_id: PersonId) -> Option<PersonProfile> {
+        self.people.as_ref()?.profile(person_id, self.origins_of(&person_id))
+    }
+
+    /// The family profile of `family_id`: its partners without their own partners and children, its
+    /// birth children, and its linked marriage.
+    pub(crate) fn family(&self, family_id: FamilyId) -> Option<FamilyProfile> {
+        let people = self.people.as_ref()?;
+        let view = people.families.get(&family_id)?;
+        let mut partners = Vec::new();
+        for partner in view.partners() {
+            if let Some(mut profile) = people.profile(partner, self.origins_of(&partner)) {
+                profile.partners.clear();
+                profile.children.clear();
+                partners.push(profile);
+            }
+        }
+        let children = view
+            .children()
+            .iter()
+            .filter_map(|child| people.relative(child.child_id))
+            .collect();
+        let marriage = view
+            .linked_events()
+            .into_iter()
+            .find(|event| people.events.get(event).and_then(EventView::event_type) == Some(&EventType::Marriage))
+            .and_then(|event| people.event(event, self.origins_of(&event)));
+        Some(FamilyProfile {
+            partners,
+            children,
+            marriage,
+            origins: self.origins_of(&family_id),
+            external_ids: view.external_ids().into_iter().cloned().collect(),
+        })
+    }
+
+    /// The event profile of `event_id`.
+    pub(crate) fn event(&self, event_id: EventId) -> Option<EventProfile> {
+        self.people.as_ref()?.event(event_id, self.origins_of(&event_id))
+    }
+
+    /// The place profile of `place_id`.
+    pub(crate) fn place(&self, place_id: PlaceId) -> Option<PlaceProfile> {
+        let lookup = self.place_lookup()?;
+        lookup.places.get(&place_id)?;
+        let mut profile = lookup.place(place_id);
+        profile.origins = self.origins_of(&place_id);
+        Some(profile)
+    }
+
+    /// The source profile of `source_id`, with every repository holding it.
+    pub(crate) fn source(&self, source_id: SourceId) -> Option<SourceProfile> {
+        let view = self.sources.get(&source_id)?;
+        let repositories = view
+            .repositories()
+            .iter()
+            .filter_map(|held| self.repository(held.repository_id))
+            .collect();
+        Some(SourceProfile {
+            id: Some(source_id),
+            title: view.title().map(ToOwned::to_owned),
+            author: view.author().map(ToOwned::to_owned),
+            publication: view.pub_info().map(ToOwned::to_owned),
+            repositories,
+            origins: self.origins_of(&source_id),
+        })
+    }
+
+    /// The repository profile of `repository_id`.
+    pub(crate) fn repository(&self, repository_id: RepositoryId) -> Option<RepositoryProfile> {
+        let view = self.repositories.get(&repository_id)?;
+        Some(RepositoryProfile {
+            id: Some(repository_id),
+            name: view.name().map(ToOwned::to_owned),
+            addresses: view.addresses().into_iter().cloned().collect(),
+            origins: self.origins_of(&repository_id),
+        })
+    }
+
+    /// The citation profile of `citation_id`, with its source's.
+    pub(crate) fn citation(&self, citation_id: CitationId) -> Option<CitationProfile> {
+        let view = self.citations.get(&citation_id)?;
+        Some(CitationProfile {
+            source: view.source_id().and_then(|source| self.source(source)),
+            page: view.page().map(ToOwned::to_owned),
+            date: view.date().cloned(),
+            origins: self.origins_of(&citation_id),
+        })
+    }
+
+    /// The media profile of `media_id`.
+    pub(crate) fn media(&self, media_id: MediaId) -> Option<MediaProfile> {
+        let view = self.media.get(&media_id)?;
+        Some(MediaProfile {
+            checksum: view.checksum().map(ToOwned::to_owned),
+            path: view.path().cloned(),
+            origins: self.origins_of(&media_id),
+        })
+    }
+
+    /// The note profile of `note_id`.
+    pub(crate) fn note(&self, note_id: NoteId) -> Option<NoteProfile> {
+        let text = self.notes.get(&note_id)?.text();
+        Some(NoteProfile {
+            text: text.map(|text| text.text.clone()),
+            language: text.and_then(|text| text.language.clone()),
+            origins: self.origins_of(&note_id),
+        })
+    }
+
+    /// The tag profile of `tag_id`: its name.
+    pub(crate) fn tag(&self, tag_id: TagId) -> Option<TagProfile> {
+        let name = self.tags.get(&tag_id)?.name()?;
+        Some(TagProfile { name: name.to_owned() })
+    }
+}
+
+/// `views` keyed by their id, skipping any not yet created.
+fn by_id<K: std::hash::Hash + Eq, V>(views: Vec<V>, id: fn(&V) -> Option<K>) -> HashMap<K, V> {
+    let mut keyed = HashMap::with_capacity(views.len());
+    for view in views {
+        if let Some(key) = id(&view) {
+            keyed.insert(key, view);
+        }
+    }
+    keyed
 }
 
 /// The workspace's persons, events, places and family links, read once.
 struct ProfileLookups {
     persons: HashMap<PersonId, PersonView>,
     events: HashMap<EventId, EventView>,
+    families: HashMap<FamilyId, FamilyView>,
     places: PlaceLookup,
     participants_of: HashMap<EventId, Vec<(PersonId, ParticipantRole)>>,
     parents_of: HashMap<PersonId, Vec<PersonId>>,
@@ -355,6 +616,7 @@ impl ProfileLookups {
         let mut lookups = Self {
             persons,
             events,
+            families: HashMap::new(),
             places: PlaceLookup::load(store).await?,
             participants_of,
             parents_of: HashMap::new(),
@@ -363,6 +625,9 @@ impl ProfileLookups {
         };
         for family in store.list_families().await? {
             lookups.add_family(&family);
+            if let Some(id) = family.family_id() {
+                lookups.families.insert(id, family);
+            }
         }
         Ok(lookups)
     }

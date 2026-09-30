@@ -185,6 +185,16 @@ pub(crate) fn decode_assertion_id(text: &str) -> Result<AssertionId, DbError> {
         .map_err(|e| DbError::Backend(format!("decoding an assertion id: {e}")))
 }
 
+/// Decodes a stored `run` column.
+///
+/// # Errors
+///
+/// [`DbError::Backend`] if it is not an encoded import run id.
+pub(crate) fn decode_run(text: &str) -> Result<vitni_core::ids::ImportRunId, DbError> {
+    serde_json::from_value(serde_json::Value::String(text.to_owned()))
+        .map_err(|e| DbError::Backend(format!("decoding an import run id: {e}")))
+}
+
 /// Decodes a stored `occurred_at` column.
 ///
 /// # Errors

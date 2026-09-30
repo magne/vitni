@@ -568,6 +568,9 @@ err-dataset-not-found = ingen datasett passer til «{ $query }»
 err-dataset-ambiguous = «{ $query }» gjelder flere datasett
 err-dataset-required = arbeidsområdet har allerede data av denne typen; velg treet filen hører til, eller et nytt
 err-dataset-global = { $scheme }-importer bruker alltid det ene datasettet sitt
+err-match-data-read = kunne ikke lese sammenligningsdataene i { $path }: { $detail }
+err-match-data-parse = sammenligningsfilen { $name } er ugyldig: { $detail }
+err-match-data-id = navnekulturpakken { $name } oppgir id-en «{ $id }», som ikke er filnavnet
 err-backup-database-not-empty = måldatabasen har allerede hendelser; gjenopprett til en tom database
 
 # Source · Repository slices (Phase 5 PR9)

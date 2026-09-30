@@ -12,10 +12,11 @@ use serde::Serialize;
 use sqlx::{Pool, Postgres, Row};
 use vitni_core::assertions::{Envelope, EventBody};
 use vitni_core::ids::AssertionId;
-use vitni_core::origin::ContentDigest;
+use vitni_core::origin::{ContentDigest, DatasetId, RecordOrigin};
 
 use super::{
-    IndexRow, OriginResolution, OriginRow, RECORD_ORIGINS_TABLE, decode_assertion_id, decode_timestamp, index_rows,
+    IndexRow, OriginResolution, OriginRow, RECORD_ORIGINS_TABLE, created_key, decode_assertion_id, decode_run,
+    decode_timestamp, index_rows,
 };
 use crate::store::DbError;
 
@@ -278,4 +279,35 @@ pub(crate) async fn resolve(
         aggregate_id: row.get("aggregate_id"),
         created: row.get::<String, _>("field_key") == super::created_key(kind),
     }))
+}
+
+/// The origin of the creating event of every aggregate of `kind` that was imported, as
+/// `(aggregate_id, origin)`, oldest first. The origin carries no content digest: the index holds the
+/// digest of the event body, not the importer's.
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails or a row does not decode.
+pub(crate) async fn created(pool: &Pool<Postgres>, kind: &str) -> Result<Vec<(String, RecordOrigin)>, DbError> {
+    let rows = sqlx::query(&format!(
+        "SELECT aggregate_id, dataset, record, item, run FROM {RECORD_ORIGINS_TABLE} \
+         WHERE aggregate_kind = $1 AND field_key = $2 ORDER BY id"
+    ))
+    .bind(kind)
+    .bind(created_key(kind))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("reading creating origins: {e}")))?;
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let origin = RecordOrigin {
+            dataset: DatasetId::new(row.get::<String, _>("dataset")),
+            record: row.get("record"),
+            item: row.get("item"),
+            digest: None,
+            run: decode_run(&row.get::<String, _>("run"))?,
+        };
+        out.push((row.get("aggregate_id"), origin));
+    }
+    Ok(out)
 }

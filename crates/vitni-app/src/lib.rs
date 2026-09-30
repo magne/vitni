@@ -70,6 +70,7 @@ pub mod repository_change_set;
 pub mod research_note;
 pub mod secret_env;
 pub mod session;
+pub mod similar;
 pub mod source;
 pub mod source_change_set;
 pub mod tag;
@@ -216,6 +217,7 @@ pub use research_note::{
 };
 pub use secret_env::require_secret_env;
 pub use session::Session;
+pub use similar::{SimilarPair, SimilarRecord, assess, find_similar, similar_pairs};
 pub use source::{
     NewSource, SourceAttributeRef, SourceSummary, add_source_attribute, attach_source_media, attach_source_note,
     create_source, import_attach_source_media, import_attach_source_note, link_source_repository, list_sources,
@@ -254,6 +256,8 @@ pub use vitni_core::ids::ImportRunId;
 pub use vitni_core::import_run::{
     AbandonReason, ImportCounts, ImportRunError, ImportRunStatus, NewImportRun, ResolutionDecision, ResolvedItem,
 };
+pub use vitni_core::matching::pack::PackError;
+pub use vitni_core::matching::{MatchAssessment, MatchBand, MatchableKind};
 pub use vitni_core::media::MediaError;
 pub use vitni_core::media_path::MEDIA_DIR;
 pub use vitni_core::media_path::media_root_relative;

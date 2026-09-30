@@ -178,6 +178,20 @@ impl Probe {
     }
 }
 
+/// The first string after every string starting with `prefix` — the exclusive end of the key range a
+/// prefix probe scans.
+#[must_use]
+pub fn prefix_end(prefix: &str) -> String {
+    let mut end: Vec<char> = prefix.chars().collect();
+    while let Some(last) = end.pop() {
+        if let Some(next) = char::from_u32(u32::from(last) + 1) {
+            end.push(next);
+            return end.into_iter().collect();
+        }
+    }
+    String::from(char::MAX)
+}
+
 /// A key split into its base, qualifier mark and qualifier, or `None` for an unqualified key.
 fn split(key: &str) -> Option<(&str, char, &str)> {
     let at = key.rfind([DECADE, PAGE])?;

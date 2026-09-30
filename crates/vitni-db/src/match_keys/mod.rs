@@ -19,7 +19,7 @@ pub(crate) mod postgres;
 #[cfg(feature = "sqlite")]
 pub(crate) mod sqlite;
 
-use vitni_core::matching::{MatchableKind, Probe};
+use vitni_core::matching::{MatchableKind, Probe, prefix_end};
 
 /// The index table.
 const MATCH_KEYS_TABLE: &str = "match_keys";
@@ -53,18 +53,6 @@ pub struct KeyedRecord {
     pub aggregate_id: String,
     /// Its keys; empty removes the record from the index.
     pub keys: Vec<String>,
-}
-
-/// The first string after every string starting with `prefix`, for a range scan an index serves.
-fn prefix_end(prefix: &str) -> String {
-    let mut end: Vec<char> = prefix.chars().collect();
-    while let Some(last) = end.pop() {
-        if let Some(next) = char::from_u32(u32::from(last) + 1) {
-            end.push(next);
-            return end.into_iter().collect();
-        }
-    }
-    String::from(char::MAX)
 }
 
 /// The `WHERE` condition over `key` a probe meets, with its bound values in order, each placeholder
@@ -102,15 +90,7 @@ fn kind_of(aggregate_type: &str) -> Result<MatchableKind, crate::store::DbError>
 mod tests {
     use vitni_core::matching::Probe;
 
-    use super::{prefix_end, probe_condition};
-
-    #[test]
-    fn a_prefix_range_ends_just_past_every_string_it_starts() {
-        assert_eq!(prefix_end("t:ole@"), "t:oleA");
-        assert_eq!(prefix_end("src:1#"), "src:1$");
-        assert!("t:ole@185".as_bytes() < prefix_end("t:ole@").as_bytes());
-        assert!("t:olea@185".as_bytes() >= prefix_end("t:ole@").as_bytes());
-    }
+    use super::probe_condition;
 
     #[test]
     fn a_probe_becomes_one_condition_with_its_values_in_order() {

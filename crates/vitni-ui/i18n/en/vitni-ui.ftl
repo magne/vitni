@@ -568,6 +568,9 @@ err-dataset-not-found = no dataset matches "{ $query }"
 err-dataset-ambiguous = "{ $query }" names more than one dataset
 err-dataset-required = this workspace already holds data of this kind; choose the tree this file belongs to, or a new one
 err-dataset-global = { $scheme } imports always use its one dataset
+err-match-data-read = could not read the matching data at { $path }: { $detail }
+err-match-data-parse = the matching file { $name } is invalid: { $detail }
+err-match-data-id = the name-culture pack { $name } declares the id "{ $id }", which is not its file name
 err-backup-database-not-empty = the target database already holds events; restore into an empty database
 
 # Source · Repository slices (Phase 5 PR9)

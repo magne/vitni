@@ -3,7 +3,7 @@
 
 use proptest::prelude::{Just, Strategy, prop, prop_assert, prop_oneof, proptest};
 
-use super::{BlockingKeys, MatchableKind, Probe};
+use super::{BlockingKeys, MatchableKind, Probe, prefix_end};
 use crate::enums::{EventType, ParticipantRole, Sex};
 use crate::ids::SourceId;
 use crate::matching::pack::PackSource;
@@ -332,6 +332,14 @@ fn a_toy_pack_class_becomes_a_key() {
     let speaker = |given: &str| person(given, "", Sex::Male, Vec::new());
     assert!(meet(&keys.person(&speaker("Zorbo")), &keys.person(&speaker("Quimble"))));
     assert!(!persons_meet(&speaker("Zorbo"), &speaker("Quimble")));
+}
+
+#[test]
+fn a_prefix_range_ends_just_past_every_key_it_starts() {
+    assert_eq!(prefix_end("t:ole@"), "t:oleA");
+    assert_eq!(prefix_end("src:1#"), "src:1$");
+    assert!("t:ole@185" < prefix_end("t:ole@").as_str());
+    assert!("t:olea@185" >= prefix_end("t:ole@").as_str());
 }
 
 #[test]
