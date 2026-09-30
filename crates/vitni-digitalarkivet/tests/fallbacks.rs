@@ -82,6 +82,28 @@ fn a_media_host_anchor_is_the_last_resort_scan_link() {
 }
 
 #[test]
+fn a_data_scans_anchor_wins_over_text_and_media_host_anchors() {
+    let extra = r#"
+        <a href="https://media.digitalarkivet.no/fs10000099901042">Se skannet versjon</a>
+        <a data-scans="[]" href="https://goto.digitalarkivet.no/kb1">Vis</a>"#;
+    assert_eq!(
+        scan_viewer_url(extra).expect("parse person page").as_deref(),
+        Some("https://goto.digitalarkivet.no/kb1")
+    );
+}
+
+#[test]
+fn an_anchor_reading_skannet_wins_over_a_media_host_anchor() {
+    let extra = r#"
+        <a href="https://media.digitalarkivet.no/fs10000099901042">Vis</a>
+        <a href="https://goto.digitalarkivet.no/kb1">Se skannet versjon</a>"#;
+    assert_eq!(
+        scan_viewer_url(extra).expect("parse person page").as_deref(),
+        Some("https://goto.digitalarkivet.no/kb1")
+    );
+}
+
+#[test]
 fn a_page_with_no_scan_link_has_none() {
     let extra = r#"<a href="https://www.digitalarkivet.no/source/99901">Kilde</a>"#;
     assert_eq!(scan_viewer_url(extra).expect("parse person page"), None);
@@ -97,6 +119,31 @@ fn an_og_image_that_is_the_scan_wins_over_the_displayed_image() {
     assert_eq!(
         parse_viewer_page(html, VIEWER_URL).expect("parse viewer"),
         "https://urn.digitalarkivet.no/URN:NBN:no-a1450-fs10000099901042.jpg"
+    );
+}
+
+#[test]
+fn a_blank_permanent_image_link_falls_through_to_the_next_rung() {
+    let html = r#"<html><head>
+        <meta property="og:image" content="https://urn.digitalarkivet.no/URN:NBN:no-a1450-fs10000099901042.jpg">
+        </head><body>
+        <input id="permanent_image_link" value="  ">
+        </body></html>"#;
+    assert_eq!(
+        parse_viewer_page(html, VIEWER_URL).expect("parse viewer"),
+        "https://urn.digitalarkivet.no/URN:NBN:no-a1450-fs10000099901042.jpg"
+    );
+}
+
+#[test]
+fn a_displayed_scan_image_wins_over_a_permanent_jpg_anchor() {
+    let html = r#"<html><body>
+        <a href="https://urn.digitalarkivet.no/URN:NBN:no-a1450-fs10000099901042.jpg">Last ned</a>
+        <img src="https://media.digitalarkivet.no/image/00000000-0000-4000-8000-000000099901">
+        </body></html>"#;
+    assert_eq!(
+        parse_viewer_page(html, VIEWER_URL).expect("parse viewer"),
+        "https://media.digitalarkivet.no/image/00000000-0000-4000-8000-000000099901"
     );
 }
 
