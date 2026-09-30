@@ -112,13 +112,14 @@ cargo xtask check                                                    # every sta
 cargo xtask build-plugins                                            # lint + build plugins/* → target/plugins
 cargo xtask icons                                                    # assets/icon/*.svg → the installed PNGs
 cargo xtask backup-fixture                                           # regenerate the golden backup fixture (ADR 0041)
+cargo xtask match-eval                                               # score the matching evaluation corpus (ADR 0038 §9)
 cargo xtask gui-pass                                                 # drive the real GUI headless (below)
 cargo xtask screenshots                                              # README images from the real GUI (below)
 prek run                                                             # run git hooks manually
 ```
 
 `cargo xtask` also runs the individual checks (`i18n-check`, `css-check`, `input-guard`,
-`licence-check`, `icons --check`, `backup-guard`) plus `issue-sync`, `labels`, and `package` (Linux release tarball).
+`licence-check`, `icons --check`, `backup-guard`, `match-eval`) plus `issue-sync`, `labels`, and `package` (Linux release tarball).
 
 The **app icon** lives in `crates/vitni-ui-dioxus/assets/icon/` (four SVG tiers — the seal on the V's
 heavy upper terminal and the ruled lines under it are both disclosed by size — plus the symbolic

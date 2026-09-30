@@ -55,6 +55,7 @@ cargo xtask check                                                    # every sta
 cargo xtask build-plugins                                            # plugins/* → target/plugins
 cargo xtask icons                                                    # SVG icon sources → installed PNGs
 cargo xtask backup-fixture                                           # regenerate the golden backup fixture
+cargo xtask match-eval                                               # score the matching evaluation corpus
 prek run                                                             # the git hooks, by hand
 ```
 
@@ -74,8 +75,8 @@ The matching bench seeds a 100k-person workspace of several gigabytes under `tar
 out of `/tmp`, which may be RAM-backed.
 
 `cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`,
-`licence-check`, `icons --check`, `backup-guard`) plus `issue-sync`, `labels`, `package` (the Linux release tarball)
-and `screenshots` (the README images, below).
+`licence-check`, `icons --check`, `backup-guard`, `match-eval`) plus `issue-sync`, `labels`, `package`
+(the Linux release tarball) and `screenshots` (the README images, below).
 
 ## The app icon and the brand art
 
@@ -217,13 +218,14 @@ rejected and a pack's `id` must equal its file name.
 
 - **Adding a culture** is a new pack file, an entry in `EMBEDDED` in `pack.rs`, a region row if a
   country selects it, and table cases in `crates/vitni-core/src/matching/tests.rs` showing the pair it
-  exists for. No comparator changes.
+  exists for, plus [evaluation pairs](#the-matching-evaluation-corpus) from that culture's records. No
+  comparator changes.
 - **Rewrites** see lower-cased text with diacritics already stripped (`å` is `a` by then) and apply in
   order, `universal` first; doubled letters collapse after them.
 - **A workspace override** is the same file under `<workspace>/matching/cultures/` (or
   `~/.local/share/vitni/matching/cultures/`): same name replaces, new name adds.
 - **A change to a rule, class or weight** changes scores, so bump `ENGINE_VERSION` in
-  `crates/vitni-core/src/matching/mod.rs`.
+  `crates/vitni-core/src/matching/mod.rs` and run `cargo xtask match-eval`.
 - **A patronymic** is read with the pack's `male_suffixes`/`female_suffixes`: the stem left once the
   suffix is removed must equal the father's given name (or a name in its class) after both drop a
   genitive `s` and one final vowel (`Olsdatter` ↔ `Ole`, `Andreassen` ↔ `Andreas`). A culture whose
@@ -271,6 +273,31 @@ by `similar.rs` before each lookup.
   `default_cultures` (pack ids beside `universal`) and the `probable`/`possible` thresholds as whole
   percentages; an unset field falls back field by field to the engine's defaults. A bad value, or a
   pack that does not parse, fails the lookup that needs it, never the workspace open.
+
+## The matching evaluation corpus
+
+`cargo xtask match-eval` (`xtask/src/match_eval/`) measures the engine against labelled person pairs in
+`crates/vitni-core/matching/corpus/*.toml` (ADR 0038 §9): invented pairs in `invented.toml`, and
+transcriptions of public Norwegian census and church records over 100 years old in
+`digitalarkivet.toml`. It runs each pair through blocking (`BlockingKeys::person`, as `match_keys`
+would) and `assess_persons` with the default settings, then prints, per band, the true and false
+matches there, the band's precision and the recall at or above it. Every pair on the wrong side of
+`possible` is listed as *misjudged*: a false match the user would be shown, or a true match they would
+not.
+
+- **The gate is recall on the hard cases.** A `same` pair may name its `hard` case —
+  `spelling-variant`, `surname-after-move`, `census-age` or `baptism-for-birth`. Each must be a
+  candidate and score `possible` or better, and each case needs at least one pair. `match-eval` is part
+  of `cargo xtask check`, so CI fails when a comparator, weight or pack change loses one. Precision is
+  reported, not gated.
+- **A pair is two records and a label.** Each record takes `given`, `surname`, `sex`, `occupations`,
+  `birth`/`baptism`/`death`/`burial` (`year`, optional `month`/`day`, `country`, `place`, and
+  `basis = "age"` for a birth year computed from a census age), and `parents`/`partners`/`children`
+  (`given`, `surname`, `sex`, `born`). Unknown keys are rejected, ids are unique across files, and
+  `source` is required: `invented`, or the records' Digitalarkivet references and the evidence that
+  they are one person.
+- **Only mark a pair `hard` if the engine surfaces it.** A true match the engine misses today goes in
+  without `hard`, so it is reported as misjudged; add `hard` in the change that fixes it.
 
 ## Repository conventions
 

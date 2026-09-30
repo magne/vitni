@@ -639,6 +639,12 @@ rebuilt when the keying rules or the pack set change (a fingerprint) and after `
 otherwise rekeys the records committed to since, with the records whose keys carry theirs. The
 `[matching]` config sets the default cultures and the band thresholds. The duplicate check and the
 Merge screen score through the engine, and `duplicates.rs` is gone. A bench seeds 100k persons.
+✅ Evaluation corpus and `match-eval` (ADR 0038 §9, #402): `cargo xtask match-eval` runs the labelled
+person pairs of `crates/vitni-core/matching/corpus/` — invented ones and transcriptions of Norwegian
+census and church records from 1865 to 1924 — through blocking and the engine, and reports precision
+and recall per band. Every pair marked as a hard true match (a spelling variant, a surname changed
+after a move, a census age a few years off, a baptism for a birth) must surface at `possible` or
+better; the check is part of `cargo xtask check`, so CI fails when a change loses one.
 
 ## Risk register
 
