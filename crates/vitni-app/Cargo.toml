@@ -42,6 +42,14 @@ sqlx = { workspace = true, features = ["migrate"] }
 # The cross-engine backup test (feature = "postgres"; ADR 0041 §2): one reused container, a fresh
 # database per test. The `migrate` feature above provides the empty `Migrator` the helper requires.
 test-containers-util = { version = "0.1.4", features = ["pg-sqlx"] }
+# The record-matching benchmarks: criterion, and the event trait the bench's bulk-loaded rows are
+# written through.
+criterion = { workspace = true }
+cqrs-es = { workspace = true }
+
+[[bench]]
+name = "similar"
+harness = false
 
 [lints]
 workspace = true
