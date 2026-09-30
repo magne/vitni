@@ -1,0 +1,402 @@
+# Real pairs for the matching evaluation corpus (ADR 0038 §9, `cargo xtask match-eval`): transcribed
+# Norwegian census and church-book records over 100 years old, published by the National Archives of
+# Norway (Arkivverket) on Digitalarkivet. Each record is transcribed field by field as the source
+# gives it, spelling included; `source` names both records and why they are, or are not, one person.
+# The schema is described in `invented.toml`.
+
+[[pair]]
+id = "asbjorn-bergstol-1920-census-and-1924-baptism"
+label = "same"
+hard = "spelling-variant"
+source = """
+Folketelling 1920 for 1017 Greipstad herred, https://www.digitalarkivet.no/census/person/pf01073902000464 ↔
+Klokkerbok for Søgne prestegjeld, Greipstad sokn 1904-1936, baptism of Sigmund Magne 1924-11-30, the father,
+https://www.digitalarkivet.no/view/255/pd00000020636420. Linked on given name and patronymic, birth year 1886,
+parish, and the wife/mother born 1889 (Gunlaug ↔ Gunbvig Signe); the farm name is spelled Bergstøl ↔
+Bergstad. Both records are the fixtures in crates/vitni-digitalarkivet/tests/fixtures/.
+"""
+[pair.left]
+given = "Asbjørn"
+surname = "Andreassen Bergstøl"
+sex = "male"
+occupations = ["Gårdbruker S."]
+birth = { year = 1886, month = 7, day = 8, country = "Norge", place = "Greipstad" }
+partners = [{ given = "Gunlaug", surname = "Bergstøl", sex = "female", born = 1889 }]
+children = [
+    { given = "Andreas", surname = "Bergstøl", sex = "male", born = 1917 },
+    { given = "Kjetil", surname = "Asbjørnsen Bergstøl", sex = "male", born = 1919 },
+]
+[pair.right]
+given = "Asbjørn"
+surname = "Andreassen Bergstad"
+sex = "male"
+birth = { year = 1886, country = "Norge" }
+partners = [{ given = "Gunbvig Signe", surname = "Aandal", born = 1889 }]
+children = [{ given = "Sigmund Magne" }]
+
+[[pair]]
+id = "asbjorn-bergstad-1917-baptism-and-1920-census"
+label = "same"
+hard = "spelling-variant"
+source = """
+Ministerialbok for Søgne prestegjeld, Greipstad sokn 1911-1945, baptism of Andreas 1917-05-28, the father,
+https://www.digitalarkivet.no/view/255/pd00000034846376 ↔ Folketelling 1920 for 1017 Greipstad herred,
+https://www.digitalarkivet.no/census/person/pf01073902000464. Linked on name, birth year 1886, parish, the wife
+Gunlaug born 1889 and the son Andreas born 1917-04-22 in the 1920 household.
+"""
+[pair.left]
+given = "Asbjørn"
+surname = "Andreasen Bergstad"
+sex = "male"
+birth = { year = 1886, country = "Norge" }
+partners = [{ given = "Gunlaug Signe Birgitte", surname = "Johnsen", sex = "female", born = 1889 }]
+children = [{ given = "Andreas" }]
+[pair.right]
+given = "Asbjørn"
+surname = "Andreassen Bergstøl"
+sex = "male"
+occupations = ["Gårdbruker S."]
+birth = { year = 1886, month = 7, day = 8, country = "Norge", place = "Greipstad" }
+partners = [{ given = "Gunlaug", surname = "Bergstøl", sex = "female", born = 1889 }]
+children = [
+    { given = "Andreas", surname = "Bergstøl", sex = "male", born = 1917 },
+    { given = "Kjetil", surname = "Asbjørnsen Bergstøl", sex = "male", born = 1919 },
+]
+
+[[pair]]
+id = "asbjorn-asbjornsen-1910-and-asbjorn-andreassen-bergstol-1920"
+label = "same"
+hard = "surname-after-move"
+source = """
+Folketelling 1910 for 1018 Søgne herred, https://www.digitalarkivet.no/census/person/pf01036585003937 ↔
+Folketelling 1920 for 1017 Greipstad herred, https://www.digitalarkivet.no/census/person/pf01073902000464.
+HISTREG (https://histreg.no/index.php/person/daid/pf01073902000464) links them; the 1910 son of Andreas
+Asbjørnsen Bergstøl is the 1920 Asbjørn Andreassen of the same farm. The two birth dates disagree on the month.
+"""
+[pair.left]
+given = "Asbjørn"
+surname = "Asbjørnsen"
+sex = "male"
+occupations = ["Haadverker, Maler (husmaling)"]
+birth = { year = 1886, month = 11, day = 8, country = "Norge", place = "Søgne" }
+parents = [
+    { given = "Andreas", surname = "Asbjørnsen Bergstøl", sex = "male", born = 1853 },
+    { given = "Marie", surname = "Asbjørnsen", sex = "female", born = 1857 },
+]
+[pair.right]
+given = "Asbjørn"
+surname = "Andreassen Bergstøl"
+sex = "male"
+occupations = ["Gårdbruker S."]
+birth = { year = 1886, month = 7, day = 8, country = "Norge", place = "Greipstad" }
+partners = [{ given = "Gunlaug", surname = "Bergstøl", sex = "female", born = 1889 }]
+children = [
+    { given = "Andreas", surname = "Bergstøl", sex = "male", born = 1917 },
+    { given = "Kjetil", surname = "Asbjørnsen Bergstøl", sex = "male", born = 1919 },
+]
+
+[[pair]]
+id = "peter-frantsvold-1900-and-petter-olsen-1910"
+label = "same"
+hard = "spelling-variant"
+source = """
+Folketelling 1900 for 0123 Spydeberg herred, https://www.digitalarkivet.no/census/person/pf01037006000911 ↔
+Folketelling 1910 for 0123 Spydeberg herred, https://www.digitalarkivet.no/census/person/pf01036349001249.
+HISTREG (https://histreg.no/index.php/person/daid/pf01036349001249) links them; the households agree: the farm
+Frantsvold/Fransvold, a Swedish-born wife born 1859, a son Ole and a daughter Hilda born on 3 November.
+"""
+[pair.left]
+given = "Peter"
+surname = "Frantsvold"
+sex = "male"
+occupations = ["Gaardbruger og selveier"]
+birth = { year = 1861, country = "Norge", place = "Spydeberg" }
+partners = [{ given = "Anna", surname = "Frantsvold", sex = "female", born = 1859 }]
+children = [
+    { given = "Anna Matilde", surname = "Frantsvold", sex = "female", born = 1894 },
+    { given = "Ole", surname = "Frantsvold", sex = "male", born = 1897 },
+    { given = "Hilda", surname = "Frantsvold", sex = "female", born = 1900 },
+]
+[pair.right]
+given = "Petter"
+surname = "Olsen"
+sex = "male"
+occupations = ["Gaardbr selveier"]
+birth = { year = 1862, month = 3, day = 14, country = "Norge", place = "Spydeberg" }
+partners = [{ given = "Anne", surname = "Andersen", sex = "female", born = 1859 }]
+children = [
+    { given = "Ole", surname = "Pettersen", sex = "male", born = 1896 },
+    { given = "Hilda", surname = "Pettersen", sex = "female", born = 1899 },
+]
+
+[[pair]]
+id = "ole-olsoen-nese-1910-and-olav-olsoen-engum-1920"
+label = "same"
+hard = "surname-after-move"
+source = """
+Folketelling 1910 for 1417 Vik herred, https://www.digitalarkivet.no/census/person/pf01036716003134 ↔
+Folketelling 1920 for 1417 Vik herred, https://www.digitalarkivet.no/census/person/pf01074042003119.
+HISTREG (https://histreg.no/index.php/person/daid/pf01036716003134) links them; both are born 1882-04-25 in Vik,
+and the 1910 parents Ole Pedersøn Nese (1844-07-20) and Ingeborg Lassedatter (1846-11-29) live in the 1920
+household.
+"""
+[pair.left]
+given = "Ole"
+surname = "Olsøn Nese"
+sex = "male"
+occupations = ["gaardsarbeide"]
+birth = { year = 1882, month = 4, day = 25, country = "Norge", place = "Vik" }
+parents = [
+    { given = "Ole", surname = "Pedersøn Nese", sex = "male", born = 1844 },
+    { given = "Ingeborg", surname = "Lassedatter", sex = "female", born = 1846 },
+]
+[pair.right]
+given = "Olav"
+surname = "Olsøn Engum"
+sex = "male"
+occupations = ["Gardbrukar s."]
+birth = { year = 1882, month = 4, day = 25, country = "Norge", place = "Vik" }
+partners = [{ given = "Brita", surname = "Karlsdotter Engum", sex = "female", born = 1886 }]
+children = [
+    { given = "Ingeborg", surname = "Olsdotter Engum", sex = "female", born = 1911 },
+    { given = "Ola", surname = "Olson Engum", sex = "male", born = 1913 },
+    { given = "Karl", surname = "Olson Engum", sex = "male", born = 1914 },
+    { given = "Bjarne", surname = "Olson Engum", sex = "male", born = 1918 },
+    { given = "Borghild Maria", surname = "Olsdotter Engum", sex = "female", born = 1920 },
+]
+
+[[pair]]
+id = "ole-1882-baptism-and-ole-olsoen-nese-1910"
+label = "same"
+source = """
+Klokkerbok for Vik prestegjeld, Arnafjord sokn 1878-1893, baptism 1882-05-05,
+https://www.digitalarkivet.no/view/255/pd00000030472018 ↔ Folketelling 1910 for 1417 Vik herred,
+https://www.digitalarkivet.no/census/person/pf01036716003134. Linked on the birth date 1882-04-25 and the
+parents: Ole Pedersen (1844) and Ingeborg Lassesdtr (1847) ↔ Ole Pedersøn Nese (1844) and Ingeborg Lassedatter
+(1846).
+"""
+[pair.left]
+given = "Ole"
+sex = "male"
+birth = { year = 1882, month = 4, day = 25, country = "Norge" }
+baptism = { year = 1882, month = 5, day = 5, country = "Norge" }
+parents = [
+    { given = "Ole", surname = "Pedersen", sex = "male", born = 1844 },
+    { given = "Ingeborg", surname = "Lassesdtr", sex = "female", born = 1847 },
+]
+[pair.right]
+given = "Ole"
+surname = "Olsøn Nese"
+sex = "male"
+occupations = ["gaardsarbeide"]
+birth = { year = 1882, month = 4, day = 25, country = "Norge", place = "Vik" }
+parents = [
+    { given = "Ole", surname = "Pedersøn Nese", sex = "male", born = 1844 },
+    { given = "Ingeborg", surname = "Lassedatter", sex = "female", born = 1846 },
+]
+
+[[pair]]
+id = "peter-kristian-1889-baptism-and-petter-kristian-andersen-1910"
+label = "same"
+hard = "spelling-variant"
+source = """
+Ministerialbok for Holmestrand prestegjeld 1880-1901 (0702Q), baptism 1889-06-10,
+https://www.digitalarkivet.no/view/255/pd00000023702659 ↔ Folketelling 1910 for 0702 Holmestrand kjøpstad,
+https://www.digitalarkivet.no/census/person/pf01036485000448. HISTREG
+(https://histreg.no/index.php/person/daid/pf01036485000448) links them; the birth date 04-28 1889 and the father
+Anders Petersen/Pettersen born 1855 agree.
+"""
+[pair.left]
+given = "Peter Kristian"
+sex = "male"
+birth = { year = 1889, month = 4, day = 28, country = "Norge" }
+baptism = { year = 1889, month = 6, day = 10, country = "Norge" }
+parents = [
+    { given = "Anders", surname = "Petersen", sex = "male", born = 1855 },
+    { given = "Oline", surname = "Aslaksdtr.", sex = "female", born = 1848 },
+]
+[pair.right]
+given = "Petter Kristian"
+surname = "Pettersen Andersen"
+sex = "male"
+occupations = ["Bakersvend"]
+birth = { year = 1889, month = 4, day = 28, country = "Norge", place = "Holmestrand" }
+parents = [
+    { given = "Anders", surname = "Pettersen", sex = "male", born = 1855 },
+    { given = "Oline", surname = "Pettersen", sex = "female", born = 1849 },
+]
+
+[[pair]]
+id = "gulbran-hanssoen-1865-and-gulbrand-hansen-1910"
+label = "same"
+hard = "census-age"
+source = """
+Folketelling 1865 for 0104B Moss prestegjeld, Moss kjøpstad,
+https://www.digitalarkivet.no/census/person/pf01037982001488 (age 17, born 1849 computed) ↔ Folketelling 1910 for 0301 Kristiania kjøpstad,
+https://www.digitalarkivet.no/census/person/pf01036392237958. Linked by HISTREG only
+(https://histreg.no/index.php/person/daid/pf01037982001488); the 1865 lodging household names no parent.
+"""
+[pair.left]
+given = "Gulbran"
+surname = "Hanssøn"
+sex = "male"
+birth = { year = 1849, basis = "age", country = "Norge", place = "Moss" }
+[pair.right]
+given = "Gulbrand"
+surname = "Hansen"
+sex = "male"
+occupations = ["Dokarbeider Nylands Værksted"]
+birth = { year = 1849, month = 12, day = 28, country = "Norge", place = "Moss" }
+partners = [{ given = "Marie", surname = "Hansen", sex = "female", born = 1835 }]
+
+[[pair]]
+id = "petter-olsen-two-rows-of-the-1920-moss-census"
+label = "same"
+source = """
+Folketelling 1920 for 0104 Moss kjøpstad, https://www.digitalarkivet.no/census/person/pf01073640009742 (at home)
+↔ https://www.digitalarkivet.no/census/person/pf01073640003063 (a patient in hospital). Both are born 1856-01-15
+in Moss and married; the 1910 Rygge household (https://www.digitalarkivet.no/census/person/pf01036359000858) has
+him with the same wife Maren (1858-11-07) as the first row.
+"""
+[pair.left]
+given = "Petter"
+surname = "Olsen"
+sex = "male"
+occupations = ["celluloseorb"]
+birth = { year = 1856, month = 1, day = 15, country = "Norge", place = "Moss" }
+partners = [{ given = "Maren", surname = "Olsen", sex = "female", born = 1858 }]
+children = [
+    { given = "David", surname = "Olsen", sex = "male", born = 1894 },
+    { given = "Ester", surname = "Olsen", sex = "female", born = 1896 },
+]
+[pair.right]
+given = "Petter"
+surname = "Olsen"
+sex = "male"
+occupations = ["Cellulosearbeider"]
+birth = { year = 1856, month = 1, day = 15, country = "Norge", place = "Moss" }
+
+[[pair]]
+id = "two-asbjorn-asbjornsens-born-1886"
+label = "distinct"
+source = """
+Folketelling 1910 for 1018 Søgne herred, https://www.digitalarkivet.no/census/person/pf01036585003937 ↔
+Folketelling 1910 for 1103 Stavanger kjøpstad, https://www.digitalarkivet.no/census/person/pf01036615033321.
+Two rows of one census, each at home with different parents.
+"""
+[pair.left]
+given = "Asbjørn"
+surname = "Asbjørnsen"
+sex = "male"
+occupations = ["Haadverker, Maler (husmaling)"]
+birth = { year = 1886, month = 11, day = 8, country = "Norge", place = "Søgne" }
+parents = [
+    { given = "Andreas", surname = "Asbjørnsen Bergstøl", sex = "male", born = 1853 },
+    { given = "Marie", surname = "Asbjørnsen", sex = "female", born = 1857 },
+]
+[pair.right]
+given = "Asbjørn"
+surname = "Asbjørnsen"
+sex = "male"
+occupations = ["d/s fyrbøtar"]
+birth = { year = 1886, month = 1, day = 6, country = "Norge", place = "Stavanger" }
+parents = [
+    { given = "Sivert", surname = "Asbjørnsen", sex = "male", born = 1859 },
+    { given = "Sara", surname = "Asbjørnsen", sex = "female", born = 1868 },
+]
+
+[[pair]]
+id = "asbjorn-asbjornsen-father-and-son-1910"
+label = "distinct"
+source = """
+Folketelling 1910 for 1103 Stavanger kjøpstad, one household: the father
+https://www.digitalarkivet.no/census/person/pf01036615025489 ↔ the son
+https://www.digitalarkivet.no/census/person/pf01036615025497.
+"""
+[pair.left]
+given = "Asbjørn"
+surname = "Asbjørnsen"
+sex = "male"
+occupations = ["Malersvend"]
+birth = { year = 1870, month = 8, day = 2, country = "Norge", place = "Time" }
+partners = [{ given = "Hanna", surname = "Asbjørnsen", sex = "female", born = 1873 }]
+[pair.right]
+given = "Asbjørn"
+surname = "Asbjørnsen"
+sex = "male"
+birth = { year = 1908, month = 12, day = 2, country = "Norge", place = "Stavanger" }
+parents = [
+    { given = "Asbjørn", surname = "Asbjørnsen", sex = "male", born = 1870 },
+    { given = "Hanna", surname = "Asbjørnsen", sex = "female", born = 1873 },
+]
+
+[[pair]]
+id = "olav-and-ola-engum-father-and-son-1920"
+label = "distinct"
+source = """
+Folketelling 1920 for 1417 Vik herred, one household: the father
+https://www.digitalarkivet.no/census/person/pf01074042003119 ↔ the son born on the same day and month,
+https://www.digitalarkivet.no/census/person/pf01074042003122.
+"""
+[pair.left]
+given = "Olav"
+surname = "Olsøn Engum"
+sex = "male"
+occupations = ["Gardbrukar s."]
+birth = { year = 1882, month = 4, day = 25, country = "Norge", place = "Vik" }
+[pair.right]
+given = "Ola"
+surname = "Olson Engum"
+sex = "male"
+birth = { year = 1913, month = 4, day = 25, country = "Norge", place = "Vik" }
+parents = [
+    { given = "Olav", surname = "Olsøn Engum", sex = "male", born = 1882 },
+    { given = "Brita", surname = "Karlsdotter Engum", sex = "female", born = 1886 },
+]
+
+[[pair]]
+id = "andreas-bergstol-grandfather-and-grandson"
+label = "distinct"
+source = """
+Folketelling 1910 for 1018 Søgne herred, https://www.digitalarkivet.no/census/person/pf01036585003931 ↔
+Folketelling 1920 for 1017 Greipstad herred, https://www.digitalarkivet.no/census/person/pf01073902000466, the
+son of the first one's son Asbjørn.
+"""
+[pair.left]
+given = "Andreas"
+surname = "Asbjørnsen Bergstøl"
+sex = "male"
+occupations = ["Gaardbruker"]
+birth = { year = 1853, month = 5, day = 20, country = "Norge", place = "Søgne" }
+[pair.right]
+given = "Andreas"
+surname = "Bergstøl"
+sex = "male"
+birth = { year = 1917, month = 4, day = 22, country = "Norge", place = "Greipstad" }
+parents = [
+    { given = "Asbjørn", surname = "Andreassen Bergstøl", sex = "male", born = 1886 },
+    { given = "Gunlaug", surname = "Bergstøl", sex = "female", born = 1889 },
+]
+
+[[pair]]
+id = "gulbrand-and-gulbran-hansen-kristiania-1910"
+label = "distinct"
+source = """
+Folketelling 1910 for 0301 Kristiania kjøpstad, two households:
+https://www.digitalarkivet.no/census/person/pf01036392237958 ↔
+https://www.digitalarkivet.no/census/person/pf01036392283304.
+"""
+[pair.left]
+given = "Gulbrand"
+surname = "Hansen"
+sex = "male"
+occupations = ["Dokarbeider Nylands Værksted"]
+birth = { year = 1849, month = 12, day = 28, country = "Norge", place = "Moss" }
+partners = [{ given = "Marie", surname = "Hansen", sex = "female", born = 1835 }]
+[pair.right]
+given = "Gulbran"
+surname = "Hansen"
+sex = "male"
+occupations = ["Fjelarbejder"]
+birth = { year = 1853, month = 1, day = 9, country = "Norge", place = "Enebak" }
+partners = [{ given = "Marie Adeline", surname = "Hansen", sex = "female", born = 1856 }]
