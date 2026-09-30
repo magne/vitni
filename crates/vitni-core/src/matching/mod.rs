@@ -45,7 +45,7 @@ mod tag;
 mod weights;
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, PoisonError, RwLock};
 
 use crate::enums::Sex;
 use crate::matching::date::{DayInterval, SLIP_SIMILARITY, Tolerance, interval, is_clerical_slip, similarity};
@@ -342,12 +342,16 @@ impl MatchData {
 /// The normalized rules of each culture set a comparison has applied, so a set's packs are normalized
 /// once rather than per comparison. A cache: it is empty when cloned and never tells two data apart.
 #[derive(Default)]
-struct RulesCache(Mutex<HashMap<Vec<CultureId>, Arc<Rules>>>);
+struct RulesCache(RwLock<HashMap<Vec<CultureId>, Arc<Rules>>>);
 
 impl RulesCache {
-    /// The rules of `cultures`, built by `build` the first time they are asked for.
+    /// The rules of `cultures`, built by `build` the first time they are asked for. Comparisons on
+    /// several threads share the cache, and only a miss takes the write lock.
     fn get(&self, cultures: &[CultureId], build: impl FnOnce() -> Rules) -> Arc<Rules> {
-        let mut cache = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(rules) = self.0.read().unwrap_or_else(PoisonError::into_inner).get(cultures) {
+            return Arc::clone(rules);
+        }
+        let mut cache = self.0.write().unwrap_or_else(PoisonError::into_inner);
         Arc::clone(cache.entry(cultures.to_vec()).or_insert_with(|| Arc::new(build())))
     }
 }

@@ -141,12 +141,43 @@ pub async fn similar_pairs(
             built.insert(id.clone(), profile);
         }
     }
+    let records: Vec<(&String, &Vec<String>)> = by_record.iter().collect();
+    let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+    let chunk = records.len().div_ceil(threads).max(1);
+    let scored: Vec<Vec<(String, String, MatchAssessment)>> = std::thread::scope(|scope| {
+        let workers: Vec<_> = records
+            .chunks(chunk)
+            .map(|part| scope.spawn(|| pairs_from(part, &by_key, &built, matching, min_band)))
+            .collect();
+        workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
+            .collect()
+    });
     let mut pairs = Vec::new();
-    for (id, record_keys) in &by_record {
-        let Some(profile) = built.get(id) else {
+    for (a, b, assessment) in scored.into_iter().flatten() {
+        let (a, b) = (agg_ref(&profiles, kind, &a), agg_ref(&profiles, kind, &b));
+        pairs.push(SimilarPair { a, b, assessment });
+    }
+    pairs.sort_by(|x, y| rank(&x.assessment, &y.assessment).then_with(|| (&x.a.id, &x.b.id).cmp(&(&y.a.id, &y.b.id))));
+    Ok(pairs)
+}
+
+/// The pairs each record of `records` forms, at least `min_band` similar, with the candidates its keys
+/// meet that sort after it — so every pair is scored once across all the parts.
+fn pairs_from(
+    records: &[(&String, &Vec<String>)],
+    by_key: &BTreeMap<String, Vec<String>>,
+    built: &BTreeMap<String, Profile>,
+    matching: &Matching,
+    min_band: MatchBand,
+) -> Vec<(String, String, MatchAssessment)> {
+    let mut pairs = Vec::new();
+    for (id, record_keys) in records {
+        let Some(profile) = built.get(*id) else {
             continue;
         };
-        for other in candidates(&Probe::of(record_keys), &by_key) {
+        for other in candidates(&Probe::of(record_keys), by_key) {
             if other.as_str() <= id.as_str() {
                 continue;
             }
@@ -154,13 +185,11 @@ pub async fn similar_pairs(
                 continue;
             };
             if assessment.band >= min_band {
-                let (a, b) = (agg_ref(&profiles, kind, id), agg_ref(&profiles, kind, &other));
-                pairs.push(SimilarPair { a, b, assessment });
+                pairs.push(((*id).clone(), other, assessment));
             }
         }
     }
-    pairs.sort_by(|x, y| rank(&x.assessment, &y.assessment).then_with(|| (&x.a.id, &x.b.id).cmp(&(&y.a.id, &y.b.id))));
-    Ok(pairs)
+    pairs
 }
 
 /// The records in `by_key` holding a key `probe` meets.
