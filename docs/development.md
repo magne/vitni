@@ -231,6 +231,15 @@ rejected and a pack's `id` must equal its file name.
   partner's support is capped (`PARTNER_SUPPORT`) because a remarriage shares a partner; only both
   agreeing make one family. **An event** pairs its principals (primary, husband, wife, spouse, groom,
   bride) one to one, never across an asserted sex; its other participants only ever support a pair.
+- **A place** as a record of its own is compared by names, type, where it lies and coordinates; one
+  place enclosing the other (a farm and its parish) is `Partial` on `Enclosure`, never a disagreement.
+  **Titles, repository names, addresses and notes** are free text, scored by `Applied::text_similarity`:
+  the share of both texts' letters in shared words, so word order does not matter; numbers must be
+  equal and words under three letters (*i*, *på*) are skipped. **A citation** summarises its source pair
+  as one `Source` term (capped, `SOURCE_SUPPORT`) with the source assessment in `parts`, and compares
+  its page by its numbers. **Media** match on the checksum exactly, with the file name as weak support;
+  the aggregate has no description to compare. **A tag** pair with one case-folded name is
+  `Deterministic` — the only band a compared value sets.
 
 ## Repository conventions
 

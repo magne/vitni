@@ -623,6 +623,13 @@ term — its support capped, since a remarriage shares a partner — and keeps t
 `MatchAssessment::parts`; children and the marriage's date and place follow. An event is compared by
 type (a different one is a conflict), date, place, its principals pair by pair, and its other
 participants as support only. The same marriage from a church book and a GEDCOM file scores Probable.
+✅ Place, source, repository, citation, media, note and tag profiles (ADR 0038 §2, #399): one
+`vitni_app::*_profile` and one `vitni_core::matching::assess_*` per kind. A place is compared by names
+(dated ones included), type, where it lies — a farm matched to its parish is Partial — and coordinates.
+Titles, names, addresses and notes are compared by the words they share; a citation by its source,
+assessed as a source and kept in `MatchAssessment::parts`, and by the numbers of its page. Media match
+exactly by checksum, with the file name as weak support, and a tag pair with one case-folded name is
+Deterministic.
 
 ## Risk register
 
