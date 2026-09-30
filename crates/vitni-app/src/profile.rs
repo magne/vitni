@@ -1,6 +1,7 @@
-//! The person profile the matching engine compares (ADR 0038 §2), built from the workspace's views.
+//! The person, family and event profiles the matching engine compares (ADR 0038 §2), built from the
+//! workspace's views.
 //!
-//! A profile gathers a person's names, sex, occupations and external ids, the vital events they are the
+//! A person profile gathers a person's names, sex, occupations and external ids, the vital events they are the
 //! primary participant in (a christening counts as a baptism) with each event's place, and their
 //! relatives — parents, partners and children, each with names, sex and a birth. With no dated birth or
 //! baptism, an age recorded at a dated event (a census) stands in, as a birth computed from that age.
@@ -8,6 +9,12 @@
 //! events and their parents' vital events, select the name cultures. Its origin is the one of the
 //! assertion that created the person, never a participation's: a church record's father, mother and
 //! child all take part in one baptism item.
+//!
+//! A family profile holds its partners' person profiles — without their partners and children, which
+//! the family compares itself — its children, and its linked marriage as an event profile. An event
+//! profile holds its type, date and place, and every person taking part, with their role, names, sex
+//! and birth; participation is the person's, so the participants are read from the persons. Each
+//! profile's origin is the one of the assertion that created its record.
 //!
 //! [`ProfileLookups`] reads every person, event, place and family once, so building many profiles costs
 //! one load.
@@ -21,7 +28,10 @@ use vitni_core::family::{ChildEntry, FamilyView};
 use vitni_core::ids::{EventId, PersonId, PlaceId};
 use vitni_core::matching::DateBasis;
 use vitni_core::matching::date::year;
-use vitni_core::matching::profile::{PersonProfile, PlaceMention, PlaceProfile, Relative, VitalEvent, VitalKind};
+use vitni_core::matching::profile::{
+    EventProfile, FamilyProfile, Participant, PersonProfile, PlaceMention, PlaceProfile, Relative, VitalEvent,
+    VitalKind,
+};
 use vitni_core::origin::RecordOrigin;
 use vitni_core::person::PersonView;
 use vitni_core::place::PlaceView;
@@ -31,6 +41,7 @@ use vitni_db::{DbError, Store};
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::person::resolve_person_id_public;
+use crate::use_case;
 use crate::workspace::Workspace;
 
 /// Builds the matching profile of the person `human_id`.
@@ -42,28 +53,93 @@ pub async fn person_profile(workspace: &Workspace, human_id: &str) -> Result<Per
     let store = workspace.store();
     let person_id = resolve_person_id_public(store, human_id).await?;
     let lookups = ProfileLookups::load(store).await?;
-    let origins = creating_origin(store, person_id).await?.into_iter().collect();
+    let origins = creating_origins(store, "person", &person_id.to_string()).await?;
     lookups
         .profile(person_id, origins)
         .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))
 }
 
-/// The origin of the assertion that created the person: the first event of its stream.
-async fn creating_origin(store: &Store, person_id: PersonId) -> Result<Option<RecordOrigin>, AppError> {
+/// Builds the matching profile of the family `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if no such family exists, or [`AppError`] on a store read failure.
+pub async fn family_profile(workspace: &Workspace, human_id: &str) -> Result<FamilyProfile, AppError> {
+    let store = workspace.store();
+    let found = store.find_family(human_id).await?;
+    let Some((view, family_id)) = found.and_then(|view| view.family_id().map(|id| (view, id))) else {
+        return Err(AppError::FamilyNotFound(human_id.to_owned()));
+    };
+    let lookups = ProfileLookups::load(store).await?;
+    let mut partners = Vec::new();
+    for partner in view.partners() {
+        let origins = creating_origins(store, "person", &partner.to_string()).await?;
+        if let Some(mut profile) = lookups.profile(partner, origins) {
+            profile.partners.clear();
+            profile.children.clear();
+            partners.push(profile);
+        }
+    }
+    let children = view
+        .children()
+        .iter()
+        .filter_map(|child| lookups.relative(child.child_id))
+        .collect();
+    let marriage = view
+        .linked_events()
+        .into_iter()
+        .find(|event| lookups.events.get(event).and_then(EventView::event_type) == Some(&EventType::Marriage));
+    let marriage = match marriage {
+        Some(event) => {
+            let origins = creating_origins(store, "event", &event.to_string()).await?;
+            lookups.event(event, origins)
+        }
+        None => None,
+    };
+    Ok(FamilyProfile {
+        partners,
+        children,
+        marriage,
+        origins: creating_origins(store, "family", &family_id.to_string()).await?,
+        external_ids: view.external_ids().into_iter().cloned().collect(),
+    })
+}
+
+/// Builds the matching profile of the event `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if no such event exists, or [`AppError`] on a store read failure.
+pub async fn event_profile(workspace: &Workspace, human_id: &str) -> Result<EventProfile, AppError> {
+    let store = workspace.store();
+    let not_found = || AppError::EventNotFound(human_id.to_owned());
+    let event_id = use_case::resolve_id(store.find_event(human_id).await?, EventView::event_id, not_found)?;
+    let lookups = ProfileLookups::load(store).await?;
+    let origins = creating_origins(store, "event", &event_id.to_string()).await?;
+    lookups.event(event_id, origins).ok_or_else(not_found)
+}
+
+/// The origin of the assertion that created a record — the first event of its aggregate's stream — as
+/// the profile's origins: none when it was not imported.
+async fn creating_origins(
+    store: &Store,
+    aggregate_type: &str,
+    aggregate_id: &str,
+) -> Result<Vec<RecordOrigin>, AppError> {
     #[derive(serde::Deserialize)]
     struct Header {
         context: EventContext,
     }
-    let events = store.read_aggregate_events("person", &person_id.to_string()).await?;
+    let events = store.read_aggregate_events(aggregate_type, aggregate_id).await?;
     let Some(created) = events.iter().min_by_key(|event| event.sequence) else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
     let header: Header = serde_json::from_str(&created.payload).map_err(|e| {
         AppError::Db(DbError::Backend(format!(
-            "decoding the creating event of person {person_id}: {e}"
+            "decoding the creating event of {aggregate_type} {aggregate_id}: {e}"
         )))
     })?;
-    Ok(header.context.origin.map(|origin| *origin))
+    Ok(header.context.origin.map(|origin| *origin).into_iter().collect())
 }
 
 /// The workspace's persons, events, places and family links, read once.
@@ -71,6 +147,7 @@ struct ProfileLookups {
     persons: HashMap<PersonId, PersonView>,
     events: HashMap<EventId, EventView>,
     places: HashMap<PlaceId, PlaceView>,
+    participants_of: HashMap<EventId, Vec<(PersonId, ParticipantRole)>>,
     parents_of: HashMap<PersonId, Vec<PersonId>>,
     partners_of: HashMap<PersonId, Vec<PersonId>>,
     children_of: HashMap<PersonId, Vec<PersonId>>,
@@ -87,8 +164,15 @@ fn link(map: &mut HashMap<PersonId, Vec<PersonId>>, key: PersonId, value: Person
 impl ProfileLookups {
     async fn load(store: &Store) -> Result<Self, AppError> {
         let mut persons = HashMap::new();
+        let mut participants_of: HashMap<EventId, Vec<(PersonId, ParticipantRole)>> = HashMap::new();
         for view in store.list_persons().await? {
             if let Some(id) = view.person_id() {
+                for participation in view.participations() {
+                    participants_of
+                        .entry(participation.event_id)
+                        .or_default()
+                        .push((id, participation.role.clone()));
+                }
                 persons.insert(id, view);
             }
         }
@@ -108,6 +192,7 @@ impl ProfileLookups {
             persons,
             events,
             places,
+            participants_of,
             parents_of: HashMap::new(),
             partners_of: HashMap::new(),
             children_of: HashMap::new(),
@@ -170,6 +255,28 @@ impl ProfileLookups {
             children: related(&self.children_of),
             origins,
             external_ids: view.external_ids().into_iter().cloned().collect(),
+        })
+    }
+
+    /// The profile of `event_id`, with its creating `origins`, or `None` when it is not projected.
+    fn event(&self, event_id: EventId, origins: Vec<RecordOrigin>) -> Option<EventProfile> {
+        let view = self.events.get(&event_id)?;
+        let taking_part = self.participants_of.get(&event_id).map_or(&[][..], Vec::as_slice);
+        let mut participants = Vec::new();
+        for (person_id, role) in taking_part {
+            if let Some(person) = self.relative(*person_id) {
+                participants.push(Participant {
+                    role: role.clone(),
+                    person,
+                });
+            }
+        }
+        Some(EventProfile {
+            event_type: view.event_type().cloned(),
+            date: view.date().cloned(),
+            place: view.place_id().map(|place| self.place(place)),
+            participants,
+            origins,
         })
     }
 

@@ -451,8 +451,8 @@ in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and imp
 [`research/record-matching.md`](research/record-matching.md). The bullets are listed in dependency
 order, and each one's *Needs:* names its prerequisites. The milestone opened with backup (#391),
 record origins with import runs (#393) and resolve-by-origin (#394), then the xref-collision fix
-(#389), tombstones by origin (#395), the matching core (#396) and the person profile (#397), which
-have landed.
+(#389), tombstones by origin (#395), the matching core (#396), the person profile (#397) and the
+family and event profiles (#398), which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
@@ -463,9 +463,16 @@ does.
   re-import then misses the earlier imports' origins until `vitni rebuild`. *Shape:* a completion
   marker written after the replay, or the backfill in one transaction. *Exit:* a test that interrupts
   the backfill and reopens gets the full index.
-- **Family and Event profiles** — ADR 0038 §2. A family by its partners, children and marriage. An event
-  by type, date, place and participants. These carry the census and marriage cases. *Needs:* the person
-  profile. *Exit:* the same marriage from a church book and a GEDCOM file scores Probable. — #398
+- **A person can score higher against another record than against itself** — the property test
+  `a_record_matches_itself_at_least_as_well_as_any_other` (`vitni-core/src/matching/tests.rs`) fails on
+  a surname-only *Olsen*. Compared with itself it selects only `universal` and has no father to check the
+  patronymic against, so it scores 0.33; against a record born in Norway whose father is *Ole* it selects
+  `no`/`da` (a weak surname) and the patronymic agrees, so it scores 0.5. Present since the person profile
+  (#397); CI misses it because proptest draws new cases each run. *Shape:* either credit a patronymic
+  when neither side states a father, or narrow the property to pairs that select the same cultures.
+  *Exit:* the seed
+  `cc 1fcd7bbe0ff35daf52fdf8580a165aa776e3fac38bc8b4827a465079aa45e903` is committed under
+  `crates/vitni-core/proptest-regressions/` and passes. — #439
 - **Place, Source, Repository, Citation, Media, Note and Tag profiles** — ADR 0038 §2. Media matches
   exactly by checksum, and Tag by case-folded name. *Needs:* the matching core. *Exit:* per-kind table
   tests, including a farm matched to its parish as Partial. — #399

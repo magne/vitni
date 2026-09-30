@@ -224,6 +224,11 @@ rejected and a pack's `id` must equal its file name.
   suffix is removed must equal the father's given name (or a name in its class) after both drop a
   genitive `s` and one final vowel (`Olsdatter` ↔ `Ole`, `Andreassen` ↔ `Andreas`). A culture whose
   patronymics are formed otherwise needs a comparator change, not only a pack.
+- **A family** is scored through its partners: each pair is a person assessment under the families'
+  shared cultures, summarised as one `Partner` term and kept whole in `MatchAssessment::parts`. A
+  partner's support is capped (`PARTNER_SUPPORT`) because a remarriage shares a partner; only both
+  agreeing make one family. **An event** pairs its principals (primary, husband, wife, spouse, groom,
+  bride) one to one, never across an asserted sex; its other participants only ever support a pair.
 
 ## Repository conventions
 

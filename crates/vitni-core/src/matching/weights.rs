@@ -88,6 +88,33 @@ pub(crate) const PATRONYMIC: Weights = Weights {
     disagree: -3.0,
 };
 
+/// A marriage's or any event's date: the same event is recorded on the same day.
+pub(crate) const EVENT_DATE: Weights = Weights {
+    agree: 4.0,
+    disagree: -5.0,
+};
+
+/// An event type in common: weak, since candidate events are mostly of one type already; a different
+/// type is a conflict.
+pub(crate) const EVENT_TYPE_AGREE: f64 = 1.0;
+
+/// The most one family partner can support a pair: a remarriage shares a partner too, so only both
+/// partners agreeing make one family. A partner who is someone else is not capped.
+pub(crate) const PARTNER_SUPPORT: f64 = 6.0;
+
+/// An event's principal: an event with another principal is another event.
+pub(crate) const PRINCIPAL: Weights = Weights {
+    agree: 4.0,
+    disagree: -8.0,
+};
+
+/// An event's other participants: sources list different witnesses and godparents, so only agreement
+/// counts.
+pub(crate) const PARTICIPANT: Weights = Weights {
+    agree: 2.0,
+    disagree: 0.0,
+};
+
 /// An occupation in common: weak, and occupations change, so a difference is not evidence.
 pub(crate) const OCCUPATION_AGREE: f64 = 1.0;
 
