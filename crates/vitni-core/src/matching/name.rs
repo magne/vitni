@@ -114,9 +114,13 @@ impl<'a> Applied<'a> {
         tokens
     }
 
-    /// One word folded, stripped of punctuation, rewritten and with doubled letters collapsed.
+    /// One word folded, stripped of punctuation, rewritten and with doubled letters collapsed. A number
+    /// is kept as written: *1882* and *182* are different years.
     fn normalize_word(&self, word: &str) -> String {
         let mut text: String = fold(word).chars().filter(|c| c.is_alphanumeric()).collect();
+        if is_number(&text) {
+            return text;
+        }
         for pack in &self.packs {
             for (from, to) in pack.rewrites() {
                 text = text.replace(from.as_str(), to);
@@ -258,19 +262,23 @@ impl<'a> Applied<'a> {
 }
 
 /// The share of the letters of `a` and `b` in words of `a` matched, each to at most one word of `b`, in
-/// the order `a` lists them.
+/// the order `a` lists them: equal words first, so a spelling variant never takes a word's exact twin.
 fn shared_letters(a: &[String], b: &[String]) -> f64 {
     let total: f64 = a.iter().chain(b).map(|word| letters(word)).sum();
+    let mut matched = vec![false; a.len()];
     let mut used = vec![false; b.len()];
     let mut shared = 0.0;
-    for x in a {
-        let found = b
-            .iter()
-            .zip(used.iter_mut())
-            .find(|(y, used)| !**used && same_word(x, y));
-        if let Some((y, used)) = found {
-            *used = true;
-            shared += letters(x) + letters(y);
+    let passes: [fn(&str, &str) -> bool; 2] = [|x, y| x == y, same_word];
+    for same in passes {
+        for (x, matched) in a.iter().zip(matched.iter_mut()) {
+            if *matched {
+                continue;
+            }
+            let found = b.iter().zip(used.iter_mut()).find(|(y, used)| !**used && same(x, y));
+            if let Some((y, used)) = found {
+                (*matched, *used) = (true, true);
+                shared += letters(x) + letters(y);
+            }
         }
     }
     if total > 0.0 { shared / total } else { 0.0 }
@@ -355,6 +363,21 @@ mod tests {
 
     fn universal() -> Applied<'static> {
         with(&["universal"])
+    }
+
+    #[test]
+    fn numbers_in_free_text_keep_their_repeated_digits() {
+        let applied = norwegian();
+        assert_eq!(applied.tokens("1882"), ["1882"]);
+        let similarity = applied.text_similarity("utvandret 1882", "utvandret 182").unwrap();
+        assert!(similarity < 1.0, "{similarity}");
+    }
+
+    #[test]
+    fn a_spelling_variant_never_takes_an_exact_twin() {
+        let applied = norwegian();
+        let similarity = applied.text_similarity("Anders Andersen", "Andersen").unwrap();
+        assert!((similarity - 16.0 / 22.0).abs() < 1e-9, "{similarity}");
     }
 
     #[test]

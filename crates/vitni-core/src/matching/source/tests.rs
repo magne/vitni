@@ -4,7 +4,7 @@ use proptest::prelude::{Strategy, prop, prop_assert, prop_assert_eq, proptest};
 use uuid::Uuid;
 
 use crate::address::Address;
-use crate::ids::RepositoryId;
+use crate::ids::{RepositoryId, SourceId};
 use crate::matching::profile::{CitationProfile, RepositoryProfile, SourceProfile};
 use crate::matching::tests::{DATA, feature, household, point};
 use crate::matching::{
@@ -30,6 +30,7 @@ fn archive(name: &str, locality: &str) -> RepositoryProfile {
 
 fn church_book(title: &str) -> SourceProfile {
     SourceProfile {
+        id: None,
         title: Some(title.to_owned()),
         author: Some("Ringsaker prestegjeld".to_owned()),
         publication: None,
@@ -148,6 +149,34 @@ fn one_page_of_another_book_is_another_citation() {
 }
 
 #[test]
+fn a_page_is_read_by_its_digits_as_written() {
+    let book = church_book("Ministerialbok for Ringsaker 1870-1880");
+    let page = |x: &str, y: &str| {
+        let assessment = assess_citations(&cite(book.clone(), x), &cite(book.clone(), y), &DATA, &settings());
+        feature(&assessment, Feature::Page).outcome
+    };
+    assert_eq!(page("s. 11", "s. 1"), Outcome::Disagree);
+    assert_eq!(page("nr. 100", "nr. 10"), Outcome::Disagree);
+    assert_eq!(page("s.45", "s. 45"), Outcome::Agree);
+    assert_eq!(page("s. 045", "side 45"), Outcome::Agree);
+}
+
+#[test]
+fn two_citations_of_one_source_record_share_its_source_whatever_it_holds() {
+    let untitled = SourceProfile {
+        id: Some(SourceId::from_uuid(Uuid::now_v7())),
+        ..SourceProfile::default()
+    };
+    let assessment = assess_citations(
+        &cite(untitled.clone(), "s. 45"),
+        &cite(untitled, "s. 45"),
+        &DATA,
+        &settings(),
+    );
+    assert_eq!(feature(&assessment, Feature::Source).outcome, Outcome::Agree);
+}
+
+#[test]
 fn a_page_without_numbers_compares_by_its_words() {
     let book = church_book("Ministerialbok for Ringsaker 1870-1880");
     let a = cite(book.clone(), "Døde, innledning");
@@ -208,4 +237,13 @@ proptest! {
         );
         prop_assert!(itself.score >= other.score, "self {} < other {}", itself.score, other.score);
     }
+}
+
+#[test]
+fn a_page_and_entry_swapped_is_another_citation() {
+    let book = church_book("Ministerialbok for Ringsaker 1870-1880");
+    let a = cite(book.clone(), "s. 12, nr. 45");
+    let b = cite(book, "s. 45, nr. 12");
+    let page = feature(&assess_citations(&a, &b, &DATA, &settings()), Feature::Page).clone();
+    assert_eq!(page.outcome, Outcome::Disagree, "{page:?}");
 }

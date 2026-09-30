@@ -259,11 +259,13 @@ async fn source_of(store: &Store, view: &SourceView) -> Result<SourceProfile, Ap
             }
         }
     }
-    let origins = match view.source_id() {
+    let id = view.source_id();
+    let origins = match id {
         Some(id) => creating_origins(store, "source", &id.to_string()).await?,
         None => Vec::new(),
     };
     Ok(SourceProfile {
+        id,
         title: view.title().map(ToOwned::to_owned),
         author: view.author().map(ToOwned::to_owned),
         publication: view.pub_info().map(ToOwned::to_owned),

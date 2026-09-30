@@ -5,7 +5,7 @@ use crate::address::Address;
 use crate::date::GenealogicalDate;
 use crate::enums::{EventType, ParticipantRole, PlaceType, Sex};
 use crate::geo::GeoCoordinates;
-use crate::ids::{PlaceId, RepositoryId};
+use crate::ids::{PlaceId, RepositoryId, SourceId};
 use crate::matching::date::DateBasis;
 use crate::media_path::MediaPath;
 use crate::name::{LanguageTag, PersonName};
@@ -151,6 +151,9 @@ pub struct Participant {
 /// A source's evidence: its title, author and publication, and the repositories holding it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SourceProfile {
+    /// The source's aggregate id, when it is a workspace source: two citations of one source cite it
+    /// whatever its fields hold.
+    pub id: Option<SourceId>,
     /// The title, if any.
     pub title: Option<String>,
     /// The author, if any.

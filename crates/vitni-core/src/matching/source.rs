@@ -9,16 +9,16 @@
 //! A citation is compared by its source, its page and the date of its entry. Its sources are assessed as
 //! sources, summarised as one [`Feature::Source`] term — capped, since one source holds many citations —
 //! with the pair's assessment kept in [`MatchAssessment::parts`]. A page is compared by its numbers
-//! (*s. 45, nr. 12* and *side 45 nr 12* agree, *s. 46* does not), or, when it has none, as free text.
+//! in the order written (*s. 45, nr. 12* and *side 45 nr 12* agree; *s. 46* and *s. 12, nr. 45* do not), or, when it has none, as free text.
 
 use crate::address::Address;
-use crate::matching::name::{Applied, is_number};
+use crate::matching::name::Applied;
 use crate::matching::profile::{CitationProfile, RepositoryProfile, SourceProfile};
 use crate::matching::select::{Signals, comparison_cultures};
 use crate::matching::weights::{self, TEXT_FLOOR, Weights};
 use crate::matching::{
-    CultureId, Feature, FeatureComparison, FeatureValue, Identity, MatchAssessment, MatchData, MatchSettings, Outcome,
-    applied, compare_dates, conclude, event_estimate, grade, missing, summary_term,
+    CultureId, Feature, FeatureComparison, FeatureValue, Identity, MatchAssessment, MatchBand, MatchData,
+    MatchSettings, Outcome, applied, compare_dates, conclude, event_estimate, grade, missing, summary_term,
 };
 
 /// Compares two source profiles.
@@ -57,7 +57,11 @@ fn source_assessment(
         compare_repositories(&a.repositories, &b.repositories, applied),
     ];
     let sides = (Identity::of(&a.origins, &[]), Identity::of(&b.origins, &[]));
-    conclude(features, cultures, Vec::new(), sides, settings)
+    let mut assessment = conclude(features, cultures, Vec::new(), sides, settings);
+    if a.id.is_some() && a.id == b.id {
+        assessment.band = MatchBand::Deterministic;
+    }
+    assessment
 }
 
 /// Compares two repository profiles.
@@ -236,7 +240,7 @@ fn address_text(address: &Address) -> String {
 /// Compares two pages by their numbers, or as free text when either has none.
 fn compare_pages(a: Option<&str>, b: Option<&str>, applied: &Applied<'_>) -> FeatureComparison {
     let similarity = a.zip(b).and_then(|(x, y)| {
-        let (p, q) = (numbers(x, applied), numbers(y, applied));
+        let (p, q) = (numbers(x), numbers(y));
         if p.is_empty() || q.is_empty() {
             applied.text_similarity(x, y)
         } else if p == q {
@@ -249,22 +253,17 @@ fn compare_pages(a: Option<&str>, b: Option<&str>, applied: &Applied<'_>) -> Fea
     text_term(Feature::Page, similarity, weights::PAGE, (a.map(value), b.map(value)))
 }
 
-/// The numbers in a locator, without leading zeros, in ascending order.
-fn numbers(locator: &str, applied: &Applied<'_>) -> Vec<String> {
-    let mut numbers: Vec<String> = applied
-        .tokens(locator)
-        .into_iter()
-        .filter(|token| is_number(token))
-        .map(|token| {
-            let trimmed = token.trim_start_matches('0');
-            if trimmed.is_empty() {
-                "0".to_owned()
-            } else {
-                trimmed.to_owned()
-            }
-        })
-        .collect();
-    numbers.sort();
+/// The runs of digits in a locator — *s.45*, *45/12* and *45a* hold theirs too — without leading zeros,
+/// in the order written: *s. 12, nr. 45* and *s. 45, nr. 12* are two entries.
+fn numbers(locator: &str) -> Vec<String> {
+    let mut numbers = Vec::new();
+    for run in locator.split(|c: char| !c.is_ascii_digit()) {
+        if run.is_empty() {
+            continue;
+        }
+        let trimmed = run.trim_start_matches('0');
+        numbers.push(if trimmed.is_empty() { "0" } else { trimmed }.to_owned());
+    }
     numbers
 }
 
