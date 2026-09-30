@@ -1,0 +1,4 @@
+# Fixture provenance (ADR 0042), checked by `cargo xtask fixture-guard`. The golden backup archives
+# and their projection digests are written from invented events (ADR 0041 §5).
+origin = "generated"
+generator = "cargo xtask backup-fixture"

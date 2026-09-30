@@ -75,8 +75,8 @@ The matching bench seeds a 100k-person workspace of several gigabytes under `tar
 out of `/tmp`, which may be RAM-backed.
 
 `cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`,
-`licence-check`, `icons --check`, `backup-guard`, `match-eval`) plus `issue-sync`, `labels`, `package`
-(the Linux release tarball) and `screenshots` (the README images, below).
+`licence-check`, `icons --check`, `backup-guard`, `fixture-guard`, `match-eval`) plus `issue-sync`, `labels`,
+`package` (the Linux release tarball) and `screenshots` (the README images, below).
 
 ## The app icon and the brand art
 
@@ -313,8 +313,26 @@ fixture one of four origins:
 - **`transcribed-facts`**: facts from public records, with each record's source URL, and no copied
   pages.
 
-A page from Digitalarkivet or any other archive is none of these, so it goes in the external tier. The
-`PROVENANCE.toml` declarations and `cargo xtask fixture-guard` that enforce the origins are #448.
+A page from Digitalarkivet or any other archive is none of these, so it goes in the external tier.
+
+The origin is declared in a `PROVENANCE.toml` in the fixture's directory or an ancestor, and the
+nearest one wins. `origin` is always required, plus what that origin needs:
+
+```toml
+origin = "generated"
+generator = "cargo xtask backup-fixture"   # generated: the xtask that writes the files
+# licensed:          licence = "…" and attribution = "…"
+# transcribed-facts: sources = ["https://…"], or a statement that the files list them
+
+[files."digitalarkivet.toml"]              # optional: one file in this directory with its own origin
+origin = "transcribed-facts"
+sources = "each pair's `source` lists its records' Digitalarkivet URLs"
+```
+
+`cargo xtask fixture-guard` (part of `cargo xtask check`, so prek and CI run it) fails on a tracked
+fixture with no declaration, naming it; on a malformed declaration, including an unknown key, a
+blank value, a non-https source or a `[files."…"]` table naming no tracked file beside it; and on a
+tracked page from the external manifest.
 The Digitalarkivet parser's own fixtures, under `crates/vitni-digitalarkivet/tests/fixtures/`, are
 invented pages that reproduce only the DOM `src/html.rs` reads; `tests/fallbacks.rs` covers each
 fallback rung those pages cannot reach.

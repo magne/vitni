@@ -1,0 +1,2 @@
+# Fixture provenance (ADR 0042), checked by `cargo xtask fixture-guard`.
+origin = "invented"

@@ -121,7 +121,8 @@ prek run                                                             # run git h
 ```
 
 `cargo xtask` also runs the individual checks (`i18n-check`, `css-check`, `input-guard`,
-`licence-check`, `icons --check`, `backup-guard`, `match-eval`) plus `issue-sync`, `labels`, and `package` (Linux release tarball).
+`licence-check`, `icons --check`, `backup-guard`, `fixture-guard`, `match-eval`) plus `issue-sync`, `labels`, and
+`package` (Linux release tarball).
 
 The **app icon** lives in `crates/vitni-ui-dioxus/assets/icon/` (four SVG tiers — the seal on the V's
 heavy upper terminal and the ruled lines under it are both disclosed by size — plus the symbolic

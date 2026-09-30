@@ -49,12 +49,14 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-/// Loads every `*.toml` corpus file under `dir`, in name order, rejecting an id used twice.
+/// Loads every `*.toml` corpus file under `dir` except its `PROVENANCE.toml` (ADR 0042), in name order,
+/// rejecting an id used twice.
 pub fn load(dir: &Path) -> Result<Vec<Pair>> {
     let mut files = Vec::new();
     for entry in fs::read_dir(dir).with_context(|| format!("reading the corpus directory {}", dir.display()))? {
         let path = entry?.path();
-        if path.extension().is_some_and(|extension| extension == "toml") {
+        let declaration = path.file_name().is_some_and(|name| name == "PROVENANCE.toml");
+        if path.extension().is_some_and(|extension| extension == "toml") && !declaration {
             files.push(path);
         }
     }

@@ -26,12 +26,15 @@
 //!   `crates/vitni-digitalarkivet/tests/external/manifest.toml` into the gitignored
 //!   `target/external-fixtures/`, for the opt-in live-site tests (ADR 0042 §3). Needs the network, so
 //!   it is not part of `check`.
+//! - `fixture-guard` — verify every tracked file under a `tests/fixtures/` tree or the matching corpus
+//!   is covered by a `PROVENANCE.toml` declaring its origin, and that no external-manifest page is
+//!   tracked (ADR 0042).
 //! - `match-eval` — score the labelled pairs of the matching evaluation corpus
 //!   (`crates/vitni-core/matching/corpus/`), report precision and recall per band, and fail when a
 //!   hard true match no longer surfaces (ADR 0038 §9).
 //! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`,
-//!   `licence-check`, `icons --check`, `issue-sync`, `backup-guard`, `match-eval`) in one pass, reporting all
-//!   failures rather than stopping at the first.
+//!   `licence-check`, `icons --check`, `issue-sync`, `backup-guard`, `fixture-guard`, `match-eval`) in one
+//!   pass, reporting all failures rather than stopping at the first.
 //! - `issue-sync` — verify the `docs/issues.md` ↔ GitHub Issues linkage: references well-formed and
 //!   unique, every backlog bullet inside an `###` area. `--online` also reconciles against `gh`.
 //! - `labels` — reconcile GitHub's issue labels with `.github/labels.toml` (`--apply` to write).
@@ -57,6 +60,7 @@ mod backup_guard;
 mod build_plugins;
 mod css_check;
 mod fetch_fixtures;
+mod fixture_guard;
 mod fmt;
 mod gui_pass;
 mod i18n_check;
@@ -95,6 +99,7 @@ fn main() -> Result<()> {
         Some("backup-guard") => backup_guard::run(),
         Some("match-eval") => match_eval::run(),
         Some("fetch-fixtures") => fetch_fixtures::run(),
+        Some("fixture-guard") => fixture_guard::run(),
         Some("check") => check(),
         Some(other) => {
             print_usage();
@@ -109,7 +114,7 @@ fn main() -> Result<()> {
 
 /// Runs every static check, reporting all failures (never stopping at the first).
 fn check() -> Result<()> {
-    let checks: [Check; 8] = [
+    let checks: [Check; 9] = [
         ("i18n-check", i18n_check::run),
         ("css-check", css_check::run),
         ("input-guard", input_guard::run),
@@ -117,6 +122,7 @@ fn check() -> Result<()> {
         ("icons", icons::check),
         ("issue-sync", issue_sync::run),
         ("backup-guard", backup_guard::run),
+        ("fixture-guard", fixture_guard::run),
         ("match-eval", match_eval::run),
     ];
     let mut failed = Vec::new();
@@ -150,10 +156,11 @@ fn print_usage() {
     println!("  labels         reconcile GitHub labels with .github/labels.toml (--apply to write)");
     println!("  backup-fixture regenerate the golden backup fixture and refresh every fixture digest");
     println!("  backup-guard   fail at 1.0.0 while the pre-1.0 backup upgraders still exist");
+    println!("  fixture-guard  verify every committed fixture declares its origin in a PROVENANCE.toml");
     println!("  match-eval     score the matching evaluation corpus; fail when a hard true match is lost");
     println!("  fetch-fixtures download the external Digitalarkivet fixtures into target/ (needs the network)");
     println!(
-        "  check          run every static check (i18n-check, css-check, input-guard, licence-check, icons, issue-sync,\n                 backup-guard, match-eval)"
+        "  check          run every static check (i18n-check, css-check, input-guard, licence-check, icons, issue-sync,\n                 backup-guard, fixture-guard, match-eval)"
     );
     println!("  package        assemble a Linux release tarball (binaries + signed plugins) in target/dist");
     println!("  gui-pass       run GUI scenarios on a headless Xvfb display, asserting over screenshots");

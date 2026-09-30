@@ -16,10 +16,10 @@ use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 
 /// The manifest, relative to the repository root.
-const MANIFEST: &str = "crates/vitni-digitalarkivet/tests/external/manifest.toml";
+pub const MANIFEST: &str = "crates/vitni-digitalarkivet/tests/external/manifest.toml";
 
 /// Where the fetched pages land, relative to the repository root.
-const OUT_DIR: &str = "target/external-fixtures/digitalarkivet";
+pub const OUT_DIR: &str = "target/external-fixtures/digitalarkivet";
 
 /// The archive's `robots.txt` `Crawl-delay`.
 const CRAWL_DELAY: Duration = Duration::from_secs(5);

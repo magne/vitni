@@ -773,12 +773,6 @@ The `area/docs` label already existed with no `###` home; this is it.
   duties arrive 11 September 2026, main obligations 11 December 2027). Also unresolved for
   `vitni-digitalarkivet` specifically: the National Archives' service name in a paid product's
   title.
-- **Nothing enforces fixture provenance.** `cargo xtask fixture-guard` enforces
-  [ADR 0042](adr/0042-test-fixture-provenance.md), wired into `cargo xtask check` and prek. Every
-  tracked file under a `tests/fixtures/` tree or `crates/vitni-core/matching/corpus/` must be
-  covered by a `PROVENANCE.toml` declaring `invented`, `generated`, `licensed` (with licence and
-  attribution) or `transcribed-facts` (with source URLs). The guard also fails if a path listed in an external manifest is tracked.
-  *Exit:* a test adds an uncovered file and the guard names it. — #448
 
 ## Decided — no action needed
 
