@@ -1,16 +1,19 @@
-//! The person, family and event profiles built from the workspace's views (ADR 0038 §2): the relatives
-//! that separate two same-named people born the same year (§4), and one marriage from a church book and
-//! from a GEDCOM file.
+//! The profiles built from the workspace's views (ADR 0038 §2): the relatives that separate two
+//! same-named people born the same year (§4), one marriage from a church book and from a GEDCOM file, a
+//! farm matched to its parish, and one citation of one church-book page.
 
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, ChildParentRelationship, DateParts, MutationMeta, NewEvent, NewFact, NewParticipation, NewPerson,
-    NewPlace, OperatorConfig, PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults, add_child,
-    add_partner, assert_event_date, assert_fact, assert_participation, assert_place_enclosed_by, assert_sex,
-    create_event, create_family, create_person, create_place, event_profile, family_profile, link_family_event,
-    link_place, person_profile,
+    Address, AppDefaults, ChildParentRelationship, DateParts, MutationMeta, NewCitation, NewEvent, NewFact, NewMedia,
+    NewNote, NewParticipation, NewPerson, NewPlace, NewRepository, NewSource, OperatorConfig, PersonNameParts,
+    Provenance, Session, SourceMediaType, Workspace, WorkspaceDefaults, add_child, add_partner, add_repository_address,
+    assert_citation_date, assert_event_date, assert_fact, assert_participation, assert_place_enclosed_by, assert_sex,
+    citation_profile, create_citation, create_event, create_family, create_media, create_note, create_person,
+    create_place, create_repository, create_source, create_tag, event_profile, family_profile, link_family_event,
+    link_place, link_source_repository, media_profile, note_profile, person_profile, place_profile, repository_profile,
+    set_media_checksum, set_note_text, set_source_author, set_source_pub_info, source_profile, tag_profile,
 };
 use vitni_core::age::Age;
 use vitni_core::date::DateQuality;
@@ -18,8 +21,10 @@ use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Pla
 use vitni_core::ids::{AgentId, ImportRunId, PlaceId};
 use vitni_core::matching::profile::{FamilyProfile, PersonProfile, VitalKind};
 use vitni_core::matching::{
-    DateBasis, Feature, MatchBand, MatchData, MatchSettings, Outcome, assess_events, assess_families, assess_persons,
+    DateBasis, Feature, MatchBand, MatchData, MatchSettings, Outcome, assess_citations, assess_events, assess_families,
+    assess_persons, assess_places, assess_tags,
 };
+use vitni_core::media_path::MediaPath;
 use vitni_core::origin::{DatasetId, RecordOrigin};
 use vitni_core::provenance::{Agent, AgentKind};
 
@@ -734,5 +739,307 @@ async fn an_unknown_family_or_event_is_not_found() {
     assert!(
         matches!(event, vitni_app::AppError::EventNotFound(ref id) if id == "E9999"),
         "{event:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_farm_matched_to_its_parish_is_partial() {
+    let records = Records::new().await;
+    let norge = records.place("Norge", PlaceType::Country, None).await;
+    let parish = records.place("Ringsaker", PlaceType::Parish, Some(&norge)).await;
+    let farm = records.place("Haugen", PlaceType::Farm, Some(&parish)).await;
+    let (farm, parish) = (
+        place_profile(&records.workspace, &farm).await.expect("farm profile"),
+        place_profile(&records.workspace, &parish)
+            .await
+            .expect("parish profile"),
+    );
+    assert_eq!(farm.place_type, Some(PlaceType::Farm));
+    assert_eq!(farm.names[0].text, "Haugen");
+    assert_eq!(
+        farm.enclosing,
+        [parish.id.expect("parish id"), records.place_id(&norge).await]
+    );
+    assert_eq!(farm.country.as_deref(), Some("Norge"));
+    let data = MatchData::embedded().expect("embedded match data");
+    let assessment = assess_places(&farm, &parish, &data, &MatchSettings::default());
+    let enclosure = assessment
+        .features
+        .iter()
+        .find(|f| f.feature == Feature::Enclosure)
+        .expect("enclosure compared");
+    assert!(matches!(enclosure.outcome, Outcome::Partial(_)), "{assessment:#?}");
+}
+
+#[tokio::test]
+async fn the_place_profile_carries_the_creating_origin() {
+    let records = Records::new().await;
+    let new = NewPlace {
+        human_id: None,
+        place_type: PlaceType::Farm,
+        name: Some("Haugen".to_owned()),
+    };
+    let place = create_place(
+        &records.workspace,
+        &records.session,
+        new,
+        from("digitalarkivet", "bf01036389000123", "place:1"),
+        &[],
+    )
+    .await
+    .expect("create place");
+    let profile = place_profile(&records.workspace, &place).await.expect("place profile");
+    let items: Vec<Option<&str>> = profile.origins.iter().map(|o| o.item.as_deref()).collect();
+    assert_eq!(items, [Some("place:1")]);
+}
+
+impl Records {
+    /// The regional archive at Hamar.
+    async fn archive(&self) -> String {
+        let new = NewRepository {
+            human_id: None,
+            name: Some("Statsarkivet på Hamar".to_owned()),
+        };
+        let repository = create_repository(&self.workspace, &self.session, new, Provenance::default(), &[])
+            .await
+            .expect("create repository");
+        let address = Address {
+            locality: Some("Hamar".to_owned()),
+            country: Some("Norge".to_owned()),
+            ..Address::default()
+        };
+        add_repository_address(
+            &self.workspace,
+            &self.session,
+            &repository,
+            address,
+            MutationMeta::default(),
+        )
+        .await
+        .expect("add address");
+        repository
+    }
+
+    /// The Ringsaker church book, held at `archive`.
+    async fn book(&self, archive: &str) -> String {
+        let new = NewSource {
+            human_id: None,
+            title: Some("Ministerialbok for Ringsaker 1870-1880".to_owned()),
+        };
+        let source = create_source(&self.workspace, &self.session, new, Provenance::default(), &[])
+            .await
+            .expect("create source");
+        let meta = MutationMeta::default;
+        set_source_author(
+            &self.workspace,
+            &self.session,
+            &source,
+            "Ringsaker prestegjeld".to_owned(),
+            meta(),
+        )
+        .await
+        .expect("set author");
+        set_source_pub_info(&self.workspace, &self.session, &source, "Kirkebok".to_owned(), meta())
+            .await
+            .expect("set publication");
+        link_source_repository(
+            &self.workspace,
+            &self.session,
+            &source,
+            archive,
+            None,
+            SourceMediaType::Book,
+            meta(),
+        )
+        .await
+        .expect("link repository");
+        source
+    }
+
+    /// A citation of `page` in `source`, dated 14 October 1877.
+    async fn cite(&self, source: &str, page: &str, provenance: Provenance) -> String {
+        let new = NewCitation {
+            human_id: None,
+            source: source.to_owned(),
+            page: Some(page.to_owned()),
+        };
+        let citation = create_citation(&self.workspace, &self.session, new, provenance, &[])
+            .await
+            .expect("create citation");
+        assert_citation_date(
+            &self.workspace,
+            &self.session,
+            &citation,
+            on(1877, 10, 14),
+            MutationMeta::default(),
+        )
+        .await
+        .expect("date citation");
+        citation
+    }
+}
+
+#[tokio::test]
+async fn one_citation_of_one_church_book_page_is_probable() {
+    let records = Records::new().await;
+    let archive = records.archive().await;
+    let book = records.book(&archive).await;
+    let a = records.cite(&book, "s. 45, nr. 12", Provenance::default()).await;
+    let b = records
+        .cite(
+            &book,
+            "side 45 nr 12",
+            from("digitalarkivet", "vi01036389000412", "citation:1"),
+        )
+        .await;
+    let (a, b) = (
+        citation_profile(&records.workspace, &a)
+            .await
+            .expect("citation profile"),
+        citation_profile(&records.workspace, &b)
+            .await
+            .expect("citation profile"),
+    );
+    assert_eq!(a.page.as_deref(), Some("s. 45, nr. 12"));
+    assert_eq!(a.date.as_ref().and_then(vitni_core::matching::date::year), Some(1877));
+    assert!(a.origins.is_empty());
+    let items: Vec<Option<&str>> = b.origins.iter().map(|o| o.item.as_deref()).collect();
+    assert_eq!(items, [Some("citation:1")]);
+    let source = a.source.as_ref().expect("the cited source");
+    assert_eq!(source.title.as_deref(), Some("Ministerialbok for Ringsaker 1870-1880"));
+    assert_eq!(source.author.as_deref(), Some("Ringsaker prestegjeld"));
+    assert_eq!(source.publication.as_deref(), Some("Kirkebok"));
+    let holder = &source.repositories[0];
+    assert_eq!(holder.name.as_deref(), Some("Statsarkivet på Hamar"));
+    assert_eq!(holder.addresses[0].locality.as_deref(), Some("Hamar"));
+    assert!(holder.id.is_some());
+    assert_eq!(
+        source_profile(&records.workspace, &book).await.expect("source profile"),
+        *source
+    );
+    assert_eq!(
+        repository_profile(&records.workspace, &archive)
+            .await
+            .expect("repository profile"),
+        *holder
+    );
+    let data = MatchData::embedded().expect("embedded match data");
+    let assessment = assess_citations(&a, &b, &data, &MatchSettings::default());
+    assert_eq!(assessment.band, MatchBand::Probable, "{assessment:#?}");
+    assert_eq!(assessment.parts.len(), 1);
+}
+
+#[tokio::test]
+async fn the_media_note_and_tag_profiles_carry_their_evidence() {
+    let records = Records::new().await;
+    let (workspace, session) = (&records.workspace, &records.session);
+    let new = NewMedia {
+        human_id: None,
+        path: Some("media/portretter/ole.jpg".to_owned()),
+    };
+    let media = create_media(workspace, session, new, Provenance::default(), &[])
+        .await
+        .expect("create media");
+    set_media_checksum(
+        workspace,
+        session,
+        &media,
+        "9f86d081".to_owned(),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("set checksum");
+    let profile = media_profile(workspace, &media).await.expect("media profile");
+    assert_eq!(profile.checksum.as_deref(), Some("9f86d081"));
+    assert_eq!(
+        profile.path,
+        Some(MediaPath::File("media/portretter/ole.jpg".to_owned()))
+    );
+
+    let new = NewNote {
+        human_id: None,
+        text: Some("Flyttet til Amerika.".to_owned()),
+    };
+    let note = create_note(workspace, session, new, Provenance::default(), &[])
+        .await
+        .expect("create note");
+    set_note_text(
+        workspace,
+        session,
+        &note,
+        "Flyttet til Amerika i 1882.".to_owned(),
+        Some("nb".to_owned()),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("set note text");
+    let profile = note_profile(workspace, &note).await.expect("note profile");
+    assert_eq!(profile.text.as_deref(), Some("Flyttet til Amerika i 1882."));
+    assert_eq!(
+        profile.language.as_ref().map(vitni_core::name::LanguageTag::as_str),
+        Some("nb")
+    );
+
+    let brick = create_tag(workspace, session, "Brick Wall".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("create tag");
+    let wall = create_tag(workspace, session, "brick wall".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("create tag");
+    let (brick, wall) = (
+        tag_profile(workspace, &brick).await.expect("tag profile"),
+        tag_profile(workspace, &wall).await.expect("tag profile"),
+    );
+    assert_eq!(brick.name, "Brick Wall");
+    assert_eq!(
+        assess_tags(&brick, &wall, &MatchSettings::default()).band,
+        MatchBand::Deterministic
+    );
+}
+
+#[tokio::test]
+async fn an_unknown_record_of_any_other_kind_is_not_found() {
+    use vitni_app::AppError;
+    let records = Records::new().await;
+    let workspace = &records.workspace;
+    let place = place_profile(workspace, "P9999").await.expect_err("no such place");
+    assert!(
+        matches!(place, AppError::PlaceNotFound(ref id) if id == "P9999"),
+        "{place:?}"
+    );
+    let source = source_profile(workspace, "S9999").await.expect_err("no such source");
+    assert!(
+        matches!(source, AppError::SourceNotFound(ref id) if id == "S9999"),
+        "{source:?}"
+    );
+    let repository = repository_profile(workspace, "R9999")
+        .await
+        .expect_err("no such repository");
+    assert!(
+        matches!(repository, AppError::RepositoryNotFound(ref id) if id == "R9999"),
+        "{repository:?}"
+    );
+    let citation = citation_profile(workspace, "C9999")
+        .await
+        .expect_err("no such citation");
+    assert!(
+        matches!(citation, AppError::CitationNotFound(ref id) if id == "C9999"),
+        "{citation:?}"
+    );
+    let media = media_profile(workspace, "O9999").await.expect_err("no such media");
+    assert!(
+        matches!(media, AppError::MediaNotFound(ref id) if id == "O9999"),
+        "{media:?}"
+    );
+    let note = note_profile(workspace, "N9999").await.expect_err("no such note");
+    assert!(
+        matches!(note, AppError::NoteNotFound(ref id) if id == "N9999"),
+        "{note:?}"
+    );
+    let missing = Uuid::from_u128(7).to_string();
+    let tag = tag_profile(workspace, &missing).await.expect_err("no such tag");
+    assert!(
+        matches!(tag, AppError::TagNotFound(ref id) if *id == missing),
+        "{tag:?}"
     );
 }

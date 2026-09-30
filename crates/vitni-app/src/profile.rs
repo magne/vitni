@@ -1,5 +1,4 @@
-//! The person, family and event profiles the matching engine compares (ADR 0038 §2), built from the
-//! workspace's views.
+//! The profiles the matching engine compares (ADR 0038 §2), built from the workspace's views.
 //!
 //! A person profile gathers a person's names, sex, occupations and external ids, the vital events they are the
 //! primary participant in (a christening counts as a baptism) with each event's place, and their
@@ -16,6 +15,13 @@
 //! and birth; participation is the person's, so the participants are read from the persons. Each
 //! profile's origin is the one of the assertion that created its record.
 //!
+//! A place profile holds its names, type, every enclosing place, country and coordinates. A source
+//! profile holds its title, author and publication, and the repositories holding it, each as a
+//! repository profile — name and addresses. A citation profile holds its source's profile, its page and
+//! date. A media profile holds its checksum and path; a note profile its text and the text's language;
+//! a tag profile its name. Each carries the origin of the assertion that created its record, except a
+//! tag, which is its name.
+//!
 //! [`ProfileLookups`] reads every person, event, place and family once, so building many profiles costs
 //! one load.
 
@@ -25,17 +31,19 @@ use vitni_core::date::{DateQuality, GenealogicalDate};
 use vitni_core::enums::{ChildParentRelationship, EventType, FactType, ParticipantRole, PlaceType};
 use vitni_core::event::EventView;
 use vitni_core::family::{ChildEntry, FamilyView};
-use vitni_core::ids::{EventId, PersonId, PlaceId};
+use vitni_core::ids::{EventId, PersonId, PlaceId, RepositoryId};
 use vitni_core::matching::DateBasis;
 use vitni_core::matching::date::year;
 use vitni_core::matching::profile::{
-    EventProfile, FamilyProfile, Participant, PersonProfile, PlaceMention, PlaceProfile, Relative, VitalEvent,
-    VitalKind,
+    CitationProfile, EventProfile, FamilyProfile, MediaProfile, NoteProfile, Participant, PersonProfile, PlaceMention,
+    PlaceProfile, Relative, RepositoryProfile, SourceProfile, TagProfile, VitalEvent, VitalKind,
 };
 use vitni_core::origin::RecordOrigin;
 use vitni_core::person::PersonView;
 use vitni_core::place::PlaceView;
 use vitni_core::provenance::EventContext;
+use vitni_core::repository::RepositoryView;
+use vitni_core::source::SourceView;
 use vitni_db::{DbError, Store};
 
 use crate::error::AppError;
@@ -119,6 +127,166 @@ pub async fn event_profile(workspace: &Workspace, human_id: &str) -> Result<Even
     lookups.event(event_id, origins).ok_or_else(not_found)
 }
 
+/// Builds the matching profile of the place `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if no such place exists, or [`AppError`] on a store read failure.
+pub async fn place_profile(workspace: &Workspace, human_id: &str) -> Result<PlaceProfile, AppError> {
+    let store = workspace.store();
+    let not_found = || AppError::PlaceNotFound(human_id.to_owned());
+    let place_id = use_case::resolve_id(store.find_place(human_id).await?, PlaceView::place_id, not_found)?;
+    let mut profile = PlaceLookup::load(store).await?.place(place_id);
+    profile.origins = creating_origins(store, "place", &place_id.to_string()).await?;
+    Ok(profile)
+}
+
+/// Builds the matching profile of the source `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::SourceNotFound`] if no such source exists, or [`AppError`] on a store read failure.
+pub async fn source_profile(workspace: &Workspace, human_id: &str) -> Result<SourceProfile, AppError> {
+    let store = workspace.store();
+    let not_found = || AppError::SourceNotFound(human_id.to_owned());
+    let view = store.find_source(human_id).await?.ok_or_else(not_found)?;
+    source_of(store, &view).await
+}
+
+/// Builds the matching profile of the repository `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::RepositoryNotFound`] if no such repository exists, or [`AppError`] on a store read
+/// failure.
+pub async fn repository_profile(workspace: &Workspace, human_id: &str) -> Result<RepositoryProfile, AppError> {
+    let store = workspace.store();
+    let not_found = || AppError::RepositoryNotFound(human_id.to_owned());
+    let view = store.find_repository(human_id).await?.ok_or_else(not_found)?;
+    repository_of(store, &view).await
+}
+
+/// Builds the matching profile of the citation `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if no such citation exists, or [`AppError`] on a store read failure.
+pub async fn citation_profile(workspace: &Workspace, human_id: &str) -> Result<CitationProfile, AppError> {
+    let store = workspace.store();
+    let not_found = || AppError::CitationNotFound(human_id.to_owned());
+    let view = store.find_citation(human_id).await?.ok_or_else(not_found)?;
+    let citation_id = view.citation_id().ok_or_else(not_found)?;
+    let mut source = None;
+    if let Some(source_id) = view.source_id() {
+        let cited = store
+            .list_sources()
+            .await?
+            .into_iter()
+            .find(|candidate| candidate.source_id() == Some(source_id));
+        if let Some(cited) = cited {
+            source = Some(source_of(store, &cited).await?);
+        }
+    }
+    Ok(CitationProfile {
+        source,
+        page: view.page().map(ToOwned::to_owned),
+        date: view.date().cloned(),
+        origins: creating_origins(store, "citation", &citation_id.to_string()).await?,
+    })
+}
+
+/// Builds the matching profile of the media object `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::MediaNotFound`] if no such media object exists, or [`AppError`] on a store read failure.
+pub async fn media_profile(workspace: &Workspace, human_id: &str) -> Result<MediaProfile, AppError> {
+    let store = workspace.store();
+    let not_found = || AppError::MediaNotFound(human_id.to_owned());
+    let view = store.find_media(human_id).await?.ok_or_else(not_found)?;
+    let media_id = view.media_id().ok_or_else(not_found)?;
+    Ok(MediaProfile {
+        checksum: view.checksum().map(ToOwned::to_owned),
+        path: view.path().cloned(),
+        origins: creating_origins(store, "media", &media_id.to_string()).await?,
+    })
+}
+
+/// Builds the matching profile of the note `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::NoteNotFound`] if no such note exists, or [`AppError`] on a store read failure.
+pub async fn note_profile(workspace: &Workspace, human_id: &str) -> Result<NoteProfile, AppError> {
+    let store = workspace.store();
+    let not_found = || AppError::NoteNotFound(human_id.to_owned());
+    let view = store.find_note(human_id).await?.ok_or_else(not_found)?;
+    let note_id = view.note_id().ok_or_else(not_found)?;
+    let text = view.text();
+    Ok(NoteProfile {
+        text: text.map(|text| text.text.clone()),
+        language: text.and_then(|text| text.language.clone()),
+        origins: creating_origins(store, "note", &note_id.to_string()).await?,
+    })
+}
+
+/// Builds the matching profile of the tag `id` — a tag has no human id.
+///
+/// # Errors
+///
+/// [`AppError::TagNotFound`] if no such tag exists, or [`AppError`] on a store read failure.
+pub async fn tag_profile(workspace: &Workspace, id: &str) -> Result<TagProfile, AppError> {
+    let view = workspace.store().find_tag(id).await?;
+    let name = view.as_ref().and_then(|view| view.name());
+    let name = name.ok_or_else(|| AppError::TagNotFound(id.to_owned()))?;
+    Ok(TagProfile { name: name.to_owned() })
+}
+
+/// A source's profile, with every repository holding it.
+async fn source_of(store: &Store, view: &SourceView) -> Result<SourceProfile, AppError> {
+    let held: Vec<RepositoryId> = view.repositories().iter().map(|held| held.repository_id).collect();
+    let mut repositories = Vec::new();
+    if !held.is_empty() {
+        let mut views: HashMap<RepositoryId, RepositoryView> = HashMap::new();
+        for repository in store.list_repositories().await? {
+            if let Some(id) = repository.repository_id() {
+                views.insert(id, repository);
+            }
+        }
+        for id in held {
+            if let Some(repository) = views.get(&id) {
+                repositories.push(repository_of(store, repository).await?);
+            }
+        }
+    }
+    let origins = match view.source_id() {
+        Some(id) => creating_origins(store, "source", &id.to_string()).await?,
+        None => Vec::new(),
+    };
+    Ok(SourceProfile {
+        title: view.title().map(ToOwned::to_owned),
+        author: view.author().map(ToOwned::to_owned),
+        publication: view.pub_info().map(ToOwned::to_owned),
+        repositories,
+        origins,
+    })
+}
+
+/// A repository's profile.
+async fn repository_of(store: &Store, view: &RepositoryView) -> Result<RepositoryProfile, AppError> {
+    let id = view.repository_id();
+    let origins = match id {
+        Some(id) => creating_origins(store, "repository", &id.to_string()).await?,
+        None => Vec::new(),
+    };
+    Ok(RepositoryProfile {
+        id,
+        name: view.name().map(ToOwned::to_owned),
+        addresses: view.addresses().into_iter().cloned().collect(),
+        origins,
+    })
+}
+
 /// The origin of the assertion that created a record — the first event of its aggregate's stream — as
 /// the profile's origins: none when it was not imported.
 async fn creating_origins(
@@ -146,7 +314,7 @@ async fn creating_origins(
 struct ProfileLookups {
     persons: HashMap<PersonId, PersonView>,
     events: HashMap<EventId, EventView>,
-    places: HashMap<PlaceId, PlaceView>,
+    places: PlaceLookup,
     participants_of: HashMap<EventId, Vec<(PersonId, ParticipantRole)>>,
     parents_of: HashMap<PersonId, Vec<PersonId>>,
     partners_of: HashMap<PersonId, Vec<PersonId>>,
@@ -182,16 +350,10 @@ impl ProfileLookups {
                 events.insert(id, view);
             }
         }
-        let mut places = HashMap::new();
-        for view in store.list_places().await? {
-            if let Some(id) = view.place_id() {
-                places.insert(id, view);
-            }
-        }
         let mut lookups = Self {
             persons,
             events,
-            places,
+            places: PlaceLookup::load(store).await?,
             participants_of,
             parents_of: HashMap::new(),
             partners_of: HashMap::new(),
@@ -274,7 +436,7 @@ impl ProfileLookups {
         Some(EventProfile {
             event_type: view.event_type().cloned(),
             date: view.date().cloned(),
-            place: view.place_id().map(|place| self.place(place)),
+            place: view.place_id().map(|place| self.places.place(place)),
             participants,
             origins,
         })
@@ -313,7 +475,7 @@ impl ProfileLookups {
                 kind,
                 date: event.date().cloned(),
                 basis: DateBasis::Recorded,
-                place: event.place_id().map(|place| self.place(place)),
+                place: event.place_id().map(|place| self.places.place(place)),
             });
         }
         let born = vitals.iter().any(|vital| {
@@ -355,7 +517,7 @@ impl ProfileLookups {
             if event.event_type().and_then(vital_kind).is_some() {
                 continue;
             }
-            let Some(country) = event.place_id().and_then(|place| self.place(place).country) else {
+            let Some(country) = event.place_id().and_then(|place| self.places.place(place).country) else {
                 continue;
             };
             mentions.push(PlaceMention {
@@ -365,8 +527,25 @@ impl ProfileLookups {
         }
         mentions
     }
+}
 
-    /// A place's names, every place enclosing it, its country and coordinates.
+/// The workspace's places, read once.
+struct PlaceLookup {
+    places: HashMap<PlaceId, PlaceView>,
+}
+
+impl PlaceLookup {
+    async fn load(store: &Store) -> Result<Self, AppError> {
+        let mut places = HashMap::new();
+        for view in store.list_places().await? {
+            if let Some(id) = view.place_id() {
+                places.insert(id, view);
+            }
+        }
+        Ok(Self { places })
+    }
+
+    /// A place's names and type, every place enclosing it, its country and coordinates.
     fn place(&self, place_id: PlaceId) -> PlaceProfile {
         let Some(view) = self.places.get(&place_id) else {
             return PlaceProfile {
