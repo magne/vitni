@@ -472,7 +472,7 @@ does.
   when neither side states a father, or narrow the property to pairs that select the same cultures.
   *Exit:* the seed
   `cc 1fcd7bbe0ff35daf52fdf8580a165aa776e3fac38bc8b4827a465079aa45e903` is committed under
-  `crates/vitni-core/proptest-regressions/` and passes.
+  `crates/vitni-core/proptest-regressions/` and passes. — #439
 - **Place, Source, Repository, Citation, Media, Note and Tag profiles** — ADR 0038 §2. Media matches
   exactly by checksum, and Tag by case-folded name. *Needs:* the matching core. *Exit:* per-kind table
   tests, including a farm matched to its parish as Partial. — #399
