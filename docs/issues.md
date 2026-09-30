@@ -439,15 +439,7 @@ Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none 
   round-trips, but `vitni-plugin-host/src/ai.rs:73` returns `AiError::InvalidInput` for it, so a
   workspace configured with `kind = "plugin"` fails only at first use. Either implement it or reject it
   at config-load time.
-- **The parser's fixtures are third-party page captures.** The five files under
-  `crates/vitni-digitalarkivet/tests/fixtures/` are Digitalarkivet pages saved as they were served. They
-  carry a census transcription owned by Nasjonalarkivet with no stated licence, an AMF-transcribed
-  church-book entry, and Arkivverket's own site HTML and JS — none of which the project's licences can
-  cover. Replace them with hand-written pages about invented people, reproducing only the DOM
-  `src/html.rs` reads. Port the three crate tests and `assisted_digitalarkivet.rs` to them, and drop the
-  `prek.toml` excludes that protect the captures. *Needs:* ADR 0042. *Exit:* no capture is tracked,
-  and mutating any selector in `html.rs` fails a test. — #446
-- **Nothing checks the parser against the live site.** Once the captures leave the tree (#446), the
+- **Nothing checks the parser against the live site.** The captures left the tree in #446, so the
   real pages belong in an external manifest,
   `crates/vitni-digitalarkivet/tests/external/manifest.toml`. Each entry records the URL, the rights as
   the source states them, and the facts to expect. `cargo xtask fetch-fixtures` downloads the pages
@@ -461,7 +453,7 @@ Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none 
   selectors reach (those selectors are exported from the crate) and drops scripts, styles and site
   chrome. It replaces every remaining text, `href` and attribute value through a per-fixture
   real → invented mapping in the manifest, treating an unmapped value as an error. And it fails if any
-  real value survives into the output. *Needs:* #446, #447. *Exit:* a regen reproduces fixtures the
+  real value survives into the output. *Needs:* #447. *Exit:* a regen reproduces fixtures the
   bundled tests pass on, and an unmapped value fails the run by name. — #449
 
 ### Record matching & identity
@@ -793,8 +785,8 @@ The `area/docs` label already existed with no `###` home; this is it.
   [ADR 0042](adr/0042-test-fixture-provenance.md), wired into `cargo xtask check` and prek. Every
   tracked file under a `tests/fixtures/` tree or `crates/vitni-core/matching/corpus/` must be
   covered by a `PROVENANCE.toml` declaring `invented`, `generated`, `licensed` (with licence and
-  attribution) or `transcribed-facts` (with source URLs). The guard also fails if a path listed in an external manifest is tracked. It lands after
-  #446, so the tree passes. *Exit:* a test adds an uncovered file and the guard names it. — #448
+  attribution) or `transcribed-facts` (with source URLs). The guard also fails if a path listed in an external manifest is tracked.
+  *Exit:* a test adds an uncovered file and the guard names it. — #448
 
 ## Decided — no action needed
 
@@ -988,7 +980,7 @@ Recorded when the repository was made public, so none of it is re-audited.
     is owned by Nasjonalarkivet with no licence stated. The church-book baptism (source 1035) was
     transcribed by AMF under a licence labelled only "Ancestry, MyHeritage og FamilySearch", with no
     published terms. Both pages also carry Arkivverket's site markup.
-  - **The captures leave the tree going forward (#446) and stay in existing commits.** A rewrite would
+  - **The captures left the tree in #446 and stay in existing commits.** A rewrite would
     change every SHA since 2026-07-19 and drop the GPG signatures on those commits, for a risk nobody
     has raised.
   - **If a rights holder asks, the takedown procedure does it** (ADR 0042 §5,

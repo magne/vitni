@@ -316,8 +316,9 @@ fixture one of four origins:
 A page from Digitalarkivet or any other archive is none of these, so it goes in the external tier: a
 manifest of URLs, rights and expected facts, fetched locally and checked by opt-in tests. The
 external tier is #447, the `PROVENANCE.toml` declarations and `cargo xtask fixture-guard` are #448.
-Until #446 replaces them, the five Digitalarkivet captures under
-`crates/vitni-digitalarkivet/tests/fixtures/` are the one exception.
+The Digitalarkivet parser's own fixtures, under `crates/vitni-digitalarkivet/tests/fixtures/`, are
+invented pages that reproduce only the DOM `src/html.rs` reads; `tests/fallbacks.rs` covers each
+fallback rung those pages cannot reach.
 
 ### Takedown: removing a file from history
 
@@ -325,13 +326,25 @@ The pre-ADR captures stay in existing commits (ADR 0042 §5). If a rights holder
 removed, removing it from the tree is not enough: every commit that ever held it has to be rewritten.
 The procedure below was run against this repository on 2026-09-30 (without the push).
 
-1. **Find every path the file ever had.** A rename leaves the old path in history, so look it up
-   instead of assuming the current one. The Digitalarkivet captures, for example, also live under
-   `crates/genealogy-digitalarkivet/`, from before the crate was renamed.
+1. **List the blobs to remove, by id.** Filter by content, not by path: the path of a removed file
+   may hold a different, legitimate file today. The Digitalarkivet captures, for example, were
+   replaced by invented pages at the same paths. A rename also leaves the old path in history (the
+   captures also live under `crates/genealogy-digitalarkivet/`), so match every path the file ever
+   had, then keep the blobs the tip still needs. Run it from an up-to-date checkout: the lists land
+   there, and step 2 clones the mirror beside them (trash both afterwards).
 
    ```bash
    git log --all --format= --name-only --diff-filter=AR -M -- '*digitalarkivet/tests/fixtures/*' | sort -u
+   git rev-list --objects --all | rg ' crates/(genealogy|vitni)-digitalarkivet/tests/fixtures/.+' \
+     | cut -d' ' -f1 | git cat-file --batch-check='%(objecttype) %(objectname)' \
+     | awk '$1 == "blob" {print $2}' | sort -u > all.txt
+   git ls-tree -r origin/main -- crates/vitni-digitalarkivet/tests/fixtures | awk '{print $3}' | sort -u > keep.txt
+   comm -23 all.txt keep.txt > strip.txt
    ```
+
+   The `cat-file --batch-check` step keeps blobs only: `rev-list --objects` also lists the directories'
+   tree objects. Read `strip.txt` against the history before going on (`git cat-file -p <id> | head`
+   for each): it must hold only the files you mean to remove. For the captures it holds five.
 
 2. **Rewrite a fresh mirror clone.** `git filter-repo` refuses a repository that is not freshly
    cloned; a clone from a local path needs `--no-local`. If it isn't installed, `uvx git-filter-repo`
@@ -340,21 +353,19 @@ The procedure below was run against this repository on 2026-09-30 (without the p
    ```bash
    git clone --mirror git@github.com:magne/vitni.git vitni-mirror.git
    cd vitni-mirror.git
-   uvx git-filter-repo --invert-paths --path-glob '*digitalarkivet/tests/fixtures/*'
+   uvx git-filter-repo --strip-blobs-with-ids ../strip.txt
    ```
 
-3. **Check that nothing is left**, by path and by content. The second loop runs from the working
-   checkout, which still holds the files:
+3. **Check that nothing is left, and nothing else went.**
 
    ```bash
-   git rev-list --objects --all | rg 'digitalarkivet/tests/fixtures'   # expect no output
-   for f in crates/vitni-digitalarkivet/tests/fixtures/*/*.html; do
-     git -C vitni-mirror.git cat-file -e "$(git hash-object "$f")" 2>/dev/null && echo "still present: $f"
-   done
+   while read -r id; do git cat-file -e "$id" 2>/dev/null && echo "still present: $id"; done < ../strip.txt
+   while read -r id; do git cat-file -e "$id" || echo "lost: $id"; done < ../keep.txt
    ```
 
-   `git rev-list --all | wc -l` should give the same commit count as before. `git filter-repo` drops a
-   commit only if it becomes empty, and the capture commits all changed other files too.
+   Both loops should print nothing, and `git rev-list --all | wc -l` should give the same commit count
+   as before. `git filter-repo` drops a commit only if it becomes empty, and the commits that added
+   the captures all changed other files too.
 
 4. **Force-push the branches and tags.** Before you push:
    - lift the branch protection on `main` in the repository settings, since it blocks force-pushes;
@@ -368,6 +379,7 @@ The procedure below was run against this repository on 2026-09-30 (without the p
    git push --force --all origin
    git push --force --tags origin
    ```
+
 5. **Ask GitHub Support to purge the old objects.** GitHub keeps the `refs/pull/*` refs and cached
    views of old commits, and those still serve the removed file until Support deletes them.
 6. **Tell everyone with a clone to re-clone.** A clone made before the rewrite still holds the file,

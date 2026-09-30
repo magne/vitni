@@ -13,7 +13,7 @@ Folketelling 1920 for 1017 Greipstad herred, https://www.digitalarkivet.no/censu
 Klokkerbok for Søgne prestegjeld, Greipstad sokn 1904-1936, baptism of Sigmund Magne 1924-11-30, the father,
 https://www.digitalarkivet.no/view/255/pd00000020636420. Linked on given name and patronymic, birth year 1886,
 parish, and the wife/mother born 1889 (Gunlaug ↔ Gunbvig Signe); the farm name is spelled Bergstøl ↔
-Bergstad. Both records are the fixtures in crates/vitni-digitalarkivet/tests/fixtures/.
+Bergstad.
 """
 [pair.left]
 given = "Asbjørn"

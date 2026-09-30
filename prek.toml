@@ -6,9 +6,8 @@
 repo = "builtin"
 hooks = [
     { id = "no-commit-to-branch", args = ["--branch", "main"] },
-    # Test fixtures are verbatim Digitalarkivet captures — never reformat them.
-    { id = "trailing-whitespace", exclude = "^crates/vitni-digitalarkivet/tests/fixtures/" },
-    { id = "end-of-file-fixer", exclude = "^crates/vitni-digitalarkivet/tests/fixtures/" },
+    { id = "trailing-whitespace" },
+    { id = "end-of-file-fixer" },
     { id = "check-yaml" },
     { id = "check-toml" },
 ]

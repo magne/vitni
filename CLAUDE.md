@@ -84,7 +84,7 @@ Each crate's `lib.rs` module header holds the authoritative description; this ta
 | `vitni-i18n` | Shared Fluent plumbing (ADR 0003): the workspace > shared-app > embedded override chain and locale fallback. |
 | `vitni-plugin-host` | WASM component host (ADR 0007, 0011, 0014): Wasmtime, deny-by-default capabilities over one versioned WIT world, fuel + memory limits. Sits above `vitni-app`, driving use-cases under an `AgentKind::Software` session. |
 | `vitni-interchange` | The format-neutral leaf value vocabulary shared by the interchange formats — simple and serde-free; richer concerns stay in core. |
-| `vitni-gedcom`, `vitni-gramps-xml`, `vitni-digitalarkivet` | Pure parse/emit crates — the format logic of the `plugins/*` glue, free of WASM/host types so `--workspace` unit-tests them. Digitalarkivet's `…/tests/fixtures/` still holds five saved pages that ADR 0042 does not allow, until #446 replaces them. Don't add to them, and don't reformat them either (prek skips its whitespace/EOF fixers there). |
+| `vitni-gedcom`, `vitni-gramps-xml`, `vitni-digitalarkivet` | Pure parse/emit crates — the format logic of the `plugins/*` glue, free of WASM/host types so `--workspace` unit-tests them. Digitalarkivet's `…/tests/fixtures/` are invented pages reproducing only the DOM `src/html.rs` reads (ADR 0042), and `tests/fallbacks.rs` covers the fallback rungs they cannot reach. |
 | `vitni` | The `vitni` launcher binary (ADR 0035): the GUI with no arguments, the CLI with any, both as in-process library calls. Holds no logic of its own. |
 | `xtask` (repo root, not `crates/*`) | Repository task runner, not shipped. Aliased in `.cargo/config.toml`. |
 

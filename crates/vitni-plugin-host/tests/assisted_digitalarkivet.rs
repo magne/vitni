@@ -1,8 +1,9 @@
 //! End-to-end integration test for the Digitalarkivet assisted-import plugin (ADR 0017): the
 //! `digitalarkivet-import` component drives a full `run-assisted` session against a local `wiremock`
-//! server serving the PR3 fixtures (a census person page, a residence page, a scan-viewer page, and a
-//! scan JPEG) and a scripted [`Presenter`] that answers each `present` payload. Asserts the created
-//! aggregates, the crop, re-run idempotence, cancellation, and denied-capability behaviour.
+//! server and a scripted [`Presenter`] that answers each `present` payload. The server serves the
+//! `vitni-digitalarkivet` page fixtures (a census person page, a residence page and a scan-viewer
+//! page, all invented per ADR 0042) plus a scan JPEG. Asserts the created aggregates, the crop,
+//! re-run idempotence, cancellation, and denied-capability behaviour.
 //!
 //! The fixtures' absolute Digitalarkivet URLs are rewritten to the mock host so every fetch hits
 //! wiremock; the request carries an explicit `page` hint so the flow routes without the
@@ -122,7 +123,7 @@ fn invocation(workspace: Workspace, grants: Grants) -> Invocation {
     }
 }
 
-/// Reads a PR3 fixture and rewrites its absolute Digitalarkivet URLs to the mock base, so every
+/// Reads a `vitni-digitalarkivet` page fixture and rewrites its absolute Digitalarkivet URLs to the mock base, so every
 /// in-page link (record URL, scan viewer, permanent image) resolves to wiremock.
 fn fixture(kind: &str, name: &str, base: &str) -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -282,7 +283,7 @@ fn request(url: &str, page: &str) -> String {
 }
 
 fn person_url(base: &str) -> String {
-    format!("{base}/census/person/pf01073902000464")
+    format!("{base}/census/person/pf01099901000101")
 }
 
 async fn run(
@@ -293,7 +294,7 @@ async fn run(
 ) -> Result<String, PluginError> {
     let base = format!("http://localhost:{}", server.address().port());
     let url = if page == "census-residence" {
-        format!("{base}/census/rural-residence/bf01052209001842")
+        format!("{base}/census/rural-residence/bf01099901000100")
     } else {
         person_url(&base)
     };
@@ -350,7 +351,7 @@ async fn assert_census_run(root: &Path, workspace: &Workspace) {
     assert_eq!(runs[0].status, ImportRunStatus::Finished);
     assert_eq!(runs[0].dataset, DatasetId::global("digitalarkivet"));
     assert!(
-        events_contain(root, r#""item":"citation","record":"pf01073902000464""#).await,
+        events_contain(root, r#""item":"citation","record":"pf01099901000101""#).await,
         "the citation names the census record it was read from"
     );
 }

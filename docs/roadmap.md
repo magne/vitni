@@ -337,7 +337,7 @@ entries, each `command` — argv, no shell — or `vision-api`, plus a reserved 
 suspending **`present`** carrying a typed, versioned assisted-import payload. On top of them: the
 **`assisted-import` world** with a `Confidence::Low` provenance template; the pure
 **`vitni-digitalarkivet`** crate that parses census/church-book pages and resolves the scan-URL
-chain over verbatim fixtures (HTML-first — the research doc found no anonymous public API); **crop
+chain over invented fixtures (HTML-first — the research doc found no anonymous public API); **crop
 plumbing end-to-end** (`MediaRef.crop`/caption through app, DTO, and WIT, with the Gramps `<region>`
 round-trip proven on import) plus a GUI crop tool, media viewer, and media-save dialog; the
 first-party **`Tool::Import` wizard**; and the **`digitalarkivet-import` plugin** with an idempotent

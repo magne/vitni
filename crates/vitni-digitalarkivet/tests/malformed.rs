@@ -4,9 +4,9 @@
 use vitni_digitalarkivet::{PageContext, ParseError, parse_person_page, parse_residence_page, parse_viewer_page};
 
 const PERSON_HTML: &str = include_str!("fixtures/census/person.html");
-const PERSON_URL: &str = "https://www.digitalarkivet.no/census/person/pf01073902000464";
+const PERSON_URL: &str = "https://www.digitalarkivet.no/census/person/pf01099901000101";
 const BOSTED_HTML: &str = include_str!("fixtures/census/bosted.html");
-const BOSTED_URL: &str = "https://www.digitalarkivet.no/census/rural-residence/bf01073902000463";
+const BOSTED_URL: &str = "https://www.digitalarkivet.no/census/rural-residence/bf01099901000100";
 
 const MISSING_FOCAL: ParseError = ParseError::MissingElement {
     page: PageContext::CensusPerson,

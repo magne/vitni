@@ -1,4 +1,4 @@
-//! Church-book fixture parsing — verbatim captures.
+//! Church-book fixture parsing — invented pages that reproduce the DOM the parser reads (ADR 0042).
 //!
 //! The person page is an event record (`Fødte og døpte`) whose participants share
 //! the census `data-item` structure but a different URL scheme (`/view/<n>/pd…`)
@@ -8,23 +8,23 @@
 use vitni_digitalarkivet::{PageContext, PageKind, ParseError, classify_url, parse_person_page, parse_viewer_page};
 
 const PERSON_HTML: &str = include_str!("fixtures/churchbook/person.html");
-const PERSON_URL: &str = "https://www.digitalarkivet.no/view/255/pd00000020636420";
+const PERSON_URL: &str = "https://www.digitalarkivet.no/view/999/pd00000099901001";
 const VIEWER_HTML: &str = include_str!("fixtures/churchbook/viewer.html");
-const VIEWER_URL: &str = "https://goto.digitalarkivet.no/kb20051205050405";
+const VIEWER_URL: &str = "https://goto.digitalarkivet.no/kb20000099901001";
 
 #[test]
 fn person_page_classifies_as_churchbook_record() {
     assert_eq!(classify_url(PERSON_URL), PageKind::ChurchbookRecord);
     let record = parse_person_page(PERSON_HTML, PERSON_URL).expect("parse churchbook record");
     assert_eq!(record.page_kind, PageKind::ChurchbookRecord);
-    assert_eq!(record.external_id.value, "pd00000020636420");
+    assert_eq!(record.external_id.value, "pd00000099901001");
 }
 
 #[test]
 fn person_page_extracts_named_focal_participant() {
     let record = parse_person_page(PERSON_HTML, PERSON_URL).expect("parse churchbook record");
     // Name comes from the `Navn` field, not the `Løpenr` ordinal in the heading.
-    assert_eq!(record.name, "Asbjørn Andreassen Bergstad");
+    assert_eq!(record.name, "Ola Eksempelsen Fjellstue");
     assert_eq!(record.birth.as_deref(), Some("1886"));
     assert_eq!(record.role.as_deref(), Some("far"));
     // `Stilling/stand` is `-` here, so the typed field is absent.
@@ -36,7 +36,7 @@ fn person_page_resolves_goto_scan_and_participants() {
     let record = parse_person_page(PERSON_HTML, PERSON_URL).expect("parse churchbook record");
     assert_eq!(
         record.scan_viewer_url.as_deref(),
-        Some("https://goto.digitalarkivet.no/kb20051205050405")
+        Some("https://goto.digitalarkivet.no/kb20000099901001")
     );
     assert_eq!(record.household.len(), 3);
     assert!(record.household.iter().all(|u| u.contains("/view/")));
@@ -47,7 +47,7 @@ fn person_page_event_heading_and_source() {
     let record = parse_person_page(PERSON_HTML, PERSON_URL).expect("parse churchbook record");
     assert_eq!(
         record.source.title.as_deref(),
-        Some("Klokkerbok for Søgne prestegjeld, Greipstad sokn 1904-1936")
+        Some("Klokkerbok for Eksempelvik prestegjeld, Eksempelvik sokn 1904-1936")
     );
     assert_eq!(record.source.year.as_deref(), Some("1904"));
     let event = record.source.headings.iter().find(|f| f.key == "Fødte og døpte");
