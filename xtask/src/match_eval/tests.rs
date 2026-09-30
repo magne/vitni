@@ -94,6 +94,19 @@ fn a_hard_distinct_pair_is_rejected_naming_it() {
 }
 
 #[test]
+fn a_date_the_engine_would_drop_or_widen_is_rejected() {
+    for (bad, needle) in [
+        ("month = 13, day = 10", "month"),
+        ("month = 6, day = 0", "day"),
+        ("day = 10", "needs a month"),
+    ] {
+        let text = CENSUS_AGE.replace("month = 6, day = 10", bad);
+        let error = format!("{:#}", parse("test.toml", &text).unwrap_err());
+        assert!(error.contains("census-age") && error.contains(needle), "{bad}: {error}");
+    }
+}
+
+#[test]
 fn an_empty_record_is_rejected_naming_the_pair() {
     let text = "[[pair]]\nid = \"empty\"\nlabel = \"same\"\nsource = \"invented\"\n[pair.left]\n[pair.right]\n";
     let error = format!("{:#}", parse("test.toml", text).unwrap_err());

@@ -184,7 +184,7 @@ fn profile(record: Record) -> Result<PersonProfile> {
         (VitalKind::Burial, record.burial),
     ] {
         if let Some(event) = event {
-            vitals.push(vital(kind, event));
+            vitals.push(vital(kind, event)?);
         }
     }
     Ok(PersonProfile {
@@ -251,7 +251,24 @@ fn sex(sex: RecordSex) -> Sex {
     }
 }
 
-fn vital(kind: VitalKind, event: Vital) -> VitalEvent {
+/// The vital event `event` records, rejecting a date the engine would silently drop or widen: a month
+/// outside 1–12, a day outside 1–31, or a day without its month.
+fn vital(kind: VitalKind, event: Vital) -> Result<VitalEvent> {
+    let year = event.year;
+    ensure!(
+        event.month.is_none_or(|month| (1..=12).contains(&month)),
+        "{kind:?} {year}: month {:?} is not 1-12",
+        event.month
+    );
+    ensure!(
+        event.day.is_none_or(|day| (1..=31).contains(&day)),
+        "{kind:?} {year}: day {:?} is not 1-31",
+        event.day
+    );
+    ensure!(
+        event.day.is_none() || event.month.is_some(),
+        "{kind:?} {year}: a day needs a month"
+    );
     let basis = match event.basis {
         Basis::Recorded => DateBasis::Recorded,
         Basis::Age => DateBasis::FromAge,
@@ -267,12 +284,12 @@ fn vital(kind: VitalKind, event: Vital) -> VitalEvent {
         country: event.country,
         ..PlaceProfile::default()
     });
-    VitalEvent {
+    Ok(VitalEvent {
         kind,
         date: Some(date(event.year, event.month, event.day)),
         basis,
         place,
-    }
+    })
 }
 
 /// A Gregorian date of the given precision; the engine reads its point, never its sort value.
