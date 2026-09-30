@@ -22,6 +22,10 @@
 //!   (ADR 0041 §5).
 //! - `backup-guard` — fail once the workspace version reaches 1.0.0 while the temporary pre-1.0
 //!   backup upgraders (`backup::upgrade::pre_release`) still exist (ADR 0041 §4).
+//! - `fetch-fixtures` — download the external Digitalarkivet fixtures listed in
+//!   `crates/vitni-digitalarkivet/tests/external/manifest.toml` into the gitignored
+//!   `target/external-fixtures/`, for the opt-in live-site tests (ADR 0042 §3). Needs the network, so
+//!   it is not part of `check`.
 //! - `match-eval` — score the labelled pairs of the matching evaluation corpus
 //!   (`crates/vitni-core/matching/corpus/`), report precision and recall per band, and fail when a
 //!   hard true match no longer surfaces (ADR 0038 §9).
@@ -52,6 +56,7 @@ mod backup_fixture;
 mod backup_guard;
 mod build_plugins;
 mod css_check;
+mod fetch_fixtures;
 mod fmt;
 mod gui_pass;
 mod i18n_check;
@@ -89,6 +94,7 @@ fn main() -> Result<()> {
         Some("backup-fixture") => backup_fixture::run(),
         Some("backup-guard") => backup_guard::run(),
         Some("match-eval") => match_eval::run(),
+        Some("fetch-fixtures") => fetch_fixtures::run(),
         Some("check") => check(),
         Some(other) => {
             print_usage();
@@ -145,6 +151,7 @@ fn print_usage() {
     println!("  backup-fixture regenerate the golden backup fixture and refresh every fixture digest");
     println!("  backup-guard   fail at 1.0.0 while the pre-1.0 backup upgraders still exist");
     println!("  match-eval     score the matching evaluation corpus; fail when a hard true match is lost");
+    println!("  fetch-fixtures download the external Digitalarkivet fixtures into target/ (needs the network)");
     println!(
         "  check          run every static check (i18n-check, css-check, input-guard, licence-check, icons, issue-sync,\n                 backup-guard, match-eval)"
     );

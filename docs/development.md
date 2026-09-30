@@ -313,12 +313,35 @@ fixture one of four origins:
 - **`transcribed-facts`**: facts from public records, with each record's source URL, and no copied
   pages.
 
-A page from Digitalarkivet or any other archive is none of these, so it goes in the external tier: a
-manifest of URLs, rights and expected facts, fetched locally and checked by opt-in tests. The
-external tier is #447, the `PROVENANCE.toml` declarations and `cargo xtask fixture-guard` are #448.
+A page from Digitalarkivet or any other archive is none of these, so it goes in the external tier. The
+`PROVENANCE.toml` declarations and `cargo xtask fixture-guard` that enforce the origins are #448.
 The Digitalarkivet parser's own fixtures, under `crates/vitni-digitalarkivet/tests/fixtures/`, are
 invented pages that reproduce only the DOM `src/html.rs` reads; `tests/fallbacks.rs` covers each
 fallback rung those pages cannot reach.
+
+### The external tier: checking the parser against the live site
+
+`crates/vitni-digitalarkivet/tests/external/manifest.toml` lists the real Digitalarkivet pages the
+parser is checked against. For each page it records the URL, the rights as its source states them
+(always `redistributable = false`), and the facts it must parse to. Only those facts are committed,
+never the pages:
+
+```bash
+cargo xtask fetch-fixtures                                    # into target/external-fixtures/digitalarkivet/
+cargo nextest run -p vitni-digitalarkivet --run-ignored only  # every page against its expected facts
+```
+
+`fetch-fixtures` runs `curl` with an honest user agent and waits five seconds between pages, as the
+archive's `robots.txt` asks. The test reports every mismatch at once, one line each
+(`census-person: birth: expected "1886-07-08", parsed …`), and a page that was never fetched fails
+naming the command above.
+
+It is a manual check before a release, not a CI job: polling a public archive from CI is impolite, and
+would make CI depend on the archive's uptime. When it fails, decide which side moved. If the site's
+markup changed, fix `src/html.rs`, then update the invented pages under `tests/fixtures/` to the new
+shape so the bundled tests pin it. If the record's transcription was corrected, update the expected
+fact. The manifest's own shape, and the checking logic, are tested on every run over the invented
+pages.
 
 ### Takedown: removing a file from history
 

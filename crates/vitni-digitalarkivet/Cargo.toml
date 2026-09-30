@@ -12,5 +12,10 @@ scraper = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 
+[dev-dependencies]
+# `tests/external.rs` reads the external-fixture manifest (ADR 0042 §3).
+serde = { workspace = true }
+toml = { workspace = true }
+
 [lints]
 workspace = true

@@ -1,0 +1,92 @@
+# External Digitalarkivet fixtures (ADR 0042 §3). These are real pages the project may not
+# redistribute: `cargo xtask fetch-fixtures` downloads them into target/external-fixtures/digitalarkivet/
+# and `tests/external.rs` checks each against its expected facts:
+#
+#     cargo xtask fetch-fixtures
+#     cargo nextest run -p vitni-digitalarkivet --run-ignored only
+#
+# Only URLs, rights and transcribed facts are committed here (`transcribed-facts`, ADR 0042 §1); they
+# are the records of the matching corpus's first pair (crates/vitni-core/matching/corpus/digitalarkivet.toml).
+#
+# `kind` is census-person, census-residence, churchbook-person or viewer. Every `expected` key is
+# optional and only the ones given are checked: name, birth, role, occupation, scan_viewer_url and
+# household (person pages); person_links (residence pages); source_title (both); image or
+# no_image = true (viewers).
+
+[[page]]
+id = "census-person"
+kind = "census-person"
+url = "https://www.digitalarkivet.no/census/person/pf01073902000464"
+[page.rights]
+source = "https://www.digitalarkivet.no/source/73902"
+holder = "Nasjonalarkivet"
+transcriber = "Nasjonalarkivet (volunteer transcription 2018-2020, credited on the source page)"
+licence = "not stated"
+redistributable = false
+[page.expected]
+name = "Asbjørn Andreassen Bergstøl"
+birth = "1886-07-08"
+role = "hp"
+occupation = "Gårdbruker S."
+scan_viewer_url = "https://media.digitalarkivet.no/fs10771822220997"
+household = 4
+source_title = "Folketelling 1920 for 1017 Greipstad herred"
+
+[[page]]
+id = "census-residence"
+kind = "census-residence"
+url = "https://www.digitalarkivet.no/census/rural-residence/bf01073902000463"
+[page.rights]
+source = "https://www.digitalarkivet.no/source/73902"
+holder = "Nasjonalarkivet"
+transcriber = "Nasjonalarkivet (volunteer transcription 2018-2020, credited on the source page)"
+licence = "not stated"
+redistributable = false
+[page.expected]
+person_links = 4
+source_title = "Folketelling 1920 for 1017 Greipstad herred"
+
+[[page]]
+id = "census-viewer"
+kind = "viewer"
+url = "https://media.digitalarkivet.no/fs10771822220997"
+[page.rights]
+source = "https://www.digitalarkivet.no/source/73902"
+holder = "Nasjonalarkivet"
+transcriber = "none (a scan viewer)"
+licence = "the scan is reusable with attribution (digitalarkivet.no/content/1570); the page markup is not licensed"
+redistributable = false
+[page.expected]
+image = "https://urn.digitalarkivet.no/URN:NBN:no-a1450-fs10771822220997.jpg"
+
+[[page]]
+id = "churchbook-person"
+kind = "churchbook-person"
+url = "https://www.digitalarkivet.no/view/255/pd00000020636420"
+[page.rights]
+source = "https://www.digitalarkivet.no/source/1035"
+holder = "Nasjonalarkivet"
+transcriber = "AMF (Ancestry, MyHeritage og FamilySearch)"
+licence = "Ancestry, MyHeritage og FamilySearch (terms not published)"
+redistributable = false
+[page.expected]
+name = "Asbjørn Andreassen Bergstad"
+birth = "1886"
+role = "far"
+scan_viewer_url = "https://goto.digitalarkivet.no/kb20051205050405"
+household = 3
+source_title = "Klokkerbok for Søgne prestegjeld, Greipstad sokn 1904-1936"
+
+[[page]]
+id = "churchbook-viewer"
+kind = "viewer"
+url = "https://goto.digitalarkivet.no/kb20051205050405"
+[page.rights]
+source = "https://www.digitalarkivet.no/source/1035"
+holder = "Nasjonalarkivet"
+transcriber = "none (a scan viewer)"
+licence = "the scan is reusable with attribution (digitalarkivet.no/content/1570); the page markup is not licensed"
+redistributable = false
+[page.expected]
+# The nye.digitalarkivet.no IIIF viewer serves tiles through a manifest, with no permanent image.
+no_image = true
