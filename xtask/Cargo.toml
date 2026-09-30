@@ -17,8 +17,8 @@ toml = { workspace = true }
 # (nothing depends on `xtask`), so the module is reused rather than split into a separate crate.
 vitni-plugin-host = { workspace = true }
 # `gui-pass` seeds the fixture's media record, so it must spell the stored `media/…` path the same way
-# every other layer does — `vitni_core::media_path` is that one owner (#301). Already in the graph
-# via `vitni-plugin-host`.
+# every other layer does — `vitni_core::media_path` is that one owner (#301). `match-eval` scores its
+# corpus with `vitni_core::matching` (ADR 0038 §9). Already in the graph via `vitni-plugin-host`.
 vitni-core = { workspace = true }
 
 # `backup-fixture` builds the golden backup fixtures (ADR 0041 §5) from typed events of every

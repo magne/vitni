@@ -1,0 +1,363 @@
+# Invented pairs for the matching evaluation corpus (ADR 0038 §9, `cargo xtask match-eval`).
+#
+# Each pair is two person records and a label: `same` (one individual) or `distinct`. A `same` pair
+# may name the `hard` case it exercises (`spelling-variant`, `surname-after-move`, `census-age`,
+# `baptism-for-birth`); the gate fails if any of those stops surfacing at `possible` or better. A
+# vital event's `basis = "age"` marks a birth year computed from a census age.
+
+# --- Hard true matches: spelling variants --------------------------------------------------------
+
+[[pair]]
+id = "guldbrand-olsen-gulbrand-olsoen"
+label = "same"
+hard = "spelling-variant"
+source = "invented"
+[pair.left]
+given = "Guldbrand"
+surname = "Olsen"
+sex = "male"
+birth = { year = 1850, month = 3, day = 4, country = "Norge" }
+[pair.right]
+given = "Gulbrand"
+surname = "Olsøn"
+sex = "male"
+birth = { year = 1850, month = 3, day = 4, country = "Norge" }
+
+[[pair]]
+id = "katherine-catherine-brown"
+label = "same"
+hard = "spelling-variant"
+source = "invented"
+[pair.left]
+given = "Katherine"
+surname = "Brown"
+sex = "female"
+birth = { year = 1852, month = 9, day = 2, country = "England" }
+[pair.right]
+given = "Catherine"
+surname = "Brown"
+sex = "female"
+birth = { year = 1852, month = 9, day = 2, country = "England" }
+
+[[pair]]
+id = "mathilde-matilde-matiasdatter"
+label = "same"
+hard = "spelling-variant"
+source = "invented"
+[pair.left]
+given = "Mathilde"
+surname = "Matiasdatter"
+sex = "female"
+birth = { year = 1878, basis = "age", country = "Norge" }
+parents = [{ given = "Matias", surname = "Olsen", sex = "male", born = 1845 }]
+[pair.right]
+given = "Matilde"
+surname = "Matiasdatter"
+sex = "female"
+birth = { year = 1878, month = 4, day = 11, country = "Norge" }
+parents = [{ given = "Mathias", surname = "Olsen", sex = "male", born = 1845 }]
+
+# --- Hard true matches: a surname changed after a move ------------------------------------------
+
+[[pair]]
+id = "ole-haugen-moved-to-brekke"
+label = "same"
+hard = "surname-after-move"
+source = "invented"
+[pair.left]
+given = "Ole"
+surname = "Haugen"
+sex = "male"
+birth = { year = 1850, month = 3, day = 4, country = "Norge" }
+[pair.right]
+given = "Ole"
+surname = "Brekke"
+sex = "male"
+birth = { year = 1850, month = 3, day = 4, country = "Norge" }
+
+[[pair]]
+id = "peder-johnsen-berg-moved-to-vik"
+label = "same"
+hard = "surname-after-move"
+source = "invented"
+[pair.left]
+given = "Peder"
+surname = "Johnsen Berg"
+sex = "male"
+birth = { year = 1843, basis = "age", country = "Norge" }
+partners = [{ given = "Anne", surname = "Olsdatter", sex = "female", born = 1845 }]
+[pair.right]
+given = "Peder"
+surname = "Johnsen Vik"
+sex = "male"
+birth = { year = 1842, basis = "age", country = "Norge" }
+partners = [{ given = "Anne", surname = "Olsdatter", sex = "female", born = 1846 }]
+
+# --- Hard true matches: a census age a few years off ---------------------------------------------
+
+[[pair]]
+id = "census-age-one-year-off"
+label = "same"
+hard = "census-age"
+source = "invented"
+[pair.left]
+given = "Kari"
+surname = "Hansdatter"
+sex = "female"
+birth = { year = 1831, basis = "age", country = "Norge" }
+[pair.right]
+given = "Kari"
+surname = "Hansdatter"
+sex = "female"
+birth = { year = 1830, month = 12, day = 2, country = "Norge" }
+
+[[pair]]
+id = "census-age-five-years-off-with-father"
+label = "same"
+hard = "census-age"
+source = "invented"
+[pair.left]
+given = "Ole"
+surname = "Olsen"
+sex = "male"
+birth = { year = 1855, basis = "age", country = "Norge" }
+parents = [{ given = "Ole", surname = "Hansen", sex = "male", born = 1815 }]
+[pair.right]
+given = "Ole"
+surname = "Olsen"
+sex = "male"
+birth = { year = 1850, month = 5, day = 1, country = "Norge" }
+parents = [{ given = "Ole", surname = "Hansen", sex = "male", born = 1815 }]
+
+[[pair]]
+id = "census-ages-of-two-censuses-disagree"
+label = "same"
+hard = "census-age"
+source = "invented"
+[pair.left]
+given = "Berte"
+surname = "Nilsdatter"
+sex = "female"
+birth = { year = 1836, basis = "age", country = "Norge" }
+[pair.right]
+given = "Berte"
+surname = "Nilsdatter"
+sex = "female"
+birth = { year = 1833, basis = "age", country = "Norge" }
+
+# --- Hard true matches: a baptism standing in for a birth ----------------------------------------
+
+[[pair]]
+id = "census-1852-baptism-1849"
+label = "same"
+hard = "baptism-for-birth"
+source = "invented"
+[pair.left]
+given = "Ole"
+surname = "Olsen"
+sex = "male"
+birth = { year = 1852, basis = "age", country = "Norge" }
+[pair.right]
+given = "Ole"
+surname = "Olsen"
+sex = "male"
+baptism = { year = 1849, month = 6, day = 10, country = "Norge" }
+
+[[pair]]
+id = "birth-and-baptism-two-weeks-apart"
+label = "same"
+hard = "baptism-for-birth"
+source = "invented"
+[pair.left]
+given = "Anne"
+surname = "Pedersdatter"
+sex = "female"
+birth = { year = 1861, month = 3, day = 4, country = "Norge" }
+[pair.right]
+given = "Anne"
+surname = "Pedersdatter"
+sex = "female"
+baptism = { year = 1861, month = 3, day = 17, country = "Norge" }
+
+# --- Hard true matches: several difficulties at once, as two censuses give them ----------------
+
+[[pair]]
+id = "petter-moved-and-aged-between-censuses"
+label = "same"
+hard = "surname-after-move"
+source = "invented"
+[pair.left]
+given = "Peder"
+surname = "Olsen Berg"
+sex = "male"
+birth = { year = 1834, basis = "age", country = "Norge" }
+[pair.right]
+given = "Petter"
+surname = "Olsen Vik"
+sex = "male"
+birth = { year = 1837, basis = "age", country = "Norge" }
+
+[[pair]]
+id = "census-age-and-spelling-without-dates"
+label = "same"
+hard = "census-age"
+source = "invented"
+[pair.left]
+given = "Gjertrud"
+surname = "Andersdatter"
+sex = "female"
+birth = { year = 1829, basis = "age", country = "Norge" }
+[pair.right]
+given = "Gjertru"
+surname = "Andersdtr"
+sex = "female"
+birth = { year = 1833, basis = "age", country = "Norge" }
+
+[[pair]]
+id = "baptism-against-a-census-age-four-off"
+label = "same"
+hard = "baptism-for-birth"
+source = "invented"
+[pair.left]
+given = "Lars"
+surname = "Halvorsen"
+sex = "male"
+baptism = { year = 1840, month = 10, day = 4, country = "Norge" }
+[pair.right]
+given = "Lars"
+surname = "Halvorsen"
+sex = "male"
+birth = { year = 1844, basis = "age", country = "Norge" }
+
+[[pair]]
+id = "jens-jenssen-spelled-two-ways"
+label = "same"
+hard = "spelling-variant"
+source = "invented"
+[pair.left]
+given = "Jens"
+surname = "Jensen"
+sex = "male"
+birth = { year = 1812, basis = "age", country = "Danmark" }
+[pair.right]
+given = "Jenns"
+surname = "Jenssen"
+sex = "male"
+birth = { year = 1813, basis = "age", country = "Danmark" }
+
+# --- True matches that are not hard ---------------------------------------------------------------
+
+[[pair]]
+id = "same-person-two-transcriptions"
+label = "same"
+source = "invented"
+[pair.left]
+given = "Hans"
+surname = "Pedersen"
+sex = "male"
+occupations = ["gårdbruker"]
+birth = { year = 1848, month = 1, day = 20, country = "Norge" }
+death = { year = 1912, month = 11, day = 3, country = "Norge" }
+[pair.right]
+given = "Hans"
+surname = "Pedersen"
+sex = "male"
+birth = { year = 1848, month = 1, day = 20, country = "Norge" }
+burial = { year = 1912, month = 11, day = 10, country = "Norge" }
+
+# --- Distinct pairs --------------------------------------------------------------------------------
+
+[[pair]]
+id = "two-ole-olsens-with-different-fathers"
+label = "distinct"
+source = "invented"
+[pair.left]
+given = "Ole"
+surname = "Olsen"
+sex = "male"
+birth = { year = 1850, month = 3, day = 4, country = "Norge" }
+parents = [{ given = "Ole", surname = "Hansen", sex = "male", born = 1815 }]
+[pair.right]
+given = "Ole"
+surname = "Olsen"
+sex = "male"
+birth = { year = 1850, month = 3, day = 4, country = "Norge" }
+parents = [{ given = "Nils", surname = "Pedersen", sex = "male", born = 1822 }]
+
+[[pair]]
+id = "father-and-son-of-one-name"
+label = "distinct"
+source = "invented"
+[pair.left]
+given = "Ole"
+surname = "Olsen"
+sex = "male"
+birth = { year = 1822, basis = "age", country = "Norge" }
+[pair.right]
+given = "Ole"
+surname = "Olsen"
+sex = "male"
+birth = { year = 1851, basis = "age", country = "Norge" }
+
+[[pair]]
+id = "asserted-sexes-differ"
+label = "distinct"
+source = "invented"
+[pair.left]
+given = "Per"
+surname = "Hansen"
+sex = "male"
+birth = { year = 1860, month = 2, day = 2, country = "Norge" }
+[pair.right]
+given = "Per"
+surname = "Hansen"
+sex = "female"
+birth = { year = 1860, month = 2, day = 2, country = "Norge" }
+
+[[pair]]
+id = "died-before-the-other-was-born"
+label = "distinct"
+source = "invented"
+[pair.left]
+given = "Johannes"
+surname = "Larsen"
+sex = "male"
+birth = { year = 1801, country = "Norge" }
+death = { year = 1840, month = 5, day = 1, country = "Norge" }
+[pair.right]
+given = "Johannes"
+surname = "Larsen"
+sex = "male"
+birth = { year = 1845, month = 7, day = 9, country = "Norge" }
+
+[[pair]]
+id = "john-smith-john-brown"
+label = "distinct"
+source = "invented"
+[pair.left]
+given = "John"
+surname = "Smith"
+sex = "male"
+birth = { year = 1850, month = 3, day = 4, country = "England" }
+[pair.right]
+given = "John"
+surname = "Brown"
+sex = "male"
+birth = { year = 1850, month = 3, day = 4, country = "England" }
+
+[[pair]]
+id = "sisters-kari-and-anne"
+label = "distinct"
+source = "invented"
+[pair.left]
+given = "Kari"
+surname = "Olsdatter"
+sex = "female"
+birth = { year = 1850, basis = "age", country = "Norge" }
+parents = [{ given = "Ole", surname = "Hansen", sex = "male", born = 1815 }]
+[pair.right]
+given = "Anne"
+surname = "Olsdatter"
+sex = "female"
+birth = { year = 1852, basis = "age", country = "Norge" }
+parents = [{ given = "Ole", surname = "Hansen", sex = "male", born = 1815 }]
