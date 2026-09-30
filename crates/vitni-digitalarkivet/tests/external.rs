@@ -11,13 +11,15 @@
 //! ```
 //!
 //! It is a manual drift check before a release, not a CI job. The other tests run everywhere and check
-//! the manifest and the checking logic itself, over the bundled invented pages.
+//! the manifest, the checking logic itself over the bundled pages, and that no real value the manifest
+//! substitutes survives into any bundled page.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
+use serde::de::IgnoredAny;
 use vitni_digitalarkivet::{PageKind, classify_url, parse_person_page, parse_residence_page, parse_viewer_page};
 
 const MANIFEST: &str = include_str!("external/manifest.toml");
@@ -25,6 +27,9 @@ const MANIFEST: &str = include_str!("external/manifest.toml");
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Manifest {
+    /// `regen-fixtures`' verbatim values; its own tests check them.
+    #[serde(rename = "vocabulary")]
+    _vocabulary: IgnoredAny,
     page: Vec<Page>,
 }
 
@@ -35,9 +40,14 @@ struct Page {
     id: String,
     kind: Kind,
     url: String,
+    /// The bundled fixture `cargo xtask regen-fixtures` generates from this page, under `tests/fixtures/`.
+    fixture: String,
     rights: Rights,
     #[serde(default)]
     expected: Expected,
+    /// Real value → invented value, for `regen-fixtures`.
+    #[serde(default)]
+    substitute: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize, Clone, Copy)]
@@ -198,6 +208,7 @@ fn invented_census_person() -> Page {
         id: "invented-census-person".to_owned(),
         kind: Kind::CensusPerson,
         url: "https://www.digitalarkivet.no/census/person/pf01099901000101".to_owned(),
+        fixture: "census/person.html".to_owned(),
         rights: Rights {
             source: "invented".to_owned(),
             holder: "vitni".to_owned(),
@@ -207,7 +218,7 @@ fn invented_census_person() -> Page {
         },
         expected: Expected {
             name: Some("Ola Eksempelsen Fjellstue".to_owned()),
-            birth: Some("1886-07-08".to_owned()),
+            birth: Some("1887-03-14".to_owned()),
             role: Some("hp".to_owned()),
             occupation: Some("Gårdbruker S.".to_owned()),
             scan_viewer_url: Some("https://media.digitalarkivet.no/fs10000099901042".to_owned()),
@@ -215,6 +226,7 @@ fn invented_census_person() -> Page {
             source_title: Some("Folketelling 1920 for 9901 Eksempelvik herred".to_owned()),
             ..Expected::default()
         },
+        substitute: BTreeMap::new(),
     }
 }
 
@@ -302,11 +314,13 @@ fn check_reports_why_a_viewer_expected_to_show_a_scan_does_not_parse() {
         id: "invented-viewer".to_owned(),
         kind: Kind::Viewer,
         url: "https://media.digitalarkivet.no/view/99901/42".to_owned(),
+        fixture: "census/viewer.html".to_owned(),
         rights: invented_census_person().rights,
         expected: Expected {
             image: Some("https://urn.digitalarkivet.no/URN:NBN:no-a1450-fs10000099901042.jpg".to_owned()),
             ..Expected::default()
         },
+        substitute: BTreeMap::new(),
     };
     let mismatches = check(&page, "<html><body></body></html>");
     assert_eq!(mismatches.len(), 1, "{mismatches:?}");
@@ -408,4 +422,27 @@ fn every_person_page_url_classifies_as_its_kind() {
             assert_eq!(classify_url(&page.url), kind, "{}: {}", page.id, page.url);
         }
     }
+}
+
+#[test]
+fn no_bundled_fixture_holds_a_real_value_the_manifest_substitutes() {
+    let manifest = manifest().expect("the manifest parses");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let mut fixtures = Vec::new();
+    for page in &manifest.page {
+        let path = dir.join(&page.fixture);
+        let html = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {}: {e}", page.id, path.display()));
+        fixtures.push((page.fixture.as_str(), html));
+    }
+    let mut survivors = Vec::new();
+    for page in &manifest.page {
+        for real in page.substitute.keys() {
+            for (fixture, html) in &fixtures {
+                if html.contains(real.as_str()) || html.contains(&real.replace('&', "&amp;")) {
+                    survivors.push(format!("{fixture}: {real:?} (from {})", page.id));
+                }
+            }
+        }
+    }
+    assert!(survivors.is_empty(), "real values in bundled fixtures: {survivors:#?}");
 }

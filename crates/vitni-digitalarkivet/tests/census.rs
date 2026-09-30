@@ -1,4 +1,5 @@
-//! Census fixture parsing — invented pages that reproduce the DOM the parser reads (ADR 0042).
+//! Census fixture parsing — pages `cargo xtask regen-fixtures` generates from the live site, pruned to
+//! the DOM the parser reads and carrying only invented values (ADR 0042 §4).
 
 use vitni_digitalarkivet::{
     Field, PageContext, PageKind, ParseError, classify_url, extract_urn, parse_person_page, parse_residence_page,
@@ -26,7 +27,7 @@ fn person_page_classifies_and_identifies() {
 fn person_page_extracts_focal_fields() {
     let record = parse_person_page(PERSON_HTML, PERSON_URL).expect("parse census person");
     assert_eq!(record.name, "Ola Eksempelsen Fjellstue");
-    assert_eq!(record.birth.as_deref(), Some("1886-07-08"));
+    assert_eq!(record.birth.as_deref(), Some("1887-03-14"));
     assert_eq!(record.birthplace.as_deref(), Some("Eksempelvik"));
     assert_eq!(record.role.as_deref(), Some("hp"));
     assert_eq!(record.marital_status.as_deref(), Some("g"));
@@ -131,4 +132,20 @@ fn viewer_never_returns_a_non_scan_og_image() {
             page: PageContext::Viewer
         }
     );
+}
+
+// A residence-level row outside the focal block, which the live page's pruned markup no longer carries:
+// the parser must read the focal block's own `Fødested`, never the one before it.
+const ROW_OUTSIDE_FOCAL: &str = r#"<!DOCTYPE html><html><body>
+    <div class="row"><div>Fødested:</div><div class="ssp-semibold">Utlandet</div></div>
+    <div class="data-item current"><h4><a href="/census/person/pf01099901000101">Ola</a></h4>
+      <div class="row"><div>Fødested:</div><div class="ssp-semibold">Eksempelvik</div></div>
+    </div>
+    </body></html>"#;
+
+#[test]
+fn person_page_reads_only_rows_inside_the_focal_block() {
+    let record = parse_person_page(ROW_OUTSIDE_FOCAL, PERSON_URL).expect("parse census person");
+    assert_eq!(record.birthplace.as_deref(), Some("Eksempelvik"));
+    assert_eq!(record.fields.len(), 1, "{:?}", record.fields);
 }

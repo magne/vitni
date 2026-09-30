@@ -135,6 +135,7 @@ vitni-db = { path = "crates/vitni-db", default-features = false }
 vitni-app = { path = "crates/vitni-app" }
 vitni-ui = { path = "crates/vitni-ui" }
 vitni-plugin-host = { path = "crates/vitni-plugin-host" }
+vitni-digitalarkivet = { path = "crates/vitni-digitalarkivet" }
 # The two frontends, consumed as libraries by the `vitni` launcher (ADR 0035). The renderer's webview
 # is opted into through the launcher's `gui` feature, so it stays off here.
 vitni-cli = { path = "crates/vitni-cli" }

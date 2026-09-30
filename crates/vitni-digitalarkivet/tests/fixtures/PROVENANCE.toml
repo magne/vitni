@@ -1,3 +1,5 @@
-# Fixture provenance (ADR 0042), checked by `cargo xtask fixture-guard`. Invented pages reproducing only
-# the DOM `src/html.rs` reads; the real pages are in the external tier (tests/external/manifest.toml).
-origin = "invented"
+# Fixture provenance (ADR 0042), checked by `cargo xtask fixture-guard`. Each page is generated from a
+# fetched external page (tests/external/manifest.toml): pruned to the DOM `src/html.rs` reads, with every
+# text and value replaced by an invented one through the manifest's substitutions (ADR 0042 §4).
+origin = "generated"
+generator = "cargo xtask regen-fixtures"

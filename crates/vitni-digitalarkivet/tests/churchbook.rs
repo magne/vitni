@@ -1,4 +1,5 @@
-//! Church-book fixture parsing — invented pages that reproduce the DOM the parser reads (ADR 0042).
+//! Church-book fixture parsing — pages `cargo xtask regen-fixtures` generates from the live site, pruned
+//! to the DOM the parser reads and carrying only invented values (ADR 0042 §4).
 //!
 //! The person page is an event record (`Fødte og døpte`) whose participants share
 //! the census `data-item` structure but a different URL scheme (`/view/<n>/pd…`)
@@ -25,7 +26,7 @@ fn person_page_extracts_named_focal_participant() {
     let record = parse_person_page(PERSON_HTML, PERSON_URL).expect("parse churchbook record");
     // Name comes from the `Navn` field, not the `Løpenr` ordinal in the heading.
     assert_eq!(record.name, "Ola Eksempelsen Fjellstue");
-    assert_eq!(record.birth.as_deref(), Some("1886"));
+    assert_eq!(record.birth.as_deref(), Some("1887"));
     assert_eq!(record.role.as_deref(), Some("far"));
     // `Stilling/stand` is `-` here, so the typed field is absent.
     assert_eq!(record.occupation, None);
@@ -51,7 +52,7 @@ fn person_page_event_heading_and_source() {
     );
     assert_eq!(record.source.year.as_deref(), Some("1904"));
     let event = record.source.headings.iter().find(|f| f.key == "Fødte og døpte");
-    assert_eq!(event.map(|f| f.value.as_str()), Some("1924-11-30"));
+    assert_eq!(event.map(|f| f.value.as_str()), Some("1925-02-15"));
 }
 
 #[test]

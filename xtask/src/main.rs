@@ -26,6 +26,10 @@
 //!   `crates/vitni-digitalarkivet/tests/external/manifest.toml` into the gitignored
 //!   `target/external-fixtures/`, for the opt-in live-site tests (ADR 0042 §3). Needs the network, so
 //!   it is not part of `check`.
+//! - `regen-fixtures` — rebuild the bundled Digitalarkivet fixtures from the pages `fetch-fixtures`
+//!   saved: pruned to the elements the parser reads, every value substituted through the manifest's
+//!   real → invented table, and failing on any unmapped or surviving real value (ADR 0042 §4). Needs
+//!   the fetched pages, so it is not part of `check`.
 //! - `fixture-guard` — verify every tracked file under a `tests/fixtures/` tree or the matching corpus
 //!   is covered by a `PROVENANCE.toml` declaring its origin, and that no external-manifest page is
 //!   tracked (ADR 0042).
@@ -71,6 +75,7 @@ mod labels;
 mod licence_check;
 mod match_eval;
 mod package;
+mod regen_fixtures;
 mod screenshots;
 mod util;
 
@@ -100,6 +105,7 @@ fn main() -> Result<()> {
         Some("match-eval") => match_eval::run(),
         Some("fetch-fixtures") => fetch_fixtures::run(),
         Some("fixture-guard") => fixture_guard::run(),
+        Some("regen-fixtures") => regen_fixtures::run(),
         Some("check") => check(),
         Some(other) => {
             print_usage();
@@ -159,6 +165,7 @@ fn print_usage() {
     println!("  fixture-guard  verify every committed fixture declares its origin in a PROVENANCE.toml");
     println!("  match-eval     score the matching evaluation corpus; fail when a hard true match is lost");
     println!("  fetch-fixtures download the external Digitalarkivet fixtures into target/ (needs the network)");
+    println!("  regen-fixtures rebuild the bundled Digitalarkivet fixtures from the fetched pages, failing closed");
     println!(
         "  check          run every static check (i18n-check, css-check, input-guard, licence-check, icons, issue-sync,\n                 backup-guard, fixture-guard, match-eval)"
     );

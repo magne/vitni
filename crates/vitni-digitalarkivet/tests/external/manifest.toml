@@ -13,10 +13,53 @@
 # household (person pages); person_links (residence pages); source_title (both); image or
 # no_image = true (viewers).
 
+# `cargo xtask regen-fixtures` (ADR 0042 §4) rebuilds the bundled pages under tests/fixtures/ from the
+# fetched ones: it prunes each page to the elements the parser reads, then replaces every remaining text
+# and value through the page's `[page.substitute]` table (real → invented), keeping only what
+# `vocabulary` lists verbatim. A value in neither fails the run, naming it, and so does a real value
+# that survives into any output. `vocabulary` is for site labels and codes that name no one;
+# `fixture` is each page's output under tests/fixtures/.
+vocabulary = [
+    "-",
+    "001",
+    "002",
+    "003",
+    "004",
+    "01",
+    "1",
+    "2",
+    "3",
+    "Alder/født:",
+    "Bostatus:",
+    "Bosted land:",
+    "Bosted:",
+    "Familiestilling:",
+    "Fødested:",
+    "Fødselsår:",
+    "Fødte og døpte:",
+    "H.nr:",
+    "Løpenr",
+    "Navn:",
+    "Rolle:",
+    "Sivilstand:",
+    "Stilling/stand:",
+    "Tellingskrets:",
+    "Yrke:",
+    "Neste",
+    "Siste",
+    "Skannet",
+    "far",
+    "g",
+    "hp",
+    "Gårdbruker S.",
+    "https://www.digitalarkivet.no/assets/images/logo/logo200.png",
+]
+
 [[page]]
 id = "census-person"
 kind = "census-person"
 url = "https://www.digitalarkivet.no/census/person/pf01073902000464"
+fixture = "census/person.html"
 [page.rights]
 source = "https://www.digitalarkivet.no/source/73902"
 holder = "Nasjonalarkivet"
@@ -31,11 +74,30 @@ occupation = "Gårdbruker S."
 scan_viewer_url = "https://media.digitalarkivet.no/fs10771822220997"
 household = 4
 source_title = "Folketelling 1920 for 1017 Greipstad herred"
+[page.substitute]
+"Asbjørn Andreassen Bergstøl" = "Ola Eksempelsen Fjellstue"
+"Gunlaug Bergstøl" = "Kari Eksempelsen"
+"Andreas Bergstøl" = "Per Olsen Fjellstue"
+"Kjetil Asbjørnsen Bergstøl" = "Nils Olsen Fjellstue"
+"002 Nodeland, Monen og Kulibygden" = "001 Nordbygda"
+"https://www.digitalarkivet.no/census/district/tf01073902000267" = "https://www.digitalarkivet.no/census/district/tf01099901000001"
+"https://www.digitalarkivet.no/census/person/pf01073902000464" = "https://www.digitalarkivet.no/census/person/pf01099901000101"
+"https://www.digitalarkivet.no/census/person/pf01073902000465" = "https://www.digitalarkivet.no/census/person/pf01099901000102"
+"https://www.digitalarkivet.no/census/person/pf01073902000466" = "https://www.digitalarkivet.no/census/person/pf01099901000103"
+"https://www.digitalarkivet.no/census/person/pf01073902000467" = "https://www.digitalarkivet.no/census/person/pf01099901000104"
+"001 Asbjørn Andreassen Bergstøl" = "001 Ola Eksempelsen Fjellstue"
+"001 Asbjørn Andreassen Bergstøl - 0036 Bergstøl - 002 Nodeland, Monen og Kulibygden - Tellingskretsoversikt - Folketelling 1920 for 1017 Greipstad herred - Digitalarkivet" = "001 Ola Eksempelsen Fjellstue - 0012 Fjellstue - 001 Nordbygda - Tellingskretsoversikt - Folketelling 1920 for 9901 Eksempelvik herred - Digitalarkivet"
+"0036 Bergstøl" = "0012 Fjellstue"
+"1886-07-08" = "1887-03-14"
+"Greipstad" = "Eksempelvik"
+"https://media.digitalarkivet.no/fs10771822220997" = "https://media.digitalarkivet.no/fs10000099901042"
+"https://www.digitalarkivet.no/census/rural-residence/bf01073902000463" = "https://www.digitalarkivet.no/census/rural-residence/bf01099901000100"
 
 [[page]]
 id = "census-residence"
 kind = "census-residence"
 url = "https://www.digitalarkivet.no/census/rural-residence/bf01073902000463"
+fixture = "census/bosted.html"
 [page.rights]
 source = "https://www.digitalarkivet.no/source/73902"
 holder = "Nasjonalarkivet"
@@ -45,11 +107,26 @@ redistributable = false
 [page.expected]
 person_links = 4
 source_title = "Folketelling 1920 for 1017 Greipstad herred"
+[page.substitute]
+"https://www.digitalarkivet.no/census/rural-residence/bf01073902000463" = "https://www.digitalarkivet.no/census/rural-residence/bf01099901000100"
+"Asbjørn Andreassen Bergstøl" = "Ola Eksempelsen Fjellstue"
+"Gunlaug Bergstøl" = "Kari Eksempelsen"
+"Andreas Bergstøl" = "Per Olsen Fjellstue"
+"Kjetil Asbjørnsen Bergstøl" = "Nils Olsen Fjellstue"
+"002 Nodeland, Monen og Kulibygden" = "001 Nordbygda"
+"https://www.digitalarkivet.no/census/district/tf01073902000267" = "https://www.digitalarkivet.no/census/district/tf01099901000001"
+"https://www.digitalarkivet.no/census/person/pf01073902000464" = "https://www.digitalarkivet.no/census/person/pf01099901000101"
+"https://www.digitalarkivet.no/census/person/pf01073902000465" = "https://www.digitalarkivet.no/census/person/pf01099901000102"
+"https://www.digitalarkivet.no/census/person/pf01073902000466" = "https://www.digitalarkivet.no/census/person/pf01099901000103"
+"https://www.digitalarkivet.no/census/person/pf01073902000467" = "https://www.digitalarkivet.no/census/person/pf01099901000104"
+"0036 Bergstøl - 002 Nodeland, Monen og Kulibygden - Tellingskretsoversikt - Folketelling 1920 for 1017 Greipstad herred - Digitalarkivet" = "0012 Fjellstue - 001 Nordbygda - Tellingskretsoversikt - Folketelling 1920 for 9901 Eksempelvik herred - Digitalarkivet"
+"https://media.digitalarkivet.no/fs10101706010498" = "https://media.digitalarkivet.no/fs10000099901041"
 
 [[page]]
 id = "census-viewer"
 kind = "viewer"
 url = "https://media.digitalarkivet.no/fs10771822220997"
+fixture = "census/viewer.html"
 [page.rights]
 source = "https://www.digitalarkivet.no/source/73902"
 holder = "Nasjonalarkivet"
@@ -58,11 +135,17 @@ licence = "the scan is reusable with attribution (digitalarkivet.no/content/1570
 redistributable = false
 [page.expected]
 image = "https://urn.digitalarkivet.no/URN:NBN:no-a1450-fs10771822220997.jpg"
+[page.substitute]
+"Folketellinger: SAK, Folketelling 1920 for 1017 Greipstad herred, 1920, s. 1192 - Skanna arkiver - Nasjonalarkivet" = "Folketellinger: Folketelling 1920 for 9901 Eksempelvik herred, 1920, s. 42 - Skanna arkiver - Nasjonalarkivet"
+"https://media.digitalarkivet.no/image/2dbfa4da-7820-4bba-99b8-f5127b9c9500" = "https://media.digitalarkivet.no/image/00000000-0000-4000-8000-000000099901"
+"https://media.digitalarkivet.no/view/73902/1192" = "https://media.digitalarkivet.no/view/99901/42"
+"https://urn.digitalarkivet.no/URN:NBN:no-a1450-fs10771822220997.jpg" = "https://urn.digitalarkivet.no/URN:NBN:no-a1450-fs10000099901042.jpg"
 
 [[page]]
 id = "churchbook-person"
 kind = "churchbook-person"
 url = "https://www.digitalarkivet.no/view/255/pd00000020636420"
+fixture = "churchbook/person.html"
 [page.rights]
 source = "https://www.digitalarkivet.no/source/1035"
 holder = "Nasjonalarkivet"
@@ -76,11 +159,22 @@ role = "far"
 scan_viewer_url = "https://goto.digitalarkivet.no/kb20051205050405"
 household = 3
 source_title = "Klokkerbok for Søgne prestegjeld, Greipstad sokn 1904-1936"
+[page.substitute]
+"Asbjørn Andreassen Bergstad" = "Ola Eksempelsen Fjellstue"
+"Asbjørn Andreassen Bergstad - Klokkerbok for Søgne prestegjeld, Greipstad sokn 1904-1936 - Digitalarkivet" = "Ola Eksempelsen Fjellstue - Klokkerbok for Eksempelvik prestegjeld, Eksempelvik sokn 1904-1936 - Digitalarkivet"
+"1886" = "1887"
+"1924-11-30" = "1925-02-15"
+"https://goto.digitalarkivet.no/kb20051205050405" = "https://goto.digitalarkivet.no/kb20000099901001"
+"https://www.digitalarkivet.no/view/255/pd00000020636419" = "https://www.digitalarkivet.no/view/999/pd00000099901000"
+"https://www.digitalarkivet.no/view/255/pd00000020636420" = "https://www.digitalarkivet.no/view/999/pd00000099901001"
+"https://www.digitalarkivet.no/view/255/pd00000020636421" = "https://www.digitalarkivet.no/view/999/pd00000099901002"
+"https://www.digitalarkivet.no/view/261/hd00000004661376" = "https://www.digitalarkivet.no/view/999/hd00000099901000"
 
 [[page]]
 id = "churchbook-viewer"
 kind = "viewer"
 url = "https://goto.digitalarkivet.no/kb20051205050405"
+fixture = "churchbook/viewer.html"
 [page.rights]
 source = "https://www.digitalarkivet.no/source/1035"
 holder = "Nasjonalarkivet"
@@ -90,3 +184,5 @@ redistributable = false
 [page.expected]
 # The nye.digitalarkivet.no IIIF viewer serves tiles through a manifest, with no permanent image.
 no_image = true
+[page.substitute]
+"Digitalarkivet - 887cf78a-7901-4995-af77-5d94b1a2ee43 -" = "Digitalarkivet - 00000000-0000-4000-8000-000000099901 -"

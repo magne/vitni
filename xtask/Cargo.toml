@@ -50,6 +50,14 @@ time = { workspace = true }
 # sources are pure geometry.
 resvg = { version = "0.48", default-features = false }
 
+# `regen-fixtures` prunes the fetched Digitalarkivet pages to the elements the parser reads (ADR 0042
+# §4), so it takes those selectors from `vitni-digitalarkivet` itself and walks the page with the same
+# HTML parser. None of the three adds a crate to `Cargo.lock`.
+vitni-digitalarkivet = { workspace = true }
+scraper = { workspace = true }
+# The tree `scraper` parses into, named for the set of kept node ids; the version `scraper` pins.
+ego-tree = "0.11.0"
+
 # Duplicated (the `[lints]` table can't both inherit and override). xtask is a developer
 # task runner whose stdout/stderr is its interface, so the print lints are relaxed — same
 # relaxation vitni-cli takes. Keep this list in sync with the workspace lint set.
