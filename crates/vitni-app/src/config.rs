@@ -248,10 +248,10 @@ pub struct MatchingConfig {
     /// `universal`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_cultures: Option<Vec<String>>,
-    /// The score, in percent, at or above which a pair is a probable match.
+    /// The score, in percent, above which a pair is a probable match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub probable: Option<u8>,
-    /// The score, in percent, at or above which a pair is a possible match.
+    /// The score, in percent, above which a pair is a possible match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub possible: Option<u8>,
 }
