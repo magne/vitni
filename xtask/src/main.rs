@@ -22,9 +22,12 @@
 //!   (ADR 0041 §5).
 //! - `backup-guard` — fail once the workspace version reaches 1.0.0 while the temporary pre-1.0
 //!   backup upgraders (`backup::upgrade::pre_release`) still exist (ADR 0041 §4).
+//! - `match-eval` — score the labelled pairs of the matching evaluation corpus
+//!   (`crates/vitni-core/matching/corpus/`), report precision and recall per band, and fail when a
+//!   hard true match no longer surfaces (ADR 0038 §9).
 //! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`,
-//!   `licence-check`, `icons --check`, `issue-sync`, `backup-guard`) in one pass, reporting all failures rather than stopping at
-//!   the first.
+//!   `licence-check`, `icons --check`, `issue-sync`, `backup-guard`, `match-eval`) in one pass, reporting all
+//!   failures rather than stopping at the first.
 //! - `issue-sync` — verify the `docs/issues.md` ↔ GitHub Issues linkage: references well-formed and
 //!   unique, every backlog bullet inside an `###` area. `--online` also reconciles against `gh`.
 //! - `labels` — reconcile GitHub's issue labels with `.github/labels.toml` (`--apply` to write).
@@ -57,6 +60,7 @@ mod input_guard;
 mod issue_sync;
 mod labels;
 mod licence_check;
+mod match_eval;
 mod package;
 mod screenshots;
 mod util;
@@ -84,6 +88,7 @@ fn main() -> Result<()> {
         Some("screenshots") => screenshots::run(&env::args().skip(2).collect::<Vec<String>>()),
         Some("backup-fixture") => backup_fixture::run(),
         Some("backup-guard") => backup_guard::run(),
+        Some("match-eval") => match_eval::run(),
         Some("check") => check(),
         Some(other) => {
             print_usage();
@@ -98,7 +103,7 @@ fn main() -> Result<()> {
 
 /// Runs every static check, reporting all failures (never stopping at the first).
 fn check() -> Result<()> {
-    let checks: [Check; 7] = [
+    let checks: [Check; 8] = [
         ("i18n-check", i18n_check::run),
         ("css-check", css_check::run),
         ("input-guard", input_guard::run),
@@ -106,6 +111,7 @@ fn check() -> Result<()> {
         ("icons", icons::check),
         ("issue-sync", issue_sync::run),
         ("backup-guard", backup_guard::run),
+        ("match-eval", match_eval::run),
     ];
     let mut failed = Vec::new();
     for (name, run) in checks {
@@ -138,8 +144,9 @@ fn print_usage() {
     println!("  labels         reconcile GitHub labels with .github/labels.toml (--apply to write)");
     println!("  backup-fixture regenerate the golden backup fixture and refresh every fixture digest");
     println!("  backup-guard   fail at 1.0.0 while the pre-1.0 backup upgraders still exist");
+    println!("  match-eval     score the matching evaluation corpus; fail when a hard true match is lost");
     println!(
-        "  check          run every static check (i18n-check, css-check, input-guard, licence-check, icons, issue-sync,\n                 backup-guard)"
+        "  check          run every static check (i18n-check, css-check, input-guard, licence-check, icons, issue-sync,\n                 backup-guard, match-eval)"
     );
     println!("  package        assemble a Linux release tarball (binaries + signed plugins) in target/dist");
     println!("  gui-pass       run GUI scenarios on a headless Xvfb display, asserting over screenshots");

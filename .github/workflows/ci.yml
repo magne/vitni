@@ -60,7 +60,7 @@ jobs:
         run: cargo xtask fmt --check
       - name: clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: static checks (i18n, css, input-guard)
+      - name: static checks (i18n, css, input-guard, match-eval)
         run: cargo xtask check
 
   test:

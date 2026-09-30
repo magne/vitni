@@ -452,8 +452,9 @@ in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and imp
 order, and each one's *Needs:* names its prerequisites. The milestone opened with backup (#391),
 record origins with import runs (#393) and resolve-by-origin (#394), then the xref-collision fix
 (#389), tombstones by origin (#395), the matching core (#396), the person profile (#397), the
-family and event profiles (#398), the other seven kinds' profiles (#399) and the `match_keys` blocking
-index with `find_similar` (#400), which have landed.
+family and event profiles (#398), the other seven kinds' profiles (#399), the `match_keys` blocking
+index with `find_similar` (#400) and the evaluation corpus with `cargo xtask match-eval` (#402), which
+have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
@@ -464,12 +465,6 @@ does.
   re-import then misses the earlier imports' origins until `vitni rebuild`. *Shape:* a completion
   marker written after the replay, or the backfill in one transaction. *Exit:* a test that interrupts
   the backfill and reopens gets the full index.
-- **Evaluation corpus and `cargo xtask match-eval`** — ADR 0038 §9. Labelled pairs: invented ones, plus
-  public census and church records over 100 years old. The corpus deliberately holds the hard true
-  matches: spelling variants, a surname changed after a move, a census age off by one to five years,
-  a baptism standing in for a birth. The harness reports precision and recall per band, and CI gates
-  recall on the hard cases. *Needs:* the matching core. *Exit:* the gate fails when a weight change
-  loses a hard case. — #402
 - **`PersonsDistinguished` and the assessment on identity decisions** — ADR 0039 §1–§3.
   `PersonsDistinguished`, plus `assessment: Option<MatchEvidence>` on `PersonsMerged`. `MatchEvidence`
   is the fixed-point, `Eq`-safe snapshot of `MatchAssessment`, produced by `MatchAssessment::evidence()`
