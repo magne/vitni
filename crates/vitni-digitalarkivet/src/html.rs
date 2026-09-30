@@ -12,6 +12,56 @@ use crate::error::{PageContext, ParseError};
 use crate::model::{ExternalId, Field, PageKind, PersonRecord, ResidenceRecord, SourceMetadata};
 use crate::text::{REPOSITORY, normalize_ws};
 
+/// The page title, whose ` - `-delimited segments carry the source title.
+pub const TITLE: &str = "title";
+/// The canonical record URL.
+pub const OG_URL: &str = r#"meta[property="og:url"]"#;
+/// The share image, which on a legacy scan viewer is the scan itself.
+pub const OG_IMAGE: &str = r#"meta[property="og:image"]"#;
+/// A `Label: value` source heading above the record.
+pub const SOURCE_HEADING: &str = "div.parent-post h4";
+/// The focal person's block, whose rows are the transcribed fields.
+pub const FOCAL: &str = "div.data-item.current";
+/// A field's value column; the label is its preceding element sibling.
+pub const FIELD_VALUE: &str = "div.ssp-semibold";
+/// A household member's or event participant's record link.
+pub const PARTICIPANT_LINK: &str = "div.data-item h4 a[href]";
+/// The focal block's heading link, whose text is the name when there is no `Navn` field.
+pub const FOCAL_HEADING: &str = "h4 a";
+/// The de-emphasized ordinal (`001`, `Løpenr`) inside a heading link.
+pub const ORDINAL: &str = "span.de-emphasized";
+/// The scan-viewer button on a person page.
+pub const SCAN_LINK: &str = "a#scannedImageLink";
+/// A residence page's person links.
+pub const RESIDENCE_PERSON_LINK: &str = r#"a[href*="/census/person/"]"#;
+/// The legacy scan viewer's permanent image link.
+pub const PERMANENT_IMAGE: &str = "input#permanent_image_link";
+/// A scan `<img>` on a viewer page, before the [`is_scan_image`] check.
+pub const SCAN_IMAGE: &str = r#"img[src*="urn.digitalarkivet.no"], img[src*="media.digitalarkivet.no/image/"]"#;
+/// A scan anchor on a viewer page, before the [`is_scan_image`] check.
+pub const SCAN_IMAGE_LINK: &str = r#"a[href*="urn.digitalarkivet.no"], a[href*="media.digitalarkivet.no/image/"]"#;
+
+/// The selectors the parsers apply only inside a [`FOCAL`] match, which [`PAGE_ELEMENTS`] keeps whole.
+pub const NESTED_ELEMENTS: &[&str] = &[FIELD_VALUE, FOCAL_HEADING, ORDINAL];
+
+/// Every element the parsers read on a page's first rung: a page pruned to the matches of these
+/// selectors, with their subtrees and ancestors, parses the same as the whole page. The scan-link
+/// fallback rungs of [`parse_person_page`] are left out (`tests/fallbacks.rs` covers them), and so are
+/// the [`NESTED_ELEMENTS`].
+pub const PAGE_ELEMENTS: &[&str] = &[
+    TITLE,
+    OG_URL,
+    OG_IMAGE,
+    SOURCE_HEADING,
+    FOCAL,
+    PARTICIPANT_LINK,
+    SCAN_LINK,
+    RESIDENCE_PERSON_LINK,
+    PERMANENT_IMAGE,
+    SCAN_IMAGE,
+    SCAN_IMAGE_LINK,
+];
+
 /// Compile a static selector, surfacing a compile failure as a typed error rather
 /// than an `unwrap`/`expect` (which `-D warnings` would reject).
 fn sel(css: &'static str) -> Result<Selector, ParseError> {
@@ -40,12 +90,12 @@ fn prev_element(el: ElementRef<'_>) -> Option<ElementRef<'_>> {
 
 /// The record page URL: `og:url` when present, else the fetched URL.
 fn record_url(doc: &Html, url: &str) -> Result<String, ParseError> {
-    Ok(attr_of(doc, r#"meta[property="og:url"]"#, "content")?.unwrap_or_else(|| url.to_owned()))
+    Ok(attr_of(doc, OG_URL, "content")?.unwrap_or_else(|| url.to_owned()))
 }
 
 /// Every transcribed key/value row inside the focal element, in document order.
 fn extract_fields(focal: ElementRef<'_>) -> Result<Vec<Field>, ParseError> {
-    let value_sel = sel("div.ssp-semibold")?;
+    let value_sel = sel(FIELD_VALUE)?;
     let mut fields = Vec::new();
     for value_el in focal.select(&value_sel) {
         let Some(label_el) = prev_element(value_el) else {
@@ -86,8 +136,8 @@ fn focal_name(focal: ElementRef<'_>, fields: &[Field]) -> Result<String, ParseEr
     if let Some(navn) = field_value(fields, &["Navn"]) {
         return Ok(navn);
     }
-    let anchor_sel = sel("h4 a")?;
-    let de_sel = sel("span.de-emphasized")?;
+    let anchor_sel = sel(FOCAL_HEADING)?;
+    let de_sel = sel(ORDINAL)?;
     let Some(anchor) = focal.select(&anchor_sel).next() else {
         return Ok(String::new());
     };
@@ -98,7 +148,7 @@ fn focal_name(focal: ElementRef<'_>, fields: &[Field]) -> Result<String, ParseEr
 
 /// Resolve the scan-viewer URL from a person page, prototype selector chain.
 fn scan_viewer_url(doc: &Html, base: &str) -> Result<Option<String>, ParseError> {
-    if let Some(href) = attr_of(doc, "a#scannedImageLink", "href")? {
+    if let Some(href) = attr_of(doc, SCAN_LINK, "href")? {
         return Ok(resolve(base, &href));
     }
     let anchor_sel = sel("a[href]")?;
@@ -130,7 +180,7 @@ fn scan_viewer_url(doc: &Html, base: &str) -> Result<Option<String>, ParseError>
 
 /// Href of every `.data-item` participant/household anchor, absolute and deduped.
 fn household_links(doc: &Html, base: &str) -> Result<Vec<String>, ParseError> {
-    let anchor_sel = sel("div.data-item h4 a[href]")?;
+    let anchor_sel = sel(PARTICIPANT_LINK)?;
     let hrefs: Vec<&str> = doc.select(&anchor_sel).filter_map(|a| a.value().attr("href")).collect();
     Ok(resolve_and_dedup(base, hrefs, ""))
 }
@@ -161,12 +211,12 @@ fn source_title(title: &str) -> Option<String> {
 
 /// Source/citation metadata from the page title and `.parent-post` headings.
 fn source_metadata(doc: &Html) -> Result<SourceMetadata, ParseError> {
-    let title_sel = sel("title")?;
+    let title_sel = sel(TITLE)?;
     let title = doc.select(&title_sel).next().map(text_of).unwrap_or_default();
     let heading_title = source_title(&title);
     let year = heading_title.as_deref().and_then(year_in);
 
-    let heading_sel = sel("div.parent-post h4")?;
+    let heading_sel = sel(SOURCE_HEADING)?;
     let mut headings = Vec::new();
     for heading in doc.select(&heading_sel) {
         let text = text_of(heading);
@@ -203,7 +253,7 @@ pub fn parse_person_page(html: &str, url: &str) -> Result<PersonRecord, ParseErr
     let record_url = record_url(&doc, url)?;
     let rid = record_id(&record_url).or_else(|| record_id(url)).unwrap_or_default();
 
-    let focal_sel = sel("div.data-item.current")?;
+    let focal_sel = sel(FOCAL)?;
     let focal = doc.select(&focal_sel).next().ok_or(ParseError::MissingElement {
         page,
         what: "focal person (.data-item.current)",
@@ -241,7 +291,7 @@ pub fn parse_residence_page(html: &str, url: &str) -> Result<ResidenceRecord, Pa
     let record_url = record_url(&doc, url)?;
     let rid = record_id(&record_url).or_else(|| record_id(url)).unwrap_or_default();
 
-    let anchor_sel = sel("a[href]")?;
+    let anchor_sel = sel(RESIDENCE_PERSON_LINK)?;
     let hrefs: Vec<&str> = doc.select(&anchor_sel).filter_map(|a| a.value().attr("href")).collect();
     let person_links = resolve_and_dedup(&record_url, hrefs, "/census/person/");
 
@@ -268,17 +318,17 @@ pub fn parse_residence_page(html: &str, url: &str) -> Result<ResidenceRecord, Pa
 /// tiles through a manifest rather than a permanent `.jpg`.
 pub fn parse_viewer_page(html: &str, url: &str) -> Result<String, ParseError> {
     let doc = Html::parse_document(html);
-    if let Some(value) = attr_of(&doc, "input#permanent_image_link", "value")?
+    if let Some(value) = attr_of(&doc, PERMANENT_IMAGE, "value")?
         && !value.trim().is_empty()
     {
         return Ok(resolve(url, &value).unwrap_or(value));
     }
-    if let Some(image) = attr_of(&doc, r#"meta[property="og:image"]"#, "content")?
+    if let Some(image) = attr_of(&doc, OG_IMAGE, "content")?
         && is_scan_image(&image)
     {
         return Ok(resolve(url, &image).unwrap_or(image));
     }
-    let img_sel = sel("img[src]")?;
+    let img_sel = sel(SCAN_IMAGE)?;
     for img in doc.select(&img_sel) {
         if let Some(src) = img.value().attr("src")
             && is_scan_image(src)
@@ -286,7 +336,7 @@ pub fn parse_viewer_page(html: &str, url: &str) -> Result<String, ParseError> {
             return Ok(resolve(url, src).unwrap_or_else(|| src.to_owned()));
         }
     }
-    let anchor_sel = sel("a[href]")?;
+    let anchor_sel = sel(SCAN_IMAGE_LINK)?;
     for anchor in doc.select(&anchor_sel) {
         if let Some(href) = anchor.value().attr("href")
             && is_scan_image(href)
