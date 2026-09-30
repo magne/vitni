@@ -102,7 +102,11 @@ fn one_marriage_from_a_church_book_and_a_gedcom_file_is_probable() {
     assert_eq!(feature(&assessment, Feature::Marriage).outcome, Outcome::Agree);
     assert_eq!(feature(&assessment, Feature::MarriagePlace).outcome, Outcome::Agree);
     let patronymic = feature(&assessment.parts[0], Feature::Patronymic);
-    assert_eq!(patronymic.outcome, Outcome::Agree, "Olsøn ↔ father Ole: {patronymic:?}");
+    assert_eq!(
+        patronymic.outcome,
+        Outcome::Missing,
+        "Olsen and Olsøn already agree: {patronymic:?}"
+    );
 }
 
 #[test]

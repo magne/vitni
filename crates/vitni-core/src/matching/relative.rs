@@ -6,7 +6,8 @@
 //! A father or mother both records state and who cannot be one person disagrees. Partners and children
 //! only ever support a pair, because sources list different subsets of them. A patronymic is checked
 //! against the other record's father only where its own record states none: where both do, the fathers
-//! are compared directly.
+//! are compared directly. Nor is it checked where the surnames already agree, even partly: then it would
+//! read the other record's own surname against its own father, which says nothing about the pair.
 
 use crate::date::GenealogicalDate;
 use crate::enums::Sex;
