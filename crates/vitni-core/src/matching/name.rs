@@ -25,6 +25,13 @@ const PHONETIC_SIMILARITY: f64 = 0.85;
 /// A patronymic stem must keep this many letters once its suffix is removed.
 const MIN_STEM: usize = 2;
 
+/// A word of free text shorter than this, and not a number, is a particle (*i*, *på*, *of*) and is not
+/// compared.
+const MIN_WORD: usize = 3;
+
+/// Two words of free text at least this similar by Jaro–Winkler are one word spelled two ways.
+const FUZZY_WORD: f64 = 0.92;
+
 /// Lower-cases `text` and strips its combining diacritics (é → e, å → a).
 pub(crate) fn fold(text: &str) -> String {
     text.nfd()
@@ -223,12 +230,65 @@ impl<'a> Applied<'a> {
         keys
     }
 
+    /// The similarity in `0..=1` of two free texts — titles, names, addresses, notes — or `None` when
+    /// either has no word to compare. It is the share of both texts' letters in words they have in
+    /// common, so word order does not matter and a long word counts for more than a short one. Numbers
+    /// must be equal; other words may differ by a spelling slip. Particles are not compared.
+    pub fn text_similarity(&self, a: &str, b: &str) -> Option<f64> {
+        let (a, b) = (self.words(a), self.words(b));
+        if a.is_empty() || b.is_empty() {
+            return None;
+        }
+        Some(shared_letters(&a, &b).max(shared_letters(&b, &a)))
+    }
+
+    /// The normalized words of free text, without particles.
+    fn words(&self, text: &str) -> Vec<String> {
+        let mut words = self.tokens(text);
+        words.retain(|word| is_number(word) || word.chars().count() >= MIN_WORD);
+        words
+    }
+
     /// Whether two residence names differ only by a definite-article ending.
     fn same_residence(&self, a: &str, b: &str) -> bool {
         self.definite_suffixes
             .iter()
             .any(|suffix| a.strip_suffix(suffix.as_str()) == Some(b) || b.strip_suffix(suffix.as_str()) == Some(a))
     }
+}
+
+/// The share of the letters of `a` and `b` in words of `a` matched, each to at most one word of `b`, in
+/// the order `a` lists them.
+fn shared_letters(a: &[String], b: &[String]) -> f64 {
+    let total: f64 = a.iter().chain(b).map(|word| letters(word)).sum();
+    let mut used = vec![false; b.len()];
+    let mut shared = 0.0;
+    for x in a {
+        let found = b
+            .iter()
+            .zip(used.iter_mut())
+            .find(|(y, used)| !**used && same_word(x, y));
+        if let Some((y, used)) = found {
+            *used = true;
+            shared += letters(x) + letters(y);
+        }
+    }
+    if total > 0.0 { shared / total } else { 0.0 }
+}
+
+/// How many letters a word has.
+fn letters(word: &str) -> f64 {
+    f64::from(u32::try_from(word.chars().count()).unwrap_or(u32::MAX))
+}
+
+/// Whether two normalized words are one: equal, or, unless either is a number, close by Jaro–Winkler.
+fn same_word(x: &str, y: &str) -> bool {
+    x == y || (!is_number(x) && !is_number(y) && jaro_winkler(x, y) >= FUZZY_WORD)
+}
+
+/// Whether a word is all digits.
+pub(crate) fn is_number(word: &str) -> bool {
+    !word.is_empty() && word.chars().all(|c| c.is_ascii_digit())
 }
 
 /// `text` with every run of one repeated letter reduced to a single letter.

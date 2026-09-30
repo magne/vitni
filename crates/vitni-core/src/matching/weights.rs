@@ -129,3 +129,103 @@ pub(crate) const NAME_FLOOR: f64 = 0.75;
 
 /// Below this similarity two place names disagree.
 pub(crate) const PLACE_NAME_FLOOR: f64 = 0.85;
+
+/// A place's names, compared as a place record rather than as a person's birthplace.
+pub(crate) const PLACE_NAME: Weights = Weights {
+    agree: 5.0,
+    disagree: -5.0,
+};
+
+/// A place's type: sources type one place differently (a farm, a village), so a difference is mild.
+pub(crate) const PLACE_TYPE: Weights = Weights {
+    agree: 1.0,
+    disagree: -2.0,
+};
+
+/// Where a place lies: the same enclosing place, or one enclosing the other.
+pub(crate) const ENCLOSURE: Weights = Weights {
+    agree: 3.0,
+    disagree: -3.0,
+};
+
+/// A place's coordinates: two places of one name far apart are two places.
+pub(crate) const COORDINATES: Weights = Weights {
+    agree: 4.0,
+    disagree: -6.0,
+};
+
+/// A source's title: the one feature that names the source.
+pub(crate) const TITLE: Weights = Weights {
+    agree: 7.0,
+    disagree: -5.0,
+};
+
+/// A source's author.
+pub(crate) const AUTHOR: Weights = Weights {
+    agree: 2.0,
+    disagree: -2.0,
+};
+
+/// A source's publication information: a copy is published otherwise, so only agreement counts.
+pub(crate) const PUBLICATION: Weights = Weights {
+    agree: 1.0,
+    disagree: 0.0,
+};
+
+/// A repository holding a source: a copy is held elsewhere, so only agreement counts.
+pub(crate) const REPOSITORY: Weights = Weights {
+    agree: 2.0,
+    disagree: 0.0,
+};
+
+/// A repository's name.
+pub(crate) const REPOSITORY_NAME: Weights = Weights {
+    agree: 6.0,
+    disagree: -5.0,
+};
+
+/// A repository's address.
+pub(crate) const ADDRESS: Weights = Weights {
+    agree: 3.0,
+    disagree: -2.0,
+};
+
+/// The most a citation's source can support a pair: one source holds many citations, so only its page
+/// makes two citations one.
+pub(crate) const SOURCE_SUPPORT: f64 = 4.0;
+
+/// A citation's page: another page of one source is another citation.
+pub(crate) const PAGE: Weights = Weights {
+    agree: 6.0,
+    disagree: -6.0,
+};
+
+/// The date of a citation's entry.
+pub(crate) const CITATION_DATE: Weights = Weights {
+    agree: 2.0,
+    disagree: -3.0,
+};
+
+/// Below this share of shared letters two free texts disagree.
+pub(crate) const TEXT_FLOOR: f64 = 0.6;
+
+/// A media object's checksum: equal bytes are one file, other bytes another.
+pub(crate) const CHECKSUM: Weights = Weights {
+    agree: 12.0,
+    disagree: -12.0,
+};
+
+/// A media object's file name: weak, and a file is renamed, so only agreement counts.
+pub(crate) const FILE_NAME_AGREE: f64 = 2.0;
+
+/// A note's text.
+pub(crate) const NOTE_TEXT: Weights = Weights {
+    agree: 10.0,
+    disagree: -6.0,
+};
+
+/// A tag's name: a tag is its name.
+pub(crate) const TAG_NAME: Weights = Weights {
+    agree: 10.0,
+    disagree: -10.0,
+};

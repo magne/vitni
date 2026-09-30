@@ -383,9 +383,11 @@ impl ProfileLookups {
         PlaceProfile {
             id: Some(place_id),
             names: view.names().into_iter().cloned().collect(),
+            place_type: view.place_type().cloned(),
             enclosing,
             country,
             coordinates: view.coordinates().copied(),
+            origins: Vec::new(),
         }
     }
 

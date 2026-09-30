@@ -3,7 +3,8 @@
 //! A side's cultures come from its places, looked up by country and year in the region table
 //! (`matching/regions.toml`), and from its names' data languages. A person's places are those of its
 //! vital events and lineage; a family's are its partners' and its marriage's; an event's are its own and
-//! its participants' births. A side with
+//! its participants' births; a place's is its own; a repository's are its addresses', a source's its
+//! repositories' and a citation's its source's. A note's language selects too. A side with
 //! no signal gets the workspace's default cultures. A comparison applies `universal`, the union of both
 //! sides' cultures, and every cross-culture pack that bridges cultures in that union.
 
@@ -15,7 +16,10 @@ use crate::date::GenealogicalDate;
 use crate::matching::date::year;
 use crate::matching::name::fold;
 use crate::matching::pack::{PackError, PackSource};
-use crate::matching::profile::{EventProfile, FamilyProfile, PersonProfile, PlaceProfile};
+use crate::matching::profile::{
+    CitationProfile, EventProfile, FamilyProfile, NoteProfile, PersonProfile, PlaceProfile, RepositoryProfile,
+    SourceProfile,
+};
 use crate::matching::{CultureId, MatchData, MatchSettings};
 use crate::name::{LanguageTag, PersonName};
 
@@ -132,6 +136,65 @@ impl<'p> Signals<'p> {
         let mut signals = Self::default();
         signals.add_event(profile);
         signals
+    }
+
+    /// A place's signals: its country, and its names' languages.
+    pub fn place(profile: &'p PlaceProfile) -> Self {
+        let mut signals = Self::default();
+        signals.add_place(Some(profile), None);
+        signals.languages.extend(
+            profile
+                .names
+                .iter()
+                .filter_map(|name| name.language.as_ref().map(LanguageTag::as_str)),
+        );
+        signals
+    }
+
+    /// A repository's signals: the countries of its addresses.
+    pub fn repository(profile: &'p RepositoryProfile) -> Self {
+        let mut signals = Self::default();
+        signals.add_repository(profile);
+        signals
+    }
+
+    /// A source's signals: its repositories'.
+    pub fn source(profile: &'p SourceProfile) -> Self {
+        let mut signals = Self::default();
+        signals.add_source(profile);
+        signals
+    }
+
+    /// A citation's signals: its source's.
+    pub fn citation(profile: &'p CitationProfile) -> Self {
+        let mut signals = Self::default();
+        if let Some(source) = &profile.source {
+            signals.add_source(source);
+        }
+        signals
+    }
+
+    /// A note's signals: the language of its text.
+    pub fn note(profile: &'p NoteProfile) -> Self {
+        let mut signals = Self::default();
+        signals
+            .languages
+            .extend(profile.language.as_ref().map(LanguageTag::as_str));
+        signals
+    }
+
+    fn add_source(&mut self, profile: &'p SourceProfile) {
+        for repository in &profile.repositories {
+            self.add_repository(repository);
+        }
+    }
+
+    fn add_repository(&mut self, profile: &'p RepositoryProfile) {
+        for address in &profile.addresses {
+            if let Some(country) = &address.country {
+                self.places.push((country.as_str(), None));
+            }
+        }
     }
 
     fn add_person(&mut self, profile: &'p PersonProfile) {
