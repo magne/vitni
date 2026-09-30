@@ -1,10 +1,11 @@
 # Issue tracking on GitHub
 
-- **Status:** **Applied 2026-07-27; updated 2026-09-30** with the `0.9.1` milestone (2026-09-27: the
-  `0.10` milestone and two area labels). 42 labels and the issue-template forms exist, alongside
-  `.github/labels.toml` and `cargo xtask issue-sync`. `0.8 — UI parity` shipped and is closed; the four
-  remaining gates are `0.9`, `0.9.1`, `0.10` and `1.0`.
-- **Date:** 2026-07-27 (updated 2026-09-30)
+- **Status:** **Applied 2026-07-27; updated 2026-10-01**: `0.9.1 — Fixture provenance` landed
+  (2026-09-30: that milestone; 2026-09-27: the `0.10` milestone and two area labels). 42 labels and the
+  issue-template forms exist, alongside `.github/labels.toml` and `cargo xtask issue-sync`. `0.8 — UI
+  parity` and `0.9.1 — Fixture provenance` shipped; the three remaining gates are `0.9`, `0.10` and
+  `1.0`.
+- **Date:** 2026-07-27 (updated 2026-10-01)
 - **Audience:** anyone filing, triaging, or closing an issue
 - **Companion:** [`issues.md`](issues.md) is the backlog this describes; [`roadmap.md`](roadmap.md)
   owns phase detail.
@@ -169,14 +170,13 @@ duplicates every place and source. A user of the Digitalarkivet flow reports dup
 well. A 1.0 whose import can merge strangers is worse than a later 1.0. The milestone also delivers the
 backup format that 1.0 freezes (ADR 0041), so it must land before the `1.0` release mechanics.
 
-`0.8 — UI parity` shipped and is closed on GitHub; its narrative lives in
+`0.8 — UI parity` and `0.9.1 — Fixture provenance` shipped; their narratives live in
 [`archive/completed-work.md`](archive/completed-work.md). A closed gate is dropped from this table
 rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
 | **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: a save run that hangs when its target leaves the strip (#302), and the shared record tabs having no common layout contract (#303). |
-| **`0.9.1 — Fixture provenance`** | Commit only fixtures the project may redistribute. The verbatim Digitalarkivet page captures give way to synthetic pages, with the real pages moving to an external, fetched tier; ADR 0042 and a guard keep it that way, and a regenerator resyncs the synthetic pages when the site changes. Five issues, in §4; ADR 0042 (#445) is accepted. |
 | **`0.10 — Record matching`** | Import that never duplicates and never guesses: record origins and import runs, the matching engine, identity decisions, staged import with side-by-side review, and versioned workspace backup (ADRs 0037–0041). Groomed in full in §4, in dependency order. |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end on the first real tag, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. Also the deletion of the pre-1.0 backup upgraders, which freezes backup format v1 (#392, ADR 0041 §4). |
 
@@ -265,25 +265,6 @@ freeze (v1, #392) is filed in `1.0`. Issues were numbered before the order was c
 out of sequence. #389 follows #394, because once xrefs and Gramps ids stop being `ExternalId`s only
 resolve-by-origin can find a re-imported person. #401 follows #403, because the duplicate check
 excludes decided pairs. Every other stage is in number order.
-
-### `0.9.1 — Fixture provenance` (2 open)
-
-The `vitni-digitalarkivet` tests parsed five Digitalarkivet pages saved as they were served: census and
-church-book transcriptions whose licences are unstated or unpublished, plus Arkivverket's own site
-markup. The project's licences could not cover them. No scanned image was ever committed. History is not
-rewritten (`issues.md`, *Decided*, *Publication*). The bullets are under *Assisted import* and *Docs &
-repo tooling*. [ADR 0042](adr/0042-test-fixture-provenance.md) (#445) sets the rule the four issues
-implement, and `development.md` holds its takedown procedure. The captures were replaced by invented
-pages in #446, and the real pages became the fetched external tier in #447.
-
-| Order | Item | Needs |
-| --- | --- | --- |
-| 1 | [`cargo xtask fixture-guard`](https://github.com/magne/vitni/issues/448) | — |
-| 1 | [`cargo xtask regen-fixtures`: rebuild the synthetic pages from the fetched ones](https://github.com/magne/vitni/issues/449) | — |
-
-It is a gate of its own rather than part of `0.9` because it closes independently and touches no UI.
-It sits before `0.10` because #409/#410 port the Digitalarkivet importer, and those should build on
-fixtures that can stay in the tree.
 
 ### Not in any milestone
 
