@@ -131,7 +131,42 @@ async fn a_rekey_clears_only_the_generation_it_read(store: &Store) {
     let dirty = store.match_dirty().await.unwrap();
     assert_eq!(dirty.len(), 1, "the person touched meanwhile stays dirty: {dirty:?}");
     assert_eq!(dirty[0].aggregate_id, person_id(1).to_string());
-    assert_eq!(dirty[0].generation, 2);
+    assert!(dirty[0].generation > read[0].generation);
+}
+
+async fn a_rekey_that_lost_a_race_marks_its_records_dirty_again(store: &Store) {
+    create_person(store, 1).await;
+    let slow = store.match_dirty().await.unwrap();
+    assert_sex(store, 1, 101).await;
+    let fast = store.match_dirty().await.unwrap();
+    store.rekey_matches(&[keyed(1, &["t:new@185"])], &fast).await.unwrap();
+    assert!(
+        store.match_dirty().await.unwrap().is_empty(),
+        "the fresh rekey cleared it"
+    );
+    store.rekey_matches(&[keyed(1, &["t:old@185"])], &slow).await.unwrap();
+    let dirty = store.match_dirty().await.unwrap();
+    assert_eq!(
+        dirty.len(),
+        1,
+        "the stale keys are rekeyed on the next lookup: {dirty:?}"
+    );
+    assert_eq!(dirty[0].aggregate_id, person_id(1).to_string());
+}
+
+async fn a_rebuild_that_another_rebuild_beat_writes_nothing(store: &Store) {
+    create_person(store, 1).await;
+    let read = store.match_dirty().await.unwrap();
+    store
+        .reset_match_keys("f1", &[keyed(1, &["t:new@?"])], &read)
+        .await
+        .unwrap();
+    store
+        .reset_match_keys("f1", &[keyed(1, &["t:old@?"])], &read)
+        .await
+        .unwrap();
+    let keys = store.match_keys_of_kind(MatchableKind::Person).await.unwrap();
+    assert_eq!(keys, [(person_id(1).to_string(), "t:new@?".to_owned())]);
 }
 
 async fn a_rekey_replaces_a_records_keys(store: &Store) {
@@ -229,6 +264,8 @@ mod sqlite {
 
     sqlite_tests!(
         a_commit_marks_its_record_dirty_and_bumps_the_generation,
+        a_rekey_that_lost_a_race_marks_its_records_dirty_again,
+        a_rebuild_that_another_rebuild_beat_writes_nothing,
         an_unmatched_kind_is_never_dirty,
         a_rekey_clears_only_the_generation_it_read,
         a_rekey_replaces_a_records_keys,
@@ -265,6 +302,8 @@ mod postgres {
 
     postgres_tests!(
         a_commit_marks_its_record_dirty_and_bumps_the_generation,
+        a_rekey_that_lost_a_race_marks_its_records_dirty_again,
+        a_rebuild_that_another_rebuild_beat_writes_nothing,
         an_unmatched_kind_is_never_dirty,
         a_rekey_clears_only_the_generation_it_read,
         a_rekey_replaces_a_records_keys,

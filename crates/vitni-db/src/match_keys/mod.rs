@@ -8,10 +8,11 @@
 //! - `match_keys (kind, key, aggregate_id)` — the index itself, written by the app layer;
 //! - `match_dirty (aggregate_type, aggregate_id, generation)` — every matchable aggregate a commit
 //!   touched since the app layer last keyed it, fed by [`sqlite::MatchDirtyQuery`] on every commit.
-//!   Each touch bumps `generation`, and the app layer clears a row only at the generation it read, so
-//!   a commit landing while a record is being rekeyed marks it dirty again rather than being lost;
+//!   Each touch bumps `generation`, and the app layer clears a row only at the generation it read. A
+//!   row found at another generation, or already cleared by another refresh, is marked dirty again, so
+//!   neither a commit landing mid-rekey nor a slower refresh writing older keys is left unnoticed;
 //! - `match_keys_state (fingerprint)` — one row naming the keying rules and packs the index was built
-//!   under. No row means the index must be built from scratch: a new workspace, or one whose
+//!   under. A rebuild that finds its own fingerprint already there lost a race and writes nothing. No row means the index must be built from scratch: a new workspace, or one whose
 //!   projections were rebuilt ([`sqlite::clear_state`]).
 
 #[cfg(feature = "postgres")]

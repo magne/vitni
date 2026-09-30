@@ -168,7 +168,8 @@ pub(crate) async fn rekey(
 }
 
 /// Replaces the whole index with `records` built under `fingerprint`, and clears `cleared` at the
-/// generations read, in one transaction.
+/// generations read, in one transaction — unless another rebuild already built it under
+/// `fingerprint`, when nothing is written.
 ///
 /// # Errors
 ///
@@ -180,6 +181,21 @@ pub(crate) async fn reset(
     cleared: &[DirtyRecord],
 ) -> Result<(), DbError> {
     let mut tx = pool.begin().await.map_err(backend("starting a match keys rebuild"))?;
+    let built = sqlx::query(&format!(
+        "SELECT fingerprint FROM {MATCH_KEYS_STATE_TABLE} WHERE id = 1"
+    ))
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(backend("reading the match keys state"))?
+    .map(|row| row.get::<String, _>("fingerprint"));
+    if built.as_deref() == Some(fingerprint) {
+        // Another rebuild under the same rules finished first; the records its snapshot missed are
+        // still dirty, while this one's may be older than its.
+        return tx
+            .commit()
+            .await
+            .map_err(backend("ending a superseded match keys rebuild"));
+    }
     sqlx::query(&format!("DELETE FROM {MATCH_KEYS_TABLE}"))
         .execute(&mut *tx)
         .await
@@ -219,9 +235,13 @@ async fn insert(tx: &mut Transaction<'_, Sqlite>, records: &[KeyedRecord]) -> Re
     Ok(())
 }
 
+/// Clears each of `cleared` at the generation read. A row at another generation, or already gone,
+/// means another commit or another refresh reached the record meanwhile, and the keys just written may
+/// be older than theirs: the record is marked dirty again, so the next lookup rekeys it from fresh
+/// views rather than trusting keys whose views it cannot vouch for.
 async fn clear_dirty(tx: &mut Transaction<'_, Sqlite>, cleared: &[DirtyRecord]) -> Result<(), DbError> {
     for record in cleared {
-        sqlx::query(&format!(
+        let deleted = sqlx::query(&format!(
             "DELETE FROM {MATCH_DIRTY_TABLE} WHERE aggregate_type = ? AND aggregate_id = ? AND generation = ?"
         ))
         .bind(record.kind.as_str())
@@ -229,7 +249,19 @@ async fn clear_dirty(tx: &mut Transaction<'_, Sqlite>, cleared: &[DirtyRecord]) 
         .bind(record.generation)
         .execute(&mut **tx)
         .await
-        .map_err(backend("clearing a dirty record"))?;
+        .map_err(backend("clearing a dirty record"))?
+        .rows_affected();
+        if deleted == 0 {
+            sqlx::query(&format!(
+                "INSERT INTO {MATCH_DIRTY_TABLE} (aggregate_type, aggregate_id, generation) VALUES (?, ?, 1) \
+                 ON CONFLICT (aggregate_type, aggregate_id) DO UPDATE SET generation = generation + 1"
+            ))
+            .bind(record.kind.as_str())
+            .bind(&record.aggregate_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(backend("marking a record dirty again"))?;
+        }
     }
     Ok(())
 }
