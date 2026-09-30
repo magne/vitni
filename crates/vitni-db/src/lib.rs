@@ -19,6 +19,8 @@
 #[cfg(feature = "sqlite")]
 mod geo_index;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
+mod match_keys;
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod place_succession_index;
 #[cfg(feature = "postgres")]
 mod postgres;
@@ -40,6 +42,8 @@ mod store;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod tables;
 
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+pub use match_keys::{DirtyRecord, KeyedRecord};
 pub use raw::{ProjectionRow, RawEvent, RawEventKey, decode_raw_event, event_variants};
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use record_origins::{

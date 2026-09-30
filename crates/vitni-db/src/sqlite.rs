@@ -136,6 +136,11 @@ macro_rules! sqlite_store {
                     .map_err(|e| DbError::Backend(format!("creating place succession index: {e}")))?;
                 // The record origins index (ADR 0037 §4) is fed by every aggregate. A workspace
                 // whose log predates it gets it filled from that log below.
+                // The match keys blocking index (ADR 0038 §7): every commit marks the matchable
+                // aggregate it touched, and the app layer rekeys it before the next lookup.
+                crate::match_keys::sqlite::create_tables(&pool)
+                    .await
+                    .map_err(|e| DbError::Backend(format!("creating match keys index: {e}")))?;
                 let origins_are_new = crate::record_origins::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating record origins index: {e}")))?;
@@ -144,7 +149,7 @@ macro_rules! sqlite_store {
                     let $snake = sqlite_open_cqrs!(pool, repo, $wiring);
                     let $snake = sqlite_wire_place_indexes!($snake, pool, $snake).append_query(Box::new(
                         crate::record_origins::sqlite::RecordOriginsQuery::new(pool.clone(), $table_const),
-                    ));
+                    )).append_query(Box::new(crate::match_keys::sqlite::MatchDirtyQuery::new(pool.clone())));
                     if stale_tables.contains(&$table_const) {
                         tracing::info!(
                             table = $table_const,
@@ -213,6 +218,9 @@ macro_rules! sqlite_store {
                 // The record origins index is replayed from the raw events, after the projections
                 // its `live` flags are read from.
                 crate::record_origins::sqlite::clear_table(&self.pool).await?;
+                // The match keys need the name-culture packs, which only the app layer has: forgetting
+                // what the index was built under makes it rebuild on next use.
+                crate::match_keys::sqlite::clear_state(&self.pool).await?;
                 $(
                     replay_record_origins::<$State>(&self.pool, $table_const, $upcasters).await?;
                 )+
@@ -363,6 +371,52 @@ impl SqliteStore {
         kind: &str,
     ) -> Result<Option<crate::record_origins::OriginResolution>, DbError> {
         crate::record_origins::sqlite::resolve(&self.pool, dataset, record, item, kind).await
+    }
+
+    /// The fingerprint the match keys were built under, if any (ADR 0038 §7).
+    pub(crate) async fn match_keys_fingerprint(&self) -> Result<Option<String>, DbError> {
+        crate::match_keys::sqlite::fingerprint(&self.pool).await
+    }
+
+    /// Every matchable record touched since it was keyed.
+    pub(crate) async fn match_dirty(&self) -> Result<Vec<crate::match_keys::DirtyRecord>, DbError> {
+        crate::match_keys::sqlite::dirty(&self.pool).await
+    }
+
+    /// Replaces the keys of `records` and clears `cleared`.
+    pub(crate) async fn rekey_matches(
+        &self,
+        records: &[crate::match_keys::KeyedRecord],
+        cleared: &[crate::match_keys::DirtyRecord],
+    ) -> Result<(), DbError> {
+        crate::match_keys::sqlite::rekey(&self.pool, records, cleared).await
+    }
+
+    /// Replaces the whole match keys index.
+    pub(crate) async fn reset_match_keys(
+        &self,
+        fingerprint: &str,
+        records: &[crate::match_keys::KeyedRecord],
+        cleared: &[crate::match_keys::DirtyRecord],
+    ) -> Result<(), DbError> {
+        crate::match_keys::sqlite::reset(&self.pool, fingerprint, records, cleared).await
+    }
+
+    /// The ids of every record of `kind` holding a key `probe` meets.
+    pub(crate) async fn match_candidates(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+        probe: &vitni_core::matching::Probe,
+    ) -> Result<Vec<String>, DbError> {
+        crate::match_keys::sqlite::candidates(&self.pool, kind, probe).await
+    }
+
+    /// Every `(aggregate_id, key)` of `kind`.
+    pub(crate) async fn match_keys_of_kind(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+    ) -> Result<Vec<(String, String)>, DbError> {
+        crate::match_keys::sqlite::keys_of_kind(&self.pool, kind).await
     }
 
     /// Every record origins row, as text columns in a stable order — for comparing a live index to

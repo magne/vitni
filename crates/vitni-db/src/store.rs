@@ -659,6 +659,115 @@ impl Store {
         }
     }
 
+    /// The fingerprint of the keying rules and packs the match keys index was built under (ADR 0038
+    /// §7), or `None` when it must be built: a new workspace, or rebuilt projections.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn match_keys_fingerprint(&self) -> Result<Option<String>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.match_keys_fingerprint().await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.match_keys_fingerprint().await,
+        }
+    }
+
+    /// Every matchable record a commit touched since the app layer last keyed it.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn match_dirty(&self) -> Result<Vec<crate::match_keys::DirtyRecord>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.match_dirty().await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.match_dirty().await,
+        }
+    }
+
+    /// Replaces the keys of `records` and clears each of `cleared` at the generation read, in one
+    /// transaction: a record touched again meanwhile stays dirty.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn rekey_matches(
+        &self,
+        records: &[crate::match_keys::KeyedRecord],
+        cleared: &[crate::match_keys::DirtyRecord],
+    ) -> Result<(), DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.rekey_matches(records, cleared).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.rekey_matches(records, cleared).await,
+        }
+    }
+
+    /// Replaces the whole match keys index with `records`, built under `fingerprint`, and clears each of
+    /// `cleared` at the generation read, in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn reset_match_keys(
+        &self,
+        fingerprint: &str,
+        records: &[crate::match_keys::KeyedRecord],
+        cleared: &[crate::match_keys::DirtyRecord],
+    ) -> Result<(), DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.reset_match_keys(fingerprint, records, cleared).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.reset_match_keys(fingerprint, records, cleared).await,
+        }
+    }
+
+    /// The ids of every record of `kind` holding a key `probe` meets, in id order.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn match_candidates(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+        probe: &vitni_core::matching::Probe,
+    ) -> Result<Vec<String>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.match_candidates(kind, probe).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.match_candidates(kind, probe).await,
+        }
+    }
+
+    /// Every `(aggregate_id, key)` of `kind`, by id then key.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn match_keys_of_kind(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+    ) -> Result<Vec<(String, String)>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.match_keys_of_kind(kind).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.match_keys_of_kind(kind).await,
+        }
+    }
+
     /// Every record origins row as text columns, in an order independent of insertion — for tests
     /// comparing a live index with a rebuilt one.
     ///
