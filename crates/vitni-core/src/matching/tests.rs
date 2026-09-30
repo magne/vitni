@@ -440,7 +440,8 @@ fn a_parent_of_unknown_sex_is_neither_father_nor_mother() {
 fn a_patronymic_is_checked_against_the_candidate_father() {
     let census = ole_olsen();
     let patronymic = |father: &str| {
-        let b = with_parents(ole_olsen(), vec![relative(father, "Hansen", Sex::Male, None)]);
+        let farm = person("Ole", "Haugen", Sex::Male, born(on(1850, 3, 4), Some("Norge")));
+        let b = with_parents(farm, vec![relative(father, "Hansen", Sex::Male, None)]);
         feature(&assess(&census, &b), Feature::Patronymic).clone()
     };
     assert_eq!(patronymic("Ole").outcome, Outcome::Agree);
@@ -463,11 +464,21 @@ fn patronymic_stems_meet_their_fathers_names() {
     ] {
         let a = person("Anne", surname, Sex::Female, born(on(1850, 3, 4), Some("Norge")));
         let b = with_parents(
-            person("Anne", surname, Sex::Female, born(on(1850, 3, 4), Some("Norge"))),
+            person("Anne", "Brekke", Sex::Female, born(on(1850, 3, 4), Some("Norge"))),
             vec![relative(father, "", Sex::Male, None)],
         );
         let outcome = feature(&assess(&a, &b), Feature::Patronymic).outcome;
         assert_eq!(outcome, Outcome::Agree, "{surname} ↔ {father}");
+    }
+}
+
+#[test]
+fn a_patronymic_adds_nothing_where_the_surnames_already_agree() {
+    for father in ["Ole", "Hans"] {
+        let b = with_parents(ole_olsen(), vec![relative(father, "Hansen", Sex::Male, None)]);
+        let patronymic = feature(&assess(&ole_olsen(), &b), Feature::Patronymic).clone();
+        assert_eq!(patronymic.outcome, Outcome::Missing, "father {father}: {patronymic:?}");
+        assert!(patronymic.weight.abs() < f64::EPSILON);
     }
 }
 

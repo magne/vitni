@@ -71,7 +71,7 @@ impl CultureId {
 pub struct EngineVersion(pub u32);
 
 /// The engine version of this build. Bump it when a comparator, weight or shipped pack changes scores.
-pub const ENGINE_VERSION: EngineVersion = EngineVersion(2);
+pub const ENGINE_VERSION: EngineVersion = EngineVersion(3);
 
 /// How sure the engine is that two records describe one individual.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -308,9 +308,14 @@ fn person_assessment(
         estimate(&a.vitals, VitalKind::Death),
         estimate(&b.vitals, VitalKind::Death),
     );
+    let surname = compare_surname(a, b, applied);
+    let patronymic = match surname.outcome {
+        Outcome::Agree | Outcome::Partial(_) => missing(Feature::Patronymic, None, None),
+        Outcome::Disagree | Outcome::Missing | Outcome::Conflict => compare_patronymic(a, b, applied),
+    };
     let mut features = vec![
         compare_given(a, b, applied),
-        compare_surname(a, b, applied),
+        surname,
         compare_sex(a.sex.as_ref(), b.sex.as_ref()),
         compare_dates(Feature::Birth, birth_a.as_ref(), birth_b.as_ref(), weights::BIRTH),
         compare_dates(Feature::Death, death_a.as_ref(), death_b.as_ref(), weights::DEATH),
@@ -328,7 +333,7 @@ fn person_assessment(
         ),
     ];
     features.extend(compare_relatives(a, b, applied));
-    features.push(compare_patronymic(a, b, applied));
+    features.push(patronymic);
     features.push(compare_occupations(a, b, applied));
     features.extend(lifespan_conflict(death_a.as_ref(), birth_b.as_ref()));
     features.extend(lifespan_conflict(death_b.as_ref(), birth_a.as_ref()));
