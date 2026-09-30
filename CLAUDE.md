@@ -84,7 +84,7 @@ Each crate's `lib.rs` module header holds the authoritative description; this ta
 | `vitni-i18n` | Shared Fluent plumbing (ADR 0003): the workspace > shared-app > embedded override chain and locale fallback. |
 | `vitni-plugin-host` | WASM component host (ADR 0007, 0011, 0014): Wasmtime, deny-by-default capabilities over one versioned WIT world, fuel + memory limits. Sits above `vitni-app`, driving use-cases under an `AgentKind::Software` session. |
 | `vitni-interchange` | The format-neutral leaf value vocabulary shared by the interchange formats — simple and serde-free; richer concerns stay in core. |
-| `vitni-gedcom`, `vitni-gramps-xml`, `vitni-digitalarkivet` | Pure parse/emit crates — the format logic of the `plugins/*` glue, free of WASM/host types so `--workspace` unit-tests them. Digitalarkivet fixtures (`…/tests/fixtures/`) are verbatim captures — **never reformat them** (prek skips its whitespace/EOF fixers there). |
+| `vitni-gedcom`, `vitni-gramps-xml`, `vitni-digitalarkivet` | Pure parse/emit crates — the format logic of the `plugins/*` glue, free of WASM/host types so `--workspace` unit-tests them. Digitalarkivet's `…/tests/fixtures/` still holds five saved pages that ADR 0042 does not allow, until #446 replaces them. Don't add to them, and don't reformat them either (prek skips its whitespace/EOF fixers there). |
 | `vitni` | The `vitni` launcher binary (ADR 0035): the GUI with no arguments, the CLI with any, both as in-process library calls. Holds no logic of its own. |
 | `xtask` (repo root, not `crates/*`) | Repository task runner, not shipped. Aliased in `.cargo/config.toml`. |
 
@@ -270,6 +270,17 @@ Clippy still runs `--all-targets`, so the bench code stays linted. Run benches d
   regardless**; `cargo deny check` enforces that, and its per-crate `[[licenses.exceptions]]` cover
   only this repo's own AGPL crates. **Never copy Gramps (GPLv2+) source** — the Gramps-derived model
   is a clean-room reimplementation; copying its code would force a copyleft relicense.
+- **A fixture is committed only if we may redistribute it (ADR 0042).** A crate's licence does not
+  cover a file just because the file sits in the crate. Every file under a `tests/fixtures/` tree or
+  `crates/vitni-core/matching/corpus/` must be one of four kinds:
+  - `invented`: made up for the test;
+  - `generated`: written by a named xtask;
+  - `licensed`: under a redistributable licence, with that licence recorded;
+  - `transcribed-facts`: facts from public records, with source URLs.
+
+  Never save an archive's or website's page as a fixture. List it in the external manifest, fetched
+  locally, instead (#447). Removing a file from history is the takedown procedure in
+  [`docs/development.md`](docs/development.md#takedown-removing-a-file-from-history).
 
 ## Code navigation
 

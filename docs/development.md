@@ -300,6 +300,86 @@ not.
 - **Only mark a pair `hard` if the engine surfaces it.** A true match the engine misses today goes in
   without `hard`, so it is reported as misjudged; add `hard` in the change that fixes it.
 
+## Test fixtures and their provenance
+
+A fixture is committed only if the project may redistribute it ([ADR 0042](adr/0042-test-fixture-provenance.md)).
+That covers every `tests/fixtures/` tree and `crates/vitni-core/matching/corpus/`, and it gives a
+fixture one of four origins:
+
+- **`invented`**: data made up for the test.
+- **`generated`**: written by a named xtask, such as `cargo xtask backup-fixture`.
+- **`licensed`**: under a licence that permits redistribution, with the licence and attribution
+  recorded.
+- **`transcribed-facts`**: facts from public records, with each record's source URL, and no copied
+  pages.
+
+A page from Digitalarkivet or any other archive is none of these, so it goes in the external tier: a
+manifest of URLs, rights and expected facts, fetched locally and checked by opt-in tests. The
+external tier is #447, the `PROVENANCE.toml` declarations and `cargo xtask fixture-guard` are #448.
+Until #446 replaces them, the five Digitalarkivet captures under
+`crates/vitni-digitalarkivet/tests/fixtures/` are the one exception.
+
+### Takedown: removing a file from history
+
+The pre-ADR captures stay in existing commits (ADR 0042 §5). If a rights holder asks for a file to be
+removed, removing it from the tree is not enough: every commit that ever held it has to be rewritten.
+The procedure below was run against this repository on 2026-09-30 (without the push).
+
+1. **Find every path the file ever had.** A rename leaves the old path in history, so look it up
+   instead of assuming the current one. The Digitalarkivet captures, for example, also live under
+   `crates/genealogy-digitalarkivet/`, from before the crate was renamed.
+
+   ```bash
+   git log --all --format= --name-only --diff-filter=AR -M -- '*digitalarkivet/tests/fixtures/*' | sort -u
+   ```
+
+2. **Rewrite a fresh mirror clone.** `git filter-repo` refuses a repository that is not freshly
+   cloned; a clone from a local path needs `--no-local`. If it isn't installed, `uvx git-filter-repo`
+   runs it.
+
+   ```bash
+   git clone --mirror git@github.com:magne/vitni.git vitni-mirror.git
+   cd vitni-mirror.git
+   uvx git-filter-repo --invert-paths --path-glob '*digitalarkivet/tests/fixtures/*'
+   ```
+
+3. **Check that nothing is left**, by path and by content. The second loop runs from the working
+   checkout, which still holds the files:
+
+   ```bash
+   git rev-list --objects --all | rg 'digitalarkivet/tests/fixtures'   # expect no output
+   for f in crates/vitni-digitalarkivet/tests/fixtures/*/*.html; do
+     git -C vitni-mirror.git cat-file -e "$(git hash-object "$f")" 2>/dev/null && echo "still present: $f"
+   done
+   ```
+
+   `git rev-list --all | wc -l` should give the same commit count as before. `git filter-repo` drops a
+   commit only if it becomes empty, and the capture commits all changed other files too.
+
+4. **Force-push the branches and tags.** Before you push:
+   - lift the branch protection on `main` in the repository settings, since it blocks force-pushes;
+   - re-add the remote, because `git filter-repo` removes `origin` to prevent an accidental push.
+
+   Don't use `--mirror`: the clone carries GitHub's read-only `refs/pull/*`, and a mirror push fails
+   on them. Push the branches and tags instead, then restore the protection:
+
+   ```bash
+   git remote add origin git@github.com:magne/vitni.git
+   git push --force --all origin
+   git push --force --tags origin
+   ```
+5. **Ask GitHub Support to purge the old objects.** GitHub keeps the `refs/pull/*` refs and cached
+   views of old commits, and those still serve the removed file until Support deletes them.
+6. **Tell everyone with a clone to re-clone.** A clone made before the rewrite still holds the file,
+   and pushing it back would restore it.
+
+What it costs:
+
+- Every SHA from the first commit that touched the file onward changes. For the captures that means
+  everything from 2026-07-19.
+- The GPG signatures on rewritten commits are lost.
+- Links to old commit SHAs in issues, PRs and docs stop resolving.
+
 ## Repository conventions
 
 The ones that will fail a review if missed:
