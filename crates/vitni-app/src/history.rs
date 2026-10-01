@@ -25,6 +25,7 @@ use vitni_core::family::FamilyView;
 use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use vitni_core::ids::{AssertionId, ImportRunId};
 use vitni_core::import_run::ImportRunView;
+use vitni_core::matching::MatchEvidence;
 use vitni_core::media::MediaView;
 use vitni_core::media::command::{MediaCommand, MediaCommandEnvelope};
 use vitni_core::note::NoteView;
@@ -70,6 +71,12 @@ pub enum ActivityDetail {
     Fact {
         /// The asserted fact's kind (Birth, Death, Occupation, …).
         fact_type: FactType,
+    },
+    /// An identity decision made on the matching engine's assessment (ADR 0039 §2): what the
+    /// operator was shown when they decided.
+    IdentityDecision {
+        /// The assessment recorded on the decision.
+        assessment: MatchEvidence,
     },
     /// One import run's entries, folded into a single row (ADR 0037 §5).
     ImportRun {
@@ -1078,7 +1085,8 @@ async fn label_runs(store: &Store, mut entries: Vec<ChangeLogEntry>) -> Result<V
 
 /// Extracts a payload-specific [`ActivityDetail`] when the event type alone is too coarse.
 ///
-/// Only Person `FactAsserted` carries one today (the fact's kind); every other Person variant — and
+/// Person `FactAsserted` carries the fact's kind, and an identity decision the assessment it was made
+/// on; every other Person variant — and
 /// every other aggregate — relies on the event-type verb the frontend localizes, so they return
 /// `None`. Decoding the concrete enum keeps this exhaustive: a new Person variant is a compile error
 /// here, not a silent fallthrough.
@@ -1105,8 +1113,11 @@ fn extract_detail(event: &StoredEvent) -> Option<ActivityDetail> {
         | PersonEventBody::RestrictionsChanged { .. }
         | PersonEventBody::HumanIdChanged { .. }
         | PersonEventBody::AssertionRetracted { .. }
-        | PersonEventBody::AssertionSuperseded { .. }
-        | PersonEventBody::PersonsMerged { .. } => None,
+        | PersonEventBody::AssertionSuperseded { .. } => None,
+        PersonEventBody::PersonsMerged { assessment, .. }
+        | PersonEventBody::PersonsDistinguished { assessment, .. } => {
+            assessment.map(|assessment| ActivityDetail::IdentityDecision { assessment })
+        }
     }
 }
 

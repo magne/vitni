@@ -85,6 +85,13 @@ impl Localizer {
                 reason = reason.clone()
             ),
             PersonError::SelfAssociation(id) => fl!(self.loader, "err-self-association", id = id.to_string()),
+            PersonError::DistinctFromItself(id) => fl!(self.loader, "err-distinct-from-itself", id = id.to_string()),
+            PersonError::IdentityDecided { person, other } => fl!(
+                self.loader,
+                "err-identity-decided",
+                person = person.to_string(),
+                other = other.to_string()
+            ),
         }
     }
 }

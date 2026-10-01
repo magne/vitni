@@ -1782,7 +1782,7 @@ impl Localizer {
                 };
                 fl!(self.loader, "history-import-run", source = source)
             }
-            None => self.event_type_summary(&entry.event_type),
+            Some(ActivityDetail::IdentityDecision { .. }) | None => self.event_type_summary(&entry.event_type),
         }
     }
 
@@ -1820,6 +1820,7 @@ impl Localizer {
             "AssertionRetracted" => fl!(self.loader, "history-assertion-retracted"),
             "AssertionSuperseded" => fl!(self.loader, "history-assertion-superseded"),
             "PersonsMerged" => fl!(self.loader, "history-persons-merged"),
+            "PersonsDistinguished" => fl!(self.loader, "history-persons-distinguished"),
             "CitationCreated" => fl!(self.loader, "history-citation-created"),
             "PageSet" => fl!(self.loader, "history-page-set"),
             "DateAsserted" => fl!(self.loader, "history-date-asserted"),
@@ -2896,6 +2897,42 @@ impl Localizer {
         }
     }
 
+    /// The one-line summary of the engine's assessment behind an identity decision (ADR 0039 §2):
+    /// "Matched at 97% · probable match · engine 4".
+    #[must_use]
+    pub fn identity_assessment(&self, evidence: &vitni_app::MatchEvidence) -> String {
+        fl!(
+            self.loader,
+            "identity-assessment",
+            score = evidence.percent(),
+            band = self.match_band(evidence.band),
+            engine = evidence.engine.0
+        )
+    }
+
+    /// The confirmation shown after "Not the same person".
+    #[must_use]
+    pub fn distinguish_result_summary(&self, other_human_id: &str, person_human_id: &str) -> String {
+        fl!(
+            self.loader,
+            "distinguish-result-summary",
+            other = other_human_id,
+            person = person_human_id
+        )
+    }
+
+    /// The blocked-decision card's heading when the pair already holds a live identity decision.
+    #[must_use]
+    pub fn identity_decided_heading(&self) -> String {
+        fl!(self.loader, "identity-decided-heading")
+    }
+
+    /// The blocked-decision card's guidance when the pair already holds a live identity decision.
+    #[must_use]
+    pub fn identity_decided_guidance(&self) -> String {
+        fl!(self.loader, "identity-decided-guidance")
+    }
+
     /// The merge compare grid's "Name" row label.
     #[must_use]
     pub fn merge_field_name(&self) -> String {
@@ -3219,6 +3256,7 @@ mod tests {
         "AssertionRetracted",
         "AssertionSuperseded",
         "PersonsMerged",
+        "PersonsDistinguished",
         "CitationCreated",
         "PageSet",
         "DateAsserted",

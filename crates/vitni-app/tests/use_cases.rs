@@ -8,23 +8,26 @@
 use std::collections::BTreeSet;
 
 use uuid::Uuid;
+use vitni_app::{ActivityDetail, EngineVersion, MatchBand, MatchEvidence};
 use vitni_app::{
-    AppDefaults, Centimorgans, DnaProvider, MutationMeta, NewCitation, NewDnaMatch, NewDnaTest, NewEvent, NewFact,
-    NewMedia, NewNote, NewPerson, NewPlace, NewRepository, NewSource, OperatorConfig, PersonNameParts, Provenance,
-    Session, TagChangeSet, TagTarget, Workspace, WorkspaceDefaults, add_name, assert_association,
-    assert_dna_test_haplogroup, assert_fact, attach_person_note, change_log_for_citation, change_log_for_dna_match,
-    change_log_for_dna_test, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
-    change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, change_log_for_tag,
-    commit_tag_change_set, create_citation, create_dna_test, create_event, create_media, create_note, create_person,
-    create_place, create_repository, create_source, create_tag, list_person_rows, list_persons, merge_persons,
-    observe_dna_match, rename_tag, set_dna_match_status, set_dna_test_provider, set_event_description,
-    set_family_restrictions, set_media_mime, set_note_text, set_page, set_place_code, set_repository_name,
-    set_source_author, show_dna_match, show_dna_test, show_person, show_source, tag_person, undo_assertion,
+    AppDefaults, Centimorgans, DnaProvider, IdentityDecision, MutationMeta, NewCitation, NewDnaMatch, NewDnaTest,
+    NewEvent, NewFact, NewMedia, NewNote, NewPerson, NewPlace, NewRepository, NewSource, OperatorConfig,
+    PersonNameParts, Provenance, Session, TagChangeSet, TagTarget, Workspace, WorkspaceDefaults, add_name,
+    assert_association, assert_dna_test_haplogroup, assert_fact, attach_person_note, change_log_for_citation,
+    change_log_for_dna_match, change_log_for_dna_test, change_log_for_event, change_log_for_family,
+    change_log_for_media, change_log_for_note, change_log_for_person, change_log_for_place, change_log_for_repository,
+    change_log_for_source, change_log_for_tag, commit_tag_change_set, create_citation, create_dna_test, create_event,
+    create_media, create_note, create_person, create_place, create_repository, create_source, create_tag,
+    distinguish_persons, list_person_rows, list_persons, merge_persons, observe_dna_match, rename_tag,
+    set_dna_match_status, set_dna_test_provider, set_event_description, set_family_restrictions, set_media_mime,
+    set_note_text, set_page, set_place_code, set_repository_name, set_source_author, show_dna_match, show_dna_test,
+    show_person, show_source, tag_person, undo_assertion,
 };
 use vitni_app::{CitingContext, CitingKind};
 use vitni_app::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
 use vitni_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, PlaceType, Restriction};
 use vitni_core::ids::AgentId;
+use vitni_core::person::PersonError;
 use vitni_core::provenance::{Agent, AgentKind, Confidence};
 
 fn operator() -> OperatorConfig {
@@ -1015,7 +1018,7 @@ async fn merge_links_the_merged_person_as_a_persona_of_the_survivor() {
         .await
         .expect("create merged");
 
-    let result = merge_persons(&ws, &session, &survivor, &merged, None)
+    let result = merge_persons(&ws, &session, &survivor, &merged, IdentityDecision::default())
         .await
         .expect("merge");
     assert_eq!(result.survivor.human_id, survivor);
@@ -1039,7 +1042,7 @@ async fn merging_a_person_with_itself_is_rejected_and_emits_no_event() {
         .await
         .expect("create");
 
-    let result = merge_persons(&ws, &session, &solo, &solo, None).await;
+    let result = merge_persons(&ws, &session, &solo, &solo, IdentityDecision::default()).await;
     assert!(matches!(result, Err(vitni_app::AppError::Domain(_))));
 
     let log = change_log_for_person(&ws, &solo).await.expect("log");
@@ -1057,10 +1060,10 @@ async fn merge_with_an_unknown_human_id_surfaces_person_not_found() {
         .await
         .expect("create");
 
-    let missing_merged = merge_persons(&ws, &session, &survivor, "I9999", None).await;
+    let missing_merged = merge_persons(&ws, &session, &survivor, "I9999", IdentityDecision::default()).await;
     assert!(matches!(missing_merged, Err(vitni_app::AppError::PersonNotFound(id)) if id == "I9999"));
 
-    let missing_survivor = merge_persons(&ws, &session, "I9998", &survivor, None).await;
+    let missing_survivor = merge_persons(&ws, &session, "I9998", &survivor, IdentityDecision::default()).await;
     assert!(matches!(missing_survivor, Err(vitni_app::AppError::PersonNotFound(id)) if id == "I9998"));
 }
 
@@ -1074,7 +1077,7 @@ async fn undoing_a_merge_removes_the_persona_link() {
     let merged = create_person(&ws, &session, new_person("John", "Smyth"), Provenance::default(), &[])
         .await
         .expect("create merged");
-    merge_persons(&ws, &session, &survivor, &merged, None)
+    merge_persons(&ws, &session, &survivor, &merged, IdentityDecision::default())
         .await
         .expect("merge");
 
@@ -1420,22 +1423,144 @@ async fn merge_records_the_supplied_rationale() {
         &session,
         &survivor,
         &merged,
-        Some("same individual per DNA match".to_owned()),
+        decision("same individual per DNA match"),
     )
     .await
     .expect("merge");
 
-    let entry = change_log_for_person(&ws, &survivor)
-        .await
-        .expect("log")
-        .into_iter()
-        .find(|entry| entry.event_type == "PersonsMerged")
-        .expect("the merge is logged");
+    let entry = logged(&ws, &survivor, "PersonsMerged").await;
     assert_eq!(
         entry.rationale.as_deref(),
         Some("same individual per DNA match"),
         "the merge rationale is recorded"
     );
+    assert_eq!(
+        entry.confidence,
+        Some(Confidence::High),
+        "the merge confidence is recorded"
+    );
+}
+
+/// An identity decision with a rationale and `High` confidence, as the compare screen supplies it.
+fn decision(rationale: &str) -> IdentityDecision {
+    IdentityDecision {
+        provenance: Provenance {
+            confidence: Some(Confidence::High),
+            rationale: Some(rationale.to_owned()),
+            ..Provenance::default()
+        },
+        assessment: None,
+    }
+}
+
+/// The newest entry of `event_type` in `human_id`'s change log.
+async fn logged(ws: &vitni_app::Workspace, human_id: &str, event_type: &str) -> vitni_app::ChangeLogEntry {
+    change_log_for_person(ws, human_id)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == event_type)
+        .expect("the decision is logged")
+}
+
+/// Two fresh persons, John Smith and John Smyth, by `human_id`.
+async fn smith_and_smyth(ws: &vitni_app::Workspace, session: &vitni_app::Session) -> (String, String) {
+    let smith = create_person(ws, session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("smith");
+    let smyth = create_person(ws, session, new_person("John", "Smyth"), Provenance::default(), &[])
+        .await
+        .expect("smyth");
+    (smith, smyth)
+}
+
+/// A merge without a judgment records none: no default confidence or rationale (ADR 0039 §1).
+#[tokio::test]
+async fn a_merge_without_a_judgment_records_no_confidence_or_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let (smith, smyth) = smith_and_smyth(&ws, &session).await;
+    merge_persons(&ws, &session, &smith, &smyth, IdentityDecision::default())
+        .await
+        .expect("merge");
+
+    let entry = logged(&ws, &smith, "PersonsMerged").await;
+    assert_eq!(entry.confidence, None);
+    assert_eq!(entry.rationale, None);
+}
+
+#[tokio::test]
+async fn distinguishing_two_persons_records_the_decision_on_the_first() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let (smith, smyth) = smith_and_smyth(&ws, &session).await;
+    distinguish_persons(&ws, &session, &smith, &smyth, decision("different fathers"))
+        .await
+        .expect("distinguish");
+
+    let entry = logged(&ws, &smith, "PersonsDistinguished").await;
+    assert_eq!(entry.rationale.as_deref(), Some("different fathers"));
+    assert_eq!(entry.confidence, Some(Confidence::High));
+    assert!(entry.can_undo, "a distinction can be undone");
+}
+
+#[tokio::test]
+async fn distinguishing_an_unknown_person_surfaces_person_not_found() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let (smith, _) = smith_and_smyth(&ws, &session).await;
+    let result = distinguish_persons(&ws, &session, &smith, "I9999", IdentityDecision::default()).await;
+    assert!(matches!(result, Err(vitni_app::AppError::PersonNotFound(id)) if id == "I9999"));
+}
+
+/// A decision on either person's stream blocks a second decision about the pair from the other side
+/// (ADR 0039 §4): a distinguished pair cannot be merged, a merged pair cannot be distinguished.
+#[tokio::test]
+async fn a_pair_decided_on_one_stream_cannot_be_decided_from_the_other() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let (smith, smyth) = smith_and_smyth(&ws, &session).await;
+    distinguish_persons(&ws, &session, &smith, &smyth, IdentityDecision::default())
+        .await
+        .expect("distinguish");
+    let merge = merge_persons(&ws, &session, &smyth, &smith, IdentityDecision::default()).await;
+    assert!(
+        matches!(
+            merge,
+            Err(vitni_app::AppError::Domain(PersonError::IdentityDecided { .. }))
+        ),
+        "{merge:?}"
+    );
+
+    let (anna, ann) = smith_and_smyth(&ws, &session).await;
+    merge_persons(&ws, &session, &anna, &ann, IdentityDecision::default())
+        .await
+        .expect("merge");
+    let distinguish = distinguish_persons(&ws, &session, &ann, &anna, IdentityDecision::default()).await;
+    assert!(
+        matches!(
+            distinguish,
+            Err(vitni_app::AppError::Domain(PersonError::IdentityDecided { .. }))
+        ),
+        "{distinguish:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_undone_distinction_lets_the_pair_be_merged() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let (smith, smyth) = smith_and_smyth(&ws, &session).await;
+    distinguish_persons(&ws, &session, &smith, &smyth, IdentityDecision::default())
+        .await
+        .expect("distinguish");
+    let entry = logged(&ws, &smith, "PersonsDistinguished").await;
+    undo_assertion(&ws, &session, &smith, &entry.assertion_id, None)
+        .await
+        .expect("undo");
+    merge_persons(&ws, &session, &smyth, &smith, IdentityDecision::default())
+        .await
+        .expect("an undone distinction no longer blocks the merge");
 }
 
 // PR24 per-aggregate coverage: each test performs one non-create mutation with a caller-supplied
@@ -3424,4 +3549,38 @@ async fn an_attached_note_carries_its_type_and_text() {
         Some("en"),
         "the attach ref carries the body's language"
     );
+}
+
+fn evidence() -> MatchEvidence {
+    MatchEvidence {
+        score_bp: 9712,
+        band: MatchBand::Probable,
+        engine: EngineVersion(4),
+        cultures: Vec::new(),
+        features: Vec::new(),
+    }
+}
+
+/// The history shows the assessment behind a decision (ADR 0039 §2), and none for a decision made
+/// without the engine.
+#[tokio::test]
+async fn an_identity_decision_logs_the_assessment_it_was_made_on() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let (smith, smyth) = smith_and_smyth(&ws, &session).await;
+    let (anna, ann) = smith_and_smyth(&ws, &session).await;
+    let assessed = IdentityDecision {
+        assessment: Some(evidence()),
+        ..IdentityDecision::default()
+    };
+    merge_persons(&ws, &session, &smith, &smyth, assessed.clone())
+        .await
+        .expect("merge");
+    distinguish_persons(&ws, &session, &anna, &ann, IdentityDecision::default())
+        .await
+        .expect("distinguish");
+
+    let detail = Some(ActivityDetail::IdentityDecision { assessment: evidence() });
+    assert_eq!(logged(&ws, &smith, "PersonsMerged").await.detail, detail);
+    assert_eq!(logged(&ws, &anna, "PersonsDistinguished").await.detail, None);
 }

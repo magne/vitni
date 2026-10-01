@@ -20,6 +20,9 @@ pub struct HistoryEntryVm {
     /// For an import-run row, the localized count of the changes it folds (e.g. `4 changes`), shown
     /// muted beside it; `None` for any other entry.
     pub count: Option<String>,
+    /// For an identity decision made on the matching engine's assessment, its localized summary
+    /// (ADR 0039 §2); `None` for any other entry.
+    pub evidence: Option<String>,
     /// For an import-run row, the entries it folds, newest first; empty otherwise.
     pub children: Vec<HistoryEntryVm>,
 }
@@ -36,13 +39,18 @@ impl HistoryEntryVm {
                 Some(loc.import_run_changes(*count)),
                 children.iter().map(|child| Self::from_entry(child, loc)).collect(),
             ),
-            Some(ActivityDetail::Fact { .. }) | None => (None, Vec::new()),
+            Some(ActivityDetail::Fact { .. } | ActivityDetail::IdentityDecision { .. }) | None => (None, Vec::new()),
+        };
+        let evidence = match &entry.detail {
+            Some(ActivityDetail::IdentityDecision { assessment }) => Some(loc.identity_assessment(assessment)),
+            Some(ActivityDetail::Fact { .. } | ActivityDetail::ImportRun { .. }) | None => None,
         };
         Self {
             when: friendly_timestamp(&entry.occurred_at),
             what: loc.change_summary(entry),
             who: loc.operator_line(entry),
             why: entry.rationale.clone(),
+            evidence,
             assertion_id: entry.assertion_id.clone(),
             can_undo: entry.can_undo,
             count,
@@ -114,7 +122,7 @@ impl ActivityVm {
                     .map(|child| Self::from_entry(child, loc, names))
                     .collect(),
             ),
-            Some(ActivityDetail::Fact { .. }) | None => (None, Vec::new()),
+            Some(ActivityDetail::Fact { .. } | ActivityDetail::IdentityDecision { .. }) | None => (None, Vec::new()),
         };
         Self {
             when: friendly_timestamp(&entry.occurred_at),
@@ -153,6 +161,7 @@ mod tests {
             assertion_id: assertion_id.to_owned(),
             can_undo,
             count: None,
+            evidence: None,
             children: Vec::new(),
         }
     }

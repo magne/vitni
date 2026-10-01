@@ -15,6 +15,7 @@ use crate::assertions::{Envelope, EventBody};
 use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Restriction, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
+use crate::matching::MatchEvidence;
 use crate::name::PersonName;
 use crate::text::{Attribute, ExternalId, MediaRef};
 
@@ -157,6 +158,22 @@ pub enum PersonEventBody {
         surviving: PersonId,
         /// The person merged into the survivor.
         merged: PersonId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a merge made
+        /// without the engine.
+        #[serde(default)]
+        assessment: Option<MatchEvidence>,
+    },
+    /// Two persons were concluded to be different individuals (ADR 0039 §1), so the pair is never
+    /// proposed again.
+    PersonsDistinguished {
+        /// The person the decision was recorded on.
+        person: PersonId,
+        /// The person it is not.
+        other: PersonId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a decision
+        /// made without the engine.
+        #[serde(default)]
+        assessment: Option<MatchEvidence>,
     },
 }
 
@@ -180,6 +197,7 @@ impl EventBody for PersonEventBody {
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
             Self::PersonsMerged { .. } => "PersonsMerged",
+            Self::PersonsDistinguished { .. } => "PersonsDistinguished",
         }
     }
 

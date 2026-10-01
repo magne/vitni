@@ -21,3 +21,5 @@ err-missing-assertion = påstand { $id } finnes ikke eller er allerede trukket t
 err-invalid-date = ugyldig dato: { $detail }
 err-merge-conflict = personer { $surviving } og { $merged } kan ikke slås sammen: { $reason }
 err-self-association = person { $id } kan ikke knyttes til seg selv
+err-distinct-from-itself = person { $id } kan ikke skilles fra seg selv
+err-identity-decided = personene { $person } og { $other } har allerede en gjeldende identitetsavgjørelse; angre den først

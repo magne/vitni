@@ -41,4 +41,16 @@ pub enum PersonError {
     /// A person was associated with itself.
     #[error("person {0} cannot be associated with itself")]
     SelfAssociation(PersonId),
+    /// A person was distinguished from itself.
+    #[error("person {0} cannot be distinguished from itself")]
+    DistinctFromItself(PersonId),
+    /// The pair already holds a live identity decision — merged or distinguished — on this person
+    /// (ADR 0039 §1); undo it before deciding again.
+    #[error("persons {person} and {other} already have a live identity decision")]
+    IdentityDecided {
+        /// The person the decision was asked on.
+        person: PersonId,
+        /// The other person of the pair.
+        other: PersonId,
+    },
 }

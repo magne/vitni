@@ -15,6 +15,7 @@ use vitni_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, Par
 use vitni_core::event::EventView;
 use vitni_core::fact::Fact;
 use vitni_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
+use vitni_core::matching::MatchEvidence;
 use vitni_core::name::{NameType, PersonName, Surname};
 use vitni_core::person::PersonView;
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
@@ -768,41 +769,50 @@ pub struct MergeResult {
     pub still_referenced: usize,
 }
 
+/// The user's identity decision about a pair (ADR 0039 §1, §2): their surety and reason, and the
+/// matching engine's assessment they decided on. Nothing is defaulted — a decision made without a
+/// judgment records none, and one made without the engine carries no assessment.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct IdentityDecision {
+    /// The operator's confidence and rationale.
+    pub provenance: Provenance,
+    /// The engine's assessment of the pair as the user was shown it.
+    pub assessment: Option<MatchEvidence>,
+}
+
 /// Merges `merged_human_id` into `surviving_human_id`, recording a same-as link on the survivor.
 ///
-/// Emits a single `MergePersons` event on the *surviving* person's stream (data-model §9). This is
-/// non-destructive: the merged person's own event stream, and every existing Family/Association/
-/// Participation record naming their id, is left exactly as it was — `merge_persons` does not
-/// re-point any cross-aggregate reference (no core command exists to do that, and none is added
-/// here). The merged person becomes a linked persona of the survivor; both streams are retained.
+/// Emits a single `PersonsMerged` event on the *surviving* person's stream (data-model §9), carrying
+/// the decision's provenance and assessment. This is non-destructive: the merged person's own event
+/// stream, and every existing Family/Association/Participation record naming their id, is left exactly
+/// as it was — `merge_persons` does not re-point any cross-aggregate reference. The merged person
+/// becomes a linked persona of the survivor; both streams are retained.
 ///
 /// # Errors
 ///
-/// [`AppError::PersonNotFound`] if either `human_id` does not resolve, [`AppError::Domain`] (via
-/// [`PersonError::MergeConflict`](vitni_core::person::PersonError::MergeConflict)) if the two
-/// `human_id`s resolve to the same person, or a workspace/store error.
+/// [`AppError::PersonNotFound`] if either `human_id` does not resolve; [`AppError::Domain`] with
+/// [`PersonError::MergeConflict`] if they resolve to the same person, or
+/// [`PersonError::IdentityDecided`] if either person already holds a live decision about the other;
+/// or a workspace/store error.
 pub async fn merge_persons(
     workspace: &Workspace,
     session: &Session,
     surviving_human_id: &str,
     merged_human_id: &str,
-    rationale: Option<String>,
+    decision: IdentityDecision,
 ) -> Result<MergeResult, AppError> {
     let store = workspace.store();
-    let surviving = resolve_person_id(store, surviving_human_id).await?;
-    let merged = resolve_person_id(store, merged_human_id).await?;
-    let provenance = Provenance {
-        confidence: Some(Confidence::Normal),
-        rationale: Some(rationale.unwrap_or_else(|| "Merge".to_owned())),
-        evidence_analysis: None,
-        origin: None,
-    };
+    let (surviving, merged) = undecided_pair(store, surviving_human_id, merged_human_id).await?;
     execute_person_command(
         store,
         session,
         &surviving.to_string(),
-        PersonCommand::MergePersons { surviving, merged },
-        provenance,
+        PersonCommand::MergePersons {
+            surviving,
+            merged,
+            assessment: decision.assessment,
+        },
+        decision.provenance,
         Vec::new(),
     )
     .await?;
@@ -816,6 +826,60 @@ pub async fn merge_persons(
         merged_human_id: merged_human_id.to_owned(),
         still_referenced,
     })
+}
+
+/// Records that `person_human_id` and `other_human_id` are different individuals (ADR 0039 §1), so
+/// the pair is never proposed as a duplicate again. Emits a single `PersonsDistinguished` event on
+/// `person_human_id`'s stream, carrying the decision's provenance and assessment; undoing it lifts the
+/// decision.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if either `human_id` does not resolve; [`AppError::Domain`] with
+/// [`PersonError::DistinctFromItself`] if they resolve to the same person, or
+/// [`PersonError::IdentityDecided`] if either person already holds a live decision about the other;
+/// or a workspace/store error.
+pub async fn distinguish_persons(
+    workspace: &Workspace,
+    session: &Session,
+    person_human_id: &str,
+    other_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let (person, other) = undecided_pair(store, person_human_id, other_human_id).await?;
+    execute_person_command(
+        store,
+        session,
+        &person.to_string(),
+        PersonCommand::DistinguishPersons {
+            person,
+            other,
+            assessment: decision.assessment,
+        },
+        decision.provenance,
+        Vec::new(),
+    )
+    .await
+}
+
+/// Resolves a pair about to be decided, refusing it when the *second* person's stream already holds a
+/// live decision about the first — the cross-stream half of the check the first person's `decide`
+/// makes on its own stream (ADR 0039 §4, against the lagging projection per ADR 0002).
+async fn undecided_pair(store: &Store, first: &str, second: &str) -> Result<(PersonId, PersonId), AppError> {
+    let first_id = resolve_person_id(store, first).await?;
+    let found = store.find_person(second).await?;
+    let Some((second_view, second_id)) = found.and_then(|view| view.person_id().map(|id| (view, id))) else {
+        return Err(AppError::PersonNotFound(second.to_owned()));
+    };
+    if second_view.merged().contains(&first_id) || second_view.distinguished().contains(&first_id) {
+        return Err(PersonError::IdentityDecided {
+            person: first_id,
+            other: second_id,
+        }
+        .into());
+    }
+    Ok((first_id, second_id))
 }
 
 /// Loads a single person's summary by `human_id`.

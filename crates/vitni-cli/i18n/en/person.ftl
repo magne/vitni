@@ -21,3 +21,5 @@ err-missing-assertion = assertion { $id } is not present or already retracted
 err-invalid-date = invalid date: { $detail }
 err-merge-conflict = persons { $surviving } and { $merged } cannot be merged: { $reason }
 err-self-association = person { $id } cannot be associated with itself
+err-distinct-from-itself = person { $id } cannot be distinguished from itself
+err-identity-decided = persons { $person } and { $other } already have a live identity decision; undo it first

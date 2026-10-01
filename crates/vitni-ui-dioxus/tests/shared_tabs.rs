@@ -125,6 +125,7 @@ fn history_rows() -> Vec<HistoryEntryVm> {
         assertion_id: "55555555-5555-7555-8555-555555555555".to_owned(),
         can_undo: true,
         count: None,
+        evidence: None,
         children: Vec::new(),
     }]
 }

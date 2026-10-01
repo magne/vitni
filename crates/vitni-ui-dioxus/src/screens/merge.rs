@@ -11,8 +11,14 @@
 //! `vitni_app::merge_persons` call, never a field-by-field reconciliation. The footer never claims
 //! "N relationships re-pointed" — it reports how many other records still *reference* the merged
 //! persona ([`Chrome`]/[`Localizer::merge_result_summary`](vitni_ui::Localizer)).
+//!
+//! *Not the same person* is the other decision (ADR 0039 §1): one `vitni_app::distinguish_persons`
+//! call. Either decision records the reason, confidence and engine assessment the wizard shows, and the
+//! pair then never returns to the duplicates table.
 
 use super::prelude::*;
+use super::shared::confidence_choices;
+use crate::components::SelectInput;
 use crate::i18n::Chrome;
 
 /// The screen's two modes: the duplicates table, or the compare/merge wizard for a chosen pair.
@@ -32,8 +38,9 @@ pub fn MergeScreen() -> Element {
     let chrome = use_context::<ChromeCtx>();
     let mut nav = use_context::<NavState>();
     let mut mode = use_signal(|| MergeMode::Duplicates);
-    let mut reason = use_signal(String::new);
+    let mut draft = use_signal(DecisionDraft::default);
     let mut blocked = use_signal(|| None::<MergeBlockedVm>);
+    let confidence_options = confidence_choices(state.data_loc());
 
     let duplicates_services = state.services().clone();
     let duplicates_data = use_resource(move || {
@@ -66,10 +73,35 @@ pub fn MergeScreen() -> Element {
     });
 
     let on_cancel = use_callback(move |()| {
-        reason.set(String::new());
+        draft.set(DecisionDraft::default());
         blocked.set(None);
         mode.set(MergeMode::Duplicates);
     });
+    // The decision is recorded with the assessment the compare view showed (ADR 0039 §2).
+    let judgment = move || {
+        let assessment = match compare_data.read_unchecked().as_ref() {
+            Some(Some(ScreenData::Loaded(IntentOutcome::MergeCompare(vm)))) => Some(vm.assessment.clone()),
+            _ => None,
+        };
+        let DecisionDraft { reason, confidence } = draft();
+        PairJudgment {
+            rationale: Some(reason),
+            confidence,
+            assessment,
+        }
+    };
+    // After either decision the pair has left the duplicates table: reset and go back to it.
+    let decided = use_callback(move |notice: String| {
+        nav.notify(notice);
+        draft.set(DecisionDraft::default());
+        nav.mark_changed();
+        mode.set(MergeMode::Duplicates);
+    });
+    let on_failure = use_callback(move |failure: MergeFailure| match failure {
+        MergeFailure::Blocked(vm) => blocked.set(Some(vm)),
+        MergeFailure::Other(message) => nav.notify_error(message),
+    });
+    let merge_services = state.services().clone();
     let on_merge = use_callback(move |()| {
         let MergeMode::Compare { surviving, merged } = mode() else {
             return;
@@ -77,23 +109,41 @@ pub fn MergeScreen() -> Element {
         let request = MergePersons {
             surviving_human_id: surviving,
             merged_human_id: merged,
-            rationale: Some(reason()),
+            judgment: judgment(),
         };
-        let services = state.services().clone();
+        let services = merge_services.clone();
         spawn(async move {
             blocked.set(None);
             match merge_persons(services, request).await {
-                Ok(result) => {
-                    nav.notify(result.summary);
-                    reason.set(String::new());
-                    nav.mark_changed();
-                    mode.set(MergeMode::Duplicates);
-                }
-                Err(MergeFailure::Blocked(vm)) => blocked.set(Some(vm)),
-                Err(MergeFailure::Other(message)) => nav.notify_error(message),
+                Ok(result) => decided.call(result.summary),
+                Err(failure) => on_failure.call(failure),
             }
         });
     });
+    let distinguish_services = state.services().clone();
+    let on_distinguish = use_callback(move |()| {
+        let MergeMode::Compare { surviving, merged } = mode() else {
+            return;
+        };
+        let request = DistinguishPersons {
+            person_human_id: surviving,
+            other_human_id: merged,
+            judgment: judgment(),
+        };
+        let services = distinguish_services.clone();
+        spawn(async move {
+            blocked.set(None);
+            match distinguish_persons(services, request).await {
+                Ok(notice) => decided.call(notice),
+                Err(failure) => on_failure.call(failure),
+            }
+        });
+    });
+    let actions = DecisionActions {
+        cancel: on_cancel,
+        merge: on_merge,
+        distinguish: on_distinguish,
+    };
 
     rsx! {
         div { style: "display:flex;flex-direction:column;gap:var(--sp-4)",
@@ -104,10 +154,15 @@ pub fn MergeScreen() -> Element {
                     &chrome.0,
                     &loading,
                     compare_data.read_unchecked().as_ref(),
-                    reason,
-                    blocked,
-                    on_merge,
-                    on_cancel,
+                    rsx! {
+                        Button { label: chrome.0.merge_back(), small: true, onclick: move |_| on_cancel.call(()) }
+                    },
+                    rsx! {
+                        if let Some(vm) = blocked() {
+                            {merge_blocked_card(&vm)}
+                        }
+                        {merge_wizard_foot(&chrome.0, confidence_options.clone(), draft, actions)}
+                    },
                 ),
             }
         }
@@ -206,54 +261,79 @@ pub fn DuplicatesTable(
     }
 }
 
-/// Renders the compare/merge wizard body: the loaded [`MergeCompareVm`]'s header row and field grid,
-/// plus the Cancel/Merge footer. `surviving`/`merged` are the `human_id`s the wizard was opened for
-/// (kept outside the resource so the Merge button can reference them without re-parsing the vm).
+/// Renders the compare/merge wizard body: `back`, then the loaded [`MergeCompareVm`]'s heading,
+/// assessment and field grid, then `tail` — the blocked-decision card and the decision foot, built by
+/// the screen.
 fn compare_body(
     chrome: &Chrome,
     loading: &str,
     data: Option<&Option<ScreenData>>,
-    reason: Signal<String>,
-    blocked: Signal<Option<MergeBlockedVm>>,
-    on_merge: Callback<()>,
-    on_cancel: Callback<()>,
+    back: Element,
+    tail: Element,
 ) -> Element {
-    let back = rsx! {
-        Button { label: chrome.merge_back(), small: true, onclick: move |_| on_cancel.call(()) }
-    };
-    let blocked_card = match blocked() {
-        Some(vm) => merge_blocked_card(&vm),
-        None => rsx! {},
-    };
     match data {
         None | Some(None) => rsx! { {back} p { class: "loading", "{loading}" } },
         Some(Some(ScreenData::Error(message))) => rsx! { {back} p { class: "empty", "{message}" } },
         Some(Some(ScreenData::Loaded(IntentOutcome::MergeCompare(vm)))) => rsx! {
             {back}
-            h2 { "{chrome.merge_wizard_heading(& vm.survivor.name, & vm.merged.name)}" }
+            {merge_compare_heading(chrome, vm)}
             MergeCompareGrid { vm: (**vm).clone() }
-            {blocked_card}
-            {merge_wizard_foot(chrome, reason, on_cancel, on_merge)}
+            {tail}
         },
         Some(Some(ScreenData::Loaded(_))) => rsx! { {back} },
     }
 }
 
-/// The compare/merge wizard's foot (`merge.html:191-202`): a labeled "Reason for merge" text input
-/// bound to `reason`, then the Cancel/Merge actions. Pure over its args (the reason signal and the
-/// two callbacks are passed in), so an SSR test renders it without an `AppCtx`. A blank input leaves
-/// `reason` empty; [`dispatch_merge`](vitni_ui::dispatch_merge) normalizes that to no rationale.
+/// The compare wizard's heading (`merge.html`): the pair, then the engine's assessment the decision
+/// will record. Pure over its args, so an SSR test renders it directly.
+pub fn merge_compare_heading(chrome: &Chrome, vm: &MergeCompareVm) -> Element {
+    rsx! {
+        h2 { style: "margin-bottom:var(--sp-1)", "{chrome.merge_wizard_heading(&vm.survivor.name, &vm.merged.name)}" }
+        p { class: "muted", style: "margin-top:0", "{vm.assessment_line}" }
+    }
+}
+
+/// What the operator records with either decision: their reason and confidence (ADR 0039 §1).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DecisionDraft {
+    /// The reason, as typed.
+    pub reason: String,
+    /// The confidence, or `None` when unset.
+    pub confidence: Option<ConfidenceLevel>,
+}
+
+/// The compare wizard foot's actions.
+#[derive(Clone, Copy, PartialEq)]
+pub struct DecisionActions {
+    /// Leave the wizard without deciding.
+    pub cancel: Callback<()>,
+    /// Merge the pair.
+    pub merge: Callback<()>,
+    /// Record that the pair are different people.
+    pub distinguish: Callback<()>,
+}
+
+/// The compare/merge wizard's foot (`merge.html`): the reason and confidence recorded with the
+/// decision, bound to `draft`, then Cancel, *Not the same person* and *Merge (reversible)*. Pure over
+/// its args (the confidence options arrive localized), so an SSR test renders it without an `AppCtx`.
+/// A blank reason records no rationale ([`PairJudgment::decision`]).
 pub fn merge_wizard_foot(
     chrome: &Chrome,
-    reason: Signal<String>,
-    on_cancel: Callback<()>,
-    on_merge: Callback<()>,
+    confidence_options: Vec<SelectChoice>,
+    draft: Signal<DecisionDraft>,
+    actions: DecisionActions,
 ) -> Element {
-    let mut reason = reason;
+    let mut draft = draft;
+    let DecisionDraft { reason, confidence } = draft();
+    let confidence_index = confidence
+        .and_then(|level| ConfidenceLevel::all().iter().position(|l| *l == level))
+        .map(|index| index.to_string())
+        .unwrap_or_default();
+    let confidence_label = chrome.merge_confidence_label();
     rsx! {
         div {
             class: "card",
-            style: "display:flex;align-items:center;gap:var(--sp-4);flex-wrap:wrap",
+            style: "display:flex;align-items:flex-end;gap:var(--sp-4);flex-wrap:wrap",
             div { class: "field", style: "flex:1;min-width:260px;margin:0",
                 label { r#for: "merge-reason",
                     "{chrome.merge_reason_label()} "
@@ -263,30 +343,48 @@ pub fn merge_wizard_foot(
                     id: "merge-reason",
                     name: "merge-reason",
                     value: "{reason}",
-                    oninput: move |event: FormEvent| reason.set(event.value()),
+                    oninput: move |event: FormEvent| draft.write().reason = event.value(),
+                }
+            }
+            div { class: "field", style: "margin:0",
+                label { r#for: "merge-confidence", "{confidence_label}" }
+                SelectInput {
+                    id: "merge-confidence",
+                    style: "width:auto",
+                    aria_label: "{confidence_label}",
+                    selected: confidence_index,
+                    options: confidence_options,
+                    onchange: move |event: FormEvent| {
+                        let index = event.value().parse::<usize>().ok();
+                        draft.write().confidence = index.and_then(|i| ConfidenceLevel::all().get(i).copied());
+                    },
                 }
             }
             div { class: "spacer" }
-            Button { label: chrome.merge_cancel(), onclick: move |_| on_cancel.call(()) }
+            Button { label: chrome.merge_cancel(), onclick: move |_| actions.cancel.call(()) }
+            Button { label: chrome.merge_distinguish(), onclick: move |_| actions.distinguish.call(()) }
             Button {
                 label: chrome.merge_submit(),
                 variant: ButtonVariant::Primary,
-                onclick: move |_| on_merge.call(()),
+                onclick: move |_| actions.merge.call(()),
             }
         }
     }
 }
 
-/// The blocked-merge card (`merge.html:181-188`): shown when the decision core rejects the merge
-/// with a [`MergeConflict`](vitni_ui::MergeBlockedVm). An error-bordered `role="alert"` card with
-/// the localized heading + guidance and the core's own reason detail. Pure over `vm` (already
+/// The blocked-decision card (`merge.html:181-188`): shown when the decision core rejects the merge
+/// with a [`MergeConflict`](vitni_ui::MergeBlockedVm), or either decision because the pair is already
+/// decided. An error-bordered `role="alert"` card with the localized heading + guidance and the core's
+/// own reason detail, when it has one. Pure over `vm` (already
 /// localized), so an SSR test renders it directly.
 pub fn merge_blocked_card(vm: &MergeBlockedVm) -> Element {
     rsx! {
         div { class: "card blocked", role: "alert",
             h3 { "{vm.heading}" }
             div { class: "muted", style: "font-size:var(--fs-sm)", "{vm.guidance}" }
-            div { class: "mono", style: "margin-top:var(--sp-2);font-size:var(--fs-sm)", "{vm.detail}" }
+            if !vm.detail.is_empty() {
+                div { class: "mono", style: "margin-top:var(--sp-2);font-size:var(--fs-sm)", "{vm.detail}" }
+            }
         }
     }
 }

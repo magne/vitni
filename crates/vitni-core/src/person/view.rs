@@ -155,6 +155,13 @@ impl PersonView {
         self.state.merged.iter().map(|m| m.value).collect()
     }
 
+    /// The ids of persons concluded to be different individuals from this one (ADR 0039 §1) — whose
+    /// `PersonsDistinguished` assertion has not been undone.
+    #[must_use]
+    pub fn distinguished(&self) -> Vec<PersonId> {
+        self.state.distinguished.iter().map(|d| d.value).collect()
+    }
+
     /// Currently-live asserted names, each paired with the `AssertionId` that introduced it — the
     /// read side of the per-row correction (Edit supersedes it, Retract retracts it, data-model §8).
     #[must_use]

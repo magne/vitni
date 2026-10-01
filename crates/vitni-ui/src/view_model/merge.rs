@@ -31,9 +31,10 @@ impl RelationshipVm {
     }
 }
 
-/// A blocked merge (Phase 5 PR 30; `merge.html:181-188`): the decision core rejected `MergePersons`
+/// A blocked decision (Phase 5 PR 30; `merge.html:181-188`): the decision core rejected `MergePersons`
 /// with [`PersonError::MergeConflict`](vitni_app::PersonError) because the two records carry
-/// contradictions that cannot both be true — nothing was written.
+/// contradictions that cannot both be true, or rejected a merge or distinction with
+/// `IdentityDecided` because the pair already holds a live decision — nothing was written.
 ///
 /// `heading` and `guidance` are localized chrome; `detail` is the core's own reason string
 /// (developer/domain text, English), surfaced verbatim so the operator sees what contradicts.
@@ -43,7 +44,8 @@ pub struct MergeBlockedVm {
     pub heading: String,
     /// The localized "resolve the contradiction first" guidance.
     pub guidance: String,
-    /// The core's reason the merge was refused (not localized — domain text).
+    /// The core's reason the merge was refused (not localized — domain text); empty when the
+    /// guidance says it all.
     pub detail: String,
 }
 
@@ -55,14 +57,26 @@ impl MergeBlockedVm {
         let vitni_app::AppError::Domain(person_error) = error else {
             return None;
         };
-        let vitni_app::PersonError::MergeConflict { reason, .. } = person_error else {
-            return None;
-        };
-        Some(Self {
-            heading: loc.merge_blocked_heading(),
-            guidance: loc.merge_blocked_guidance(),
-            detail: reason.clone(),
-        })
+        match person_error {
+            vitni_app::PersonError::MergeConflict { reason, .. } => Some(Self {
+                heading: loc.merge_blocked_heading(),
+                guidance: loc.merge_blocked_guidance(),
+                detail: reason.clone(),
+            }),
+            vitni_app::PersonError::IdentityDecided { .. } => Some(Self {
+                heading: loc.identity_decided_heading(),
+                guidance: loc.identity_decided_guidance(),
+                detail: String::new(),
+            }),
+            vitni_app::PersonError::NotFound(_)
+            | vitni_app::PersonError::AlreadyExists(_)
+            | vitni_app::PersonError::EmptyName
+            | vitni_app::PersonError::RetractsMissingAssertion(_)
+            | vitni_app::PersonError::SupersedesMissingAssertion(_)
+            | vitni_app::PersonError::InvalidDate(_)
+            | vitni_app::PersonError::SelfAssociation(_)
+            | vitni_app::PersonError::DistinctFromItself(_) => None,
+        }
     }
 }
 
@@ -196,13 +210,25 @@ pub struct MergeCompareVm {
     pub differs_label: String,
     /// The localized accessible name / tooltip for the "differs" badge.
     pub differs_title: String,
+    /// The engine's assessment of the pair, recorded on whichever decision the operator takes
+    /// (ADR 0039 §2).
+    pub assessment: vitni_app::MatchEvidence,
+    /// The localized one-line summary of [`assessment`](Self::assessment): score, band, engine.
+    pub assessment_line: String,
 }
 
 impl MergeCompareVm {
     /// Builds the view-model from the two persons' summaries, comparing name/birth/death/occupation
-    /// (the fields the mockup shows) — only fields the summaries actually carry, no fabricated rows.
+    /// (the fields the mockup shows) — only fields the summaries actually carry, no fabricated rows —
+    /// and the engine's assessment of the pair.
     #[must_use]
-    pub fn build(survivor: &vitni_app::PersonSummary, merged: &vitni_app::PersonSummary, loc: &Localizer) -> Self {
+    pub fn build(
+        survivor: &vitni_app::PersonSummary,
+        merged: &vitni_app::PersonSummary,
+        assessment: &vitni_app::MatchAssessment,
+        loc: &Localizer,
+    ) -> Self {
+        let assessment = assessment.evidence();
         let fields = vec![
             MergeFieldRowVm::new(
                 loc.merge_field_name(),
@@ -224,6 +250,8 @@ impl MergeCompareVm {
             fields,
             differs_label: loc.merge_differs(),
             differs_title: loc.merge_differs_title(),
+            assessment_line: loc.identity_assessment(&assessment),
+            assessment,
         }
     }
 }

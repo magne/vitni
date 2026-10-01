@@ -24,6 +24,7 @@ fn timeline() -> Element {
                 undo_text: "Undo".to_owned(),
                 undo_label: "Undo: Name asserted".to_owned(),
                 count: None,
+                evidence: None,
             }],
             onundo: move |_| {},
         }
@@ -44,6 +45,7 @@ fn run_timeline() -> Element {
                 undo_text: "Undo".to_owned(),
                 undo_label: "Undo: Imported from tree.ged".to_owned(),
                 count: Some("4 changes".to_owned()),
+                evidence: None,
             }],
             onundo: move |_| {},
         }
@@ -261,5 +263,37 @@ fn dashboard_renders_stats_activity_and_data_quality() {
         html.matches("<h1").count(),
         1,
         "the dashboard carries exactly one <h1>:\n{html}"
+    );
+}
+
+/// Renders the audit timeline with a merge decided on the engine's assessment.
+fn decision_timeline() -> Element {
+    rsx! {
+        HistoryTimeline {
+            entries: vec![HistoryEntry {
+                when: "2026-06-22 14:35".to_owned(),
+                what: "Persona merged".to_owned(),
+                who: "magne · High".to_owned(),
+                why: Some("same household".to_owned()),
+                assertion_id: "a1".to_owned(),
+                can_undo: true,
+                undo_text: "Undo".to_owned(),
+                undo_label: "Undo: Persona merged".to_owned(),
+                count: None,
+                evidence: Some("Matched at 97% · probable match · engine 4".to_owned()),
+            }],
+            onundo: move |_| {},
+        }
+    }
+}
+
+#[test]
+fn a_decision_entry_shows_the_assessment_it_was_made_on() {
+    let mut vdom = VirtualDom::new(decision_timeline);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"<div class="tl-evidence muted">Matched at 97% · probable match · engine 4</div>"#),
+        "the assessment renders as its own muted line:\n{html}"
     );
 }

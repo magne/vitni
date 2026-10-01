@@ -84,6 +84,7 @@ fn gallery() -> Element {
                 undo_text: "Undo".to_owned(),
                 undo_label: "Undo: Birth asserted".to_owned(),
                 count: None,
+                evidence: None,
             }],
             onundo: move |_| {},
         }

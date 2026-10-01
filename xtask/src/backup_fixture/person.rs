@@ -1,8 +1,9 @@
 //! Person fixture events: every `PersonEventBody` variant.
 //!
 //! Four persons: `Ingrid` (the hero, exercising every variant), `Ola` (her spouse, also the
-//! `family`/`dna_match` partner), `Kari` (their child, for `family`), and a duplicate `Ingrid`
-//! record later merged into the hero via `PersonsMerged`.
+//! `family`/`dna_match` partner), `Kari` (their child, for `family`, and the person `PersonsDistinguished`
+//! records the hero is not), and a duplicate `Ingrid` record later merged into the hero via
+//! `PersonsMerged`.
 
 use std::collections::BTreeSet;
 
@@ -10,6 +11,9 @@ use vitni_core::age::Age;
 use vitni_core::enums::{AssociationRole, EvidenceLevel, FactType, ParticipantRole, Restriction, Sex};
 use vitni_core::fact::Fact;
 use vitni_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
+use vitni_core::matching::{
+    CultureId, EngineVersion, Feature, FeatureEvidence, MatchBand, MatchEvidence, OutcomeEvidence,
+};
 use vitni_core::name::{LanguageTag, NameType, PersonName, Surname};
 use vitni_core::person::{PersonEvent, PersonEventBody, PersonState};
 use vitni_core::text::{Attribute, ExternalId, MediaRef};
@@ -34,7 +38,7 @@ pub(crate) fn events(builder: &mut Builder) {
         existing_note_id(builder),
         existing_tag_id(builder),
     );
-    push_corrections(builder, ingrid, duplicate, created_id);
+    push_corrections(builder, [ingrid, duplicate, kari], created_id);
 
     push_minimal(builder, ola, "I0002", "Ola");
     push_minimal(builder, kari, "I0003", "Kari");
@@ -224,7 +228,9 @@ fn push_attachments(
     }
 }
 
-fn push_corrections(builder: &mut Builder, ingrid: PersonId, duplicate: PersonId, target: AssertionId) {
+/// Ingrid's corrections and identity decisions: merged with her duplicate on the engine's assessment,
+/// and distinguished from Kari.
+fn push_corrections(builder: &mut Builder, [ingrid, duplicate, kari]: [PersonId; 3], target: AssertionId) {
     let bodies = [
         PersonEventBody::HumanIdChanged {
             person_id: ingrid,
@@ -242,11 +248,40 @@ fn push_corrections(builder: &mut Builder, ingrid: PersonId, duplicate: PersonId
         PersonEventBody::PersonsMerged {
             surviving: ingrid,
             merged: duplicate,
+            assessment: Some(evidence()),
+        },
+        PersonEventBody::PersonsDistinguished {
+            person: ingrid,
+            other: kari,
+            assessment: None,
         },
     ];
     for body in bodies {
         let meta = builder.meta();
         builder.push::<PersonState>(ingrid, PersonEvent::new(&meta, body));
+    }
+}
+
+/// A recorded assessment with one term of each fixed-point kind: a partial similarity and a negative
+/// weight.
+fn evidence() -> MatchEvidence {
+    MatchEvidence {
+        score_bp: 9712,
+        band: MatchBand::Probable,
+        engine: EngineVersion(4),
+        cultures: vec![CultureId::new("universal"), CultureId::new("no")],
+        features: vec![
+            FeatureEvidence {
+                feature: Feature::GivenName,
+                outcome: OutcomeEvidence::Agree,
+                weight_bp: 41_500,
+            },
+            FeatureEvidence {
+                feature: Feature::Birth,
+                outcome: OutcomeEvidence::Partial(6250),
+                weight_bp: -8_125,
+            },
+        ],
     }
 }
 

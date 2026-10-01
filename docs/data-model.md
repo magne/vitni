@@ -211,7 +211,7 @@ synthesis* derived from the log; none is edited directly.
 
 | Entity         | Purpose                                                          | Key projected fields                                                                                                                                                                                                                                                                                |
 | -------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Person**     | An individual (conclusion or persona).                           | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: occupation/residence/…), event participations (birth, death, and other vitals live here as Events — §7), associations, citations, media, notes, tags, `external_ids`, merged personas (`PersonsMerged` links), `evidence_level` (conclusion vs persona), `restrictions` (a `Restriction` set). |
+| **Person**     | An individual (conclusion or persona).                           | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: occupation/residence/…), event participations (birth, death, and other vitals live here as Events — §7), associations, citations, media, notes, tags, `external_ids`, merged personas (`PersonsMerged` links), persons it is distinct from (`PersonsDistinguished` links), `evidence_level` (conclusion vs persona), `restrictions` (a `Restriction` set). |
 | **Family**     | A union and its children.                                        | `id`, `human_id`, partner participations (neutral roles), child list (`ChildParentRelationship` per partner per child), family-level events (marriage/divorce), citations, media, notes, tags, `external_ids`, `restrictions` (a `Restriction` set).                                                |
 | **Event**      | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (a projection of the person-side `ParticipationAsserted` rows that reference this event — the Person aggregate owns participation), addresses, citations, media, notes, tags, `restrictions` (a `Restriction` set). |
 | **Place**      | A location, hierarchical and dated.                              | `id`, `human_id`, `place_type`, names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                       |
@@ -471,9 +471,14 @@ Boundary notes:
   assert who was present.
 - **Persona vs conclusion person.** A person extracted from a single source is a `Person` aggregate
   with `evidence_level = Persona`. When the researcher concludes two records are the same
-  individual, a `PersonsMerged` event records the join (operator + rationale + confidence) and the
+  individual, a `PersonsMerged` event records the join (operator + rationale + confidence, and the
+  matching engine's assessment the decision was made on, when there was one — ADR 0039 §2) and the
   conclusion person references the personas as evidence. **Both streams are retained** — the merge
-  is non-destructive, exactly as FamilySearch/Geni require but as audit-by-construction.
+  is non-destructive, exactly as FamilySearch/Geni require but as audit-by-construction. The opposite
+  conclusion — two records are *different* individuals — is a `PersonsDistinguished` event of the same
+  shape, so the pair is never proposed again (ADR 0039 §1). Either decision lives on one person's
+  stream and is undone by retracting it; a pair already decided either way, on either stream, is
+  refused a second decision (`IdentityDecided`).
 - **`DnaMatch` is owned by neither person.** It is a pairwise observation between two `DnaTest`s
   (referenced by id, self-contained) that genealogists research over time — so it is its own
   aggregate, not a value on a Person. `DnaTest` is anchored to one Person. See §12.
@@ -504,7 +509,7 @@ Representative **commands** (not exhaustive):
 
 - **Person:** `CreatePerson`, `AssertName`, `AssertSex`, `AssertFact`, `AssertParticipation`,
   `AssertAssociation`, `AttachMedia`, `AttachNote`, `Tag` / `Untag`, `SetRestrictions`,
-  `RetractAssertion`, `SupersedeAssertion`, `MergePersons`.
+  `RetractAssertion`, `SupersedeAssertion`, `MergePersons`, `DistinguishPersons`.
 - **Family:** `CreateFamily`, `AddPartner` / `RemovePartner`, `AddChild` (child membership) /
   `AssertChildRelationship` (one child-to-partner link) / `RemoveChild`, `LinkFamilyEvent`, `Tag`,
   `SetRestrictions`, plus the retract/supersede pair.
@@ -527,7 +532,8 @@ verbs (not exhaustive):
   `Attribute`s, and `NoteId`s — ADR 0019), `AssociationAsserted` (person↔person with an
   `AssociationRole`), `MediaAttached`, `NoteAttached`,
   `Tagged` / `Untagged`, `RestrictionsChanged`, `AssertionRetracted`, `AssertionSuperseded`,
-  `PersonsMerged`.
+  `PersonsMerged` / `PersonsDistinguished` (each with an optional `assessment: MatchEvidence`, the
+  fixed-point snapshot of the engine's `MatchAssessment` the user decided on — ADR 0039 §2).
 - **Family:** `FamilyCreated`, `PartnerAdded` (neutral role) / `PartnerRemoved`, `ChildAdded`
   (child membership) / `ChildRelationshipAsserted` (one child-to-partner link, a
   `ChildParentRelationship` — GEDCOM `_FREL`/`_MREL`, each its own assertion so an adoption link
@@ -576,7 +582,8 @@ Representative variants (not exhaustive):
   referenced `AssertionId` is unknown or already retracted), `InvalidDate` (a `GenealogicalDate`
   that cannot be ordered or is internally inconsistent), `EmptyRequiredField`.
 - **Person:** `EmptyName` (a `PersonName` with neither given nor surname), `MergeConflict` (the two
-  persons cannot be merged — e.g. contradicting irreversible facts), `SelfAssociation`.
+  persons cannot be merged — e.g. contradicting irreversible facts), `SelfAssociation`,
+  `DistinctFromItself`, `IdentityDecided` (the pair already holds a live merge or distinction).
 - **Family:** `DuplicatePartner`, `DuplicateChild`, `ChildIsOwnAncestor` (cycle in the
   child/partner graph).
 - **Event:** `UnknownPlace` (a `LinkPlace` to a place id the projection does not know — the §9
@@ -611,11 +618,13 @@ around evidence and provenance.
    like FamilySearch's *Tree Person Reference* (a directional "same individual" link that does *not*
    merge data), we record a same-as assertion / `ExternalId` link rather than forcing a merge.
 
-3. **Matches and hints are suggested assertions by a software `Agent`.** A SmartMatch, a Record
-   Match, a FamilySearch person match, or a Theory of Family Relativity is a *claim made by an
-   engine*, with a confidence. It enters as a low-confidence assertion in the evidence layer
-   attributed to a `Software` agent (§7, §8); the user's **confirm** or **reject** is itself an
-   audited event. Nothing is silently merged into the conclusion layer.
+3. **Matches are computed, not asserted; only the user's decision is (ADR 0039 §3).** A proposed
+   match — vitni's own engine (ADR 0038), a SmartMatch, a Record Match, a FamilySearch person match —
+   is a function of the current data, so it is computed on demand and never stored: storing it would
+   freeze a stale judgement into the log. The user's **confirm** (`PersonsMerged`) or **reject**
+   (`PersonsDistinguished`) is the audited assertion, and it records the engine's assessment as its
+   evidence. Every consumer of suggestions leaves out a pair already decided either way. Nothing is
+   silently merged into the conclusion layer.
 
 4. **Every import is a run, and every imported claim names its record (ADR 0037).** An import writes
    an `ImportRun` (`ImportRunStarted`, `ItemResolved` for an item resolved onto an existing aggregate,
@@ -928,7 +937,8 @@ pub enum PersonEvent {
     ParticipationAsserted { person_id: PersonId, event_id: EventId, role: ParticipantRole },
     AssociationAsserted { person_id: PersonId, other: PersonId, role: AssociationRole },
     AssertionSuperseded { person_id: PersonId, supersedes: AssertionId },
-    PersonsMerged { surviving: PersonId, merged: PersonId },
+    PersonsMerged { surviving: PersonId, merged: PersonId, assessment: Option<MatchEvidence> },
+    PersonsDistinguished { person: PersonId, other: PersonId, assessment: Option<MatchEvidence> },
     // … Tagged, MediaAttached, NoteAttached, RestrictionsChanged, AssertionRetracted
 }
 
@@ -940,7 +950,8 @@ pub enum PersonCommand {
     AssertFact { person_id: PersonId, fact: Fact },
     RetractAssertion { person_id: PersonId, target: AssertionId },
     SupersedeAssertion { person_id: PersonId, target: AssertionId, replacement: Box<PersonCommand> },
-    MergePersons { surviving: PersonId, merged: PersonId },
+    MergePersons { surviving: PersonId, merged: PersonId, assessment: Option<MatchEvidence> },
+    DistinguishPersons { person: PersonId, other: PersonId, assessment: Option<MatchEvidence> },
     // … AssertSex, AssertParticipation, AssertAssociation, AttachMedia/Note, Tag/Untag, SetRestrictions
 }
 

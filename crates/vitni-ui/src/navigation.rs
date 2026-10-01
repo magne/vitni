@@ -21,6 +21,7 @@ use vitni_app::{
     ParticipantRole, PercentShared, PersonNameParts, PlaceGeometry, PlaceType, Rect, RepositoryType, Sex,
     SourceMediaType, SuccessionKind, Url,
 };
+use vitni_app::{IdentityDecision, MatchEvidence, Provenance};
 
 use crate::help::HelpTopicId;
 use crate::presentation::{ConfidenceLevel, RestrictionKind};
@@ -861,6 +862,39 @@ pub enum Intent {
     },
 }
 
+/// What the operator records with an identity decision on the compare screen (ADR 0039 §1, §2): their
+/// reason and confidence, and the matching engine's assessment they were shown.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PairJudgment {
+    /// The operator's reason. A blank or whitespace-only value records no rationale.
+    pub rationale: Option<String>,
+    /// The operator's confidence, or `None` when they gave none.
+    pub confidence: Option<ConfidenceLevel>,
+    /// The engine's assessment of the pair as the compare screen showed it.
+    pub assessment: Option<MatchEvidence>,
+}
+
+impl PairJudgment {
+    /// The app-layer decision: the rationale trimmed (blank becomes none), nothing defaulted.
+    #[must_use]
+    pub fn decision(&self) -> IdentityDecision {
+        let rationale = self
+            .rationale
+            .as_deref()
+            .map(str::trim)
+            .filter(|trimmed| !trimmed.is_empty())
+            .map(ToOwned::to_owned);
+        IdentityDecision {
+            provenance: Provenance {
+                confidence: self.confidence.map(Into::into),
+                rationale,
+                ..Provenance::default()
+            },
+            assessment: self.assessment.clone(),
+        }
+    }
+}
+
 /// A request to merge two persons, dispatched to `vitni_app::merge_persons` via
 /// [`dispatch_merge`](crate::intent::dispatch_merge). Distinct from [`Intent`] (a read): a merge
 /// emits an event and the renderer shows the outcome/reloads the duplicates list afterwards.
@@ -870,10 +904,20 @@ pub struct MergePersons {
     pub surviving_human_id: String,
     /// The person to merge into the survivor (becomes a persona; their own record is untouched).
     pub merged_human_id: String,
-    /// The operator's reason for the merge, recorded on the `PersonsMerged` event. A blank or
-    /// whitespace-only value is normalized to `None` by [`dispatch_merge`](crate::intent::dispatch_merge),
-    /// which then lets the app supply its default rationale.
-    pub rationale: Option<String>,
+    /// The operator's judgment, recorded on the `PersonsMerged` event.
+    pub judgment: PairJudgment,
+}
+
+/// A request to record that two persons are different people ("Not the same person"), dispatched to
+/// `vitni_app::distinguish_persons` via [`dispatch_distinguish`](crate::intent::dispatch_distinguish).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DistinguishPersons {
+    /// The person the decision is recorded on.
+    pub person_human_id: String,
+    /// The person they are not.
+    pub other_human_id: String,
+    /// The operator's judgment, recorded on the `PersonsDistinguished` event.
+    pub judgment: PairJudgment,
 }
 
 /// A request to mutate a person, dispatched to a `vitni-app` command use-case via
@@ -2647,7 +2691,42 @@ mod tests {
 
     use vitni_app::SuccessionKind;
 
-    use super::{Category, Destination, DraftId, NavHistory, NavLocation, NavRecord, PlaceEdit, Tool, tab_label};
+    use super::{
+        Category, Destination, DraftId, NavHistory, NavLocation, NavRecord, PairJudgment, PlaceEdit, Tool, tab_label,
+    };
+    use crate::presentation::ConfidenceLevel;
+
+    fn rationale_of(rationale: Option<&str>) -> Option<String> {
+        let judgment = PairJudgment {
+            rationale: rationale.map(ToOwned::to_owned),
+            ..PairJudgment::default()
+        };
+        judgment.decision().provenance.rationale
+    }
+
+    #[test]
+    fn a_judgment_trims_its_rationale_and_blanks_it_to_none() {
+        assert_eq!(rationale_of(None), None, "absent stays absent");
+        assert_eq!(rationale_of(Some("")), None, "empty is absent");
+        assert_eq!(rationale_of(Some("   ")), None, "whitespace-only is absent");
+        assert_eq!(rationale_of(Some("  Same person  ")).as_deref(), Some("Same person"));
+    }
+
+    #[test]
+    fn a_judgment_carries_its_confidence_and_defaults_nothing() {
+        let judgment = PairJudgment {
+            confidence: Some(ConfidenceLevel::VeryHigh),
+            ..PairJudgment::default()
+        };
+        assert_eq!(
+            judgment.decision().provenance.confidence,
+            Some(vitni_app::Confidence::VeryHigh)
+        );
+        assert_eq!(
+            PairJudgment::default().decision(),
+            vitni_app::IdentityDecision::default()
+        );
+    }
 
     fn location(category: Category) -> NavLocation {
         NavLocation {

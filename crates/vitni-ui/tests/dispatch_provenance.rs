@@ -10,20 +10,22 @@
 
 use uuid::Uuid;
 use vitni_app::{
-    Age, AgeBound, Agent, AgentId, AgentKind, AppDefaults, Attribute, Calendar, ChangeLogEntry, DateInput,
-    DateModifier, DatePoint, DateQuality, EventType, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody,
-    MutationMeta, NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewPlace, NewSource, OperatorConfig,
-    ParticipantRole, PersonNameParts, PlaceType, Provenance, Rect, Session, Workspace, WorkspaceDefaults, add_child,
-    build_genealogical_date, change_log_for_citation, change_log_for_event, change_log_for_family,
-    change_log_for_media, change_log_for_person, change_log_for_place, change_log_for_source, create_citation,
-    create_event, create_family, create_media, create_note, create_person, create_place, create_source, create_tag,
-    show_citation, show_event, show_family, show_media, show_person, show_place, show_source,
+    Age, AgeBound, Agent, AgentId, AgentKind, AppDefaults, Attribute, Calendar, ChangeLogEntry, Confidence, DateInput,
+    DateModifier, DatePoint, DateQuality, EngineVersion, EventType, EvidenceLevel, FactType, GenealogicalDate,
+    GenealogicalDateBody, MatchBand, MatchEvidence, MutationMeta, NewCitation, NewEvent, NewMedia, NewNote, NewPerson,
+    NewPlace, NewSource, OperatorConfig, ParticipantRole, PersonNameParts, PlaceType, Provenance, Rect, Session,
+    Workspace, WorkspaceDefaults, add_child, build_genealogical_date, change_log_for_citation, change_log_for_event,
+    change_log_for_family, change_log_for_media, change_log_for_person, change_log_for_place, change_log_for_source,
+    create_citation, create_event, create_family, create_media, create_note, create_person, create_place,
+    create_source, create_tag, show_citation, show_event, show_family, show_media, show_person, show_place,
+    show_source,
 };
 use vitni_ui::{
-    CitationEdit, ConfidenceLevel, EventEdit, EvidenceKind, FamilyEdit, InformationKind, Localizer, MediaEdit,
-    MergePersons, PersonEdit, PlaceEdit, ProvenanceDraft, SourceChangeSetRequest, SourceEdit, SourceQuality,
-    dispatch_citation_edit, dispatch_event_edit, dispatch_family_edit, dispatch_media_edit, dispatch_merge,
-    dispatch_person_edit, dispatch_place_edit, dispatch_source_change_set, dispatch_source_edit,
+    CitationEdit, ConfidenceLevel, DistinguishPersons, EventEdit, EvidenceKind, FamilyEdit, InformationKind, Intent,
+    IntentOutcome, Localizer, MediaEdit, MergePersons, PairJudgment, PersonEdit, PlaceEdit, ProvenanceDraft,
+    SourceChangeSetRequest, SourceEdit, SourceQuality, dispatch, dispatch_citation_edit, dispatch_distinguish,
+    dispatch_event_edit, dispatch_family_edit, dispatch_media_edit, dispatch_merge, dispatch_person_edit,
+    dispatch_place_edit, dispatch_source_change_set, dispatch_source_edit,
 };
 
 fn operator() -> OperatorConfig {
@@ -494,10 +496,25 @@ fn merge_entry(log: &[ChangeLogEntry]) -> &ChangeLogEntry {
         .expect("the merge is logged as a PersonsMerged event")
 }
 
-/// A merge dispatched with a rationale threads that (trimmed) rationale onto the `PersonsMerged`
-/// event's provenance.
+/// The judgment the compare screen collects: a reason, a confidence and the assessment it showed.
+fn judgment(rationale: &str) -> PairJudgment {
+    PairJudgment {
+        rationale: Some(rationale.to_owned()),
+        confidence: Some(ConfidenceLevel::High),
+        assessment: Some(MatchEvidence {
+            score_bp: 9712,
+            band: MatchBand::Probable,
+            engine: EngineVersion(4),
+            cultures: Vec::new(),
+            features: Vec::new(),
+        }),
+    }
+}
+
+/// A merge dispatched from the compare screen threads its trimmed rationale and its confidence onto
+/// the `PersonsMerged` event's provenance.
 #[tokio::test]
-async fn a_merge_carries_its_rationale_into_the_change_log() {
+async fn a_merge_carries_its_rationale_and_confidence_into_the_change_log() {
     let (ws, session, dir) = setup().await;
     let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
     let survivor = named_person(&ws, &session, "John", "Smith").await;
@@ -510,24 +527,21 @@ async fn a_merge_carries_its_rationale_into_the_change_log() {
         &MergePersons {
             surviving_human_id: survivor.clone(),
             merged_human_id: merged,
-            rationale: Some("  Same person: name variant  ".to_owned()),
+            judgment: judgment("  Same person: name variant  "),
         },
     )
     .await
     .expect("dispatch merge");
 
     let log = change_log_for_person(&ws, &survivor).await.expect("log");
-    assert_eq!(
-        merge_entry(&log).rationale.as_deref(),
-        Some("Same person: name variant"),
-        "the merge event carries the trimmed rationale"
-    );
+    let entry = merge_entry(&log);
+    assert_eq!(entry.rationale.as_deref(), Some("Same person: name variant"));
+    assert_eq!(entry.confidence, Some(Confidence::High));
 }
 
-/// A merge dispatched with a blank rationale normalizes to `None`, so the app records its default
-/// ("Merge") rather than an empty string.
+/// A blank reason and no confidence record neither — the app supplies no default (ADR 0039 §1).
 #[tokio::test]
-async fn a_blank_merge_rationale_falls_back_to_the_default() {
+async fn a_blank_merge_rationale_records_none() {
     let (ws, session, dir) = setup().await;
     let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
     let survivor = named_person(&ws, &session, "Mary", "Doe").await;
@@ -540,18 +554,66 @@ async fn a_blank_merge_rationale_falls_back_to_the_default() {
         &MergePersons {
             surviving_human_id: survivor.clone(),
             merged_human_id: merged,
-            rationale: Some("   ".to_owned()),
+            judgment: PairJudgment {
+                rationale: Some("   ".to_owned()),
+                ..PairJudgment::default()
+            },
         },
     )
     .await
     .expect("dispatch merge");
 
     let log = change_log_for_person(&ws, &survivor).await.expect("log");
-    assert_eq!(
-        merge_entry(&log).rationale.as_deref(),
-        Some("Merge"),
-        "a blank rationale falls back to the app default"
-    );
+    assert_eq!(merge_entry(&log).rationale, None);
+    assert_eq!(merge_entry(&log).confidence, None);
+}
+
+/// "Not the same person" records the decision with its judgment, and the pair leaves the Merge tool's
+/// duplicates table for good.
+#[tokio::test]
+async fn distinguishing_a_pair_removes_it_from_the_duplicates_table() {
+    let (ws, session, dir) = setup().await;
+    let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
+    let smith = named_person(&ws, &session, "John", "Smith").await;
+    let smyth = named_person(&ws, &session, "John", "Smyth").await;
+    let pairs = |outcome: IntentOutcome| match outcome {
+        IntentOutcome::DuplicateCandidates(candidates) => candidates
+            .into_iter()
+            .map(|c| (c.a.human_id, c.b.human_id))
+            .collect::<Vec<_>>(),
+        other => panic!("expected the duplicates table, got {other:?}"),
+    };
+    let before = dispatch(&ws, &loc, &Intent::ListDuplicateCandidates)
+        .await
+        .expect("list");
+    assert_eq!(pairs(before).len(), 1, "Smith/Smyth is proposed before the decision");
+
+    let notice = dispatch_distinguish(
+        &ws,
+        &session,
+        &loc,
+        &DistinguishPersons {
+            person_human_id: smith.clone(),
+            other_human_id: smyth.clone(),
+            judgment: judgment("different fathers"),
+        },
+    )
+    .await
+    .expect("dispatch distinguish");
+    assert!(notice.contains(&smith) && notice.contains(&smyth), "{notice}");
+
+    let entry = change_log_for_person(&ws, &smith)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "PersonsDistinguished")
+        .expect("the decision is logged");
+    assert_eq!(entry.rationale.as_deref(), Some("different fathers"));
+    assert_eq!(entry.confidence, Some(Confidence::High));
+    let after = dispatch(&ws, &loc, &Intent::ListDuplicateCandidates)
+        .await
+        .expect("list");
+    assert!(pairs(after).is_empty(), "a distinguished pair never reappears");
 }
 
 /// The `PersonEdit::AssertParticipation` intent records a participation with its age, attributes, and

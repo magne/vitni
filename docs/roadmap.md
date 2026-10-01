@@ -645,6 +645,13 @@ census and church records from 1865 to 1924 — through blocking and the engine,
 and recall per band. Every pair marked as a hard true match (a spelling variant, a surname changed
 after a move, a census age a few years off, a baptism for a birth) must surface at `possible` or
 better; the check is part of `cargo xtask check`, so CI fails when a change loses one.
+✅ Identity decisions on persons (ADR 0039 §1–§3, #403): `PersonsDistinguished`, and an optional
+`assessment` on it and on `PersonsMerged` — a `MatchEvidence`, the fixed-point snapshot of the
+`MatchAssessment` the user decided on. `merge_persons` and the new `distinguish_persons` take the
+user's confidence and rationale as given, with nothing defaulted, and refuse a pair already decided on
+either person's stream. `similar_pairs` and `find_similar` leave out every decided pair, so a rejected
+pair never returns to the Dashboard, the checks or the Merge screen. The compare view shows the
+assessment and records it with *Merge* or *Not the same person*, and History shows it on the decision.
 
 ## Risk register
 

@@ -1,4 +1,4 @@
-use super::{DuplicateCandidateVm, MergeCompareVm, MergeResultVm};
+use super::{DuplicateCandidateVm, MergeCompareVm, MergeFailure, MergeResultVm};
 use crate::i18n::Localizer;
 use std::collections::BTreeSet;
 use vitni_app::{AggRef, Confidence, FactSummary, MatchAssessment, MatchBand, MergeResult, PersonSummary, SimilarPair};
@@ -80,7 +80,7 @@ fn compare_grid_carries_only_real_fields() {
     });
     let merged = bare_summary("I0099", Some("John Smyth"));
 
-    let vm = MergeCompareVm::build(&survivor, &merged, &loc);
+    let vm = MergeCompareVm::build(&survivor, &merged, &assessment(0.5, MatchBand::Possible), &loc);
     assert_eq!(vm.survivor.human_id, "I0042");
     assert_eq!(vm.merged.human_id, "I0099");
     let occupation = vm
@@ -107,4 +107,43 @@ fn merge_result_summary_never_claims_repointing() {
     );
     assert!(vm.summary.contains("I0099"));
     assert!(vm.summary.contains("I0042"));
+}
+
+fn assessment(score: f64, band: MatchBand) -> MatchAssessment {
+    MatchAssessment {
+        score,
+        band,
+        features: Vec::new(),
+        cultures: Vec::new(),
+        parts: Vec::new(),
+        engine: vitni_app::EngineVersion(4),
+    }
+}
+
+#[test]
+fn the_compare_view_carries_the_assessment_the_decision_will_record() {
+    let loc = Localizer::for_test("en");
+    let shown = assessment(0.9712, MatchBand::Probable);
+    let vm = MergeCompareVm::build(
+        &bare_summary("I0042", Some("John Smith")),
+        &bare_summary("I0099", Some("John Smyth")),
+        &shown,
+        &loc,
+    );
+    assert_eq!(vm.assessment, shown.evidence());
+    assert_eq!(vm.assessment_line, "Matched at 97% · probable match · engine 4");
+}
+
+#[test]
+fn a_pair_already_decided_is_a_blocked_decision_not_a_toast() {
+    let loc = Localizer::for_test("en");
+    let error = vitni_app::AppError::Domain(vitni_app::PersonError::IdentityDecided {
+        person: vitni_app::PersonId::from_uuid(uuid::Uuid::from_u128(1)),
+        other: vitni_app::PersonId::from_uuid(uuid::Uuid::from_u128(2)),
+    });
+    let MergeFailure::Blocked(vm) = MergeFailure::from_error(&error, &loc) else {
+        panic!("an already-decided pair renders the blocked card");
+    };
+    assert_eq!(vm.heading, "Already decided");
+    assert!(vm.guidance.contains("Undo it in History"), "{}", vm.guidance);
 }

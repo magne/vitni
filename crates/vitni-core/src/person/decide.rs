@@ -77,7 +77,11 @@ pub fn decide(
             events.extend(decide(state, *replacement, meta)?);
             Ok(events)
         }
-        PersonCommand::MergePersons { surviving, merged } => {
+        PersonCommand::MergePersons {
+            surviving,
+            merged,
+            assessment,
+        } => {
             ensure_exists(state, surviving)?;
             if surviving == merged {
                 return Err(PersonError::MergeConflict {
@@ -86,7 +90,34 @@ pub fn decide(
                     reason: "a person cannot be merged with itself".to_owned(),
                 });
             }
-            Ok(one(meta, PersonEventBody::PersonsMerged { surviving, merged }))
+            ensure_undecided(state, surviving, merged)?;
+            Ok(one(
+                meta,
+                PersonEventBody::PersonsMerged {
+                    surviving,
+                    merged,
+                    assessment,
+                },
+            ))
+        }
+        PersonCommand::DistinguishPersons {
+            person,
+            other,
+            assessment,
+        } => {
+            ensure_exists(state, person)?;
+            if person == other {
+                return Err(PersonError::DistinctFromItself(person));
+            }
+            ensure_undecided(state, person, other)?;
+            Ok(one(
+                meta,
+                PersonEventBody::PersonsDistinguished {
+                    person,
+                    other,
+                    assessment,
+                },
+            ))
         }
         assertion => decide_assertion(state, assertion, meta),
     }
@@ -191,7 +222,8 @@ fn decide_assertion(
         PersonCommand::CreatePerson { .. }
         | PersonCommand::RetractAssertion { .. }
         | PersonCommand::SupersedeAssertion { .. }
-        | PersonCommand::MergePersons { .. } => unreachable!("handled by decide"),
+        | PersonCommand::MergePersons { .. }
+        | PersonCommand::DistinguishPersons { .. } => unreachable!("handled by decide"),
     };
     Ok(one(meta, body))
 }
@@ -199,6 +231,14 @@ fn decide_assertion(
 /// Builds the single-event vector for a body stamped with `meta`.
 fn one(meta: &AssertionMeta, body: PersonEventBody) -> Vec<PersonEvent> {
     vec![PersonEvent::new(meta, body)]
+}
+
+/// Refuses a second identity decision about a pair this person already decided (ADR 0039 §1).
+fn ensure_undecided(state: &PersonState, person: PersonId, other: PersonId) -> Result<(), PersonError> {
+    if state.has_decided(other) {
+        return Err(PersonError::IdentityDecided { person, other });
+    }
+    Ok(())
 }
 
 /// Rejects a command that targets a person which has not been created yet.
@@ -282,6 +322,13 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
+        PersonEventBody::PersonsDistinguished { other, .. } => {
+            state.distinguished.push(Attributed {
+                assertion_id,
+                value: *other,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
         PersonEventBody::AssertionRetracted { target, .. } | PersonEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
@@ -355,6 +402,7 @@ mod tests {
     use super::{decide, evolve};
     use crate::enums::{AssociationRole, EvidenceLevel, Restriction, Sex};
     use crate::ids::{AgentId, AssertionId, HumanId, PersonId};
+    use crate::matching::{CultureId, EngineVersion, MatchBand, MatchEvidence};
     use crate::name::{NameType, PersonName, Surname};
     use crate::person::command::PersonCommand;
     use crate::person::error::PersonError;
@@ -727,6 +775,7 @@ mod tests {
             PersonCommand::MergePersons {
                 surviving: pid(100),
                 merged: pid(100),
+                assessment: None,
             },
             &meta(2),
         )
@@ -1077,6 +1126,7 @@ mod tests {
             PersonCommand::MergePersons {
                 surviving: pid(100),
                 merged: pid(200),
+                assessment: None,
             },
             &meta(2),
         )
@@ -1092,6 +1142,7 @@ mod tests {
             PersonCommand::MergePersons {
                 surviving: pid(100),
                 merged: pid(200),
+                assessment: None,
             },
             &meta(2),
         )
@@ -1116,6 +1167,142 @@ mod tests {
             state.merged
         );
         assert!(!state.live_assertions.contains(&target));
+    }
+
+    fn evidence() -> MatchEvidence {
+        MatchEvidence {
+            score_bp: 8712,
+            band: MatchBand::Possible,
+            engine: EngineVersion(4),
+            cultures: vec![CultureId::new("universal")],
+            features: Vec::new(),
+        }
+    }
+
+    fn merge(surviving: u128, merged: u128) -> PersonCommand {
+        PersonCommand::MergePersons {
+            surviving: pid(surviving),
+            merged: pid(merged),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn distinguish(person: u128, other: u128) -> PersonCommand {
+        PersonCommand::DistinguishPersons {
+            person: pid(person),
+            other: pid(other),
+            assessment: Some(evidence()),
+        }
+    }
+
+    #[test]
+    fn a_merge_carries_the_assessment_it_was_made_on() {
+        let events = decide(&created_person(100), merge(100, 200), &meta(2)).unwrap();
+        assert_eq!(
+            events[0].body,
+            PersonEventBody::PersonsMerged {
+                surviving: pid(100),
+                merged: pid(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn distinguishing_two_persons_emits_persons_distinguished_with_its_assessment() {
+        let events = decide(&created_person(100), distinguish(100, 200), &meta(2)).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].body,
+            PersonEventBody::PersonsDistinguished {
+                person: pid(100),
+                other: pid(200),
+                assessment: Some(evidence()),
+            }
+        );
+        assert_eq!(events[0].assertion_id, AssertionId::from_uuid(Uuid::from_u128(2)));
+    }
+
+    #[test]
+    fn distinguishing_an_absent_person_is_not_found() {
+        let err = decide(&PersonState::default(), distinguish(100, 200), &meta(2)).unwrap_err();
+        assert_eq!(err, PersonError::NotFound(pid(100)));
+    }
+
+    #[test]
+    fn a_person_cannot_be_distinguished_from_itself() {
+        let err = decide(&created_person(100), distinguish(100, 100), &meta(2)).unwrap_err();
+        assert_eq!(err, PersonError::DistinctFromItself(pid(100)));
+    }
+
+    #[test]
+    fn a_distinction_folds_into_state_and_undo_removes_it() {
+        let mut state = created_person(100);
+        let events = decide(&state, distinguish(100, 200), &meta(2)).unwrap();
+        apply_all(&mut state, &events);
+        assert_eq!(
+            state.distinguished.iter().map(|d| d.value).collect::<Vec<_>>(),
+            vec![pid(200)]
+        );
+
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+        let retract = PersonCommand::RetractAssertion {
+            person_id: pid(100),
+            target,
+        };
+        let events = decide(&state, retract, &meta(3)).unwrap();
+        apply_all(&mut state, &events);
+        assert!(state.distinguished.is_empty(), "{:?}", state.distinguished);
+        assert!(!state.live_assertions.contains(&target));
+    }
+
+    #[test]
+    fn a_pair_decided_either_way_cannot_be_decided_again() {
+        let decided = PersonError::IdentityDecided {
+            person: pid(100),
+            other: pid(200),
+        };
+        for first in [merge(100, 200), distinguish(100, 200)] {
+            let mut state = created_person(100);
+            let events = decide(&state, first.clone(), &meta(2)).unwrap();
+            apply_all(&mut state, &events);
+            for second in [merge(100, 200), distinguish(100, 200)] {
+                let err = decide(&state, second.clone(), &meta(3)).unwrap_err();
+                assert_eq!(err, decided, "{first:?} then {second:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn an_undone_merge_lets_the_pair_be_distinguished() {
+        let mut state = created_person(100);
+        let events = decide(&state, merge(100, 200), &meta(2)).unwrap();
+        apply_all(&mut state, &events);
+        let retract = PersonCommand::RetractAssertion {
+            person_id: pid(100),
+            target: AssertionId::from_uuid(Uuid::from_u128(2)),
+        };
+        let events = decide(&state, retract, &meta(3)).unwrap();
+        apply_all(&mut state, &events);
+        assert!(decide(&state, distinguish(100, 200), &meta(4)).is_ok());
+    }
+
+    #[test]
+    fn a_merge_without_an_assessment_decodes_from_a_payload_that_lacks_one() {
+        let body: PersonEventBody = serde_json::from_value(serde_json::json!({
+            "type": "PersonsMerged",
+            "surviving": pid(100),
+            "merged": pid(200),
+        }))
+        .unwrap();
+        assert_eq!(
+            body,
+            PersonEventBody::PersonsMerged {
+                surviving: pid(100),
+                merged: pid(200),
+                assessment: None,
+            }
+        );
     }
 
     #[test]

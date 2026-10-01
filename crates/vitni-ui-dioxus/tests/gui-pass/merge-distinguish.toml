@@ -1,0 +1,154 @@
+# #403: "Not the same person" in the compare wizard records the decision, and the pair leaves the
+# duplicates table for good. SSR renders the button but cannot press it: this proves the click reaches
+# `distinguish_persons` through the screen's callbacks, that the screen returns to a table the pair has
+# left, and that the pair stays gone after leaving the tool and coming back.
+#
+# The fixture seeds no persons (and must not — every scenario is measured against its lists), so the
+# scenario creates John Smith and John Smyth itself, which the engine proposes as a possible match.
+# After the first Save the record sits in edit mode, where ⌘N does not open a draft, so the second
+# person comes from the tabstrip's "+" menu.
+#
+# Every assertion is scoped to the duplicates card, y 75-235: the *Created* and decision notices
+# repaint the bottom of the window, and the rail's selection moves between the visits.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "Not the same person removes the pair from the duplicates table for good (#403)"
+
+[[step]]
+do = "click"
+at = [85, 175]
+label = "rail: People"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Person draft"
+
+[[step]]
+do = "click"
+at = [1150, 486]
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "John"
+label = "type: John"
+
+[[step]]
+do = "click"
+at = [1150, 636]
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Smith"
+label = "type: Smith"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New person: Save"
+
+[[step]]
+do = "click"
+at = [756, 101]
+label = "tabstrip: +"
+
+[[step]]
+do = "click"
+at = [825, 148]
+label = "menu: New person"
+
+[[step]]
+do = "click"
+at = [1150, 486]
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "John"
+label = "type: John"
+
+[[step]]
+do = "click"
+at = [1150, 636]
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Smyth"
+label = "type: Smyth"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New person: Save"
+
+[[step]]
+do = "click"
+at = [108, 749]
+label = "rail: Compare / merge"
+
+[[step]]
+do = "shot"
+name = "table"
+
+[[step]]
+do = "click"
+at = [1548, 190]
+label = "row: Compare"
+
+[[step]]
+do = "shot"
+name = "compare"
+
+[[step]]
+do = "click"
+at = [478, 629]
+label = "field: Reason for this decision"
+
+[[step]]
+do = "text"
+text = "different fathers"
+label = "type: different fathers"
+
+[[step]]
+do = "click"
+at = [1522, 631]
+label = "Not the same person"
+
+[[step]]
+do = "shot"
+name = "decided"
+
+[[step]]
+do = "click"
+at = [85, 175]
+label = "rail: People — leave the tool"
+
+[[step]]
+do = "click"
+at = [108, 749]
+label = "rail: Compare / merge — come back"
+
+[[step]]
+do = "shot"
+name = "revisit"
+
+[[assert]]
+kind = "differ"
+shots = ["table", "compare"]
+because = "Compare must open the wizard for the proposed pair"
+region = [232, 75, 1568, 160]
+
+[[assert]]
+kind = "differ"
+shots = ["table", "decided"]
+because = "after Not the same person the screen returns to a duplicates table the pair has left"
+region = [232, 75, 1568, 160]
+
+[[assert]]
+kind = "match"
+shots = ["decided", "revisit"]
+because = "a distinguished pair never reappears, not even after leaving the tool and coming back"
+region = [232, 75, 1568, 160]

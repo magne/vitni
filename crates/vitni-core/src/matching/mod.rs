@@ -30,6 +30,7 @@
 
 pub mod date;
 mod event;
+mod evidence;
 mod family;
 pub mod keys;
 mod media;
@@ -47,6 +48,8 @@ mod weights;
 use std::collections::HashMap;
 use std::sync::{Arc, PoisonError, RwLock};
 
+use serde::{Deserialize, Serialize};
+
 use crate::enums::Sex;
 use crate::matching::date::{DayInterval, SLIP_SIMILARITY, Tolerance, interval, is_clerical_slip, similarity};
 use crate::matching::name::{Applied, Rules};
@@ -60,6 +63,7 @@ use crate::text::ExternalId;
 
 pub use crate::matching::date::DateBasis;
 pub use crate::matching::event::assess_events;
+pub use crate::matching::evidence::{FeatureEvidence, MatchEvidence, OutcomeEvidence};
 pub use crate::matching::family::assess_families;
 pub use crate::matching::keys::{BlockingKeys, MatchableKind, Probe, prefix_end};
 pub use crate::matching::media::assess_media;
@@ -69,7 +73,7 @@ pub use crate::matching::source::{assess_citations, assess_repositories, assess_
 pub use crate::matching::tag::assess_tags;
 
 /// The id of a name-culture pack (`no`, `en`, `pl-en`).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct CultureId(String);
 
 impl CultureId {
@@ -87,14 +91,14 @@ impl CultureId {
 
 /// The version of the scoring engine, recorded on every assessment so a stored one can be told apart
 /// from a rescoring by a later engine.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct EngineVersion(pub u32);
 
 /// The engine version of this build. Bump it when a comparator, weight or shipped pack changes scores.
 pub const ENGINE_VERSION: EngineVersion = EngineVersion(4);
 
 /// How sure the engine is that two records describe one individual.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum MatchBand {
     /// Below the possible threshold: not shown.
     Unlikely,
@@ -122,7 +126,7 @@ pub enum Outcome {
 }
 
 /// A compared feature.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Feature {
     /// The given names.
     GivenName,

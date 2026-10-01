@@ -178,11 +178,11 @@ pub use pedigree::{
     PersonRef as PedigreePersonRef, RelationshipResult, ancestors, descendants, relationship,
 };
 pub use person::{
-    AssociationSummary, FactSummary, MergeResult, NameSummary, NewFact, NewParticipation, NewPerson, ParticipationRef,
-    PersonNameParts, PersonRow, PersonSummary, add_name, add_person_citation, assert_association, assert_fact,
-    assert_participation, assert_sex, attach_person_media, attach_person_note, create_person, list_person_rows,
-    list_persons, merge_persons, set_person_human_id, set_restrictions, show_person, tag_person,
-    update_person_media_ref,
+    AssociationSummary, FactSummary, IdentityDecision, MergeResult, NameSummary, NewFact, NewParticipation, NewPerson,
+    ParticipationRef, PersonNameParts, PersonRow, PersonSummary, add_name, add_person_citation, assert_association,
+    assert_fact, assert_participation, assert_sex, attach_person_media, attach_person_note, create_person,
+    distinguish_persons, list_person_rows, list_persons, merge_persons, set_person_human_id, set_restrictions,
+    show_person, tag_person, update_person_media_ref,
 };
 pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
 pub use place::{
@@ -251,11 +251,14 @@ pub use vitni_core::family::FamilyError;
 pub use vitni_core::geo::{GeoCoordinates, Microdegrees, PlaceGeometry};
 pub use vitni_core::ids::AgentId;
 pub use vitni_core::ids::ImportRunId;
+pub use vitni_core::ids::PersonId;
 pub use vitni_core::import_run::{
     AbandonReason, ImportCounts, ImportRunError, ImportRunStatus, NewImportRun, ResolutionDecision, ResolvedItem,
 };
 pub use vitni_core::matching::pack::PackError;
-pub use vitni_core::matching::{ENGINE_VERSION, MatchAssessment, MatchBand, MatchableKind};
+pub use vitni_core::matching::{
+    ENGINE_VERSION, EngineVersion, MatchAssessment, MatchBand, MatchEvidence, MatchableKind,
+};
 pub use vitni_core::media::MediaError;
 pub use vitni_core::media_path::MEDIA_DIR;
 pub use vitni_core::media_path::media_root_relative;

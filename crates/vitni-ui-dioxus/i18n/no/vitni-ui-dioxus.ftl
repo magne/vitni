@@ -401,8 +401,10 @@ merge-radio-group-label = Hvilken post har for øyeblikket denne verdien
 merge-cancel = Avbryt
 merge-submit = Slå sammen (reversibelt)
 merge-back = Tilbake til dubletter
-merge-reason-label = Årsak til sammenslåing
-merge-reason-hint = (registreres på sammenslåingshendelsen)
+merge-reason-label = Årsak til avgjørelsen
+merge-reason-hint = (registreres på avgjørelsen)
+merge-confidence-label = Sikkerhet
+merge-distinguish = Ikke samme person
 
 # Tilleggshåndtering – rammestrenger (PR21). Kapabilitets-/rolle-/tillitsetiketter leses fra selve
 # komponenten av vitni-plugin-host::discover — dette er kun visningsnavnene.
