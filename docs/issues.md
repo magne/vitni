@@ -488,14 +488,14 @@ does.
   surnames differ. The default 256 cases rarely reach it. *Shape:* a key the Jaro–Winkler floor
   implies (a short prefix of the normalized given name), or *Katherine* in the same class as *Kari*.
   *Exit:* the proptest passes at 10 000 cases.
-- **Port the GEDCOM and Gramps importers to record graphs** — ADR 0040 §1, ADR 0037 §3. Both already
+- **Propose a GEDCOM or Gramps file's dataset from its header and keys** — ADR 0040 §1, ADR 0037 §3. Both already
   submit record graphs (#407), keyed as before: `INDI`/`FAM` xrefs or Gramps handles, events
   `event:BIRT:0`, places `plac:<name>`, media `file:<path>`. What remains is the dataset: it is proposed
   from the header fingerprint — `staging.begin-run`'s `dataset-hint`, which neither importer sends yet —
   and key overlap, and the user confirms. The explicit choice it proposes into already exists (#393):
   the CLI's `--dataset` / `--new-dataset` and the bulk-import confirm's *This file is* select. *Exit:* a
   re-run fixture per importer proves stable item keys. — #408
-- **Port the Digitalarkivet importer to record graphs** — ADR 0040 §1, §4. The census-person, household
+- **Submit each Digitalarkivet record as one record graph** — ADR 0040 §1, §4. The census-person, household
   and church-book records already submit graphs (#407), but in two steps: the person alone, then — only
   when the host reports it is this dataset's own — the person with its occupation, citation and scan.
   The host withholds another dataset's contents itself, so the two steps, the title/path `query` lookups
@@ -505,7 +505,7 @@ does.
 - **Digitalarkivet imports what it drops today** — ADR 0040. For a census: the residence event with its
   participants, roles and ages; an estimated birth from the age; birthplace and residence places; and
   household relationships. For a church book: the event, with participants by role. Without these a
-  census or marriage record has nothing to match on beyond a name. *Needs:* the Digitalarkivet port.
+  census or marriage record has nothing to match on beyond a name. *Needs:* the one-graph Digitalarkivet import.
   *Exit:* a household import yields its event, places and family links, each carrying an origin. — #410
 - **A person linked by identity gets no persona** — ADR 0040 §3. A staged person that resolves onto
   another dataset's person (`Link`, by `ExternalId` or a recorded resolution) is reused, as every other
@@ -540,13 +540,13 @@ does.
   keyboard. — #411
 - **Assisted wizard match stage** — ADR 0040 §4. A host-owned `present` stage after *Confirm*, shown
   only when the record has candidates. `docs/mockups/import.html` is updated. *Needs:* the compare view
-  and the Digitalarkivet port. *Exit:* a gui-pass scenario covering a record with a candidate, and one
+  and the one-graph Digitalarkivet import. *Exit:* a gui-pass scenario covering a record with a candidate, and one
   without, where no stage appears. — #412
 - **Bulk import Plan and Review stages, and `vitni import --plan`** — ADR 0040 §3, §4. A plan summary by
   kind and disposition, a review list with bulk actions (*Treat all Probable places as the same*,
   *Decide the rest later*), and commit. CLI: `--plan` (text or `--json`, writes nothing),
   `--defer-matches` (the non-interactive default), and interactive review on a TTY. The mockups are
-  updated. *Needs:* the compare view and the GEDCOM/Gramps port. *Exit:* `--plan` over a re-import
+  updated. *Needs:* the compare view. *Exit:* `--plan` over a re-import
   reports all Unchanged. — #413
 - **Possible-matches review queue** — ADR 0039 §3. The Merge tool becomes *Matches*: the computed queue
   across kinds, filtered by run, kind and band, with a Dashboard card. CLI:
