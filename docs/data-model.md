@@ -679,8 +679,8 @@ around evidence and provenance.
    files `<kind>.resolved` under its payload's record, so a recorded resolution resolves the same item
    in later runs. Field key and digest are computed in `vitni-db` (`indexed_field`), next to the index
    that stores them, and `vitni-app` calls the same function. On import:
-   - every `create-*` under an origin first looks the item up, and an item an earlier run of the same
-     dataset created from resolves onto that aggregate instead of creating another (Place and Source
+   - every staged entity first looks its item up, and an item an earlier run of the same dataset
+     created from resolves onto that aggregate instead of creating another (Place and Source
      included);
    - every write is previewed before it is made (`Store::preview_<aggregate>`), and one whose field
      already carries a live row with the same digest, from the same item, is not written;
@@ -694,8 +694,35 @@ around evidence and provenance.
 
    An import run is started by its first write that goes ahead, so re-importing an unchanged file
    writes no events at all, not even a run. A record resolved onto an aggregate another dataset made
-   (by `ExternalId`, or by a recorded resolution) is not that dataset's to fill: the importers write a
-   record's owned contents only for their own dataset's records.
+   (by `ExternalId`, or by a recorded resolution) is not that dataset's to fill: the plan writes only
+   its identity — a person's name when it is not already recorded, and its sex; a family's partners and
+   children — and withholds the rest of the record, and whatever only withheld writes reach (item 6).
+
+6. **Importers submit record graphs; the host plans before it writes (ADR 0040).** An importer is a
+   parser: it submits one **record graph** per source record through the `staging` host interface —
+   the record's entities, each with a local id, an item key and its incoming fields, and the links
+   between them (participation, partner, child, family event, event place, enclosure, citation, media,
+   note, tag, source repository, association), each stamped with an item. A link end names an entity
+   of the same graph, another graph's entity by its origin, or an existing record. `vitni-app` plans
+   every entity (`plan_import`) before anything is written:
+   - **Unchanged** — this dataset's record from the same origin, whose writes, run through the origin
+     gate as a dry run, write nothing;
+   - **Update** — the same, naming the fields the writes would assert;
+   - **Link** — a record identity is established for deterministically: by a recorded resolution, by
+     `ExternalId`, or a tag by its case-folded name (ADR 0038 §6), recorded as `ItemResolved`;
+   - **Candidates** — a new person, place, source or repository the matching engine judges at least
+     Possible against the workspace; relatives that resolved stand in as the records they resolved
+     onto, and two items of one graph are never matched to each other. Until the review stages land
+     they are written as new, the pairs left for the review queue;
+   - **New** — nothing resolved.
+
+   `commit_import` writes the plan in dependency order (places, sources, repositories, tags, media,
+   notes, citations, persons, families, events, then the links), every write stamped with its entity's
+   or link's origin and the run, each new aggregate created whole by one command. Across aggregates the
+   commit is sequenced, not atomic; an interrupted one leaves what it wrote, keyed by origin, so the
+   same import planned again resolves all of it as unchanged and finishes the rest. A bulk import is
+   planned and committed once the importer returns, its writes reported as the host's own progress
+   step; an assisted import is planned and committed one record at a time.
 
 The upshot: external APIs add the `ExternalId` value object and exercise the `Agent` generalisation,
 but the evidence/conclusion architecture absorbs imports and machine matches without new structure.

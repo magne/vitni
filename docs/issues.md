@@ -385,9 +385,9 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
 
 ### Bulk import, export & sync
 
-- **Gramps `<header created>` is parsed but never threaded to `begin-import`** — ADR 0029's
-  timestamp-gated reconciliation is only wired on the GEDCOM side
-  (`plugins/gedcom-import/src/lib.rs:41`). `plugins/gramps-import/src/lib.rs` goes straight from
+- **Gramps `<header created>` is parsed but never threaded to `begin-run`** — ADR 0029's
+  timestamp-gated reconciliation is only wired on the GEDCOM side (`plugins/gedcom-import/src/lib.rs`,
+  `staging.begin-run`). `plugins/gramps-import/src/lib.rs` goes straight from
   `parse` to the person loop and never reads `db.header`, though `vitni-gramps-xml/src/parse.rs:400`
   does parse the date — so a Gramps re-import gets no timestamp gating at all. Found while verifying
   the Phase 10 completion claim, which described both formats as wired.
@@ -488,26 +488,54 @@ does.
   surnames differ. The default 256 cases rarely reach it. *Shape:* a key the Jaro–Winkler floor
   implies (a short prefix of the normalized given name), or *Katherine* in the same class as *Kari*.
   *Exit:* the proptest passes at 10 000 cases.
-- **Staged import: WIT record graph, `ImportPlan`, commit and resume** — ADR 0040 §1, §2, §5.
-  `host-api@0.25.0` adds the `staging` interface (`begin-run`, `submit(record-graph)`) and removes
-  the imperative create verbs from the import worlds. `vitni-app` plans every entity as Unchanged,
-  Update, Link, Candidates or New, with graph-aware resolution. Commit is dependency-ordered and
-  origin-stamped, with atomic per-aggregate creation, and resumes by re-run. *Needs:* `find_similar`. *Exit:* an interrupted commit finishes on re-run with no duplicates. — #407
-- **Port the GEDCOM and Gramps importers to record graphs** — ADR 0040 §1, ADR 0037 §3. Parsers emit
-  graphs with stable item keys and dataset-scoped origins, with places and sources keyed. The dataset
-  is proposed from the header fingerprint and key overlap, and the user confirms. The explicit choice
-  it proposes into already exists (#393): the CLI's `--dataset` / `--new-dataset` and the bulk-import
-  confirm's *This file is* select. *Needs:* staged import. *Exit:* a re-run fixture per importer proves stable item
-  keys. — #408
+- **Port the GEDCOM and Gramps importers to record graphs** — ADR 0040 §1, ADR 0037 §3. Both already
+  submit record graphs (#407), keyed as before: `INDI`/`FAM` xrefs or Gramps handles, events
+  `event:BIRT:0`, places `plac:<name>`, media `file:<path>`. What remains is the dataset: it is proposed
+  from the header fingerprint — `staging.begin-run`'s `dataset-hint`, which neither importer sends yet —
+  and key overlap, and the user confirms. The explicit choice it proposes into already exists (#393):
+  the CLI's `--dataset` / `--new-dataset` and the bulk-import confirm's *This file is* select. *Exit:* a
+  re-run fixture per importer proves stable item keys. — #408
 - **Port the Digitalarkivet importer to record graphs** — ADR 0040 §1, §4. The census-person, household
-  and church-book pages become graphs, and the owner-gated `record_claims` path and the title/path
-  `query` dedup are removed. *Needs:* staged import. *Exit:* the existing assisted tests pass through
-  the graph path. — #409
+  and church-book records already submit graphs (#407), but in two steps: the person alone, then — only
+  when the host reports it is this dataset's own — the person with its occupation, citation and scan.
+  The host withholds another dataset's contents itself, so the two steps, the title/path `query` lookups
+  of the source, repository and scan, and the `existing` references `staging` keeps for them are
+  removed, and each record is one graph. *Exit:* the existing assisted tests pass through the one-graph
+  path. — #409
 - **Digitalarkivet imports what it drops today** — ADR 0040. For a census: the residence event with its
   participants, roles and ages; an estimated birth from the age; birthplace and residence places; and
   household relationships. For a church book: the event, with participants by role. Without these a
   census or marriage record has nothing to match on beyond a name. *Needs:* the Digitalarkivet port.
   *Exit:* a household import yields its event, places and family links, each carrying an origin. — #410
+- **A person linked by identity gets no persona** — ADR 0040 §3. A staged person that resolves onto
+  another dataset's person (`Link`, by `ExternalId` or a recorded resolution) is reused, as every other
+  kind is: the plan writes its name and sex onto the target and withholds the rest of its record. The ADR
+  has the record's evidence kept as a unit instead — a new persona carrying the record's claims, linked
+  with `PersonsMerged`. That needs the commit to route links into existing records to the cluster root
+  and links among new records to the persona. *Shape:* the persona on a person *Same*, with that
+  routing, landing with the review stages (#412, #413). *Exit:* re-importing a person from a second
+  dataset leaves two persons in one cluster, each with its own record's facts.
+- **The origin index is written after the event commit** — ADR 0040 §5. `RecordOriginsQuery`
+  (`vitni-db/src/record_origins/sqlite.rs:75`) indexes an aggregate's events in a cqrs-es query run
+  after the events commit, logging a failure. A process killed between the two leaves an aggregate no
+  origin resolves to, so the next run of the import creates it again. A cancel stops between two writes
+  and is safe. *Shape:* index in the event transaction, or rebuild the index for the newest events on
+  open. *Exit:* a test that kills the commit between an event and its index row re-runs without a
+  duplicate.
+- **An abandoned import run cannot be resumed from History** — ADR 0040 §5. Re-running the import
+  finishes an interrupted commit, but History only lists the abandoned run. *Shape:* *Resume* on an
+  abandoned bulk run, re-running its plugin over its source with its dataset. *Exit:* a gui-pass scenario
+  that cancels a bulk import while writing and resumes it from History.
+- **Planning an import costs a workspace-wide load** — ADR 0040 §2. Each plan loads the profiles of
+  every kind it matches (`Matcher::load`, `vitni-app/src/similar.rs`), which is about 0.9 s at 100k
+  persons — once per bulk import, but once per record in an assisted session — and dry-runs every write
+  of every record a re-import resolves. *Shape:* the by-id profile loading the `find_similar` bullet
+  above describes, and a cached matcher across an assisted session's submits. *Exit:* planning one
+  assisted record at 100k persons under 100 ms in a bench.
+- **Two staged tags of one name become two tags** — ADR 0038 §6. A tag resolves by its case-folded name
+  against the workspace's tags only, so two tag records of one import carrying the same name are both
+  created. *Shape:* resolve a tag against the plan's earlier tags too. *Exit:* importing two same-named
+  tags creates one.
 - **Shared match-compare view** — ADR 0038 §3, ADR 0039. A view-model and component generalized from
   the Merge compare grid (`vitni-ui/src/view_model/merge.rs:198`): per-kind rows, the feature
   explanations, origin chips, an evidence snippet (the scan crop), and *Same* / *Not the same* /

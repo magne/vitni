@@ -232,7 +232,8 @@ pub struct PluginHost {
 
 impl PluginHost {
     /// Builds the host: component model + async + fuel metering enabled, WASI Preview 2 linked, and
-    /// the `log`/`query`/`commands` capability interfaces wired (gated per instance by [`Grants`]).
+    /// the capability interfaces (`log`, `query`, `commands`, `staging`, …) wired (gated per instance by
+    /// [`Grants`]).
     ///
     /// # Errors
     /// Returns [`PluginError::Runtime`] if the engine or linker cannot be configured.

@@ -685,6 +685,15 @@ duplicate check leave members out. Every reference names the root: an event's pl
 jurisdiction and successions, a citation's source, a source's repositories, attached citations, notes
 and media, usage lists and research-note subjects, and an export writes one record per cluster. The
 place screen names a duplicate-record merge apart from an ADR 0026 succession. Tag is excluded.
+✅ Staged import (ADR 0040 §1, §2, §5, #407): host-api 0.25.0's `staging` interface takes one record
+graph per source record (ADR 0040 names it 0.24.0, which `set-origin` had taken), and the import worlds
+no longer import `commands`. The GEDCOM, Gramps and Digitalarkivet importers build graphs, keeping their
+record and item keys. `vitni-app` plans every entity before writing — Unchanged and Update by a dry run
+of its writes through the origin gate, Link by recorded resolution, `ExternalId` or tag name, Candidates
+from the matching engine with resolved relatives standing in, New otherwise — and withholds the contents
+of a record resolved onto another dataset's. The commit writes in dependency order, each write stamped
+with its origin, and an interrupted commit finishes when the import is run again. Candidates are written
+as new until the review stages (#411–#413) land.
 
 ## Risk register
 
