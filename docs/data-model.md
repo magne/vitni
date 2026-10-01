@@ -477,8 +477,21 @@ Boundary notes:
   is non-destructive, exactly as FamilySearch/Geni require but as audit-by-construction. The opposite
   conclusion — two records are *different* individuals — is a `PersonsDistinguished` event of the same
   shape, so the pair is never proposed again (ADR 0039 §1). Either decision lives on one person's
-  stream and is undone by retracting it; a pair already decided either way, on either stream, is
-  refused a second decision (`IdentityDecided`).
+  stream and is undone by retracting it.
+- **Merged persons form clusters (ADR 0039 §4, §5).** The `identity_links` projection holds the
+  transitive closure of the live merges: each merged record names its cluster's **root**, the survivor
+  that is not itself merged, and retracting a merge splits the cluster again. A decision is judged
+  between clusters: both records resolve to their roots first, so a merge into a member lands on its
+  root and no record joins two clusters; a pair already in one cluster, or whose clusters hold a live
+  distinction between any of their records, is refused (`IdentityDecided`). The members stay
+  separate streams; `vitni-app` composes the cluster at read time:
+  - lists, pickers, counts and suggestions show the root only;
+  - the root's detail is the union of its own and every member's rows, each still attributed to the
+    record and assertion it came from, so a correction of a member's row is written to that member,
+    while a new claim goes on the root;
+  - every reference to a member — a family partner or child, an event participant, an association,
+    a backlink, a research-note subject, a pedigree edge — names the root, and an export writes one
+    person per cluster.
 - **`DnaMatch` is owned by neither person.** It is a pairwise observation between two `DnaTest`s
   (referenced by id, self-contained) that genealogists research over time — so it is its own
   aggregate, not a value on a Person. `DnaTest` is anchored to one Person. See §12.
@@ -623,8 +636,8 @@ around evidence and provenance.
    is a function of the current data, so it is computed on demand and never stored: storing it would
    freeze a stale judgement into the log. The user's **confirm** (`PersonsMerged`) or **reject**
    (`PersonsDistinguished`) is the audited assertion, and it records the engine's assessment as its
-   evidence. Every consumer of suggestions leaves out a pair already decided either way. Nothing is
-   silently merged into the conclusion layer.
+   evidence. Every consumer of suggestions leaves out a merged record and a pair of clusters already
+   decided either way (§9). Nothing is silently merged into the conclusion layer.
 
 4. **Every import is a run, and every imported claim names its record (ADR 0037).** An import writes
    an `ImportRun` (`ImportRunStarted`, `ItemResolved` for an item resolved onto an existing aggregate,

@@ -658,6 +658,15 @@ kind. The Dashboard's data-quality card lists the strongest pairs, each linked, 
 the band and the reasons — one line per compared term, the strongest first, with its log₂ weight
 ("Same place name (+5.0)") — and the Merge screen's duplicates table, which the palette's *Find
 duplicates* opens, shows the same reasons under the band.
+✅ Persona clusters (ADR 0039 §4, §5, #404): the `identity_links` projection, SQLite and Postgres, holds
+the transitive closure of the live person merges, each member naming its cluster's root. `merge_persons`
+and `distinguish_persons` resolve both records to their roots and judge distinctness between clusters,
+and `undo_distinction_and_merge` backs the compare view's *Undo "not the same" and merge*. Lists,
+pickers, counts and suggestions hide members; `show_person` reads a cluster as the union of every
+record's rows, each attributed (`claim_owners`, a *from I0007* chip), and a correction of a member's row
+is written to that member. Families, event participants, associations, pedigrees, backlinks and
+research-note subjects name the root, and a GEDCOM or Gramps export writes one person per cluster.
+Undoing the merge restores both.
 
 ## Risk register
 
