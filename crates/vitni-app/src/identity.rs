@@ -734,6 +734,32 @@ impl<I: ClusterId> Clusters<I> {
         cluster.extend_from_slice(self.members(root));
         cluster
     }
+
+    /// Points every member's entry of `map` at a copy of its root's, so a lookup by a merged record's
+    /// id reads its cluster's root (ADR 0039 §5). A member whose root has no entry keeps its own.
+    pub(crate) fn redirect<V: Clone>(&self, map: &mut HashMap<I, V>) {
+        for (member, root) in self.links() {
+            if let Some(entry) = map.get(&root).cloned() {
+                map.insert(member, entry);
+            }
+        }
+    }
+
+    /// Moves every member's entries of an inverse index onto its root's, each once, so the records that
+    /// use any record of a cluster are listed under its root (ADR 0039 §5).
+    pub(crate) fn fold<T: PartialEq>(&self, map: &mut HashMap<I, Vec<T>>) {
+        let mut links: Vec<(I, I)> = self.links().collect();
+        links.sort_unstable();
+        for (member, root) in links {
+            let Some(entries) = map.remove(&member) else { continue };
+            let held = map.entry(root).or_default();
+            for entry in entries {
+                if !held.contains(&entry) {
+                    held.push(entry);
+                }
+            }
+        }
+    }
 }
 
 /// Parses an aggregate id read from the identity index.
@@ -840,6 +866,18 @@ pub(crate) type PersonReferences = References<PersonId>;
 pub(crate) type EventReferences = References<EventId>;
 /// How a reference names each family.
 pub(crate) type FamilyReferences = References<FamilyId>;
+/// How a reference names each place.
+pub(crate) type PlaceReferences = References<PlaceId>;
+/// How a reference names each source.
+pub(crate) type SourceReferences = References<SourceId>;
+/// How a reference names each citation.
+pub(crate) type CitationReferences = References<CitationId>;
+/// How a reference names each repository.
+pub(crate) type RepositoryReferences = References<RepositoryId>;
+/// How a reference names each note.
+pub(crate) type NoteReferences = References<NoteId>;
+/// How a reference names each media object.
+pub(crate) type MediaReferences = References<MediaId>;
 
 impl<I: ClusterId> References<I> {
     /// Loads the clusters and every record's `human_id`.

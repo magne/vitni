@@ -892,7 +892,7 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
 /// per-row query: source/media/notes by `human_id`, and tags by **name** (tags carry no `human_id`
 /// and their aggregate id is never surfaced — data-model §9).
 struct Lookups {
-    sources: HashMap<SourceId, String>,
+    sources: HashMap<SourceId, (SourceId, String)>,
     media: HashMap<MediaId, MediaLookup>,
     notes: HashMap<NoteId, use_case::NoteLookup>,
     tags: HashMap<TagId, TagRef>,
@@ -929,23 +929,25 @@ async fn tag_labels(store: &Store) -> Result<HashMap<TagId, TagRef>, AppError> {
     Ok(map)
 }
 
-/// Builds a `SourceId -> human_id` lookup from the Source projection, to render the cited source.
-async fn source_human_ids(store: &Store) -> Result<HashMap<SourceId, String>, AppError> {
+/// Builds a `SourceId -> (id, human_id)` lookup from the Source projection, to render the cited source.
+/// A merged source resolves to its cluster's root (ADR 0039 §5).
+async fn source_human_ids(store: &Store) -> Result<HashMap<SourceId, (SourceId, String)>, AppError> {
     let mut map = HashMap::new();
     for view in store.list_sources().await? {
         if let (Some(id), Some(human_id)) = (view.source_id(), view.human_id()) {
-            map.insert(id, human_id.as_str().to_owned());
+            map.insert(id, (id, human_id.as_str().to_owned()));
         }
     }
+    crate::identity::SourceClusters::load(store).await?.redirect(&mut map);
     Ok(map)
 }
 
 /// Renders a [`CitationView`] into the frontend DTO, resolving the cited source and attachments.
 fn summarize(view: &CitationView, lookups: &Lookups) -> CitationSummary {
     let source = view.source_id().and_then(|id| {
-        lookups.sources.get(&id).map(|human_id| AggRef {
+        lookups.sources.get(&id).map(|(root, human_id)| AggRef {
             human_id: human_id.clone(),
-            id: id.to_string(),
+            id: root.to_string(),
         })
     });
     CitationSummary {
@@ -986,7 +988,7 @@ fn summarize(view: &CitationView, lookups: &Lookups) -> CitationSummary {
             .filter_map(|attributed| {
                 lookups.notes.get(&attributed.value).map(|note| AttachedRef {
                     human_id: note.human_id.clone(),
-                    id: attributed.value.to_string(),
+                    id: note.id.clone(),
                     note_type: note.note_type.clone(),
                     text: note.text.clone(),
                     language: note.language.clone(),

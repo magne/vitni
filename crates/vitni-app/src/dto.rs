@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use vitni_core::date::GenealogicalDate;
 use vitni_core::enums::{AssociationRole, FactType, NoteType, ParticipantRole, SourceMediaType};
-use vitni_core::ids::{CitationId, MediaId, RepositoryId, TagId};
+use vitni_core::ids::{CitationId, MediaId, RepositoryId, SourceId, TagId};
 use vitni_core::provenance::{Agent, AgentKind, Confidence, EvidenceAnalysis, Timestamp};
 use vitni_core::text::Rect;
 use vitni_db::Store;
@@ -17,6 +17,7 @@ use vitni_db::Store;
 use crate::citation::TagRef;
 use crate::error::AppError;
 use crate::history::{OperatorKind, operator_kind};
+use crate::identity::{CitationClusters, MediaClusters, RepositoryClusters, SourceClusters};
 
 /// A reference to a related aggregate, carrying both its user-facing `human_id` (the display label)
 /// and its stable aggregate `id` (a UUID string) so a frontend can join/navigate by the stable id.
@@ -289,35 +290,44 @@ pub struct SourceReliability {
     pub record_count: usize,
 }
 
-/// Builds a `RepositoryId -> (human_id, name)` lookup from the Repository projection, so a source's
-/// repository links resolve to a name + stable id without a per-link query.
+/// Builds a `RepositoryId -> (id, human_id, name)` lookup from the Repository projection, so a source's
+/// repository links resolve to a name + stable id without a per-link query. A merged repository resolves
+/// to its cluster's root (ADR 0039 §5).
 pub(crate) async fn repository_refs(
     store: &Store,
-) -> Result<HashMap<RepositoryId, (String, Option<String>)>, AppError> {
+) -> Result<HashMap<RepositoryId, (RepositoryId, String, Option<String>)>, AppError> {
     let mut map = HashMap::new();
     for view in store.list_repositories().await? {
         if let (Some(id), Some(human_id)) = (view.repository_id(), view.human_id()) {
-            map.insert(id, (human_id.as_str().to_owned(), view.name().map(ToOwned::to_owned)));
+            map.insert(
+                id,
+                (id, human_id.as_str().to_owned(), view.name().map(ToOwned::to_owned)),
+            );
         }
     }
+    RepositoryClusters::load(store).await?.redirect(&mut map);
     Ok(map)
 }
 
 /// Builds a `CitationId -> CitationRef` lookup from the Citation projection, joined to the Source
 /// projection for the source label, so an owner's attached citations resolve to a full row without a
-/// per-citation query (the cross-aggregate join lives here — the app/db layer).
+/// per-citation query (the cross-aggregate join lives here — the app/db layer). A merged citation
+/// resolves to its cluster's root, and a citation of a merged source names the source's root (ADR 0039
+/// §5).
 pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, CitationRef>, AppError> {
-    let sources: HashMap<_, (String, Option<String>)> = store
+    let mut sources: HashMap<_, (SourceId, String, Option<String>)> = store
         .list_sources()
         .await?
         .iter()
         .filter_map(|s| {
+            let id = s.source_id()?;
             Some((
-                s.source_id()?,
-                (s.human_id()?.as_str().to_owned(), s.title().map(ToOwned::to_owned)),
+                id,
+                (id, s.human_id()?.as_str().to_owned(), s.title().map(ToOwned::to_owned)),
             ))
         })
         .collect();
+    SourceClusters::load(store).await?.redirect(&mut sources);
 
     let mut map = HashMap::new();
     for view in store.list_citations().await? {
@@ -325,15 +335,15 @@ pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, C
             continue;
         };
         let source = view.source_id().and_then(|sid| {
-            sources.get(&sid).map(|(human, _)| AggRef {
+            sources.get(&sid).map(|(root, human, _)| AggRef {
                 human_id: human.clone(),
-                id: sid.to_string(),
+                id: root.to_string(),
             })
         });
         let source_title = view
             .source_id()
             .and_then(|sid| sources.get(&sid))
-            .and_then(|(_, title)| title.clone());
+            .and_then(|(_, _, title)| title.clone());
         let (asserted_by, asserted_by_kind) = creation_agent_fields(view.created_by());
         map.insert(
             id,
@@ -353,6 +363,7 @@ pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, C
             },
         );
     }
+    CitationClusters::load(store).await?.redirect(&mut map);
     Ok(map)
 }
 
@@ -399,7 +410,7 @@ pub(crate) struct MediaLookup {
 
 /// Loads a `MediaId -> MediaLookup` lookup from the Media projection, joining each attached media
 /// object's `human_id`, path, and MIME so an owner's `MediaRefSummary` rows resolve without a
-/// per-row query.
+/// per-row query. A merged media object resolves to its cluster's root (ADR 0039 §5).
 pub(crate) async fn media_lookups(store: &Store) -> Result<HashMap<MediaId, MediaLookup>, AppError> {
     let mut map = HashMap::new();
     for view in store.list_media().await? {
@@ -415,6 +426,7 @@ pub(crate) async fn media_lookups(store: &Store) -> Result<HashMap<MediaId, Medi
             );
         }
     }
+    MediaClusters::load(store).await?.redirect(&mut map);
     Ok(map)
 }
 

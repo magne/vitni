@@ -26,7 +26,7 @@ use crate::dto::{
     SourceReliability, citation_refs, media_lookups, repository_refs, tag_refs,
 };
 use crate::error::AppError;
-use crate::identity::{self, IdentityDecision, PairDecision, SourceClusters};
+use crate::identity::{self, CitationClusters, IdentityDecision, PairDecision, SourceClusters};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
@@ -841,7 +841,7 @@ async fn resolve_repository_id(store: &Store, human_id: &str) -> Result<Reposito
 /// The lookups `summarize` needs to join a source's repository links, the citations that use it, and
 /// its attachments to the other projections without a per-row query (the join lives in this layer).
 struct SourceLookups {
-    repositories: HashMap<RepositoryId, (String, Option<String>)>,
+    repositories: HashMap<RepositoryId, (RepositoryId, String, Option<String>)>,
     citations: HashMap<CitationId, CitationRef>,
     citations_by_source: HashMap<SourceId, Vec<CitationId>>,
     media: HashMap<MediaId, MediaLookup>,
@@ -853,12 +853,18 @@ struct SourceLookups {
 impl SourceLookups {
     async fn load(workspace: &Workspace) -> Result<Self, AppError> {
         let store = workspace.store();
+        // A merged citation is listed once, as its root, and a citation of a merged source under the
+        // source's root (ADR 0039 §5).
+        let citation_clusters = CitationClusters::load(store).await?;
         let mut citations_by_source: HashMap<SourceId, Vec<CitationId>> = HashMap::new();
         for view in store.list_citations().await? {
-            if let (Some(citation_id), Some(source_id)) = (view.citation_id(), view.source_id()) {
+            if let (Some(citation_id), Some(source_id)) = (view.citation_id(), view.source_id())
+                && !citation_clusters.is_member(citation_id)
+            {
                 citations_by_source.entry(source_id).or_default().push(citation_id);
             }
         }
+        SourceClusters::load(store).await?.fold(&mut citations_by_source);
         Ok(Self {
             repositories: repository_refs(store).await?,
             citations: citation_refs(store).await?,
@@ -882,11 +888,11 @@ fn summarize(view: &SourceView, lookups: &SourceLookups) -> SourceSummary {
             let repo_ref = &asserted.value;
             let info = lookups.repositories.get(&repo_ref.repository_id);
             RepositoryLinkRef {
-                repository: info.map(|(human_id, _)| AggRef {
+                repository: info.map(|(root, human_id, _)| AggRef {
                     human_id: human_id.clone(),
-                    id: repo_ref.repository_id.to_string(),
+                    id: root.to_string(),
                 }),
-                name: info.and_then(|(_, name)| name.clone()),
+                name: info.and_then(|(_, _, name)| name.clone()),
                 call_number: repo_ref.call_number.clone(),
                 media_type: repo_ref.media_type.clone(),
                 confidence: asserted.confidence,
@@ -941,7 +947,7 @@ fn summarize(view: &SourceView, lookups: &SourceLookups) -> SourceSummary {
         .filter_map(|attributed| {
             lookups.notes.get(&attributed.value).map(|note| AttachedRef {
                 human_id: note.human_id.clone(),
-                id: attributed.value.to_string(),
+                id: note.id.clone(),
                 note_type: note.note_type.clone(),
                 text: note.text.clone(),
                 language: note.language.clone(),

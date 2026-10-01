@@ -1675,3 +1675,80 @@ async fn a_merged_family_and_marriage_export_as_one() {
     assert_eq!(document.matches("1 HUSB").count(), 1, "{document}");
     assert_eq!(document.matches("1 CHIL").count(), 1, "{document}");
 }
+
+/// A source and citation recorded twice export as one source record once both pairs are merged
+/// (ADR 0039 §5): every citation of either copy names the root, and a record citing both copies cites
+/// the root once.
+#[tokio::test]
+async fn a_merged_source_and_citation_export_as_one() {
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, workspace) = common::host()
+        .run_bulk_import(
+            &common::component("gedcom-import"),
+            invocation(workspace, import_grants()),
+            write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    let source = list_sources(&workspace).await.expect("sources")[0].human_id.clone();
+    let citation = list_citations(&workspace).await.expect("citations")[0].human_id.clone();
+    let persons = list_persons(&workspace).await.expect("persons");
+    let named = |given: &str| {
+        persons
+            .iter()
+            .find(|person| person.given.as_deref() == Some(given))
+            .expect("imported")
+            .human_id
+            .clone()
+    };
+    let (john, sam) = (named("John"), named("Sam"));
+    let human = Session::new(Agent {
+        kind: AgentKind::Human,
+        id: AgentId::from_uuid(Uuid::from_u128(1)),
+        display: Some("Tester".to_owned()),
+    });
+    let new_source = vitni_app::NewSource {
+        human_id: None,
+        title: Some("Census 1801 (copy)".to_owned()),
+    };
+    let source_copy = vitni_app::create_source(&workspace, &human, new_source, Provenance::default(), &[])
+        .await
+        .expect("source copy");
+    let new_citation = vitni_app::NewCitation {
+        human_id: None,
+        source: source_copy.clone(),
+        page: Some("p. 5".to_owned()),
+    };
+    let citation_copy = vitni_app::create_citation(&workspace, &human, new_citation, Provenance::default(), &[])
+        .await
+        .expect("citation copy");
+    for person in [&john, &sam] {
+        vitni_app::add_person_citation(&workspace, &human, person, &citation_copy, MutationMeta::default())
+            .await
+            .expect("cite");
+    }
+    vitni_app::merge_sources(&workspace, &human, &source, &source_copy, IdentityDecision::default())
+        .await
+        .expect("merge sources");
+    vitni_app::merge_citations(
+        &workspace,
+        &human,
+        &citation,
+        &citation_copy,
+        IdentityDecision::default(),
+    )
+    .await
+    .expect("merge citations");
+
+    let (_, document, _workspace) = export_gedcom(workspace, &io_dir.path().join("out.ged")).await;
+    assert_eq!(document.matches(" SOUR\n").count(), 1, "one source record\n{document}");
+    assert!(!document.contains(&format!("@{source_copy}@")), "{document}");
+    assert_eq!(
+        document.matches(&format!("1 SOUR @{source}@")).count(),
+        2,
+        "John cites the root once, and Sam cites it through the copy\n{document}"
+    );
+}

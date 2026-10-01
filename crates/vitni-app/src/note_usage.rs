@@ -40,6 +40,10 @@ impl NoteUsage {
         scan_repositories(workspace, &mut by_note).await?;
         scan_dna_tests(workspace, &mut by_note).await?;
         scan_dna_matches(workspace, &mut by_note).await?;
+        // The records that use any record of a merged cluster are listed under its root (ADR 0039 §5).
+        crate::identity::NoteClusters::load(workspace.store())
+            .await?
+            .fold(&mut by_note);
         Ok(Self { by_note })
     }
 
@@ -138,11 +142,12 @@ async fn scan_events(workspace: &Workspace, map: &mut HashMap<NoteId, Vec<UsingR
 
 /// Inverts place note attachments.
 async fn scan_places(workspace: &Workspace, map: &mut HashMap<NoteId, Vec<UsingRecordRef>>) -> Result<(), AppError> {
+    let references = crate::identity::PlaceReferences::load(workspace.store()).await?;
     for view in workspace.store().list_places().await? {
-        let (Some(id), Some(human_id)) = (view.place_id(), view.human_id()) else {
+        let Some(id) = view.place_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.names().first().map(|n| n.text.clone());
         for note in view.notes() {
             push(
@@ -162,11 +167,12 @@ async fn scan_places(workspace: &Workspace, map: &mut HashMap<NoteId, Vec<UsingR
 
 /// Inverts source note attachments.
 async fn scan_sources(workspace: &Workspace, map: &mut HashMap<NoteId, Vec<UsingRecordRef>>) -> Result<(), AppError> {
+    let references = crate::identity::SourceReferences::load(workspace.store()).await?;
     for view in workspace.store().list_sources().await? {
-        let (Some(id), Some(human_id)) = (view.source_id(), view.human_id()) else {
+        let Some(id) = view.source_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.title().map(ToOwned::to_owned);
         for note in view.notes() {
             push(
@@ -186,11 +192,12 @@ async fn scan_sources(workspace: &Workspace, map: &mut HashMap<NoteId, Vec<Using
 
 /// Inverts citation note attachments.
 async fn scan_citations(workspace: &Workspace, map: &mut HashMap<NoteId, Vec<UsingRecordRef>>) -> Result<(), AppError> {
+    let references = crate::identity::CitationReferences::load(workspace.store()).await?;
     for view in workspace.store().list_citations().await? {
-        let (Some(id), Some(human_id)) = (view.citation_id(), view.human_id()) else {
+        let Some(id) = view.citation_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         for note in view.notes() {
             push(
                 map,
@@ -212,11 +219,12 @@ async fn scan_repositories(
     workspace: &Workspace,
     map: &mut HashMap<NoteId, Vec<UsingRecordRef>>,
 ) -> Result<(), AppError> {
+    let references = crate::identity::RepositoryReferences::load(workspace.store()).await?;
     for view in workspace.store().list_repositories().await? {
-        let (Some(id), Some(human_id)) = (view.repository_id(), view.human_id()) else {
+        let Some(id) = view.repository_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.name().map(ToOwned::to_owned);
         for note in view.notes() {
             push(

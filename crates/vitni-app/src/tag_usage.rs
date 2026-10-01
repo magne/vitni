@@ -260,11 +260,12 @@ async fn scan_events(workspace: &Workspace, map: &mut HashMap<TagId, Vec<UsingRe
 
 /// Inverts place tag applications.
 async fn scan_places(workspace: &Workspace, map: &mut HashMap<TagId, Vec<UsingRecordRef>>) -> Result<(), AppError> {
+    let references = crate::identity::PlaceReferences::load(workspace.store()).await?;
     for view in workspace.store().list_places().await? {
-        let (Some(id), Some(human_id)) = (view.place_id(), view.human_id()) else {
+        let Some(id) = view.place_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.names().first().map(|n| n.text.clone());
         for tag in view.tags() {
             push(
@@ -284,11 +285,12 @@ async fn scan_places(workspace: &Workspace, map: &mut HashMap<TagId, Vec<UsingRe
 
 /// Inverts source tag applications.
 async fn scan_sources(workspace: &Workspace, map: &mut HashMap<TagId, Vec<UsingRecordRef>>) -> Result<(), AppError> {
+    let references = crate::identity::SourceReferences::load(workspace.store()).await?;
     for view in workspace.store().list_sources().await? {
-        let (Some(id), Some(human_id)) = (view.source_id(), view.human_id()) else {
+        let Some(id) = view.source_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.title().map(ToOwned::to_owned);
         for tag in view.tags() {
             push(
@@ -313,11 +315,12 @@ async fn scan_citations(
     lookups: &Lookups,
     map: &mut HashMap<TagId, Vec<UsingRecordRef>>,
 ) -> Result<(), AppError> {
+    let references = crate::identity::CitationReferences::load(workspace.store()).await?;
     for view in workspace.store().list_citations().await? {
-        let (Some(id), Some(human_id)) = (view.citation_id(), view.human_id()) else {
+        let Some(id) = view.citation_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let title = view
             .source_id()
             .and_then(|source| lookups.source_titles.get(&source))
@@ -348,11 +351,12 @@ async fn scan_repositories(
     workspace: &Workspace,
     map: &mut HashMap<TagId, Vec<UsingRecordRef>>,
 ) -> Result<(), AppError> {
+    let references = crate::identity::RepositoryReferences::load(workspace.store()).await?;
     for view in workspace.store().list_repositories().await? {
-        let (Some(id), Some(human_id)) = (view.repository_id(), view.human_id()) else {
+        let Some(id) = view.repository_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.name().map(ToOwned::to_owned);
         for tag in view.tags() {
             push(
@@ -373,11 +377,12 @@ async fn scan_repositories(
 /// Inverts media tag applications, labelling each by its file name (or web reference), falling back
 /// to the `O####` id when the media has no path yet.
 async fn scan_media(workspace: &Workspace, map: &mut HashMap<TagId, Vec<UsingRecordRef>>) -> Result<(), AppError> {
+    let references = crate::identity::MediaReferences::load(workspace.store()).await?;
     for view in workspace.store().list_media().await? {
-        let (Some(id), Some(human_id)) = (view.media_id(), view.human_id()) else {
+        let Some(id) = view.media_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.path().and_then(media_label);
         for tag in view.tags() {
             push(
@@ -398,11 +403,12 @@ async fn scan_media(workspace: &Workspace, map: &mut HashMap<TagId, Vec<UsingRec
 /// Inverts note tag applications, labelling each by the first line of its body, falling back to the
 /// `N####` id when the note is empty.
 async fn scan_notes(workspace: &Workspace, map: &mut HashMap<TagId, Vec<UsingRecordRef>>) -> Result<(), AppError> {
+    let references = crate::identity::NoteReferences::load(workspace.store()).await?;
     for view in workspace.store().list_notes().await? {
-        let (Some(id), Some(human_id)) = (view.note_id(), view.human_id()) else {
+        let Some(id) = view.note_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.text().and_then(|text| note_snippet(&text.text));
         for tag in view.tags() {
             push(

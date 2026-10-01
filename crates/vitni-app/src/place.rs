@@ -1003,7 +1003,7 @@ fn succession_ref(record: &PlaceSuccessionRecord, lookups: &PlaceLookups) -> Opt
         .and_then(|id| lookups.places.get(&id));
     Some(PlaceSuccessionRef {
         human_id: info.map_or_else(|| record.place_id.clone(), |i| i.human_id.clone()),
-        id: record.place_id.clone(),
+        id: info.map_or_else(|| record.place_id.clone(), |i| i.id.to_string()),
         name: info.and_then(|i| i.name.clone()),
         kind,
         date,
@@ -1046,7 +1046,9 @@ async fn list_resolved(workspace: &Workspace, as_of: Option<&GenealogicalDate>) 
 }
 
 /// An enclosing place joined to the Place projection: the `human_id`, primary name, and type.
+#[derive(Clone)]
 struct PlaceInfo {
+    id: PlaceId,
     human_id: String,
     name: Option<String>,
     place_type: Option<PlaceType>,
@@ -1075,6 +1077,7 @@ impl PlaceLookups {
                 places.insert(
                     id,
                     PlaceInfo {
+                        id,
                         human_id: human_id.as_str().to_owned(),
                         name: view.names().first().map(|n| n.text.clone()),
                         place_type: view.place_type().cloned(),
@@ -1083,6 +1086,11 @@ impl PlaceLookups {
                 views.insert(id, view);
             }
         }
+        // A reference to a merged place — an enclosure, a succession — reads as its cluster's root
+        // (ADR 0039 §5), and the hierarchy walk continues from the root's own enclosure.
+        let clusters = PlaceClusters::load(store).await?;
+        clusters.redirect(&mut places);
+        clusters.redirect(&mut views);
         Ok(Self {
             places,
             views,
@@ -1351,7 +1359,13 @@ fn resolve_hop(
     views: &HashMap<PlaceId, PlaceView>,
     as_of_sort_value: Option<i64>,
 ) -> Option<HierarchyHop> {
-    let view = views.get(&place_id)?;
+    own_hop(views.get(&place_id)?, as_of_sort_value)
+}
+
+/// The enclosing link `view`'s own `enclosed_by` set carries as of `as_of_sort_value`, as in
+/// [`resolve_hop`] — read from the record itself, so a merged member's own jurisdiction is not
+/// replaced by its root's.
+fn own_hop(view: &PlaceView, as_of_sort_value: Option<i64>) -> Option<HierarchyHop> {
     let link = match as_of_sort_value {
         Some(target) => view.enclosed_by_as_of(target),
         None => view.primary_enclosed_by(),
@@ -1378,13 +1392,29 @@ fn enclosing_ref_from_hop(hop: &HierarchyHop, lookups: &PlaceLookups) -> PlaceEn
     let info = lookups.places.get(&hop.place_id);
     PlaceEnclosingRef {
         human_id: info.map_or_else(|| hop.place_id.to_string(), |i| i.human_id.clone()),
-        id: hop.place_id.to_string(),
+        id: info.map_or(hop.place_id, |i| i.id).to_string(),
         name: info.and_then(|i| i.name.clone()),
         place_type: info.and_then(|i| i.place_type.clone()),
         date: hop.date.clone(),
         confidence: hop.confidence,
         assertion_id: hop.assertion_id.to_string(),
     }
+}
+
+/// The transitive jurisdiction chain of `view`, nearest first, as of `as_of_sort_value` (ADR 0026 §1):
+/// the first hop from the record's own enclosure, every later hop through the (cluster-resolved)
+/// lookups.
+fn enclosing_chain(view: &PlaceView, lookups: &PlaceLookups, as_of_sort_value: Option<i64>) -> Vec<HierarchyHop> {
+    let Some(place_id) = view.place_id() else {
+        return Vec::new();
+    };
+    hierarchy_chain(place_id, |id| {
+        if id == place_id {
+            own_hop(view, as_of_sort_value)
+        } else {
+            resolve_hop(id, &lookups.views, as_of_sort_value)
+        }
+    })
 }
 
 /// Builds the DTO, resolving the name and the transitive enclosing chain **as of** `as_of`'s
@@ -1395,10 +1425,7 @@ fn enclosing_ref_from_hop(hop: &HierarchyHop, lookups: &PlaceLookups) -> PlaceEn
 fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&GenealogicalDate>) -> PlaceSummary {
     let as_of_sort_value = as_of.map(|date| date.sort_value);
     let names = name_refs(view);
-    let chain = view
-        .place_id()
-        .map(|place_id| hierarchy_chain(place_id, |id| resolve_hop(id, &lookups.views, as_of_sort_value)))
-        .unwrap_or_default();
+    let chain = enclosing_chain(view, lookups, as_of_sort_value);
     let enclosing = chain.iter().map(|hop| enclosing_ref_from_hop(hop, lookups)).collect();
     let geometries = geometry_refs(view, lookups);
     let citations = view
@@ -1433,7 +1460,7 @@ fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&Gene
         .filter_map(|attributed| {
             lookups.notes.get(&attributed.value).map(|note| AttachedRef {
                 human_id: note.human_id.clone(),
-                id: attributed.value.to_string(),
+                id: note.id.clone(),
                 note_type: note.note_type.clone(),
                 text: note.text.clone(),
                 language: note.language.clone(),

@@ -881,6 +881,7 @@ pub async fn list_event_rows(workspace: &Workspace) -> Result<Vec<EventRow>, App
             );
         }
     }
+    crate::identity::PlaceClusters::load(store).await?.redirect(&mut places);
     let views = store.list_events().await?;
     let clusters = EventClusters::load(store).await?;
     let mut rows = Vec::with_capacity(views.len());
@@ -911,7 +912,9 @@ struct PersonInfo {
 }
 
 /// A place joined to the Place projection: the `human_id` and primary name, for the linked-place row.
+#[derive(Clone)]
 struct PlaceInfo {
+    id: PlaceId,
     human_id: String,
     name: Option<String>,
 }
@@ -1005,12 +1008,14 @@ impl EventLookups {
                 places.insert(
                     id,
                     PlaceInfo {
+                        id,
                         human_id: human_id.as_str().to_owned(),
                         name: view.names().first().map(|n| n.text.clone()),
                     },
                 );
             }
         }
+        crate::identity::PlaceClusters::load(store).await?.redirect(&mut places);
         Ok(Self {
             places,
             citations: citation_refs(store).await?,
@@ -1254,7 +1259,7 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         let info = lookups.places.get(&asserted.value);
         PlaceRefSummary {
             human_id: info.map_or_else(|| asserted.value.to_string(), |i| i.human_id.clone()),
-            id: asserted.value.to_string(),
+            id: info.map_or(asserted.value, |i| i.id).to_string(),
             name: info.and_then(|i| i.name.clone()),
         }
     });
@@ -1299,7 +1304,7 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         .filter_map(|attributed| {
             lookups.notes.get(&attributed.value).map(|note| AttachedRef {
                 human_id: note.human_id.clone(),
-                id: attributed.value.to_string(),
+                id: note.id.clone(),
                 note_type: note.note_type.clone(),
                 text: note.text.clone(),
                 language: note.language.clone(),

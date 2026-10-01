@@ -683,11 +683,15 @@ impl RepositoryLookups {
                 *citation_counts.entry(source_id).or_default() += 1;
             }
         }
+        // A source held by a merged repository is listed under the repository's root, and a merged
+        // source names its own root (ADR 0039 §5).
+        let sources = crate::identity::SourceReferences::load(store).await?;
         let mut sources_by_repository: HashMap<RepositoryId, Vec<SourceLinkRef>> = HashMap::new();
         for view in store.list_sources().await? {
-            let (Some(source_id), Some(human_id)) = (view.source_id(), view.human_id()) else {
+            let Some(source_id) = view.source_id() else {
                 continue;
             };
+            let (source_id, human_id) = sources.resolve(source_id);
             let title = view.title().map(ToOwned::to_owned);
             let citation_count = citation_counts.get(&source_id).copied().unwrap_or_default();
             for repo_ref in view.repositories() {
@@ -696,7 +700,7 @@ impl RepositoryLookups {
                     .or_default()
                     .push(SourceLinkRef {
                         source: AggRef {
-                            human_id: human_id.as_str().to_owned(),
+                            human_id: human_id.clone(),
                             id: source_id.to_string(),
                         },
                         title: title.clone(),
@@ -706,6 +710,7 @@ impl RepositoryLookups {
                     });
             }
         }
+        RepositoryClusters::load(store).await?.fold(&mut sources_by_repository);
         Ok(Self {
             sources_by_repository,
             notes: use_case::note_lookups(store).await?,
@@ -728,7 +733,7 @@ fn summarize(view: &RepositoryView, lookups: &RepositoryLookups) -> RepositorySu
         .filter_map(|attributed| {
             lookups.notes.get(&attributed.value).map(|note| AttachedRef {
                 human_id: note.human_id.clone(),
-                id: attributed.value.to_string(),
+                id: note.id.clone(),
                 note_type: note.note_type.clone(),
                 text: note.text.clone(),
                 language: note.language.clone(),

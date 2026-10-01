@@ -38,11 +38,10 @@ pub struct ResearchNoteSubjectRef {
 }
 
 /// The aggregate-id → `human_id` lookups for the four subject kinds, loaded once per query so every
-/// subject of every returned research note resolves without a lookup per subject. A person, family or
-/// event subject resolves through its cluster (ADR 0039 §5), so a note about a merged record names the
-/// root.
+/// subject of every returned research note resolves without a lookup per subject. Every subject
+/// resolves through its cluster (ADR 0039 §5), so a note about a merged record names the root.
 struct SubjectIndex {
-    places: HashMap<String, String>,
+    places: crate::identity::PlaceReferences,
     persons: crate::identity::PersonReferences,
     families: crate::identity::FamilyReferences,
     events: crate::identity::EventReferences,
@@ -51,7 +50,7 @@ struct SubjectIndex {
 /// Loads the [`SubjectIndex`] for the four conclusion-bearing aggregates.
 async fn subject_index(store: &Store) -> Result<SubjectIndex, AppError> {
     Ok(SubjectIndex {
-        places: store.human_id_index("place").await?.into_iter().collect(),
+        places: crate::identity::PlaceReferences::load(store).await?,
         persons: crate::identity::PersonReferences::load(store).await?,
         families: crate::identity::FamilyReferences::load(store).await?,
         events: crate::identity::EventReferences::load(store).await?,
@@ -64,11 +63,7 @@ fn resolve_subject_ref(subject: SubjectRef, index: &SubjectIndex) -> ResearchNot
         SubjectRef::Person(id) => ("person", stringify(index.persons.resolve(id))),
         SubjectRef::Family(id) => ("family", stringify(index.families.resolve(id))),
         SubjectRef::Event(id) => ("event", stringify(index.events.resolve(id))),
-        SubjectRef::Place(id) => {
-            let id = id.to_string();
-            let human_id = index.places.get(&id).cloned().unwrap_or_default();
-            ("place", (id, human_id))
-        }
+        SubjectRef::Place(id) => ("place", stringify(index.places.resolve(id))),
     };
     ResearchNoteSubjectRef {
         kind: kind.to_owned(),
@@ -448,8 +443,8 @@ pub async fn list_research_notes_for_subject(
 
 /// Lists every research note arguing about the record `subject` names by its `human_id` — the
 /// reverse-lookup tab on the four conclusion-bearing detail screens. Resolves the `human_id` to its
-/// aggregate id and then queries [`list_research_notes_for_subject`] — for a person, family or event,
-/// once per record of its cluster (ADR 0039 §5).
+/// aggregate id and then queries [`list_research_notes_for_subject`] once per record of its cluster
+/// (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -476,7 +471,11 @@ pub async fn list_research_notes_about(
             .into_iter()
             .map(SubjectRef::Event)
             .collect(),
-        SubjectRef::Place(_) => vec![subject],
+        SubjectRef::Place(id) => cluster_of(store, id)
+            .await?
+            .into_iter()
+            .map(SubjectRef::Place)
+            .collect(),
     };
     let mut notes: Vec<ResearchNoteSummary> = Vec::new();
     for record in records {

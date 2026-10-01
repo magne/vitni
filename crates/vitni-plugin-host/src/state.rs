@@ -1873,9 +1873,9 @@ impl query::Host for HostState {
                         })
                     })
                     .collect(),
-                citations: person.citations.into_iter().map(|c| c.human_id).collect(),
+                citations: distinct(person.citations.into_iter().map(|c| c.human_id)),
                 media: person.media.iter().map(from_media_ref).collect(),
-                notes: person.notes.into_iter().map(|n| n.human_id).collect(),
+                notes: distinct(person.notes.into_iter().map(|n| n.human_id)),
                 tags: person.tags,
                 restrictions: from_restrictions(&person.restrictions),
             })
@@ -1912,9 +1912,9 @@ impl query::Host for HostState {
                     })
                     .collect(),
                 events: family.events.into_iter().map(|event| event.human_id).collect(),
-                citations: family.citations.into_iter().map(|citation| citation.human_id).collect(),
+                citations: distinct(family.citations.into_iter().map(|citation| citation.human_id)),
                 media: family.media.iter().map(from_media_ref).collect(),
-                notes: family.notes.into_iter().map(|note| note.human_id).collect(),
+                notes: distinct(family.notes.into_iter().map(|note| note.human_id)),
                 tags: family.tags.into_iter().map(|tag| tag.id).collect(),
                 restrictions: from_restrictions(&family.restrictions),
             })
@@ -1937,9 +1937,9 @@ impl query::Host for HostState {
                 place: event.place.map(|p| p.human_id),
                 description: event.description,
                 addresses: event.addresses.iter().map(|a| from_address(&a.address)).collect(),
-                citations: event.citations.into_iter().map(|c| c.human_id).collect(),
+                citations: distinct(event.citations.into_iter().map(|c| c.human_id)),
                 media: event.media.iter().map(from_media_ref).collect(),
-                notes: event.notes.into_iter().map(|n| n.human_id).collect(),
+                notes: distinct(event.notes.into_iter().map(|n| n.human_id)),
                 tags: event.tags.into_iter().map(|t| t.id).collect(),
                 restrictions: from_restrictions(&event.restrictions),
             })
@@ -1981,7 +1981,7 @@ impl query::Host for HostState {
                 source: citation.source.map(|s| s.human_id),
                 page: citation.page,
                 confidence: citation.confidence.map(from_confidence),
-                notes: citation.notes.into_iter().map(|note| note.human_id).collect(),
+                notes: distinct(citation.notes.into_iter().map(|note| note.human_id)),
                 restrictions: from_restrictions(&citation.restrictions),
             })
             .collect())
@@ -2069,11 +2069,23 @@ impl query::Host for HostState {
                 human_id: place.human_id,
                 name: place.names.into_iter().next().map(|n| n.text),
                 place_type: place.place_type.map(from_place_type),
-                enclosed_by: place.enclosing.into_iter().map(|e| e.human_id).collect(),
+                enclosed_by: distinct(place.enclosing.into_iter().map(|e| e.human_id)),
                 restrictions: from_restrictions(&place.restrictions),
             })
             .collect())
     }
+}
+
+/// `ids` in order, each once: two claims on a merged record can name records of one cluster, which
+/// every reader resolves to the same root (ADR 0039 §5), and an export writes that reference once.
+fn distinct(ids: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut unique = Vec::new();
+    for id in ids {
+        if !unique.contains(&id) {
+            unique.push(id);
+        }
+    }
+    unique
 }
 
 /// Maps the WIT `confidence` enum onto the domain [`Confidence`](vitni_app::Confidence).
