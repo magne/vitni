@@ -182,7 +182,9 @@ impl EventRefResolver for EventRefService {
             | EventCommand::SetRestrictions { .. }
             | EventCommand::RetractAssertion { .. }
             | EventCommand::SupersedeAssertion { .. }
-            | EventCommand::SetHumanId { .. } => true,
+            | EventCommand::SetHumanId { .. }
+            | EventCommand::MergeEvents { .. }
+            | EventCommand::DistinguishEvents { .. } => true,
         };
         EventRefs { place_exists }
     }

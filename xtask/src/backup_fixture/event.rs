@@ -164,7 +164,10 @@ fn push_attachments(
     }
 }
 
+/// The event's corrections and identity decisions: merged with one duplicate copy and distinguished
+/// from another, both minted here — the projection needs neither to exist.
 fn push_corrections(builder: &mut Builder, event_id: EventId, target: AssertionId) {
+    let (duplicate, other) = (EventId::from_uuid(builder.uuid()), EventId::from_uuid(builder.uuid()));
     let bodies = [
         EventEventBody::AssertionRetracted { event_id, target },
         EventEventBody::AssertionSuperseded { event_id, target },
@@ -172,6 +175,16 @@ fn push_corrections(builder: &mut Builder, event_id: EventId, target: AssertionI
             event_id,
             human_id: HumanId::new("E0099"),
             old_human_id: HumanId::new("E0001"),
+        },
+        EventEventBody::EventsMerged {
+            surviving: event_id,
+            merged: duplicate,
+            assessment: None,
+        },
+        EventEventBody::EventsDistinguished {
+            event: event_id,
+            other,
+            assessment: None,
         },
     ];
     for body in bodies {

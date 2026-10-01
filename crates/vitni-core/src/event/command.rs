@@ -6,6 +6,7 @@ use crate::address::Address;
 use crate::date::GenealogicalDate;
 use crate::enums::{EventType, Restriction};
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PlaceId, TagId};
+use crate::matching::MatchEvidence;
 use crate::provenance::AssertionMeta;
 use crate::text::MediaRef;
 
@@ -120,6 +121,24 @@ pub enum EventCommand {
         event_id: EventId,
         /// The new user-facing identifier.
         human_id: HumanId,
+    },
+    /// Record that `merged` is the same event as `surviving` (ADR 0039 §1).
+    MergeEvents {
+        /// The surviving event — the stream the decision is written on.
+        surviving: EventId,
+        /// The event merged into it.
+        merged: EventId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
+    },
+    /// Record that `other` is a different event from `event` (ADR 0039 §1).
+    DistinguishEvents {
+        /// The event the decision is written on.
+        event: EventId,
+        /// The event it is distinct from.
+        other: EventId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
     },
 }
 

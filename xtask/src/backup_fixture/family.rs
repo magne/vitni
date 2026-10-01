@@ -177,7 +177,10 @@ fn push_attachments(builder: &mut Builder, family_id: FamilyId, media_id: MediaI
     }
 }
 
+/// The family's corrections and identity decisions: merged with one duplicate copy and distinguished
+/// from another, both minted here — the projection needs neither to exist.
 fn push_corrections(builder: &mut Builder, family_id: FamilyId, target: AssertionId) {
+    let (duplicate, other) = (FamilyId::from_uuid(builder.uuid()), FamilyId::from_uuid(builder.uuid()));
     let bodies = [
         FamilyEventBody::AssertionRetracted { family_id, target },
         FamilyEventBody::AssertionSuperseded { family_id, target },
@@ -185,6 +188,16 @@ fn push_corrections(builder: &mut Builder, family_id: FamilyId, target: Assertio
             family_id,
             human_id: HumanId::new("F0099"),
             old_human_id: HumanId::new("F0001"),
+        },
+        FamilyEventBody::FamiliesMerged {
+            surviving: family_id,
+            merged: duplicate,
+            assessment: None,
+        },
+        FamilyEventBody::FamiliesDistinguished {
+            family: family_id,
+            other,
+            assessment: None,
         },
     ];
     for body in bodies {

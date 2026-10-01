@@ -41,3 +41,6 @@ err-event-not-found = no event with human_id "{ $id }"
 err-event-not-exist = event { $id } does not exist
 err-event-exists = event { $id } already exists
 err-unknown-place = event references unknown place { $id }
+err-event-merge-conflict = events { $surviving } and { $merged } cannot be merged: { $reason }
+err-event-distinct-from-itself = event { $id } cannot be distinguished from itself
+err-event-identity-decided = events { $event } and { $other } already have a live identity decision; undo it first

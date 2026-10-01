@@ -23,4 +23,26 @@ pub enum EventError {
     /// `SupersedeAssertion` referenced an assertion that is unknown or already retracted.
     #[error("assertion {0} is not present or already retracted")]
     SupersedesMissingAssertion(AssertionId),
+    /// The two events cannot be merged.
+    #[error("events {surviving} and {merged} cannot be merged: {reason}")]
+    MergeConflict {
+        /// The intended surviving event.
+        surviving: EventId,
+        /// The event that would have been merged in.
+        merged: EventId,
+        /// Why the merge was refused.
+        reason: String,
+    },
+    /// An event was distinguished from itself.
+    #[error("event {0} cannot be distinguished from itself")]
+    DistinctFromItself(EventId),
+    /// The pair already holds a live identity decision — merged or distinguished — on this event
+    /// (ADR 0039 §1); undo it before deciding again.
+    #[error("events {event} and {other} already have a live identity decision")]
+    IdentityDecided {
+        /// The event the decision was asked on.
+        event: EventId,
+        /// The other event of the pair.
+        other: EventId,
+    },
 }

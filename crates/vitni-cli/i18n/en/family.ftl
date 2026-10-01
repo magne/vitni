@@ -15,3 +15,6 @@ err-child-present = person { $id } is already a child of this family
 err-child-absent = person { $id } is not a child of this family
 err-parent-not-partner = person { $id } is not a partner of this family
 err-child-relationship-present = child { $child } already has a relationship to partner { $parent }
+err-family-merge-conflict = families { $surviving } and { $merged } cannot be merged: { $reason }
+err-family-distinct-from-itself = family { $id } cannot be distinguished from itself
+err-family-identity-decided = families { $family } and { $other } already have a live identity decision; undo it first

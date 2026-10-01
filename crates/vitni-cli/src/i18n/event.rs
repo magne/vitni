@@ -83,6 +83,26 @@ impl Localizer {
             EventError::RetractsMissingAssertion(id) | EventError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
+            EventError::MergeConflict {
+                surviving,
+                merged,
+                reason,
+            } => fl!(
+                self.loader,
+                "err-event-merge-conflict",
+                surviving = surviving.to_string(),
+                merged = merged.to_string(),
+                reason = reason.clone()
+            ),
+            EventError::DistinctFromItself(id) => {
+                fl!(self.loader, "err-event-distinct-from-itself", id = id.to_string())
+            }
+            EventError::IdentityDecided { event, other } => fl!(
+                self.loader,
+                "err-event-identity-decided",
+                event = event.to_string(),
+                other = other.to_string()
+            ),
         }
     }
 }

@@ -80,12 +80,26 @@ pub struct FamilyState {
     pub tags: Vec<Attributed<TagId>>,
     /// All currently-live external identifiers (data-model §11) — the re-import resolution key.
     pub external_ids: Vec<Attributed<ExternalId>>,
+    /// The families merged into this survivor (ADR 0039 §1), each attributed to the `FamiliesMerged`
+    /// assertion that recorded it, so undoing that assertion removes the link.
+    #[serde(default)]
+    pub merged: Vec<Attributed<FamilyId>>,
+    /// The families concluded to be different from this one, each attributed to the
+    /// `FamiliesDistinguished` assertion that recorded it, so undoing that assertion lifts it.
+    #[serde(default)]
+    pub distinguished: Vec<Attributed<FamilyId>>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,
 }
 
 impl FamilyState {
+    /// Whether this family holds a live identity decision — merged or distinguished — about `other`.
+    #[must_use]
+    pub(crate) fn has_decided(&self, other: FamilyId) -> bool {
+        self.merged.iter().chain(&self.distinguished).any(|d| d.value == other)
+    }
+
     /// Whether `person_id` is a currently-live partner.
     #[must_use]
     pub(crate) fn has_partner(&self, person_id: PersonId) -> bool {
@@ -147,6 +161,8 @@ impl FamilyState {
         self.notes.retain(|n| n.assertion_id != target);
         self.tags.retain(|t| t.assertion_id != target);
         self.external_ids.retain(|e| e.assertion_id != target);
+        self.merged.retain(|m| m.assertion_id != target);
+        self.distinguished.retain(|d| d.assertion_id != target);
         self.live_assertions.remove(&target);
         if let Some(child_id) = removed_child {
             self.remove_child_rows(child_id);

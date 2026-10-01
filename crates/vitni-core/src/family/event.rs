@@ -13,6 +13,7 @@ use std::collections::BTreeSet;
 use crate::assertions::{Envelope, EventBody};
 use crate::enums::{ChildParentRelationship, Restriction};
 use crate::ids::{AssertionId, CitationId, EventId, FamilyId, HumanId, NoteId, PersonId, TagId};
+use crate::matching::MatchEvidence;
 use crate::text::{ExternalId, MediaRef};
 
 /// A single Family assertion plus its provenance envelope (ADR 0004 §1).
@@ -149,6 +150,28 @@ pub enum FamilyEventBody {
         /// The identifier in effect before this change (for the audit trail).
         old_human_id: HumanId,
     },
+    /// Another family was concluded to be this one (ADR 0039 §1): a same-as link on the survivor that
+    /// leaves the merged family's own stream untouched (data-model §9).
+    FamiliesMerged {
+        /// The family that survives as the cluster's record.
+        surviving: FamilyId,
+        /// The family merged into it.
+        merged: FamilyId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a merge made
+        /// without the engine.
+        assessment: Option<MatchEvidence>,
+    },
+    /// Another family was concluded to be a different family from this one (ADR 0039 §1), so the
+    /// pair is never proposed as a duplicate again.
+    FamiliesDistinguished {
+        /// The family the decision is recorded on.
+        family: FamilyId,
+        /// The family it is distinct from.
+        other: FamilyId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a decision
+        /// made without the engine.
+        assessment: Option<MatchEvidence>,
+    },
 }
 
 impl EventBody for FamilyEventBody {
@@ -171,6 +194,8 @@ impl EventBody for FamilyEventBody {
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
             Self::HumanIdChanged { .. } => "HumanIdChanged",
+            Self::FamiliesMerged { .. } => "FamiliesMerged",
+            Self::FamiliesDistinguished { .. } => "FamiliesDistinguished",
         }
     }
 

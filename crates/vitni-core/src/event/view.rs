@@ -13,7 +13,7 @@ use crate::date::GenealogicalDate;
 use crate::enums::{EventType, Restriction};
 use crate::event::decide::evolve;
 use crate::event::state::EventState;
-use crate::ids::{CitationId, EventId, HumanId, NoteId, PlaceId, TagId};
+use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PlaceId, TagId};
 use crate::text::MediaRef;
 
 /// The current best synthesis of an Event, derived from the event log (data-model §6).
@@ -125,6 +125,33 @@ impl EventView {
         &self.state.restrictions
     }
 
+    /// The ids of events currently merged into this survivor (ADR 0039 §1) — whose `EventsMerged`
+    /// assertion has not been undone.
+    #[must_use]
+    pub fn merged(&self) -> Vec<EventId> {
+        self.state.merged.iter().map(|m| m.value).collect()
+    }
+
+    /// The ids of events concluded to be different from this one (ADR 0039 §1).
+    #[must_use]
+    pub fn distinguished(&self) -> Vec<EventId> {
+        self.state.distinguished.iter().map(|d| d.value).collect()
+    }
+
+    /// The live distinctions, each paired with the `AssertionId` of its `EventsDistinguished` — the
+    /// target an undo retracts (ADR 0039 §4).
+    #[must_use]
+    pub fn distinguished_with_assertions(&self) -> &[Attributed<EventId>] {
+        &self.state.distinguished
+    }
+
+    /// Whether `assertion` is a live assertion on this event's stream — one a retraction or
+    /// supersession of it may target.
+    #[must_use]
+    pub fn holds_assertion(&self, assertion: AssertionId) -> bool {
+        self.state.live_assertions.contains(&assertion)
+    }
+
     /// Currently-live postal addresses, each paired with the `AssertionId` that introduced it — the
     /// read side of the per-card correction (Edit supersedes it, Retract retracts it).
     #[must_use]
@@ -161,7 +188,6 @@ impl View<EventState> for EventView {
 mod tests {
     use super::*;
     use crate::assertions::Attributed;
-    use crate::ids::AssertionId;
     use uuid::Uuid;
 
     #[test]

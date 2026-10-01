@@ -19,10 +19,10 @@ use vitni_core::dna_match::command::{DnaMatchCommand, DnaMatchCommandEnvelope};
 use vitni_core::dna_test::DnaTestView;
 use vitni_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
 use vitni_core::enums::FactType;
-use vitni_core::event::EventView;
 use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
-use vitni_core::family::FamilyView;
+use vitni_core::event::{EventEventBody, EventView};
 use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
+use vitni_core::family::{FamilyEventBody, FamilyView};
 use vitni_core::ids::{AssertionId, ImportRunId};
 use vitni_core::import_run::ImportRunView;
 use vitni_core::matching::MatchEvidence;
@@ -1089,16 +1089,22 @@ async fn label_runs(store: &Store, mut entries: Vec<ChangeLogEntry>) -> Result<V
 
 /// Extracts a payload-specific [`ActivityDetail`] when the event type alone is too coarse.
 ///
-/// Person `FactAsserted` carries the fact's kind, and an identity decision the assessment it was made
-/// on; every other Person variant — and
-/// every other aggregate — relies on the event-type verb the frontend localizes, so they return
-/// `None`. Decoding the concrete enum keeps this exhaustive: a new Person variant is a compile error
-/// here, not a silent fallthrough.
+/// Person `FactAsserted` carries the fact's kind, and an identity decision — on a person, an event or a
+/// family — the assessment it was made on; every other variant, and every other aggregate, relies on
+/// the event-type verb the frontend localizes, so they return `None`. Decoding the concrete enums keeps
+/// this exhaustive: a new variant of a decoded aggregate is a compile error here, not a silent
+/// fallthrough.
 fn extract_detail(event: &StoredEvent) -> Option<ActivityDetail> {
-    if event.aggregate_type != "person" {
-        return None;
+    match event.aggregate_type.as_str() {
+        "person" => person_detail(serde_json::from_str(&event.payload).ok()?),
+        "event" => event_detail(serde_json::from_str(&event.payload).ok()?),
+        "family" => family_detail(serde_json::from_str(&event.payload).ok()?),
+        _ => None,
     }
-    let body: PersonEventBody = serde_json::from_str(&event.payload).ok()?;
+}
+
+/// The detail of a Person event: a fact's kind, or an identity decision's assessment.
+fn person_detail(body: PersonEventBody) -> Option<ActivityDetail> {
     match body {
         PersonEventBody::FactAsserted { fact, .. } => Some(ActivityDetail::Fact {
             fact_type: fact.fact_type,
@@ -1119,10 +1125,62 @@ fn extract_detail(event: &StoredEvent) -> Option<ActivityDetail> {
         | PersonEventBody::AssertionRetracted { .. }
         | PersonEventBody::AssertionSuperseded { .. } => None,
         PersonEventBody::PersonsMerged { assessment, .. }
-        | PersonEventBody::PersonsDistinguished { assessment, .. } => {
-            assessment.map(|assessment| ActivityDetail::IdentityDecision { assessment })
-        }
+        | PersonEventBody::PersonsDistinguished { assessment, .. } => identity_detail(assessment),
     }
+}
+
+/// The detail of an Event event: an identity decision's assessment.
+fn event_detail(body: EventEventBody) -> Option<ActivityDetail> {
+    match body {
+        EventEventBody::EventsMerged { assessment, .. } | EventEventBody::EventsDistinguished { assessment, .. } => {
+            identity_detail(assessment)
+        }
+        EventEventBody::EventCreated { .. }
+        | EventEventBody::EventTypeSet { .. }
+        | EventEventBody::DateAsserted { .. }
+        | EventEventBody::DescriptionSet { .. }
+        | EventEventBody::PlaceLinked { .. }
+        | EventEventBody::AddressAdded { .. }
+        | EventEventBody::CitationAdded { .. }
+        | EventEventBody::MediaAttached { .. }
+        | EventEventBody::NoteAttached { .. }
+        | EventEventBody::Tagged { .. }
+        | EventEventBody::Untagged { .. }
+        | EventEventBody::RestrictionsChanged { .. }
+        | EventEventBody::AssertionRetracted { .. }
+        | EventEventBody::AssertionSuperseded { .. }
+        | EventEventBody::HumanIdChanged { .. } => None,
+    }
+}
+
+/// The detail of a Family event: an identity decision's assessment.
+fn family_detail(body: FamilyEventBody) -> Option<ActivityDetail> {
+    match body {
+        FamilyEventBody::FamiliesMerged { assessment, .. }
+        | FamilyEventBody::FamiliesDistinguished { assessment, .. } => identity_detail(assessment),
+        FamilyEventBody::FamilyCreated { .. }
+        | FamilyEventBody::PartnerAdded { .. }
+        | FamilyEventBody::PartnerRemoved { .. }
+        | FamilyEventBody::ChildAdded { .. }
+        | FamilyEventBody::ChildRelationshipAsserted { .. }
+        | FamilyEventBody::ChildRemoved { .. }
+        | FamilyEventBody::RestrictionsChanged { .. }
+        | FamilyEventBody::CitationAdded { .. }
+        | FamilyEventBody::FamilyEventLinked { .. }
+        | FamilyEventBody::MediaAttached { .. }
+        | FamilyEventBody::NoteAttached { .. }
+        | FamilyEventBody::Tagged { .. }
+        | FamilyEventBody::Untagged { .. }
+        | FamilyEventBody::ExternalIdAdded { .. }
+        | FamilyEventBody::AssertionRetracted { .. }
+        | FamilyEventBody::AssertionSuperseded { .. }
+        | FamilyEventBody::HumanIdChanged { .. } => None,
+    }
+}
+
+/// An identity decision's detail: the assessment it was made on, if the engine supplied one.
+fn identity_detail(assessment: Option<MatchEvidence>) -> Option<ActivityDetail> {
+    assessment.map(|assessment| ActivityDetail::IdentityDecision { assessment })
 }
 
 /// Parses the provenance header (assertion id + context) from an event payload.
