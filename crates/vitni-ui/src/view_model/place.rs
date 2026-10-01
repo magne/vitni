@@ -1407,6 +1407,8 @@ mod place_detail_events_tests {
             notes: Vec::new(),
             tags: Vec::new(),
             restrictions: BTreeSet::new(),
+            merged: Vec::new(),
+            claim_owners: std::collections::BTreeMap::new(),
         }
     }
 

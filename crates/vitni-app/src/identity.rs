@@ -1,5 +1,6 @@
-//! Identity clusters (ADR 0039 §4, §5): the decision use-cases and the read side of `PersonsMerged`,
-//! `EventsMerged` and `FamiliesMerged`.
+//! Identity clusters (ADR 0039 §4, §5): the decision use-cases and the read side of every
+//! `<Kind>sMerged` — persons, events, families, places, sources, citations, repositories, notes and
+//! media.
 //!
 //! A merge links records rather than rewriting them, so every merged record keeps its own stream.
 //! The `identity_links` index names each merged record's cluster root, and this module turns it into
@@ -16,16 +17,24 @@ use std::future::Future;
 use std::hash::Hash;
 
 use uuid::Uuid;
+use vitni_core::citation::{CitationCommand, CitationError, CitationView};
 use vitni_core::event::command::EventCommand;
 use vitni_core::event::{EventError, EventView};
 use vitni_core::family::command::FamilyCommand;
 use vitni_core::family::{FamilyError, FamilyView};
 use vitni_core::identity::ClusterRecord;
-use vitni_core::ids::{AssertionId, EventId, FamilyId, PersonId};
+use vitni_core::ids::{
+    AssertionId, CitationId, EventId, FamilyId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId,
+};
 use vitni_core::matching::MatchEvidence;
+use vitni_core::media::{MediaCommand, MediaError, MediaView};
+use vitni_core::note::{NoteCommand, NoteError, NoteView};
 use vitni_core::person::PersonView;
 use vitni_core::person::command::PersonCommand;
 use vitni_core::person::error::PersonError;
+use vitni_core::place::{PlaceCommand, PlaceError, PlaceView};
+use vitni_core::repository::{RepositoryCommand, RepositoryError, RepositoryView};
+use vitni_core::source::{SourceCommand, SourceError, SourceView};
 use vitni_db::{DbError, Store};
 
 use crate::error::AppError;
@@ -49,6 +58,30 @@ impl ClusterId for EventId {
 
 impl ClusterId for FamilyId {
     type View = FamilyView;
+}
+
+impl ClusterId for PlaceId {
+    type View = PlaceView;
+}
+
+impl ClusterId for SourceId {
+    type View = SourceView;
+}
+
+impl ClusterId for CitationId {
+    type View = CitationView;
+}
+
+impl ClusterId for RepositoryId {
+    type View = RepositoryView;
+}
+
+impl ClusterId for NoteId {
+    type View = NoteView;
+}
+
+impl ClusterId for MediaId {
+    type View = MediaView;
 }
 
 /// What the decision use-cases and readers need of one cluster kind beyond [`ClusterRecord`]: how to
@@ -266,6 +299,358 @@ impl ClusterView for FamilyView {
     }
 }
 
+impl ClusterView for PlaceView {
+    const AGGREGATE: &'static str = "place";
+
+    async fn find(store: &Store, human_id: &str) -> Result<Option<Self>, AppError> {
+        Ok(store.find_place(human_id).await?)
+    }
+
+    fn not_found(human_id: &str) -> AppError {
+        AppError::PlaceNotFound(human_id.to_owned())
+    }
+
+    fn decided(place: PlaceId, other: PlaceId) -> AppError {
+        PlaceError::IdentityDecided { place, other }.into()
+    }
+
+    async fn merge(
+        store: &Store,
+        session: &Session,
+        [surviving, merged]: [PlaceId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = PlaceCommand::MergePlaces {
+            surviving,
+            merged,
+            assessment: decision.assessment,
+        };
+        let id = surviving.to_string();
+        crate::place::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn distinguish(
+        store: &Store,
+        session: &Session,
+        [place, other]: [PlaceId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = PlaceCommand::DistinguishPlaces {
+            place,
+            other,
+            assessment: decision.assessment,
+        };
+        let id = place.to_string();
+        crate::place::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn retract(
+        store: &Store,
+        session: &Session,
+        place_id: PlaceId,
+        target: AssertionId,
+        provenance: Provenance,
+    ) -> Result<(), AppError> {
+        let command = PlaceCommand::RetractAssertion { place_id, target };
+        let id = place_id.to_string();
+        crate::place::execute(store, session, &id, command, provenance, Vec::new()).await
+    }
+}
+
+impl ClusterView for SourceView {
+    const AGGREGATE: &'static str = "source";
+
+    async fn find(store: &Store, human_id: &str) -> Result<Option<Self>, AppError> {
+        Ok(store.find_source(human_id).await?)
+    }
+
+    fn not_found(human_id: &str) -> AppError {
+        AppError::SourceNotFound(human_id.to_owned())
+    }
+
+    fn decided(source: SourceId, other: SourceId) -> AppError {
+        SourceError::IdentityDecided {
+            source_id: source,
+            other,
+        }
+        .into()
+    }
+
+    async fn merge(
+        store: &Store,
+        session: &Session,
+        [surviving, merged]: [SourceId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = SourceCommand::MergeSources {
+            surviving,
+            merged,
+            assessment: decision.assessment,
+        };
+        let id = surviving.to_string();
+        crate::source::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn distinguish(
+        store: &Store,
+        session: &Session,
+        [source, other]: [SourceId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = SourceCommand::DistinguishSources {
+            source,
+            other,
+            assessment: decision.assessment,
+        };
+        let id = source.to_string();
+        crate::source::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn retract(
+        store: &Store,
+        session: &Session,
+        source_id: SourceId,
+        target: AssertionId,
+        provenance: Provenance,
+    ) -> Result<(), AppError> {
+        let command = SourceCommand::RetractAssertion { source_id, target };
+        let id = source_id.to_string();
+        crate::source::execute(store, session, &id, command, provenance, Vec::new()).await
+    }
+}
+
+impl ClusterView for CitationView {
+    const AGGREGATE: &'static str = "citation";
+
+    async fn find(store: &Store, human_id: &str) -> Result<Option<Self>, AppError> {
+        Ok(store.find_citation(human_id).await?)
+    }
+
+    fn not_found(human_id: &str) -> AppError {
+        AppError::CitationNotFound(human_id.to_owned())
+    }
+
+    fn decided(citation: CitationId, other: CitationId) -> AppError {
+        CitationError::IdentityDecided { citation, other }.into()
+    }
+
+    async fn merge(
+        store: &Store,
+        session: &Session,
+        [surviving, merged]: [CitationId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = CitationCommand::MergeCitations {
+            surviving,
+            merged,
+            assessment: decision.assessment,
+        };
+        let id = surviving.to_string();
+        crate::citation::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn distinguish(
+        store: &Store,
+        session: &Session,
+        [citation, other]: [CitationId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = CitationCommand::DistinguishCitations {
+            citation,
+            other,
+            assessment: decision.assessment,
+        };
+        let id = citation.to_string();
+        crate::citation::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn retract(
+        store: &Store,
+        session: &Session,
+        citation_id: CitationId,
+        target: AssertionId,
+        provenance: Provenance,
+    ) -> Result<(), AppError> {
+        let command = CitationCommand::RetractAssertion { citation_id, target };
+        let id = citation_id.to_string();
+        crate::citation::execute(store, session, &id, command, provenance, Vec::new()).await
+    }
+}
+
+impl ClusterView for RepositoryView {
+    const AGGREGATE: &'static str = "repository";
+
+    async fn find(store: &Store, human_id: &str) -> Result<Option<Self>, AppError> {
+        Ok(store.find_repository(human_id).await?)
+    }
+
+    fn not_found(human_id: &str) -> AppError {
+        AppError::RepositoryNotFound(human_id.to_owned())
+    }
+
+    fn decided(repository: RepositoryId, other: RepositoryId) -> AppError {
+        RepositoryError::IdentityDecided { repository, other }.into()
+    }
+
+    async fn merge(
+        store: &Store,
+        session: &Session,
+        [surviving, merged]: [RepositoryId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = RepositoryCommand::MergeRepositories {
+            surviving,
+            merged,
+            assessment: decision.assessment,
+        };
+        let id = surviving.to_string();
+        crate::repository::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn distinguish(
+        store: &Store,
+        session: &Session,
+        [repository, other]: [RepositoryId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = RepositoryCommand::DistinguishRepositories {
+            repository,
+            other,
+            assessment: decision.assessment,
+        };
+        let id = repository.to_string();
+        crate::repository::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn retract(
+        store: &Store,
+        session: &Session,
+        repository_id: RepositoryId,
+        target: AssertionId,
+        provenance: Provenance,
+    ) -> Result<(), AppError> {
+        let command = RepositoryCommand::RetractAssertion { repository_id, target };
+        let id = repository_id.to_string();
+        crate::repository::execute(store, session, &id, command, provenance, Vec::new()).await
+    }
+}
+
+impl ClusterView for NoteView {
+    const AGGREGATE: &'static str = "note";
+
+    async fn find(store: &Store, human_id: &str) -> Result<Option<Self>, AppError> {
+        Ok(store.find_note(human_id).await?)
+    }
+
+    fn not_found(human_id: &str) -> AppError {
+        AppError::NoteNotFound(human_id.to_owned())
+    }
+
+    fn decided(note: NoteId, other: NoteId) -> AppError {
+        NoteError::IdentityDecided { note, other }.into()
+    }
+
+    async fn merge(
+        store: &Store,
+        session: &Session,
+        [surviving, merged]: [NoteId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = NoteCommand::MergeNotes {
+            surviving,
+            merged,
+            assessment: decision.assessment,
+        };
+        let id = surviving.to_string();
+        crate::note::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn distinguish(
+        store: &Store,
+        session: &Session,
+        [note, other]: [NoteId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = NoteCommand::DistinguishNotes {
+            note,
+            other,
+            assessment: decision.assessment,
+        };
+        let id = note.to_string();
+        crate::note::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn retract(
+        store: &Store,
+        session: &Session,
+        note_id: NoteId,
+        target: AssertionId,
+        provenance: Provenance,
+    ) -> Result<(), AppError> {
+        let command = NoteCommand::RetractAssertion { note_id, target };
+        let id = note_id.to_string();
+        crate::note::execute(store, session, &id, command, provenance, Vec::new()).await
+    }
+}
+
+impl ClusterView for MediaView {
+    const AGGREGATE: &'static str = "media";
+
+    async fn find(store: &Store, human_id: &str) -> Result<Option<Self>, AppError> {
+        Ok(store.find_media(human_id).await?)
+    }
+
+    fn not_found(human_id: &str) -> AppError {
+        AppError::MediaNotFound(human_id.to_owned())
+    }
+
+    fn decided(media: MediaId, other: MediaId) -> AppError {
+        MediaError::IdentityDecided { media, other }.into()
+    }
+
+    async fn merge(
+        store: &Store,
+        session: &Session,
+        [surviving, merged]: [MediaId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = MediaCommand::MergeMedia {
+            surviving,
+            merged,
+            assessment: decision.assessment,
+        };
+        let id = surviving.to_string();
+        crate::media::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn distinguish(
+        store: &Store,
+        session: &Session,
+        [media, other]: [MediaId; 2],
+        decision: IdentityDecision,
+    ) -> Result<(), AppError> {
+        let command = MediaCommand::DistinguishMedia {
+            media,
+            other,
+            assessment: decision.assessment,
+        };
+        let id = media.to_string();
+        crate::media::execute(store, session, &id, command, decision.provenance, Vec::new()).await
+    }
+
+    async fn retract(
+        store: &Store,
+        session: &Session,
+        media_id: MediaId,
+        target: AssertionId,
+        provenance: Provenance,
+    ) -> Result<(), AppError> {
+        let command = MediaCommand::RetractAssertion { media_id, target };
+        let id = media_id.to_string();
+        crate::media::execute(store, session, &id, command, provenance, Vec::new()).await
+    }
+}
+
 /// Every cluster of one kind in the workspace, from the `identity_links` index.
 #[derive(Debug, Clone)]
 pub(crate) struct Clusters<I> {
@@ -279,6 +664,18 @@ pub(crate) type PersonClusters = Clusters<PersonId>;
 pub(crate) type EventClusters = Clusters<EventId>;
 /// Every family cluster.
 pub(crate) type FamilyClusters = Clusters<FamilyId>;
+/// Every place cluster.
+pub(crate) type PlaceClusters = Clusters<PlaceId>;
+/// Every source cluster.
+pub(crate) type SourceClusters = Clusters<SourceId>;
+/// Every citation cluster.
+pub(crate) type CitationClusters = Clusters<CitationId>;
+/// Every repository cluster.
+pub(crate) type RepositoryClusters = Clusters<RepositoryId>;
+/// Every note cluster.
+pub(crate) type NoteClusters = Clusters<NoteId>;
+/// Every media cluster.
+pub(crate) type MediaClusters = Clusters<MediaId>;
 
 impl<I> Default for Clusters<I> {
     fn default() -> Self {
@@ -348,6 +745,32 @@ fn parse_id<I: ClusterId>(raw: &str) -> Result<I, AppError> {
         ))
     })?;
     Ok(I::View::id_from_uuid(uuid))
+}
+
+/// Groups `views` into clusters in list order (ADR 0039 §5): one group per record that is not merged
+/// into another, its own view first, then its members' views in id order.
+pub(crate) fn group_clusters<'a, V: ClusterView>(views: &'a [V], clusters: &Clusters<V::Id>) -> Vec<Vec<&'a V>> {
+    let mut by_id: HashMap<V::Id, &V> = HashMap::new();
+    for view in views {
+        if let Some(id) = view.record_id() {
+            by_id.insert(id, view);
+        }
+    }
+    let mut groups = Vec::new();
+    for view in views {
+        let Some(id) = view.record_id() else { continue };
+        if clusters.is_member(id) {
+            continue;
+        }
+        let mut group = Vec::new();
+        for record in clusters.cluster(id) {
+            if let Some(view) = by_id.get(&record) {
+                group.push(*view);
+            }
+        }
+        groups.push(group);
+    }
+    groups
 }
 
 /// The projections of every record in `ids`, skipping any not found.

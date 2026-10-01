@@ -865,6 +865,8 @@ fn citation_summary() -> CitationSummary {
             priority: Some(1),
         }],
         restrictions: BTreeSet::new(),
+        merged: Vec::new(),
+        claim_owners: std::collections::BTreeMap::new(),
     }
 }
 
