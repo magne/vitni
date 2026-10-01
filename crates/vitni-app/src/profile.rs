@@ -268,6 +268,21 @@ impl Profiles {
         Ok(profiles)
     }
 
+    /// Every pair of `kind` holding a live identity decision either way — merged or distinguished
+    /// (ADR 0039 §3) — as aggregate ids, the lower first. Only persons can be decided yet.
+    pub(crate) fn decided_pairs(&self, kind: MatchableKind) -> HashSet<(String, String)> {
+        let mut pairs = HashSet::new();
+        let (MatchableKind::Person, Some(people)) = (kind, &self.people) else {
+            return pairs;
+        };
+        for (id, view) in &people.persons {
+            for other in view.merged().into_iter().chain(view.distinguished()) {
+                pairs.insert(ordered_pair(id.to_string(), other.to_string()));
+            }
+        }
+        pairs
+    }
+
     /// The aggregate id of every record of `kind` read, in id order.
     pub(crate) fn ids(&self, kind: MatchableKind) -> Vec<String> {
         let mut ids: Vec<String> = match kind {
@@ -582,6 +597,11 @@ struct ProfileLookups {
     parents_of: HashMap<PersonId, Vec<PersonId>>,
     partners_of: HashMap<PersonId, Vec<PersonId>>,
     children_of: HashMap<PersonId, Vec<PersonId>>,
+}
+
+/// The two ids of a pair, the lower first.
+pub(crate) fn ordered_pair(a: String, b: String) -> (String, String) {
+    if a <= b { (a, b) } else { (b, a) }
 }
 
 /// Appends `value` to `key`'s list unless it is already there.

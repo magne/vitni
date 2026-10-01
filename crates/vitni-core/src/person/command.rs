@@ -12,6 +12,7 @@ use crate::assertions::Attributed;
 use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Restriction, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
+use crate::matching::MatchEvidence;
 use crate::name::PersonName;
 use crate::provenance::AssertionMeta;
 use crate::text::{Attribute, ExternalId, MediaRef};
@@ -156,6 +157,17 @@ pub enum PersonCommand {
         surviving: PersonId,
         /// The person merged into the survivor.
         merged: PersonId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
+    },
+    /// Conclude that two persons are different individuals (ADR 0039 §1).
+    DistinguishPersons {
+        /// The person the decision is recorded on.
+        person: PersonId,
+        /// The person it is not.
+        other: PersonId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
     },
 }
 

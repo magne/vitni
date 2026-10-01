@@ -24,6 +24,9 @@ pub struct HistoryEntry {
     pub undo_label: String,
     /// An import-run row's already-localized count (e.g. `4 changes`), shown muted beside `what`.
     pub count: Option<String>,
+    /// An identity decision's already-localized assessment (e.g. `Matched at 97% · …`), shown muted
+    /// beneath the rationale.
+    pub evidence: Option<String>,
 }
 
 /// A vertical audit timeline of change-log entries; undoable entries carry an undo control.
@@ -48,6 +51,9 @@ pub fn HistoryTimeline(
                     div { class: "tl-who", "{entry.who}" }
                     if let Some(why) = &entry.why {
                         div { class: "tl-why", "{why}" }
+                    }
+                    if let Some(evidence) = &entry.evidence {
+                        div { class: "tl-evidence muted", "{evidence}" }
                     }
                     if entry.can_undo {
                         div { class: "row-actions", style: "margin-top:4px",

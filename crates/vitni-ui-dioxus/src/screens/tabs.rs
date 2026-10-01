@@ -949,6 +949,7 @@ pub fn history_panel(loc: &Localizer, entries: &[HistoryEntryVm], on_undo: Optio
             undo_text: undo_text.clone(),
             undo_label: loc.history_undo_label(&entry.what),
             count: entry.count.clone(),
+            evidence: entry.evidence.clone(),
         })
         .collect();
     rsx! {

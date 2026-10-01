@@ -40,10 +40,13 @@
           </tr>
         </tbody>
       </table>
+      <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">A pair you merged or marked as
+        <i>not the same person</i> never reappears here; undoing the decision in History brings it back.</div>
     </div>
 
     <!-- Merge wizard -->
-    <h1 style="border:0;margin:8px 0 12px;font-size:21px">Compare &amp; merge — John Smith ⟷ John Smyth</h1>
+    <h1 style="border:0;margin:8px 0 4px;font-size:21px">Compare &amp; merge — John Smith ⟷ John Smyth</h1>
+    <p class="muted" style="margin:0 0 12px" title="The matching engine's assessment, recorded on whichever decision you take (ADR 0039 §2) — not the 5-level assertion Confidence">Matched at 97% · probable match · engine 4</p>
     <div class="section-note">
       <b>Non-destructive and reversible.</b> Merging does <i>not</i> delete the merged-from record. I0099
       is kept as a <b>persona</b> of the survivor and every assertion it carried stays in the event log with
@@ -193,6 +196,16 @@
       </div>
     </div>
 
+    <!-- Blocked-decision specimen: IdentityDecided -->
+    <div class="card" style="border-color:var(--err)">
+      <h3 style="color:var(--err)">Already decided</h3>
+      <div class="muted" style="font-size:var(--fs-sm)">These two people already have an identity decision. Undo it
+        in History before deciding again.</div>
+      <div class="muted" style="font-size:var(--fs-xs);margin-top:var(--sp-2)">Specimen: shown when either person
+        already holds a live <span class="mono">PersonsMerged</span> or <span class="mono">PersonsDistinguished</span>
+        about the other — nothing is written.</div>
+    </div>
+
     <!-- Blocked-merge specimen: MergeConflict -->
     <div class="card" style="border-color:var(--err)">
       <h3 style="color:var(--err)">Merge blocked — conflicting irreversible facts</h3>
@@ -203,22 +216,31 @@
     </div>
 
     <!-- Foot -->
-    <div class="card" style="display:flex;align-items:center;gap:var(--sp-4);flex-wrap:wrap">
+    <div class="card" style="display:flex;align-items:flex-end;gap:var(--sp-4);flex-wrap:wrap">
       <div class="field" style="flex:1;min-width:260px;margin:0">
-        <label>Reason for merge <span class="faint">(recorded on the PersonsMerged event)</span></label>
-        <input class="in" value="Same person: name variant, identical birth and household">
+        <label for="merge-reason">Reason for this decision <span class="faint">(recorded on the decision)</span></label>
+        <input id="merge-reason" class="in" value="Same person: name variant, identical birth and household">
       </div>
-      <div class="muted" style="font-size:var(--fs-sm)">
-        <b>Result:</b> I0099 becomes a persona of I0042; 6 other records still reference I0099 and will be
-        updated by follow-up assertions.
+      <div class="field" style="margin:0">
+        <label for="merge-confidence">Confidence</label>
+        <select id="merge-confidence" class="in" style="width:auto" aria-label="Confidence">
+          <option value="">—</option><option>Very low</option><option>Low</option><option>Normal</option>
+          <option selected>High</option><option>Very high</option>
+        </select>
       </div>
       <div class="spacer"></div>
       <button class="btn">Cancel</button>
+      <button class="btn">Not the same person</button>
       <button class="btn primary">Merge (reversible)</button>
     </div>
+    <div class="muted" style="font-size:var(--fs-sm)">Either decision records the reason, the confidence and the
+      engine's assessment above on its event — <span class="mono">PersonsMerged</span> or
+      <span class="mono">PersonsDistinguished</span> — with nothing defaulted. A blank reason or an unset confidence
+      records none.</div>
 
     <div class="specimen wrap" style="align-items:center">
-      <div class="toast">✓ Merged · <span class="src-link">Dismiss</span></div>
+      <div class="toast">✓ I0099 becomes a persona of I0042; one event added to History. · <span class="src-link">Dismiss</span></div>
+      <div class="toast">✓ I0099 is marked as a different person from I0042; one event added to History. · <span class="src-link">Dismiss</span></div>
       <span class="muted" style="font-size:var(--fs-sm)">Confirmation is an <span class="mono">aria-live="polite"</span> region, mirroring the record-editing Save toast.</span>
     </div>
 

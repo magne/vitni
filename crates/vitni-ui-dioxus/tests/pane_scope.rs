@@ -149,6 +149,7 @@ fn undoable_entry() -> Vec<vitni_ui::HistoryEntryVm> {
         assertion_id: "a1".to_owned(),
         can_undo: true,
         count: None,
+        evidence: None,
         children: Vec::new(),
     }]
 }

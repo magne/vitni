@@ -8,10 +8,11 @@ use std::collections::BTreeSet;
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, AppError, DateParts, MatchBand, MatchableKind, MutationMeta, NewEvent, NewParticipation, NewPerson,
-    NewPlace, NewSource, OperatorConfig, PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults,
-    assert_event_date, assert_participation, assert_sex, assess, create_event, create_person, create_place,
-    create_source, create_tag, find_similar, similar_pairs,
+    AppDefaults, AppError, CheckKind, DateParts, IdentityDecision, MatchBand, MatchableKind, MutationMeta, NewEvent,
+    NewParticipation, NewPerson, NewPlace, NewSource, OperatorConfig, PersonNameParts, Provenance, Session, Workspace,
+    WorkspaceDefaults, assert_event_date, assert_participation, assert_sex, assess, change_log_for_person,
+    create_event, create_person, create_place, create_source, create_tag, distinguish_persons, find_similar,
+    merge_persons, run_checks, similar_pairs, undo_assertion,
 };
 use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
 use vitni_core::ids::AgentId;
@@ -119,6 +120,32 @@ impl Records {
         assert_event_date(&self.workspace, &self.session, event, date, MutationMeta::default())
             .await
             .expect("date event");
+    }
+
+    /// Every person pair `similar_pairs` proposes, as sorted human-id pairs.
+    async fn person_pairs(&self) -> BTreeSet<(String, String)> {
+        let mut pairs = BTreeSet::new();
+        for pair in similar_pairs(&self.workspace, MatchableKind::Person, MatchBand::Possible)
+            .await
+            .expect("similar pairs")
+        {
+            pairs.insert(sorted(pair.a.human_id, pair.b.human_id));
+        }
+        pairs
+    }
+
+    /// Every person pair the duplicate check reports, as sorted human-id pairs.
+    async fn duplicate_findings(&self) -> BTreeSet<(String, String)> {
+        let mut pairs = BTreeSet::new();
+        for finding in run_checks(&self.workspace).await.expect("run checks") {
+            if finding.kind == CheckKind::PossibleDuplicates {
+                pairs.insert(sorted(
+                    finding.records[0].human_id.clone(),
+                    finding.records[1].human_id.clone(),
+                ));
+            }
+        }
+        pairs
     }
 
     async fn similar(&self, kind: MatchableKind, target: &str) -> Vec<String> {
@@ -414,4 +441,89 @@ async fn blocking_loses_no_pair_a_score_of_every_pair_would_show() {
     for pair in &pairs {
         assert!(pair.a.id < pair.b.id);
     }
+}
+
+fn sorted(a: String, b: String) -> (String, String) {
+    if a <= b { (a, b) } else { (b, a) }
+}
+
+/// Three near-identical Ole Olsens: every pair of them is proposed until decided.
+async fn three_oles(records: &Records) -> (String, String, String) {
+    let (a, _) = records.born("Ole", "Olsen", 1850).await;
+    let (b, _) = records.born("Ole", "Olsen", 1850).await;
+    let (c, _) = records.born("Ole", "Olsen", 1850).await;
+    (a, b, c)
+}
+
+/// A pair the user said are different people is never proposed again, by any consumer (ADR 0039 §3).
+#[tokio::test]
+async fn a_distinguished_pair_is_never_proposed_again() {
+    let records = Records::new().await;
+    let (a, b, c) = three_oles(&records).await;
+    assert!(records.person_pairs().await.contains(&sorted(a.clone(), b.clone())));
+
+    distinguish_persons(
+        &records.workspace,
+        &records.session,
+        &b,
+        &a,
+        IdentityDecision::default(),
+    )
+    .await
+    .expect("distinguish");
+
+    let expected = BTreeSet::from([sorted(a.clone(), c.clone()), sorted(b.clone(), c.clone())]);
+    assert_eq!(records.person_pairs().await, expected);
+    assert_eq!(records.duplicate_findings().await, expected);
+    assert_eq!(
+        records.similar(MatchableKind::Person, &a).await,
+        std::slice::from_ref(&c)
+    );
+    assert_eq!(records.similar(MatchableKind::Person, &b).await, [c]);
+}
+
+#[tokio::test]
+async fn a_merged_pair_is_not_proposed_as_a_duplicate() {
+    let records = Records::new().await;
+    let (a, b, c) = three_oles(&records).await;
+    merge_persons(
+        &records.workspace,
+        &records.session,
+        &a,
+        &b,
+        IdentityDecision::default(),
+    )
+    .await
+    .expect("merge");
+
+    assert!(!records.person_pairs().await.contains(&sorted(a.clone(), b.clone())));
+    assert!(!records.similar(MatchableKind::Person, &b).await.contains(&a));
+    assert!(records.similar(MatchableKind::Person, &b).await.contains(&c));
+}
+
+#[tokio::test]
+async fn undoing_a_distinction_proposes_the_pair_again() {
+    let records = Records::new().await;
+    let (a, b, _) = three_oles(&records).await;
+    distinguish_persons(
+        &records.workspace,
+        &records.session,
+        &a,
+        &b,
+        IdentityDecision::default(),
+    )
+    .await
+    .expect("distinguish");
+    let decision = change_log_for_person(&records.workspace, &a)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "PersonsDistinguished")
+        .expect("logged");
+    undo_assertion(&records.workspace, &records.session, &a, &decision.assertion_id, None)
+        .await
+        .expect("undo");
+
+    assert!(records.person_pairs().await.contains(&sorted(a.clone(), b.clone())));
+    assert!(records.similar(MatchableKind::Person, &a).await.contains(&b));
 }

@@ -34,7 +34,8 @@ use vitni_app::{
     commit_person_change_set, set_person_human_id,
 };
 use vitni_app::{
-    MatchBand, MatchableKind, ancestors, check_persons, descendants, merge_persons, relationship, similar_pairs,
+    MatchBand, MatchableKind, ancestors, assess, check_persons, descendants, distinguish_persons, merge_persons,
+    relationship, similar_pairs,
 };
 use vitni_app::{
     NewResearchNote, NewResearchNoteSubject, add_subject_to_research_note, create_research_note, list_research_notes,
@@ -74,12 +75,13 @@ use vitni_app::{
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DnaMatchChangeSetRequest, DnaMatchEdit,
-    DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventChangeSetRequest, EventEdit,
-    EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent, MediaChangeSetRequest, MediaEdit, MergePersons,
-    NewRecordRequest, NoteChangeSetRequest, NoteEdit, PartnerRequest, PersonChangeSetRequest, PersonEdit,
-    PlaceChangeSetRequest, PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest,
-    ResearchNoteEdit, SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest,
+    Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DistinguishPersons,
+    DnaMatchChangeSetRequest, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftSourceRef,
+    EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent,
+    MediaChangeSetRequest, MediaEdit, MergePersons, NewRecordRequest, NoteChangeSetRequest, NoteEdit, PartnerRequest,
+    PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit,
+    ResearchNoteChangeSetRequest, ResearchNoteEdit, SourceChangeSetRequest, SourceEdit, SubjectRequest,
+    TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail,
@@ -322,7 +324,8 @@ async fn merge_compare(
     let merged = show_person(workspace, merged_human_id)
         .await?
         .ok_or_else(|| AppError::PersonNotFound(merged_human_id.to_owned()))?;
-    let vm = MergeCompareVm::build(&survivor, &merged, loc);
+    let assessment = assess(workspace, MatchableKind::Person, surviving_human_id, merged_human_id).await?;
+    let vm = MergeCompareVm::build(&survivor, &merged, &assessment, loc);
     Ok(IntentOutcome::MergeCompare(Box::new(vm)))
 }
 
@@ -334,8 +337,8 @@ async fn merge_compare(
 ///
 /// # Errors
 ///
-/// Propagates the [`AppError`] from `merge_persons` (either `human_id` not found, a self-merge
-/// domain rejection, or a database failure).
+/// Propagates the [`AppError`] from `merge_persons` (either `human_id` not found, a self-merge or
+/// already-decided domain rejection, or a database failure).
 pub async fn dispatch_merge(
     workspace: &Workspace,
     session: &Session,
@@ -347,17 +350,34 @@ pub async fn dispatch_merge(
         session,
         &request.surviving_human_id,
         &request.merged_human_id,
-        normalized_rationale(request.rationale.as_deref()),
+        request.judgment.decision(),
     )
     .await?;
     Ok(MergeResultVm::build(&result, loc))
 }
 
-/// Trims a merge rationale and treats a blank result as absent, so `merge_persons` falls back to its
-/// own default rather than recording an empty string.
-fn normalized_rationale(rationale: Option<&str>) -> Option<String> {
-    let trimmed = rationale?.trim();
-    (!trimmed.is_empty()).then(|| trimmed.to_owned())
+/// Dispatches a [`DistinguishPersons`] request to `vitni_app::distinguish_persons`, mutating the
+/// workspace. Returns the localized confirmation the screen shows as a notice.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `distinguish_persons` (either `human_id` not found, a
+/// self-distinction or already-decided domain rejection, or a database failure).
+pub async fn dispatch_distinguish(
+    workspace: &Workspace,
+    session: &Session,
+    loc: &Localizer,
+    request: &DistinguishPersons,
+) -> Result<String, AppError> {
+    distinguish_persons(
+        workspace,
+        session,
+        &request.person_human_id,
+        &request.other_human_id,
+        request.judgment.decision(),
+    )
+    .await?;
+    Ok(loc.distinguish_result_summary(&request.other_human_id, &request.person_human_id))
 }
 
 /// Resolves the current primary display name of the record `(category, human_id)`, or `None` when
@@ -2590,21 +2610,4 @@ pub fn pin_publisher(config_path: &std::path::Path, publisher: &str, public_key_
 /// pinned, or the config is unreadable/unwritable).
 pub fn unpin_publisher(config_path: &std::path::Path, publisher: &str) -> Result<(), AppError> {
     vitni_app::remove_trusted_publisher(config_path, publisher)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::normalized_rationale;
-
-    #[test]
-    fn normalized_rationale_trims_and_blanks_to_none() {
-        assert_eq!(normalized_rationale(None), None, "absent stays absent");
-        assert_eq!(normalized_rationale(Some("")), None, "empty is absent");
-        assert_eq!(normalized_rationale(Some("   ")), None, "whitespace-only is absent");
-        assert_eq!(
-            normalized_rationale(Some("  Same person  ")),
-            Some("Same person".to_owned()),
-            "a real rationale is trimmed"
-        );
-    }
 }

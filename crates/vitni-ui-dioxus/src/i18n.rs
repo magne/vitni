@@ -1626,6 +1626,18 @@ impl Chrome {
         fl!(self.loader, "merge-reason-hint")
     }
 
+    /// The wizard foot's confidence select label / accessible name.
+    #[must_use]
+    pub fn merge_confidence_label(&self) -> String {
+        fl!(self.loader, "merge-confidence-label")
+    }
+
+    /// The wizard's "Not the same person" button label.
+    #[must_use]
+    pub fn merge_distinguish(&self) -> String {
+        fl!(self.loader, "merge-distinguish")
+    }
+
     /// The assisted-import wizard heading.
     #[must_use]
     pub fn import_heading(&self) -> String {

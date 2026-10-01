@@ -765,19 +765,26 @@ pub fn provenance_block_dna(loc: &Localizer, draft: Signal<ProvenanceDraft>) -> 
     provenance_block_impl(loc, draft, true)
 }
 
-/// Shared body of the provenance-block wrappers: builds the confidence + evidence-axis options and
-/// renders [`ProvenanceBlock`], toggling the DNA-match evidence picker via `allow_dna_evidence`.
-fn provenance_block_impl(loc: &Localizer, draft: Signal<ProvenanceDraft>, allow_dna_evidence: bool) -> Element {
-    let mut confidence_options: Vec<SelectChoice> = vec![SelectChoice {
+/// The options of an assertion-confidence select: the unset "—" (value `""`), then one per
+/// [`ConfidenceLevel::all`] level, valued by its index.
+pub fn confidence_choices(loc: &Localizer) -> Vec<SelectChoice> {
+    let mut options = vec![SelectChoice {
         value: String::new(),
         label: loc.confidence_label_opt(None),
     }];
     for (index, level) in ConfidenceLevel::all().iter().enumerate() {
-        confidence_options.push(SelectChoice {
+        options.push(SelectChoice {
             value: index.to_string(),
             label: loc.confidence_label(*level),
         });
     }
+    options
+}
+
+/// Shared body of the provenance-block wrappers: builds the confidence + evidence-axis options and
+/// renders [`ProvenanceBlock`], toggling the DNA-match evidence picker via `allow_dna_evidence`.
+fn provenance_block_impl(loc: &Localizer, draft: Signal<ProvenanceDraft>, allow_dna_evidence: bool) -> Element {
+    let confidence_options = confidence_choices(loc);
     let unset = loc.evidence_axis_unset();
     let axes = vec![
         ProvenanceAxis {

@@ -1256,3 +1256,28 @@ fn an_untyped_textless_note_still_renders_its_id() {
     assert_eq!(vm.text, None);
     assert_eq!(vm.language, None);
 }
+
+#[test]
+fn a_history_entry_shows_the_assessment_behind_an_identity_decision() {
+    let loc = Localizer::for_test("en");
+    let mut entry = log_entry("person", Some("I0001"), OperatorKind::Human, "magne");
+    entry.event_type = "PersonsMerged".to_owned();
+    entry.detail = Some(ActivityDetail::IdentityDecision {
+        assessment: vitni_app::MatchEvidence {
+            score_bp: 8712,
+            band: vitni_app::MatchBand::Possible,
+            engine: vitni_app::EngineVersion(4),
+            cultures: Vec::new(),
+            features: Vec::new(),
+        },
+    });
+    let vm = super::HistoryEntryVm::from_entry(&entry, &loc);
+    assert_eq!(vm.what, "Persona merged");
+    assert_eq!(
+        vm.evidence.as_deref(),
+        Some("Matched at 87% · possible match · engine 4")
+    );
+
+    entry.detail = None;
+    assert_eq!(super::HistoryEntryVm::from_entry(&entry, &loc).evidence, None);
+}

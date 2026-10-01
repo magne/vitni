@@ -31,11 +31,12 @@ use vitni_plugin_host::{
     resolve_trust_roots,
 };
 use vitni_ui::{
-    Category, CitationChangeSetRequest, DataQualityVm, DnaMatchChangeSetRequest, DnaTestChangeSetRequest,
-    EventChangeSetRequest, FamilyChangeSetRequest, ImportTargetChoice, Intent, IntentOutcome, Localizer,
-    MediaChangeSetRequest, MergeFailure, MergePersons, MergeResultVm, NewRecordRequest, NoteChangeSetRequest, Panel,
-    PersonChangeSetRequest, PlaceChangeSetRequest, ProvenanceDraft, RepositoryChangeSetRequest,
-    ResearchNoteChangeSetRequest, RowVm, SourceChangeSetRequest, SubmitResult, TagChangeSetRequest, list_intent,
+    Category, CitationChangeSetRequest, DataQualityVm, DistinguishPersons, DnaMatchChangeSetRequest,
+    DnaTestChangeSetRequest, EventChangeSetRequest, FamilyChangeSetRequest, ImportTargetChoice, Intent, IntentOutcome,
+    Localizer, MediaChangeSetRequest, MergeFailure, MergePersons, MergeResultVm, NewRecordRequest,
+    NoteChangeSetRequest, Panel, PersonChangeSetRequest, PlaceChangeSetRequest, ProvenanceDraft,
+    RepositoryChangeSetRequest, ResearchNoteChangeSetRequest, RowVm, SourceChangeSetRequest, SubmitResult,
+    TagChangeSetRequest, list_intent,
 };
 
 use crate::detail_aggregates::for_each_detail_aggregate;
@@ -299,6 +300,20 @@ pub async fn merge_persons(services: Services, request: MergePersons) -> Result<
         .map_err(|error| MergeFailure::from_error(&error, &loc))?;
     let session = Session::new(services.config.operator_agent());
     vitni_ui::dispatch_merge(&workspace, &session, &loc, &request)
+        .await
+        .map_err(|error| MergeFailure::from_error(&error, &loc))
+}
+
+/// Records that two persons are different people through `vitni_ui::dispatch_distinguish`, returning
+/// the localized confirmation or a [`MergeFailure`], like [`merge_persons`].
+pub async fn distinguish_persons(services: Services, request: DistinguishPersons) -> Result<String, MergeFailure> {
+    let loc = services.localizer();
+    let workspace = services
+        .open()
+        .await
+        .map_err(|error| MergeFailure::from_error(&error, &loc))?;
+    let session = Session::new(services.config.operator_agent());
+    vitni_ui::dispatch_distinguish(&workspace, &session, &loc, &request)
         .await
         .map_err(|error| MergeFailure::from_error(&error, &loc))
 }

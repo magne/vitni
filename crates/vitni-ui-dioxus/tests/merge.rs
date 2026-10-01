@@ -8,9 +8,14 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use unic_langid::LanguageIdentifier;
+use vitni_app::{EngineVersion, MatchBand, MatchEvidence};
 use vitni_ui::{DuplicateCandidateVm, MergeBlockedVm, MergeCompareVm, MergeFieldRowVm, PedigreeNodeVm};
+use vitni_ui_dioxus::components::SelectChoice;
 use vitni_ui_dioxus::i18n::Chrome;
-use vitni_ui_dioxus::screens::{DuplicatesTable, MergeCompareGrid, merge_blocked_card, merge_wizard_foot};
+use vitni_ui_dioxus::screens::{
+    DecisionActions, DecisionDraft, DuplicatesTable, MergeCompareGrid, merge_blocked_card, merge_compare_heading,
+    merge_wizard_foot,
+};
 use vitni_ui_dioxus::shell::ChromeCtx;
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
@@ -29,6 +34,16 @@ fn node(human_id: &str, name: &str) -> PedigreeNodeVm {
         source_count: 0,
         restrictions: Vec::new(),
         has_more: false,
+    }
+}
+
+fn evidence() -> MatchEvidence {
+    MatchEvidence {
+        score_bp: 9712,
+        band: MatchBand::Probable,
+        engine: EngineVersion(4),
+        cultures: Vec::new(),
+        features: Vec::new(),
     }
 }
 
@@ -106,6 +121,8 @@ fn compare_grid() -> Element {
         ],
         differs_label: "differs".to_owned(),
         differs_title: "differs from kept value".to_owned(),
+        assessment: evidence(),
+        assessment_line: String::new(),
     };
     rsx! {
         MergeCompareGrid { vm }
@@ -159,28 +176,82 @@ fn compare_grid_renders_native_radio_pairs_grouped_per_field() {
     );
 }
 
-/// Renders the compare/merge wizard foot (reason input + Cancel/Merge).
+/// Renders the compare/merge wizard foot (reason, confidence, and the three decisions).
 fn wizard_foot() -> Element {
     let chrome = chrome("en");
-    let reason = use_signal(String::new);
-    let oncancel = use_callback(|()| {});
-    let onmerge = use_callback(|()| {});
-    merge_wizard_foot(&chrome, reason, oncancel, onmerge)
+    let draft = use_signal(DecisionDraft::default);
+    let actions = DecisionActions {
+        cancel: use_callback(|()| {}),
+        merge: use_callback(|()| {}),
+        distinguish: use_callback(|()| {}),
+    };
+    let options = vec![
+        SelectChoice {
+            value: String::new(),
+            label: "—".to_owned(),
+        },
+        SelectChoice {
+            value: "0".to_owned(),
+            label: "Very low".to_owned(),
+        },
+    ];
+    merge_wizard_foot(&chrome, options, draft, actions)
 }
 
 #[test]
-fn compare_foot_renders_a_labeled_reason_for_merge_input() {
+fn compare_foot_records_a_reason_and_confidence_with_either_decision() {
     let mut vdom = VirtualDom::new(wizard_foot);
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
 
     assert!(
-        html.contains("Reason for merge"),
+        html.contains("Reason for this decision"),
         "the reason field is labeled:\n{html}"
     );
     assert!(
         html.contains(r#"id="merge-reason""#),
         "a reason text input renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Confidence""#),
+        "a labeled confidence select renders:\n{html}"
+    );
+    assert!(
+        html.contains("Very low"),
+        "the select offers the given confidence options:\n{html}"
+    );
+    assert!(
+        html.contains("Not the same person"),
+        "the distinguish action renders:\n{html}"
+    );
+    assert!(html.contains("Merge (reversible)"), "the merge action renders:\n{html}");
+}
+
+/// Renders the compare heading over a vm whose assessment line is set.
+fn compare_heading() -> Element {
+    let chrome = chrome("en");
+    let vm = MergeCompareVm {
+        survivor: node("I0042", "John Smith"),
+        merged: node("I0099", "John Smyth"),
+        fields: Vec::new(),
+        differs_label: "differs".to_owned(),
+        differs_title: "differs from kept value".to_owned(),
+        assessment: evidence(),
+        assessment_line: "Matched at 97% · probable match · engine 4".to_owned(),
+    };
+    merge_compare_heading(&chrome, &vm)
+}
+
+#[test]
+fn compare_heading_shows_the_assessment_the_decision_records() {
+    let mut vdom = VirtualDom::new(compare_heading);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    assert!(html.contains("John Smith ⟷ John Smyth"), "the pair is named:\n{html}");
+    assert!(
+        html.contains("Matched at 97% · probable match · engine 4"),
+        "the engine's assessment is shown:\n{html}"
     );
 }
 

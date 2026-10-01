@@ -7,8 +7,8 @@
 
 use uuid::Uuid;
 use vitni_app::{
-    Agent, AgentId, AgentKind, AppDefaults, EvidenceLevel, NewPerson, OperatorConfig, PersonNameParts, Provenance,
-    Session, Workspace, WorkspaceDefaults, create_person, merge_persons,
+    Agent, AgentId, AgentKind, AppDefaults, EvidenceLevel, IdentityDecision, NewPerson, OperatorConfig,
+    PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults, create_person, merge_persons,
 };
 use vitni_ui::{Localizer, MergeBlockedVm};
 
@@ -64,7 +64,7 @@ async fn a_merge_conflict_becomes_a_blocked_view_model_with_the_reason() {
     let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
     let solo = person(&ws, &session, "John", "Smith").await;
 
-    let error = merge_persons(&ws, &session, &solo, &solo, None)
+    let error = merge_persons(&ws, &session, &solo, &solo, IdentityDecision::default())
         .await
         .expect_err("a self-merge is a conflict");
     let blocked = MergeBlockedVm::from_error(&error, &loc).expect("a conflict is a blocked merge");
@@ -84,7 +84,7 @@ async fn a_non_conflict_failure_is_not_a_blocked_merge() {
     let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
     let survivor = person(&ws, &session, "John", "Smith").await;
 
-    let error = merge_persons(&ws, &session, &survivor, "I9999", None)
+    let error = merge_persons(&ws, &session, &survivor, "I9999", IdentityDecision::default())
         .await
         .expect_err("an unknown id is not found");
     assert!(

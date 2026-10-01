@@ -402,8 +402,10 @@ merge-radio-group-label = Which record currently holds this value
 merge-cancel = Cancel
 merge-submit = Merge (reversible)
 merge-back = Back to duplicates
-merge-reason-label = Reason for merge
-merge-reason-hint = (recorded on the merge event)
+merge-reason-label = Reason for this decision
+merge-reason-hint = (recorded on the decision)
+merge-confidence-label = Confidence
+merge-distinguish = Not the same person
 
 # Plugin manager chrome (PR21). Capability/role/trust labels are read off the component itself by
 # vitni-plugin-host::discover — these are only their display names.

@@ -625,6 +625,7 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .tl-count { margin-left: var(--sp-2); font-size: var(--fs-sm); }
 .tl-who { font-size: var(--fs-xs); color: var(--muted); }
 .tl-why { font-size: var(--fs-sm); color: var(--ink-2); font-style: italic; }
+.tl-evidence { font-size: var(--fs-xs); }
 
 /* ---- Provenance popover ("why we believe this") — anchored to the claim's source-count link ---- */
 .prov-anchor { position: relative; display: inline-block; }

@@ -86,6 +86,10 @@ pub struct PersonState {
     /// Persons merged into this surviving person (data-model §9), each attributed to the
     /// `PersonsMerged` assertion that recorded it, so undoing that assertion removes the persona link.
     pub merged: Vec<Attributed<PersonId>>,
+    /// Persons concluded to be different individuals from this one (ADR 0039 §1), each attributed to
+    /// the `PersonsDistinguished` assertion that recorded it, so undoing that assertion lifts it.
+    #[serde(default)]
+    pub distinguished: Vec<Attributed<PersonId>>,
     /// All currently-live external identifiers (data-model §11) — the re-import resolution key.
     pub external_ids: Vec<Attributed<ExternalId>>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
@@ -94,6 +98,12 @@ pub struct PersonState {
 }
 
 impl PersonState {
+    /// Whether this person holds a live identity decision — merged or distinguished — about `other`.
+    #[must_use]
+    pub(crate) fn has_decided(&self, other: PersonId) -> bool {
+        self.merged.iter().chain(&self.distinguished).any(|d| d.value == other)
+    }
+
     /// Whether an external id with this `(authority, value)` is currently live.
     #[must_use]
     pub(crate) fn has_external_id(&self, authority: &str, value: &str) -> bool {
@@ -117,6 +127,7 @@ impl PersonState {
         self.tags.retain(|t| t.assertion_id != target);
         self.external_ids.retain(|e| e.assertion_id != target);
         self.merged.retain(|m| m.assertion_id != target);
+        self.distinguished.retain(|d| d.assertion_id != target);
         self.sex.retain(|s| s.assertion_id != target);
         if self.restrictions_assertion == Some(target) {
             self.restrictions.clear();

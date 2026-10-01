@@ -23,7 +23,7 @@ use vitni_db::{DirtyRecord, KeyedRecord};
 use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::matching::Matching;
-use crate::profile::{Profile, Profiles};
+use crate::profile::{Profile, Profiles, ordered_pair};
 use crate::workspace::Workspace;
 
 /// A record similar to the target, with the engine's assessment of the pair.
@@ -47,7 +47,8 @@ pub struct SimilarPair {
 }
 
 /// The records of `kind` the engine judges at least `min_band` similar to the record `target` (a human
-/// id; a tag's id), most similar first, at most `limit` of them. The target itself is never among them.
+/// id; a tag's id), most similar first, at most `limit` of them. The target itself is never among them,
+/// nor a record the user already decided about against it, either way (ADR 0039 §3).
 ///
 /// # Errors
 ///
@@ -71,9 +72,10 @@ pub async fn find_similar(
         .profile(kind, &target_id)
         .ok_or_else(|| not_found(kind, target))?;
     let probe = Probe::of(&keys_of(&keys, &target_profile));
+    let decided = profiles.decided_pairs(kind);
     let mut similar = Vec::new();
     for candidate in workspace.store().match_candidates(kind, &probe).await? {
-        if candidate == target_id {
+        if candidate == target_id || decided.contains(&ordered_pair(target_id.clone(), candidate.clone())) {
             continue;
         }
         let Some(profile) = profiles.profile(kind, &candidate) else {
@@ -115,7 +117,7 @@ pub async fn assess(workspace: &Workspace, kind: MatchableKind, a: &str, b: &str
 }
 
 /// Every pair of records of `kind` the engine judges at least `min_band` similar, each pair once, the
-/// most similar first.
+/// most similar first. A pair the user already decided, either way, is left out (ADR 0039 §3).
 ///
 /// # Errors
 ///
@@ -154,8 +156,12 @@ pub async fn similar_pairs(
             .map(|worker| worker.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
             .collect()
     });
+    let decided = profiles.decided_pairs(kind);
     let mut pairs = Vec::new();
     for (a, b, assessment) in scored.into_iter().flatten() {
+        if decided.contains(&(a.clone(), b.clone())) {
+            continue;
+        }
         let (a, b) = (agg_ref(&profiles, kind, &a), agg_ref(&profiles, kind, &b));
         pairs.push(SimilarPair { a, b, assessment });
     }
