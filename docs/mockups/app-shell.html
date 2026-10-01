@@ -23,7 +23,7 @@
     <div class="grid-3" style="margin-bottom:8px">
       <div class="card"><h3>People</h3><div style="font-size:28px;font-weight:700">1,284</div><div class="muted">642 families · 3,910 events</div></div>
       <div class="card"><h3>Evidence health</h3><div style="font-size:28px;font-weight:700">86%</div><div class="muted">facts with at least one source</div></div>
-      <div class="card"><h3>Needs attention</h3><div style="font-size:28px;font-weight:700;color:var(--warn)">31</div><div class="muted">facts without a source · <span class="badge" title="Check framework not built yet — implementation shows a 'coming in a later milestone' note, never a fabricated count (plan.md data-quality follow-up)">deferred</span> 2 death-before-birth · <span class="badge" title="Duplicate detection lands with Compare/merge (plan.md PR19) — until then the implementation labels this deferred">deferred</span> 14 duplicates</div></div>
+      <div class="card"><h3>Needs attention</h3><div style="font-size:28px;font-weight:700;color:var(--warn)">31</div><div class="muted">31 facts without a source · 2 death-before-birth · 6 duplicates</div></div>
     </div>
 
     <div class="grid-2">
@@ -65,11 +65,28 @@
           <h3>Data quality</h3>
           <table class="tbl" style="margin-top:4px">
             <tbody>
-              <tr><td><span class="no-source">⚠</span> Death before birth <span class="badge" title="Check framework not built yet — implementation shows a 'coming in a later milestone' note, never a fabricated count (plan.md data-quality follow-up)">deferred</span></td><td class="muted">2</td><td class="row-actions"><a class="btn sm ghost" href="event.html" title="Opens the Events list filtered to flagged records">Review</a></td></tr>
-              <tr><td><span class="no-source">⚠</span> Facts without a source</td><td class="muted">31</td><td class="row-actions"><a class="btn sm ghost" href="person.html" title="Opens the People list filtered to flagged records">Review</a></td></tr>
-              <tr><td>⇄ Possible duplicates <span class="badge" title="Duplicate detection lands with Compare/merge (plan.md PR19) — until then the implementation labels this deferred">deferred</span></td><td class="muted">14</td><td class="row-actions"><a class="btn sm ghost" href="merge.html">Compare</a></td></tr>
+              <tr><td><span class="no-source">⚠</span> Death before birth</td><td class="muted">2</td><td class="row-actions"><div class="wrap"><a href="person.html">Jane Reversed</a><a href="person.html">Per Berg</a></div></td></tr>
+              <tr><td><span class="no-source">⚠</span> Facts without a source</td><td class="muted">31</td><td></td></tr>
+              <tr><td>⇄ Possible duplicates</td><td class="muted">6</td><td class="row-actions"><a class="btn sm ghost" href="merge.html" aria-label="Compare possible duplicates">Compare</a></td></tr>
             </tbody>
           </table>
+          <!-- The duplicate check covers every matchable kind (ADR 0038 §8), the most similar pair first, whatever
+               its kind; a pair the user already decided never appears. Five are listed, the rest counted. -->
+          <div class="stack" style="margin-top:var(--sp-2)">
+            <div>
+              <div class="wrap"><a href="person.html">👤 John Smith</a><span class="muted">⇄</span><a href="person.html">👤 John Smyth</a><span class="badge" title="Matching-engine probability — not the 5-level assertion Confidence">97%</span><span class="muted">probable match</span></div>
+              <div class="muted match-reasons" title="The engine's terms, the strongest first, each with its log₂ weight; a term with a value missing on either side is left out">Same given name (+3.0) · Similar surname (+1.5) · Same birth (+2.4)</div>
+            </div>
+            <div>
+              <div class="wrap"><a href="place.html">📍 Nordaas</a><span class="muted">⇄</span><a href="place.html">📍 Nordås</a><span class="badge" title="Matching-engine probability — not the 5-level assertion Confidence">80%</span><span class="muted">possible match</span></div>
+              <div class="muted match-reasons">Same place name (+5.0) · Same place type (+1.0)</div>
+            </div>
+            <div>
+              <div class="wrap"><a href="source.html">📚 Ministerialbok for Fana</a><span class="muted">⇄</span><a href="source.html">📚 Fana ministerialbok</a><span class="badge" title="Matching-engine probability — not the 5-level assertion Confidence">74%</span><span class="muted">possible match</span></div>
+              <div class="muted match-reasons">Similar title (+2.1) · Different author (−1.0)</div>
+            </div>
+            <span class="muted">+3 more</span>
+          </div>
         </div>
       </div>
     </div>

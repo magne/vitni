@@ -34,7 +34,7 @@ use vitni_app::{
     commit_person_change_set, set_person_human_id,
 };
 use vitni_app::{
-    MatchBand, MatchableKind, ancestors, assess, check_persons, descendants, distinguish_persons, merge_persons,
+    MatchBand, MatchableKind, ancestors, assess, check_records, descendants, distinguish_persons, merge_persons,
     relationship, similar_pairs,
 };
 use vitni_app::{
@@ -167,7 +167,7 @@ pub enum IntentOutcome {
 pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -> Result<IntentOutcome, AppError> {
     match intent {
         Intent::ShowDashboard => show_dashboard(workspace, loc).await,
-        Intent::ShowDataQuality => show_data_quality(workspace).await,
+        Intent::ShowDataQuality => show_data_quality(workspace, loc).await,
         Intent::ShowList => {
             let person_rows = list_person_rows(workspace).await?;
             let mut rows = Vec::with_capacity(person_rows.len());
@@ -292,10 +292,10 @@ async fn show_dashboard(workspace: &Workspace, loc: &Localizer) -> Result<Intent
 
 /// Runs the dashboard's data-quality checks over a single shared person load and groups them into the
 /// [`DataQualityVm`] the data-quality card renders.
-async fn show_data_quality(workspace: &Workspace) -> Result<IntentOutcome, AppError> {
+async fn show_data_quality(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
     let persons = list_persons(workspace).await?;
-    let findings = check_persons(workspace, &persons).await?;
-    let data_quality = DataQualityVm::build(&persons, &findings);
+    let findings = check_records(workspace, &persons).await?;
+    let data_quality = DataQualityVm::build(&persons, &findings, loc);
     Ok(IntentOutcome::DataQuality(Box::new(data_quality)))
 }
 

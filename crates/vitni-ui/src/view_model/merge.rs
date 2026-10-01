@@ -119,11 +119,13 @@ pub struct DuplicateCandidateVm {
     /// person). This is *not* an operator-asserted surety — it must never be rendered as the 5-level
     /// assertion Confidence; the screen shows it as a plain `{score}%` badge (`merge.html`).
     pub score: u8,
+    /// The already-localized reasons behind the score, the strongest first.
+    pub reasons: Vec<String>,
 }
 
 impl DuplicateCandidateVm {
     /// Builds the view-model from the engine's [`SimilarPair`](vitni_app::SimilarPair), localizing its
-    /// band and rounding its `0..1` score to a percentage.
+    /// band and reasons and rounding its `0..1` score to a percentage.
     #[must_use]
     pub fn build(pair: &vitni_app::SimilarPair, loc: &Localizer) -> Self {
         let percent = (pair.assessment.score * 100.0).round().clamp(0.0, 100.0);
@@ -138,6 +140,7 @@ impl DuplicateCandidateVm {
             b: node_ref(&pair.b),
             reason: loc.match_band(pair.assessment.band),
             score,
+            reasons: loc.match_reasons(&pair.assessment.evidence()),
         }
     }
 }

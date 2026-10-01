@@ -95,7 +95,7 @@ name = "table"
 
 [[step]]
 do = "click"
-at = [1548, 190]
+at = [1626, 190]
 label = "row: Compare"
 
 [[step]]

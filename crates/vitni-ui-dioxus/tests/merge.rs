@@ -53,6 +53,7 @@ fn candidate(a: &str, b: &str, reason: &str, score: u8) -> DuplicateCandidateVm 
         b: node(b, b),
         reason: reason.to_owned(),
         score,
+        reasons: vec!["Same given name (+3.0)".to_owned(), "Similar birth (+1.2)".to_owned()],
     }
 }
 
@@ -61,7 +62,7 @@ fn duplicates_table() -> Element {
     use_context_provider(NavState::new);
     use_context_provider(|| ChromeCtx(chrome("en")));
     let candidates = vec![
-        candidate("I0042", "I0099", "same birth year · name variant", 94),
+        candidate("I0042", "I0099", "probable match", 94),
         candidate("I0061", "I0140", "shared parents", 55),
     ];
     rsx! {
@@ -81,9 +82,10 @@ fn duplicates_table_renders_an_accessible_table_with_a_compare_button_per_row() 
         html.contains("I0042") && html.contains("I0099"),
         "both people in a pair render:\n{html}"
     );
+    assert!(html.contains("probable match"), "the band renders:\n{html}");
     assert!(
-        html.contains("same birth year · name variant"),
-        "the match reason renders:\n{html}"
+        html.contains("Same given name (+3.0) · Similar birth (+1.2)"),
+        "the reasons behind the score render beside it:\n{html}"
     );
     assert!(
         html.matches("Compare").count() >= 2,

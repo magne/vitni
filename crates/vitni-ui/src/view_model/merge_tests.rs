@@ -61,6 +61,33 @@ fn a_duplicate_pair_shows_the_engine_score_as_a_percentage_and_its_band() {
     assert_eq!(vm.b.human_id, "I0099");
     assert_eq!(vm.score, 94, "the engine score as a percentage, not a confidence level");
     assert_eq!(vm.reason, "possible match");
+    assert!(vm.reasons.is_empty(), "no terms, nothing to explain");
+}
+
+#[test]
+fn a_duplicate_pair_explains_its_score_by_the_engines_terms() {
+    use vitni_app::{Feature, FeatureComparison, Outcome};
+    let loc = Localizer::for_test("en");
+    let term = |feature, outcome, weight| FeatureComparison {
+        feature,
+        outcome,
+        weight,
+        left: None,
+        right: None,
+    };
+    let mut shown = assessment(0.97, MatchBand::Probable);
+    shown.features = vec![
+        term(Feature::Surname, Outcome::Partial(0.9), 1.5),
+        term(Feature::Birth, Outcome::Missing, 0.0),
+        term(Feature::GivenName, Outcome::Agree, 3.25),
+    ];
+    let pair = SimilarPair {
+        a: agg("I0042"),
+        b: agg("I0099"),
+        assessment: shown,
+    };
+    let vm = DuplicateCandidateVm::build(&pair, &loc);
+    assert_eq!(vm.reasons, ["Same given name (+3.3)", "Similar surname (+1.5)"]);
 }
 
 #[test]

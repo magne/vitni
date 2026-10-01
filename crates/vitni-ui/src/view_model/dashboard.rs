@@ -1,6 +1,6 @@
 use super::{ActivityVm, ChangeLogEntry, HashMap, Localizer, PersonSummary, RecordRef, WorkspaceCounts};
 use crate::navigation::Category;
-use vitni_app::{CheckFinding, CheckKind};
+use vitni_app::{AggRef, CheckFinding, MatchEvidence, MatchableKind};
 
 /// A quick entry point on the dashboard ("Jump back in") — a recently touched record.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,43 +121,94 @@ pub struct DataQualityVm {
     /// Persons flagged by the death-before-birth check, as navigable record references (the Review
     /// action lists these; the row count is their number).
     pub death_before_birth: Vec<RecordRef>,
-    /// How many possible-duplicate pairs the detector flagged (the row's Compare action routes into
-    /// the merge wizard rather than to individual records).
-    pub duplicate_count: usize,
+    /// The possible-duplicate pairs of every kind, the most similar first (the row count is their
+    /// number; its Compare action routes into the merge wizard).
+    pub duplicates: Vec<DuplicateVm>,
+}
+
+/// One possible-duplicate pair on the dashboard: both records, navigable, and the engine's view of them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicateVm {
+    /// The first record.
+    pub a: RecordRef,
+    /// The second record.
+    pub b: RecordRef,
+    /// The engine's score as a whole percentage — a probability, never an asserted confidence.
+    pub percent: u8,
+    /// The already-localized band the engine put the pair in.
+    pub band: String,
+    /// The already-localized reasons behind the score, the strongest first.
+    pub reasons: Vec<String>,
 }
 
 impl DataQualityVm {
     /// Groups the data-quality `findings` into the per-check shapes the card renders, resolving each
     /// flagged person's display name from `persons`.
     #[must_use]
-    pub fn build(persons: &[PersonSummary], findings: &[CheckFinding]) -> Self {
+    pub fn build(persons: &[PersonSummary], findings: &[CheckFinding], loc: &Localizer) -> Self {
         let names: HashMap<String, String> = persons
             .iter()
             .filter_map(|person| person.display_name.clone().map(|name| (person.human_id.clone(), name)))
             .collect();
         let mut death_before_birth = Vec::new();
-        let mut duplicate_count = 0usize;
+        let mut duplicates = Vec::new();
         for finding in findings {
-            match finding.kind {
-                CheckKind::DeathBeforeBirth => {
-                    for record in &finding.records {
-                        let label = names
-                            .get(&record.human_id)
-                            .cloned()
-                            .unwrap_or_else(|| record.human_id.clone());
-                        death_before_birth.push(RecordRef {
-                            category: Category::People,
-                            human_id: record.human_id.clone(),
-                            label,
-                        });
-                    }
+            match finding {
+                CheckFinding::DeathBeforeBirth(record) => {
+                    death_before_birth.push(record_ref(MatchableKind::Person, record, &names));
                 }
-                CheckKind::PossibleDuplicates => duplicate_count += 1,
+                CheckFinding::PossibleDuplicate { kind, a, b, assessment } => {
+                    duplicates.push(DuplicateVm::build(*kind, a, b, assessment, &names, loc));
+                }
             }
         }
         Self {
             death_before_birth,
-            duplicate_count,
+            duplicates,
         }
+    }
+}
+
+impl DuplicateVm {
+    fn build(
+        kind: MatchableKind,
+        a: &AggRef,
+        b: &AggRef,
+        assessment: &MatchEvidence,
+        names: &HashMap<String, String>,
+        loc: &Localizer,
+    ) -> Self {
+        Self {
+            a: record_ref(kind, a, names),
+            b: record_ref(kind, b, names),
+            percent: assessment.percent(),
+            band: loc.match_band(assessment.band),
+            reasons: loc.match_reasons(assessment),
+        }
+    }
+}
+
+/// A flagged record as a navigable reference: a person by display name, a tag by its name (it opens by
+/// its id), anything else by its human id — the record link shows the live name.
+fn record_ref(kind: MatchableKind, record: &AggRef, names: &HashMap<String, String>) -> RecordRef {
+    let (human_id, label) = match kind {
+        MatchableKind::Tag => (record.id.clone(), record.human_id.clone()),
+        MatchableKind::Person => {
+            let label = names.get(&record.human_id).unwrap_or(&record.human_id);
+            (record.human_id.clone(), label.clone())
+        }
+        MatchableKind::Family
+        | MatchableKind::Event
+        | MatchableKind::Place
+        | MatchableKind::Source
+        | MatchableKind::Repository
+        | MatchableKind::Citation
+        | MatchableKind::Media
+        | MatchableKind::Note => (record.human_id.clone(), record.human_id.clone()),
+    };
+    RecordRef {
+        category: Category::from_matchable_kind(kind),
+        human_id,
+        label,
     }
 }

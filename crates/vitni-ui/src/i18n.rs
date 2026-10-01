@@ -1950,6 +1950,7 @@ impl Localizer {
             "possible-duplicates" => fl!(self.loader, "dashboard-possible-duplicates"),
             "compare" => fl!(self.loader, "dashboard-compare"),
             "compare-label" => fl!(self.loader, "dashboard-compare-label"),
+            "score-tooltip" => fl!(self.loader, "dashboard-score-tooltip"),
             "activity-empty" => fl!(self.loader, "dashboard-activity-empty"),
             _ => fl!(self.loader, "dashboard-title"),
         }
@@ -2908,6 +2909,92 @@ impl Localizer {
             band = self.match_band(evidence.band),
             engine = evidence.engine.0
         )
+    }
+
+    /// The engine's reasons for an assessment (ADR 0038 §3, §8), one per term that compared two values,
+    /// the strongest evidence for the pair first: "Same given name (+3.0)". A term with a value missing
+    /// on either side explains nothing and is left out.
+    #[must_use]
+    pub fn match_reasons(&self, evidence: &vitni_app::MatchEvidence) -> Vec<String> {
+        use vitni_app::OutcomeEvidence;
+        let mut terms: Vec<&vitni_app::FeatureEvidence> = evidence.features.iter().collect();
+        terms.sort_by_key(|term| std::cmp::Reverse(term.weight_bp));
+        let mut reasons = Vec::with_capacity(terms.len());
+        for term in terms {
+            let (feature, weight) = (self.match_feature(term.feature), self.match_weight(term.weight_bp));
+            reasons.push(match term.outcome {
+                OutcomeEvidence::Agree => fl!(self.loader, "match-reason-agree", feature = feature, weight = weight),
+                OutcomeEvidence::Partial(_) => {
+                    fl!(self.loader, "match-reason-partial", feature = feature, weight = weight)
+                }
+                OutcomeEvidence::Disagree => {
+                    fl!(self.loader, "match-reason-disagree", feature = feature, weight = weight)
+                }
+                OutcomeEvidence::Conflict => {
+                    fl!(self.loader, "match-reason-conflict", feature = feature, weight = weight)
+                }
+                OutcomeEvidence::Missing => continue,
+            });
+        }
+        reasons
+    }
+
+    /// A term's log₂ weight, signed, to one decimal: "+3.0", "−1.2".
+    fn match_weight(&self, weight_bp: i32) -> String {
+        let tenths = (weight_bp.unsigned_abs() + 500) / 1_000;
+        let sign = if weight_bp < 0 && tenths > 0 { "\u{2212}" } else { "+" };
+        fl!(
+            self.loader,
+            "match-weight",
+            sign = sign,
+            whole = (tenths / 10).to_string(),
+            tenth = (tenths % 10).to_string()
+        )
+    }
+
+    /// The name of a compared feature, as a reason's sentence takes it.
+    fn match_feature(&self, feature: vitni_app::Feature) -> String {
+        use vitni_app::Feature;
+        match feature {
+            Feature::GivenName => fl!(self.loader, "match-feature-given-name"),
+            Feature::Surname => fl!(self.loader, "match-feature-surname"),
+            Feature::Sex => fl!(self.loader, "match-feature-sex"),
+            Feature::Birth => fl!(self.loader, "match-feature-birth"),
+            Feature::Death => fl!(self.loader, "match-feature-death"),
+            Feature::BirthPlace => fl!(self.loader, "match-feature-birth-place"),
+            Feature::DeathPlace => fl!(self.loader, "match-feature-death-place"),
+            Feature::Lifespan => fl!(self.loader, "match-feature-lifespan"),
+            Feature::Father => fl!(self.loader, "match-feature-father"),
+            Feature::Mother => fl!(self.loader, "match-feature-mother"),
+            Feature::Partners => fl!(self.loader, "match-feature-partners"),
+            Feature::Children => fl!(self.loader, "match-feature-children"),
+            Feature::Patronymic => fl!(self.loader, "match-feature-patronymic"),
+            Feature::Occupation => fl!(self.loader, "match-feature-occupation"),
+            Feature::Record => fl!(self.loader, "match-feature-record"),
+            Feature::Partner => fl!(self.loader, "match-feature-partner"),
+            Feature::Marriage => fl!(self.loader, "match-feature-marriage"),
+            Feature::MarriagePlace => fl!(self.loader, "match-feature-marriage-place"),
+            Feature::EventType => fl!(self.loader, "match-feature-event-type"),
+            Feature::Date => fl!(self.loader, "match-feature-date"),
+            Feature::Place => fl!(self.loader, "match-feature-place"),
+            Feature::Principal => fl!(self.loader, "match-feature-principal"),
+            Feature::Participants => fl!(self.loader, "match-feature-participants"),
+            Feature::PlaceName => fl!(self.loader, "match-feature-place-name"),
+            Feature::PlaceType => fl!(self.loader, "match-feature-place-type"),
+            Feature::Enclosure => fl!(self.loader, "match-feature-enclosure"),
+            Feature::Coordinates => fl!(self.loader, "match-feature-coordinates"),
+            Feature::Title => fl!(self.loader, "match-feature-title"),
+            Feature::Author => fl!(self.loader, "match-feature-author"),
+            Feature::Publication => fl!(self.loader, "match-feature-publication"),
+            Feature::Repository => fl!(self.loader, "match-feature-repository"),
+            Feature::Name => fl!(self.loader, "match-feature-name"),
+            Feature::Address => fl!(self.loader, "match-feature-address"),
+            Feature::Source => fl!(self.loader, "match-feature-source"),
+            Feature::Page => fl!(self.loader, "match-feature-page"),
+            Feature::Checksum => fl!(self.loader, "match-feature-checksum"),
+            Feature::Path => fl!(self.loader, "match-feature-path"),
+            Feature::Text => fl!(self.loader, "match-feature-text"),
+        }
     }
 
     /// The confirmation shown after "Not the same person".

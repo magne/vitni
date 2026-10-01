@@ -1,19 +1,20 @@
 //! Data-quality checks (Phase 5 PR 34): a small, string-free framework of scans over the workspace
 //! projections, each returning a typed finding the dashboard turns into a counted, navigable row.
 //!
-//! A check is a pure function over already-projected read models: it names its [`CheckKind`] and the
-//! record(s) it flags as [`AggRef`]s, so the frontend can localize the label and build navigable
+//! A check is a pure function over already-projected read models: its [`CheckFinding`] variant names
+//! the check and the record(s) it flags as [`AggRef`]s, so the frontend can localize the label and build navigable
 //! targets (ADR 0003 keeps this crate free of display strings). New checks (orphaned records,
 //! implausible ages, …) slot in as another per-check function plus a line in [`run_checks`] — no
 //! registry, no trait objects.
 //!
 //! Two checks ship here:
-//! - [`CheckKind::DeathBeforeBirth`] — a per-person date-sanity scan flagging anyone whose known
+//! - [`CheckFinding::DeathBeforeBirth`] — a per-person date-sanity scan flagging anyone whose known
 //!   death year precedes their known birth year.
-//! - [`CheckKind::PossibleDuplicates`] — the matching engine's [`similar_pairs`] of persons at least
-//!   [`MatchBand::Possible`], one finding per pair (the same pairs the Compare/merge screen shows).
+//! - [`CheckFinding::PossibleDuplicate`] — the matching engine's [`similar_pairs`] of every
+//!   [`MatchableKind`] at least [`MatchBand::Possible`], one finding per pair with the engine's evidence
+//!   (ADR 0038 §8). A pair the user already decided is left out (ADR 0039 §3).
 
-use vitni_core::matching::{MatchBand, MatchableKind};
+use vitni_core::matching::{MatchBand, MatchEvidence, MatchableKind};
 
 use crate::dto::AggRef;
 use crate::error::AppError;
@@ -21,32 +22,30 @@ use crate::person::{PersonSummary, list_persons};
 use crate::similar::similar_pairs;
 use crate::workspace::Workspace;
 
-/// Which data-quality check produced a finding — a closed enum the frontend localizes to its own
-/// display text (ADR 0003 keeps this crate string-free).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CheckKind {
-    /// A person whose known death year precedes their known birth year.
-    DeathBeforeBirth,
-    /// A pair of persons flagged as a possible duplicate.
-    PossibleDuplicates,
-}
-
-/// A single data-quality finding: which check fired and the record(s) it flags.
+/// A single data-quality finding: which check fired, the record(s) it flags, and what it found.
 ///
-/// `records` holds one [`AggRef`] for a per-record check ([`CheckKind::DeathBeforeBirth`]) and the
-/// pair for [`CheckKind::PossibleDuplicates`], so the frontend can build a navigable target for each.
+/// A closed enum the frontend localizes to its own display text (ADR 0003 keeps this crate
+/// string-free), and builds a navigable target for each record from.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CheckFinding {
-    /// Which check produced this finding.
-    pub kind: CheckKind,
-    /// The record(s) the finding flags (one for a per-record check, a pair for duplicates).
-    pub records: Vec<AggRef>,
+pub enum CheckFinding {
+    /// A person whose known death year precedes their known birth year.
+    DeathBeforeBirth(AggRef),
+    /// Two records of one kind the engine judges possibly the same.
+    PossibleDuplicate {
+        /// The kind of both records.
+        kind: MatchableKind,
+        /// The first record, the lower aggregate id.
+        a: AggRef,
+        /// The second record.
+        b: AggRef,
+        /// The engine's assessment of the pair: its score, band and the terms behind them.
+        assessment: MatchEvidence,
+    },
 }
 
 /// Runs every data-quality check against the workspace, returning one [`CheckFinding`] per flag.
 ///
-/// A scan over projections plus the matching engine — no new events. Findings for different
-/// [`CheckKind`]s are interleaved in check order; the caller groups by kind.
+/// A scan over projections plus the matching engine — no new events.
 ///
 /// # Errors
 ///
@@ -54,27 +53,31 @@ pub struct CheckFinding {
 /// loaded.
 pub async fn run_checks(workspace: &Workspace) -> Result<Vec<CheckFinding>, AppError> {
     let persons = list_persons(workspace).await?;
-    check_persons(workspace, &persons).await
+    check_records(workspace, &persons).await
 }
 
-/// Runs every data-quality check against an already-loaded person projection.
+/// Runs every data-quality check, reading the persons from an already-loaded projection.
 ///
 /// The core of [`run_checks`], exposed so a caller that already holds the person list (the dashboard,
 /// which also needs it for evidence health and activity names) runs the checks without a second
-/// [`list_persons`] load. Findings for different [`CheckKind`]s are interleaved in check order; the
-/// caller groups by kind.
+/// [`list_persons`] load. The death-before-birth findings come first, then the duplicates of every
+/// kind, the most similar first.
 ///
 /// # Errors
 ///
 /// A store/read-model error, or the matching engine's error when its data or settings cannot be
 /// loaded.
-pub async fn check_persons(workspace: &Workspace, persons: &[PersonSummary]) -> Result<Vec<CheckFinding>, AppError> {
+pub async fn check_records(workspace: &Workspace, persons: &[PersonSummary]) -> Result<Vec<CheckFinding>, AppError> {
+    let mut duplicates = Vec::new();
+    for kind in MatchableKind::ALL {
+        for pair in similar_pairs(workspace, kind, MatchBand::Possible).await? {
+            duplicates.push((kind, pair.a, pair.b, pair.assessment.evidence()));
+        }
+    }
+    duplicates.sort_by_key(|(_, _, _, evidence)| std::cmp::Reverse((evidence.band, evidence.score_bp)));
     let mut findings = death_before_birth(persons);
-    for pair in similar_pairs(workspace, MatchableKind::Person, MatchBand::Possible).await? {
-        findings.push(CheckFinding {
-            kind: CheckKind::PossibleDuplicates,
-            records: vec![pair.a, pair.b],
-        });
+    for (kind, a, b, assessment) in duplicates {
+        findings.push(CheckFinding::PossibleDuplicate { kind, a, b, assessment });
     }
     Ok(findings)
 }
@@ -89,13 +92,10 @@ fn death_before_birth(persons: &[PersonSummary]) -> Vec<CheckFinding> {
             continue;
         };
         if death < birth {
-            findings.push(CheckFinding {
-                kind: CheckKind::DeathBeforeBirth,
-                records: vec![AggRef {
-                    human_id: person.human_id.clone(),
-                    id: person.human_id.clone(),
-                }],
-            });
+            findings.push(CheckFinding::DeathBeforeBirth(AggRef {
+                human_id: person.human_id.clone(),
+                id: person.human_id.clone(),
+            }));
         }
     }
     findings
@@ -103,7 +103,7 @@ fn death_before_birth(persons: &[PersonSummary]) -> Vec<CheckFinding> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CheckKind, death_before_birth, run_checks};
+    use super::{CheckFinding, death_before_birth, run_checks};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
     use crate::event::{DateParts, NewEvent, assert_event_date, create_event};
     use crate::person::{
@@ -248,8 +248,10 @@ mod tests {
             1,
             "the reversed-lifespan person must be flagged: {findings:?}"
         );
-        assert_eq!(findings[0].kind, CheckKind::DeathBeforeBirth);
-        assert_eq!(findings[0].records[0].human_id, subject);
+        let CheckFinding::DeathBeforeBirth(record) = &findings[0] else {
+            panic!("a death-before-birth finding: {findings:?}");
+        };
+        assert_eq!(record.human_id, subject);
     }
 
     #[tokio::test]
@@ -303,15 +305,23 @@ mod tests {
             .await
             .expect("duplicates");
         let findings = run_checks(&workspace).await.expect("run checks");
-        let duplicate_findings: Vec<_> = findings
-            .iter()
-            .filter(|finding| finding.kind == CheckKind::PossibleDuplicates)
-            .collect();
+        let mut duplicate_findings = Vec::new();
+        for finding in &findings {
+            if let CheckFinding::PossibleDuplicate {
+                kind: MatchableKind::Person,
+                a: first,
+                b: second,
+                assessment,
+            } = finding
+            {
+                duplicate_findings.push((first.human_id.clone(), second.human_id.clone(), assessment.clone()));
+            }
+        }
         assert_eq!(duplicate_findings.len(), duplicates.len());
         assert!(
-            duplicate_findings.iter().any(|finding| {
-                (finding.records[0].human_id == a && finding.records[1].human_id == b)
-                    || (finding.records[0].human_id == b && finding.records[1].human_id == a)
+            duplicate_findings.iter().any(|(first, second, assessment)| {
+                ((*first == a && *second == b) || (*first == b && *second == a))
+                    && assessment.band >= MatchBand::Possible
             }),
             "the Smith/Smyth pair must surface as a duplicates finding: {findings:?}"
         );

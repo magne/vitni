@@ -78,7 +78,7 @@ pub fn dashboard_view(
 ) -> Element {
     let stats = &dashboard.stats;
     let (deaths, duplicates) = data_quality.map_or((0, 0), |quality| {
-        (quality.death_before_birth.len(), quality.duplicate_count)
+        (quality.death_before_birth.len(), quality.duplicates.len())
     });
     rsx! {
         div { style: "padding:var(--sp-6);overflow:auto;height:100%",
@@ -177,7 +177,8 @@ const MAX_FLAGGED_LINKS: usize = 5;
 
 /// The data-quality card: one row per check with its real count and an action. Death-before-birth
 /// lists the flagged persons as navigable links (no list-filter screen exists); facts-without-source
-/// keeps its computed count; possible-duplicates offers a Compare button into the merge wizard.
+/// keeps its computed count; possible-duplicates offers a Compare button into the merge wizard, and
+/// under the table the strongest pairs of every kind, each with its probability and reasons.
 ///
 /// `data_quality` is `None` while the whole-workspace check pass is still loading — the card then
 /// shows a localized loading line in place of the check rows (`facts_without_source` comes from the
@@ -211,7 +212,7 @@ fn data_quality_card(loc: &Localizer, facts_without_source: usize, data_quality:
                 }
                 tr {
                     td { "⇄ {loc.dashboard_label(\"possible-duplicates\")}" }
-                    td { class: "muted", "{data_quality.duplicate_count}" }
+                    td { class: "muted", "{data_quality.duplicates.len()}" }
                     td { class: "row-actions",
                         CompareButton {
                             label: loc.dashboard_label("compare"),
@@ -219,6 +220,48 @@ fn data_quality_card(loc: &Localizer, facts_without_source: usize, data_quality:
                         }
                     }
                 }
+            }
+        }
+        {duplicate_pairs(loc, &data_quality.duplicates)}
+    }
+}
+
+/// The strongest possible-duplicate pairs, capped at [`MAX_FLAGGED_LINKS`] with a muted `+N more`
+/// for the rest: both records as links, the engine's probability and band, and its reasons.
+fn duplicate_pairs(loc: &Localizer, pairs: &[DuplicateVm]) -> Element {
+    if pairs.is_empty() {
+        return rsx! {};
+    }
+    let overflow = pairs.len().saturating_sub(MAX_FLAGGED_LINKS);
+    let tooltip = loc.dashboard_label("score-tooltip");
+    rsx! {
+        div { class: "stack", style: "margin-top:var(--sp-2)",
+            for pair in pairs.iter().take(MAX_FLAGGED_LINKS) {
+                div {
+                    div { class: "wrap",
+                        RecordLink {
+                            category: pair.a.category,
+                            human_id: pair.a.human_id.clone(),
+                            label: pair.a.label.clone(),
+                            icon: true,
+                        }
+                        span { class: "muted", "⇄" }
+                        RecordLink {
+                            category: pair.b.category,
+                            human_id: pair.b.human_id.clone(),
+                            label: pair.b.label.clone(),
+                            icon: true,
+                        }
+                        span { class: "badge", title: "{tooltip}", "{pair.percent}%" }
+                        span { class: "muted", "{pair.band}" }
+                    }
+                    if !pair.reasons.is_empty() {
+                        div { class: "muted match-reasons", "{pair.reasons.join(\" · \")}" }
+                    }
+                }
+            }
+            if overflow > 0 {
+                span { class: "muted", "{loc.dashboard_more(overflow)}" }
             }
         }
     }
