@@ -497,7 +497,6 @@ mod event_detail_tests {
             confidence,
             source_count,
             assertion_id: assertion_id.to_owned(),
-            owner_human_id: human_id.to_owned(),
         }
     }
 

@@ -7,10 +7,11 @@ use std::collections::BTreeSet;
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, AppError, IdentityDecision, MutationMeta, NewFact, NewPerson, OperatorConfig, PersonChangeSet,
-    PersonNameParts, PersonTarget, Provenance, Session, Workspace, WorkspaceDefaults, assert_fact,
-    change_log_for_person, commit_person_change_set, create_person, create_tag, distinguish_persons, list_person_rows,
-    list_persons, merge_persons, show_person, tag_person, undo_assertion, undo_distinction_and_merge, workspace_counts,
+    AppDefaults, AppError, IdentityDecision, MutationMeta, NewFact, NewPerson, OperatorConfig, PairDecision,
+    PersonChangeSet, PersonNameParts, PersonTarget, Provenance, Session, Workspace, WorkspaceDefaults, assert_fact,
+    change_log_for_person, claim_owner, commit_person_change_set, create_person, create_tag, distinguish_persons,
+    list_person_rows, list_persons, merge_persons, pair_decision, show_person, tag_person, undo_assertion,
+    undo_distinction_and_merge, workspace_counts,
 };
 use vitni_core::enums::{EvidenceLevel, FactType};
 use vitni_core::ids::AgentId;
@@ -430,4 +431,69 @@ async fn removing_a_members_tag_in_the_record_editor_untags_the_member() {
         .await
         .expect("untag");
     assert!(show_person(&ws, &a).await.expect("show").expect("root").tags.is_empty());
+}
+
+#[tokio::test]
+async fn a_claim_is_owned_by_the_cluster_record_whose_stream_holds_it() {
+    let (ws, _dir) = workspace().await;
+    let a = person(&ws, "Ole", "Hansen").await;
+    let b = person(&ws, "Ole", "Hanssen").await;
+    occupation(&ws, &b, "Fisherman").await;
+    merge(&ws, &a, &b).await;
+    let root = show_person(&ws, &a).await.expect("show").expect("root");
+
+    let fact = &root.facts[0].assertion_id;
+    assert_eq!(claim_owner(&ws, &a, fact).await.expect("owner"), b);
+    let own_name = &root.names[0].assertion_id;
+    assert_eq!(claim_owner(&ws, &a, own_name).await.expect("owner"), a);
+    assert_eq!(
+        claim_owner(&ws, &b, own_name).await.expect("owner"),
+        a,
+        "from a member too"
+    );
+    let unknown = "01890000-0000-7000-8000-000000000000";
+    assert_eq!(
+        claim_owner(&ws, &a, unknown).await.expect("owner"),
+        a,
+        "nobody holds it"
+    );
+}
+
+#[tokio::test]
+async fn untagging_a_root_untags_every_cluster_record_holding_the_tag() {
+    let (ws, _dir) = workspace().await;
+    let a = person(&ws, "Ole", "Hansen").await;
+    let b = person(&ws, "Ole", "Hanssen").await;
+    let tag = create_tag(&ws, &session(), "Emigrant".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("tag");
+    tag_person(&ws, &session(), &b, &tag, false, MutationMeta::default())
+        .await
+        .expect("tag member");
+    merge(&ws, &a, &b).await;
+
+    tag_person(&ws, &session(), &a, &tag, true, MutationMeta::default())
+        .await
+        .expect("untag through the root");
+    assert!(show_person(&ws, &a).await.expect("show").expect("root").tags.is_empty());
+}
+
+#[tokio::test]
+async fn the_decision_between_two_clusters_is_read_whichever_record_names_them() {
+    let (ws, _dir) = workspace().await;
+    let a = person(&ws, "Ole", "Hansen").await;
+    let b = person(&ws, "Ole", "Hanssen").await;
+    let c = person(&ws, "Ola", "Hansen").await;
+    assert_eq!(pair_decision(&ws, &a, &c).await.expect("decision"), None);
+    merge(&ws, &a, &b).await;
+    assert_eq!(
+        pair_decision(&ws, &b, &a).await.expect("decision"),
+        Some(PairDecision::SameCluster)
+    );
+    distinguish(&ws, &c, &a).await;
+    assert_eq!(
+        pair_decision(&ws, &b, &c).await.expect("decision"),
+        Some(PairDecision::Distinct)
+    );
+    assert_eq!(pair_decision(&ws, &a, &a).await.expect("decision"), None);
 }

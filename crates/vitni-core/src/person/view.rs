@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::assertions::{Asserted, Attributed};
 use crate::enums::{EvidenceLevel, Restriction, Sex};
 use crate::fact::Fact;
-use crate::ids::{CitationId, HumanId, NoteId, PersonId, TagId};
+use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
 use crate::person::decide::evolve;
 use crate::person::state::{Association, Participation, PersonState};
@@ -160,6 +160,13 @@ impl PersonView {
     #[must_use]
     pub fn distinguished(&self) -> Vec<PersonId> {
         self.state.distinguished.iter().map(|d| d.value).collect()
+    }
+
+    /// Whether `assertion` is a live assertion on this person's stream — one a retraction or
+    /// supersession of it may target.
+    #[must_use]
+    pub fn holds_assertion(&self, assertion: AssertionId) -> bool {
+        self.state.live_assertions.contains(&assertion)
     }
 
     /// The live distinctions, each paired with the `AssertionId` of its `PersonsDistinguished` — the

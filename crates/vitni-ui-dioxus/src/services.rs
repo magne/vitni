@@ -304,6 +304,24 @@ pub async fn merge_persons(services: Services, request: MergePersons) -> Result<
         .map_err(|error| MergeFailure::from_error(&error, &loc))
 }
 
+/// Undoes the distinction between two persons and merges them through
+/// `vitni_ui::dispatch_undo_distinction_and_merge`, returning the localized result or a
+/// [`MergeFailure`], like [`merge_persons`].
+pub async fn undo_distinction_and_merge(
+    services: Services,
+    request: MergePersons,
+) -> Result<MergeResultVm, MergeFailure> {
+    let loc = services.localizer();
+    let workspace = services
+        .open()
+        .await
+        .map_err(|error| MergeFailure::from_error(&error, &loc))?;
+    let session = Session::new(services.config.operator_agent());
+    vitni_ui::dispatch_undo_distinction_and_merge(&workspace, &session, &loc, &request)
+        .await
+        .map_err(|error| MergeFailure::from_error(&error, &loc))
+}
+
 /// Records that two persons are different people through `vitni_ui::dispatch_distinguish`, returning
 /// the localized confirmation or a [`MergeFailure`], like [`merge_persons`].
 pub async fn distinguish_persons(services: Services, request: DistinguishPersons) -> Result<String, MergeFailure> {

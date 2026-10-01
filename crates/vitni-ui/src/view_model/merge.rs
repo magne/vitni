@@ -218,6 +218,10 @@ pub struct MergeCompareVm {
     pub assessment: vitni_app::MatchEvidence,
     /// The localized one-line summary of [`assessment`](Self::assessment): score, band, engine.
     pub assessment_line: String,
+    /// The live decision already taken between the two people's clusters, if any (ADR 0039 §4): the
+    /// compare view shows a [`Distinct`](vitni_app::PairDecision::Distinct) one and offers to undo it
+    /// and merge.
+    pub earlier_decision: Option<vitni_app::PairDecision>,
 }
 
 impl MergeCompareVm {
@@ -255,6 +259,7 @@ impl MergeCompareVm {
             differs_title: loc.merge_differs_title(),
             assessment_line: loc.identity_assessment(&assessment),
             assessment,
+            earlier_decision: None,
         }
     }
 }

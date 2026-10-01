@@ -222,10 +222,9 @@ async fn fixture() -> Fixture {
 }
 
 impl Fixture {
-    /// Asserts a read names the root and never the member, by `human_id` or by aggregate id. Only the
-    /// owner of a member-owned row may name the member: that is where an edit to it is written.
+    /// Asserts a read names the root and never the member, by `human_id` or by aggregate id.
     fn names_the_root(&self, what: &str, dto: &impl std::fmt::Debug) {
-        let rendered = format!("{dto:?}").replace(&format!("owner_human_id: \"{}\"", self.member), "");
+        let rendered = format!("{dto:?}");
         assert!(
             !rendered.contains(&format!("\"{}\"", self.member)),
             "{what} names the member {}: {rendered}",

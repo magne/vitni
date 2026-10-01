@@ -71,9 +71,6 @@ pub struct ParticipantRef {
     /// this participation — the target a per-row Edit supersedes and a Remove retracts (ADR 0004 §2).
     /// Never rendered. Always the Person-aggregate assertion (the canonical, single-owner side).
     pub assertion_id: String,
-    /// The `human_id` of the person whose stream holds the assertion — the participant itself, or the
-    /// member of its cluster the row came from (ADR 0039 §5). An edit or retraction goes there.
-    pub owner_human_id: String,
 }
 
 /// The place an event occurred, joined to the place projection: its primary name for display and the
@@ -726,7 +723,6 @@ struct PlaceInfo {
 struct PersonSideParticipation {
     person_id: PersonId,
     human_id: String,
-    owner_human_id: String,
     name: Option<String>,
     role: ParticipantRole,
     age: Option<Age>,
@@ -778,7 +774,6 @@ impl EventLookups {
             let Some(person_id) = view.person_id() else {
                 continue;
             };
-            let owner_human_id = view.human_id().map(ToString::to_string).unwrap_or_default();
             let person_id = clusters.root(person_id);
             let info = persons.get(&person_id);
             let human_id = info.map_or_else(|| person_id.to_string(), |i| i.human_id.clone());
@@ -792,7 +787,6 @@ impl EventLookups {
                     .push(PersonSideParticipation {
                         person_id,
                         human_id: human_id.clone(),
-                        owner_human_id: owner_human_id.clone(),
                         name: name.clone(),
                         role: participation.role.clone(),
                         age: participation.age.clone(),
@@ -1048,7 +1042,6 @@ fn merged_participants(view: &EventView, lookups: &EventLookups) -> Vec<Particip
             confidence: participation.confidence,
             source_count: participation.source_count,
             assertion_id: participation.assertion_id.clone(),
-            owner_human_id: participation.owner_human_id.clone(),
         })
         .collect()
 }

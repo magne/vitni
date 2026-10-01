@@ -3069,6 +3069,13 @@ impl Localizer {
         fl!(self.loader, "merge-blocked-guidance")
     }
 
+    /// The attribution on a row a merged record supplied to its cluster (ADR 0039 §5): which record it
+    /// came from.
+    #[must_use]
+    pub fn merged_from(&self, record: &str) -> String {
+        fl!(self.loader, "claim-merged-from", record = record)
+    }
+
     /// The completed-merge outcome summary: the merged person becomes a persona of the survivor.
     /// Deliberately never says "re-pointed" — see [`crate::view_model::MergeResultVm`] doc.
     #[must_use]

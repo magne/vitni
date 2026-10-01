@@ -13,8 +13,8 @@ use vitni_ui::{DuplicateCandidateVm, MergeBlockedVm, MergeCompareVm, MergeFieldR
 use vitni_ui_dioxus::components::SelectChoice;
 use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::screens::{
-    DecisionActions, DecisionDraft, DuplicatesTable, MergeCompareGrid, merge_blocked_card, merge_compare_heading,
-    merge_wizard_foot,
+    DecisionActions, DecisionDraft, DuplicatesTable, MergeCompareGrid, earlier_distinction_card, merge_blocked_card,
+    merge_compare_heading, merge_wizard_foot,
 };
 use vitni_ui_dioxus::shell::ChromeCtx;
 use vitni_ui_dioxus::shell::nav_state::NavState;
@@ -125,6 +125,7 @@ fn compare_grid() -> Element {
         differs_title: "differs from kept value".to_owned(),
         assessment: evidence(),
         assessment_line: String::new(),
+        earlier_decision: None,
     };
     rsx! {
         MergeCompareGrid { vm }
@@ -186,6 +187,7 @@ fn wizard_foot() -> Element {
         cancel: use_callback(|()| {}),
         merge: use_callback(|()| {}),
         distinguish: use_callback(|()| {}),
+        undo_and_merge: use_callback(|()| {}),
     };
     let options = vec![
         SelectChoice {
@@ -240,6 +242,7 @@ fn compare_heading() -> Element {
         differs_title: "differs from kept value".to_owned(),
         assessment: evidence(),
         assessment_line: "Matched at 97% · probable match · engine 4".to_owned(),
+        earlier_decision: None,
     };
     merge_compare_heading(&chrome, &vm)
 }
@@ -254,6 +257,32 @@ fn compare_heading_shows_the_assessment_the_decision_records() {
     assert!(
         html.contains("Matched at 97% · probable match · engine 4"),
         "the engine's assessment is shown:\n{html}"
+    );
+}
+
+/// Renders the notice that an earlier decision holds the pair distinct.
+fn earlier_distinction() -> Element {
+    let chrome = chrome("en");
+    earlier_distinction_card(&chrome, use_callback(|()| {}))
+}
+
+#[test]
+fn an_earlier_distinction_is_shown_with_an_undo_and_merge_action() {
+    let mut vdom = VirtualDom::new(earlier_distinction);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    assert!(
+        html.contains(r#"role="status""#),
+        "the notice is a status region:\n{html}"
+    );
+    assert!(
+        html.contains("Marked as different people"),
+        "the earlier decision is named:\n{html}"
+    );
+    assert!(
+        html.contains("Undo “not the same” and merge"),
+        "the undo-and-merge action renders:\n{html}"
     );
 }
 

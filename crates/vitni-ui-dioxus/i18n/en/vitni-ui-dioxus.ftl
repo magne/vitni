@@ -406,6 +406,9 @@ merge-reason-label = Reason for this decision
 merge-reason-hint = (recorded on the decision)
 merge-confidence-label = Confidence
 merge-distinguish = Not the same person
+merge-earlier-distinct-heading = Marked as different people
+merge-earlier-distinct-guidance = An earlier decision says these two are different people, so they cannot be merged as they are. Undoing it and merging records both steps in History.
+merge-undo-distinction = Undo “not the same” and merge
 
 # Plugin manager chrome (PR21). Capability/role/trust labels are read off the component itself by
 # vitni-plugin-host::discover — these are only their display names.

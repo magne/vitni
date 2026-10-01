@@ -15,19 +15,20 @@ use vitni_app::{
     assert_participation, assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note,
     attach_family_media, attach_family_note, attach_person_media, attach_person_note, change_log_for_citation,
     change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person,
-    change_log_for_place, change_log_for_repository, change_log_for_research_note, change_log_for_source,
+    change_log_for_place, change_log_for_repository, change_log_for_research_note, change_log_for_source, claim_owner,
     families_for_person, import_attach_event_media, import_attach_event_note, import_attach_media_note,
     import_attach_place_media, import_attach_place_note, import_attach_repository_note, import_attach_source_media,
     import_attach_source_note, link_family_event, link_place, link_source_repository, list_citations, list_event_rows,
     list_family_rows, list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories,
-    list_sources, recent_activity, remove_child, set_citation_confidence, set_citation_evidence_analysis,
-    set_citation_restrictions, set_event_restrictions, set_family_restrictions, set_media_restrictions,
-    set_note_restrictions, set_note_text, set_note_type, set_page, set_place_restrictions, set_repository_restrictions,
-    set_restrictions, set_source_restrictions, show_citation, show_event, show_family, show_media, show_note,
-    show_person, show_place, show_repository, show_source, tag_citation, tag_event, tag_family, tag_media, tag_note,
-    tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion, undo_event_assertion,
-    undo_family_assertion, undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion,
-    undo_research_note_assertion, undo_source_assertion, workspace_counts,
+    list_sources, pair_decision, recent_activity, remove_child, set_citation_confidence,
+    set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions, set_family_restrictions,
+    set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page, set_place_restrictions,
+    set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation, show_event, show_family,
+    show_media, show_note, show_person, show_place, show_repository, show_source, tag_citation, tag_event, tag_family,
+    tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion,
+    undo_distinction_and_merge, undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion,
+    undo_place_assertion, undo_repository_assertion, undo_research_note_assertion, undo_source_assertion,
+    workspace_counts,
 };
 use vitni_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
@@ -309,7 +310,8 @@ async fn list_duplicate_candidates(workspace: &Workspace, loc: &Localizer) -> Re
     Ok(IntentOutcome::DuplicateCandidates(vms))
 }
 
-/// Loads both people's summaries for the Merge tool's compare/merge wizard. Like [`show_pedigree`],
+/// Loads both people's summaries for the Merge tool's compare/merge wizard, with the decision already
+/// taken between their clusters (ADR 0039 §4). Like [`show_pedigree`],
 /// an unknown `human_id` propagates as an [`AppError`] rather than [`IntentOutcome::NotFound`] — the
 /// Merge tool has no per-record detail pane to degrade gracefully into.
 async fn merge_compare(
@@ -325,7 +327,8 @@ async fn merge_compare(
         .await?
         .ok_or_else(|| AppError::PersonNotFound(merged_human_id.to_owned()))?;
     let assessment = assess(workspace, MatchableKind::Person, surviving_human_id, merged_human_id).await?;
-    let vm = MergeCompareVm::build(&survivor, &merged, &assessment, loc);
+    let mut vm = MergeCompareVm::build(&survivor, &merged, &assessment, loc);
+    vm.earlier_decision = pair_decision(workspace, surviving_human_id, merged_human_id).await?;
     Ok(IntentOutcome::MergeCompare(Box::new(vm)))
 }
 
@@ -346,6 +349,31 @@ pub async fn dispatch_merge(
     request: &MergePersons,
 ) -> Result<MergeResultVm, AppError> {
     let result = merge_persons(
+        workspace,
+        session,
+        &request.surviving_human_id,
+        &request.merged_human_id,
+        request.judgment.decision(),
+    )
+    .await?;
+    Ok(MergeResultVm::build(&result, loc))
+}
+
+/// Dispatches a [`MergePersons`] request to `vitni_app::undo_distinction_and_merge`: the compare
+/// view's *Undo "not the same" and merge* for a pair an earlier decision held distinct (ADR 0039 §4).
+/// Returns the localized [`MergeResultVm`], like [`dispatch_merge`].
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `undo_distinction_and_merge` (either `human_id` not found, a
+/// self-merge or same-cluster domain rejection, or a database failure).
+pub async fn dispatch_undo_distinction_and_merge(
+    workspace: &Workspace,
+    session: &Session,
+    loc: &Localizer,
+    request: &MergePersons,
+) -> Result<MergeResultVm, AppError> {
+    let result = undo_distinction_and_merge(
         workspace,
         session,
         &request.surviving_human_id,
@@ -882,7 +910,9 @@ fn map_source_ref(reference: &DraftSourceRef) -> SourceRefInput {
 ///
 /// Unlike [`dispatch`] (a read), this mutates the workspace and is stamped with the session's
 /// operator/clock/id. The returned id is always [`PersonEdit::target`]: unlike the other eleven
-/// aggregates, `PersonEdit` has no `SetHumanId`, so nothing here can rename the person.
+/// aggregates, `PersonEdit` has no `SetHumanId`, so nothing here can rename the person. A correction of
+/// a row a merged member owns is written to that member (ADR 0039 §5), while the target still names
+/// the cluster the pane shows.
 ///
 /// # Errors
 ///
@@ -894,23 +924,17 @@ pub async fn dispatch_person_edit(
     edit: &PersonEdit,
     prov: &ProvenanceDraft,
 ) -> Result<String, AppError> {
+    let owner = person_edit_owner(workspace, edit, prov).await?;
+    let human_id = &owner;
     let outcome = match edit {
-        PersonEdit::AssertName { human_id, name } => {
-            add_name(workspace, session, human_id, name.clone(), prov.meta()).await
-        }
-        PersonEdit::AssertSex { human_id, sex } => {
-            assert_sex(workspace, session, human_id, sex.clone(), prov.meta()).await
-        }
-        PersonEdit::SetRestrictions { human_id, restrictions } => {
+        PersonEdit::AssertName { name, .. } => add_name(workspace, session, human_id, name.clone(), prov.meta()).await,
+        PersonEdit::AssertSex { sex, .. } => assert_sex(workspace, session, human_id, sex.clone(), prov.meta()).await,
+        PersonEdit::SetRestrictions { restrictions, .. } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
             set_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
-        PersonEdit::AssertFact {
-            human_id,
-            fact_type,
-            value,
-        } => {
+        PersonEdit::AssertFact { fact_type, value, .. } => {
             let new = NewFact {
                 fact_type: fact_type.clone(),
                 value: value.clone(),
@@ -918,10 +942,10 @@ pub async fn dispatch_person_edit(
             };
             assert_fact(workspace, session, human_id, new, prov.meta()).await
         }
-        PersonEdit::AttachCitation { human_id, citation_id } => {
+        PersonEdit::AttachCitation { citation_id, .. } => {
             add_person_citation(workspace, session, human_id, citation_id, prov.meta()).await
         }
-        PersonEdit::AttachMedia { human_id, media_id } => {
+        PersonEdit::AttachMedia { media_id, .. } => {
             attach_person_media(
                 workspace,
                 session,
@@ -933,10 +957,10 @@ pub async fn dispatch_person_edit(
             .await
         }
         PersonEdit::SetMediaRegion {
-            human_id,
             assertion_id,
             crop,
             caption,
+            ..
         } => {
             update_person_media_ref(
                 workspace,
@@ -951,21 +975,19 @@ pub async fn dispatch_person_edit(
             )
             .await
         }
-        PersonEdit::AttachNote { human_id, note_id } => {
+        PersonEdit::AttachNote { note_id, .. } => {
             attach_person_note(workspace, session, human_id, note_id, prov.meta()).await
         }
-        PersonEdit::AssertAssociation {
-            human_id,
-            other_id,
-            role,
-        } => assert_association(workspace, session, human_id, other_id, role.clone(), prov.meta()).await,
+        PersonEdit::AssertAssociation { other_id, role, .. } => {
+            assert_association(workspace, session, human_id, other_id, role.clone(), prov.meta()).await
+        }
         PersonEdit::AssertParticipation {
-            human_id,
             event_id,
             role,
             age,
             attributes,
             notes,
+            ..
         } => {
             let new = NewParticipation {
                 role: role.clone(),
@@ -975,16 +997,43 @@ pub async fn dispatch_person_edit(
             };
             assert_participation(workspace, session, human_id, event_id, new, prov.meta()).await
         }
-        PersonEdit::Tag {
-            human_id,
-            tag_id,
-            remove,
-        } => tag_person(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
-        PersonEdit::UndoAssertion { human_id, assertion_id } => {
+        PersonEdit::Tag { tag_id, remove, .. } => {
+            tag_person(workspace, session, human_id, tag_id, *remove, prov.meta()).await
+        }
+        PersonEdit::UndoAssertion { assertion_id, .. } => {
             undo_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale).await
         }
     };
     outcome.map(|()| edit.target().to_owned())
+}
+
+/// The record an edit on a person's detail writes to (ADR 0039 §5): a correction — an undo, a media
+/// region update, or any edit superseding a row — goes to the cluster record whose stream holds that
+/// row; anything else goes to the record the edit names.
+async fn person_edit_owner(
+    workspace: &Workspace,
+    edit: &PersonEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let corrected = match edit {
+        PersonEdit::UndoAssertion { assertion_id, .. } | PersonEdit::SetMediaRegion { assertion_id, .. } => {
+            Some(assertion_id.as_str())
+        }
+        PersonEdit::AssertName { .. }
+        | PersonEdit::AssertSex { .. }
+        | PersonEdit::SetRestrictions { .. }
+        | PersonEdit::AssertFact { .. }
+        | PersonEdit::AttachCitation { .. }
+        | PersonEdit::AttachMedia { .. }
+        | PersonEdit::AttachNote { .. }
+        | PersonEdit::AssertAssociation { .. }
+        | PersonEdit::AssertParticipation { .. }
+        | PersonEdit::Tag { .. } => prov.supersedes.as_deref(),
+    };
+    match corrected {
+        Some(assertion_id) => claim_owner(workspace, edit.target(), assertion_id).await,
+        None => Ok(edit.target().to_owned()),
+    }
 }
 
 /// Dispatches a [`CitationEdit`] to its `vitni-app` command use-case, mutating the workspace.

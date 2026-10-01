@@ -733,7 +733,8 @@ pub async fn attach_person_note(
     .await
 }
 
-/// Applies (or, with `remove`, removes) a tag on the person.
+/// Applies (or, with `remove`, removes) a tag on the person. Removing a tag from a cluster untags
+/// every record of it that holds the tag (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -749,12 +750,87 @@ pub async fn tag_person(
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
     let tag_id = parse_tag_id(tag_id)?;
-    let command = if remove {
-        PersonCommand::Untag { person_id, tag_id }
-    } else {
-        PersonCommand::Tag { person_id, tag_id }
+    if !remove {
+        return execute_person_mutation(
+            store,
+            session,
+            person_id,
+            PersonCommand::Tag { person_id, tag_id },
+            meta,
+        )
+        .await;
+    }
+    let holders = tag_holders(store, person_id, tag_id).await?;
+    let Some((first, rest)) = holders.split_first() else {
+        return execute_person_mutation(
+            store,
+            session,
+            person_id,
+            PersonCommand::Untag { person_id, tag_id },
+            meta,
+        )
+        .await;
     };
-    execute_person_mutation(store, session, person_id, command, meta).await
+    let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
+    for &holder in rest {
+        let untag = PersonCommand::Untag {
+            person_id: holder,
+            tag_id,
+        };
+        execute_person_command(
+            store,
+            session,
+            &holder.to_string(),
+            untag,
+            meta.provenance.clone(),
+            citations.clone(),
+        )
+        .await?;
+    }
+    let untag = PersonCommand::Untag {
+        person_id: *first,
+        tag_id,
+    };
+    execute_person_command(store, session, &first.to_string(), untag, meta.provenance, citations).await
+}
+
+/// Every record of `person`'s cluster that has `tag_id` applied — where removing the tag from the
+/// cluster writes (ADR 0039 §5).
+pub(crate) async fn tag_holders(store: &Store, person: PersonId, tag_id: TagId) -> Result<Vec<PersonId>, AppError> {
+    let clusters = PersonClusters::load(store).await?;
+    let records = crate::identity::person_views(store, &clusters.cluster(clusters.root(person))).await?;
+    let mut holders = Vec::new();
+    for record in &records {
+        if let Some(id) = record.person_id()
+            && record.tags().contains(&tag_id)
+        {
+            holders.push(id);
+        }
+    }
+    Ok(holders)
+}
+
+/// The `human_id` of the record of `human_id`'s cluster whose stream holds the live assertion
+/// `assertion_id` — where an edit or retraction of that row is written (ADR 0039 §5). The cluster's
+/// root when no record holds it, so the correction is refused there with the core's own error.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if `human_id` is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or a store error.
+pub async fn claim_owner(workspace: &Workspace, human_id: &str, assertion_id: &str) -> Result<String, AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, human_id).await?;
+    let target = use_case::parse_assertion_id(assertion_id)?;
+    let clusters = PersonClusters::load(store).await?;
+    let records = crate::identity::person_views(store, &clusters.cluster(clusters.root(person_id))).await?;
+    let holder = records
+        .iter()
+        .find(|record| record.holds_assertion(target))
+        .or_else(|| records.first());
+    Ok(holder
+        .and_then(PersonView::human_id)
+        .map_or_else(|| human_id.to_owned(), |id| id.as_str().to_owned()))
 }
 
 /// Parses a tag aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`]. Mirrors
@@ -929,6 +1005,10 @@ pub async fn distinguish_persons(
 
 /// A pair about to be decided, resolved to its cluster roots (ADR 0039 §4).
 struct DecidablePair {
+    /// The first record as named.
+    first_id: PersonId,
+    /// The second record as named.
+    second_id: PersonId,
     /// The first record's cluster root — the stream the decision is written on.
     first: PersonId,
     /// The first root's `human_id`.
@@ -971,28 +1051,71 @@ impl DecidablePair {
     }
 }
 
+/// The live identity decision between two persons' clusters (ADR 0039 §4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PairDecision {
+    /// Both records are in one cluster: a merge joined them.
+    SameCluster,
+    /// A record of one cluster is held distinct from a record of the other.
+    Distinct,
+}
+
+/// The live identity decision between the clusters of `first_human_id` and `other_human_id`, or `None`
+/// when the pair is undecided — what the compare view shows before the user decides again (ADR 0039
+/// §4). A record compared with itself is undecided.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if either `human_id` does not resolve, or a store error.
+pub async fn pair_decision(
+    workspace: &Workspace,
+    first_human_id: &str,
+    other_human_id: &str,
+) -> Result<Option<PairDecision>, AppError> {
+    let pair = cluster_pair(workspace.store(), first_human_id, other_human_id).await?;
+    if pair.first_id == pair.second_id {
+        return Ok(None);
+    }
+    if pair.first == pair.second {
+        return Ok(Some(PairDecision::SameCluster));
+    }
+    Ok((!pair.distinctions().is_empty()).then_some(PairDecision::Distinct))
+}
+
 /// Resolves a pair about to be decided to its cluster roots, refusing it when both are already one
 /// cluster — checked against the lagging `identity_links` projection per ADR 0002. A record decided
 /// about itself passes through, for the core to refuse.
 async fn decidable_pair(store: &Store, first: &str, second: &str) -> Result<DecidablePair, AppError> {
+    let pair = cluster_pair(store, first, second).await?;
+    if pair.first_id != pair.second_id && pair.first == pair.second {
+        return Err(PersonError::IdentityDecided {
+            person: pair.first_id,
+            other: pair.second_id,
+        }
+        .into());
+    }
+    Ok(pair)
+}
+
+/// Resolves two records to their cluster roots and reads every record of both clusters.
+async fn cluster_pair(store: &Store, first: &str, second: &str) -> Result<DecidablePair, AppError> {
     let first_id = resolve_person_id(store, first).await?;
     let second_id = resolve_person_id(store, second).await?;
     let clusters = crate::identity::PersonClusters::load(store).await?;
     let (first_root, second_root) = (clusters.root(first_id), clusters.root(second_id));
-    if first_id != second_id && first_root == second_root {
-        return Err(PersonError::IdentityDecided {
-            person: first_id,
-            other: second_id,
-        }
-        .into());
-    }
     let first_human_id = store
         .human_id_of("person", &first_root.to_string())
         .await?
         .ok_or_else(|| AppError::PersonNotFound(first.to_owned()))?;
     let first_views = crate::identity::person_views(store, &clusters.cluster(first_root)).await?;
-    let second_views = crate::identity::person_views(store, &clusters.cluster(second_root)).await?;
+    let second_views = if second_root == first_root {
+        Vec::new()
+    } else {
+        crate::identity::person_views(store, &clusters.cluster(second_root)).await?
+    };
     Ok(DecidablePair {
+        first_id,
+        second_id,
         first: first_root,
         first_human_id,
         second: second_root,

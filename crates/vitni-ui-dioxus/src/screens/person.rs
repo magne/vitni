@@ -1055,6 +1055,17 @@ fn fact_value_date(fact: &FactVm) -> String {
     }
 }
 
+/// The attribution chip on a row a merged record supplied to its cluster (ADR 0039 §5), naming the
+/// record it came from; nothing on the person's own rows.
+fn merged_from_chip(loc: &Localizer, merged_from: Option<&str>) -> Element {
+    let Some(record) = merged_from else {
+        return rsx! {};
+    };
+    rsx! {
+        span { class: "badge", "{loc.merged_from(record)}" }
+    }
+}
+
 /// The Names tab: every asserted name variant with its type chip, date / language, and its
 /// evidence cues (surety badge + source-count / no-source flag — colour is never the only signal).
 pub fn names_table(
@@ -1082,7 +1093,7 @@ pub fn names_table(
                     td {
                         Chip { label: name.type_label.clone() }
                     }
-                    td { "{name.display}" }
+                    td { "{name.display}" {merged_from_chip(loc, name.merged_from.as_deref())} }
                     td { class: "muted", {name_date_language(name)} }
                     td {
                         ConfidenceBadge { level: name.confidence, label: name.confidence_label.clone() }
@@ -1172,7 +1183,7 @@ pub fn facts_table(
                             },
                             td { "{fact.type_label}" }
                             td { class: "muted", {or_dash(fact.date.clone())} }
-                            td { {or_dash(fact.value.clone())} }
+                            td { {or_dash(fact.value.clone())} {merged_from_chip(loc, fact.merged_from.as_deref())} }
                             td {
                                 ConfidenceBadge { level: fact.confidence, label: fact.confidence_label.clone() }
                             }
@@ -1251,6 +1262,7 @@ fn events_row(
                     human_id: event.event_id.clone(),
                     label: event.event_id.clone(),
                 }
+                {merged_from_chip(loc, event.merged_from.as_deref())}
             }
             td { Chip { label: event.role_label.clone() } }
             td { class: "muted", {or_dash(event.age_label.clone())} }
@@ -1311,6 +1323,7 @@ pub fn associations_table(
                             human_id: association.other_id.clone(),
                             label: association.other_id.clone(),
                         }
+                        {merged_from_chip(loc, association.merged_from.as_deref())}
                     }
                     td {
                         Chip { label: association.role_label.clone() }
@@ -1949,6 +1962,7 @@ mod tests {
             confidence_label: "Normal".to_owned(),
             source_count: 0,
             assertion_id: "0190a2b3-0000-7000-8000-000000000009".to_owned(),
+            merged_from: None,
         };
         let parts = name_parts_of(&name);
         assert_eq!(parts.name_type, NameType::AlsoKnownAs);

@@ -1058,6 +1058,7 @@ merge-field-occupation = Occupation
 merge-differs = differs
 merge-differs-title = differs from kept value
 merge-result-summary = { $merged } becomes a persona of { $survivor }; one event added to History.
+claim-merged-from = from { $record }
 merge-blocked-heading = Merge blocked — conflicting facts
 merge-blocked-guidance = Resolve the contradiction first (retract or supersede one claim), then merge.
 identity-assessment = Matched at { $score }% · { $band } · engine { $engine }

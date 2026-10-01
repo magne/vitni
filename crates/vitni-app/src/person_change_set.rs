@@ -38,7 +38,6 @@ use crate::change_set::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, Resolution, commit_pending_sources_and_citations,
 };
 use crate::error::AppError;
-use crate::identity::PersonClusters;
 use crate::person::{PersonNameParts, PersonSummary, build_name, execute_person_command, show_person};
 use crate::session::Session;
 use crate::use_case::{self, Provenance};
@@ -388,13 +387,10 @@ async fn commit_tag_diff(
             .await?;
         }
     }
-    let clusters = PersonClusters::load(store).await?;
-    let records = crate::identity::person_views(store, &clusters.cluster(person_id)).await?;
     for current_tag in &current.tags {
         if !desired_tags.contains(current_tag.as_str()) {
             let tag_id = parse_tag_id(current_tag)?;
-            for record in records.iter().filter(|record| record.tags().contains(&tag_id)) {
-                let Some(owner) = record.person_id() else { continue };
+            for owner in crate::person::tag_holders(store, person_id, tag_id).await? {
                 execute_person_command(
                     store,
                     session,

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::{
     ActionLabel, AssociationSummary, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab,
     DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactVm,
@@ -70,7 +72,7 @@ fn initials(given: Option<&str>, surname: Option<&str>) -> String {
 }
 
 /// Builds a [`NameVm`] from an asserted [`NameSummary`], localizing the type label and confidence.
-fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
+fn name_vm(summary: &NameSummary, owners: &BTreeMap<String, String>, loc: &Localizer) -> NameVm {
     let name = &summary.name;
     let primary_surname = name.surnames.first();
     let surname = primary_surname.map(|element| element.surname.clone());
@@ -91,11 +93,12 @@ fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
         suffix: name.suffix.clone(),
         name_type: name.name_type.clone(),
         assertion_id: summary.assertion_id.clone(),
+        merged_from: owners.get(&summary.assertion_id).cloned(),
     }
 }
 
 /// Builds an [`AssociationVm`] from an app [`AssociationSummary`], localizing the role + confidence.
-fn association_vm(summary: &AssociationSummary, loc: &Localizer) -> AssociationVm {
+fn association_vm(summary: &AssociationSummary, owners: &BTreeMap<String, String>, loc: &Localizer) -> AssociationVm {
     let confidence = summary.confidence.map(ConfidenceLevel::from);
     AssociationVm {
         other_id: summary.other.human_id.clone(),
@@ -105,6 +108,7 @@ fn association_vm(summary: &AssociationSummary, loc: &Localizer) -> AssociationV
         source_count: summary.source_count,
         role: summary.role.clone(),
         assertion_id: summary.assertion_id.clone(),
+        merged_from: owners.get(&summary.assertion_id).cloned(),
     }
 }
 
@@ -119,7 +123,11 @@ fn sorted_participations(participations: &[vitni_app::ParticipationRef]) -> Vec<
 
 /// Builds an [`EventRefVm`] from a person's [`ParticipationRef`](vitni_app::ParticipationRef),
 /// localizing the role label and the event's date (both joined in the app layer).
-fn participation_vm(participation: &vitni_app::ParticipationRef, loc: &Localizer) -> EventRefVm {
+fn participation_vm(
+    participation: &vitni_app::ParticipationRef,
+    owners: &BTreeMap<String, String>,
+    loc: &Localizer,
+) -> EventRefVm {
     EventRefVm {
         event_id: participation.event.human_id.clone(),
         role_label: loc.participant_role_label(&participation.role),
@@ -134,11 +142,12 @@ fn participation_vm(participation: &vitni_app::ParticipationRef, loc: &Localizer
         confidence_label: loc.confidence_label_opt(participation.confidence.map(ConfidenceLevel::from)),
         source_count: participation.source_count,
         assertion_id: participation.assertion_id.clone(),
+        merged_from: owners.get(&participation.assertion_id).cloned(),
     }
 }
 
 /// Builds a [`FactVm`] from an app [`FactSummary`], localizing labels and the date.
-fn fact_vm(summary: &FactSummary, loc: &Localizer) -> FactVm {
+fn fact_vm(summary: &FactSummary, owners: &BTreeMap<String, String>, loc: &Localizer) -> FactVm {
     let confidence = summary.confidence.map(ConfidenceLevel::from);
     FactVm {
         type_label: loc.fact_type_label(&summary.fact.fact_type),
@@ -154,6 +163,7 @@ fn fact_vm(summary: &FactSummary, loc: &Localizer) -> FactVm {
             .collect(),
         fact_type: summary.fact.fact_type.clone(),
         assertion_id: summary.assertion_id.clone(),
+        merged_from: owners.get(&summary.assertion_id).cloned(),
     }
 }
 
@@ -334,6 +344,7 @@ impl PersonDetail {
     /// ([`dispatch`](crate::intent::dispatch)), which has the joined event/family data.
     #[must_use]
     pub fn from_summary(summary: &PersonSummary, loc: &Localizer) -> Self {
+        let owners = &summary.claim_owners;
         Self {
             human_id: summary.human_id.clone(),
             is_persona: summary.evidence_level == EvidenceLevel::Persona,
@@ -344,17 +355,17 @@ impl PersonDetail {
             sex: loc.sex_label(summary.sex.as_ref()),
             vitals: vital_summary(summary, loc),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
-            names: summary.names.iter().map(|name| name_vm(name, loc)).collect(),
-            facts: summary.facts.iter().map(|fact| fact_vm(fact, loc)).collect(),
+            names: summary.names.iter().map(|name| name_vm(name, owners, loc)).collect(),
+            facts: summary.facts.iter().map(|fact| fact_vm(fact, owners, loc)).collect(),
             events: sorted_participations(&summary.participations)
                 .into_iter()
-                .map(|p| participation_vm(p, loc))
+                .map(|p| participation_vm(p, owners, loc))
                 .collect(),
             timeline: timeline_rows(summary, loc),
             associations: summary
                 .associations
                 .iter()
-                .map(|assoc| association_vm(assoc, loc))
+                .map(|assoc| association_vm(assoc, owners, loc))
                 .collect(),
             families: Vec::new(),
             citations: summary
