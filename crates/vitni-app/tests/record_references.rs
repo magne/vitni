@@ -324,3 +324,89 @@ async fn a_record_using_a_merged_place_is_listed_under_the_root() {
         "a note on the copy is used by the root"
     );
 }
+
+#[tokio::test]
+async fn a_note_on_two_records_of_one_place_cluster_is_used_by_the_root_once() {
+    let (ws, _dir) = workspace().await;
+    let (survivor, copy) = (place(&ws, "Haugen").await, place(&ws, "Hougen").await);
+    let (remark, remark_id) = note(&ws).await;
+    for record in [&survivor, &copy] {
+        attach_place_note(&ws, &session(), record, remark_id, meta())
+            .await
+            .expect("note");
+    }
+    merge_places(&ws, &session(), &survivor, &copy, IdentityDecision::default())
+        .await
+        .expect("merge");
+    let shown = show_note(&ws, &remark).await.expect("show").expect("note");
+    assert_eq!(
+        shown.references.iter().map(|r| r.human_id.as_str()).collect::<Vec<_>>(),
+        vec![survivor.as_str()],
+        "the cluster is one using record, whichever member's name labels it"
+    );
+}
+
+#[tokio::test]
+async fn a_repository_counts_the_citations_of_a_held_source_cluster_once_each() {
+    let (ws, _dir) = workspace().await;
+    let archive = create_repository(
+        &ws,
+        &session(),
+        NewRepository {
+            human_id: None,
+            name: Some("Arkivverket".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("repository");
+    let (book, book_copy) = (source(&ws).await, source(&ws).await);
+    citation(&ws, &book).await;
+    let (cited, cited_copy) = (citation(&ws, &book_copy).await, citation(&ws, &book_copy).await);
+    link_source_repository(&ws, &session(), &book, &archive, None, SourceMediaType::Book, meta())
+        .await
+        .expect("link");
+    merge_sources(&ws, &session(), &book, &book_copy, IdentityDecision::default())
+        .await
+        .expect("merge sources");
+    merge_citations(&ws, &session(), &cited, &cited_copy, IdentityDecision::default())
+        .await
+        .expect("merge citations");
+
+    let held = show_repository(&ws, &archive).await.expect("show").expect("repository");
+    let counts: Vec<usize> = held.sources.iter().map(|s| s.citation_count).collect();
+    let listed = show_source(&ws, &book)
+        .await
+        .expect("show")
+        .expect("source")
+        .citations
+        .len();
+    assert_eq!(counts, vec![2], "the root's own citation and the merged pair, once");
+    assert_eq!(counts, vec![listed], "the count matches the Source › Citations tab");
+}
+
+#[tokio::test]
+async fn two_copies_of_a_place_using_two_copies_of_a_note_are_listed_once() {
+    let (ws, _dir) = workspace().await;
+    let (survivor, copy) = (place(&ws, "Haugen").await, place(&ws, "Hougen").await);
+    let ((remark, remark_id), (remark_copy, remark_copy_id)) = (note(&ws).await, note(&ws).await);
+    attach_place_note(&ws, &session(), &survivor, remark_id, meta())
+        .await
+        .expect("note");
+    attach_place_note(&ws, &session(), &copy, remark_copy_id, meta())
+        .await
+        .expect("note copy");
+    merge_places(&ws, &session(), &survivor, &copy, IdentityDecision::default())
+        .await
+        .expect("merge places");
+    merge_notes(&ws, &session(), &remark, &remark_copy, IdentityDecision::default())
+        .await
+        .expect("merge notes");
+    let shown = show_note(&ws, &remark).await.expect("show").expect("note");
+    assert_eq!(
+        shown.references.iter().map(|r| r.human_id.as_str()).collect::<Vec<_>>(),
+        vec![survivor.as_str()],
+        "the place cluster uses the note cluster once"
+    );
+}

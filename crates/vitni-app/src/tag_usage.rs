@@ -95,11 +95,14 @@ impl TagUsage {
     }
 }
 
-/// Pushes one carrying record onto a tag's bucket, once: the records of a merged person cluster all name
-/// its root (ADR 0039 §5).
+/// Pushes one carrying record onto a tag's bucket, once per record: the records of a merged cluster all
+/// name its root (ADR 0039 §5), each with its own label, so the root is matched by kind and id alone.
 fn push(map: &mut HashMap<TagId, Vec<UsingRecordRef>>, tag: TagId, record: UsingRecordRef) {
     let records = map.entry(tag).or_default();
-    if !records.contains(&record) {
+    if !records
+        .iter()
+        .any(|held| held.kind == record.kind && held.id == record.id)
+    {
         records.push(record);
     }
 }

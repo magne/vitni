@@ -39,7 +39,9 @@ impl MediaUsage {
         // The records that use any record of a merged cluster are listed under its root (ADR 0039 §5).
         crate::identity::MediaClusters::load(workspace.store())
             .await?
-            .fold(&mut by_media);
+            .fold_by(&mut by_media, |held, entry| {
+                held.kind == entry.kind && held.id == entry.id
+            });
         Ok(Self { by_media })
     }
 
@@ -49,11 +51,15 @@ impl MediaUsage {
     }
 }
 
-/// Pushes one referencing record onto a media object's bucket, once: the records of a merged person
-/// cluster all name its root (ADR 0039 §5).
+/// Pushes one referencing record onto a media object's bucket, once per record: the records of a merged
+/// cluster all name its root (ADR 0039 §5), each with its own label, so the root is matched by kind and
+/// id alone.
 fn push(map: &mut HashMap<MediaId, Vec<UsingRecordRef>>, media: MediaId, record: UsingRecordRef) {
     let records = map.entry(media).or_default();
-    if !records.contains(&record) {
+    if !records
+        .iter()
+        .any(|held| held.kind == record.kind && held.id == record.id)
+    {
         records.push(record);
     }
 }

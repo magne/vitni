@@ -677,15 +677,21 @@ struct RepositoryLookups {
 impl RepositoryLookups {
     async fn load(workspace: &Workspace) -> Result<Self, AppError> {
         let store = workspace.store();
+        // A source held by a merged repository is listed under the repository's root, and a merged
+        // source names its own root (ADR 0039 §5). Its citation count is its cluster's, each merged
+        // citation counted once, as the Source › Citations tab lists them.
+        let sources = crate::identity::SourceReferences::load(store).await?;
+        let citation_clusters = crate::identity::CitationClusters::load(store).await?;
         let mut citation_counts: HashMap<SourceId, usize> = HashMap::new();
         for view in store.list_citations().await? {
+            if view.citation_id().is_some_and(|id| citation_clusters.is_member(id)) {
+                continue;
+            }
             if let Some(source_id) = view.source_id() {
-                *citation_counts.entry(source_id).or_default() += 1;
+                let (root, _) = sources.resolve(source_id);
+                *citation_counts.entry(root).or_default() += 1;
             }
         }
-        // A source held by a merged repository is listed under the repository's root, and a merged
-        // source names its own root (ADR 0039 §5).
-        let sources = crate::identity::SourceReferences::load(store).await?;
         let mut sources_by_repository: HashMap<RepositoryId, Vec<SourceLinkRef>> = HashMap::new();
         for view in store.list_sources().await? {
             let Some(source_id) = view.source_id() else {

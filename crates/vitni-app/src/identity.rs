@@ -748,13 +748,19 @@ impl<I: ClusterId> Clusters<I> {
     /// Moves every member's entries of an inverse index onto its root's, each once, so the records that
     /// use any record of a cluster are listed under its root (ADR 0039 §5).
     pub(crate) fn fold<T: PartialEq>(&self, map: &mut HashMap<I, Vec<T>>) {
+        self.fold_by(map, |held, entry| held == entry);
+    }
+
+    /// [`fold`](Self::fold), with `same` deciding when an entry is already held — for entries that name
+    /// a record of another cluster by its root but keep their own copy's label.
+    pub(crate) fn fold_by<T>(&self, map: &mut HashMap<I, Vec<T>>, same: impl Fn(&T, &T) -> bool) {
         let mut links: Vec<(I, I)> = self.links().collect();
         links.sort_unstable();
         for (member, root) in links {
             let Some(entries) = map.remove(&member) else { continue };
             let held = map.entry(root).or_default();
             for entry in entries {
-                if !held.contains(&entry) {
+                if !held.iter().any(|existing| same(existing, &entry)) {
                     held.push(entry);
                 }
             }
