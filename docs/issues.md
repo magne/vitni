@@ -453,8 +453,8 @@ order, and each one's *Needs:* names its prerequisites. The milestone opened wit
 record origins with import runs (#393) and resolve-by-origin (#394), then the xref-collision fix
 (#389), tombstones by origin (#395), the matching core (#396), the person profile (#397), the
 family and event profiles (#398), the other seven kinds' profiles (#399), the `match_keys` blocking
-index with `find_similar` (#400) and the evaluation corpus with `cargo xtask match-eval` (#402), which
-have landed.
+index with `find_similar` (#400), the evaluation corpus with `cargo xtask match-eval` (#402) and
+`PersonsDistinguished` with the assessment on identity decisions (#403), which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
@@ -465,14 +465,6 @@ does.
   re-import then misses the earlier imports' origins until `vitni rebuild`. *Shape:* a completion
   marker written after the replay, or the backfill in one transaction. *Exit:* a test that interrupts
   the backfill and reopens gets the full index.
-- **`PersonsDistinguished` and the assessment on identity decisions** — ADR 0039 §1–§3.
-  `PersonsDistinguished`, plus `assessment: Option<MatchEvidence>` on `PersonsMerged`. `MatchEvidence`
-  is the fixed-point, `Eq`-safe snapshot of `MatchAssessment`, produced by `MatchAssessment::evidence()`
-  (ADR 0039 §2). `merge_persons` stops hardcoding `Confidence::Normal` and its default rationale
-  (`vitni-app/src/person.rs:778-816`).
-  Decided pairs, either way, are excluded from every consumer. This amends data-model §11.3
-  (suggestions are computed, not asserted). *Needs:* the matching core. *Exit:* a rejected pair never
-  reappears; the history shows the assessment behind a merge. — #403
 - **The duplicate check scores through the engine** — ADR 0038 §8. `PossibleDuplicates` covers every
   matchable kind with the engine's score, band and features, and excludes decided pairs. The
   Dashboard data-quality card and the palette's *Find duplicates* show the probability and the
