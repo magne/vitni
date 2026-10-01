@@ -602,7 +602,8 @@ async fn an_import_that_fails_before_writing_leaves_no_run() {
     let workspace = Workspace::open(&root, &operator(), &WorkspaceDefaults::default())
         .await
         .expect("reopen");
-    assert!(list_import_runs(&workspace).await.expect("runs").is_empty());
+    let checked = list_import_runs(&workspace).await.expect("runs");
+    assert!(checked.is_empty(), "{checked:?}");
 }
 
 #[tokio::test]
@@ -619,7 +620,8 @@ async fn an_import_without_a_run_stamps_no_origin() {
         )
         .await
         .expect("import");
-    assert!(list_import_runs(&workspace).await.expect("runs").is_empty());
+    let checked = list_import_runs(&workspace).await.expect("runs");
+    assert!(checked.is_empty(), "{checked:?}");
     assert!(origin_keys(&workspace).await.is_empty());
 }
 

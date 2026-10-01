@@ -688,7 +688,7 @@ mod tests {
         apply_all(&mut state, &retract);
 
         // then: the derived name is gone and the assertion is no longer live.
-        assert!(state.names.is_empty());
+        assert!(state.names.is_empty(), "{:?}", state.names);
         assert!(!state.live_assertions.contains(&name_assertion));
     }
 
@@ -817,7 +817,7 @@ mod tests {
             &meta(3),
         )
         .unwrap();
-        assert!(again.is_empty());
+        assert!(again.is_empty(), "{again:?}");
     }
 
     #[test]
@@ -845,7 +845,7 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &retract);
-        assert!(state.external_ids.is_empty());
+        assert!(state.external_ids.is_empty(), "{:?}", state.external_ids);
 
         // once retracted, the same identifier is addable again (emits an event).
         let re_add = decide(
@@ -937,7 +937,7 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &retract);
 
-        assert!(state.external_ids.is_empty());
+        assert!(state.external_ids.is_empty(), "{:?}", state.external_ids);
         assert!(
             state
                 .live_assertions
@@ -975,7 +975,7 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &retract);
-        assert!(state.associations.is_empty());
+        assert!(state.associations.is_empty(), "{:?}", state.associations);
     }
 
     #[test]

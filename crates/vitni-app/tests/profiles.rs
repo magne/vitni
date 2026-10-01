@@ -379,7 +379,8 @@ async fn a_step_father_is_not_a_parent() {
     let profile = records.profile(&ole).await;
     let parents: Vec<Option<&str>> = profile.parents.iter().map(|p| p.names[0].given.as_deref()).collect();
     assert_eq!(parents, [Some("Marte")]);
-    assert!(records.profile(&step_father).await.children.is_empty());
+    let checked = records.profile(&step_father).await.children;
+    assert!(checked.is_empty(), "{checked:?}");
 }
 
 #[tokio::test]
@@ -443,13 +444,11 @@ async fn the_profile_carries_the_creating_origin_only() {
         .map(|o| (o.dataset.as_str(), o.record.as_str(), o.item.as_deref()))
         .collect();
     assert_eq!(keys, [("digitalarkivet", "bf01036389000123", Some("person:1"))]);
-    assert!(
-        records
-            .profile(&records.person("Per", "Olsen", Sex::Male).await)
-            .await
-            .origins
-            .is_empty()
-    );
+    let checked = records
+        .profile(&records.person("Per", "Olsen", Sex::Male).await)
+        .await
+        .origins;
+    assert!(checked.is_empty(), "{checked:?}");
 
     let father = records.profile(&father).await;
     let assessment = assess(&profile, &father);
@@ -715,7 +714,7 @@ async fn the_event_profile_carries_type_date_place_and_participants() {
             (ParticipantRole::Neighbour, Some("Anders"), false)
         ]
     );
-    assert!(profile.origins.is_empty());
+    assert!(profile.origins.is_empty(), "{:?}", profile.origins);
     let recorded = event_profile(&records.workspace, &recorded)
         .await
         .expect("event profile");
@@ -902,7 +901,7 @@ async fn one_citation_of_one_church_book_page_is_probable() {
     );
     assert_eq!(a.page.as_deref(), Some("s. 45, nr. 12"));
     assert_eq!(a.date.as_ref().and_then(vitni_core::matching::date::year), Some(1877));
-    assert!(a.origins.is_empty());
+    assert!(a.origins.is_empty(), "{:?}", a.origins);
     let items: Vec<Option<&str>> = b.origins.iter().map(|o| o.item.as_deref()).collect();
     assert_eq!(items, [Some("citation:1")]);
     let source = a.source.as_ref().expect("the cited source");

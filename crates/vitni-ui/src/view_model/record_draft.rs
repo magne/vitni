@@ -92,6 +92,6 @@ mod tests {
     #[test]
     fn a_toggle_removes_an_already_selected_kind() {
         let toggled = toggled_restrictions(&[RestrictionKind::Confidential], RestrictionKind::Confidential);
-        assert!(toggled.is_empty());
+        assert!(toggled.is_empty(), "{toggled:?}");
     }
 }

@@ -138,7 +138,8 @@ fn a_given_name_recorded_differently_meets_on_the_surname() {
 #[test]
 fn a_person_with_only_a_surname_is_keyed_by_it() {
     let a = person("", "Olsen", Sex::Male, Vec::new());
-    assert!(!keys().person(&a).is_empty());
+    let checked = keys().person(&a);
+    assert!(!checked.is_empty(), "{checked:?}");
     assert!(persons_meet(&a, &person("", "Olsen", Sex::Male, Vec::new())));
 }
 

@@ -235,7 +235,7 @@ mod tests {
             .expect("create");
         let place = show_place(&workspace, &human_id).await.expect("show").expect("place");
         assert_eq!(place.place_type, Some(PlaceType::Country));
-        assert!(place.names.is_empty());
+        assert!(place.names.is_empty(), "{:?}", place.names);
         assert_eq!(place.coordinates, None);
     }
 
@@ -281,7 +281,7 @@ mod tests {
         let log = crate::history::change_log_for_place(&workspace, &human_id)
             .await
             .expect("log");
-        assert!(!log.is_empty());
+        assert!(!log.is_empty(), "{log:?}");
         for entry in &log {
             assert_eq!(entry.confidence, Some(Confidence::High));
             assert_eq!(entry.rationale.as_deref(), Some("gazetteer"));

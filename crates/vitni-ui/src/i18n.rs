@@ -3829,10 +3829,12 @@ mod tests {
                 );
             }
             for quality in DATE_QUALITIES {
-                assert!(!loc.date_quality_choice_label(quality).is_empty());
+                let checked = loc.date_quality_choice_label(quality);
+                assert!(!checked.is_empty(), "{checked:?}");
             }
             for calendar in DATE_CALENDARS {
-                assert!(!loc.calendar_label(calendar).is_empty());
+                let checked = loc.calendar_label(calendar);
+                assert!(!checked.is_empty(), "{checked:?}");
             }
         }
         assert_eq!(Localizer::for_test("en").date_invalid_error(), "Not a valid date.");

@@ -638,7 +638,7 @@ mod tests {
             let events = decide(&state, command, &meta(assertion), &REPO_PRESENT).unwrap();
             apply_all(&mut state, &events);
         }
-        assert!(state.tags.is_empty());
+        assert!(state.tags.is_empty(), "{:?}", state.tags);
     }
 
     #[test]

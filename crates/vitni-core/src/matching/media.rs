@@ -101,7 +101,7 @@ mod tests {
         assert_eq!(feature(&assessment, Feature::Checksum).outcome, Outcome::Agree);
         assert_eq!(feature(&assessment, Feature::Path).outcome, Outcome::Missing);
         assert_eq!(assessment.band, MatchBand::Probable, "{assessment:#?}");
-        assert!(assessment.cultures.is_empty());
+        assert!(assessment.cultures.is_empty(), "{:?}", assessment.cultures);
     }
 
     #[test]

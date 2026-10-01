@@ -134,7 +134,8 @@ fn graph_walk_is_empty_for_a_clean_closure() {
     graph.insert("vitni-app".to_string(), vec!["serde".to_string()]);
     graph.insert("serde".to_string(), Vec::new());
 
-    assert!(framework_crates_in_graph(&graph, "vitni-ui", BANNED_FRAMEWORKS).is_empty());
+    let checked = framework_crates_in_graph(&graph, "vitni-ui", BANNED_FRAMEWORKS);
+    assert!(checked.is_empty(), "{checked:?}");
 }
 
 #[test]
@@ -146,7 +147,8 @@ fn source_scan_detects_a_framework_use() {
 #[test]
 fn source_scan_ignores_a_framework_reference_in_a_comment() {
     let clean = "//! No `dioxus::` type appears here (ADR 0008).\nuse vitni_app::Workspace;\n";
-    assert!(framework_tokens_in_source(clean, BANNED_FRAMEWORKS).is_empty());
+    let checked = framework_tokens_in_source(clean, BANNED_FRAMEWORKS);
+    assert!(checked.is_empty(), "{checked:?}");
 }
 
 #[test]

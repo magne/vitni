@@ -540,7 +540,7 @@ mod tests {
     #[test]
     fn empty_everything_yields_empty() {
         let resolved = resolve_requested_languages(None, &[], None);
-        assert!(resolved.is_empty());
+        assert!(resolved.is_empty(), "{resolved:?}");
     }
 
     use super::{ConfigStore, FileConfigStore};

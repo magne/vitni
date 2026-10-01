@@ -90,14 +90,8 @@ async fn undoing_a_members_row_from_the_root_writes_to_the_member() {
     .await
     .expect("undo routed to the member");
     assert_eq!(target, root, "the pane reloads the root");
-    assert!(
-        show_person(&ws, &root)
-            .await
-            .expect("show")
-            .expect("root")
-            .facts
-            .is_empty()
-    );
+    let checked = show_person(&ws, &root).await.expect("show").expect("root").facts;
+    assert!(checked.is_empty(), "{checked:?}");
     let _ = member;
 }
 

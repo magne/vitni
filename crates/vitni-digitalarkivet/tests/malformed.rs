@@ -38,7 +38,7 @@ fn person_fed_to_residence_parser_is_honest() {
     // Not an error: a person page also carries `/census/person/` links, so the
     // residence parser returns them rather than pretending to fail.
     let record = parse_residence_page(PERSON_HTML, PERSON_URL).expect("residence parse is lenient");
-    assert!(!record.person_links.is_empty());
+    assert!(!record.person_links.is_empty(), "{:?}", record.person_links);
     assert!(record.person_links.iter().all(|u| u.contains("/census/person/")));
 }
 
@@ -57,7 +57,7 @@ fn empty_input_to_viewer_parser_reports_no_image() {
 #[test]
 fn residence_parser_on_empty_input_yields_no_links() {
     let record = parse_residence_page("", BOSTED_URL).expect("empty residence parses to no links");
-    assert!(record.person_links.is_empty());
+    assert!(record.person_links.is_empty(), "{:?}", record.person_links);
 }
 
 #[test]

@@ -242,7 +242,7 @@ mod tests {
         };
         state.clear();
         assert!(state.selection.is_none());
-        assert!(state.query.is_empty());
+        assert!(state.query.is_empty(), "{:?}", state.query);
         assert!(!state.open);
     }
 

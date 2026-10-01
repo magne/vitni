@@ -1387,9 +1387,9 @@ mod tests {
         .await
         .expect("source");
         let summary = show_source(&workspace, &source).await.expect("show").expect("source");
-        assert!(summary.notes.is_empty());
-        assert!(summary.tags.is_empty());
-        assert!(summary.media.is_empty());
+        assert!(summary.notes.is_empty(), "{:?}", summary.notes);
+        assert!(summary.tags.is_empty(), "{:?}", summary.tags);
+        assert!(summary.media.is_empty(), "{:?}", summary.media);
         assert_eq!(summary.reliability.citation_count, 0);
     }
 

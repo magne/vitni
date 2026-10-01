@@ -37,7 +37,7 @@ fn one_marriage_written_two_ways_is_probable() {
     assert!(principals.iter().all(|f| f.weight > 0.0), "{principals:#?}");
     let cultures: Vec<&str> = assessment.cultures.iter().map(CultureId::as_str).collect();
     assert_eq!(cultures, ["universal", "da", "no"]);
-    assert!(assessment.parts.is_empty());
+    assert!(assessment.parts.is_empty(), "{:?}", assessment.parts);
 }
 
 #[test]

@@ -445,7 +445,8 @@ mod tests {
     #[test]
     fn a_clean_doc_has_no_problems() {
         let doc = "## Records & data model\n### Places\n- **A** — x — #1\n- **B** — y\n";
-        assert!(offline_problems(&parse(doc)).is_empty());
+        let checked = offline_problems(&parse(doc));
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]
@@ -472,7 +473,8 @@ mod tests {
         // Intro bullets above the first `##` (the doc's own conventions list) are not backlog items.
         let bullets = parse("- **Not an item** — intro prose\n");
         assert_eq!(bullets[0].section, "");
-        assert!(offline_problems(&bullets).is_empty());
+        let checked = offline_problems(&bullets);
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]

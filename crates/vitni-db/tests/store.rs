@@ -371,6 +371,7 @@ async fn discarding_every_event_empties_the_log_and_the_projections() {
     name(&store, 1, "Ada", "Lovelace").await;
     store.discard_all_events().await.unwrap();
     assert_eq!(store.event_count().await.unwrap(), 0);
-    assert!(store.projection_rows().await.unwrap().is_empty());
+    let checked = store.projection_rows().await.unwrap();
+    assert!(checked.is_empty(), "{checked:?}");
     assert!(store.find_person("I0001").await.unwrap().is_none());
 }

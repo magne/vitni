@@ -373,7 +373,7 @@ mod tests {
     fn skips_unknown_tags_but_keeps_the_record() {
         let tree = parse("0 @I1@ INDI\n1 SEX M\n1 FOOO ignored\n0 TRLR\n").expect("parse");
         assert_eq!(tree.individuals.len(), 1);
-        assert!(tree.individuals[0].names.is_empty());
+        assert!(tree.individuals[0].names.is_empty(), "{:?}", tree.individuals[0].names);
     }
 
     #[test]

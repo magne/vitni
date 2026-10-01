@@ -342,7 +342,7 @@ mod research_note_tests {
         draft.remove_subject(7);
         assert_eq!(draft.subjects.len(), 1);
         draft.remove_subject(0);
-        assert!(draft.subjects.is_empty());
+        assert!(draft.subjects.is_empty(), "{:?}", draft.subjects);
     }
 
     #[test]
@@ -366,7 +366,8 @@ mod research_note_tests {
 
     #[test]
     fn an_unchanged_draft_yields_no_edits() {
-        assert!(seed().edits_against(&seed()).is_empty());
+        let checked = seed().edits_against(&seed());
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]

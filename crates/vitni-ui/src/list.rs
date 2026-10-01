@@ -213,7 +213,8 @@ mod tests {
 
     #[test]
     fn empty_list_stays_empty() {
-        assert!(visible_rows(&[], &ListQuery::default()).is_empty());
+        let checked = visible_rows(&[], &ListQuery::default());
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]

@@ -278,7 +278,8 @@ mod tests {
         let workspace = workspace(dir.path()).await;
         let run = ActiveRun::new(spec());
         close(&workspace, run, &Ending::Bulk(&Ok(3))).await.expect("closed");
-        assert!(list_import_runs(&workspace).await.expect("runs").is_empty());
+        let checked = list_import_runs(&workspace).await.expect("runs");
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[tokio::test]

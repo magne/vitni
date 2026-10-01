@@ -495,7 +495,8 @@ mod media_draft_tests {
 
     #[test]
     fn an_unchanged_draft_yields_no_edits() {
-        assert!(seed().edits_against(&seed()).is_empty());
+        let checked = seed().edits_against(&seed());
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]
@@ -537,7 +538,8 @@ mod media_draft_tests {
 
     #[test]
     fn an_untouched_date_emits_no_set_date() {
-        assert!(seed().edits_against(&seed()).is_empty());
+        let checked = seed().edits_against(&seed());
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]

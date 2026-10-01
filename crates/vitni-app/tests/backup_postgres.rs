@@ -107,7 +107,7 @@ async fn assert_same_workspace(left: &Workspace, right: &Workspace) {
         "the logs are identical"
     );
     let projections = left.store().projection_rows().await.expect("projections");
-    assert!(!projections.is_empty());
+    assert!(!projections.is_empty(), "{projections:?}");
     assert_eq!(
         projections,
         right.store().projection_rows().await.expect("projections"),

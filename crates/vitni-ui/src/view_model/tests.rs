@@ -316,8 +316,8 @@ fn every_feature_and_outcome_has_a_reason_in_each_language() {
 #[test]
 fn data_quality_reports_zero_counts_with_no_findings() {
     let vm = DataQualityVm::build(&[summary()], &[], &Localizer::for_test("en"));
-    assert!(vm.death_before_birth.is_empty());
-    assert!(vm.duplicates.is_empty());
+    assert!(vm.death_before_birth.is_empty(), "{:?}", vm.death_before_birth);
+    assert!(vm.duplicates.is_empty(), "{:?}", vm.duplicates);
 }
 
 #[test]
@@ -915,7 +915,8 @@ fn citation_detail_maps_axes_confidence_and_attachments() {
 #[test]
 fn evidence_axes_are_empty_without_analysis() {
     let loc = Localizer::for_test("en");
-    assert!(evidence_axes(None, &loc).is_empty());
+    let checked = evidence_axes(None, &loc);
+    assert!(checked.is_empty(), "{checked:?}");
 }
 
 #[test]
@@ -943,7 +944,7 @@ fn citation_tabs_carry_attachment_counts() {
 fn a_fresh_tag_draft_seeds_the_create_defaults() {
     let draft = TagDraft::new();
     assert!(draft.existing_id.is_none());
-    assert!(draft.name.is_empty());
+    assert!(draft.name.is_empty(), "{:?}", draft.name);
     assert_eq!(draft.priority, DEFAULT_TAG_PRIORITY.to_string());
     assert_eq!(draft.color, DEFAULT_TAG_COLOR);
     // A blank name means the draft is not committable yet (Save disabled).

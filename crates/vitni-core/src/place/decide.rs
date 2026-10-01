@@ -914,7 +914,7 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &retract);
-        assert!(state.geometries.is_empty());
+        assert!(state.geometries.is_empty(), "{:?}", state.geometries);
         assert!(!state.live_assertions.contains(&target));
     }
 
@@ -968,7 +968,7 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &retract);
 
-        assert!(state.names.is_empty());
+        assert!(state.names.is_empty(), "{:?}", state.names);
         assert!(!state.live_assertions.contains(&name_assertion));
     }
 
@@ -1278,7 +1278,7 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &retract);
-        assert!(state.successions.is_empty());
+        assert!(state.successions.is_empty(), "{:?}", state.successions);
         assert!(!state.live_assertions.contains(&target));
     }
 

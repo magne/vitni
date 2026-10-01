@@ -213,7 +213,8 @@ mod tests {
                 name: "{group}",
             }
         "#;
-        assert!(flagged_lines(source).is_empty());
+        let checked = flagged_lines(source);
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]

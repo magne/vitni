@@ -681,7 +681,8 @@ async fn event_and_family_merges_are_indexed_under_their_own_kind_on_postgres() 
     let families = vec![(f2.to_string(), f1.to_string())];
     assert_eq!(links(MatchableKind::Event).await, events);
     assert_eq!(links(MatchableKind::Family).await, families);
-    assert!(links(MatchableKind::Person).await.is_empty());
+    let checked = links(MatchableKind::Person).await;
+    assert!(checked.is_empty(), "{checked:?}");
 
     store.rebuild_projections().await.unwrap();
     assert_eq!(
@@ -823,7 +824,8 @@ async fn every_record_kind_indexes_its_merges_on_postgres() {
     for (kind, kind_links) in &expected {
         assert_eq!(&links(*kind).await, kind_links, "{kind:?}");
     }
-    assert!(links(MatchableKind::Person).await.is_empty());
+    let checked = links(MatchableKind::Person).await;
+    assert!(checked.is_empty(), "{checked:?}");
 
     store.rebuild_projections().await.unwrap();
     for (kind, kind_links) in &expected {

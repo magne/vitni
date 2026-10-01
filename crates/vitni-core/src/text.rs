@@ -177,6 +177,6 @@ mod tests {
         // A note stored before `translations` existed has no such key (ADR 0004 §4 additive rule).
         let json = r#"{ "text": "Born in Bergen.", "media_type": "Markdown", "language": null }"#;
         let text: RichText = serde_json::from_str(json).unwrap();
-        assert!(text.translations.is_empty());
+        assert!(text.translations.is_empty(), "{:?}", text.translations);
     }
 }

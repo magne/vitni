@@ -385,7 +385,8 @@ mod repository_draft_tests {
 
     #[test]
     fn an_unchanged_draft_yields_no_edits() {
-        assert!(seed().edits_against(&seed()).is_empty());
+        let checked = seed().edits_against(&seed());
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]
@@ -413,7 +414,8 @@ mod repository_draft_tests {
     #[test]
     fn seeding_from_a_detail_is_not_dirty_against_itself() {
         let seed = RepositoryDraft::from_detail(&detail());
-        assert!(seed.edits_against(&seed).is_empty());
+        let checked = seed.edits_against(&seed);
+        assert!(checked.is_empty(), "{checked:?}");
     }
 }
 

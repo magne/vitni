@@ -1784,7 +1784,7 @@ mod tests {
         assert!(log[0].can_undo, "an assertion is undoable");
         assert_eq!(log[0].operator_kind, OperatorKind::Human);
         assert_eq!(log[0].operator_display.as_deref(), Some("Ada"));
-        assert!(!log[0].occurred_at.is_empty());
+        assert!(!log[0].occurred_at.is_empty(), "{:?}", log[0].occurred_at);
         assert_eq!(log[1].event_type, "PersonCreated");
         assert!(!log[1].can_undo, "the creation is not undoable");
     }

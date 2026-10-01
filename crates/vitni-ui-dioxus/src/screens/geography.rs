@@ -935,7 +935,9 @@ mod tests {
 
     #[test]
     fn a_non_matching_filter_yields_no_markers() {
-        assert!(filtered_markers(&markers(), "Bergen").is_empty());
+        let markers = markers();
+        let checked = filtered_markers(&markers, "Bergen");
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     fn geography_vm() -> GeographyVm {

@@ -350,7 +350,7 @@ async fn undoing_the_merge_separates_the_records_again() {
 
     let root = show_person(&ws, &a).await.expect("show").expect("a");
     assert!(root.facts.is_empty(), "B's fact is B's again: {:?}", root.facts);
-    assert!(root.merged.is_empty());
+    assert!(root.merged.is_empty(), "{:?}", root.merged);
     let member = show_person(&ws, &b).await.expect("show").expect("b");
     assert_eq!(member.human_id, b);
     assert_eq!(member.owner_of(&member.facts[0].assertion_id), b);
@@ -430,7 +430,8 @@ async fn removing_a_members_tag_in_the_record_editor_untags_the_member() {
     commit_person_change_set(&ws, &session(), record_edit(&a, None, Vec::new()))
         .await
         .expect("untag");
-    assert!(show_person(&ws, &a).await.expect("show").expect("root").tags.is_empty());
+    let checked = show_person(&ws, &a).await.expect("show").expect("root").tags;
+    assert!(checked.is_empty(), "{checked:?}");
 }
 
 #[tokio::test]
@@ -475,7 +476,8 @@ async fn untagging_a_root_untags_every_cluster_record_holding_the_tag() {
     tag_person(&ws, &session(), &a, &tag, true, MutationMeta::default())
         .await
         .expect("untag through the root");
-    assert!(show_person(&ws, &a).await.expect("show").expect("root").tags.is_empty());
+    let checked = show_person(&ws, &a).await.expect("show").expect("root").tags;
+    assert!(checked.is_empty(), "{checked:?}");
 }
 
 #[tokio::test]

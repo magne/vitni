@@ -278,7 +278,7 @@ mod tests {
         .await
         .expect("create");
         let log = change_log_for_media(&workspace, &human_id).await.expect("log");
-        assert!(!log.is_empty());
+        assert!(!log.is_empty(), "{log:?}");
         for entry in &log {
             assert_eq!(entry.confidence, Some(Confidence::High));
             assert_eq!(entry.rationale.as_deref(), Some("original scan"));

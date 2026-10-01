@@ -364,7 +364,8 @@ mod tests {
 
     #[test]
     fn no_edges_mean_no_links() {
-        assert!(closure(&[]).is_empty());
+        let checked = closure(&[]);
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]
@@ -403,6 +404,7 @@ mod tests {
 
     #[test]
     fn a_self_edge_is_ignored() {
-        assert!(closure(&edges(&[("a", "a")])).is_empty());
+        let checked = closure(&edges(&[("a", "a")]));
+        assert!(checked.is_empty(), "{checked:?}");
     }
 }

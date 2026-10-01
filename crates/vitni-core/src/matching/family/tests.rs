@@ -117,7 +117,7 @@ fn a_family_recording_only_its_husband_is_not_paired_against_one_recording_only_
     wife_only.partners.remove(0);
     let assessment = assess(&husband_only, &wife_only);
     assert_eq!(partners(&assessment), [(Outcome::Missing, 0.0)], "{assessment:#?}");
-    assert!(assessment.parts.is_empty());
+    assert!(assessment.parts.is_empty(), "{:?}", assessment.parts);
     assert!(
         assessment.features.iter().all(|f| f.outcome != Outcome::Conflict),
         "{assessment:#?}"

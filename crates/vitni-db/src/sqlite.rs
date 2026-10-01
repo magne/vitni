@@ -1517,7 +1517,7 @@ mod tests {
         let hits = store.places_in_bbox(61.4, 8.9, 61.6, 9.1).await.unwrap();
         assert_eq!(hits, vec![parish.to_string()]);
         let misses = store.places_in_bbox(10.0, 10.0, 11.0, 11.0).await.unwrap();
-        assert!(misses.is_empty());
+        assert!(misses.is_empty(), "{misses:?}");
 
         let before = dump_place_geometry(&store).await;
         store.rebuild_projections().await.unwrap();
@@ -2055,7 +2055,8 @@ mod tests {
             assert_eq!(store.place_successors(&id).await.unwrap(), vec![]);
             assert_eq!(store.place_predecessors(&id).await.unwrap(), vec![]);
         }
-        assert!(dump_place_succession_links(&store).await.is_empty());
+        let checked = dump_place_succession_links(&store).await;
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[tokio::test]
@@ -2411,7 +2412,7 @@ mod tests {
             .list_research_notes_for_subject("Person", &unrelated.to_string())
             .await
             .unwrap();
-        assert!(none_found.is_empty());
+        assert!(none_found.is_empty(), "{none_found:?}");
     }
 
     /// Runs `EXPLAIN QUERY PLAN` for `sql` against `pool` and returns each step's `detail` — the

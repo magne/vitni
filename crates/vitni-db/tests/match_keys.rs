@@ -116,7 +116,8 @@ async fn an_unmatched_kind_is_never_dirty(store: &Store) {
         )
         .await
         .unwrap();
-    assert!(store.match_dirty().await.unwrap().is_empty());
+    let checked = store.match_dirty().await.unwrap();
+    assert!(checked.is_empty(), "{checked:?}");
 }
 
 async fn a_rekey_clears_only_the_generation_it_read(store: &Store) {
@@ -218,7 +219,7 @@ async fn candidates_meet_exact_keys_and_prefixes_within_their_kind(store: &Store
         .match_candidates(MatchableKind::Person, &Probe::default())
         .await
         .unwrap();
-    assert!(nothing.is_empty());
+    assert!(nothing.is_empty(), "{nothing:?}");
 }
 
 async fn a_reset_records_its_fingerprint_and_a_rebuild_forgets_it(store: &Store) {
@@ -230,7 +231,8 @@ async fn a_reset_records_its_fingerprint_and_a_rebuild_forgets_it(store: &Store)
         .await
         .unwrap();
     assert_eq!(store.match_keys_fingerprint().await.unwrap().as_deref(), Some("f1"));
-    assert!(store.match_dirty().await.unwrap().is_empty());
+    let checked = store.match_dirty().await.unwrap();
+    assert!(checked.is_empty(), "{checked:?}");
     store
         .reset_match_keys("f2", &[keyed(1, &["t:ole@?"])], &[])
         .await

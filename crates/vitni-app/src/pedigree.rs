@@ -682,7 +682,7 @@ mod tests {
         let solo = person(&workspace, &session, "Only", "Child").await;
 
         let chart = descendants(&workspace, &solo, 4).await.expect("descendants");
-        assert!(chart.children.is_empty());
+        assert!(chart.children.is_empty(), "{:?}", chart.children);
     }
 
     #[tokio::test]
@@ -710,7 +710,7 @@ mod tests {
             .iter()
             .find(|node| node.person.human_id == sibling)
             .expect("sibling branch");
-        assert!(leaf.children.is_empty());
+        assert!(leaf.children.is_empty(), "{:?}", leaf.children);
     }
 
     #[tokio::test]
