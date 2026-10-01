@@ -491,6 +491,7 @@ fn summary() -> PersonSummary {
         tag_refs: Vec::new(),
         restrictions: BTreeSet::new(),
         merged: Vec::new(),
+        claim_owners: std::collections::BTreeMap::new(),
     }
 }
 
@@ -797,6 +798,7 @@ fn missing_name_and_sex_use_placeholders() {
         tag_refs: Vec::new(),
         restrictions: BTreeSet::from([Restriction::Privacy]),
         merged: Vec::new(),
+        claim_owners: std::collections::BTreeMap::new(),
     };
     let row = person_row(&summary, &loc);
     assert_eq!(row.title, "(no name)");

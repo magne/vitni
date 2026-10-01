@@ -162,6 +162,13 @@ impl PersonView {
         self.state.distinguished.iter().map(|d| d.value).collect()
     }
 
+    /// The live distinctions, each paired with the `AssertionId` of its `PersonsDistinguished` — the
+    /// target an undo retracts (ADR 0039 §4).
+    #[must_use]
+    pub fn distinguished_with_assertions(&self) -> &[Attributed<PersonId>] {
+        &self.state.distinguished
+    }
+
     /// Currently-live asserted names, each paired with the `AssertionId` that introduced it — the
     /// read side of the per-row correction (Edit supersedes it, Retract retracts it, data-model §8).
     #[must_use]

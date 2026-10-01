@@ -318,13 +318,12 @@ fn summary_node_ref(summary: &vitni_app::PersonSummary) -> PedigreeNodeVm {
 ///
 /// `summary` deliberately never claims relationships were "re-pointed": `PersonsMerged` only records
 /// a same-as link on the survivor (data-model §9); Family/Association/Participation records that name
-/// the merged person are left exactly as they were. `still_referenced` counts how many such records
-/// still name the merged person's id, worded as still-linked, not re-pointed.
+/// the merged person are left exactly as they were, and read as the survivor (ADR 0039 §5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MergeResultVm {
     /// The survivor's `human_id` (unchanged by the merge).
     pub survivor_human_id: String,
-    /// The merged person's `human_id` (their own record is untouched and still resolvable).
+    /// The merged person's `human_id` (their own record is untouched and now reads as the survivor).
     pub merged_human_id: String,
     /// The already-localized outcome summary.
     pub summary: String,
@@ -337,11 +336,7 @@ impl MergeResultVm {
         Self {
             survivor_human_id: result.survivor.human_id.clone(),
             merged_human_id: result.merged_human_id.clone(),
-            summary: loc.merge_result_summary(
-                &result.merged_human_id,
-                &result.survivor.human_id,
-                result.still_referenced,
-            ),
+            summary: loc.merge_result_summary(&result.merged_human_id, &result.survivor.human_id),
         }
     }
 }

@@ -71,11 +71,12 @@ async fn scan_persons(
     person_names: &HashMap<String, String>,
     map: &mut HashMap<DnaMatchId, Vec<DnaInferenceRef>>,
 ) -> Result<(), AppError> {
+    let references = crate::identity::PersonReferences::load(workspace.store()).await?;
     for view in workspace.store().list_persons().await? {
-        let (Some(id), Some(human_id)) = (view.person_id(), view.human_id()) else {
+        let Some(id) = view.person_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = person_names.get(&human_id).cloned();
         let make = |context| CitingRecordRef {
             kind: CitingKind::Person,

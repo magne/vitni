@@ -634,6 +634,7 @@ mod tests {
             tag_refs: Vec::new(),
             restrictions: BTreeSet::from([Restriction::Privacy]),
             merged: Vec::new(),
+            claim_owners: std::collections::BTreeMap::new(),
         };
         let line = localizer("en").summary_line(&summary);
         assert!(line.contains("intersex"), "got: {line}");

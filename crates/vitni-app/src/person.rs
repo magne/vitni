@@ -6,7 +6,7 @@
 //! `human_id` is auto-allocated using the workspace's configured format, or validated when the
 //! caller supplies one (ADR 0005).
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use uuid::Uuid;
 use vitni_core::age::Age;
@@ -26,6 +26,7 @@ use vitni_db::Store;
 
 use crate::dto::{AggRef, AttachedRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
+use crate::identity::PersonClusters;
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
@@ -97,9 +98,13 @@ pub struct PersonSummary {
     pub tag_refs: Vec<crate::citation::TagRef>,
     /// The person's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
-    /// Personas merged into this person (data-model §9) — the survivor side of a `PersonsMerged`
-    /// event whose assertion has not been undone.
+    /// Every record merged into this person's cluster, directly or through another member
+    /// (data-model §9, ADR 0039 §4), in id order.
     pub merged: Vec<AggRef>,
+    /// The `human_id` of the member each member-owned row came from, by the row's `AssertionId` — the
+    /// stream an edit or retraction of that row is written to (ADR 0039 §5). A row absent here is the
+    /// person's own. Never rendered as a key; see [`owner_of`](Self::owner_of).
+    pub claim_owners: BTreeMap<String, String>,
 }
 
 impl PersonSummary {
@@ -108,6 +113,15 @@ impl PersonSummary {
     #[must_use]
     pub fn birth_year(&self) -> Option<i32> {
         self.birth_date.as_ref().and_then(crate::dto::year_of)
+    }
+
+    /// The `human_id` of the record that owns the row introduced by `assertion_id`: the member it came
+    /// from, or this person for its own rows.
+    #[must_use]
+    pub fn owner_of(&self, assertion_id: &str) -> &str {
+        self.claim_owners
+            .get(assertion_id)
+            .map_or(self.human_id.as_str(), String::as_str)
     }
 
     /// The representative death year, if the death date carries one.
@@ -751,22 +765,18 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
-/// The outcome of [`merge_persons`]: the survivor's refreshed summary, the merged person's
-/// `human_id`, and how many other records still reference the merged person's id.
+/// The outcome of [`merge_persons`]: the survivor's refreshed summary and the merged person's
+/// `human_id`.
 ///
-/// `still_referenced` is deliberately *not* framed as "relationships re-pointed" — the merge is a
-/// same-as/evidence link on the survivor (data-model §9); no Family/Association/Participation record
-/// that names the merged person is rewritten. Those records keep working unchanged (their id still
-/// resolves), they are simply not repointed at the survivor.
+/// The merge is a same-as link on the survivor (data-model §9): no Family, Association or
+/// Participation record that names the merged person is rewritten. Every reader resolves those
+/// references to the cluster's root instead (ADR 0039 §5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MergeResult {
-    /// The survivor's summary after the merge (carries the new persona in `merged`).
+    /// The survivor's summary after the merge, composed with every record now in its cluster.
     pub survivor: PersonSummary,
-    /// The merged person's `human_id` (their own record/stream is untouched and still resolvable).
+    /// The merged person's `human_id` (their own record/stream is untouched).
     pub merged_human_id: String,
-    /// How many other records (family partner/child slots, person associations/participations) still
-    /// name the merged person's id.
-    pub still_referenced: usize,
 }
 
 /// The user's identity decision about a pair (ADR 0039 §1, §2): their surety and reason, and the
@@ -780,20 +790,20 @@ pub struct IdentityDecision {
     pub assessment: Option<MatchEvidence>,
 }
 
-/// Merges `merged_human_id` into `surviving_human_id`, recording a same-as link on the survivor.
+/// Merges `merged_human_id`'s cluster into `surviving_human_id`'s, recording a same-as link.
 ///
-/// Emits a single `PersonsMerged` event on the *surviving* person's stream (data-model §9), carrying
-/// the decision's provenance and assessment. This is non-destructive: the merged person's own event
-/// stream, and every existing Family/Association/Participation record naming their id, is left exactly
-/// as it was — `merge_persons` does not re-point any cross-aggregate reference. The merged person
-/// becomes a linked persona of the survivor; both streams are retained.
+/// Both records resolve to their cluster roots first (ADR 0039 §4), so a record already merged
+/// elsewhere brings its whole cluster along and no record ends up in two clusters. One `PersonsMerged`
+/// event is emitted on the surviving root's stream (data-model §9), carrying the decision's provenance
+/// and assessment. This is non-destructive: every merged record keeps its own stream, and every
+/// cross-aggregate reference naming it is left as it was — readers resolve it to the root.
 ///
 /// # Errors
 ///
 /// [`AppError::PersonNotFound`] if either `human_id` does not resolve; [`AppError::Domain`] with
 /// [`PersonError::MergeConflict`] if they resolve to the same person, or
-/// [`PersonError::IdentityDecided`] if either person already holds a live decision about the other;
-/// or a workspace/store error.
+/// [`PersonError::IdentityDecided`] if the two are already one cluster or a record of one cluster is
+/// distinguished from a record of the other; or a workspace/store error.
 pub async fn merge_persons(
     workspace: &Workspace,
     session: &Session,
@@ -802,59 +812,60 @@ pub async fn merge_persons(
     decision: IdentityDecision,
 ) -> Result<MergeResult, AppError> {
     let store = workspace.store();
-    let (surviving, merged) = undecided_pair(store, surviving_human_id, merged_human_id).await?;
-    execute_person_command(
-        store,
-        session,
-        &surviving.to_string(),
-        PersonCommand::MergePersons {
-            surviving,
-            merged,
-            assessment: decision.assessment,
-        },
-        decision.provenance,
-        Vec::new(),
-    )
-    .await?;
-
-    let survivor = show_person(workspace, surviving_human_id)
-        .await?
-        .ok_or_else(|| AppError::PersonNotFound(surviving_human_id.to_owned()))?;
-    let still_referenced = crate::merge_usage::count_references(workspace, merged).await?;
-    Ok(MergeResult {
-        survivor,
-        merged_human_id: merged_human_id.to_owned(),
-        still_referenced,
-    })
+    let pair = decidable_pair(store, surviving_human_id, merged_human_id).await?;
+    if !pair.distinctions().is_empty() {
+        return Err(pair.decided());
+    }
+    record_merge(workspace, session, &pair, decision).await?;
+    merge_result(workspace, &pair, merged_human_id).await
 }
 
-/// Records that `person_human_id` and `other_human_id` are different individuals (ADR 0039 §1), so
-/// the pair is never proposed as a duplicate again. Emits a single `PersonsDistinguished` event on
-/// `person_human_id`'s stream, carrying the decision's provenance and assessment; undoing it lifts the
-/// decision.
+/// Undoes every live distinction between the two clusters, then merges them — the compare view's
+/// *Undo "not the same" and merge* (ADR 0039 §4). The retractions and the merge are written in
+/// sequence; each is its own assertion, so the history shows the undo before the merge.
 ///
 /// # Errors
 ///
-/// [`AppError::PersonNotFound`] if either `human_id` does not resolve; [`AppError::Domain`] with
-/// [`PersonError::DistinctFromItself`] if they resolve to the same person, or
-/// [`PersonError::IdentityDecided`] if either person already holds a live decision about the other;
-/// or a workspace/store error.
-pub async fn distinguish_persons(
+/// As [`merge_persons`], except that a distinction between the clusters no longer refuses the merge.
+pub async fn undo_distinction_and_merge(
     workspace: &Workspace,
     session: &Session,
-    person_human_id: &str,
-    other_human_id: &str,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<MergeResult, AppError> {
+    let store = workspace.store();
+    let pair = decidable_pair(store, surviving_human_id, merged_human_id).await?;
+    for (view, target) in pair.distinctions() {
+        let Some(person_id) = view.person_id() else { continue };
+        execute_person_command(
+            store,
+            session,
+            &person_id.to_string(),
+            PersonCommand::RetractAssertion { person_id, target },
+            decision.provenance.clone(),
+            Vec::new(),
+        )
+        .await?;
+    }
+    record_merge(workspace, session, &pair, decision).await?;
+    merge_result(workspace, &pair, merged_human_id).await
+}
+
+/// Emits the `PersonsMerged` for a decidable pair on its first root's stream.
+async fn record_merge(
+    workspace: &Workspace,
+    session: &Session,
+    pair: &DecidablePair,
     decision: IdentityDecision,
 ) -> Result<(), AppError> {
-    let store = workspace.store();
-    let (person, other) = undecided_pair(store, person_human_id, other_human_id).await?;
     execute_person_command(
-        store,
+        workspace.store(),
         session,
-        &person.to_string(),
-        PersonCommand::DistinguishPersons {
-            person,
-            other,
+        &pair.first.to_string(),
+        PersonCommand::MergePersons {
+            surviving: pair.first,
+            merged: pair.second,
             assessment: decision.assessment,
         },
         decision.provenance,
@@ -863,26 +874,135 @@ pub async fn distinguish_persons(
     .await
 }
 
-/// Resolves a pair about to be decided, refusing it when the *second* person's stream already holds a
-/// live decision about the first — the cross-stream half of the check the first person's `decide`
-/// makes on its own stream (ADR 0039 §4, against the lagging projection per ADR 0002).
-async fn undecided_pair(store: &Store, first: &str, second: &str) -> Result<(PersonId, PersonId), AppError> {
+/// The survivor's composed summary after a merge.
+async fn merge_result(
+    workspace: &Workspace,
+    pair: &DecidablePair,
+    merged_human_id: &str,
+) -> Result<MergeResult, AppError> {
+    let survivor = show_person(workspace, &pair.first_human_id)
+        .await?
+        .ok_or_else(|| AppError::PersonNotFound(pair.first_human_id.clone()))?;
+    Ok(MergeResult {
+        survivor,
+        merged_human_id: merged_human_id.to_owned(),
+    })
+}
+
+/// Records that `person_human_id` and `other_human_id` are different individuals (ADR 0039 §1), so
+/// neither cluster is proposed as a duplicate of the other again. Both records resolve to their
+/// cluster roots first, and one `PersonsDistinguished` event is emitted on the first root's stream,
+/// carrying the decision's provenance and assessment; undoing it lifts the decision.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if either `human_id` does not resolve; [`AppError::Domain`] with
+/// [`PersonError::DistinctFromItself`] if they resolve to the same person, or
+/// [`PersonError::IdentityDecided`] if the two are already one cluster or already distinguished; or a
+/// workspace/store error.
+pub async fn distinguish_persons(
+    workspace: &Workspace,
+    session: &Session,
+    person_human_id: &str,
+    other_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let pair = decidable_pair(store, person_human_id, other_human_id).await?;
+    if !pair.distinctions().is_empty() {
+        return Err(pair.decided());
+    }
+    execute_person_command(
+        store,
+        session,
+        &pair.first.to_string(),
+        PersonCommand::DistinguishPersons {
+            person: pair.first,
+            other: pair.second,
+            assessment: decision.assessment,
+        },
+        decision.provenance,
+        Vec::new(),
+    )
+    .await
+}
+
+/// A pair about to be decided, resolved to its cluster roots (ADR 0039 §4).
+struct DecidablePair {
+    /// The first record's cluster root — the stream the decision is written on.
+    first: PersonId,
+    /// The first root's `human_id`.
+    first_human_id: String,
+    /// The second record's cluster root.
+    second: PersonId,
+    /// Every record of the first cluster.
+    first_views: Vec<PersonView>,
+    /// Every record of the second cluster.
+    second_views: Vec<PersonView>,
+}
+
+impl DecidablePair {
+    /// The refusal for a pair already decided.
+    fn decided(&self) -> AppError {
+        PersonError::IdentityDecided {
+            person: self.first,
+            other: self.second,
+        }
+        .into()
+    }
+
+    /// Every live distinction between the two clusters, with the record whose stream holds it — the
+    /// rule that distinctness is judged between clusters (ADR 0039 §4).
+    fn distinctions(&self) -> Vec<(&PersonView, AssertionId)> {
+        let ids =
+            |views: &[PersonView]| -> BTreeSet<PersonId> { views.iter().filter_map(PersonView::person_id).collect() };
+        let (first_ids, second_ids) = (ids(&self.first_views), ids(&self.second_views));
+        let mut found = Vec::new();
+        for (views, others) in [(&self.first_views, &second_ids), (&self.second_views, &first_ids)] {
+            for view in views {
+                for distinction in view.distinguished_with_assertions() {
+                    if others.contains(&distinction.value) {
+                        found.push((view, distinction.assertion_id));
+                    }
+                }
+            }
+        }
+        found
+    }
+}
+
+/// Resolves a pair about to be decided to its cluster roots, refusing it when both are already one
+/// cluster — checked against the lagging `identity_links` projection per ADR 0002. A record decided
+/// about itself passes through, for the core to refuse.
+async fn decidable_pair(store: &Store, first: &str, second: &str) -> Result<DecidablePair, AppError> {
     let first_id = resolve_person_id(store, first).await?;
-    let found = store.find_person(second).await?;
-    let Some((second_view, second_id)) = found.and_then(|view| view.person_id().map(|id| (view, id))) else {
-        return Err(AppError::PersonNotFound(second.to_owned()));
-    };
-    if second_view.merged().contains(&first_id) || second_view.distinguished().contains(&first_id) {
+    let second_id = resolve_person_id(store, second).await?;
+    let clusters = crate::identity::PersonClusters::load(store).await?;
+    let (first_root, second_root) = (clusters.root(first_id), clusters.root(second_id));
+    if first_id != second_id && first_root == second_root {
         return Err(PersonError::IdentityDecided {
             person: first_id,
             other: second_id,
         }
         .into());
     }
-    Ok((first_id, second_id))
+    let first_human_id = store
+        .human_id_of("person", &first_root.to_string())
+        .await?
+        .ok_or_else(|| AppError::PersonNotFound(first.to_owned()))?;
+    let first_views = crate::identity::person_views(store, &clusters.cluster(first_root)).await?;
+    let second_views = crate::identity::person_views(store, &clusters.cluster(second_root)).await?;
+    Ok(DecidablePair {
+        first: first_root,
+        first_human_id,
+        second: second_root,
+        first_views,
+        second_views,
+    })
 }
 
-/// Loads a single person's summary by `human_id`.
+/// Loads a single person's summary by `human_id`. A record merged into another resolves to its
+/// cluster's root, and a root reads every member's claims as well as its own (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -892,11 +1012,22 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
     let Some(found) = store.find_person(human_id).await? else {
         return Ok(None);
     };
+    let clusters = PersonClusters::load(store).await?;
     let lookups = Lookups::load(workspace).await?;
-    Ok(Some(summarize(&found, &lookups)))
+    let Some(id) = found.person_id() else {
+        return Ok(Some(summarize(&found, &lookups)));
+    };
+    let cluster = clusters.cluster(clusters.root(id));
+    if cluster == [id] {
+        return Ok(Some(summarize(&found, &lookups)));
+    }
+    let views = crate::identity::person_views(store, &cluster).await?;
+    let views: Vec<&PersonView> = views.iter().collect();
+    Ok(summarize_cluster(&views, &lookups))
 }
 
-/// Lists every person's summary, ordered by `human_id`.
+/// Lists every person's summary, ordered by `human_id`. A record merged into another is not listed:
+/// its cluster reads as its root (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -904,10 +1035,29 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
 pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, AppError> {
     let store = workspace.store();
     let views = store.list_persons().await?;
+    let clusters = PersonClusters::load(store).await?;
     let lookups = Lookups::load(workspace).await?;
+    let mut by_id: HashMap<PersonId, &PersonView> = HashMap::with_capacity(views.len());
+    for view in &views {
+        if let Some(id) = view.person_id() {
+            by_id.insert(id, view);
+        }
+    }
     let mut summaries = Vec::with_capacity(views.len());
     for view in &views {
-        summaries.push(summarize(view, &lookups));
+        let Some(id) = view.person_id() else {
+            summaries.push(summarize(view, &lookups));
+            continue;
+        };
+        if clusters.is_member(id) {
+            continue;
+        }
+        let cluster: Vec<&PersonView> = clusters
+            .cluster(id)
+            .iter()
+            .filter_map(|member| by_id.get(member).copied())
+            .collect();
+        summaries.extend(summarize_cluster(&cluster, &lookups));
     }
     Ok(summaries)
 }
@@ -928,7 +1078,8 @@ pub struct PersonRow {
     pub sex: Option<Sex>,
 }
 
-/// Lists every person as a lightweight [`PersonRow`], ordered by `human_id`.
+/// Lists every person as a lightweight [`PersonRow`], ordered by `human_id`, leaving out a record
+/// merged into another as [`list_persons`] does.
 ///
 /// Unlike [`list_persons`], this reads only the Person projection and skips [`Lookups::load`] — the
 /// six sibling-projection join that a full [`PersonSummary`] needs — so a whole-workspace person list
@@ -941,8 +1092,12 @@ pub struct PersonRow {
 pub async fn list_person_rows(workspace: &Workspace) -> Result<Vec<PersonRow>, AppError> {
     let store = workspace.store();
     let views = store.list_persons().await?;
+    let clusters = PersonClusters::load(store).await?;
     let mut rows = Vec::with_capacity(views.len());
     for view in &views {
+        if view.person_id().is_some_and(|id| clusters.is_member(id)) {
+            continue;
+        }
         let primary = primary_name_fields(view.names().first().copied());
         rows.push(PersonRow {
             human_id: view.human_id().map(|id| id.as_str().to_owned()).unwrap_or_default(),
@@ -962,6 +1117,7 @@ pub async fn list_person_rows(workspace: &Workspace) -> Result<Vec<PersonRow>, A
 /// date, so the person's Events tab shows the event a participation references (data-model §6, §10).
 struct Lookups {
     persons: HashMap<PersonId, String>,
+    clusters: PersonClusters,
     events: HashMap<EventId, EventJoin>,
     citations: HashMap<CitationId, crate::dto::CitationRef>,
     media: HashMap<MediaId, MediaLookup>,
@@ -989,6 +1145,7 @@ impl Lookups {
         }
         Ok(Self {
             persons: person_human_ids(store).await?,
+            clusters: PersonClusters::load(store).await?,
             events: event_lookups(store).await?,
             citations,
             media: crate::dto::media_lookups(store).await?,
@@ -1303,10 +1460,11 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         .iter()
         .filter_map(|attributed| {
             let asserted = &attributed.value;
-            persons.get(&asserted.value.other).map(|human_id| AssociationSummary {
+            let other = lookups.clusters.root(asserted.value.other);
+            persons.get(&other).map(|human_id| AssociationSummary {
                 other: AggRef {
                     human_id: human_id.clone(),
-                    id: asserted.value.other.to_string(),
+                    id: other.to_string(),
                 },
                 role: asserted.value.role.clone(),
                 confidence: asserted.confidence,
@@ -1320,7 +1478,6 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
     let death_date = vital_event_date(view, lookups, &EventType::Death);
     let (citations, media, notes) = person_attachments(view, lookups);
     let (tags, tag_refs) = person_tags(view, lookups);
-    let merged = person_merged(view, persons);
     PersonSummary {
         human_id,
         evidence_level: view.evidence_level().unwrap_or(EvidenceLevel::Conclusion),
@@ -1346,8 +1503,77 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         tags,
         tag_refs,
         restrictions: view.restrictions().clone(),
-        merged,
+        merged: Vec::new(),
+        claim_owners: BTreeMap::new(),
     }
+}
+
+/// Summarises a cluster — its root first, then its members — as one person (ADR 0039 §5): the root's
+/// summary with every member's rows appended, each member-owned row recorded in `claim_owners`.
+/// `None` for an empty slice.
+fn summarize_cluster(views: &[&PersonView], lookups: &Lookups) -> Option<PersonSummary> {
+    let (root, members) = views.split_first()?;
+    let mut summary = summarize(root, lookups);
+    for view in members {
+        let member = summarize(view, lookups);
+        summary.merged.push(AggRef {
+            human_id: member.human_id.clone(),
+            id: view.person_id().map(|id| id.to_string()).unwrap_or_default(),
+        });
+        adopt(&mut summary, member);
+    }
+    summary.merged.sort_by(|x, y| x.id.cmp(&y.id));
+    Some(summary)
+}
+
+/// Appends a member's rows to its root's summary, recording the member as each row's owner, and fills
+/// what the root lacks — a primary name, sex, vitals — from the member.
+fn adopt(root: &mut PersonSummary, member: PersonSummary) {
+    let owner = member.human_id.clone();
+    let mut owned: Vec<String> = Vec::new();
+    owned.extend(member.names.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.facts.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.associations.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.participations.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.citations.iter().filter_map(|row| row.assertion_id.clone()));
+    owned.extend(member.media.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.notes.iter().map(|row| row.assertion_id.clone()));
+    for assertion_id in owned {
+        root.claim_owners.insert(assertion_id, owner.clone());
+    }
+    if root.display_name.is_none() && member.display_name.is_some() {
+        adopt_primary_name(root, &member);
+    }
+    root.sex = root.sex.take().or(member.sex);
+    root.birth_date = root.birth_date.take().or(member.birth_date);
+    root.death_date = root.death_date.take().or(member.death_date);
+    root.names.extend(member.names);
+    root.facts.extend(member.facts);
+    root.associations.extend(member.associations);
+    root.participations.extend(member.participations);
+    root.citations.extend(member.citations);
+    root.media.extend(member.media);
+    root.notes.extend(member.notes);
+    for (tag, tag_ref) in member.tags.into_iter().zip(member.tag_refs) {
+        if !root.tags.contains(&tag) {
+            root.tags.push(tag);
+            root.tag_refs.push(tag_ref);
+        }
+    }
+    root.restrictions.extend(member.restrictions);
+}
+
+/// Takes a member's primary name as the cluster's, for a root that has none.
+fn adopt_primary_name(root: &mut PersonSummary, member: &PersonSummary) {
+    root.display_name.clone_from(&member.display_name);
+    root.given.clone_from(&member.given);
+    root.surname.clone_from(&member.surname);
+    root.surname_prefix.clone_from(&member.surname_prefix);
+    root.nickname.clone_from(&member.nickname);
+    root.name_prefix.clone_from(&member.name_prefix);
+    root.name_suffix.clone_from(&member.name_suffix);
+    root.name_type.clone_from(&member.name_type);
+    root.primary_name_assertion.clone_from(&member.primary_name_assertion);
 }
 
 /// The primary name's flattened display/structured fields (data-model §7) — the first of
@@ -1411,19 +1637,6 @@ fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<Participat
                 confidence: asserted.confidence,
                 source_count: asserted.citation_ids().count(),
                 assertion_id: attributed.assertion_id.to_string(),
-            })
-        })
-        .collect()
-}
-
-/// Resolves the personas merged into this survivor to their `human_id` + stable id (data-model §9).
-fn person_merged(view: &PersonView, persons: &HashMap<PersonId, String>) -> Vec<AggRef> {
-    view.merged()
-        .into_iter()
-        .filter_map(|id| {
-            persons.get(&id).map(|human_id| AggRef {
-                human_id: human_id.clone(),
-                id: id.to_string(),
             })
         })
         .collect()

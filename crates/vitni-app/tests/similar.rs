@@ -583,6 +583,33 @@ async fn a_merged_pair_is_not_proposed_as_a_duplicate() {
     assert!(records.similar(MatchableKind::Person, &b).await.contains(&c));
 }
 
+/// A merged record is hidden behind its root, and a distinction against any record of a cluster holds
+/// for the whole cluster (ADR 0039 §4).
+#[tokio::test]
+async fn a_cluster_is_proposed_once_and_judged_distinct_as_a_whole() {
+    let records = Records::new().await;
+    let (a, b, c) = three_oles(&records).await;
+    let decision = IdentityDecision::default;
+    distinguish_persons(&records.workspace, &records.session, &c, &b, decision())
+        .await
+        .expect("distinguish");
+    assert_eq!(
+        records.person_pairs().await,
+        BTreeSet::from([sorted(a.clone(), b.clone()), sorted(a.clone(), c.clone())])
+    );
+
+    merge_persons(&records.workspace, &records.session, &a, &b, decision())
+        .await
+        .expect("merge");
+    assert!(
+        records.person_pairs().await.is_empty(),
+        "C is distinct from B, so from A's cluster"
+    );
+    assert!(records.duplicate_findings().await.is_empty());
+    assert!(records.similar(MatchableKind::Person, &a).await.is_empty());
+    assert!(records.similar(MatchableKind::Person, &c).await.is_empty());
+}
+
 #[tokio::test]
 async fn undoing_a_distinction_proposes_the_pair_again() {
     let records = Records::new().await;

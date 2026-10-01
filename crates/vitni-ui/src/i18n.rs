@@ -3069,30 +3069,15 @@ impl Localizer {
         fl!(self.loader, "merge-blocked-guidance")
     }
 
-    /// The completed-merge outcome summary: the merged person becomes a persona of the survivor, and
-    /// (if nonzero) how many other records still reference the merged person's id. Deliberately never
-    /// says "re-pointed" — see [`crate::view_model::MergeResultVm`] doc.
+    /// The completed-merge outcome summary: the merged person becomes a persona of the survivor.
+    /// Deliberately never says "re-pointed" — see [`crate::view_model::MergeResultVm`] doc.
     #[must_use]
-    pub fn merge_result_summary(
-        &self,
-        merged_human_id: &str,
-        survivor_human_id: &str,
-        still_referenced: usize,
-    ) -> String {
-        if still_referenced == 0 {
-            return fl!(
-                self.loader,
-                "merge-result-summary",
-                merged = merged_human_id,
-                survivor = survivor_human_id
-            );
-        }
+    pub fn merge_result_summary(&self, merged_human_id: &str, survivor_human_id: &str) -> String {
         fl!(
             self.loader,
-            "merge-result-summary-with-references",
+            "merge-result-summary",
             merged = merged_human_id,
-            survivor = survivor_human_id,
-            count = u64::try_from(still_referenced).unwrap_or(u64::MAX)
+            survivor = survivor_human_id
         )
     }
 

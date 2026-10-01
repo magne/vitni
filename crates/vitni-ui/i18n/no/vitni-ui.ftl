@@ -1058,7 +1058,6 @@ merge-field-occupation = Yrke
 merge-differs = avviker
 merge-differs-title = avviker fra verdien som beholdes
 merge-result-summary = { $merged } blir en persona av { $survivor }; én hendelse lagt til i historikken.
-merge-result-summary-with-references = { $merged } blir en persona av { $survivor }; { $count } annen/andre post(er) refererer fremdeles til { $merged }; én hendelse lagt til i historikken.
 merge-blocked-heading = Sammenslåing blokkert — motstridende fakta
 merge-blocked-guidance = Løs motsetningen først (trekk tilbake eller erstatt én påstand), og slå deretter sammen.
 identity-assessment = Samsvar { $score } % · { $band } · motor { $engine }

@@ -394,10 +394,11 @@ impl DnaTestLookups {
             .into_iter()
             .map(|p| (p.human_id, p.display_name))
             .collect();
+        let references = crate::identity::PersonReferences::load(store).await?;
         let mut persons = HashMap::new();
         for view in store.list_persons().await? {
             if let Some(id) = view.person_id() {
-                let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
+                let (_, human_id) = references.resolve(id);
                 let name = names.get(&human_id).cloned().flatten();
                 persons.insert(id.to_string(), (human_id, name));
             }

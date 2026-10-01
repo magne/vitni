@@ -112,10 +112,11 @@ struct Lookups {
 
 impl Lookups {
     async fn load(workspace: &Workspace, person_names_by_human_id: &HashMap<String, String>) -> Result<Self, AppError> {
+        let references = crate::identity::PersonReferences::load(workspace.store()).await?;
         let mut person_names = HashMap::new();
         for view in workspace.store().list_persons().await? {
-            if let (Some(id), Some(human_id)) = (view.person_id(), view.human_id())
-                && let Some(name) = person_names_by_human_id.get(human_id.as_str())
+            if let Some(id) = view.person_id()
+                && let Some(name) = person_names_by_human_id.get(&references.resolve(id).1)
             {
                 person_names.insert(id, name.clone());
             }
@@ -166,11 +167,12 @@ async fn scan_persons(
     person_names: &HashMap<String, String>,
     map: &mut HashMap<TagId, Vec<UsingRecordRef>>,
 ) -> Result<(), AppError> {
+    let references = crate::identity::PersonReferences::load(workspace.store()).await?;
     for view in workspace.store().list_persons().await? {
-        let (Some(id), Some(human_id)) = (view.person_id(), view.human_id()) else {
+        let Some(id) = view.person_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = person_names.get(&human_id).cloned();
         for tag in view.tags() {
             push(
