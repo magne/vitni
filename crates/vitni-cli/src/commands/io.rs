@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use vitni_app::{AiConfig, AppError, ConfigStore, DatasetChoice, FileConfigStore, Session, Workspace};
 use vitni_plugin_host::{
-    ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginHost, PluginInfo, ProgressControl,
+    ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginHost, PluginInfo, ProgressControl, ProgressStep,
     ProgressUpdate, ResourceBudget, TrustRoots, resolve_trust_roots,
 };
 
@@ -93,7 +93,7 @@ impl PreparedImport {
             import: Some(run),
         };
         let (count, _workspace) = host
-            .run_bulk_import(&component, invocation, file, render_progress)
+            .run_bulk_import(&component, invocation, file, progress_renderer(localizer))
             .await
             .map_err(|error| AppError::Plugin(error.to_string()))?;
         println!("{}", localizer.import_success(count, &plugin));
@@ -136,7 +136,7 @@ pub async fn export(
         import: None,
     };
     let (count, _workspace) = host
-        .run_bulk_export(&component, run, target, render_progress)
+        .run_bulk_export(&component, run, target, progress_renderer(localizer))
         .await
         .map_err(|error| AppError::Plugin(error.to_string()))?;
     println!("{}", localizer.export_success(count, &destination));
@@ -192,11 +192,21 @@ fn effective_grants(info: &PluginInfo, workspace_dir: &Path) -> Grants {
     info.effective_grants(prefs.approved_grants(&info.id))
 }
 
-/// Renders a plugin progress update to stderr and tells the plugin to proceed. The `step` is the
-/// plugin's own vocabulary, shown verbatim; only the counts are decorated. The CLI does not yet
-/// trigger cancellation (a future interrupt handler will return [`ProgressControl::Cancel`]).
-fn render_progress(update: ProgressUpdate) -> ProgressControl {
+/// A progress sink that renders each update to stderr and tells the plugin to proceed. A plugin's step
+/// is its own vocabulary, shown verbatim; the host's writing step is `writing`, localized. Only the
+/// counts are decorated. The CLI does not yet trigger cancellation (a future interrupt handler will
+/// return [`ProgressControl::Cancel`]).
+fn progress_renderer(localizer: &Localizer) -> impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static {
+    let writing = localizer.import_progress_writing();
+    move |update| render_progress(update, &writing)
+}
+
+fn render_progress(update: ProgressUpdate, writing: &str) -> ProgressControl {
     let ProgressUpdate { step, processed, total } = update;
+    let step = match step {
+        ProgressStep::Plugin(step) => step,
+        ProgressStep::Writing => writing.to_owned(),
+    };
     match total {
         Some(total) => eprintln!("  {step}: {processed}/{total}"),
         None => eprintln!("  {step}: {processed}"),

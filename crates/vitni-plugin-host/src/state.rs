@@ -36,7 +36,7 @@ use crate::bindings::imports::vitni::host_api::{
 };
 use crate::capability::{Capability, Grants};
 use crate::net::{self as net_impl, NetError, NetPolicy};
-use crate::{BulkIo, ProgressControl, ProgressUpdate, ai as ai_impl, media};
+use crate::{BulkIo, ProgressControl, ProgressStep, ProgressUpdate, ai as ai_impl, media};
 
 /// The data owned by one plugin instance's Wasmtime store.
 pub struct HostState {
@@ -2002,7 +2002,11 @@ impl HostState {
         if !self.grants.allows(Capability::Progress) {
             return Err(types::CapabilityError::Denied);
         }
-        let control = (self.io.progress)(ProgressUpdate { step, processed, total });
+        let control = (self.io.progress)(ProgressUpdate {
+            step: ProgressStep::Plugin(step),
+            processed,
+            total,
+        });
         if control == ProgressControl::Cancel
             && let Some(run) = self.run.as_mut()
         {

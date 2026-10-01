@@ -17,7 +17,7 @@ use vitni_app::{
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, EventContext};
 use vitni_plugin_host::{
-    Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, ProgressControl,
+    Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, ProgressControl, ProgressStep,
     ProgressUpdate, ResourceBudget,
 };
 
@@ -558,7 +558,7 @@ async fn a_changed_date_supersedes_the_imported_one_only_when_the_file_is_newer(
 
 /// Cancels a bulk import at the commit's first progress report past its start.
 fn cancel_mid_commit(update: &ProgressUpdate) -> ProgressControl {
-    if update.step == "writing" && update.processed > 0 {
+    if update.step == ProgressStep::Writing && update.processed > 0 {
         ProgressControl::Cancel
     } else {
         ProgressControl::Proceed

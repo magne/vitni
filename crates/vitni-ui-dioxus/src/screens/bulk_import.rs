@@ -20,10 +20,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use vitni_plugin_host::PluginRole;
+use vitni_plugin_host::{PluginRole, ProgressStep};
 use vitni_ui::{
-    BulkImportProgress, BulkImportSession, BulkImportStage, BulkImportSummary, ImportSourcePath, ImportTargetChoice,
-    ImportTargetError,
+    BulkImportProgress, BulkImportSession, BulkImportStage, BulkImportStep, BulkImportSummary, ImportSourcePath,
+    ImportTargetChoice, ImportTargetError,
 };
 
 use super::export::{NoticeStage, WizardNoticeTone};
@@ -81,6 +81,8 @@ pub struct BulkRunningLabels {
     pub heading: String,
     /// The step name shown before the plugin reports its first step.
     pub starting: String,
+    /// The step name shown while the host writes the records the plugin read.
+    pub writing: String,
     /// The already-formatted progress count (e.g. "40 of 120").
     pub count: String,
     /// The cancel action label.
@@ -702,10 +704,10 @@ pub fn BulkRunningStage(
     progress: BulkImportProgress,
     oncancel: EventHandler<()>,
 ) -> Element {
-    let step = if progress.step.trim().is_empty() {
-        labels.starting.clone()
-    } else {
-        progress.step.clone()
+    let step = match &progress.step {
+        BulkImportStep::Plugin(step) if step.trim().is_empty() => labels.starting.clone(),
+        BulkImportStep::Plugin(step) => step.clone(),
+        BulkImportStep::Writing => labels.writing.clone(),
     };
     let percent = progress
         .total
@@ -890,8 +892,12 @@ async fn bulk_drive(
 ) {
     let mut progress = handle.progress;
     while let Some(update) = progress.recv().await {
+        let step = match update.step {
+            ProgressStep::Plugin(step) => BulkImportStep::Plugin(step),
+            ProgressStep::Writing => BulkImportStep::Writing,
+        };
         session.write().on_progress(BulkImportProgress {
-            step: update.step,
+            step,
             processed: update.processed,
             total: update.total,
         });
@@ -942,6 +948,7 @@ fn bulk_running_labels(chrome: &Chrome, progress: &BulkImportProgress) -> BulkRu
     BulkRunningLabels {
         heading: chrome.bulk_import_running_heading(),
         starting: chrome.bulk_import_progress_starting(),
+        writing: chrome.bulk_import_progress_writing(),
         count: chrome.bulk_import_progress_count(progress.processed, progress.total),
         cancel: chrome.bulk_import_cancel(),
     }

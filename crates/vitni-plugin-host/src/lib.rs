@@ -57,12 +57,22 @@ pub use crate::trust::{TrustRoots, TrustTier, classify, resolve_trust_roots};
 /// plugin cannot yet know the record count (common during import).
 #[derive(Debug, Clone)]
 pub struct ProgressUpdate {
-    /// The phase the plugin is in (e.g. `"persons"`, `"families"`).
-    pub step: String,
+    /// What is being done.
+    pub step: ProgressStep,
     /// How many records the plugin has processed so far.
     pub processed: u32,
     /// The total it expects, if known.
     pub total: Option<u32>,
+}
+
+/// What a progress report is about.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProgressStep {
+    /// A phase the plugin names in its own vocabulary (e.g. `"persons"`, `"families"`), shown as is.
+    Plugin(String),
+    /// The host writing an import's records once the plugin has read them (ADR 0040 §4); a frontend
+    /// names it in its own language.
+    Writing,
 }
 
 /// A frontend's answer to a progress report (ADR 0013): keep going, or cancel the operation.

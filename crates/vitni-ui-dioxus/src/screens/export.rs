@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use vitni_plugin_host::{ExportTarget, PluginRole};
+use vitni_plugin_host::{ExportTarget, PluginRole, ProgressStep};
 use vitni_ui::{ExportDestination, ExportProgress, ExportSession, ExportStage, ExportSummary};
 
 use super::prelude::*;
@@ -432,8 +432,13 @@ fn export_target(destination: &ExportDestination) -> ExportTarget {
 async fn drive(handle: BulkExportHandle, mut session: Signal<ExportSession>, unknown_failure: String) {
     let mut progress = handle.progress;
     while let Some(update) = progress.recv().await {
+        // An export reads the workspace and writes no records, so the host never reports writing them.
+        let step = match update.step {
+            ProgressStep::Plugin(step) => step,
+            ProgressStep::Writing => String::new(),
+        };
         session.write().on_progress(ExportProgress {
-            step: update.step,
+            step,
             processed: update.processed,
             total: update.total,
         });

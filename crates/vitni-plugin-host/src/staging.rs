@@ -22,7 +22,7 @@ use crate::state::{
     to_child_relationship, to_confidence, to_event_type, to_external_id, to_fact_type, to_genealogical_date,
     to_note_type, to_person_name, to_place_type, to_restrictions, to_role, to_sex, to_source_media_type,
 };
-use crate::{ProgressControl, ProgressUpdate};
+use crate::{ProgressControl, ProgressStep, ProgressUpdate};
 
 /// How many writes pass between two progress reports of a bulk commit.
 const REPORT_EVERY: u32 = 10;
@@ -159,7 +159,7 @@ impl CommitControl for Reporter<'_> {
             return true;
         }
         let update = ProgressUpdate {
-            step: "writing".to_owned(),
+            step: ProgressStep::Writing,
             processed: done,
             total: Some(total),
         };

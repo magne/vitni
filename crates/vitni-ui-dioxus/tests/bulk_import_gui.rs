@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
-use vitni_ui::BulkImportProgress;
+use vitni_ui::{BulkImportProgress, BulkImportStep};
 use vitni_ui_dioxus::components::SelectChoice;
 use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::screens::{
@@ -235,6 +235,7 @@ fn running_labels() -> BulkRunningLabels {
     BulkRunningLabels {
         heading: "Importing…".to_owned(),
         starting: "Starting…".to_owned(),
+        writing: "Writing records".to_owned(),
         count: "10 of 40".to_owned(),
         cancel: "Cancel".to_owned(),
     }
@@ -245,7 +246,7 @@ fn running_view() -> Element {
         BulkRunningStage {
             labels: running_labels(),
             progress: BulkImportProgress {
-                step: "persons".to_owned(),
+                step: BulkImportStep::Plugin("persons".to_owned()),
                 processed: 10,
                 total: Some(40),
             },
@@ -262,13 +263,34 @@ fn running_without_total_view() -> Element {
                 ..running_labels()
             },
             progress: BulkImportProgress {
-                step: String::new(),
+                step: BulkImportStep::Plugin(String::new()),
                 processed: 10,
                 total: None,
             },
             oncancel: |()| {},
         }
     }
+}
+
+fn writing_view() -> Element {
+    rsx! {
+        BulkRunningStage {
+            labels: running_labels(),
+            progress: BulkImportProgress {
+                step: BulkImportStep::Writing,
+                processed: 10,
+                total: Some(40),
+            },
+            oncancel: |()| {},
+        }
+    }
+}
+
+#[test]
+fn running_stage_names_the_hosts_writing_in_the_operators_language() {
+    let html = render(writing_view);
+    assert!(html.contains("Writing records"), "the localized writing step: {html}");
+    assert!(html.contains("aria-valuemax=\"40\""), "the writes to make: {html}");
 }
 
 #[test]
