@@ -608,6 +608,8 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .tl-when { font-size: var(--fs-xs); color: var(--faint); font-family: var(--font-mono); }
 .tl-what { font-size: var(--fs-md); }
 .tl-count { margin-left: var(--sp-2); font-size: var(--fs-sm); }
+/* The engine's reasons behind a match score (ADR 0038 §8), one line under the pair or its band. */
+.match-reasons { font-size: var(--fs-sm); }
 .tl-who { font-size: var(--fs-xs); color: var(--muted); }
 .tl-why { font-size: var(--fs-sm); color: var(--ink-2); font-style: italic; }
 .tl-evidence { font-size: var(--fs-xs); }

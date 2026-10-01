@@ -88,7 +88,7 @@ pub use view_model::{
     CitationAttributeVm, CitationDetail, CitationDraft, CitationRefVm, CitingRecordVm, CropCorner, DATE_CALENDARS,
     DATE_QUALITIES, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DataQualityVm, DateDraft,
     DateEntryError, DateModifierKind, DnaInferenceVm, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, DnaTestDetail,
-    DnaTestDraft, DnaTestMatchVm, DuplicateCandidateVm, EventDetail, EventDraft, EventPinVm, EventRefVm,
+    DnaTestDraft, DnaTestMatchVm, DuplicateCandidateVm, DuplicateVm, EventDetail, EventDraft, EventPinVm, EventRefVm,
     EvidenceAxisVm, ExportDestination, ExportProgress, ExportSession, ExportStage, ExportSummary, FactVm,
     FamilyChildVm, FamilyDetail, FamilyDraft, FamilyEventVm, FamilyVm, FilenameHints, GeographyVm, HaplogroupRowVm,
     HistoryEntryVm, ImportSession, ImportSourcePath, ImportStage, ImportTargetChoice, ImportTargetError, JumpVm,

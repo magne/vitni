@@ -107,46 +107,217 @@ fn dashboard_summary_names_the_fact_kind() {
     );
 }
 
+fn agg(human_id: &str, id: &str) -> vitni_app::AggRef {
+    vitni_app::AggRef {
+        human_id: human_id.to_owned(),
+        id: id.to_owned(),
+    }
+}
+
+/// The engine's evidence for a pair: `terms` as (feature, outcome, weight in basis points).
+fn evidence(
+    score_bp: u16,
+    band: vitni_app::MatchBand,
+    terms: &[(vitni_app::Feature, vitni_app::OutcomeEvidence, i32)],
+) -> vitni_app::MatchEvidence {
+    let mut features = Vec::new();
+    for (feature, outcome, weight_bp) in terms {
+        features.push(vitni_app::FeatureEvidence {
+            feature: *feature,
+            outcome: *outcome,
+            weight_bp: *weight_bp,
+        });
+    }
+    vitni_app::MatchEvidence {
+        score_bp,
+        band,
+        engine: vitni_app::EngineVersion(4),
+        cultures: Vec::new(),
+        features,
+    }
+}
+
+fn duplicate(
+    kind: vitni_app::MatchableKind,
+    a: vitni_app::AggRef,
+    b: vitni_app::AggRef,
+    assessment: vitni_app::MatchEvidence,
+) -> vitni_app::CheckFinding {
+    vitni_app::CheckFinding::PossibleDuplicate { kind, a, b, assessment }
+}
+
 #[test]
 fn data_quality_maps_check_findings_to_navigable_rows() {
-    use vitni_app::{AggRef, CheckFinding, CheckKind};
+    use vitni_app::{CheckFinding, Feature, MatchBand, MatchableKind, OutcomeEvidence};
+    let loc = Localizer::for_test("en");
     // `summary()` is person I0001 / "Ada Lovelace"; the findings flag her lifespan and one dup pair.
     let findings = vec![
-        CheckFinding {
-            kind: CheckKind::DeathBeforeBirth,
-            records: vec![AggRef {
-                human_id: "I0001".to_owned(),
-                id: "I0001".to_owned(),
-            }],
-        },
-        CheckFinding {
-            kind: CheckKind::PossibleDuplicates,
-            records: vec![
-                AggRef {
-                    human_id: "I0001".to_owned(),
-                    id: "I0001".to_owned(),
-                },
-                AggRef {
-                    human_id: "I0002".to_owned(),
-                    id: "I0002".to_owned(),
-                },
-            ],
-        },
+        CheckFinding::DeathBeforeBirth(agg("I0001", "I0001")),
+        duplicate(
+            MatchableKind::Person,
+            agg("I0001", "a-id"),
+            agg("I0002", "b-id"),
+            evidence(
+                9_700,
+                MatchBand::Probable,
+                &[(Feature::GivenName, OutcomeEvidence::Agree, 30_000)],
+            ),
+        ),
     ];
-    let vm = DataQualityVm::build(&[summary()], &findings);
+    let vm = DataQualityVm::build(&[summary()], &findings, &loc);
 
     assert_eq!(vm.death_before_birth.len(), 1);
     // The flagged person is a navigable People record labelled by display name, not the id.
     assert_eq!(vm.death_before_birth[0].human_id, "I0001");
     assert_eq!(vm.death_before_birth[0].label, "Ada Lovelace");
-    assert_eq!(vm.duplicate_count, 1, "each duplicate finding is one pair");
+    assert_eq!(vm.duplicates.len(), 1, "each duplicate finding is one pair");
+    let pair = &vm.duplicates[0];
+    assert_eq!(pair.a.category, crate::navigation::Category::People);
+    assert_eq!(pair.a.label, "Ada Lovelace", "a person is named, not numbered");
+    assert_eq!(pair.b.label, "I0002", "an unnamed person falls back to its id");
+    assert_eq!(pair.percent, 97);
+    assert_eq!(pair.band, "probable match");
+    assert_eq!(pair.reasons, ["Same given name (+3.0)"]);
+}
+
+#[test]
+fn a_place_duplicate_is_a_place_row_with_its_reasons() {
+    use vitni_app::{Feature, MatchBand, MatchableKind, OutcomeEvidence};
+    let loc = Localizer::for_test("en");
+    let findings = vec![duplicate(
+        MatchableKind::Place,
+        agg("P0001", "p1-id"),
+        agg("P0002", "p2-id"),
+        evidence(
+            8_000,
+            MatchBand::Possible,
+            &[
+                (Feature::PlaceType, OutcomeEvidence::Agree, 10_000),
+                (Feature::Enclosure, OutcomeEvidence::Missing, 0),
+                (Feature::PlaceName, OutcomeEvidence::Agree, 50_000),
+                (Feature::Coordinates, OutcomeEvidence::Disagree, -12_345),
+            ],
+        ),
+    )];
+    let vm = DataQualityVm::build(&[summary()], &findings, &loc);
+
+    let pair = &vm.duplicates[0];
+    assert_eq!(pair.a.category, crate::navigation::Category::Places);
+    assert_eq!((pair.a.human_id.as_str(), pair.b.human_id.as_str()), ("P0001", "P0002"));
+    assert_eq!(pair.percent, 80);
+    assert_eq!(
+        pair.reasons,
+        [
+            "Same place name (+5.0)",
+            "Same place type (+1.0)",
+            "Different coordinates (\u{2212}1.2)",
+        ],
+        "the strongest term first; a term with no value on one side explains nothing"
+    );
+}
+
+#[test]
+fn a_tag_duplicate_opens_by_id_and_shows_its_name() {
+    use vitni_app::{MatchBand, MatchableKind};
+    let loc = Localizer::for_test("en");
+    let findings = vec![duplicate(
+        MatchableKind::Tag,
+        agg("Emigrant", "0190-tag-a"),
+        agg("Emigrants", "0190-tag-b"),
+        evidence(7_000, MatchBand::Possible, &[]),
+    )];
+    let vm = DataQualityVm::build(&[], &findings, &loc);
+    let pair = &vm.duplicates[0];
+    assert_eq!(pair.a.category, crate::navigation::Category::Tags);
+    assert_eq!(pair.a.human_id, "0190-tag-a", "a tag opens by its id");
+    assert_eq!(pair.a.label, "Emigrant", "but is never shown by it");
+}
+
+#[test]
+fn match_reasons_localize_to_norwegian() {
+    use vitni_app::{Feature, MatchBand, OutcomeEvidence};
+    let loc = Localizer::for_test("no");
+    let reasons = loc.match_reasons(&evidence(
+        6_000,
+        MatchBand::Possible,
+        &[
+            (Feature::Birth, OutcomeEvidence::Partial(7_000), 12_000),
+            (Feature::Surname, OutcomeEvidence::Conflict, -50_000),
+        ],
+    ));
+    assert_eq!(reasons, ["Fødsel ligner (+1,2)", "Etternavn er i strid (\u{2212}5,0)"]);
+}
+
+#[test]
+fn every_feature_and_outcome_has_a_reason_in_each_language() {
+    use vitni_app::{Feature, MatchBand, OutcomeEvidence};
+    let features = [
+        Feature::GivenName,
+        Feature::Surname,
+        Feature::Sex,
+        Feature::Birth,
+        Feature::Death,
+        Feature::BirthPlace,
+        Feature::DeathPlace,
+        Feature::Lifespan,
+        Feature::Father,
+        Feature::Mother,
+        Feature::Partners,
+        Feature::Children,
+        Feature::Patronymic,
+        Feature::Occupation,
+        Feature::Record,
+        Feature::Partner,
+        Feature::Marriage,
+        Feature::MarriagePlace,
+        Feature::EventType,
+        Feature::Date,
+        Feature::Place,
+        Feature::Principal,
+        Feature::Participants,
+        Feature::PlaceName,
+        Feature::PlaceType,
+        Feature::Enclosure,
+        Feature::Coordinates,
+        Feature::Title,
+        Feature::Author,
+        Feature::Publication,
+        Feature::Repository,
+        Feature::Name,
+        Feature::Address,
+        Feature::Source,
+        Feature::Page,
+        Feature::Checksum,
+        Feature::Path,
+        Feature::Text,
+    ];
+    let outcomes = [
+        OutcomeEvidence::Agree,
+        OutcomeEvidence::Partial(5_000),
+        OutcomeEvidence::Disagree,
+        OutcomeEvidence::Conflict,
+    ];
+    for language in ["en", "no"] {
+        let loc = Localizer::for_test(language);
+        for feature in features {
+            for outcome in outcomes {
+                let reasons = loc.match_reasons(&evidence(5_000, MatchBand::Possible, &[(feature, outcome, 0)]));
+                assert_eq!(reasons.len(), 1);
+                assert!(
+                    !reasons[0].contains("match-") && !reasons[0].contains('{'),
+                    "{language} {feature:?} {outcome:?}: {}",
+                    reasons[0]
+                );
+            }
+        }
+    }
 }
 
 #[test]
 fn data_quality_reports_zero_counts_with_no_findings() {
-    let vm = DataQualityVm::build(&[summary()], &[]);
+    let vm = DataQualityVm::build(&[summary()], &[], &Localizer::for_test("en"));
     assert!(vm.death_before_birth.is_empty());
-    assert_eq!(vm.duplicate_count, 0);
+    assert!(vm.duplicates.is_empty());
 }
 
 #[test]

@@ -652,6 +652,12 @@ user's confidence and rationale as given, with nothing defaulted, and refuse a p
 either person's stream. `similar_pairs` and `find_similar` leave out every decided pair, so a rejected
 pair never returns to the Dashboard, the checks or the Merge screen. The compare view shows the
 assessment and records it with *Merge* or *Not the same person*, and History shows it on the decision.
+✅ The duplicate check through the engine (ADR 0038 §8, #401): `CheckFinding::PossibleDuplicate` covers
+every matchable kind and carries the engine's `MatchEvidence`, the most similar pair first whatever its
+kind. The Dashboard's data-quality card lists the strongest pairs, each linked, with the probability,
+the band and the reasons — one line per compared term, the strongest first, with its log₂ weight
+("Same place name (+5.0)") — and the Merge screen's duplicates table, which the palette's *Find
+duplicates* opens, shows the same reasons under the band.
 
 ## Risk register
 

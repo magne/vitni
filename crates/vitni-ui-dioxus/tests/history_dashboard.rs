@@ -5,7 +5,9 @@
 
 use dioxus::prelude::*;
 use vitni_app::RecentItem;
-use vitni_ui::{ActivityVm, Category, DashboardStats, DashboardVm, DataQualityVm, JumpVm, Localizer, RecordRef};
+use vitni_ui::{
+    ActivityVm, Category, DashboardStats, DashboardVm, DataQualityVm, DuplicateVm, JumpVm, Localizer, RecordRef,
+};
 use vitni_ui_dioxus::components::{HistoryEntry, HistoryTimeline};
 use vitni_ui_dioxus::screens::dashboard_view;
 use vitni_ui_dioxus::shell::nav_state::NavState;
@@ -87,6 +89,35 @@ fn history_timeline_renders_who_when_why_and_an_undo_control() {
     }
 }
 
+fn record(category: Category, human_id: &str, label: &str) -> RecordRef {
+    RecordRef {
+        category,
+        human_id: human_id.to_owned(),
+        label: label.to_owned(),
+    }
+}
+
+/// Six possible-duplicate pairs, the strongest a place pair: one more than the card lists.
+fn duplicates() -> Vec<DuplicateVm> {
+    let mut pairs = vec![DuplicateVm {
+        a: record(Category::Places, "P0001", "P0001"),
+        b: record(Category::Places, "P0002", "P0002"),
+        percent: 99,
+        band: "probable match".to_owned(),
+        reasons: vec!["Same place name (+5.0)".to_owned(), "Same place type (+1.0)".to_owned()],
+    }];
+    for n in 0..5 {
+        pairs.push(DuplicateVm {
+            a: record(Category::People, &format!("I001{n}"), &format!("Ole Olsen {n}")),
+            b: record(Category::People, &format!("I002{n}"), &format!("Ola Olsen {n}")),
+            percent: 80,
+            band: "possible match".to_owned(),
+            reasons: vec!["Same surname (+2.0)".to_owned()],
+        });
+    }
+    pairs
+}
+
 /// Renders the dashboard over a representative view-model, in English.
 fn dashboard() -> Element {
     // RecordLink resolves NavState from context, so the harness must provide it.
@@ -137,7 +168,7 @@ fn dashboard() -> Element {
             human_id: "I0009".to_owned(),
             label: "Jane Reversed".to_owned(),
         }],
-        duplicate_count: 14,
+        duplicates: duplicates(),
     };
     dashboard_view(&loc, &[], &vm, Some(&data_quality))
 }
@@ -160,7 +191,7 @@ fn dashboard_with_recents() -> Element {
     };
     let data_quality = DataQualityVm {
         death_before_birth: vec![],
-        duplicate_count: 0,
+        duplicates: vec![],
     };
     let recent = vec![RecentItem::Record {
         kind: "family".to_owned(),
@@ -242,17 +273,25 @@ fn dashboard_renders_stats_activity_and_data_quality() {
         "Name asserted",                                      // an activity row
         "Imported from tree.ged",                             // an import run's row
         r#"<span class="muted tl-count">142 records</span>"#, // its count, muted beside it
-        "John Smith",           // the linked record + the jump-back button, by display name
-        "👤",                   // the entity icon prefixes the record links
-        r#"class="no-source""#, // the computable data-quality check
-        "Death before birth",   // the death-before-birth check row
-        "Jane Reversed",        // its flagged person, as a navigable link
-        "Possible duplicates",  // the duplicates check row
-        "14",                   // the real duplicate-pair count
-        "Compare",              // the Compare button routing into the merge wizard
+        "John Smith",                  // the linked record + the jump-back button, by display name
+        "👤",                          // the entity icon prefixes the record links
+        r#"class="no-source""#,        // the computable data-quality check
+        "Death before birth",          // the death-before-birth check row
+        "Jane Reversed",               // its flagged person, as a navigable link
+        "Possible duplicates",         // the duplicates check row
+        r#"<td class="muted">6</td>"#, // the real duplicate-pair count, every kind
+        "Compare",                     // the Compare button routing into the merge wizard
+        "📍",                          // a place pair, linked with the place icon
+        "P0002",                       // …to both of its records
+        r#"title="Matching-engine probability — not the 5-level assertion Confidence">99%</span>"#,
+        "probable match",                                  // the engine's band
+        "Same place name (+5.0) · Same place type (+1.0)", // and its reasons
+        "Ole Olsen 3",                                     // the pairs are listed up to the cap
+        "+1 more",                                         // and the rest are counted
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+    assert!(!html.contains("Ole Olsen 4"), "the sixth pair is past the cap:\n{html}");
     // U44: the Compare row-action carries a contextual accessible name, not the bare "Compare".
     assert!(
         html.contains(r#"aria-label="Compare possible duplicates""#),

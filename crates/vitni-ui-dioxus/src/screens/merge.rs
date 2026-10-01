@@ -237,7 +237,12 @@ pub fn DuplicatesTable(
                                         label: candidate.b.name.clone(),
                                     }
                                 }
-                                td { class: "muted", "{candidate.reason}" }
+                                td { class: "muted",
+                                    "{candidate.reason}"
+                                    if !candidate.reasons.is_empty() {
+                                        div { class: "match-reasons", "{candidate.reasons.join(\" · \")}" }
+                                    }
+                                }
                                 td {
                                     span {
                                         class: "badge",

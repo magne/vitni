@@ -84,7 +84,7 @@ pub use backup::{
     restore_backup,
 };
 pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
-pub use checks::{CheckFinding, CheckKind, check_persons, run_checks};
+pub use checks::{CheckFinding, check_records, run_checks};
 pub use citation::{
     CitationAttributeRef, CitationSummary, NewCitation, TagRef, add_citation_attribute, assert_citation_date,
     assert_citation_date_value, attach_citation_media, attach_citation_note, create_citation, list_citations,
@@ -257,7 +257,8 @@ pub use vitni_core::import_run::{
 };
 pub use vitni_core::matching::pack::PackError;
 pub use vitni_core::matching::{
-    ENGINE_VERSION, EngineVersion, MatchAssessment, MatchBand, MatchEvidence, MatchableKind,
+    ENGINE_VERSION, EngineVersion, Feature, FeatureComparison, FeatureEvidence, MatchAssessment, MatchBand,
+    MatchEvidence, MatchableKind, Outcome, OutcomeEvidence,
 };
 pub use vitni_core::media::MediaError;
 pub use vitni_core::media_path::MEDIA_DIR;

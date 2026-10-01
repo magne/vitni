@@ -247,6 +247,24 @@ impl Category {
         }
     }
 
+    /// The entity category of a kind of record the matching engine compares.
+    #[must_use]
+    pub fn from_matchable_kind(kind: vitni_app::MatchableKind) -> Self {
+        use vitni_app::MatchableKind;
+        match kind {
+            MatchableKind::Person => Self::People,
+            MatchableKind::Family => Self::Families,
+            MatchableKind::Event => Self::Events,
+            MatchableKind::Place => Self::Places,
+            MatchableKind::Source => Self::Sources,
+            MatchableKind::Repository => Self::Repositories,
+            MatchableKind::Citation => Self::Citations,
+            MatchableKind::Media => Self::Media,
+            MatchableKind::Note => Self::Notes,
+            MatchableKind::Tag => Self::Tags,
+        }
+    }
+
     /// The entity category a tag-usage record belongs to (drives the Usage-tab reference links).
     #[must_use]
     pub fn from_using_kind(kind: vitni_app::UsingKind) -> Self {

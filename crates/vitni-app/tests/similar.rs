@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, AppError, CheckKind, DateParts, IdentityDecision, MatchBand, MatchableKind, MutationMeta, NewEvent,
+    AppDefaults, AppError, CheckFinding, DateParts, IdentityDecision, MatchBand, MatchableKind, MutationMeta, NewEvent,
     NewParticipation, NewPerson, NewPlace, NewSource, OperatorConfig, PersonNameParts, Provenance, Session, Workspace,
     WorkspaceDefaults, assert_event_date, assert_participation, assert_sex, assess, change_log_for_person,
     create_event, create_person, create_place, create_source, create_tag, distinguish_persons, find_similar,
@@ -138,11 +138,14 @@ impl Records {
     async fn duplicate_findings(&self) -> BTreeSet<(String, String)> {
         let mut pairs = BTreeSet::new();
         for finding in run_checks(&self.workspace).await.expect("run checks") {
-            if finding.kind == CheckKind::PossibleDuplicates {
-                pairs.insert(sorted(
-                    finding.records[0].human_id.clone(),
-                    finding.records[1].human_id.clone(),
-                ));
+            if let CheckFinding::PossibleDuplicate {
+                kind: MatchableKind::Person,
+                a,
+                b,
+                assessment: _,
+            } = finding
+            {
+                pairs.insert(sorted(a.human_id, b.human_id));
             }
         }
         pairs
@@ -383,6 +386,85 @@ async fn places_sources_and_tags_are_found_by_their_own_keys() {
         .await
         .expect("tag");
     assert!(records.similar(MatchableKind::Tag, &emigrant).await.is_empty());
+}
+
+/// The duplicate check covers every matchable kind, carrying the engine's evidence for each pair.
+#[tokio::test]
+async fn the_duplicate_check_reports_a_place_pair_with_the_engines_evidence() {
+    let records = Records::new().await;
+    let place = |name: &str| NewPlace {
+        human_id: None,
+        place_type: PlaceType::Farm,
+        name: Some(name.to_owned()),
+    };
+    let (ws, session) = (&records.workspace, &records.session);
+    let nordaas = create_place(ws, session, place("Nordaas"), Provenance::default(), &[])
+        .await
+        .expect("place");
+    let nordas = create_place(ws, session, place("Nordås"), Provenance::default(), &[])
+        .await
+        .expect("place");
+    let expected = assess(ws, MatchableKind::Place, &nordaas, &nordas)
+        .await
+        .expect("assess")
+        .evidence();
+
+    let mut places = Vec::new();
+    for finding in run_checks(ws).await.expect("run checks") {
+        if let CheckFinding::PossibleDuplicate {
+            kind: MatchableKind::Place,
+            a,
+            b,
+            assessment,
+        } = finding
+        {
+            places.push((sorted(a.human_id, b.human_id), assessment));
+        }
+    }
+    assert_eq!(places, [(sorted(nordaas, nordas), expected.clone())]);
+    assert!(
+        !expected.features.is_empty(),
+        "the finding carries the terms behind its score"
+    );
+}
+
+/// Duplicates of every kind are listed together, the most similar first, whatever their kind.
+#[tokio::test]
+async fn the_duplicate_check_ranks_pairs_across_kinds() {
+    let records = Records::new().await;
+    records.born("Ole", "Olsen", 1850).await;
+    records.born("Ole", "Olsen", 1856).await;
+    let place = |name: &str| NewPlace {
+        human_id: None,
+        place_type: PlaceType::Farm,
+        name: Some(name.to_owned()),
+    };
+    let (ws, session) = (&records.workspace, &records.session);
+    for name in ["Nordaas", "Nordås"] {
+        create_place(ws, session, place(name), Provenance::default(), &[])
+            .await
+            .expect("place");
+    }
+    let mut ranks = Vec::new();
+    let mut kinds = Vec::new();
+    for finding in run_checks(ws).await.expect("run checks") {
+        if let CheckFinding::PossibleDuplicate {
+            kind,
+            a: _,
+            b: _,
+            assessment,
+        } = finding
+        {
+            kinds.push(kind);
+            ranks.push((assessment.band, assessment.score_bp));
+        }
+    }
+    assert_eq!(kinds, [MatchableKind::Place, MatchableKind::Person]);
+    assert_eq!(ranks.len(), 2, "{ranks:?}");
+    assert!(
+        ranks[0] > ranks[1],
+        "the place, the more similar pair, first: {ranks:?}"
+    );
 }
 
 /// Every pair the engine shows over a brute-force score of all pairs is a pair the index yields.
