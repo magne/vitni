@@ -301,9 +301,13 @@
             <thead><tr><th>Type</th><th>Value</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr><td><span class="chip">photographer</span></td><td>Brady, New York</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
-              <tr><td><span class="chip">medium</span></td><td>Albumen print, studio portrait</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td><span class="chip">medium</span> <span class="badge">from O0008</span></td><td>Albumen print, studio portrait</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
             </tbody>
           </table>
+          <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">A row marked
+            <span class="badge">from O0008</span> came from a duplicate record of this media object merged into it
+            (ADR 0039 §5): the media object reads as one record with every copy's attributes, citations, notes and uses, each row still attributed.
+            Edit and Retract on that row are written to O0008; a record that uses O0008 is listed under Used by.</div>
         </div>
 
         <!-- CITATIONS -->
@@ -342,8 +346,16 @@
 
         <!-- HISTORY -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b> — an audit trail that comes free from the event-sourced core. Any entry can be undone.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b> — an audit trail that comes free from the event-sourced core. Any entry can be undone. An identity decision — merged, or marked as a different media object — also shows the matching engine's assessment it was made on.</div>
           <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 10:30</div>
+              <div class="tl-what">Media object merged</div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"The same portrait scan, attached from two imports"</div>
+              <div class="tl-evidence muted" title="The matching engine's assessment the decision was made on (ADR 0039 §2) — not the 5-level assertion Confidence">Matched at 94% · probable match · engine 4</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-20 10:18</div>
               <div class="tl-what">Media linked to person <b>John Smith</b> as portrait</div>

@@ -251,7 +251,8 @@ async fn a_changed_birth_date_moves_the_person_to_its_new_decade() {
     let records = Records::new().await;
     let (a, _) = records.born("Ole", "Olsen", 1850).await;
     let (b, birth) = records.born("Ole", "Olsen", 1920).await;
-    assert!(records.similar(MatchableKind::Person, &a).await.is_empty());
+    let checked = records.similar(MatchableKind::Person, &a).await;
+    assert!(checked.is_empty(), "{checked:?}");
     records.date(&birth, 1850).await;
     assert_eq!(
         records.similar(MatchableKind::Person, &a).await,
@@ -265,7 +266,8 @@ async fn a_workspace_pack_rebuilds_the_index() {
     let mut records = Records::new().await;
     let zorbo = records.person("Zorbo", "").await;
     let quimble = records.person("Quimble", "").await;
-    assert!(records.similar(MatchableKind::Person, &zorbo).await.is_empty());
+    let checked = records.similar(MatchableKind::Person, &zorbo).await;
+    assert!(checked.is_empty(), "{checked:?}");
 
     let ws = records.dir.path().join("ws");
     std::fs::create_dir_all(ws.join("matching/cultures")).expect("mkdir");
@@ -385,7 +387,8 @@ async fn places_sources_and_tags_are_found_by_their_own_keys() {
     create_tag(ws, session, "Soldier".to_owned(), Provenance::default(), &[])
         .await
         .expect("tag");
-    assert!(records.similar(MatchableKind::Tag, &emigrant).await.is_empty());
+    let checked = records.similar(MatchableKind::Tag, &emigrant).await;
+    assert!(checked.is_empty(), "{checked:?}");
 }
 
 /// The duplicate check covers every matchable kind, carrying the engine's evidence for each pair.
@@ -606,8 +609,10 @@ async fn a_cluster_is_proposed_once_and_judged_distinct_as_a_whole() {
         "C is distinct from B, so from A's cluster"
     );
     assert!(records.duplicate_findings().await.is_empty());
-    assert!(records.similar(MatchableKind::Person, &a).await.is_empty());
-    assert!(records.similar(MatchableKind::Person, &c).await.is_empty());
+    let checked = records.similar(MatchableKind::Person, &a).await;
+    assert!(checked.is_empty(), "{checked:?}");
+    let checked = records.similar(MatchableKind::Person, &c).await;
+    assert!(checked.is_empty(), "{checked:?}");
 }
 
 #[tokio::test]

@@ -179,7 +179,7 @@ mod tests {
     fn the_real_manifest_loads() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(super::MANIFEST);
         let pages = load_pages(&std::fs::read_to_string(path).unwrap()).unwrap();
-        assert!(!pages.is_empty());
+        assert!(!pages.is_empty(), "{pages:?}");
     }
 
     #[test]

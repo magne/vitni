@@ -101,6 +101,33 @@ impl RepositoryView {
     pub fn notes_with_assertions(&self) -> &[Attributed<NoteId>] {
         &self.state.notes
     }
+
+    /// The ids of repositories currently merged into this survivor (ADR 0039 §1) — whose `RepositoriesMerged`
+    /// assertion has not been undone.
+    #[must_use]
+    pub fn merged(&self) -> Vec<RepositoryId> {
+        self.state.merged.iter().map(|m| m.value).collect()
+    }
+
+    /// The ids of repositories concluded to be different from this one (ADR 0039 §1).
+    #[must_use]
+    pub fn distinguished(&self) -> Vec<RepositoryId> {
+        self.state.distinguished.iter().map(|d| d.value).collect()
+    }
+
+    /// The live distinctions, each paired with the `AssertionId` of its `RepositoriesDistinguished` — the
+    /// target an undo retracts (ADR 0039 §4).
+    #[must_use]
+    pub fn distinguished_with_assertions(&self) -> &[crate::assertions::Attributed<RepositoryId>] {
+        &self.state.distinguished
+    }
+
+    /// Whether `assertion` is a live assertion on this repository's stream — one a retraction or
+    /// supersession of it may target.
+    #[must_use]
+    pub fn holds_assertion(&self, assertion: crate::ids::AssertionId) -> bool {
+        self.state.live_assertions.contains(&assertion)
+    }
 }
 
 impl View<RepositoryState> for RepositoryView {

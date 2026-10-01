@@ -41,6 +41,7 @@ fn sample() -> SourceDetail {
             confidence_label: "High".to_owned(),
             source_count: 1,
             assertion_id: "0190-repo-link-assert-1".to_owned(),
+            merged_from: None,
         }],
         citations: vec![SourceCitationVm {
             citation: CitationRefVm {
@@ -71,11 +72,13 @@ fn sample() -> SourceDetail {
                 attribute_type: "microfilm series".to_owned(),
                 value: "M432".to_owned(),
                 assertion_id: "0190-attr-assert-1".to_owned(),
+                merged_from: None,
             },
             SourceAttributeVm {
                 attribute_type: "digitized by".to_owned(),
                 value: "NARA, 2009".to_owned(),
                 assertion_id: "0190-attr-assert-2".to_owned(),
+                merged_from: None,
             },
         ],
         media: vec![MediaRefVm {
@@ -548,4 +551,27 @@ fn a_restriction_change_alone_makes_the_source_savable() {
         html.contains(r#"id="prov-reason""#),
         "and asks for the reason like any other change (issue #315):\n{html}"
     );
+}
+
+/// The sample with a repository link and an attribute supplied by a merged copy, `S0002`.
+fn merged_source_view() -> Element {
+    use_context_provider(NavState::new);
+    let loc = loc();
+    let onedit = use_callback(|_| {});
+    let onretract = use_callback(|_: (String, String, bool)| {});
+    let mut detail = sample();
+    detail.repositories[0].merged_from = Some("S0002".to_owned());
+    detail.attributes[0].merged_from = Some("S0002".to_owned());
+    rsx! {
+        {source_repositories_table(&loc, &detail, onedit, onretract)}
+        {source_attributes_table(&loc, &detail, onedit, onretract)}
+    }
+}
+
+#[test]
+fn a_merged_source_row_names_the_copy_it_came_from() {
+    let mut vdom = VirtualDom::new(merged_source_view);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert_eq!(html.matches("from S0002").count(), 2, "{html}");
 }

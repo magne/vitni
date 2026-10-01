@@ -2,6 +2,7 @@
 
 use crate::assertions::Attributed;
 use crate::ids::MediaId;
+use crate::matching::MatchEvidence;
 use crate::media::command::MediaCommand;
 use crate::media::error::MediaError;
 use crate::media::event::{MediaEvent, MediaEventBody};
@@ -77,6 +78,16 @@ pub fn decide(state: &MediaState, command: MediaCommand, meta: &AssertionMeta) -
                 },
             ))
         }
+        MediaCommand::MergeMedia {
+            surviving,
+            merged,
+            assessment,
+        } => decide_merge(state, [surviving, merged], assessment, meta),
+        MediaCommand::DistinguishMedia {
+            media,
+            other,
+            assessment,
+        } => decide_distinguish(state, [media, other], assessment, meta),
         MediaCommand::RetractAssertion { media_id, target } => {
             ensure_exists(state, media_id)?;
             if !state.live_assertions.contains(&target) {
@@ -103,6 +114,64 @@ pub fn decide(state: &MediaState, command: MediaCommand, meta: &AssertionMeta) -
 /// Builds the single-event vector for a body stamped with `meta`.
 fn one(meta: &AssertionMeta, body: MediaEventBody) -> Vec<MediaEvent> {
     vec![MediaEvent::new(meta, body)]
+}
+
+/// Decides a merge of `merged` into `surviving` (ADR 0039 §1): the survivor must exist, the pair must
+/// be two records, and the survivor must not already hold a live decision about the other.
+fn decide_merge(
+    state: &MediaState,
+    [surviving, merged]: [MediaId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<MediaEvent>, MediaError> {
+    ensure_exists(state, surviving)?;
+    if surviving == merged {
+        return Err(MediaError::MergeConflict {
+            surviving,
+            merged,
+            reason: "a media object cannot be merged with itself".to_owned(),
+        });
+    }
+    ensure_undecided(state, surviving, merged)?;
+    Ok(one(
+        meta,
+        MediaEventBody::MediaMerged {
+            surviving,
+            merged,
+            assessment,
+        },
+    ))
+}
+
+/// Decides that `other` is a different media object from `media` (ADR 0039 §1), under the same rules as a
+/// merge.
+fn decide_distinguish(
+    state: &MediaState,
+    [media, other]: [MediaId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<MediaEvent>, MediaError> {
+    ensure_exists(state, media)?;
+    if media == other {
+        return Err(MediaError::DistinctFromItself(media));
+    }
+    ensure_undecided(state, media, other)?;
+    Ok(one(
+        meta,
+        MediaEventBody::MediaDistinguished {
+            media,
+            other,
+            assessment,
+        },
+    ))
+}
+
+/// Refuses a second identity decision about a pair this media object already decided (ADR 0039 §1).
+fn ensure_undecided(state: &MediaState, media: MediaId, other: MediaId) -> Result<(), MediaError> {
+    if state.has_decided(other) {
+        return Err(MediaError::IdentityDecided { media, other });
+    }
+    Ok(())
 }
 
 /// Rejects a command that targets media which has not been created yet.
@@ -191,6 +260,20 @@ pub fn evolve(state: &mut MediaState, event: &MediaEvent) {
         }
         MediaEventBody::HumanIdChanged { human_id, .. } => {
             state.human_id = Some(human_id.clone());
+        }
+        MediaEventBody::MediaMerged { merged, .. } => {
+            state.merged.push(Attributed {
+                assertion_id,
+                value: *merged,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        MediaEventBody::MediaDistinguished { other, .. } => {
+            state.distinguished.push(Attributed {
+                assertion_id,
+                value: *other,
+            });
+            state.live_assertions.insert(assertion_id);
         }
         MediaEventBody::AssertionRetracted { target, .. } | MediaEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
@@ -327,7 +410,7 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &retract);
-        assert!(state.tags.is_empty());
+        assert!(state.tags.is_empty(), "{:?}", state.tags);
     }
 
     #[test]
@@ -357,7 +440,7 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &untagged);
-        assert!(state.tags.is_empty());
+        assert!(state.tags.is_empty(), "{:?}", state.tags);
     }
 
     #[test]
@@ -417,5 +500,115 @@ mod tests {
         apply_all(&mut state, &retract);
         assert!(state.restrictions.is_empty(), "retracting the change clears the set");
         assert_eq!(state.restrictions_assertion, None);
+    }
+
+    fn evidence() -> crate::matching::MatchEvidence {
+        crate::matching::MatchEvidence {
+            score_bp: 9100,
+            band: crate::matching::MatchBand::Probable,
+            engine: crate::matching::EngineVersion(4),
+            cultures: vec![crate::matching::CultureId::new("universal")],
+            features: Vec::new(),
+        }
+    }
+
+    fn merge(surviving: u128, merged: u128) -> MediaCommand {
+        MediaCommand::MergeMedia {
+            surviving: media(surviving),
+            merged: media(merged),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn distinguish(first: u128, other: u128) -> MediaCommand {
+        MediaCommand::DistinguishMedia {
+            media: media(first),
+            other: media(other),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn retract_decision(id: u128, assertion: u128) -> MediaCommand {
+        MediaCommand::RetractAssertion {
+            media_id: media(id),
+            target: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+        }
+    }
+
+    #[test]
+    fn merging_two_media_objects_emits_medias_merged_with_its_assessment() {
+        let events = decide(&created_media(100), merge(100, 200), &meta(2)).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].body,
+            crate::media::event::MediaEventBody::MediaMerged {
+                surviving: media(100),
+                merged: media(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_media_object_cannot_be_merged_with_itself() {
+        let err = decide(&created_media(100), merge(100, 100), &meta(2)).unwrap_err();
+        assert!(matches!(err, MediaError::MergeConflict { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn merging_into_an_absent_media_object_is_not_found() {
+        let err = decide(&MediaState::default(), merge(100, 200), &meta(2)).unwrap_err();
+        assert_eq!(err, MediaError::NotFound(media(100)));
+    }
+
+    #[test]
+    fn distinguishing_two_media_objects_emits_medias_distinguished_with_its_assessment() {
+        let events = decide(&created_media(100), distinguish(100, 200), &meta(2)).unwrap();
+        assert_eq!(
+            events[0].body,
+            crate::media::event::MediaEventBody::MediaDistinguished {
+                media: media(100),
+                other: media(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_media_object_cannot_be_distinguished_from_itself() {
+        let err = decide(&created_media(100), distinguish(100, 100), &meta(2)).unwrap_err();
+        assert_eq!(err, MediaError::DistinctFromItself(media(100)));
+    }
+
+    #[test]
+    fn media_object_identity_decisions_fold_into_state_and_undo_removes_them() {
+        for (decision, assertion) in [(merge(100, 200), 2), (distinguish(100, 200), 2)] {
+            let mut state = created_media(100);
+            let events = decide(&state, decision.clone(), &meta(assertion)).unwrap();
+            apply_all(&mut state, &events);
+            assert!(state.has_decided(media(200)), "{decision:?}");
+
+            let events = decide(&state, retract_decision(100, assertion), &meta(3)).unwrap();
+            apply_all(&mut state, &events);
+            assert!(!state.has_decided(media(200)), "undo lifts {decision:?}");
+            assert!(state.merged.is_empty() && state.distinguished.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_media_object_pair_decided_either_way_cannot_be_decided_again() {
+        let decided = MediaError::IdentityDecided {
+            media: media(100),
+            other: media(200),
+        };
+        for first in [merge(100, 200), distinguish(100, 200)] {
+            let mut state = created_media(100);
+            let events = decide(&state, first.clone(), &meta(2)).unwrap();
+            apply_all(&mut state, &events);
+            for second in [merge(100, 200), distinguish(100, 200)] {
+                let err = decide(&state, second.clone(), &meta(3)).unwrap_err();
+                assert_eq!(err, decided, "{first:?} then {second:?}");
+            }
+        }
     }
 }

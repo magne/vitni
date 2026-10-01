@@ -302,7 +302,8 @@ mod tests {
             crate_of("vitni-interchange", PERMISSIVE, &[]),
         ]);
 
-        assert!(problems(&crates).is_empty());
+        let checked = problems(&crates);
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]
@@ -336,14 +337,16 @@ mod tests {
             crate_of("b", PERMISSIVE, &["a"]),
         ]);
 
-        assert!(problems(&crates).is_empty());
+        let checked = problems(&crates);
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]
     fn an_external_dependency_is_not_traversed() {
         let crates = graph(vec![crate_of("vitni-i18n", PERMISSIVE, &["i18n-embed"])]);
 
-        assert!(problems(&crates).is_empty());
+        let checked = problems(&crates);
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]
@@ -389,7 +392,7 @@ mod tests {
         let parsed = parse_crate(&manifest, PERMISSIVE, &workspace_paths).expect("the fixture manifest is well-formed");
 
         assert_eq!(parsed.licence.as_deref(), Some(COPYLEFT));
-        assert!(parsed.deps.is_empty());
+        assert!(parsed.deps.is_empty(), "{:?}", parsed.deps);
     }
 
     #[test]

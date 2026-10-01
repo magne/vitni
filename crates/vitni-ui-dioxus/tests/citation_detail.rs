@@ -66,6 +66,7 @@ fn sample() -> CitationDetail {
             attribute_type: "quality".to_owned(),
             value: "good".to_owned(),
             assertion_id: "0190-attr-assert-1".to_owned(),
+            merged_from: None,
         }],
         media: vec![MediaRefVm {
             human_id: "O0004".to_owned(),
@@ -338,4 +339,20 @@ fn the_overview_names_each_evidence_axis_it_shows() {
             "`{axis}` labels both its read box and its chip row:\n{html}"
         );
     }
+}
+
+/// The sample with an attribute supplied by a merged copy, `C0002`.
+fn merged_citation_view() -> Element {
+    let loc = loc();
+    let onedit = use_callback(|_: CitationEditForm| {});
+    let onretract = use_callback(|_: (String, String, bool)| {});
+    let mut detail = sample();
+    detail.attributes[0].merged_from = Some("C0002".to_owned());
+    rsx! { {citation_attributes_table(&loc, &detail.attributes, onedit, onretract)} }
+}
+
+#[test]
+fn a_merged_citation_row_names_the_copy_it_came_from() {
+    let html = render(merged_citation_view);
+    assert_eq!(html.matches("from C0002").count(), 1, "{html}");
 }

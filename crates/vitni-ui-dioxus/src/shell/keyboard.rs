@@ -554,7 +554,7 @@ mod tests {
         // Rebind quit from `mod+q` to `mod+j`; `mod+q` must stop firing and `mod+j` must now fire.
         let overrides = BTreeMap::from([("quit".to_owned(), "mod+j".to_owned())]);
         let (resolved, errors) = resolved_shortcuts(&overrides);
-        assert!(errors.is_empty());
+        assert!(errors.is_empty(), "{errors:?}");
         assert_eq!(
             shell_intent(&character("q"), Modifiers::empty(), Code::KeyQ, true, &resolved),
             None,
@@ -642,7 +642,7 @@ mod tests {
         // The history chords are Global, so a workspace may rebind them (ADR 0030 §2).
         let overrides = BTreeMap::from([("history-back".to_owned(), "mod+b".to_owned())]);
         let (resolved, errors) = resolved_shortcuts(&overrides);
-        assert!(errors.is_empty());
+        assert!(errors.is_empty(), "{errors:?}");
         assert_eq!(
             shell_intent(&Key::ArrowLeft, Modifiers::empty(), Code::ArrowLeft, true, &resolved),
             None,
@@ -661,7 +661,7 @@ mod tests {
         // must now fire.
         let overrides = BTreeMap::from([("save-record".to_owned(), "mod+shift+s".to_owned())]);
         let (resolved, errors) = resolved_shortcuts(&overrides);
-        assert!(errors.is_empty());
+        assert!(errors.is_empty(), "{errors:?}");
         assert_eq!(
             shell_intent(&character("s"), Modifiers::empty(), Code::KeyS, true, &resolved),
             None,

@@ -509,7 +509,7 @@ mod tests {
         };
         assert_eq!(action, "select");
         assert_eq!(values.row.as_deref(), Some("pf01052209001843"));
-        assert!(values.fields.is_empty());
+        assert!(values.fields.is_empty(), "{:?}", values.fields);
     }
 
     #[test]

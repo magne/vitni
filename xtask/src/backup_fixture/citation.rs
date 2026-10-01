@@ -151,7 +151,13 @@ fn push_attachments(builder: &mut Builder, citation_id: CitationId, media_id: Me
     }
 }
 
+/// The citation's corrections and identity decisions: merged with one duplicate copy and distinguished
+/// from another, both minted here — the projection needs neither to exist.
 fn push_corrections(builder: &mut Builder, citation_id: CitationId, target: AssertionId) {
+    let (duplicate, other) = (
+        CitationId::from_uuid(builder.uuid()),
+        CitationId::from_uuid(builder.uuid()),
+    );
     let bodies = [
         CitationEventBody::AssertionRetracted { citation_id, target },
         CitationEventBody::AssertionSuperseded { citation_id, target },
@@ -159,6 +165,16 @@ fn push_corrections(builder: &mut Builder, citation_id: CitationId, target: Asse
             citation_id,
             human_id: HumanId::new("C0099"),
             old_human_id: HumanId::new("C0001"),
+        },
+        CitationEventBody::CitationsMerged {
+            surviving: citation_id,
+            merged: duplicate,
+            assessment: None,
+        },
+        CitationEventBody::CitationsDistinguished {
+            citation: citation_id,
+            other,
+            assessment: None,
         },
     ];
     for body in bodies {

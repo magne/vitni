@@ -35,6 +35,10 @@ impl CitationUsage {
         scan_events(workspace, &mut by_citation).await?;
         scan_families(workspace, &mut by_citation).await?;
         scan_places(workspace, &mut by_citation).await?;
+        // The records that use any record of a merged cluster are listed under its root (ADR 0039 §5).
+        crate::identity::CitationClusters::load(workspace.store())
+            .await?
+            .fold(&mut by_citation);
         Ok(Self { by_citation })
     }
 
@@ -55,6 +59,8 @@ fn push(map: &mut HashMap<CitationId, Vec<CitingRecordRef>>, citation: CitationI
 ///
 /// Every occurrence the [`CitationUsage`] scanners push must be counted here too, so the two stay in
 /// sync (Backs == `SourceCitationRef.backers.len()`).
+///
+/// A merged citation's backers count under its cluster's root (ADR 0039 §5).
 pub(crate) async fn citation_backs_counts(store: &Store) -> Result<HashMap<CitationId, usize>, AppError> {
     let mut counts: HashMap<CitationId, usize> = HashMap::new();
     let mut bump = |citation: CitationId| *counts.entry(citation).or_default() += 1;
@@ -116,6 +122,14 @@ pub(crate) async fn citation_backs_counts(store: &Store) -> Result<HashMap<Citat
             for citation in place_type.citations.iter().filter_map(|e| e.as_citation()) {
                 bump(citation);
             }
+        }
+    }
+    let mut links: Vec<(CitationId, CitationId)> =
+        crate::identity::CitationClusters::load(store).await?.links().collect();
+    links.sort_unstable();
+    for (member, root) in links {
+        if let Some(count) = counts.remove(&member) {
+            *counts.entry(root).or_default() += count;
         }
     }
     Ok(counts)
@@ -249,11 +263,12 @@ async fn scan_places(
     workspace: &Workspace,
     map: &mut HashMap<CitationId, Vec<CitingRecordRef>>,
 ) -> Result<(), AppError> {
+    let references = crate::identity::PlaceReferences::load(workspace.store()).await?;
     for view in workspace.store().list_places().await? {
-        let (Some(id), Some(human_id)) = (view.place_id(), view.human_id()) else {
+        let Some(id) = view.place_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.names().first().map(|n| n.text.clone());
         let make = |context| CitingRecordRef {
             kind: CitingKind::Place,

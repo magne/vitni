@@ -46,12 +46,26 @@ pub struct MediaState {
     /// replaced wholesale, not accumulated, so it cannot be attributed per-element — ADR 0021 §3).
     #[serde(default)]
     pub restrictions_assertion: Option<AssertionId>,
+    /// The media objects merged into this survivor (ADR 0039 §1), each attributed to the `MediaMerged`
+    /// assertion that recorded it, so undoing that assertion removes the link.
+    #[serde(default)]
+    pub merged: Vec<Attributed<MediaId>>,
+    /// The media objects concluded to be different from this one, each attributed to the
+    /// `MediaDistinguished` assertion that recorded it, so undoing that assertion lifts it.
+    #[serde(default)]
+    pub distinguished: Vec<Attributed<MediaId>>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,
 }
 
 impl MediaState {
+    /// Whether this media object holds a live identity decision — merged or distinguished — about `other`.
+    #[must_use]
+    pub(crate) fn has_decided(&self, other: MediaId) -> bool {
+        self.merged.iter().chain(&self.distinguished).any(|d| d.value == other)
+    }
+
     /// Removes every value introduced by `target` and drops it from the live set.
     pub(crate) fn remove_assertion(&mut self, target: AssertionId) {
         self.attributes.retain(|a| a.assertion_id != target);
@@ -74,6 +88,8 @@ impl MediaState {
             self.restrictions.clear();
             self.restrictions_assertion = None;
         }
+        self.merged.retain(|m| m.assertion_id != target);
+        self.distinguished.retain(|d| d.assertion_id != target);
         self.live_assertions.remove(&target);
     }
 }

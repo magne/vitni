@@ -56,7 +56,10 @@ use vitni_db::Store;
 
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
-use crate::identity::{ClusterId, Clusters, EventClusters, FamilyClusters, PersonClusters};
+use crate::identity::{
+    CitationClusters, ClusterId, Clusters, EventClusters, FamilyClusters, MediaClusters, NoteClusters, PersonClusters,
+    PlaceClusters, RepositoryClusters, SourceClusters,
+};
 use crate::person::resolve_person_id_public;
 use crate::use_case;
 use crate::workspace::Workspace;
@@ -229,6 +232,18 @@ pub(crate) struct Profiles {
     event_clusters: EventClusters,
     /// The family clusters, read with the people.
     family_clusters: FamilyClusters,
+    /// The place clusters, read with the places.
+    place_clusters: PlaceClusters,
+    /// The source clusters, read with the sources.
+    source_clusters: SourceClusters,
+    /// The repository clusters, read with the repositories.
+    repository_clusters: RepositoryClusters,
+    /// The citation clusters, read with the citations.
+    citation_clusters: CitationClusters,
+    /// The media clusters, read with the media.
+    media_clusters: MediaClusters,
+    /// The note clusters, read with the notes.
+    note_clusters: NoteClusters,
 }
 
 impl Profiles {
@@ -249,23 +264,29 @@ impl Profiles {
             if profiles.people.is_none() {
                 profiles.places = Some(PlaceLookup::load(store).await?);
             }
+            profiles.place_clusters = PlaceClusters::load(store).await?;
             origin_kinds.push(Place);
         }
         if wants(&[Source, Citation, Repository]) {
             profiles.sources = by_id(store.list_sources().await?, SourceView::source_id);
             profiles.repositories = by_id(store.list_repositories().await?, RepositoryView::repository_id);
+            profiles.source_clusters = SourceClusters::load(store).await?;
+            profiles.repository_clusters = RepositoryClusters::load(store).await?;
             origin_kinds.extend([Source, Repository]);
         }
         if wants(&[Citation]) {
             profiles.citations = by_id(store.list_citations().await?, CitationView::citation_id);
+            profiles.citation_clusters = CitationClusters::load(store).await?;
             origin_kinds.push(Citation);
         }
         if wants(&[Media]) {
             profiles.media = by_id(store.list_media().await?, MediaView::media_id);
+            profiles.media_clusters = MediaClusters::load(store).await?;
             origin_kinds.push(Media);
         }
         if wants(&[Note]) {
             profiles.notes = by_id(store.list_notes().await?, NoteView::note_id);
+            profiles.note_clusters = NoteClusters::load(store).await?;
             origin_kinds.push(Note);
         }
         if wants(&[Tag]) {
@@ -280,22 +301,28 @@ impl Profiles {
     }
 
     /// The identity decisions on `kind` that keep a pair out of every suggestion (ADR 0039 §3, §4).
-    /// Only persons, events and families can be decided.
+    /// Every kind but tags can be decided.
     pub(crate) fn decisions(&self, kind: MatchableKind) -> Decisions {
-        let Some(people) = &self.people else {
-            return Decisions::default();
-        };
+        let people = self.people.as_ref();
         match kind {
-            MatchableKind::Person => Decisions::of(&self.person_clusters, people.persons.values()),
-            MatchableKind::Event => Decisions::of(&self.event_clusters, people.events.values()),
-            MatchableKind::Family => Decisions::of(&self.family_clusters, people.families.values()),
-            MatchableKind::Place
-            | MatchableKind::Source
-            | MatchableKind::Repository
-            | MatchableKind::Citation
-            | MatchableKind::Media
-            | MatchableKind::Note
-            | MatchableKind::Tag => Decisions::default(),
+            MatchableKind::Person => people.map_or_else(Decisions::default, |people| {
+                Decisions::of(&self.person_clusters, people.persons.values())
+            }),
+            MatchableKind::Event => people.map_or_else(Decisions::default, |people| {
+                Decisions::of(&self.event_clusters, people.events.values())
+            }),
+            MatchableKind::Family => people.map_or_else(Decisions::default, |people| {
+                Decisions::of(&self.family_clusters, people.families.values())
+            }),
+            MatchableKind::Place => self.place_lookup().map_or_else(Decisions::default, |lookup| {
+                Decisions::of(&self.place_clusters, lookup.places.values())
+            }),
+            MatchableKind::Source => Decisions::of(&self.source_clusters, self.sources.values()),
+            MatchableKind::Repository => Decisions::of(&self.repository_clusters, self.repositories.values()),
+            MatchableKind::Citation => Decisions::of(&self.citation_clusters, self.citations.values()),
+            MatchableKind::Media => Decisions::of(&self.media_clusters, self.media.values()),
+            MatchableKind::Note => Decisions::of(&self.note_clusters, self.notes.values()),
+            MatchableKind::Tag => Decisions::default(),
         }
     }
 

@@ -560,5 +560,9 @@ async fn a_record_with_no_argument_about_it_has_an_empty_reverse_tab() {
     let IntentOutcome::Detail(person_detail) = outcome else {
         panic!("expected a person detail, got {outcome:?}");
     };
-    assert!(person_detail.research_notes.is_empty());
+    assert!(
+        person_detail.research_notes.is_empty(),
+        "{:?}",
+        person_detail.research_notes
+    );
 }

@@ -74,6 +74,33 @@ impl NoteView {
     pub fn note_type_assertion(&self) -> Option<crate::ids::AssertionId> {
         self.state.note_type.as_ref().map(|t| t.assertion_id)
     }
+
+    /// The ids of notes currently merged into this survivor (ADR 0039 §1) — whose `NotesMerged`
+    /// assertion has not been undone.
+    #[must_use]
+    pub fn merged(&self) -> Vec<NoteId> {
+        self.state.merged.iter().map(|m| m.value).collect()
+    }
+
+    /// The ids of notes concluded to be different from this one (ADR 0039 §1).
+    #[must_use]
+    pub fn distinguished(&self) -> Vec<NoteId> {
+        self.state.distinguished.iter().map(|d| d.value).collect()
+    }
+
+    /// The live distinctions, each paired with the `AssertionId` of its `NotesDistinguished` — the
+    /// target an undo retracts (ADR 0039 §4).
+    #[must_use]
+    pub fn distinguished_with_assertions(&self) -> &[crate::assertions::Attributed<NoteId>] {
+        &self.state.distinguished
+    }
+
+    /// Whether `assertion` is a live assertion on this note's stream — one a retraction or
+    /// supersession of it may target.
+    #[must_use]
+    pub fn holds_assertion(&self, assertion: crate::ids::AssertionId) -> bool {
+        self.state.live_assertions.contains(&assertion)
+    }
 }
 
 impl View<NoteState> for NoteView {

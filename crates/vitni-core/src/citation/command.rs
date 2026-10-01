@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use crate::date::GenealogicalDate;
 use crate::enums::Restriction;
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, SourceId, TagId};
+use crate::matching::MatchEvidence;
 use crate::provenance::{AssertionMeta, Confidence, EvidenceAnalysis};
 use crate::text::{Attribute, MediaRef};
 
@@ -112,6 +113,24 @@ pub enum CitationCommand {
         citation_id: CitationId,
         /// The new user-facing identifier.
         human_id: HumanId,
+    },
+    /// Record that `merged` is the same citation as `surviving` (ADR 0039 §1).
+    MergeCitations {
+        /// The surviving citation — the stream the decision is written on.
+        surviving: CitationId,
+        /// The citation merged into it.
+        merged: CitationId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
+    },
+    /// Record that `other` is a different citation from `citation` (ADR 0039 §1).
+    DistinguishCitations {
+        /// The citation the decision is written on.
+        citation: CitationId,
+        /// The citation it is distinct from.
+        other: CitationId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
     },
 }
 

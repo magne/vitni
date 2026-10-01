@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use crate::address::Address;
 use crate::enums::{RepositoryType, Restriction};
 use crate::ids::{AssertionId, HumanId, NoteId, RepositoryId, TagId};
+use crate::matching::MatchEvidence;
 use crate::provenance::AssertionMeta;
 use crate::text::Url;
 
@@ -96,6 +97,24 @@ pub enum RepositoryCommand {
         repository_id: RepositoryId,
         /// The new user-facing identifier.
         human_id: HumanId,
+    },
+    /// Record that `merged` is the same repository as `surviving` (ADR 0039 §1).
+    MergeRepositories {
+        /// The surviving repository — the stream the decision is written on.
+        surviving: RepositoryId,
+        /// The repository merged into it.
+        merged: RepositoryId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
+    },
+    /// Record that `other` is a different repository from `repository` (ADR 0039 §1).
+    DistinguishRepositories {
+        /// The repository the decision is written on.
+        repository: RepositoryId,
+        /// The repository it is distinct from.
+        other: RepositoryId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
     },
 }
 

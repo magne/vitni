@@ -131,6 +131,33 @@ impl SourceView {
     pub fn notes_with_assertions(&self) -> &[Attributed<NoteId>] {
         &self.state.notes
     }
+
+    /// The ids of sources currently merged into this survivor (ADR 0039 §1) — whose `SourcesMerged`
+    /// assertion has not been undone.
+    #[must_use]
+    pub fn merged(&self) -> Vec<SourceId> {
+        self.state.merged.iter().map(|m| m.value).collect()
+    }
+
+    /// The ids of sources concluded to be different from this one (ADR 0039 §1).
+    #[must_use]
+    pub fn distinguished(&self) -> Vec<SourceId> {
+        self.state.distinguished.iter().map(|d| d.value).collect()
+    }
+
+    /// The live distinctions, each paired with the `AssertionId` of its `SourcesDistinguished` — the
+    /// target an undo retracts (ADR 0039 §4).
+    #[must_use]
+    pub fn distinguished_with_assertions(&self) -> &[crate::assertions::Attributed<SourceId>] {
+        &self.state.distinguished
+    }
+
+    /// Whether `assertion` is a live assertion on this source's stream — one a retraction or
+    /// supersession of it may target.
+    #[must_use]
+    pub fn holds_assertion(&self, assertion: crate::ids::AssertionId) -> bool {
+        self.state.live_assertions.contains(&assertion)
+    }
 }
 
 impl View<SourceState> for SourceView {

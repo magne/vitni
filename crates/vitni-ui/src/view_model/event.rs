@@ -676,7 +676,8 @@ mod event_draft_tests {
 
     #[test]
     fn an_unchanged_event_yields_no_edits() {
-        assert!(edit_seed().edits_against(&edit_seed()).is_empty());
+        let checked = edit_seed().edits_against(&edit_seed());
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]
@@ -770,7 +771,8 @@ mod event_draft_tests {
 
     #[test]
     fn an_untouched_date_emits_no_set_date() {
-        assert!(edit_seed().edits_against(&edit_seed()).is_empty());
+        let checked = edit_seed().edits_against(&edit_seed());
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]

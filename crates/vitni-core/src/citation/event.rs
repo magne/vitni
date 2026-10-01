@@ -8,6 +8,7 @@ use crate::assertions::{Envelope, EventBody};
 use crate::date::GenealogicalDate;
 use crate::enums::Restriction;
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, SourceId, TagId};
+use crate::matching::MatchEvidence;
 use crate::provenance::{Confidence, EvidenceAnalysis};
 use crate::text::{Attribute, MediaRef};
 
@@ -120,6 +121,28 @@ pub enum CitationEventBody {
         /// The identifier in effect before this change (for the audit trail).
         old_human_id: HumanId,
     },
+    /// Another citation record was concluded to be this one (ADR 0039 §1): a same-as link on the survivor
+    /// that leaves the merged record's own stream untouched (data-model §9).
+    CitationsMerged {
+        /// The citation that survives as the cluster's record.
+        surviving: CitationId,
+        /// The citation merged into it.
+        merged: CitationId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a merge made
+        /// without the engine.
+        assessment: Option<MatchEvidence>,
+    },
+    /// Another citation record was concluded to be a different citation from this one (ADR 0039 §1), so the
+    /// pair is never proposed as a duplicate again.
+    CitationsDistinguished {
+        /// The citation the decision is recorded on.
+        citation: CitationId,
+        /// The citation it is distinct from.
+        other: CitationId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a decision
+        /// made without the engine.
+        assessment: Option<MatchEvidence>,
+    },
 }
 
 impl EventBody for CitationEventBody {
@@ -139,6 +162,8 @@ impl EventBody for CitationEventBody {
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
             Self::HumanIdChanged { .. } => "HumanIdChanged",
+            Self::CitationsMerged { .. } => "CitationsMerged",
+            Self::CitationsDistinguished { .. } => "CitationsDistinguished",
         }
     }
 

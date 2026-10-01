@@ -60,6 +60,7 @@ fn sample() -> MediaDetail {
             attribute_type: "dimensions".to_owned(),
             value: "1024x1536".to_owned(),
             assertion_id: "0190-attr-assertion-id".to_owned(),
+            merged_from: None,
         }],
         citations: vec![
             CitationRefVm {
@@ -625,4 +626,20 @@ fn no_assertion_uuid_is_ever_rendered() {
             "the assertion id {id:?} must never be rendered:\n{html}"
         );
     }
+}
+
+/// The sample with an attribute supplied by a merged copy, `O0002`.
+fn merged_media_view() -> Element {
+    let loc = loc();
+    let on_edit_open = use_callback(|_: MediaEditForm| {});
+    let on_retract = use_callback(|_: (String, String, bool)| {});
+    let mut detail = sample();
+    detail.attributes[0].merged_from = Some("O0002".to_owned());
+    rsx! { {media_attributes_table(&loc, &detail.attributes, on_edit_open, on_retract)} }
+}
+
+#[test]
+fn a_merged_media_row_names_the_copy_it_came_from() {
+    let html = render(merged_media_view);
+    assert_eq!(html.matches("from O0002").count(), 1, "{html}");
 }

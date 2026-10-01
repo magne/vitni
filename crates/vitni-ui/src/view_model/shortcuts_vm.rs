@@ -111,7 +111,7 @@ mod tests {
             .count();
         assert_eq!(vm.rows.len(), global_count);
         assert!(vm.rows.iter().all(|row| !row.is_overridden && row.error.is_none()));
-        assert!(vm.general_errors.is_empty());
+        assert!(vm.general_errors.is_empty(), "{:?}", vm.general_errors);
         let quit = vm
             .rows
             .iter()
@@ -155,7 +155,7 @@ mod tests {
             "the row carries a localized error message: {:?}",
             quit.error
         );
-        assert!(vm.general_errors.is_empty());
+        assert!(vm.general_errors.is_empty(), "{:?}", vm.general_errors);
     }
 
     #[test]

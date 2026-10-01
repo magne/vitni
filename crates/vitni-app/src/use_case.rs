@@ -100,6 +100,8 @@ where
 pub(crate) struct NoteLookup {
     /// The note's user-facing identifier (e.g. `N0001`).
     pub(crate) human_id: String,
+    /// The note's stable `NoteId` (a UUID string): the cluster root's for a merged note.
+    pub(crate) id: String,
     /// The note's type, if set. Structured, so the frontend localizes it (ADR 0003).
     pub(crate) note_type: Option<NoteType>,
     /// The note's primary text content, if set.
@@ -108,7 +110,8 @@ pub(crate) struct NoteLookup {
     pub(crate) language: Option<String>,
 }
 
-/// Loads a `NoteId` → [`NoteLookup`] map from the Note projection.
+/// Loads a `NoteId` → [`NoteLookup`] map from the Note projection. A merged note resolves to its
+/// cluster's root (ADR 0039 §5).
 pub(crate) async fn note_lookups(store: &Store) -> Result<HashMap<NoteId, NoteLookup>, AppError> {
     let mut map = HashMap::new();
     for view in store.list_notes().await? {
@@ -118,6 +121,7 @@ pub(crate) async fn note_lookups(store: &Store) -> Result<HashMap<NoteId, NoteLo
                 id,
                 NoteLookup {
                     human_id: human_id.as_str().to_owned(),
+                    id: id.to_string(),
                     note_type: view.note_type().cloned(),
                     text: text.map(|rich| rich.text.clone()),
                     language: text.and_then(|rich| rich.language.as_ref().map(|l| l.as_str().to_owned())),
@@ -125,6 +129,7 @@ pub(crate) async fn note_lookups(store: &Store) -> Result<HashMap<NoteId, NoteLo
             );
         }
     }
+    crate::identity::NoteClusters::load(store).await?.redirect(&mut map);
     Ok(map)
 }
 

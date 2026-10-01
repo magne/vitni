@@ -300,7 +300,7 @@ mod tests {
         .await
         .expect("create");
         let family = show_family(&workspace, &human_id).await.expect("show").expect("family");
-        assert!(family.partners.is_empty());
+        assert!(family.partners.is_empty(), "{:?}", family.partners);
     }
 
     #[tokio::test]
@@ -422,7 +422,7 @@ mod tests {
         let log = crate::history::change_log_for_person(&workspace, &created)
             .await
             .expect("log");
-        assert!(!log.is_empty());
+        assert!(!log.is_empty(), "{log:?}");
         for entry in &log {
             assert_eq!(entry.confidence, Some(Confidence::High));
             assert_eq!(entry.rationale.as_deref(), Some("marriage record"));
@@ -486,7 +486,7 @@ mod tests {
         let log = crate::history::change_log_for_family(&workspace, &human_id)
             .await
             .expect("log");
-        assert!(!log.is_empty());
+        assert!(!log.is_empty(), "{log:?}");
         for entry in &log {
             assert_eq!(entry.confidence, Some(Confidence::High));
             assert_eq!(entry.rationale.as_deref(), Some("marriage record"));

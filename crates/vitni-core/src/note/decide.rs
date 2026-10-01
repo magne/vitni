@@ -2,6 +2,7 @@
 
 use crate::assertions::Attributed;
 use crate::ids::NoteId;
+use crate::matching::MatchEvidence;
 use crate::note::command::NoteCommand;
 use crate::note::error::NoteError;
 use crate::note::event::{NoteEvent, NoteEventBody};
@@ -54,6 +55,16 @@ pub fn decide(state: &NoteState, command: NoteCommand, meta: &AssertionMeta) -> 
                 },
             ))
         }
+        NoteCommand::MergeNotes {
+            surviving,
+            merged,
+            assessment,
+        } => decide_merge(state, [surviving, merged], assessment, meta),
+        NoteCommand::DistinguishNotes {
+            note,
+            other,
+            assessment,
+        } => decide_distinguish(state, [note, other], assessment, meta),
         NoteCommand::RetractAssertion { note_id, target } => {
             ensure_exists(state, note_id)?;
             if !state.live_assertions.contains(&target) {
@@ -80,6 +91,64 @@ pub fn decide(state: &NoteState, command: NoteCommand, meta: &AssertionMeta) -> 
 /// Builds the single-event vector for a body stamped with `meta`.
 fn one(meta: &AssertionMeta, body: NoteEventBody) -> Vec<NoteEvent> {
     vec![NoteEvent::new(meta, body)]
+}
+
+/// Decides a merge of `merged` into `surviving` (ADR 0039 §1): the survivor must exist, the pair must
+/// be two records, and the survivor must not already hold a live decision about the other.
+fn decide_merge(
+    state: &NoteState,
+    [surviving, merged]: [NoteId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<NoteEvent>, NoteError> {
+    ensure_exists(state, surviving)?;
+    if surviving == merged {
+        return Err(NoteError::MergeConflict {
+            surviving,
+            merged,
+            reason: "a note cannot be merged with itself".to_owned(),
+        });
+    }
+    ensure_undecided(state, surviving, merged)?;
+    Ok(one(
+        meta,
+        NoteEventBody::NotesMerged {
+            surviving,
+            merged,
+            assessment,
+        },
+    ))
+}
+
+/// Decides that `other` is a different note from `note` (ADR 0039 §1), under the same rules as a
+/// merge.
+fn decide_distinguish(
+    state: &NoteState,
+    [note, other]: [NoteId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<NoteEvent>, NoteError> {
+    ensure_exists(state, note)?;
+    if note == other {
+        return Err(NoteError::DistinctFromItself(note));
+    }
+    ensure_undecided(state, note, other)?;
+    Ok(one(
+        meta,
+        NoteEventBody::NotesDistinguished {
+            note,
+            other,
+            assessment,
+        },
+    ))
+}
+
+/// Refuses a second identity decision about a pair this note already decided (ADR 0039 §1).
+fn ensure_undecided(state: &NoteState, note: NoteId, other: NoteId) -> Result<(), NoteError> {
+    if state.has_decided(other) {
+        return Err(NoteError::IdentityDecided { note, other });
+    }
+    Ok(())
 }
 
 /// Rejects a command that targets a note which has not been created yet.
@@ -133,6 +202,20 @@ pub fn evolve(state: &mut NoteState, event: &NoteEvent) {
         }
         NoteEventBody::HumanIdChanged { human_id, .. } => {
             state.human_id = Some(human_id.clone());
+        }
+        NoteEventBody::NotesMerged { merged, .. } => {
+            state.merged.push(Attributed {
+                assertion_id,
+                value: *merged,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        NoteEventBody::NotesDistinguished { other, .. } => {
+            state.distinguished.push(Attributed {
+                assertion_id,
+                value: *other,
+            });
+            state.live_assertions.insert(assertion_id);
         }
         NoteEventBody::AssertionRetracted { target, .. } | NoteEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
@@ -282,7 +365,7 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &untagged);
-        assert!(state.tags.is_empty());
+        assert!(state.tags.is_empty(), "{:?}", state.tags);
     }
 
     #[test]
@@ -313,5 +396,115 @@ mod tests {
         apply_all(&mut state, &retract);
         assert!(state.restrictions.is_empty(), "retracting the change clears the set");
         assert_eq!(state.restrictions_assertion, None);
+    }
+
+    fn evidence() -> crate::matching::MatchEvidence {
+        crate::matching::MatchEvidence {
+            score_bp: 9100,
+            band: crate::matching::MatchBand::Probable,
+            engine: crate::matching::EngineVersion(4),
+            cultures: vec![crate::matching::CultureId::new("universal")],
+            features: Vec::new(),
+        }
+    }
+
+    fn merge(surviving: u128, merged: u128) -> NoteCommand {
+        NoteCommand::MergeNotes {
+            surviving: note(surviving),
+            merged: note(merged),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn distinguish(first: u128, other: u128) -> NoteCommand {
+        NoteCommand::DistinguishNotes {
+            note: note(first),
+            other: note(other),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn retract_decision(id: u128, assertion: u128) -> NoteCommand {
+        NoteCommand::RetractAssertion {
+            note_id: note(id),
+            target: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+        }
+    }
+
+    #[test]
+    fn merging_two_notes_emits_notes_merged_with_its_assessment() {
+        let events = decide(&created_note(100), merge(100, 200), &meta(2)).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].body,
+            crate::note::event::NoteEventBody::NotesMerged {
+                surviving: note(100),
+                merged: note(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_note_cannot_be_merged_with_itself() {
+        let err = decide(&created_note(100), merge(100, 100), &meta(2)).unwrap_err();
+        assert!(matches!(err, NoteError::MergeConflict { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn merging_into_an_absent_note_is_not_found() {
+        let err = decide(&NoteState::default(), merge(100, 200), &meta(2)).unwrap_err();
+        assert_eq!(err, NoteError::NotFound(note(100)));
+    }
+
+    #[test]
+    fn distinguishing_two_notes_emits_notes_distinguished_with_its_assessment() {
+        let events = decide(&created_note(100), distinguish(100, 200), &meta(2)).unwrap();
+        assert_eq!(
+            events[0].body,
+            crate::note::event::NoteEventBody::NotesDistinguished {
+                note: note(100),
+                other: note(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_note_cannot_be_distinguished_from_itself() {
+        let err = decide(&created_note(100), distinguish(100, 100), &meta(2)).unwrap_err();
+        assert_eq!(err, NoteError::DistinctFromItself(note(100)));
+    }
+
+    #[test]
+    fn note_identity_decisions_fold_into_state_and_undo_removes_them() {
+        for (decision, assertion) in [(merge(100, 200), 2), (distinguish(100, 200), 2)] {
+            let mut state = created_note(100);
+            let events = decide(&state, decision.clone(), &meta(assertion)).unwrap();
+            apply_all(&mut state, &events);
+            assert!(state.has_decided(note(200)), "{decision:?}");
+
+            let events = decide(&state, retract_decision(100, assertion), &meta(3)).unwrap();
+            apply_all(&mut state, &events);
+            assert!(!state.has_decided(note(200)), "undo lifts {decision:?}");
+            assert!(state.merged.is_empty() && state.distinguished.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_note_pair_decided_either_way_cannot_be_decided_again() {
+        let decided = NoteError::IdentityDecided {
+            note: note(100),
+            other: note(200),
+        };
+        for first in [merge(100, 200), distinguish(100, 200)] {
+            let mut state = created_note(100);
+            let events = decide(&state, first.clone(), &meta(2)).unwrap();
+            apply_all(&mut state, &events);
+            for second in [merge(100, 200), distinguish(100, 200)] {
+                let err = decide(&state, second.clone(), &meta(3)).unwrap_err();
+                assert_eq!(err, decided, "{first:?} then {second:?}");
+            }
+        }
     }
 }

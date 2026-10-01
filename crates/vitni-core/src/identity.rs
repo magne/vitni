@@ -1,6 +1,6 @@
 //! What a record that can be merged exposes to the identity cluster index and its readers (ADR 0039 §4).
 //!
-//! Person, Event and Family carry the same pair of identity decisions — `<Kind>sMerged` and
+//! Person, Event, Family, Place, Source, Citation, Repository, Note and Media carry the same pair of identity decisions — `<Kind>sMerged` and
 //! `<Kind>sDistinguished` — folded into the same two sets on the survivor's projection. This trait is
 //! that shared shape, so the index and the cluster read side are written once over every kind.
 
@@ -10,11 +10,19 @@ use std::hash::Hash;
 use uuid::Uuid;
 
 use crate::assertions::Attributed;
+use crate::citation::CitationView;
 use crate::event::EventView;
 use crate::family::FamilyView;
-use crate::ids::{AssertionId, EventId, FamilyId, HumanId, PersonId};
+use crate::ids::{
+    AssertionId, CitationId, EventId, FamilyId, HumanId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId,
+};
 use crate::matching::MatchableKind;
+use crate::media::MediaView;
+use crate::note::NoteView;
 use crate::person::PersonView;
+use crate::place::PlaceView;
+use crate::repository::RepositoryView;
+use crate::source::SourceView;
 
 /// A projection whose record can be merged into, or distinguished from, another of its kind.
 pub trait ClusterRecord {
@@ -82,3 +90,9 @@ macro_rules! cluster_record {
 cluster_record!(PersonView, PersonId, MatchableKind::Person, person_id);
 cluster_record!(EventView, EventId, MatchableKind::Event, event_id);
 cluster_record!(FamilyView, FamilyId, MatchableKind::Family, family_id);
+cluster_record!(PlaceView, PlaceId, MatchableKind::Place, place_id);
+cluster_record!(SourceView, SourceId, MatchableKind::Source, source_id);
+cluster_record!(CitationView, CitationId, MatchableKind::Citation, citation_id);
+cluster_record!(RepositoryView, RepositoryId, MatchableKind::Repository, repository_id);
+cluster_record!(NoteView, NoteId, MatchableKind::Note, note_id);
+cluster_record!(MediaView, MediaId, MatchableKind::Media, media_id);

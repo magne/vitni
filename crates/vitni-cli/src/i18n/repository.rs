@@ -51,6 +51,26 @@ impl Localizer {
             RepositoryError::RetractsMissingAssertion(id) | RepositoryError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
+            RepositoryError::MergeConflict {
+                surviving,
+                merged,
+                reason,
+            } => fl!(
+                self.loader,
+                "err-repository-merge-conflict",
+                surviving = surviving.to_string(),
+                merged = merged.to_string(),
+                reason = reason.clone()
+            ),
+            RepositoryError::DistinctFromItself(id) => {
+                fl!(self.loader, "err-repository-distinct-from-itself", id = id.to_string())
+            }
+            RepositoryError::IdentityDecided { repository, other } => fl!(
+                self.loader,
+                "err-repository-identity-decided",
+                repository = repository.to_string(),
+                other = other.to_string()
+            ),
         }
     }
 }

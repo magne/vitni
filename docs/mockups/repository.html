@@ -196,9 +196,13 @@
             <thead><tr><th>Type</th><th>Link</th><th>Description</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr><td><span class="chip">website</span></td><td><a href="#">https://www.archives.gov</a></td><td class="muted">Main catalog</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this URL — it stays in History">Retract</button></td></tr>
-              <tr><td><span class="chip">catalog</span></td><td><a href="#">https://catalog.archives.gov</a></td><td class="muted">Searchable record group index</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this URL — it stays in History">Retract</button></td></tr>
+              <tr><td><span class="chip">catalog</span></td><td><a href="#">https://catalog.archives.gov</a> <span class="badge">from R0004</span></td><td class="muted">Searchable record group index</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this URL — it stays in History">Retract</button></td></tr>
             </tbody>
           </table>
+          <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">A row marked
+            <span class="badge">from R0004</span> came from a duplicate record of this repository merged into it
+            (ADR 0039 §5): the repository reads as one record with every copy's addresses, URLs, held sources and notes, each row still attributed.
+            Edit and Retract on that row are written to R0004; a source held by R0004 is listed here.</div>
         </div>
 
         <!-- SOURCES -->
@@ -236,8 +240,16 @@
 
         <!-- HISTORY -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone. An identity decision — merged, or marked as a different repository — also shows the matching engine's assessment it was made on.</div>
           <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 10:30</div>
+              <div class="tl-what">Repository merged</div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"National Archives, entered once per import"</div>
+              <div class="tl-evidence muted" title="The matching engine's assessment the decision was made on (ADR 0039 §2) — not the 5-level assertion Confidence">Matched at 96% · probable match · engine 4</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-21 16:12</div>
               <div class="tl-what">Address added: <b>New York branch</b></div>

@@ -1263,6 +1263,28 @@ impl CitationEdit {
             | Self::UndoAssertion { human_id, .. } => human_id,
         }
     }
+
+    /// This edit written to `owner` instead of its target — a correction of a row a merged member
+    /// owns goes to that member's stream (ADR 0039 §5).
+    #[must_use]
+    pub fn retargeted(&self, owner: &str) -> Self {
+        let mut edit = self.clone();
+        match &mut edit {
+            Self::SetHumanId { human_id, .. }
+            | Self::SetPage { human_id, .. }
+            | Self::SetDate { human_id, .. }
+            | Self::SetConfidence { human_id, .. }
+            | Self::SetEvidenceAnalysis { human_id, .. }
+            | Self::AddAttribute { human_id, .. }
+            | Self::AttachMedia { human_id, .. }
+            | Self::SetMediaRegion { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => owner.clone_into(human_id),
+        }
+        edit
+    }
 }
 
 /// A request to mutate a family, dispatched to a `vitni-app` command use-case via
@@ -1763,6 +1785,31 @@ impl PlaceEdit {
             | Self::UndoAssertion { human_id, .. } => human_id,
         }
     }
+
+    /// This edit written to `owner` instead of its target — a correction of a row a merged member
+    /// owns goes to that member's stream (ADR 0039 §5).
+    #[must_use]
+    pub fn retargeted(&self, owner: &str) -> Self {
+        let mut edit = self.clone();
+        match &mut edit {
+            Self::SetHumanId { human_id, .. }
+            | Self::SetType { human_id, .. }
+            | Self::SetCoordinates { human_id, .. }
+            | Self::AssertGeometry { human_id, .. }
+            | Self::SetCode { human_id, .. }
+            | Self::AddName { human_id, .. }
+            | Self::AddEnclosing { human_id, .. }
+            | Self::AssertSuccession { human_id, .. }
+            | Self::AttachCitation { human_id, .. }
+            | Self::AttachMedia { human_id, .. }
+            | Self::SetMediaRegion { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => owner.clone_into(human_id),
+        }
+        edit
+    }
 }
 
 /// A request to mutate a source, dispatched to a `vitni-app` command use-case via
@@ -1897,6 +1944,29 @@ impl SourceEdit {
             | Self::UndoAssertion { human_id, .. } => human_id,
         }
     }
+
+    /// This edit written to `owner` instead of its target — a correction of a row a merged member
+    /// owns goes to that member's stream (ADR 0039 §5).
+    #[must_use]
+    pub fn retargeted(&self, owner: &str) -> Self {
+        let mut edit = self.clone();
+        match &mut edit {
+            Self::SetHumanId { human_id, .. }
+            | Self::SetTitle { human_id, .. }
+            | Self::SetAuthor { human_id, .. }
+            | Self::SetPubInfo { human_id, .. }
+            | Self::SetAbbrev { human_id, .. }
+            | Self::LinkRepository { human_id, .. }
+            | Self::AddAttribute { human_id, .. }
+            | Self::AttachMedia { human_id, .. }
+            | Self::SetMediaRegion { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => owner.clone_into(human_id),
+        }
+        edit
+    }
 }
 
 /// A request to mutate a repository, dispatched to a `vitni-app` command use-case via
@@ -2000,6 +2070,26 @@ impl RepositoryEdit {
             | Self::SetRestrictions { human_id, .. }
             | Self::UndoAssertion { human_id, .. } => human_id,
         }
+    }
+
+    /// This edit written to `owner` instead of its target — a correction of a row a merged member
+    /// owns goes to that member's stream (ADR 0039 §5).
+    #[must_use]
+    pub fn retargeted(&self, owner: &str) -> Self {
+        let mut edit = self.clone();
+        match &mut edit {
+            Self::SetHumanId { human_id, .. }
+            | Self::SetName { human_id, .. }
+            | Self::SetType { human_id, .. }
+            | Self::AddAddress { human_id, .. }
+            | Self::AddUrl { human_id, .. }
+            | Self::LinkSource { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => owner.clone_into(human_id),
+        }
+        edit
     }
 }
 
@@ -2110,6 +2200,27 @@ impl MediaEdit {
             | Self::UndoAssertion { human_id, .. } => human_id,
         }
     }
+
+    /// This edit written to `owner` instead of its target — a correction of a row a merged member
+    /// owns goes to that member's stream (ADR 0039 §5).
+    #[must_use]
+    pub fn retargeted(&self, owner: &str) -> Self {
+        let mut edit = self.clone();
+        match &mut edit {
+            Self::SetHumanId { human_id, .. }
+            | Self::SetFilePath { human_id, .. }
+            | Self::SetWebPath { human_id, .. }
+            | Self::SetMime { human_id, .. }
+            | Self::SetDate { human_id, .. }
+            | Self::AddAttribute { human_id, .. }
+            | Self::AttachCitation { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => owner.clone_into(human_id),
+        }
+        edit
+    }
 }
 
 /// A request to mutate a note, dispatched to a `vitni-app` command use-case via
@@ -2191,6 +2302,23 @@ impl NoteEdit {
             | Self::SetRestrictions { human_id, .. }
             | Self::UndoAssertion { human_id, .. } => human_id,
         }
+    }
+
+    /// This edit written to `owner` instead of its target — a correction of a row a merged member
+    /// owns goes to that member's stream (ADR 0039 §5).
+    #[must_use]
+    pub fn retargeted(&self, owner: &str) -> Self {
+        let mut edit = self.clone();
+        match &mut edit {
+            Self::SetHumanId { human_id, .. }
+            | Self::SetType { human_id, .. }
+            | Self::SetText { human_id, .. }
+            | Self::AddTranslation { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => owner.clone_into(human_id),
+        }
+        edit
     }
 }
 

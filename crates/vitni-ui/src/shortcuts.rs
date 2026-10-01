@@ -719,7 +719,7 @@ mod tests {
     fn resolved_shortcuts_with_no_overrides_matches_the_default_map() {
         let (resolved, errors) = resolved_shortcuts(&BTreeMap::new());
         assert_eq!(resolved, shortcuts());
-        assert!(errors.is_empty());
+        assert!(errors.is_empty(), "{errors:?}");
     }
 
     #[test]
@@ -767,7 +767,7 @@ mod tests {
 
         let overrides = BTreeMap::from([("save-record".to_owned(), "mod+shift+s".to_owned())]);
         let (resolved, errors) = resolved_shortcuts(&overrides);
-        assert!(errors.is_empty());
+        assert!(errors.is_empty(), "{errors:?}");
         let overridden = resolved
             .iter()
             .find(|entry| entry.action == ShortcutAction::SaveRecord)
@@ -808,7 +808,7 @@ mod tests {
     fn resolved_shortcuts_applies_a_valid_override_and_stays_duplicate_free() {
         let overrides = BTreeMap::from([("quit".to_owned(), "mod+shift+q".to_owned())]);
         let (resolved, errors) = resolved_shortcuts(&overrides);
-        assert!(errors.is_empty());
+        assert!(errors.is_empty(), "{errors:?}");
         let quit = resolved
             .iter()
             .find(|entry| entry.action == ShortcutAction::Quit)

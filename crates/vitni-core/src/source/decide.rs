@@ -7,6 +7,7 @@
 
 use crate::assertions::{Asserted, Attributed};
 use crate::ids::{AssertionId, SourceId};
+use crate::matching::MatchEvidence;
 use crate::provenance::AssertionMeta;
 use crate::source::command::SourceCommand;
 use crate::source::error::SourceError;
@@ -82,6 +83,16 @@ pub fn decide(
                 },
             ))
         }
+        SourceCommand::MergeSources {
+            surviving,
+            merged,
+            assessment,
+        } => decide_merge(state, [surviving, merged], assessment, meta),
+        SourceCommand::DistinguishSources {
+            source,
+            other,
+            assessment,
+        } => decide_distinguish(state, [source, other], assessment, meta),
         SourceCommand::RetractAssertion { source_id, target } => {
             ensure_exists(state, source_id)?;
             if !state.live_assertions.contains(&target) {
@@ -125,6 +136,8 @@ fn setter_body(command: SourceCommand) -> SourceEventBody {
         | SourceCommand::LinkRepository { .. }
         | SourceCommand::SetRestrictions { .. }
         | SourceCommand::RetractAssertion { .. }
+        | SourceCommand::MergeSources { .. }
+        | SourceCommand::DistinguishSources { .. }
         | SourceCommand::SupersedeAssertion { .. }
         | SourceCommand::SetHumanId { .. } => unreachable!("handled by decide"),
     }
@@ -133,6 +146,67 @@ fn setter_body(command: SourceCommand) -> SourceEventBody {
 /// Builds the single-event vector for a body stamped with `meta`.
 fn one(meta: &AssertionMeta, body: SourceEventBody) -> Vec<SourceEvent> {
     vec![SourceEvent::new(meta, body)]
+}
+
+/// Decides a merge of `merged` into `surviving` (ADR 0039 §1): the survivor must exist, the pair must
+/// be two records, and the survivor must not already hold a live decision about the other.
+fn decide_merge(
+    state: &SourceState,
+    [surviving, merged]: [SourceId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<SourceEvent>, SourceError> {
+    ensure_exists(state, surviving)?;
+    if surviving == merged {
+        return Err(SourceError::MergeConflict {
+            surviving,
+            merged,
+            reason: "a source cannot be merged with itself".to_owned(),
+        });
+    }
+    ensure_undecided(state, surviving, merged)?;
+    Ok(one(
+        meta,
+        SourceEventBody::SourcesMerged {
+            surviving,
+            merged,
+            assessment,
+        },
+    ))
+}
+
+/// Decides that `other` is a different source from `source` (ADR 0039 §1), under the same rules as a
+/// merge.
+fn decide_distinguish(
+    state: &SourceState,
+    [source, other]: [SourceId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<SourceEvent>, SourceError> {
+    ensure_exists(state, source)?;
+    if source == other {
+        return Err(SourceError::DistinctFromItself(source));
+    }
+    ensure_undecided(state, source, other)?;
+    Ok(one(
+        meta,
+        SourceEventBody::SourcesDistinguished {
+            source,
+            other,
+            assessment,
+        },
+    ))
+}
+
+/// Refuses a second identity decision about a pair this source already decided (ADR 0039 §1).
+fn ensure_undecided(state: &SourceState, source: SourceId, other: SourceId) -> Result<(), SourceError> {
+    if state.has_decided(other) {
+        return Err(SourceError::IdentityDecided {
+            source_id: source,
+            other,
+        });
+    }
+    Ok(())
 }
 
 /// Rejects a command that targets a source which has not been created yet.
@@ -210,6 +284,20 @@ pub fn evolve(state: &mut SourceState, event: &SourceEvent) {
         }
         SourceEventBody::HumanIdChanged { human_id, .. } => {
             state.human_id = Some(human_id.clone());
+        }
+        SourceEventBody::SourcesMerged { merged, .. } => {
+            state.merged.push(Attributed {
+                assertion_id,
+                value: *merged,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        SourceEventBody::SourcesDistinguished { other, .. } => {
+            state.distinguished.push(Attributed {
+                assertion_id,
+                value: *other,
+            });
+            state.live_assertions.insert(assertion_id);
         }
         SourceEventBody::AssertionRetracted { target, .. } | SourceEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
@@ -550,7 +638,7 @@ mod tests {
             let events = decide(&state, command, &meta(assertion), &REPO_PRESENT).unwrap();
             apply_all(&mut state, &events);
         }
-        assert!(state.tags.is_empty());
+        assert!(state.tags.is_empty(), "{:?}", state.tags);
     }
 
     #[test]
@@ -605,5 +693,115 @@ mod tests {
         apply_all(&mut state, &retract);
         assert!(state.restrictions.is_empty(), "retracting the change clears the set");
         assert_eq!(state.restrictions_assertion, None);
+    }
+
+    fn evidence() -> crate::matching::MatchEvidence {
+        crate::matching::MatchEvidence {
+            score_bp: 9100,
+            band: crate::matching::MatchBand::Probable,
+            engine: crate::matching::EngineVersion(4),
+            cultures: vec![crate::matching::CultureId::new("universal")],
+            features: Vec::new(),
+        }
+    }
+
+    fn merge(surviving: u128, merged: u128) -> SourceCommand {
+        SourceCommand::MergeSources {
+            surviving: source(surviving),
+            merged: source(merged),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn distinguish(first: u128, other: u128) -> SourceCommand {
+        SourceCommand::DistinguishSources {
+            source: source(first),
+            other: source(other),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn retract_decision(id: u128, assertion: u128) -> SourceCommand {
+        SourceCommand::RetractAssertion {
+            source_id: source(id),
+            target: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+        }
+    }
+
+    #[test]
+    fn merging_two_sources_emits_sources_merged_with_its_assessment() {
+        let events = decide(&created_source(100), merge(100, 200), &meta(2), &REPO_PRESENT).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].body,
+            crate::source::event::SourceEventBody::SourcesMerged {
+                surviving: source(100),
+                merged: source(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_source_cannot_be_merged_with_itself() {
+        let err = decide(&created_source(100), merge(100, 100), &meta(2), &REPO_PRESENT).unwrap_err();
+        assert!(matches!(err, SourceError::MergeConflict { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn merging_into_an_absent_source_is_not_found() {
+        let err = decide(&SourceState::default(), merge(100, 200), &meta(2), &REPO_PRESENT).unwrap_err();
+        assert_eq!(err, SourceError::NotFound(source(100)));
+    }
+
+    #[test]
+    fn distinguishing_two_sources_emits_sources_distinguished_with_its_assessment() {
+        let events = decide(&created_source(100), distinguish(100, 200), &meta(2), &REPO_PRESENT).unwrap();
+        assert_eq!(
+            events[0].body,
+            crate::source::event::SourceEventBody::SourcesDistinguished {
+                source: source(100),
+                other: source(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_source_cannot_be_distinguished_from_itself() {
+        let err = decide(&created_source(100), distinguish(100, 100), &meta(2), &REPO_PRESENT).unwrap_err();
+        assert_eq!(err, SourceError::DistinctFromItself(source(100)));
+    }
+
+    #[test]
+    fn source_identity_decisions_fold_into_state_and_undo_removes_them() {
+        for (decision, assertion) in [(merge(100, 200), 2), (distinguish(100, 200), 2)] {
+            let mut state = created_source(100);
+            let events = decide(&state, decision.clone(), &meta(assertion), &REPO_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            assert!(state.has_decided(source(200)), "{decision:?}");
+
+            let events = decide(&state, retract_decision(100, assertion), &meta(3), &REPO_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            assert!(!state.has_decided(source(200)), "undo lifts {decision:?}");
+            assert!(state.merged.is_empty() && state.distinguished.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_source_pair_decided_either_way_cannot_be_decided_again() {
+        let decided = SourceError::IdentityDecided {
+            source_id: source(100),
+            other: source(200),
+        };
+        for first in [merge(100, 200), distinguish(100, 200)] {
+            let mut state = created_source(100);
+            let events = decide(&state, first.clone(), &meta(2), &REPO_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            for second in [merge(100, 200), distinguish(100, 200)] {
+                let err = decide(&state, second.clone(), &meta(3), &REPO_PRESENT).unwrap_err();
+                assert_eq!(err, decided, "{first:?} then {second:?}");
+            }
+        }
     }
 }

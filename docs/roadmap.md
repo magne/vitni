@@ -676,6 +676,15 @@ a merged family reads every copy's partners, children and events, each row attri
 chip) and corrected on the copy that owns it. Lists, counts and pickers hide members; a participation's
 event, a family's linked events, the families a person belongs to, backlinks, research-note subjects
 and the pedigree name the root, and a GEDCOM export writes one family and one marriage.
+✅ Merge for the other kinds (ADR 0039 §1, §6, #406): places, sources, citations, repositories, notes
+and media gain the same pair of identity decisions (`PlacesMerged`/`PlacesDistinguished`, …,
+`MediaMerged`/`MediaDistinguished`), indexed per kind in `identity_links`, with merge, distinguish,
+undo-and-merge, pair-decision and claim-owner use-cases. A merged record reads as one, every copy's rows
+attributed (a *from P0012* chip) and corrected on the copy that owns it; lists, counts and the
+duplicate check leave members out. Every reference names the root: an event's place, a place's
+jurisdiction and successions, a citation's source, a source's repositories, attached citations, notes
+and media, usage lists and research-note subjects, and an export writes one record per cluster. The
+place screen names a duplicate-record merge apart from an ADR 0026 succession. Tag is excluded.
 
 ## Risk register
 

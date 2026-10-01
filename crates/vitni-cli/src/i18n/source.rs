@@ -39,6 +39,26 @@ impl Localizer {
             SourceError::UnknownRepository(id) => {
                 fl!(self.loader, "err-source-unknown-repository", id = id.to_string())
             }
+            SourceError::MergeConflict {
+                surviving,
+                merged,
+                reason,
+            } => fl!(
+                self.loader,
+                "err-source-merge-conflict",
+                surviving = surviving.to_string(),
+                merged = merged.to_string(),
+                reason = reason.clone()
+            ),
+            SourceError::DistinctFromItself(id) => {
+                fl!(self.loader, "err-source-distinct-from-itself", id = id.to_string())
+            }
+            SourceError::IdentityDecided { source_id, other } => fl!(
+                self.loader,
+                "err-source-identity-decided",
+                source = source_id.to_string(),
+                other = other.to_string()
+            ),
         }
     }
 }

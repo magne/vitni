@@ -8,6 +8,7 @@ use crate::address::Address;
 use crate::assertions::{Envelope, EventBody};
 use crate::enums::{RepositoryType, Restriction};
 use crate::ids::{AssertionId, HumanId, NoteId, RepositoryId, TagId};
+use crate::matching::MatchEvidence;
 use crate::text::Url;
 
 /// A single Repository assertion plus its provenance envelope (ADR 0004 §1).
@@ -103,6 +104,28 @@ pub enum RepositoryEventBody {
         /// The identifier in effect before this change (for the audit trail).
         old_human_id: HumanId,
     },
+    /// Another repository record was concluded to be this one (ADR 0039 §1): a same-as link on the survivor
+    /// that leaves the merged record's own stream untouched (data-model §9).
+    RepositoriesMerged {
+        /// The repository that survives as the cluster's record.
+        surviving: RepositoryId,
+        /// The repository merged into it.
+        merged: RepositoryId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a merge made
+        /// without the engine.
+        assessment: Option<MatchEvidence>,
+    },
+    /// Another repository record was concluded to be a different repository from this one (ADR 0039 §1), so the
+    /// pair is never proposed as a duplicate again.
+    RepositoriesDistinguished {
+        /// The repository the decision is recorded on.
+        repository: RepositoryId,
+        /// The repository it is distinct from.
+        other: RepositoryId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a decision
+        /// made without the engine.
+        assessment: Option<MatchEvidence>,
+    },
 }
 
 impl EventBody for RepositoryEventBody {
@@ -120,6 +143,8 @@ impl EventBody for RepositoryEventBody {
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
             Self::HumanIdChanged { .. } => "HumanIdChanged",
+            Self::RepositoriesMerged { .. } => "RepositoriesMerged",
+            Self::RepositoriesDistinguished { .. } => "RepositoriesDistinguished",
         }
     }
 

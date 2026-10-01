@@ -86,10 +86,12 @@ pub use backup::{
 pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
 pub use checks::{CheckFinding, check_records, run_checks};
 pub use citation::{
-    CitationAttributeRef, CitationSummary, NewCitation, TagRef, add_citation_attribute, assert_citation_date,
-    assert_citation_date_value, attach_citation_media, attach_citation_note, create_citation, list_citations,
-    set_citation_confidence, set_citation_evidence_analysis, set_citation_human_id, set_page,
-    set_restrictions as set_citation_restrictions, show_citation, tag_citation, update_citation_media_ref,
+    CitationAttributeRef, CitationMergeResult, CitationSummary, NewCitation, TagRef, add_citation_attribute,
+    assert_citation_date, assert_citation_date_value, attach_citation_media, attach_citation_note,
+    citation_claim_owner, citation_pair_decision, create_citation, distinguish_citations, list_citations,
+    merge_citations, set_citation_confidence, set_citation_evidence_analysis, set_citation_human_id, set_page,
+    set_restrictions as set_citation_restrictions, show_citation, tag_citation, undo_citation_distinction_and_merge,
+    update_citation_media_ref,
 };
 pub use citation_change_set::{CitationChangeSet, commit_citation_change_set};
 pub use config::{
@@ -165,15 +167,17 @@ pub use import_run::{
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
 pub use matching::{MatchDataError, load_match_data};
 pub use media::{
-    MediaAttributeRef, MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date,
-    assert_media_date_value, attach_media_note, create_media, import_attach_media_note, list_media, set_media_checksum,
+    MediaAttributeRef, MediaMergeResult, MediaSummary, NewMedia, add_media_attribute, add_media_citation,
+    assert_media_date, assert_media_date_value, attach_media_note, create_media, distinguish_media,
+    import_attach_media_note, list_media, media_claim_owner, media_pair_decision, merge_media, set_media_checksum,
     set_media_file_path, set_media_human_id, set_media_mime, set_media_web_path,
-    set_restrictions as set_media_restrictions, show_media, tag_media,
+    set_restrictions as set_media_restrictions, show_media, tag_media, undo_media_distinction_and_merge,
 };
 pub use media_change_set::{MediaChangeSet, commit_media_change_set};
 pub use note::{
-    NewNote, NoteSummary, TranslationRef, add_note_translation, create_note, list_notes, set_note_human_id,
-    set_note_text, set_note_type, set_restrictions as set_note_restrictions, show_note, tag_note,
+    NewNote, NoteMergeResult, NoteSummary, TranslationRef, add_note_translation, create_note, distinguish_notes,
+    list_notes, merge_notes, note_claim_owner, note_pair_decision, set_note_human_id, set_note_text, set_note_type,
+    set_restrictions as set_note_restrictions, show_note, tag_note, undo_note_distinction_and_merge,
 };
 pub use note_change_set::{NoteChangeSet, commit_note_change_set};
 pub use origin_gate::PendingRun;
@@ -190,12 +194,13 @@ pub use person::{
 };
 pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
 pub use place::{
-    NewPlace, PlaceEnclosingRef, PlaceGeometryRef, PlaceNameRef, PlaceSuccessionInput, PlaceSuccessionRef,
-    PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
-    assert_place_geometry, assert_place_succession, attach_place_media, attach_place_note, create_place,
-    import_attach_place_media, import_attach_place_note, list_places, list_places_as_of, set_place_code,
-    set_place_human_id, set_place_type, set_restrictions as set_place_restrictions, show_place, show_place_as_of,
-    tag_place, update_place_media_ref,
+    NewPlace, PlaceEnclosingRef, PlaceGeometryRef, PlaceMergeResult, PlaceNameRef, PlaceSuccessionInput,
+    PlaceSuccessionRef, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates,
+    assert_place_enclosed_by, assert_place_geometry, assert_place_succession, attach_place_media, attach_place_note,
+    create_place, distinguish_places, import_attach_place_media, import_attach_place_note, list_places,
+    list_places_as_of, merge_places, place_claim_owner, place_pair_decision, set_place_code, set_place_human_id,
+    set_place_type, set_restrictions as set_place_restrictions, show_place, show_place_as_of, tag_place,
+    undo_place_distinction_and_merge, update_place_media_ref,
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
 pub use plugins::{PluginTrust, plugin_layers, resolve_bundle, resolve_bundles};
@@ -205,10 +210,12 @@ pub use profile::{
     repository_profile, source_profile, tag_profile,
 };
 pub use repository::{
-    NewRepository, RepositoryAddressRef, RepositorySummary, RepositoryUrlRef, add_repository_address,
-    add_repository_url, attach_repository_note, create_repository, import_attach_repository_note, list_repositories,
-    set_repository_human_id, set_repository_name, set_repository_type, set_restrictions as set_repository_restrictions,
-    show_repository, tag_repository,
+    NewRepository, RepositoryAddressRef, RepositoryMergeResult, RepositorySummary, RepositoryUrlRef,
+    add_repository_address, add_repository_url, attach_repository_note, create_repository, distinguish_repositories,
+    import_attach_repository_note, list_repositories, merge_repositories, repository_claim_owner,
+    repository_pair_decision, set_repository_human_id, set_repository_name, set_repository_type,
+    set_restrictions as set_repository_restrictions, show_repository, tag_repository,
+    undo_repository_distinction_and_merge,
 };
 pub use repository_change_set::{RepositoryChangeSet, commit_repository_change_set};
 pub use research_note::{
@@ -221,10 +228,11 @@ pub use secret_env::require_secret_env;
 pub use session::Session;
 pub use similar::{SimilarPair, SimilarRecord, assess, find_similar, similar_pairs};
 pub use source::{
-    NewSource, SourceAttributeRef, SourceSummary, add_source_attribute, attach_source_media, attach_source_note,
-    create_source, import_attach_source_media, import_attach_source_note, link_source_repository, list_sources,
-    set_restrictions as set_source_restrictions, set_source_abbrev, set_source_author, set_source_human_id,
-    set_source_pub_info, set_title, show_source, tag_source, update_source_media_ref,
+    NewSource, SourceAttributeRef, SourceMergeResult, SourceSummary, add_source_attribute, attach_source_media,
+    attach_source_note, create_source, distinguish_sources, import_attach_source_media, import_attach_source_note,
+    link_source_repository, list_sources, merge_sources, set_restrictions as set_source_restrictions,
+    set_source_abbrev, set_source_author, set_source_human_id, set_source_pub_info, set_title, show_source,
+    source_claim_owner, source_pair_decision, tag_source, undo_source_distinction_and_merge, update_source_media_ref,
 };
 pub use source_change_set::{SourceChangeSet, commit_source_change_set};
 pub use tag::{

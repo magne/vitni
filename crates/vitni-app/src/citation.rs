@@ -8,7 +8,7 @@
 //! [`CitationError::UnknownSource`](vitni_core::citation::CitationError) — the §9 aggregate-tax
 //! check (ADR 0004 §3).
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use uuid::Uuid;
 use vitni_core::citation::CitationView;
@@ -27,6 +27,7 @@ use vitni_db::Store;
 use crate::dto::{AggRef, AttachedRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
+use crate::identity::{self, CitationClusters, IdentityDecision, PairDecision};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
@@ -85,6 +86,24 @@ pub struct CitationSummary {
     pub tags: Vec<TagRef>,
     /// The citation's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+    /// Every citation record merged into this citation's cluster, directly or through another member
+    /// (ADR 0039 §4), in id order.
+    pub merged: Vec<AggRef>,
+    /// The `human_id` of the member each member row came from, by the row's `AssertionId`: its edit or
+    /// retraction is written to that member's stream (ADR 0039 §5). A row absent here is the
+    /// citation's own. Never rendered as a key; see [`owner_of`](Self::owner_of).
+    pub claim_owners: BTreeMap<String, String>,
+}
+
+impl CitationSummary {
+    /// The `human_id` of the record that owns the row introduced by `assertion_id`: the member it came
+    /// from, or this citation for its own rows.
+    #[must_use]
+    pub fn owner_of(&self, assertion_id: &str) -> &str {
+        self.claim_owners
+            .get(assertion_id)
+            .map_or(self.human_id.as_str(), String::as_str)
+    }
 }
 
 /// What to create a citation with (the auto/override `human_id`, the cited source, and a page).
@@ -481,7 +500,8 @@ pub async fn attach_citation_note(
     .await
 }
 
-/// Applies (or removes) a tag on a citation, identified by `human_id`.
+/// Applies (or removes) a tag on a citation, identified by `human_id`. A removed tag is untagged on
+/// every record of the cluster that holds it (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -497,12 +517,151 @@ pub async fn tag_citation(
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
     let tag_id = parse_tag_id(tag_id)?;
-    let command = if remove {
-        CitationCommand::Untag { citation_id, tag_id }
-    } else {
-        CitationCommand::Tag { citation_id, tag_id }
-    };
+    if !remove {
+        let command = CitationCommand::Tag { citation_id, tag_id };
+        return execute_citation_mutation(store, session, citation_id, command, meta).await;
+    }
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    for record in identity::cluster_records(store, citation_id).await? {
+        let Some(id) = record.citation_id() else { continue };
+        if id != citation_id && record.tags().contains(&tag_id) {
+            let command = CitationCommand::Untag {
+                citation_id: id,
+                tag_id,
+            };
+            execute(
+                store,
+                session,
+                &id.to_string(),
+                command,
+                meta.provenance.clone(),
+                citations.clone(),
+            )
+            .await?;
+        }
+    }
+    let command = CitationCommand::Untag { citation_id, tag_id };
     execute_citation_mutation(store, session, citation_id, command, meta).await
+}
+
+/// The outcome of [`merge_citations`]: the survivor's refreshed summary and the merged citation's
+/// `human_id`.
+///
+/// The merge is a same-as link on the survivor (ADR 0039 §1): no record that names the merged citation
+/// is rewritten. Every reader resolves those references to the cluster's root instead (ADR 0039 §5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationMergeResult {
+    /// The survivor's summary after the merge, composed with every record now in its cluster.
+    pub survivor: CitationSummary,
+    /// The merged citation's `human_id` (its own record/stream is untouched).
+    pub merged_human_id: String,
+}
+
+/// Merges `merged_human_id`'s cluster into `surviving_human_id`'s, recording a same-as link
+/// (ADR 0039 §1). Both records resolve to their cluster roots first (§4), and one `CitationsMerged`
+/// event is emitted on the surviving root's stream, carrying the decision's provenance and assessment.
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if either `human_id` does not resolve; [`AppError::CitationDomain`] with
+/// `MergeConflict` if they resolve to the same citation, or `IdentityDecided` if the two are already one
+/// cluster or a record of one cluster is distinguished from a record of the other; or a store error.
+pub async fn merge_citations(
+    workspace: &Workspace,
+    session: &Session,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<CitationMergeResult, AppError> {
+    let pair =
+        identity::merge::<CitationView>(workspace, session, surviving_human_id, merged_human_id, decision).await?;
+    citation_merge_result(workspace, &pair.first_human_id, merged_human_id).await
+}
+
+/// Undoes every live distinction between the two citation clusters, then merges them (ADR 0039 §4).
+///
+/// # Errors
+///
+/// As [`merge_citations`], except that a distinction between the clusters no longer refuses the merge.
+pub async fn undo_citation_distinction_and_merge(
+    workspace: &Workspace,
+    session: &Session,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<CitationMergeResult, AppError> {
+    let pair = identity::undo_distinction_and_merge::<CitationView>(
+        workspace,
+        session,
+        surviving_human_id,
+        merged_human_id,
+        decision,
+    )
+    .await?;
+    citation_merge_result(workspace, &pair.first_human_id, merged_human_id).await
+}
+
+/// The survivor's composed summary after a merge.
+async fn citation_merge_result(
+    workspace: &Workspace,
+    survivor_human_id: &str,
+    merged_human_id: &str,
+) -> Result<CitationMergeResult, AppError> {
+    let survivor = show_citation(workspace, survivor_human_id)
+        .await?
+        .ok_or_else(|| AppError::CitationNotFound(survivor_human_id.to_owned()))?;
+    Ok(CitationMergeResult {
+        survivor,
+        merged_human_id: merged_human_id.to_owned(),
+    })
+}
+
+/// Records that the two citations are different (ADR 0039 §1), so neither cluster is proposed as a
+/// duplicate of the other again. One `CitationsDistinguished` event is emitted on the first root's
+/// stream; undoing it lifts the decision.
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if either `human_id` does not resolve; [`AppError::CitationDomain`] with
+/// `DistinctFromItself` if they resolve to the same citation, or `IdentityDecided` if the two are already
+/// one cluster or already distinguished; or a store error.
+pub async fn distinguish_citations(
+    workspace: &Workspace,
+    session: &Session,
+    citation_human_id: &str,
+    other_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<(), AppError> {
+    identity::distinguish::<CitationView>(workspace, session, citation_human_id, other_human_id, decision).await
+}
+
+/// The live identity decision between the clusters of two citations, or `None` when the pair is
+/// undecided (ADR 0039 §4).
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if either `human_id` does not resolve, or a store error.
+pub async fn citation_pair_decision(
+    workspace: &Workspace,
+    first_human_id: &str,
+    other_human_id: &str,
+) -> Result<Option<PairDecision>, AppError> {
+    identity::pair_decision::<CitationView>(workspace, first_human_id, other_human_id).await
+}
+
+/// The `human_id` of the record of `human_id`'s citation cluster whose stream holds the live assertion
+/// `assertion_id` — where an edit or retraction of that row is written (ADR 0039 §5).
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if `human_id` is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or a store error.
+pub async fn citation_claim_owner(
+    workspace: &Workspace,
+    human_id: &str,
+    assertion_id: &str,
+) -> Result<String, AppError> {
+    identity::claim_owner::<CitationView>(workspace, human_id, assertion_id).await
 }
 
 /// Loads a single citation's summary by `human_id`.
@@ -512,14 +671,16 @@ pub async fn tag_citation(
 /// A store/read-model error.
 pub async fn show_citation(workspace: &Workspace, human_id: &str) -> Result<Option<CitationSummary>, AppError> {
     let store = workspace.store();
-    let Some(view) = store.find_citation(human_id).await? else {
+    let Some(citation_id) = store.find_citation(human_id).await?.and_then(|view| view.citation_id()) else {
         return Ok(None);
     };
+    let views = identity::cluster_records(store, citation_id).await?;
     let lookups = Lookups::load(store).await?;
-    Ok(Some(summarize(&view, &lookups)))
+    Ok(summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups))
 }
 
-/// Lists every citation's summary, ordered by `human_id`.
+/// Lists every citation's summary, ordered by `human_id`. A merged record is listed once, as its cluster's
+/// root (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -527,11 +688,18 @@ pub async fn show_citation(workspace: &Workspace, human_id: &str) -> Result<Opti
 pub async fn list_citations(workspace: &Workspace) -> Result<Vec<CitationSummary>, AppError> {
     let store = workspace.store();
     let views = store.list_citations().await?;
+    let clusters = CitationClusters::load(store).await?;
     let lookups = Lookups::load(store).await?;
-    Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
+    let mut summaries = Vec::with_capacity(views.len());
+    for cluster in identity::group_clusters(&views, &clusters) {
+        summaries.extend(summarize_cluster(&cluster, &lookups));
+    }
+    Ok(summaries)
 }
 
-/// Sets a citation's privacy restrictions (GEDCOM `RESN` — data-model §6).
+/// Sets a citation's privacy restrictions (GEDCOM `RESN` — data-model §6). A merged member restricted
+/// beyond the new set is narrowed to it first, so the cluster reads with exactly `restrictions`
+/// (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -545,6 +713,27 @@ pub async fn set_restrictions(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    for record in identity::cluster_records(store, citation_id).await? {
+        let Some(id) = record.citation_id() else { continue };
+        if id == citation_id || record.restrictions().is_subset(&restrictions) {
+            continue;
+        }
+        let narrowed = record.restrictions().intersection(&restrictions).copied().collect();
+        let command = CitationCommand::SetRestrictions {
+            citation_id: id,
+            restrictions: narrowed,
+        };
+        execute(
+            store,
+            session,
+            &id.to_string(),
+            command,
+            meta.provenance.clone(),
+            citations.clone(),
+        )
+        .await?;
+    }
     execute_citation_mutation(
         store,
         session,
@@ -605,7 +794,7 @@ pub async fn set_citation_human_id(
 /// Executes one command through the store, stamping it with `provenance` (the operator's surety and
 /// rationale) and `citations` (`EventContext.citations` — data-model §8), and maps the outcome to
 /// [`AppError`].
-async fn execute(
+pub(crate) async fn execute(
     store: &Store,
     session: &Session,
     aggregate_id: &str,
@@ -703,7 +892,7 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
 /// per-row query: source/media/notes by `human_id`, and tags by **name** (tags carry no `human_id`
 /// and their aggregate id is never surfaced — data-model §9).
 struct Lookups {
-    sources: HashMap<SourceId, String>,
+    sources: HashMap<SourceId, (SourceId, String)>,
     media: HashMap<MediaId, MediaLookup>,
     notes: HashMap<NoteId, use_case::NoteLookup>,
     tags: HashMap<TagId, TagRef>,
@@ -740,23 +929,25 @@ async fn tag_labels(store: &Store) -> Result<HashMap<TagId, TagRef>, AppError> {
     Ok(map)
 }
 
-/// Builds a `SourceId -> human_id` lookup from the Source projection, to render the cited source.
-async fn source_human_ids(store: &Store) -> Result<HashMap<SourceId, String>, AppError> {
+/// Builds a `SourceId -> (id, human_id)` lookup from the Source projection, to render the cited source.
+/// A merged source resolves to its cluster's root (ADR 0039 §5).
+async fn source_human_ids(store: &Store) -> Result<HashMap<SourceId, (SourceId, String)>, AppError> {
     let mut map = HashMap::new();
     for view in store.list_sources().await? {
         if let (Some(id), Some(human_id)) = (view.source_id(), view.human_id()) {
-            map.insert(id, human_id.as_str().to_owned());
+            map.insert(id, (id, human_id.as_str().to_owned()));
         }
     }
+    crate::identity::SourceClusters::load(store).await?.redirect(&mut map);
     Ok(map)
 }
 
 /// Renders a [`CitationView`] into the frontend DTO, resolving the cited source and attachments.
 fn summarize(view: &CitationView, lookups: &Lookups) -> CitationSummary {
     let source = view.source_id().and_then(|id| {
-        lookups.sources.get(&id).map(|human_id| AggRef {
+        lookups.sources.get(&id).map(|(root, human_id)| AggRef {
             human_id: human_id.clone(),
-            id: id.to_string(),
+            id: root.to_string(),
         })
     });
     CitationSummary {
@@ -797,7 +988,7 @@ fn summarize(view: &CitationView, lookups: &Lookups) -> CitationSummary {
             .filter_map(|attributed| {
                 lookups.notes.get(&attributed.value).map(|note| AttachedRef {
                     human_id: note.human_id.clone(),
-                    id: attributed.value.to_string(),
+                    id: note.id.clone(),
                     note_type: note.note_type.clone(),
                     text: note.text.clone(),
                     language: note.language.clone(),
@@ -811,5 +1002,52 @@ fn summarize(view: &CitationView, lookups: &Lookups) -> CitationSummary {
             .filter_map(|id| lookups.tags.get(&id).cloned())
             .collect(),
         restrictions: view.restrictions().clone(),
+        merged: Vec::new(),
+        claim_owners: BTreeMap::new(),
     }
+}
+
+/// Summarises a cluster — its root first, then its members — as one citation (ADR 0039 §5): the root's
+/// summary with every member's rows appended, each member-owned row recorded in `claim_owners`.
+/// `None` for an empty slice.
+fn summarize_cluster(views: &[&CitationView], lookups: &Lookups) -> Option<CitationSummary> {
+    let (root, members) = views.split_first()?;
+    let mut summary = summarize(root, lookups);
+    for view in members {
+        let member = summarize(view, lookups);
+        summary.merged.push(AggRef {
+            human_id: member.human_id.clone(),
+            id: view.citation_id().map(|id| id.to_string()).unwrap_or_default(),
+        });
+        adopt(&mut summary, member);
+    }
+    summary.merged.sort_by(|x, y| x.id.cmp(&y.id));
+    Some(summary)
+}
+
+/// Appends a member's rows to its root's summary, recording the member each row came from, and fills
+/// what the root lacks from the member.
+fn adopt(root: &mut CitationSummary, member: CitationSummary) {
+    let owner = member.human_id.clone();
+    let mut owned: Vec<String> = Vec::new();
+    owned.extend(member.attributes.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.media.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.notes.iter().map(|row| row.assertion_id.clone()));
+    for assertion_id in owned {
+        root.claim_owners.insert(assertion_id, owner.clone());
+    }
+    root.source = root.source.take().or(member.source);
+    root.page = root.page.take().or(member.page);
+    root.date = root.date.take().or(member.date);
+    root.confidence = root.confidence.take().or(member.confidence);
+    root.evidence_analysis = root.evidence_analysis.take().or(member.evidence_analysis);
+    root.attributes.extend(member.attributes);
+    root.media.extend(member.media);
+    root.notes.extend(member.notes);
+    for tag in member.tags {
+        if !root.tags.iter().any(|held| held.id == tag.id) {
+            root.tags.push(tag);
+        }
+    }
+    root.restrictions.extend(member.restrictions);
 }

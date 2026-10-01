@@ -143,7 +143,8 @@ async fn the_creating_origins_of_a_kind_are_read_at_once(store: &Store) {
     person(store, 11, Some(origin("I1", Some("x"))), assert_sex(Sex::Female)).await;
     let created = store.created_origins("person").await.unwrap();
     assert_eq!(created, [(person_id().to_string(), origin("I1", None))]);
-    assert!(store.created_origins("family").await.unwrap().is_empty());
+    let checked = store.created_origins("family").await.unwrap();
+    assert!(checked.is_empty(), "{checked:?}");
 }
 
 async fn a_retraction_clears_the_rows_live_flag(store: &Store) {

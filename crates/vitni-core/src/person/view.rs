@@ -345,7 +345,8 @@ mod tests {
                 },
             ),
         ]);
-        assert!(view.names_with_assertions().is_empty());
+        let checked = view.names_with_assertions();
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]

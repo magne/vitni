@@ -25,3 +25,6 @@ err-place-unknown = sted viser til ukjent sted { $id }
 err-place-invalid-geometry = en stedsgeometris polygonring må ha minst 3 punkter
 err-place-empty-succession-endpoints = en stedsetterfølgelse må navngi minst ett "fra"-sted og ett "til"-sted
 err-place-succession-anchor-mismatch = sted { $id } må være ett av etterfølgelsens "fra"-steder
+err-place-merge-conflict = stedene { $surviving } og { $merged } kan ikke slås sammen: { $reason }
+err-place-distinct-from-itself = sted { $id } kan ikke skilles fra seg selv
+err-place-identity-decided = stedene { $place } og { $other } har allerede en gjeldende identitetsavgjørelse; angre den først

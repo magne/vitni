@@ -268,7 +268,8 @@ mod tag_draft_tests {
 
     #[test]
     fn a_fresh_create_draft_has_no_restrictions() {
-        assert!(TagDraft::new().restrictions.is_empty());
+        let checked = TagDraft::new().restrictions;
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]

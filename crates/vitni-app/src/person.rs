@@ -1170,6 +1170,9 @@ async fn event_lookups(store: &Store) -> Result<HashMap<EventId, EventJoin>, App
             place_names.insert(id, name);
         }
     }
+    crate::identity::PlaceClusters::load(store)
+        .await?
+        .redirect(&mut place_names);
     let mut own = HashMap::new();
     for view in store.list_events().await? {
         let (Some(id), Some(human_id)) = (view.event_id(), view.human_id()) else {
@@ -1618,7 +1621,7 @@ fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<Participat
                     .filter_map(|note_id| {
                         lookups.notes.get(note_id).map(|note| AggRef {
                             human_id: note.human_id.clone(),
-                            id: note_id.to_string(),
+                            id: note.id.clone(),
                         })
                     })
                     .collect(),
@@ -1679,7 +1682,7 @@ fn person_attachments(
         .filter_map(|attributed| {
             lookups.notes.get(&attributed.value).map(|note| AttachedRef {
                 human_id: note.human_id.clone(),
-                id: attributed.value.to_string(),
+                id: note.id.clone(),
                 note_type: note.note_type.clone(),
                 text: note.text.clone(),
                 language: note.language.clone(),

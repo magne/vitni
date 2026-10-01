@@ -240,9 +240,13 @@
             <thead><tr><th>Type</th><th>Value</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr><td>Enumeration district</td><td>NY-Ward 6, ED 142</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
-              <tr><td>Dwelling number</td><td>88</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td>Dwelling number <span class="badge">from C0019</span></td><td>88</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
             </tbody>
           </table>
+          <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">A row marked
+            <span class="badge">from C0019</span> came from a duplicate record of this citation merged into it
+            (ADR 0039 §5): the citation reads as one record with every copy's attributes and attachments, each row still attributed.
+            Edit and Retract on that row are written to C0019; a record that cites C0019 cites this citation.</div>
         </div>
 
         <!-- MEDIA -->
@@ -277,8 +281,16 @@
 
         <!-- HISTORY -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone. An identity decision — merged, or marked as a different citation — also shows the matching engine's assessment it was made on.</div>
           <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 10:30</div>
+              <div class="tl-what">Citation merged</div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"The same census entry, cited twice"</div>
+              <div class="tl-evidence muted" title="The matching engine's assessment the decision was made on (ADR 0039 §2) — not the 5-level assertion Confidence">Matched at 93% · probable match · engine 4</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-22 14:34</div>
               <div class="tl-what">Evidence axes set: <b>derivative · primary · indirect</b></div>

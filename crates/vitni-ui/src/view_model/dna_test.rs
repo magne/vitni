@@ -467,7 +467,8 @@ mod dna_test_draft_tests {
 
     #[test]
     fn an_unchanged_test_yields_no_edits() {
-        assert!(edit_seed().edits_against(&edit_seed()).is_empty());
+        let checked = edit_seed().edits_against(&edit_seed());
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]

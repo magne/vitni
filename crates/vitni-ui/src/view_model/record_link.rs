@@ -464,14 +464,14 @@ mod tests {
     fn a_new_place_defaults_to_a_city_with_no_name() {
         let fields = NewPlaceFields::default();
         assert_eq!(fields.place_type, PlaceType::City);
-        assert!(fields.name.is_empty());
+        assert!(fields.name.is_empty(), "{:?}", fields.name);
     }
 
     #[test]
     fn a_new_citation_nests_a_source_link_that_starts_empty() {
         let citation = NewCitationFields::default();
         assert_eq!(citation.source, RecordLink::Empty);
-        assert!(citation.page.is_empty());
+        assert!(citation.page.is_empty(), "{:?}", citation.page);
         let with_new_source = NewCitationFields {
             source: RecordLink::New(NewSourceFields {
                 title: "Baptism register".to_owned(),
@@ -538,7 +538,7 @@ mod tests {
         let Some(NewRecordDraft::Person(fields)) = NewRecordDraft::seed(Category::People, "Lovelace") else {
             panic!("People always seeds a person draft");
         };
-        assert!(fields.given.is_empty());
+        assert!(fields.given.is_empty(), "{:?}", fields.given);
         assert_eq!(fields.surname, "Lovelace");
     }
 

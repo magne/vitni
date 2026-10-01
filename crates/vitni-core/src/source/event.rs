@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use crate::assertions::{Envelope, EventBody};
 use crate::enums::Restriction;
 use crate::ids::{AssertionId, HumanId, NoteId, SourceId, TagId};
+use crate::matching::MatchEvidence;
 use crate::repo_ref::RepoRef;
 use crate::text::{Attribute, MediaRef};
 
@@ -124,6 +125,28 @@ pub enum SourceEventBody {
         /// The identifier in effect before this change (for the audit trail).
         old_human_id: HumanId,
     },
+    /// Another source record was concluded to be this one (ADR 0039 §1): a same-as link on the survivor
+    /// that leaves the merged record's own stream untouched (data-model §9).
+    SourcesMerged {
+        /// The source that survives as the cluster's record.
+        surviving: SourceId,
+        /// The source merged into it.
+        merged: SourceId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a merge made
+        /// without the engine.
+        assessment: Option<MatchEvidence>,
+    },
+    /// Another source record was concluded to be a different source from this one (ADR 0039 §1), so the
+    /// pair is never proposed as a duplicate again.
+    SourcesDistinguished {
+        /// The source the decision is recorded on.
+        source: SourceId,
+        /// The source it is distinct from.
+        other: SourceId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a decision
+        /// made without the engine.
+        assessment: Option<MatchEvidence>,
+    },
 }
 
 impl EventBody for SourceEventBody {
@@ -144,6 +167,8 @@ impl EventBody for SourceEventBody {
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
             Self::HumanIdChanged { .. } => "HumanIdChanged",
+            Self::SourcesMerged { .. } => "SourcesMerged",
+            Self::SourcesDistinguished { .. } => "SourcesDistinguished",
         }
     }
 

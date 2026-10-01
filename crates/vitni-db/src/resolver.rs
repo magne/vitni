@@ -142,7 +142,9 @@ impl CitationRefResolver for CitationRefService {
             | CitationCommand::SetRestrictions { .. }
             | CitationCommand::RetractAssertion { .. }
             | CitationCommand::SupersedeAssertion { .. }
-            | CitationCommand::SetHumanId { .. } => true,
+            | CitationCommand::SetHumanId { .. }
+            | CitationCommand::MergeCitations { .. }
+            | CitationCommand::DistinguishCitations { .. } => true,
         };
         CitationRefs { source_exists }
     }
@@ -226,7 +228,9 @@ impl PlaceRefResolver for PlaceRefService {
             | PlaceCommand::SetRestrictions { .. }
             | PlaceCommand::RetractAssertion { .. }
             | PlaceCommand::SupersedeAssertion { .. }
-            | PlaceCommand::SetHumanId { .. } => true,
+            | PlaceCommand::SetHumanId { .. }
+            | PlaceCommand::MergePlaces { .. }
+            | PlaceCommand::DistinguishPlaces { .. } => true,
         };
         let missing_succession_place = match command {
             PlaceCommand::AssertSuccession { from, to, .. } => {
@@ -248,7 +252,9 @@ impl PlaceRefResolver for PlaceRefService {
             | PlaceCommand::SetRestrictions { .. }
             | PlaceCommand::RetractAssertion { .. }
             | PlaceCommand::SupersedeAssertion { .. }
-            | PlaceCommand::SetHumanId { .. } => None,
+            | PlaceCommand::SetHumanId { .. }
+            | PlaceCommand::MergePlaces { .. }
+            | PlaceCommand::DistinguishPlaces { .. } => None,
         };
         PlaceRefs {
             enclosing_exists,
@@ -304,7 +310,9 @@ impl SourceRefResolver for SourceRefService {
             | SourceCommand::SetRestrictions { .. }
             | SourceCommand::RetractAssertion { .. }
             | SourceCommand::SupersedeAssertion { .. }
-            | SourceCommand::SetHumanId { .. } => true,
+            | SourceCommand::SetHumanId { .. }
+            | SourceCommand::MergeSources { .. }
+            | SourceCommand::DistinguishSources { .. } => true,
         };
         SourceRefs { repository_exists }
     }

@@ -1825,6 +1825,18 @@ impl Localizer {
             "EventsDistinguished" => fl!(self.loader, "history-events-distinguished"),
             "FamiliesMerged" => fl!(self.loader, "history-families-merged"),
             "FamiliesDistinguished" => fl!(self.loader, "history-families-distinguished"),
+            "PlacesMerged" => fl!(self.loader, "history-places-merged"),
+            "PlacesDistinguished" => fl!(self.loader, "history-places-distinguished"),
+            "SourcesMerged" => fl!(self.loader, "history-sources-merged"),
+            "SourcesDistinguished" => fl!(self.loader, "history-sources-distinguished"),
+            "CitationsMerged" => fl!(self.loader, "history-citations-merged"),
+            "CitationsDistinguished" => fl!(self.loader, "history-citations-distinguished"),
+            "RepositoriesMerged" => fl!(self.loader, "history-repositories-merged"),
+            "RepositoriesDistinguished" => fl!(self.loader, "history-repositories-distinguished"),
+            "NotesMerged" => fl!(self.loader, "history-notes-merged"),
+            "NotesDistinguished" => fl!(self.loader, "history-notes-distinguished"),
+            "MediaMerged" => fl!(self.loader, "history-media-merged"),
+            "MediaDistinguished" => fl!(self.loader, "history-media-distinguished"),
             "CitationCreated" => fl!(self.loader, "history-citation-created"),
             "PageSet" => fl!(self.loader, "history-page-set"),
             "DateAsserted" => fl!(self.loader, "history-date-asserted"),
@@ -3344,6 +3356,18 @@ mod tests {
         "EventsDistinguished",
         "FamiliesMerged",
         "FamiliesDistinguished",
+        "PlacesMerged",
+        "PlacesDistinguished",
+        "SourcesMerged",
+        "SourcesDistinguished",
+        "CitationsMerged",
+        "CitationsDistinguished",
+        "RepositoriesMerged",
+        "RepositoriesDistinguished",
+        "NotesMerged",
+        "NotesDistinguished",
+        "MediaMerged",
+        "MediaDistinguished",
         "CitationCreated",
         "PageSet",
         "DateAsserted",
@@ -3805,10 +3829,12 @@ mod tests {
                 );
             }
             for quality in DATE_QUALITIES {
-                assert!(!loc.date_quality_choice_label(quality).is_empty());
+                let checked = loc.date_quality_choice_label(quality);
+                assert!(!checked.is_empty(), "{checked:?}");
             }
             for calendar in DATE_CALENDARS {
-                assert!(!loc.calendar_label(calendar).is_empty());
+                let checked = loc.calendar_label(calendar);
+                assert!(!checked.is_empty(), "{checked:?}");
             }
         }
         assert_eq!(Localizer::for_test("en").date_invalid_error(), "Not a valid date.");

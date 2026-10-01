@@ -517,7 +517,8 @@ mod dna_match_draft_tests {
     #[test]
     fn an_edit_draft_is_valid_without_the_locked_observations() {
         assert!(edit_seed().is_valid());
-        assert!(edit_seed().edits_against(&edit_seed()).is_empty());
+        let checked = edit_seed().edits_against(&edit_seed());
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]

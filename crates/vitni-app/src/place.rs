@@ -5,7 +5,7 @@
 //! frontend-neutral [`PlaceSummary`] (never a `PlaceView`, cqrs-es, or sqlx type). `human_id` is
 //! auto-allocated using the workspace's configured format, or validated when supplied (ADR 0005).
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use vitni_core::citation::CitationView;
 use vitni_core::date::GenealogicalDate;
@@ -23,10 +23,13 @@ use vitni_core::text::MediaRef;
 use vitni_db::{PlaceSuccessionRecord, Store};
 
 use crate::citation::TagRef;
-use crate::dto::{AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, media_lookups, tag_refs};
+use crate::dto::{
+    AggRef, AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, media_lookups, tag_refs,
+};
 use crate::error::AppError;
 use crate::event::list_events;
 use crate::geography::{EventPin, build_event_pins, place_point};
+use crate::identity::{self, IdentityDecision, PairDecision, PlaceClusters};
 use crate::place_hierarchy::{HierarchyHop, generated_title, hierarchy_chain};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
@@ -185,6 +188,25 @@ pub struct PlaceSummary {
     pub tags: Vec<TagRef>,
     /// The place's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+    /// Every place record merged into this place's cluster, directly or through another member
+    /// (ADR 0039 §4), in id order. An identity decision — the records describe one place — not an ADR
+    /// 0026 succession, which links different places.
+    pub merged: Vec<AggRef>,
+    /// The `human_id` of the member each member row came from, by the row's `AssertionId`: its edit or
+    /// retraction is written to that member's stream (ADR 0039 §5). A row absent here is the place's
+    /// own. Never rendered as a key; see [`owner_of`](Self::owner_of).
+    pub claim_owners: BTreeMap<String, String>,
+}
+
+impl PlaceSummary {
+    /// The `human_id` of the record that owns the row introduced by `assertion_id`: the member it came
+    /// from, or this place for its own rows.
+    #[must_use]
+    pub fn owner_of(&self, assertion_id: &str) -> &str {
+        self.claim_owners
+            .get(assertion_id)
+            .map_or(self.human_id.as_str(), String::as_str)
+    }
 }
 
 /// What to create a place with (the auto/override `human_id`, its type, and an optional first name).
@@ -715,7 +737,8 @@ pub async fn import_attach_place_note(
     attach_place_note(workspace, session, place_human_id, note_id, MutationMeta::default()).await
 }
 
-/// Applies (or removes) a tag on a place, identified by `human_id`.
+/// Applies (or removes) a tag on a place, identified by `human_id`. A removed tag is untagged on
+/// every record of the cluster that holds it (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -731,11 +754,27 @@ pub async fn tag_place(
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
     let tag_id = parse_tag_id(tag_id)?;
-    let command = if remove {
-        PlaceCommand::Untag { place_id, tag_id }
-    } else {
-        PlaceCommand::Tag { place_id, tag_id }
-    };
+    if !remove {
+        let command = PlaceCommand::Tag { place_id, tag_id };
+        return execute_place_mutation(store, session, place_id, command, meta).await;
+    }
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    for record in identity::cluster_records(store, place_id).await? {
+        let Some(id) = record.place_id() else { continue };
+        if id != place_id && record.tags().contains(&tag_id) {
+            let command = PlaceCommand::Untag { place_id: id, tag_id };
+            execute(
+                store,
+                session,
+                &id.to_string(),
+                command,
+                meta.provenance.clone(),
+                citations.clone(),
+            )
+            .await?;
+        }
+    }
+    let command = PlaceCommand::Untag { place_id, tag_id };
     execute_place_mutation(store, session, place_id, command, meta).await
 }
 
@@ -744,6 +783,121 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
     uuid::Uuid::parse_str(id)
         .map(TagId::from_uuid)
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
+}
+
+/// The outcome of [`merge_places`]: the survivor's refreshed summary and the merged place's
+/// `human_id`.
+///
+/// The merge is a same-as link on the survivor (ADR 0039 §1): no record that names the merged place
+/// is rewritten. Every reader resolves those references to the cluster's root instead (ADR 0039 §5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceMergeResult {
+    /// The survivor's summary after the merge, composed with every record now in its cluster.
+    pub survivor: PlaceSummary,
+    /// The merged place's `human_id` (its own record/stream is untouched).
+    pub merged_human_id: String,
+}
+
+/// Merges `merged_human_id`'s cluster into `surviving_human_id`'s, recording a same-as link
+/// (ADR 0039 §1). Both records resolve to their cluster roots first (§4), and one `PlacesMerged`
+/// event is emitted on the surviving root's stream, carrying the decision's provenance and assessment.
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if either `human_id` does not resolve; [`AppError::PlaceDomain`] with
+/// `MergeConflict` if they resolve to the same place, or `IdentityDecided` if the two are already one
+/// cluster or a record of one cluster is distinguished from a record of the other; or a store error.
+pub async fn merge_places(
+    workspace: &Workspace,
+    session: &Session,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<PlaceMergeResult, AppError> {
+    let pair = identity::merge::<PlaceView>(workspace, session, surviving_human_id, merged_human_id, decision).await?;
+    place_merge_result(workspace, &pair.first_human_id, merged_human_id).await
+}
+
+/// Undoes every live distinction between the two place clusters, then merges them (ADR 0039 §4).
+///
+/// # Errors
+///
+/// As [`merge_places`], except that a distinction between the clusters no longer refuses the merge.
+pub async fn undo_place_distinction_and_merge(
+    workspace: &Workspace,
+    session: &Session,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<PlaceMergeResult, AppError> {
+    let pair = identity::undo_distinction_and_merge::<PlaceView>(
+        workspace,
+        session,
+        surviving_human_id,
+        merged_human_id,
+        decision,
+    )
+    .await?;
+    place_merge_result(workspace, &pair.first_human_id, merged_human_id).await
+}
+
+/// The survivor's composed summary after a merge.
+async fn place_merge_result(
+    workspace: &Workspace,
+    survivor_human_id: &str,
+    merged_human_id: &str,
+) -> Result<PlaceMergeResult, AppError> {
+    let survivor = show_place(workspace, survivor_human_id)
+        .await?
+        .ok_or_else(|| AppError::PlaceNotFound(survivor_human_id.to_owned()))?;
+    Ok(PlaceMergeResult {
+        survivor,
+        merged_human_id: merged_human_id.to_owned(),
+    })
+}
+
+/// Records that the two places are different (ADR 0039 §1), so neither cluster is proposed as a
+/// duplicate of the other again. One `PlacesDistinguished` event is emitted on the first root's
+/// stream; undoing it lifts the decision.
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if either `human_id` does not resolve; [`AppError::PlaceDomain`] with
+/// `DistinctFromItself` if they resolve to the same place, or `IdentityDecided` if the two are already
+/// one cluster or already distinguished; or a store error.
+pub async fn distinguish_places(
+    workspace: &Workspace,
+    session: &Session,
+    place_human_id: &str,
+    other_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<(), AppError> {
+    identity::distinguish::<PlaceView>(workspace, session, place_human_id, other_human_id, decision).await
+}
+
+/// The live identity decision between the clusters of two places, or `None` when the pair is
+/// undecided (ADR 0039 §4).
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if either `human_id` does not resolve, or a store error.
+pub async fn place_pair_decision(
+    workspace: &Workspace,
+    first_human_id: &str,
+    other_human_id: &str,
+) -> Result<Option<PairDecision>, AppError> {
+    identity::pair_decision::<PlaceView>(workspace, first_human_id, other_human_id).await
+}
+
+/// The `human_id` of the record of `human_id`'s place cluster whose stream holds the live assertion
+/// `assertion_id` — where an edit or retraction of that row is written (ADR 0039 §5).
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if `human_id` is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or a store error.
+pub async fn place_claim_owner(workspace: &Workspace, human_id: &str, assertion_id: &str) -> Result<String, AppError> {
+    identity::claim_owner::<PlaceView>(workspace, human_id, assertion_id).await
 }
 
 /// Loads a single place's summary by `human_id`, with its succession relations (ADR 0026 §4).
@@ -778,18 +932,32 @@ async fn show_place_resolved(
     human_id: &str,
     as_of: Option<GenealogicalDate>,
 ) -> Result<Option<PlaceSummary>, AppError> {
-    let Some(view) = workspace.store().find_place(human_id).await? else {
+    let store = workspace.store();
+    let Some(place_id) = store.find_place(human_id).await?.and_then(|view| view.place_id()) else {
         return Ok(None);
     };
+    let views = identity::cluster_records(store, place_id).await?;
     let lookups = PlaceLookups::load(workspace).await?;
-    let mut summary = summarize_as_of(&view, &lookups, as_of.as_ref());
-    let Some(place_id) = view.place_id() else {
-        return Ok(Some(summary));
+    let Some(mut summary) = summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups, as_of.as_ref()) else {
+        return Ok(None);
     };
-    let store = workspace.store();
-    let id = place_id.to_string();
-    summary.predecessors = succession_refs(&store.place_predecessors(&id).await?, &lookups);
-    summary.successors = succession_refs(&store.place_successors(&id).await?, &lookups);
+    for view in &views {
+        let (Some(id), Some(owner)) = (view.place_id(), view.human_id()) else {
+            continue;
+        };
+        let id = id.to_string();
+        let predecessors = succession_refs(&store.place_predecessors(&id).await?, &lookups);
+        let successors = succession_refs(&store.place_successors(&id).await?, &lookups);
+        if owner.as_str() != summary.human_id {
+            for row in predecessors.iter().chain(&successors) {
+                summary
+                    .claim_owners
+                    .insert(row.assertion_id.clone(), owner.as_str().to_owned());
+            }
+        }
+        summary.predecessors.extend(predecessors);
+        summary.successors.extend(successors);
+    }
     if let Some(point) = place_point(&summary) {
         let mut points = HashMap::new();
         points.insert(summary.id.clone(), point);
@@ -835,7 +1003,7 @@ fn succession_ref(record: &PlaceSuccessionRecord, lookups: &PlaceLookups) -> Opt
         .and_then(|id| lookups.places.get(&id));
     Some(PlaceSuccessionRef {
         human_id: info.map_or_else(|| record.place_id.clone(), |i| i.human_id.clone()),
-        id: record.place_id.clone(),
+        id: info.map_or_else(|| record.place_id.clone(), |i| i.id.to_string()),
         name: info.and_then(|i| i.name.clone()),
         kind,
         date,
@@ -849,9 +1017,7 @@ fn succession_ref(record: &PlaceSuccessionRecord, lookups: &PlaceLookups) -> Opt
 ///
 /// A store/read-model error.
 pub async fn list_places(workspace: &Workspace) -> Result<Vec<PlaceSummary>, AppError> {
-    let views = workspace.store().list_places().await?;
-    let lookups = PlaceLookups::load(workspace).await?;
-    Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
+    list_resolved(workspace, None).await
 }
 
 /// Lists every place's summary, resolved **as of** `as_of` (ADR 0026 §1) — the geography view's feed
@@ -862,16 +1028,27 @@ pub async fn list_places(workspace: &Workspace) -> Result<Vec<PlaceSummary>, App
 ///
 /// A store/read-model error.
 pub async fn list_places_as_of(workspace: &Workspace, as_of: GenealogicalDate) -> Result<Vec<PlaceSummary>, AppError> {
-    let views = workspace.store().list_places().await?;
+    list_resolved(workspace, Some(&as_of)).await
+}
+
+/// Lists every place resolved as of `as_of` (current/primary when `None`), a merged place listed once,
+/// as its cluster's root (ADR 0039 §5).
+async fn list_resolved(workspace: &Workspace, as_of: Option<&GenealogicalDate>) -> Result<Vec<PlaceSummary>, AppError> {
+    let store = workspace.store();
+    let views = store.list_places().await?;
+    let clusters = PlaceClusters::load(store).await?;
     let lookups = PlaceLookups::load(workspace).await?;
-    Ok(views
-        .iter()
-        .map(|view| summarize_as_of(view, &lookups, Some(&as_of)))
-        .collect())
+    let mut summaries = Vec::with_capacity(views.len());
+    for cluster in identity::group_clusters(&views, &clusters) {
+        summaries.extend(summarize_cluster(&cluster, &lookups, as_of));
+    }
+    Ok(summaries)
 }
 
 /// An enclosing place joined to the Place projection: the `human_id`, primary name, and type.
+#[derive(Clone)]
 struct PlaceInfo {
+    id: PlaceId,
     human_id: String,
     name: Option<String>,
     place_type: Option<PlaceType>,
@@ -900,6 +1077,7 @@ impl PlaceLookups {
                 places.insert(
                     id,
                     PlaceInfo {
+                        id,
                         human_id: human_id.as_str().to_owned(),
                         name: view.names().first().map(|n| n.text.clone()),
                         place_type: view.place_type().cloned(),
@@ -908,6 +1086,11 @@ impl PlaceLookups {
                 views.insert(id, view);
             }
         }
+        // A reference to a merged place — an enclosure, a succession — reads as its cluster's root
+        // (ADR 0039 §5), and the hierarchy walk continues from the root's own enclosure.
+        let clusters = PlaceClusters::load(store).await?;
+        clusters.redirect(&mut places);
+        clusters.redirect(&mut views);
         Ok(Self {
             places,
             views,
@@ -919,7 +1102,9 @@ impl PlaceLookups {
     }
 }
 
-/// Sets a place's privacy restrictions (GEDCOM `RESN` — data-model §6).
+/// Sets a place's privacy restrictions (GEDCOM `RESN` — data-model §6). A merged member restricted
+/// beyond the new set is narrowed to it first, so the cluster reads with exactly `restrictions`
+/// (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -933,6 +1118,27 @@ pub async fn set_restrictions(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    for record in identity::cluster_records(store, place_id).await? {
+        let Some(id) = record.place_id() else { continue };
+        if id == place_id || record.restrictions().is_subset(&restrictions) {
+            continue;
+        }
+        let narrowed = record.restrictions().intersection(&restrictions).copied().collect();
+        let command = PlaceCommand::SetRestrictions {
+            place_id: id,
+            restrictions: narrowed,
+        };
+        execute(
+            store,
+            session,
+            &id.to_string(),
+            command,
+            meta.provenance.clone(),
+            citations.clone(),
+        )
+        .await?;
+    }
     execute_place_mutation(
         store,
         session,
@@ -989,7 +1195,7 @@ pub async fn set_place_human_id(
 
 /// Executes one command through the store, stamping the operator `provenance` and backing
 /// `citations`, and mapping the command outcome to [`AppError`].
-async fn execute(
+pub(crate) async fn execute(
     store: &Store,
     session: &Session,
     aggregate_id: &str,
@@ -1144,10 +1350,6 @@ fn geometry_refs(view: &PlaceView, lookups: &PlaceLookups) -> Vec<PlaceGeometryR
         .collect()
 }
 
-fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
-    summarize_as_of(view, lookups, None)
-}
-
 /// Resolves the enclosing link a single place's own `enclosed_by` set carries **as of**
 /// `as_of_sort_value` (ADR 0026 §1) — the primary (first-asserted) link when `None` — as one
 /// [`HierarchyHop`] the walk can continue from. `None` when `place_id` is unknown or has no
@@ -1157,7 +1359,13 @@ fn resolve_hop(
     views: &HashMap<PlaceId, PlaceView>,
     as_of_sort_value: Option<i64>,
 ) -> Option<HierarchyHop> {
-    let view = views.get(&place_id)?;
+    own_hop(views.get(&place_id)?, as_of_sort_value)
+}
+
+/// The enclosing link `view`'s own `enclosed_by` set carries as of `as_of_sort_value`, as in
+/// [`resolve_hop`] — read from the record itself, so a merged member's own jurisdiction is not
+/// replaced by its root's.
+fn own_hop(view: &PlaceView, as_of_sort_value: Option<i64>) -> Option<HierarchyHop> {
     let link = match as_of_sort_value {
         Some(target) => view.enclosed_by_as_of(target),
         None => view.primary_enclosed_by(),
@@ -1184,13 +1392,29 @@ fn enclosing_ref_from_hop(hop: &HierarchyHop, lookups: &PlaceLookups) -> PlaceEn
     let info = lookups.places.get(&hop.place_id);
     PlaceEnclosingRef {
         human_id: info.map_or_else(|| hop.place_id.to_string(), |i| i.human_id.clone()),
-        id: hop.place_id.to_string(),
+        id: info.map_or(hop.place_id, |i| i.id).to_string(),
         name: info.and_then(|i| i.name.clone()),
         place_type: info.and_then(|i| i.place_type.clone()),
         date: hop.date.clone(),
         confidence: hop.confidence,
         assertion_id: hop.assertion_id.to_string(),
     }
+}
+
+/// The transitive jurisdiction chain of `view`, nearest first, as of `as_of_sort_value` (ADR 0026 §1):
+/// the first hop from the record's own enclosure, every later hop through the (cluster-resolved)
+/// lookups.
+fn enclosing_chain(view: &PlaceView, lookups: &PlaceLookups, as_of_sort_value: Option<i64>) -> Vec<HierarchyHop> {
+    let Some(place_id) = view.place_id() else {
+        return Vec::new();
+    };
+    hierarchy_chain(place_id, |id| {
+        if id == place_id {
+            own_hop(view, as_of_sort_value)
+        } else {
+            resolve_hop(id, &lookups.views, as_of_sort_value)
+        }
+    })
 }
 
 /// Builds the DTO, resolving the name and the transitive enclosing chain **as of** `as_of`'s
@@ -1201,10 +1425,7 @@ fn enclosing_ref_from_hop(hop: &HierarchyHop, lookups: &PlaceLookups) -> PlaceEn
 fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&GenealogicalDate>) -> PlaceSummary {
     let as_of_sort_value = as_of.map(|date| date.sort_value);
     let names = name_refs(view);
-    let chain = view
-        .place_id()
-        .map(|place_id| hierarchy_chain(place_id, |id| resolve_hop(id, &lookups.views, as_of_sort_value)))
-        .unwrap_or_default();
+    let chain = enclosing_chain(view, lookups, as_of_sort_value);
     let enclosing = chain.iter().map(|hop| enclosing_ref_from_hop(hop, lookups)).collect();
     let geometries = geometry_refs(view, lookups);
     let citations = view
@@ -1239,7 +1460,7 @@ fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&Gene
         .filter_map(|attributed| {
             lookups.notes.get(&attributed.value).map(|note| AttachedRef {
                 human_id: note.human_id.clone(),
-                id: attributed.value.to_string(),
+                id: note.id.clone(),
                 note_type: note.note_type.clone(),
                 text: note.text.clone(),
                 language: note.language.clone(),
@@ -1296,5 +1517,80 @@ fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&Gene
         notes,
         tags,
         restrictions: view.restrictions().clone(),
+        merged: Vec::new(),
+        claim_owners: BTreeMap::new(),
     }
+}
+
+/// Summarises a cluster — its root first, then its members — as one place (ADR 0039 §5): the root's
+/// summary with every member's rows appended, each member-owned row recorded in `claim_owners`.
+/// `None` for an empty slice.
+fn summarize_cluster(
+    views: &[&PlaceView],
+    lookups: &PlaceLookups,
+    as_of: Option<&GenealogicalDate>,
+) -> Option<PlaceSummary> {
+    let (root, members) = views.split_first()?;
+    let mut summary = summarize_as_of(root, lookups, as_of);
+    for view in members {
+        let member = summarize_as_of(view, lookups, as_of);
+        summary.merged.push(AggRef {
+            human_id: member.human_id.clone(),
+            id: member.id.clone(),
+        });
+        adopt(&mut summary, member);
+    }
+    summary.merged.sort_by(|x, y| x.id.cmp(&y.id));
+    Some(summary)
+}
+
+/// Appends a member's rows to its root's summary, recording the member each row came from, and fills
+/// what the root lacks — type, code, coordinates, geometry, jurisdiction — from the member.
+fn adopt(root: &mut PlaceSummary, member: PlaceSummary) {
+    let owner = member.human_id.clone();
+    let mut owned: Vec<String> = Vec::new();
+    owned.extend(member.names.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.geometries.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.citations.iter().filter_map(|row| row.assertion_id.clone()));
+    owned.extend(member.media.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.notes.iter().map(|row| row.assertion_id.clone()));
+    for assertion_id in owned {
+        root.claim_owners.insert(assertion_id, owner.clone());
+    }
+    if root.place_type.is_none() {
+        root.place_type = member.place_type;
+        root.place_type_confidence = member.place_type_confidence;
+    }
+    if root.code.is_none() {
+        root.code = member.code;
+        root.code_confidence = member.code_confidence;
+        root.code_citations = member.code_citations;
+    }
+    if root.coordinates.is_none() {
+        root.coordinates = member.coordinates;
+        root.coordinates_point = member.coordinates_point;
+        root.coordinates_confidence = member.coordinates_confidence;
+        root.coordinate_citations = member.coordinate_citations;
+    }
+    if root.resolved_geometry.is_none() {
+        root.resolved_geometry = member.resolved_geometry;
+    }
+    if root.enclosing.is_empty() {
+        for row in &member.enclosing {
+            root.claim_owners.insert(row.assertion_id.clone(), owner.clone());
+        }
+        root.enclosing = member.enclosing;
+    }
+    root.resolved_name = root.resolved_name.take().or(member.resolved_name);
+    root.names.extend(member.names);
+    root.geometries.extend(member.geometries);
+    root.citations.extend(member.citations);
+    root.media.extend(member.media);
+    root.notes.extend(member.notes);
+    for tag in member.tags {
+        if !root.tags.iter().any(|held| held.id == tag.id) {
+            root.tags.push(tag);
+        }
+    }
+    root.restrictions.extend(member.restrictions);
 }

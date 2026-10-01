@@ -567,7 +567,7 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &untagged);
-        assert!(state.tags.is_empty());
+        assert!(state.tags.is_empty(), "{:?}", state.tags);
     }
 
     #[test]

@@ -36,6 +36,12 @@ impl MediaUsage {
         scan_places(workspace, &mut by_media).await?;
         scan_sources(workspace, &mut by_media).await?;
         scan_citations(workspace, &mut by_media).await?;
+        // The records that use any record of a merged cluster are listed under its root (ADR 0039 §5).
+        crate::identity::MediaClusters::load(workspace.store())
+            .await?
+            .fold_by(&mut by_media, |held, entry| {
+                held.kind == entry.kind && held.id == entry.id
+            });
         Ok(Self { by_media })
     }
 
@@ -45,11 +51,15 @@ impl MediaUsage {
     }
 }
 
-/// Pushes one referencing record onto a media object's bucket, once: the records of a merged person
-/// cluster all name its root (ADR 0039 §5).
+/// Pushes one referencing record onto a media object's bucket, once per record: the records of a merged
+/// cluster all name its root (ADR 0039 §5), each with its own label, so the root is matched by kind and
+/// id alone.
 fn push(map: &mut HashMap<MediaId, Vec<UsingRecordRef>>, media: MediaId, record: UsingRecordRef) {
     let records = map.entry(media).or_default();
-    if !records.contains(&record) {
+    if !records
+        .iter()
+        .any(|held| held.kind == record.kind && held.id == record.id)
+    {
         records.push(record);
     }
 }
@@ -134,11 +144,12 @@ async fn scan_events(workspace: &Workspace, map: &mut HashMap<MediaId, Vec<Using
 
 /// Inverts place media attachments.
 async fn scan_places(workspace: &Workspace, map: &mut HashMap<MediaId, Vec<UsingRecordRef>>) -> Result<(), AppError> {
+    let references = crate::identity::PlaceReferences::load(workspace.store()).await?;
     for view in workspace.store().list_places().await? {
-        let (Some(id), Some(human_id)) = (view.place_id(), view.human_id()) else {
+        let Some(id) = view.place_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.names().first().map(|n| n.text.clone());
         for media in view.media() {
             push(
@@ -158,11 +169,12 @@ async fn scan_places(workspace: &Workspace, map: &mut HashMap<MediaId, Vec<Using
 
 /// Inverts source media attachments.
 async fn scan_sources(workspace: &Workspace, map: &mut HashMap<MediaId, Vec<UsingRecordRef>>) -> Result<(), AppError> {
+    let references = crate::identity::SourceReferences::load(workspace.store()).await?;
     for view in workspace.store().list_sources().await? {
-        let (Some(id), Some(human_id)) = (view.source_id(), view.human_id()) else {
+        let Some(id) = view.source_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.title().map(ToOwned::to_owned);
         for media in view.media() {
             push(
@@ -185,11 +197,12 @@ async fn scan_citations(
     workspace: &Workspace,
     map: &mut HashMap<MediaId, Vec<UsingRecordRef>>,
 ) -> Result<(), AppError> {
+    let references = crate::identity::CitationReferences::load(workspace.store()).await?;
     for view in workspace.store().list_citations().await? {
-        let (Some(id), Some(human_id)) = (view.citation_id(), view.human_id()) else {
+        let Some(id) = view.citation_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         for media in view.media() {
             push(
                 map,

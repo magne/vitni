@@ -8,6 +8,7 @@ use crate::assertions::{Envelope, EventBody};
 use crate::date::GenealogicalDate;
 use crate::enums::Restriction;
 use crate::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, TagId};
+use crate::matching::MatchEvidence;
 use crate::media_path::MediaPath;
 use crate::text::Attribute;
 
@@ -118,6 +119,28 @@ pub enum MediaEventBody {
         /// The identifier in effect before this change (for the audit trail).
         old_human_id: HumanId,
     },
+    /// Another media object record was concluded to be this one (ADR 0039 §1): a same-as link on the survivor
+    /// that leaves the merged record's own stream untouched (data-model §9).
+    MediaMerged {
+        /// The media object that survives as the cluster's record.
+        surviving: MediaId,
+        /// The media object merged into it.
+        merged: MediaId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a merge made
+        /// without the engine.
+        assessment: Option<MatchEvidence>,
+    },
+    /// Another media object record was concluded to be a different media object from this one (ADR 0039 §1), so the
+    /// pair is never proposed as a duplicate again.
+    MediaDistinguished {
+        /// The media object the decision is recorded on.
+        media: MediaId,
+        /// The media object it is distinct from.
+        other: MediaId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a decision
+        /// made without the engine.
+        assessment: Option<MatchEvidence>,
+    },
 }
 
 impl EventBody for MediaEventBody {
@@ -137,6 +160,8 @@ impl EventBody for MediaEventBody {
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
             Self::HumanIdChanged { .. } => "HumanIdChanged",
+            Self::MediaMerged { .. } => "MediaMerged",
+            Self::MediaDistinguished { .. } => "MediaDistinguished",
         }
     }
 

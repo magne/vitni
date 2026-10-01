@@ -105,7 +105,13 @@ fn push_attachments(builder: &mut Builder, repository_id: RepositoryId, note_id:
     }
 }
 
+/// The repository's corrections and identity decisions: merged with one duplicate copy and distinguished
+/// from another, both minted here — the projection needs neither to exist.
 fn push_corrections(builder: &mut Builder, repository_id: RepositoryId, target: AssertionId) {
+    let (duplicate, other) = (
+        RepositoryId::from_uuid(builder.uuid()),
+        RepositoryId::from_uuid(builder.uuid()),
+    );
     let bodies = [
         RepositoryEventBody::AssertionRetracted { repository_id, target },
         RepositoryEventBody::AssertionSuperseded { repository_id, target },
@@ -113,6 +119,16 @@ fn push_corrections(builder: &mut Builder, repository_id: RepositoryId, target: 
             repository_id,
             human_id: HumanId::new("R0099"),
             old_human_id: HumanId::new("R0001"),
+        },
+        RepositoryEventBody::RepositoriesMerged {
+            surviving: repository_id,
+            merged: duplicate,
+            assessment: None,
+        },
+        RepositoryEventBody::RepositoriesDistinguished {
+            repository: repository_id,
+            other,
+            assessment: None,
         },
     ];
     for body in bodies {

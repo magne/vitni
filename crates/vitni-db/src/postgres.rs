@@ -61,7 +61,7 @@ macro_rules! postgres_open_cqrs {
 }
 
 /// Appends the derived side indexes to the one framework each is fed by: the identity cluster index
-/// (ADR 0039 §4) to `person`, `event` and `family`, and the succession index (ADR 0026 §4) to `place`,
+/// (ADR 0039 §4) to every matchable kind but `tag`, and the succession index (ADR 0026 §4) to `place`,
 /// leaving every other aggregate's framework untouched. Dispatches on the registry's literal `$snake`
 /// token — the same "wiring by tag" shape as [`postgres_open_cqrs!`] — rather than naming the aggregate
 /// after the per-aggregate repetition, which a plain `let` can't see across macro hygiene.
@@ -85,9 +85,38 @@ macro_rules! postgres_wire_side_indexes {
         >::new($pool.clone())))
     };
     (place, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(
-            place_succession_index::postgres::PlaceSuccessionIndexQuery::new($pool.clone()),
-        ))
+        $framework
+            .append_query(Box::new(
+                place_succession_index::postgres::PlaceSuccessionIndexQuery::new($pool.clone()),
+            ))
+            .append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+                vitni_core::place::PlaceView,
+            >::new($pool.clone())))
+    };
+    (source, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::source::SourceView,
+        >::new($pool.clone())))
+    };
+    (citation, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::citation::CitationView,
+        >::new($pool.clone())))
+    };
+    (repository, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::repository::RepositoryView,
+        >::new($pool.clone())))
+    };
+    (note, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::note::NoteView,
+        >::new($pool.clone())))
+    };
+    (media, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::media::MediaView,
+        >::new($pool.clone())))
     };
     ($other:ident, $pool:expr, $framework:expr) => {
         $framework
@@ -167,8 +196,8 @@ macro_rules! postgres_store {
                 crate::match_keys::postgres::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating match keys index: {e}")))?;
-                // The identity cluster index (ADR 0039 §4) is derived from the Person, Event and Family
-                // projections; its `Query` is appended to those frameworks below, and a workspace that
+                // The identity cluster index (ADR 0039 §4) is derived from the projections of every
+                // matchable kind; its `Query` is appended to those frameworks below, and a workspace that
                 // predates it gets it filled once the projections are open.
                 let identity_is_new = crate::identity_links::postgres::create_tables(&pool)
                     .await
@@ -248,8 +277,8 @@ macro_rules! postgres_store {
                 // Place's succession cross-reference index (ADR 0026 §4) is derived from the (now
                 // freshly rebuilt) Place projection above, not replayed from raw events itself.
                 place_succession_index::postgres::rebuild_index(&self.pool).await?;
-                // The identity clusters (ADR 0039 §4) are derived from the rebuilt Person, Event and Family
-                // projections.
+                // The identity clusters (ADR 0039 §4) are derived from the rebuilt projections of every
+                // matchable kind.
                 crate::identity_links::postgres::rebuild_index(&self.pool).await?;
                 // The record origins index is replayed from the raw events, after the projections
                 // its `live` flags are read from.

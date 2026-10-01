@@ -12,8 +12,8 @@ use serde::Deserialize;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap};
 use uuid::Uuid;
-use vitni_core::citation::CitationView;
 use vitni_core::citation::command::{CitationCommand, CitationCommandEnvelope};
+use vitni_core::citation::{CitationEventBody, CitationView};
 use vitni_core::dna_match::DnaMatchView;
 use vitni_core::dna_match::command::{DnaMatchCommand, DnaMatchCommandEnvelope};
 use vitni_core::dna_test::DnaTestView;
@@ -23,25 +23,27 @@ use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
 use vitni_core::event::{EventEventBody, EventView};
 use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use vitni_core::family::{FamilyEventBody, FamilyView};
-use vitni_core::ids::{AssertionId, ImportRunId};
+use vitni_core::ids::{
+    AssertionId, CitationId, EventId, FamilyId, ImportRunId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId,
+};
 use vitni_core::import_run::ImportRunView;
 use vitni_core::matching::MatchEvidence;
-use vitni_core::media::MediaView;
 use vitni_core::media::command::{MediaCommand, MediaCommandEnvelope};
-use vitni_core::note::NoteView;
+use vitni_core::media::{MediaEventBody, MediaView};
 use vitni_core::note::command::{NoteCommand, NoteCommandEnvelope};
+use vitni_core::note::{NoteEventBody, NoteView};
 use vitni_core::person::PersonView;
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::person::event::PersonEventBody;
-use vitni_core::place::PlaceView;
 use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+use vitni_core::place::{PlaceEventBody, PlaceView};
 use vitni_core::provenance::{AgentKind, Confidence, EventContext, EvidenceAnalysis, Timestamp};
-use vitni_core::repository::RepositoryView;
 use vitni_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
+use vitni_core::repository::{RepositoryEventBody, RepositoryView};
 use vitni_core::research_note::ResearchNoteView;
 use vitni_core::research_note::command::{ResearchNoteCommand, ResearchNoteCommandEnvelope};
-use vitni_core::source::SourceView;
 use vitni_core::source::command::{SourceCommand, SourceCommandEnvelope};
+use vitni_core::source::{SourceEventBody, SourceView};
 use vitni_db::{DbError, Store, StoredEvent};
 
 use crate::error::AppError;
@@ -987,24 +989,15 @@ pub async fn workspace_counts(workspace: &Workspace) -> Result<WorkspaceCounts, 
     for kind in AGGREGATE_KINDS {
         let count = store.count(kind).await?;
         match kind {
-            "person" => {
-                let members = crate::identity::PersonClusters::load(store).await?.member_count();
-                counts.person = count.saturating_sub(u64::try_from(members).unwrap_or(u64::MAX));
-            }
-            "family" => {
-                let members = crate::identity::FamilyClusters::load(store).await?.member_count();
-                counts.family = count.saturating_sub(u64::try_from(members).unwrap_or(u64::MAX));
-            }
-            "event" => {
-                let members = crate::identity::EventClusters::load(store).await?.member_count();
-                counts.event = count.saturating_sub(u64::try_from(members).unwrap_or(u64::MAX));
-            }
-            "place" => counts.place = count,
-            "source" => counts.source = count,
-            "citation" => counts.citation = count,
-            "repository" => counts.repository = count,
-            "media" => counts.media = count,
-            "note" => counts.note = count,
+            "person" => counts.person = cluster_roots::<PersonId>(store, count).await?,
+            "family" => counts.family = cluster_roots::<FamilyId>(store, count).await?,
+            "event" => counts.event = cluster_roots::<EventId>(store, count).await?,
+            "place" => counts.place = cluster_roots::<PlaceId>(store, count).await?,
+            "source" => counts.source = cluster_roots::<SourceId>(store, count).await?,
+            "citation" => counts.citation = cluster_roots::<CitationId>(store, count).await?,
+            "repository" => counts.repository = cluster_roots::<RepositoryId>(store, count).await?,
+            "media" => counts.media = cluster_roots::<MediaId>(store, count).await?,
+            "note" => counts.note = cluster_roots::<NoteId>(store, count).await?,
             "research_note" => counts.research_note = count,
             "tag" => counts.tag = count,
             "dna_test" => counts.dna_test = count,
@@ -1013,6 +1006,13 @@ pub async fn workspace_counts(workspace: &Workspace) -> Result<WorkspaceCounts, 
         }
     }
     Ok(counts)
+}
+
+/// `count` records of `I`'s kind less those merged into another — the clusters a reader sees (ADR 0039
+/// §5).
+async fn cluster_roots<I: crate::identity::ClusterId>(store: &Store, count: u64) -> Result<u64, AppError> {
+    let members = crate::identity::Clusters::<I>::load(store).await?.member_count();
+    Ok(count.saturating_sub(u64::try_from(members).unwrap_or(u64::MAX)))
 }
 
 /// Builds the retraction's provenance from an optional caller `rationale`, defaulting to `"Undo"`
@@ -1095,8 +1095,8 @@ async fn label_runs(store: &Store, mut entries: Vec<ChangeLogEntry>) -> Result<V
 
 /// Extracts a payload-specific [`ActivityDetail`] when the event type alone is too coarse.
 ///
-/// Person `FactAsserted` carries the fact's kind, and an identity decision — on a person, an event or a
-/// family — the assessment it was made on; every other variant, and every other aggregate, relies on
+/// Person `FactAsserted` carries the fact's kind, and an identity decision — on any kind that can be
+/// merged — the assessment it was made on; every other variant, and every other aggregate, relies on
 /// the event-type verb the frontend localizes, so they return `None`. Decoding the concrete enums keeps
 /// this exhaustive: a new variant of a decoded aggregate is a compile error here, not a silent
 /// fallthrough.
@@ -1105,6 +1105,12 @@ fn extract_detail(event: &StoredEvent) -> Option<ActivityDetail> {
         "person" => person_detail(serde_json::from_str(&event.payload).ok()?),
         "event" => event_detail(serde_json::from_str(&event.payload).ok()?),
         "family" => family_detail(serde_json::from_str(&event.payload).ok()?),
+        "place" => place_detail(serde_json::from_str(&event.payload).ok()?),
+        "source" => source_detail(serde_json::from_str(&event.payload).ok()?),
+        "citation" => citation_detail(serde_json::from_str(&event.payload).ok()?),
+        "repository" => repository_detail(serde_json::from_str(&event.payload).ok()?),
+        "note" => note_detail(serde_json::from_str(&event.payload).ok()?),
+        "media" => media_detail(serde_json::from_str(&event.payload).ok()?),
         _ => None,
     }
 }
@@ -1181,6 +1187,138 @@ fn family_detail(body: FamilyEventBody) -> Option<ActivityDetail> {
         | FamilyEventBody::AssertionRetracted { .. }
         | FamilyEventBody::AssertionSuperseded { .. }
         | FamilyEventBody::HumanIdChanged { .. } => None,
+    }
+}
+
+/// The detail of a Place event: an identity decision's assessment.
+fn place_detail(body: PlaceEventBody) -> Option<ActivityDetail> {
+    match body {
+        PlaceEventBody::PlacesMerged { assessment, .. } | PlaceEventBody::PlacesDistinguished { assessment, .. } => {
+            identity_detail(assessment)
+        }
+        PlaceEventBody::PlaceCreated { .. }
+        | PlaceEventBody::PlaceTypeSet { .. }
+        | PlaceEventBody::NameAsserted { .. }
+        | PlaceEventBody::EnclosedByAsserted { .. }
+        | PlaceEventBody::CoordinatesAsserted { .. }
+        | PlaceEventBody::GeometryAsserted { .. }
+        | PlaceEventBody::SuccessionAsserted { .. }
+        | PlaceEventBody::CodeSet { .. }
+        | PlaceEventBody::CitationAdded { .. }
+        | PlaceEventBody::MediaAttached { .. }
+        | PlaceEventBody::NoteAttached { .. }
+        | PlaceEventBody::Tagged { .. }
+        | PlaceEventBody::Untagged { .. }
+        | PlaceEventBody::RestrictionsChanged { .. }
+        | PlaceEventBody::AssertionRetracted { .. }
+        | PlaceEventBody::AssertionSuperseded { .. }
+        | PlaceEventBody::HumanIdChanged { .. } => None,
+    }
+}
+
+/// The detail of a Source event: an identity decision's assessment.
+fn source_detail(body: SourceEventBody) -> Option<ActivityDetail> {
+    match body {
+        SourceEventBody::SourcesMerged { assessment, .. }
+        | SourceEventBody::SourcesDistinguished { assessment, .. } => identity_detail(assessment),
+        SourceEventBody::SourceCreated { .. }
+        | SourceEventBody::TitleSet { .. }
+        | SourceEventBody::AuthorSet { .. }
+        | SourceEventBody::PubInfoSet { .. }
+        | SourceEventBody::AbbrevSet { .. }
+        | SourceEventBody::RepositoryLinked { .. }
+        | SourceEventBody::AttributeAdded { .. }
+        | SourceEventBody::MediaAttached { .. }
+        | SourceEventBody::NoteAttached { .. }
+        | SourceEventBody::Tagged { .. }
+        | SourceEventBody::Untagged { .. }
+        | SourceEventBody::RestrictionsChanged { .. }
+        | SourceEventBody::AssertionRetracted { .. }
+        | SourceEventBody::AssertionSuperseded { .. }
+        | SourceEventBody::HumanIdChanged { .. } => None,
+    }
+}
+
+/// The detail of a Citation event: an identity decision's assessment.
+fn citation_detail(body: CitationEventBody) -> Option<ActivityDetail> {
+    match body {
+        CitationEventBody::CitationsMerged { assessment, .. }
+        | CitationEventBody::CitationsDistinguished { assessment, .. } => identity_detail(assessment),
+        CitationEventBody::CitationCreated { .. }
+        | CitationEventBody::PageSet { .. }
+        | CitationEventBody::DateAsserted { .. }
+        | CitationEventBody::ConfidenceSet { .. }
+        | CitationEventBody::EvidenceAnalysisSet { .. }
+        | CitationEventBody::AttributeAdded { .. }
+        | CitationEventBody::MediaAttached { .. }
+        | CitationEventBody::NoteAttached { .. }
+        | CitationEventBody::Tagged { .. }
+        | CitationEventBody::Untagged { .. }
+        | CitationEventBody::RestrictionsChanged { .. }
+        | CitationEventBody::AssertionRetracted { .. }
+        | CitationEventBody::AssertionSuperseded { .. }
+        | CitationEventBody::HumanIdChanged { .. } => None,
+    }
+}
+
+/// The detail of a Repository event: an identity decision's assessment.
+fn repository_detail(body: RepositoryEventBody) -> Option<ActivityDetail> {
+    match body {
+        RepositoryEventBody::RepositoriesMerged { assessment, .. }
+        | RepositoryEventBody::RepositoriesDistinguished { assessment, .. } => identity_detail(assessment),
+        RepositoryEventBody::RepositoryCreated { .. }
+        | RepositoryEventBody::RepositoryTypeSet { .. }
+        | RepositoryEventBody::NameSet { .. }
+        | RepositoryEventBody::AddressAdded { .. }
+        | RepositoryEventBody::UrlAdded { .. }
+        | RepositoryEventBody::NoteAttached { .. }
+        | RepositoryEventBody::Tagged { .. }
+        | RepositoryEventBody::Untagged { .. }
+        | RepositoryEventBody::RestrictionsChanged { .. }
+        | RepositoryEventBody::AssertionRetracted { .. }
+        | RepositoryEventBody::AssertionSuperseded { .. }
+        | RepositoryEventBody::HumanIdChanged { .. } => None,
+    }
+}
+
+/// The detail of a Note event: an identity decision's assessment.
+fn note_detail(body: NoteEventBody) -> Option<ActivityDetail> {
+    match body {
+        NoteEventBody::NotesMerged { assessment, .. } | NoteEventBody::NotesDistinguished { assessment, .. } => {
+            identity_detail(assessment)
+        }
+        NoteEventBody::NoteCreated { .. }
+        | NoteEventBody::NoteTypeSet { .. }
+        | NoteEventBody::RichTextSet { .. }
+        | NoteEventBody::Tagged { .. }
+        | NoteEventBody::Untagged { .. }
+        | NoteEventBody::RestrictionsChanged { .. }
+        | NoteEventBody::AssertionRetracted { .. }
+        | NoteEventBody::AssertionSuperseded { .. }
+        | NoteEventBody::HumanIdChanged { .. } => None,
+    }
+}
+
+/// The detail of a Media event: an identity decision's assessment.
+fn media_detail(body: MediaEventBody) -> Option<ActivityDetail> {
+    match body {
+        MediaEventBody::MediaMerged { assessment, .. } | MediaEventBody::MediaDistinguished { assessment, .. } => {
+            identity_detail(assessment)
+        }
+        MediaEventBody::MediaCreated { .. }
+        | MediaEventBody::PathSet { .. }
+        | MediaEventBody::ChecksumSet { .. }
+        | MediaEventBody::MimeSet { .. }
+        | MediaEventBody::DateAsserted { .. }
+        | MediaEventBody::AttributeAdded { .. }
+        | MediaEventBody::CitationAdded { .. }
+        | MediaEventBody::NoteAttached { .. }
+        | MediaEventBody::Tagged { .. }
+        | MediaEventBody::Untagged { .. }
+        | MediaEventBody::RestrictionsChanged { .. }
+        | MediaEventBody::AssertionRetracted { .. }
+        | MediaEventBody::AssertionSuperseded { .. }
+        | MediaEventBody::HumanIdChanged { .. } => None,
     }
 }
 
@@ -1646,7 +1784,7 @@ mod tests {
         assert!(log[0].can_undo, "an assertion is undoable");
         assert_eq!(log[0].operator_kind, OperatorKind::Human);
         assert_eq!(log[0].operator_display.as_deref(), Some("Ada"));
-        assert!(!log[0].occurred_at.is_empty());
+        assert!(!log[0].occurred_at.is_empty(), "{:?}", log[0].occurred_at);
         assert_eq!(log[1].event_type, "PersonCreated");
         assert!(!log[1].can_undo, "the creation is not undoable");
     }

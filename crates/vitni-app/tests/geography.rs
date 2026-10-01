@@ -431,7 +431,7 @@ async fn show_place_has_no_events_when_none_occurred_there() {
         .expect("assert coordinates");
 
     let summary = show_place(&ws, &human_id).await.expect("show_place").expect("found");
-    assert!(summary.events.is_empty());
+    assert!(summary.events.is_empty(), "{:?}", summary.events);
 }
 
 /// Creates a place named "Oslo", plotted at a scalar coordinate, then renamed "Kristiania" from

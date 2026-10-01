@@ -14,3 +14,6 @@ err-note-not-found = no note with human_id "{ $id }"
 ## NoteError (wrapped via AppError::NoteDomain)
 err-note-not-exist = note { $id } does not exist
 err-note-exists = note { $id } already exists
+err-note-merge-conflict = notes { $surviving } and { $merged } cannot be merged: { $reason }
+err-note-distinct-from-itself = note { $id } cannot be distinguished from itself
+err-note-identity-decided = notes { $note } and { $other } already have a live identity decision; undo it first

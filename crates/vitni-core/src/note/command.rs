@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::enums::{NoteType, Restriction};
 use crate::ids::{AssertionId, HumanId, NoteId, TagId};
+use crate::matching::MatchEvidence;
 use crate::provenance::AssertionMeta;
 use crate::text::RichText;
 
@@ -74,6 +75,24 @@ pub enum NoteCommand {
         note_id: NoteId,
         /// The new user-facing identifier.
         human_id: HumanId,
+    },
+    /// Record that `merged` is the same note as `surviving` (ADR 0039 §1).
+    MergeNotes {
+        /// The surviving note — the stream the decision is written on.
+        surviving: NoteId,
+        /// The note merged into it.
+        merged: NoteId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
+    },
+    /// Record that `other` is a different note from `note` (ADR 0039 §1).
+    DistinguishNotes {
+        /// The note the decision is written on.
+        note: NoteId,
+        /// The note it is distinct from.
+        other: NoteId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
     },
 }
 

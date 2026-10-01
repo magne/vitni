@@ -249,7 +249,7 @@ mod tests {
     /// `{"type": name}` fails on a missing field, never on an unknown variant.
     fn assert_variant_names_are_serde_tags<B: super::EventBody + serde::de::DeserializeOwned>() {
         let names = super::Envelope::<B>::variant_names();
-        assert!(!names.is_empty());
+        assert!(!names.is_empty(), "{names:?}");
         for name in names {
             let Err(error) = serde_json::from_value::<B>(serde_json::json!({ "type": name })) else {
                 continue;
@@ -280,8 +280,9 @@ mod tests {
     #[test]
     fn variant_names_list_every_media_variant() {
         let names = super::Envelope::<crate::media::MediaEventBody>::variant_names();
-        assert_eq!(names.len(), 14);
+        assert_eq!(names.len(), 16);
         assert!(names.contains(&"MediaCreated"));
         assert!(names.contains(&"HumanIdChanged"));
+        assert!(names.contains(&"MediaMerged"));
     }
 }

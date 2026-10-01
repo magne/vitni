@@ -9,3 +9,6 @@ err-citation-not-found = ingen sitat med human_id "{ $id }"
 err-citation-not-exist = sitat { $id } finnes ikke
 err-citation-exists = sitat { $id } finnes allerede
 err-unknown-source = sitat viser til ukjent kilde { $id }
+err-citation-merge-conflict = kildehenvisningene { $surviving } og { $merged } kan ikke slås sammen: { $reason }
+err-citation-distinct-from-itself = kildehenvisning { $id } kan ikke skilles fra seg selv
+err-citation-identity-decided = kildehenvisningene { $citation } og { $other } har allerede en gjeldende identitetsavgjørelse; angre den først

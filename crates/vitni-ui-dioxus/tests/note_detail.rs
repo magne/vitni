@@ -29,6 +29,7 @@ fn sample() -> NoteDetail {
             text: "Må bekrefte innvandringsåret for John Smith.".to_owned(),
             translator: Some("magne".to_owned()),
             assertion_id: "0190-text-assertion-id".to_owned(),
+            merged_from: None,
         }],
         references: vec![
             UsingRecordVm {
@@ -371,4 +372,20 @@ fn a_restriction_change_alone_makes_the_note_savable() {
         !html.contains("disabled"),
         "a restriction change alone enables Save:\n{html}"
     );
+}
+
+/// The sample with a translation supplied by a merged copy, `N0002`.
+fn merged_note_view() -> Element {
+    let loc = loc();
+    let mut detail = sample();
+    detail.translations[0].merged_from = Some("N0002".to_owned());
+    rsx! {
+        {note_language_tab(&loc, &detail, use_callback(|_: NoteEditForm| {}), use_callback(|_: (String, String, bool)| {}))}
+    }
+}
+
+#[test]
+fn a_merged_note_row_names_the_copy_it_came_from() {
+    let html = render(merged_note_view);
+    assert_eq!(html.matches("from N0002").count(), 1, "{html}");
 }

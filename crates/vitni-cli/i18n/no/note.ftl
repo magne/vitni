@@ -14,3 +14,6 @@ err-note-not-found = ingen notat med human_id "{ $id }"
 ## NoteError (wrapped via AppError::NoteDomain)
 err-note-not-exist = notat { $id } finnes ikke
 err-note-exists = notat { $id } finnes allerede
+err-note-merge-conflict = notatene { $surviving } og { $merged } kan ikke slås sammen: { $reason }
+err-note-distinct-from-itself = notat { $id } kan ikke skilles fra seg selv
+err-note-identity-decided = notatene { $note } og { $other } har allerede en gjeldende identitetsavgjørelse; angre den først

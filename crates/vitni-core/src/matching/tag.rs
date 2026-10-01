@@ -51,7 +51,7 @@ mod tests {
         let assessment = assess("Brick Wall", " brick wall ");
         assert_eq!(assessment.band, MatchBand::Deterministic, "{assessment:#?}");
         assert_eq!(feature(&assessment, Feature::Name).outcome, Outcome::Agree);
-        assert!(assessment.cultures.is_empty());
+        assert!(assessment.cultures.is_empty(), "{:?}", assessment.cultures);
     }
 
     #[test]

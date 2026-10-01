@@ -294,7 +294,7 @@ mod tests {
         let log = crate::history::change_log_for_dna_test(&workspace, &human_id)
             .await
             .expect("log");
-        assert!(!log.is_empty());
+        assert!(!log.is_empty(), "{log:?}");
         for entry in &log {
             assert_eq!(entry.confidence, Some(Confidence::High));
             assert_eq!(entry.rationale.as_deref(), Some("test kit"));

@@ -104,7 +104,7 @@ mod tests {
     fn a_self_enclosure_yields_an_empty_chain() {
         let links = HashMap::from([(place(1), place(1))]);
         let chain = hierarchy_chain(place(1), |id| links.get(&id).map(|&next| hop(next)));
-        assert!(chain.is_empty());
+        assert!(chain.is_empty(), "{chain:?}");
     }
 
     #[test]
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn a_place_with_no_enclosing_link_yields_an_empty_chain() {
         let chain = hierarchy_chain(place(1), |_| None);
-        assert!(chain.is_empty());
+        assert!(chain.is_empty(), "{chain:?}");
     }
 
     #[test]

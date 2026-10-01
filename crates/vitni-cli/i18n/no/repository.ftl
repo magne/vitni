@@ -18,3 +18,6 @@ err-repository-not-found = ingen oppbevaringssted med human_id "{ $id }"
 err-repository-not-exist = oppbevaringssted { $id } finnes ikke
 err-repository-exists = oppbevaringssted { $id } finnes allerede
 err-repository-empty-name = et oppbevaringssteds navn kan ikke være tomt
+err-repository-merge-conflict = arkivene { $surviving } og { $merged } kan ikke slås sammen: { $reason }
+err-repository-distinct-from-itself = arkiv { $id } kan ikke skilles fra seg selv
+err-repository-identity-decided = arkivene { $repository } og { $other } har allerede en gjeldende identitetsavgjørelse; angre den først

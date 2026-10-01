@@ -10,6 +10,7 @@ use crate::assertions::{Asserted, Attributed};
 use crate::enums::{PlaceType, SuccessionKind};
 use crate::geo::PlaceGeometry;
 use crate::ids::{HumanId, PlaceId};
+use crate::matching::MatchEvidence;
 use crate::place::command::PlaceCommand;
 use crate::place::error::PlaceError;
 use crate::place::event::{PlaceEvent, PlaceEventBody};
@@ -79,6 +80,16 @@ pub fn decide(
             place_id,
             PlaceSuccessionAssertion { from, to, kind, date },
         ),
+        PlaceCommand::MergePlaces {
+            surviving,
+            merged,
+            assessment,
+        } => decide_merge(state, [surviving, merged], assessment, meta),
+        PlaceCommand::DistinguishPlaces {
+            place,
+            other,
+            assessment,
+        } => decide_distinguish(state, [place, other], assessment, meta),
         PlaceCommand::RetractAssertion { place_id, target } => {
             ensure_exists(state, place_id)?;
             if !state.live_assertions.contains(&target) {
@@ -156,6 +167,8 @@ fn decide_attachment(
         | PlaceCommand::AssertGeometry { .. }
         | PlaceCommand::AssertSuccession { .. }
         | PlaceCommand::RetractAssertion { .. }
+        | PlaceCommand::MergePlaces { .. }
+        | PlaceCommand::DistinguishPlaces { .. }
         | PlaceCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
     };
     Ok(one(meta, body))
@@ -257,6 +270,64 @@ fn place_human_id_changed(state: &PlaceState, place_id: PlaceId, human_id: Human
 /// `InvalidGeometry`) — a `Point` never has a ring, so it always passes.
 fn has_invalid_ring(geometry: &PlaceGeometry) -> bool {
     geometry.rings().iter().any(|ring| ring.len() < 3)
+}
+
+/// Decides a merge of `merged` into `surviving` (ADR 0039 §1): the survivor must exist, the pair must
+/// be two records, and the survivor must not already hold a live decision about the other.
+fn decide_merge(
+    state: &PlaceState,
+    [surviving, merged]: [PlaceId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<PlaceEvent>, PlaceError> {
+    ensure_exists(state, surviving)?;
+    if surviving == merged {
+        return Err(PlaceError::MergeConflict {
+            surviving,
+            merged,
+            reason: "a place cannot be merged with itself".to_owned(),
+        });
+    }
+    ensure_undecided(state, surviving, merged)?;
+    Ok(one(
+        meta,
+        PlaceEventBody::PlacesMerged {
+            surviving,
+            merged,
+            assessment,
+        },
+    ))
+}
+
+/// Decides that `other` is a different place from `place` (ADR 0039 §1), under the same rules as a
+/// merge.
+fn decide_distinguish(
+    state: &PlaceState,
+    [place, other]: [PlaceId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<PlaceEvent>, PlaceError> {
+    ensure_exists(state, place)?;
+    if place == other {
+        return Err(PlaceError::DistinctFromItself(place));
+    }
+    ensure_undecided(state, place, other)?;
+    Ok(one(
+        meta,
+        PlaceEventBody::PlacesDistinguished {
+            place,
+            other,
+            assessment,
+        },
+    ))
+}
+
+/// Refuses a second identity decision about a pair this place already decided (ADR 0039 §1).
+fn ensure_undecided(state: &PlaceState, place: PlaceId, other: PlaceId) -> Result<(), PlaceError> {
+    if state.has_decided(other) {
+        return Err(PlaceError::IdentityDecided { place, other });
+    }
+    Ok(())
 }
 
 /// Rejects a command that targets a place which has not been created yet.
@@ -406,6 +477,20 @@ fn evolve_attachment(
         }
         PlaceEventBody::HumanIdChanged { human_id, .. } => {
             state.human_id = Some(human_id.clone());
+        }
+        PlaceEventBody::PlacesMerged { merged, .. } => {
+            state.merged.push(Attributed {
+                assertion_id,
+                value: *merged,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::PlacesDistinguished { other, .. } => {
+            state.distinguished.push(Attributed {
+                assertion_id,
+                value: *other,
+            });
+            state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::AssertionRetracted { target, .. } | PlaceEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
@@ -829,7 +914,7 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &retract);
-        assert!(state.geometries.is_empty());
+        assert!(state.geometries.is_empty(), "{:?}", state.geometries);
         assert!(!state.live_assertions.contains(&target));
     }
 
@@ -883,7 +968,7 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &retract);
 
-        assert!(state.names.is_empty());
+        assert!(state.names.is_empty(), "{:?}", state.names);
         assert!(!state.live_assertions.contains(&name_assertion));
     }
 
@@ -1193,7 +1278,117 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &retract);
-        assert!(state.successions.is_empty());
+        assert!(state.successions.is_empty(), "{:?}", state.successions);
         assert!(!state.live_assertions.contains(&target));
+    }
+
+    fn evidence() -> crate::matching::MatchEvidence {
+        crate::matching::MatchEvidence {
+            score_bp: 9100,
+            band: crate::matching::MatchBand::Probable,
+            engine: crate::matching::EngineVersion(4),
+            cultures: vec![crate::matching::CultureId::new("universal")],
+            features: Vec::new(),
+        }
+    }
+
+    fn merge(surviving: u128, merged: u128) -> PlaceCommand {
+        PlaceCommand::MergePlaces {
+            surviving: place(surviving),
+            merged: place(merged),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn distinguish(first: u128, other: u128) -> PlaceCommand {
+        PlaceCommand::DistinguishPlaces {
+            place: place(first),
+            other: place(other),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn retract_decision(id: u128, assertion: u128) -> PlaceCommand {
+        PlaceCommand::RetractAssertion {
+            place_id: place(id),
+            target: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+        }
+    }
+
+    #[test]
+    fn merging_two_places_emits_places_merged_with_its_assessment() {
+        let events = decide(&created_place(100), merge(100, 200), &meta(2), &ENCLOSING_PRESENT).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].body,
+            crate::place::event::PlaceEventBody::PlacesMerged {
+                surviving: place(100),
+                merged: place(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_place_cannot_be_merged_with_itself() {
+        let err = decide(&created_place(100), merge(100, 100), &meta(2), &ENCLOSING_PRESENT).unwrap_err();
+        assert!(matches!(err, PlaceError::MergeConflict { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn merging_into_an_absent_place_is_not_found() {
+        let err = decide(&PlaceState::default(), merge(100, 200), &meta(2), &ENCLOSING_PRESENT).unwrap_err();
+        assert_eq!(err, PlaceError::NotFound(place(100)));
+    }
+
+    #[test]
+    fn distinguishing_two_places_emits_places_distinguished_with_its_assessment() {
+        let events = decide(&created_place(100), distinguish(100, 200), &meta(2), &ENCLOSING_PRESENT).unwrap();
+        assert_eq!(
+            events[0].body,
+            crate::place::event::PlaceEventBody::PlacesDistinguished {
+                place: place(100),
+                other: place(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_place_cannot_be_distinguished_from_itself() {
+        let err = decide(&created_place(100), distinguish(100, 100), &meta(2), &ENCLOSING_PRESENT).unwrap_err();
+        assert_eq!(err, PlaceError::DistinctFromItself(place(100)));
+    }
+
+    #[test]
+    fn place_identity_decisions_fold_into_state_and_undo_removes_them() {
+        for (decision, assertion) in [(merge(100, 200), 2), (distinguish(100, 200), 2)] {
+            let mut state = created_place(100);
+            let events = decide(&state, decision.clone(), &meta(assertion), &ENCLOSING_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            assert!(state.has_decided(place(200)), "{decision:?}");
+
+            let events = decide(&state, retract_decision(100, assertion), &meta(3), &ENCLOSING_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            assert!(!state.has_decided(place(200)), "undo lifts {decision:?}");
+            assert!(state.merged.is_empty() && state.distinguished.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_place_pair_decided_either_way_cannot_be_decided_again() {
+        let decided = PlaceError::IdentityDecided {
+            place: place(100),
+            other: place(200),
+        };
+        for first in [merge(100, 200), distinguish(100, 200)] {
+            let mut state = created_place(100);
+            let events = decide(&state, first.clone(), &meta(2), &ENCLOSING_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            for second in [merge(100, 200), distinguish(100, 200)] {
+                let err = decide(&state, second.clone(), &meta(3), &ENCLOSING_PRESENT).unwrap_err();
+                assert_eq!(err, decided, "{first:?} then {second:?}");
+            }
+        }
     }
 }

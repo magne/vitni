@@ -262,7 +262,8 @@ mod tests {
         with_vital_year(&workspace, &session, &subject, EventType::Death, 1950).await;
 
         let persons = list_persons(&workspace).await.expect("list");
-        assert!(death_before_birth(&persons).is_empty());
+        let checked = death_before_birth(&persons);
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[tokio::test]
@@ -273,7 +274,8 @@ mod tests {
         with_vital_year(&workspace, &session, &subject, EventType::Death, 1900).await;
 
         let persons = list_persons(&workspace).await.expect("list");
-        assert!(death_before_birth(&persons).is_empty());
+        let checked = death_before_birth(&persons);
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[tokio::test]
@@ -286,13 +288,15 @@ mod tests {
         person(&workspace, &session, "Fi", "Neither").await;
 
         let persons = list_persons(&workspace).await.expect("list");
-        assert!(death_before_birth(&persons).is_empty());
+        let checked = death_before_birth(&persons);
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[tokio::test]
     async fn empty_workspace_has_no_findings() {
         let (workspace, _session, _dir) = setup().await;
-        assert!(run_checks(&workspace).await.expect("run checks").is_empty());
+        let checked = run_checks(&workspace).await.expect("run checks");
+        assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[tokio::test]

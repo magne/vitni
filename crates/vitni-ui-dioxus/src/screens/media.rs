@@ -532,7 +532,7 @@ pub fn media_attributes_table(
             headers: vec![loc.field_label("attribute-type"), loc.field_label("value"), String::new()],
             for attribute in attributes.iter() {
                 tr {
-                    td { Chip { label: attribute.attribute_type.clone() } }
+                    td { Chip { label: attribute.attribute_type.clone() } {merged_from_chip(loc, attribute.merged_from.as_deref())} }
                     td { "{attribute.value}" }
                     {row_actions_cell(
                         loc,

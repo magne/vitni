@@ -485,7 +485,7 @@ mod tests {
             &meta(3),
         )
         .unwrap();
-        assert!(again.is_empty());
+        assert!(again.is_empty(), "{again:?}");
     }
 
     fn keyed(assertion: u128, value: &str) -> crate::assertions::Attributed<ExternalId> {
@@ -867,7 +867,7 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &remove);
-        assert!(state.children.is_empty());
+        assert!(state.children.is_empty(), "{:?}", state.children);
     }
 
     #[test]
@@ -1025,7 +1025,7 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &remove);
-        assert!(state.children.is_empty());
+        assert!(state.children.is_empty(), "{:?}", state.children);
         assert!(
             state.child_relationships.is_empty(),
             "the child's links cascade with its removal"
@@ -1094,7 +1094,7 @@ mod tests {
         apply_all(&mut state, &retract);
 
         // then: the partner is gone and the assertion is no longer live.
-        assert!(state.partners.is_empty());
+        assert!(state.partners.is_empty(), "{:?}", state.partners);
         assert!(!state.live_assertions.contains(&partner_assertion));
     }
 
