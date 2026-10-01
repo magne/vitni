@@ -45,6 +45,7 @@ fn sample() -> RepositoryDetail {
             href: "https://www.archives.gov".to_owned(),
             description: Some("Main catalog".to_owned()),
             assertion_id: "0190-url-assert-1".to_owned(),
+            merged_from: None,
         }],
         sources: vec![
             SourceHeldVm {
@@ -282,4 +283,20 @@ fn no_assertion_id_is_ever_rendered() {
             "assertion/tag id {assertion_id:?} must never be rendered:\n{html}"
         );
     }
+}
+
+/// The sample with a URL supplied by a merged copy, `R0002`.
+fn merged_repository_view() -> Element {
+    let loc = loc();
+    let onedit = use_callback(|_: RepositoryEditForm| {});
+    let onretract = use_callback(|_: (String, String, bool)| {});
+    let mut detail = sample();
+    detail.urls[0].merged_from = Some("R0002".to_owned());
+    rsx! { {repository_urls_table(&loc, &detail, onedit, onretract)} }
+}
+
+#[test]
+fn a_merged_repository_row_names_the_copy_it_came_from() {
+    let html = render(merged_repository_view);
+    assert_eq!(html.matches("from R0002").count(), 1, "{html}");
 }

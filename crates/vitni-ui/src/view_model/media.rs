@@ -42,6 +42,9 @@ pub struct MediaAttributeVm {
     pub value: String,
     /// The `AssertionId` (a UUID string) that introduced this attribute. Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from O0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// A media object's detail view — file metadata, the citations backing it, attached notes, tags, the
@@ -114,6 +117,7 @@ impl MediaDetail {
                     attribute_type: a.attribute_type.clone(),
                     value: a.value.clone(),
                     assertion_id: a.assertion_id.clone(),
+                    merged_from: summary.claim_owners.get(&a.assertion_id).cloned(),
                 })
                 .collect(),
             citations: summary

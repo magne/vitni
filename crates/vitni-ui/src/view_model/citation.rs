@@ -33,6 +33,9 @@ pub struct CitationAttributeVm {
     pub value: String,
     /// The `AssertionId` (a UUID string) that introduced this attribute. Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from C0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// A citation's detail view — its evidence axes, confidence, source, page, date, attributes, and
@@ -103,6 +106,7 @@ impl CitationDetail {
                     attribute_type: a.attribute_type.clone(),
                     value: a.value.clone(),
                     assertion_id: a.assertion_id.clone(),
+                    merged_from: summary.claim_owners.get(&a.assertion_id).cloned(),
                 })
                 .collect(),
             media: summary.media.iter().map(MediaRefVm::from_ref).collect(),

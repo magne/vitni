@@ -31,6 +31,7 @@ fn point_geometry() -> PlaceGeometryVm {
         confidence_label: "High".to_owned(),
         source_count: 1,
         assertion_id: "0190-geometry-assert-1".to_owned(),
+        merged_from: None,
     }
 }
 
@@ -47,6 +48,7 @@ fn polygon_geometry() -> PlaceGeometryVm {
         confidence_label: "Normal".to_owned(),
         source_count: 0,
         assertion_id: "0190-geometry-assert-2".to_owned(),
+        merged_from: None,
     }
 }
 

@@ -16,6 +16,9 @@ pub struct TranslationVm {
     /// target an Edit supersedes (every translation row shares the one text assertion; ADR 0004 §2).
     /// Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from N0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// A note's detail view — its type, rich-text content, language + translations, the records that
@@ -69,6 +72,7 @@ impl NoteDetail {
                     text: t.text.clone(),
                     translator: t.translator.clone(),
                     assertion_id: t.assertion_id.clone(),
+                    merged_from: summary.claim_owners.get(&t.assertion_id).cloned(),
                 })
                 .collect(),
             references: summary.references.iter().map(|u| using_record_vm(u, loc)).collect(),

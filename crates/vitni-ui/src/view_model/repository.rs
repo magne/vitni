@@ -16,6 +16,9 @@ pub struct RepositoryUrlVm {
     pub description: Option<String>,
     /// The `AssertionId` (a UUID string) that introduced this URL. Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from R0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// One source held by a repository (Repository › Sources tab): the source, call number, medium, and
@@ -98,7 +101,7 @@ impl RepositoryDetail {
                 .map(|a| AddressVm {
                     address: a.address.clone(),
                     assertion_id: a.assertion_id.clone(),
-                    merged_from: None,
+                    merged_from: summary.claim_owners.get(&a.assertion_id).cloned(),
                 })
                 .collect(),
             urls: summary
@@ -109,6 +112,7 @@ impl RepositoryDetail {
                     href: u.url.href.clone(),
                     description: u.url.description.clone(),
                     assertion_id: u.assertion_id.clone(),
+                    merged_from: summary.claim_owners.get(&u.assertion_id).cloned(),
                 })
                 .collect(),
             sources,

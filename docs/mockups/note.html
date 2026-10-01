@@ -165,12 +165,16 @@ Need to confirm **immigration year** for John Smith. Passenger lists for *1849�
             <tbody>
               <tr>
                 <td><span class="chip">nb-NO</span> Norwegian</td>
-                <td>Må bekrefte <b>innvandringsåret</b> for John Smith. Passasjerlister for 1849–1851 er ennå ikke sjekket.</td>
+                <td>Må bekrefte <b>innvandringsåret</b> for John Smith. <span class="badge">from N0031</span> Passasjerlister for 1849–1851 er ennå ikke sjekket.</td>
                 <td class="muted">magne</td>
                 <td class="row-actions"><button class="btn sm ghost">Edit</button></td>
               </tr>
             </tbody>
           </table>
+          <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">A row marked
+            <span class="badge">from N0031</span> came from a duplicate record of this note merged into it
+            (ADR 0039 §5): the note reads as one record with every copy's translations and the records that use it, each row still attributed.
+            Edit on that row is written to N0031; the primary text stays this note's own.</div>
         </div>
 
         <!-- REFERENCES (what references this) -->
@@ -195,8 +199,16 @@ Need to confirm **immigration year** for John Smith. Passenger lists for *1849�
 
         <!-- HISTORY -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone. An identity decision — merged, or marked as a different note — also shows the matching engine's assessment it was made on.</div>
           <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 10:30</div>
+              <div class="tl-what">Note merged</div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"The same research note, imported twice"</div>
+              <div class="tl-evidence muted" title="The matching engine's assessment the decision was made on (ADR 0039 §2) — not the 5-level assertion Confidence">Matched at 90% · probable match · engine 4</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-22 13:50</div>
               <div class="tl-what">Translation added: <b>nb-NO</b></div>

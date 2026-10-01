@@ -29,6 +29,9 @@ pub struct RepositoryLinkVm {
     /// The `AssertionId` (a UUID string) that introduced this repository link — the target a per-row
     /// Edit supersedes and an Unlink retracts (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from S0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// A record that uses a citation (Source › Citations "Backs record" cell): its kind drives the
@@ -66,6 +69,9 @@ pub struct SourceAttributeVm {
     /// The `AssertionId` (a UUID string) that introduced this attribute — the target a per-row Edit
     /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from S0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// The reliability synthesis for a source (Source › Overview "Reliability" card).
@@ -144,6 +150,7 @@ impl SourceDetail {
                     confidence_label: loc.confidence_label_opt(confidence),
                     source_count: link.source_count,
                     assertion_id: link.assertion_id.clone(),
+                    merged_from: summary.claim_owners.get(&link.assertion_id).cloned(),
                 }
             })
             .collect();
@@ -162,6 +169,7 @@ impl SourceDetail {
                 attribute_type: a.attribute_type.clone(),
                 value: a.value.clone(),
                 assertion_id: a.assertion_id.clone(),
+                merged_from: summary.claim_owners.get(&a.assertion_id).cloned(),
             })
             .collect();
         Self {

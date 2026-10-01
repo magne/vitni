@@ -15,20 +15,22 @@ use vitni_app::{
     assert_participation, assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note,
     attach_family_media, attach_family_note, attach_person_media, attach_person_note, change_log_for_citation,
     change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person,
-    change_log_for_place, change_log_for_repository, change_log_for_research_note, change_log_for_source, claim_owner,
-    event_claim_owner, families_for_person, family_claim_owner, import_attach_event_media, import_attach_event_note,
-    import_attach_media_note, import_attach_place_media, import_attach_place_note, import_attach_repository_note,
-    import_attach_source_media, import_attach_source_note, link_family_event, link_place, link_source_repository,
-    list_citations, list_event_rows, list_family_rows, list_media, list_notes, list_person_rows, list_persons,
-    list_places, list_repositories, list_sources, pair_decision, recent_activity, remove_child,
-    set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions,
-    set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page,
-    set_place_restrictions, set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation,
-    show_event, show_family, show_media, show_note, show_person, show_place, show_repository, show_source,
-    tag_citation, tag_event, tag_family, tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source,
-    undo_assertion, undo_citation_assertion, undo_distinction_and_merge, undo_event_assertion, undo_family_assertion,
-    undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion,
-    undo_research_note_assertion, undo_source_assertion, workspace_counts,
+    change_log_for_place, change_log_for_repository, change_log_for_research_note, change_log_for_source,
+    citation_claim_owner, claim_owner, event_claim_owner, families_for_person, family_claim_owner,
+    import_attach_event_media, import_attach_event_note, import_attach_media_note, import_attach_place_media,
+    import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
+    link_family_event, link_place, link_source_repository, list_citations, list_event_rows, list_family_rows,
+    list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories, list_sources,
+    media_claim_owner, note_claim_owner, pair_decision, place_claim_owner, recent_activity, remove_child,
+    repository_claim_owner, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
+    set_event_restrictions, set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text,
+    set_note_type, set_page, set_place_restrictions, set_repository_restrictions, set_restrictions,
+    set_source_restrictions, show_citation, show_event, show_family, show_media, show_note, show_person, show_place,
+    show_repository, show_source, source_claim_owner, tag_citation, tag_event, tag_family, tag_media, tag_note,
+    tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion,
+    undo_distinction_and_merge, undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion,
+    undo_place_assertion, undo_repository_assertion, undo_research_note_assertion, undo_source_assertion,
+    workspace_counts,
 };
 use vitni_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
@@ -1051,6 +1053,43 @@ pub async fn dispatch_citation_edit(
     edit: &CitationEdit,
     prov: &ProvenanceDraft,
 ) -> Result<String, AppError> {
+    let owner = match corrected_assertion(edit_correction_citation(edit), prov) {
+        Some(assertion_id) => citation_claim_owner(workspace, edit.target(), assertion_id).await?,
+        None => edit.target().to_owned(),
+    };
+    if owner != edit.target() {
+        dispatch_citation_edit_to(workspace, session, &edit.retargeted(&owner), prov).await?;
+        return Ok(edit.target().to_owned());
+    }
+    dispatch_citation_edit_to(workspace, session, edit, prov).await
+}
+
+/// The row a citation undo or media-region edit names.
+fn edit_correction_citation(edit: &CitationEdit) -> Option<&str> {
+    match edit {
+        CitationEdit::SetMediaRegion { assertion_id, .. } | CitationEdit::UndoAssertion { assertion_id, .. } => {
+            Some(assertion_id)
+        }
+        CitationEdit::SetHumanId { .. }
+        | CitationEdit::SetPage { .. }
+        | CitationEdit::SetDate { .. }
+        | CitationEdit::SetConfidence { .. }
+        | CitationEdit::SetEvidenceAnalysis { .. }
+        | CitationEdit::AddAttribute { .. }
+        | CitationEdit::AttachMedia { .. }
+        | CitationEdit::AttachNote { .. }
+        | CitationEdit::Tag { .. }
+        | CitationEdit::SetRestrictions { .. } => None,
+    }
+}
+
+/// Dispatches a [`CitationEdit`] to the record it names.
+async fn dispatch_citation_edit_to(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &CitationEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
     match edit {
         CitationEdit::SetHumanId { human_id, new_human_id } => {
             set_citation_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance()).await
@@ -1511,6 +1550,46 @@ pub async fn dispatch_place_edit(
     edit: &PlaceEdit,
     prov: &ProvenanceDraft,
 ) -> Result<String, AppError> {
+    let owner = match corrected_assertion(edit_correction_place(edit), prov) {
+        Some(assertion_id) => place_claim_owner(workspace, edit.target(), assertion_id).await?,
+        None => edit.target().to_owned(),
+    };
+    if owner != edit.target() {
+        dispatch_place_edit_to(workspace, session, &edit.retargeted(&owner), prov).await?;
+        return Ok(edit.target().to_owned());
+    }
+    dispatch_place_edit_to(workspace, session, edit, prov).await
+}
+
+/// The row a place undo or media-region edit names.
+fn edit_correction_place(edit: &PlaceEdit) -> Option<&str> {
+    match edit {
+        PlaceEdit::SetMediaRegion { assertion_id, .. } | PlaceEdit::UndoAssertion { assertion_id, .. } => {
+            Some(assertion_id)
+        }
+        PlaceEdit::SetHumanId { .. }
+        | PlaceEdit::SetType { .. }
+        | PlaceEdit::SetCoordinates { .. }
+        | PlaceEdit::AssertGeometry { .. }
+        | PlaceEdit::SetCode { .. }
+        | PlaceEdit::AddName { .. }
+        | PlaceEdit::AddEnclosing { .. }
+        | PlaceEdit::AssertSuccession { .. }
+        | PlaceEdit::AttachCitation { .. }
+        | PlaceEdit::AttachMedia { .. }
+        | PlaceEdit::AttachNote { .. }
+        | PlaceEdit::Tag { .. }
+        | PlaceEdit::SetRestrictions { .. } => None,
+    }
+}
+
+/// Dispatches a [`PlaceEdit`] to the record it names.
+async fn dispatch_place_edit_to(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &PlaceEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
     match edit {
         PlaceEdit::SetHumanId { human_id, new_human_id } => {
             set_place_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance()).await
@@ -1687,6 +1766,44 @@ pub async fn dispatch_source_edit(
     edit: &SourceEdit,
     prov: &ProvenanceDraft,
 ) -> Result<String, AppError> {
+    let owner = match corrected_assertion(edit_correction_source(edit), prov) {
+        Some(assertion_id) => source_claim_owner(workspace, edit.target(), assertion_id).await?,
+        None => edit.target().to_owned(),
+    };
+    if owner != edit.target() {
+        dispatch_source_edit_to(workspace, session, &edit.retargeted(&owner), prov).await?;
+        return Ok(edit.target().to_owned());
+    }
+    dispatch_source_edit_to(workspace, session, edit, prov).await
+}
+
+/// The row a source undo or media-region edit names.
+fn edit_correction_source(edit: &SourceEdit) -> Option<&str> {
+    match edit {
+        SourceEdit::SetMediaRegion { assertion_id, .. } | SourceEdit::UndoAssertion { assertion_id, .. } => {
+            Some(assertion_id)
+        }
+        SourceEdit::SetHumanId { .. }
+        | SourceEdit::SetTitle { .. }
+        | SourceEdit::SetAuthor { .. }
+        | SourceEdit::SetPubInfo { .. }
+        | SourceEdit::SetAbbrev { .. }
+        | SourceEdit::LinkRepository { .. }
+        | SourceEdit::AddAttribute { .. }
+        | SourceEdit::AttachMedia { .. }
+        | SourceEdit::AttachNote { .. }
+        | SourceEdit::Tag { .. }
+        | SourceEdit::SetRestrictions { .. } => None,
+    }
+}
+
+/// Dispatches a [`SourceEdit`] to the record it names.
+async fn dispatch_source_edit_to(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &SourceEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
     match edit {
         SourceEdit::SetHumanId { human_id, new_human_id } => {
             set_source_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance()).await
@@ -1788,6 +1905,40 @@ pub async fn dispatch_repository_edit(
     edit: &RepositoryEdit,
     prov: &ProvenanceDraft,
 ) -> Result<String, AppError> {
+    let owner = match corrected_assertion(edit_correction_repository(edit), prov) {
+        Some(assertion_id) => repository_claim_owner(workspace, edit.target(), assertion_id).await?,
+        None => edit.target().to_owned(),
+    };
+    if owner != edit.target() {
+        dispatch_repository_edit_to(workspace, session, &edit.retargeted(&owner), prov).await?;
+        return Ok(edit.target().to_owned());
+    }
+    dispatch_repository_edit_to(workspace, session, edit, prov).await
+}
+
+/// The row a repository undo or media-region edit names.
+fn edit_correction_repository(edit: &RepositoryEdit) -> Option<&str> {
+    match edit {
+        RepositoryEdit::UndoAssertion { assertion_id, .. } => Some(assertion_id),
+        RepositoryEdit::SetHumanId { .. }
+        | RepositoryEdit::SetName { .. }
+        | RepositoryEdit::SetType { .. }
+        | RepositoryEdit::AddAddress { .. }
+        | RepositoryEdit::AddUrl { .. }
+        | RepositoryEdit::LinkSource { .. }
+        | RepositoryEdit::AttachNote { .. }
+        | RepositoryEdit::Tag { .. }
+        | RepositoryEdit::SetRestrictions { .. } => None,
+    }
+}
+
+/// Dispatches a [`RepositoryEdit`] to the record it names.
+async fn dispatch_repository_edit_to(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &RepositoryEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
     match edit {
         RepositoryEdit::SetHumanId { human_id, new_human_id } => {
             set_repository_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance()).await
@@ -1866,6 +2017,41 @@ pub async fn dispatch_repository_edit(
 /// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
 /// database failure).
 pub async fn dispatch_media_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &MediaEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let owner = match corrected_assertion(edit_correction_media(edit), prov) {
+        Some(assertion_id) => media_claim_owner(workspace, edit.target(), assertion_id).await?,
+        None => edit.target().to_owned(),
+    };
+    if owner != edit.target() {
+        dispatch_media_edit_to(workspace, session, &edit.retargeted(&owner), prov).await?;
+        return Ok(edit.target().to_owned());
+    }
+    dispatch_media_edit_to(workspace, session, edit, prov).await
+}
+
+/// The row a media undo or media-region edit names.
+fn edit_correction_media(edit: &MediaEdit) -> Option<&str> {
+    match edit {
+        MediaEdit::UndoAssertion { assertion_id, .. } => Some(assertion_id),
+        MediaEdit::SetHumanId { .. }
+        | MediaEdit::SetFilePath { .. }
+        | MediaEdit::SetWebPath { .. }
+        | MediaEdit::SetMime { .. }
+        | MediaEdit::SetDate { .. }
+        | MediaEdit::AddAttribute { .. }
+        | MediaEdit::AttachCitation { .. }
+        | MediaEdit::AttachNote { .. }
+        | MediaEdit::Tag { .. }
+        | MediaEdit::SetRestrictions { .. } => None,
+    }
+}
+
+/// Dispatches a [`MediaEdit`] to the record it names.
+async fn dispatch_media_edit_to(
     workspace: &Workspace,
     session: &Session,
     edit: &MediaEdit,
@@ -1953,6 +2139,37 @@ pub async fn dispatch_media_edit(
 /// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
 /// database failure).
 pub async fn dispatch_note_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &NoteEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let owner = match corrected_assertion(edit_correction_note(edit), prov) {
+        Some(assertion_id) => note_claim_owner(workspace, edit.target(), assertion_id).await?,
+        None => edit.target().to_owned(),
+    };
+    if owner != edit.target() {
+        dispatch_note_edit_to(workspace, session, &edit.retargeted(&owner), prov).await?;
+        return Ok(edit.target().to_owned());
+    }
+    dispatch_note_edit_to(workspace, session, edit, prov).await
+}
+
+/// The row a note undo or media-region edit names.
+fn edit_correction_note(edit: &NoteEdit) -> Option<&str> {
+    match edit {
+        NoteEdit::UndoAssertion { assertion_id, .. } => Some(assertion_id),
+        NoteEdit::SetHumanId { .. }
+        | NoteEdit::SetType { .. }
+        | NoteEdit::SetText { .. }
+        | NoteEdit::AddTranslation { .. }
+        | NoteEdit::Tag { .. }
+        | NoteEdit::SetRestrictions { .. } => None,
+    }
+}
+
+/// Dispatches a [`NoteEdit`] to the record it names.
+async fn dispatch_note_edit_to(
     workspace: &Workspace,
     session: &Session,
     edit: &NoteEdit,

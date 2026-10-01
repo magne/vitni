@@ -968,7 +968,7 @@ pub fn place_geometry_table(
                 ],
                 for geometry in geometries.iter() {
                     tr {
-                        td { Chip { label: geometry.kind_label.clone() } }
+                        td { Chip { label: geometry.kind_label.clone() } {merged_from_chip(loc, geometry.merged_from.as_deref())} }
                         td { class: "muted", {or_dash(geometry.date.clone())} }
                         td { class: "mono", "{geometry_detail_text(loc, &geometry.shape)}" }
                         td { ConfidenceBadge { level: geometry.confidence, label: geometry.confidence_label.clone() } }
@@ -1021,7 +1021,7 @@ pub fn place_names_table(
             ],
             for name in detail.names.iter() {
                 tr {
-                    td { b { "{name.text}" } }
+                    td { b { "{name.text}" } {merged_from_chip(loc, name.merged_from.as_deref())} }
                     td { class: "muted", {or_dash(name.language.clone())} }
                     td { {or_dash(name.date.clone())} }
                     td { ConfidenceBadge { level: name.confidence, label: name.confidence_label.clone() } }
@@ -1070,7 +1070,7 @@ pub fn place_hierarchy_table(
             ],
             for enclosing in detail.hierarchy.iter() {
                 tr {
-                    td { "{enclosing.name}" }
+                    td { "{enclosing.name}" {merged_from_chip(loc, enclosing.merged_from.as_deref())} }
                     td {
                         if let Some(type_label) = enclosing.type_label.clone() {
                             Chip { label: type_label }
@@ -1167,6 +1167,7 @@ fn succession_row(
                     " → "
                     {counterpart}
                 }
+                {merged_from_chip(loc, rel.merged_from.as_deref())}
             }
             if let Some(date) = rel.date.clone() {
                 span { class: "muted", "{date}" }

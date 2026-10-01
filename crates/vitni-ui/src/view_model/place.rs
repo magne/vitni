@@ -3,6 +3,7 @@ use super::{
     MarkerShapeVm, MediaRefVm, PlaceChangeSetRequest, PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef,
     citation_ref_from_ref, event_pin_vm, line_label, marker_shape, non_blank, year_of,
 };
+use std::collections::BTreeMap;
 
 /// The succession kinds the Succession panel's Kind select offers, in display order — the closed
 /// domain set (ADR 0026 §2–§3), so a new variant is a compile error here rather than a silently
@@ -48,6 +49,9 @@ pub struct PlaceNameVm {
     /// The `AssertionId` (a UUID string) that introduced this name — the target a per-row Edit
     /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from P0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// One enclosing place (Hierarchy tab): the place, its type, the dated link, and surety.
@@ -70,6 +74,9 @@ pub struct PlaceHierarchyVm {
     /// The `AssertionId` (a UUID string) that introduced this enclosing-by link — the target a
     /// per-row Edit supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from P0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// One succession relation rendered on the Hierarchy tab's Succession card (ADR 0026 §3–§4): the
@@ -91,6 +98,9 @@ pub struct PlaceSuccessionVm {
     pub date: Option<String>,
     /// The `AssertionId` (a UUID string) a row Retract retracts. Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from P0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// One dated geometry assertion for the Place Map tab's "Geometry over time" table (ADR 0024/0026,
@@ -118,6 +128,9 @@ pub struct PlaceGeometryVm {
     /// The `AssertionId` (a UUID string) that introduced this geometry — the target a row Retract
     /// retracts. Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from P0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// Resolves which of a place's dated geometry assertions is in effect **as of** `year` — the
@@ -238,6 +251,7 @@ impl PlaceDetail {
                     confidence_label: loc.confidence_label_opt(confidence),
                     source_count: name.source_count,
                     assertion_id: name.assertion_id.clone(),
+                    merged_from: summary.claim_owners.get(&name.assertion_id).cloned(),
                 }
             })
             .collect();
@@ -255,11 +269,21 @@ impl PlaceDetail {
                     confidence,
                     confidence_label: loc.confidence_label_opt(confidence),
                     assertion_id: enclosing.assertion_id.clone(),
+                    merged_from: summary.claim_owners.get(&enclosing.assertion_id).cloned(),
                 }
             })
             .collect();
-        let predecessors = summary.predecessors.iter().map(|rel| succession_vm(rel, loc)).collect();
-        let successors = summary.successors.iter().map(|rel| succession_vm(rel, loc)).collect();
+        let owners = &summary.claim_owners;
+        let predecessors = summary
+            .predecessors
+            .iter()
+            .map(|rel| succession_vm(rel, owners, loc))
+            .collect();
+        let successors = summary
+            .successors
+            .iter()
+            .map(|rel| succession_vm(rel, owners, loc))
+            .collect();
         let title = place_title(summary);
         Self {
             human_id: summary.human_id.clone(),
@@ -268,8 +292,15 @@ impl PlaceDetail {
             type_label: summary.place_type.as_ref().map(|t| loc.place_type_label(t)),
             coordinates: summary.coordinates.clone(),
             map_point: map_point(summary.coordinates.as_deref(), &title),
-            resolved_geometry: summary.resolved_geometry.as_ref().map(|g| place_geometry_vm(g, loc)),
-            geometries: summary.geometries.iter().map(|g| place_geometry_vm(g, loc)).collect(),
+            resolved_geometry: summary
+                .resolved_geometry
+                .as_ref()
+                .map(|g| place_geometry_vm(g, owners, loc)),
+            geometries: summary
+                .geometries
+                .iter()
+                .map(|g| place_geometry_vm(g, owners, loc))
+                .collect(),
             title,
             coordinates_confidence,
             coordinates_confidence_label: coordinates_confidence.map(|level| loc.confidence_label(level)),
@@ -309,7 +340,11 @@ impl PlaceDetail {
 /// Builds one [`PlaceGeometryVm`] from a [`vitni_app::PlaceGeometryRef`], reusing the Geography
 /// VM's `marker_shape`/`year_of` conversions (Phase 9's "reuse the map machinery" — no duplicate
 /// point/polygon-to-decimal-degrees logic).
-fn place_geometry_vm(geometry: &vitni_app::PlaceGeometryRef, loc: &Localizer) -> PlaceGeometryVm {
+fn place_geometry_vm(
+    geometry: &vitni_app::PlaceGeometryRef,
+    owners: &BTreeMap<String, String>,
+    loc: &Localizer,
+) -> PlaceGeometryVm {
     let confidence = geometry.confidence.map(ConfidenceLevel::from);
     let kind_label = match &geometry.geometry {
         vitni_app::PlaceGeometry::Point(_) => loc.geometry_kind_point(),
@@ -324,6 +359,7 @@ fn place_geometry_vm(geometry: &vitni_app::PlaceGeometryRef, loc: &Localizer) ->
         confidence_label: loc.confidence_label_opt(confidence),
         source_count: geometry.citations.len(),
         assertion_id: geometry.assertion_id.clone(),
+        merged_from: owners.get(&geometry.assertion_id).cloned(),
     }
 }
 
@@ -372,7 +408,11 @@ fn representative_point(shape: &MarkerShapeVm) -> Option<(f64, f64)> {
 
 /// Builds one [`PlaceSuccessionVm`] from a [`vitni_app::PlaceSuccessionRef`] (either a
 /// predecessor or a successor — the caller's list decides which).
-fn succession_vm(rel: &vitni_app::PlaceSuccessionRef, loc: &Localizer) -> PlaceSuccessionVm {
+fn succession_vm(
+    rel: &vitni_app::PlaceSuccessionRef,
+    owners: &BTreeMap<String, String>,
+    loc: &Localizer,
+) -> PlaceSuccessionVm {
     PlaceSuccessionVm {
         human_id: rel.human_id.clone(),
         id: rel.id.clone(),
@@ -380,6 +420,7 @@ fn succession_vm(rel: &vitni_app::PlaceSuccessionRef, loc: &Localizer) -> PlaceS
         kind_label: loc.succession_kind_label(rel.kind),
         date: rel.date.as_ref().map(|date| loc.date(date)),
         assertion_id: rel.assertion_id.clone(),
+        merged_from: owners.get(&rel.assertion_id).cloned(),
     }
 }
 
@@ -933,6 +974,7 @@ mod place_draft_tests {
 mod place_succession_tests {
     use super::succession_vm;
     use crate::i18n::Localizer;
+    use std::collections::BTreeMap;
     use vitni_app::{PlaceSuccessionRef, SuccessionKind};
 
     fn loc() -> Localizer {
@@ -952,7 +994,7 @@ mod place_succession_tests {
 
     #[test]
     fn a_merged_relation_carries_its_localized_kind_label() {
-        let vm = succession_vm(&rel(SuccessionKind::Merged), &loc());
+        let vm = succession_vm(&rel(SuccessionKind::Merged), &BTreeMap::new(), &loc());
         assert_eq!(vm.kind_label, "merged");
         assert_eq!(vm.name, "Aker");
         assert_eq!(vm.human_id, "P0021");
@@ -969,7 +1011,7 @@ mod place_succession_tests {
             SuccessionKind::Renamed,
         ]
         .iter()
-        .map(|&kind| succession_vm(&rel(kind), &loc()).kind_label)
+        .map(|&kind| succession_vm(&rel(kind), &BTreeMap::new(), &loc()).kind_label)
         .collect();
         let mut unique = labels.clone();
         unique.sort();
@@ -983,7 +1025,7 @@ mod place_succession_tests {
             name: None,
             ..rel(SuccessionKind::Absorbed)
         };
-        assert_eq!(succession_vm(&unnamed, &loc()).name, "P0021");
+        assert_eq!(succession_vm(&unnamed, &BTreeMap::new(), &loc()).name, "P0021");
     }
 
     #[test]
@@ -1005,6 +1047,7 @@ mod place_geometry_tests {
     use super::{PlaceGeometryVm, place_geometry_vm, resolve_geometry_as_of};
     use crate::i18n::Localizer;
     use crate::view_model::MarkerShapeVm;
+    use std::collections::BTreeMap;
     use std::str::FromStr;
     use vitni_app::{
         Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, GeoCoordinates,
@@ -1046,7 +1089,7 @@ mod place_geometry_tests {
 
     #[test]
     fn a_point_geometry_carries_its_kind_label_and_year() {
-        let vm = place_geometry_vm(&point_ref(Some(year_date(1898))), &loc());
+        let vm = place_geometry_vm(&point_ref(Some(year_date(1898))), &BTreeMap::new(), &loc());
         assert_eq!(vm.kind_label, "Point");
         assert_eq!(vm.year, Some(1898));
         assert!(vm.date.is_some());
@@ -1055,7 +1098,7 @@ mod place_geometry_tests {
 
     #[test]
     fn an_undated_geometry_has_no_year() {
-        let vm = place_geometry_vm(&point_ref(None), &loc());
+        let vm = place_geometry_vm(&point_ref(None), &BTreeMap::new(), &loc());
         assert_eq!(vm.year, None);
         assert_eq!(vm.date, None);
     }
@@ -1082,7 +1125,7 @@ mod place_geometry_tests {
             },
             ..point_ref(None)
         };
-        let vm = place_geometry_vm(&polygon, &loc());
+        let vm = place_geometry_vm(&polygon, &BTreeMap::new(), &loc());
         assert_eq!(vm.kind_label, "Polygon");
         assert!(matches!(vm.shape, MarkerShapeVm::Polygon { .. }));
     }
@@ -1097,6 +1140,7 @@ mod place_geometry_tests {
             confidence_label: String::new(),
             source_count: 0,
             assertion_id: format!("assert-{year}"),
+            merged_from: None,
         }
     }
 
@@ -1242,6 +1286,7 @@ mod place_map_display_shape_tests {
                 confidence_label: String::new(),
                 source_count: 0,
                 assertion_id: "assert-1".to_owned(),
+                merged_from: None,
             }],
             ..bare()
         };
@@ -1327,6 +1372,7 @@ mod display_coordinates_tests {
                 confidence_label: String::new(),
                 source_count: 0,
                 assertion_id: "assert-1".to_owned(),
+                merged_from: None,
             }),
             ..bare()
         };
@@ -1348,6 +1394,7 @@ mod display_coordinates_tests {
                 confidence_label: String::new(),
                 source_count: 0,
                 assertion_id: "assert-2".to_owned(),
+                merged_from: None,
             }),
             ..bare()
         };

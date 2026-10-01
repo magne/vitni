@@ -68,28 +68,7 @@ fn sample() -> PlaceDetail {
             assertion_id: None,
         }],
         names: sample_names(),
-        hierarchy: vec![
-            PlaceHierarchyVm {
-                human_id: "P0050".to_owned(),
-                id: "0190-county".to_owned(),
-                name: "New York County".to_owned(),
-                type_label: Some("County".to_owned()),
-                date: Some("1683 –".to_owned()),
-                confidence: Some(ConfidenceLevel::High),
-                confidence_label: "High".to_owned(),
-                assertion_id: "0190-enclosing-assert-1".to_owned(),
-            },
-            PlaceHierarchyVm {
-                human_id: "P0001".to_owned(),
-                id: "0190-country".to_owned(),
-                name: "United States".to_owned(),
-                type_label: Some("Country".to_owned()),
-                date: Some("1788 –".to_owned()),
-                confidence: Some(ConfidenceLevel::High),
-                confidence_label: "High".to_owned(),
-                assertion_id: "0190-enclosing-assert-2".to_owned(),
-            },
-        ],
+        hierarchy: sample_hierarchy(),
         predecessors: vec![PlaceSuccessionVm {
             human_id: "P0021".to_owned(),
             id: "0190-new-amsterdam".to_owned(),
@@ -97,6 +76,7 @@ fn sample() -> PlaceDetail {
             kind_label: "absorbed".to_owned(),
             date: Some("1664".to_owned()),
             assertion_id: "0190-succession-assert-1".to_owned(),
+            merged_from: None,
         }],
         successors: Vec::new(),
         events: Vec::new(),
@@ -134,6 +114,34 @@ fn sample_media() -> Vec<MediaRefVm> {
     }]
 }
 
+/// A two-level jurisdiction chain: the county, then the country.
+fn sample_hierarchy() -> Vec<PlaceHierarchyVm> {
+    vec![
+        PlaceHierarchyVm {
+            human_id: "P0050".to_owned(),
+            id: "0190-county".to_owned(),
+            name: "New York County".to_owned(),
+            type_label: Some("County".to_owned()),
+            date: Some("1683 –".to_owned()),
+            confidence: Some(ConfidenceLevel::High),
+            confidence_label: "High".to_owned(),
+            assertion_id: "0190-enclosing-assert-1".to_owned(),
+            merged_from: None,
+        },
+        PlaceHierarchyVm {
+            human_id: "P0001".to_owned(),
+            id: "0190-country".to_owned(),
+            name: "United States".to_owned(),
+            type_label: Some("Country".to_owned()),
+            date: Some("1788 –".to_owned()),
+            confidence: Some(ConfidenceLevel::High),
+            confidence_label: "High".to_owned(),
+            assertion_id: "0190-enclosing-assert-2".to_owned(),
+            merged_from: None,
+        },
+    ]
+}
+
 /// The place's asserted names (Names tab): one sourced/dated, one unsourced.
 fn sample_names() -> Vec<PlaceNameVm> {
     vec![
@@ -145,6 +153,7 @@ fn sample_names() -> Vec<PlaceNameVm> {
             confidence_label: "Very high".to_owned(),
             source_count: 1,
             assertion_id: "0190-name-assert-1".to_owned(),
+            merged_from: None,
         },
         PlaceNameVm {
             text: "Nieuw Amsterdam".to_owned(),
@@ -154,6 +163,7 @@ fn sample_names() -> Vec<PlaceNameVm> {
             confidence_label: "Normal".to_owned(),
             source_count: 0,
             assertion_id: "0190-name-assert-2".to_owned(),
+            merged_from: None,
         },
     ]
 }
@@ -271,6 +281,7 @@ fn place_view_with_geometry_override() -> Element {
             confidence_label: String::new(),
             source_count: 0,
             assertion_id: "assert-geometry-override".to_owned(),
+            merged_from: None,
         }),
         ..sample()
     };
@@ -718,4 +729,28 @@ fn a_restriction_change_alone_makes_the_place_savable() {
         !html.contains("disabled"),
         "a restriction change alone enables Save:\n{html}"
     );
+}
+
+/// The sample with a name, a jurisdiction and a succession supplied by a merged copy, `P0002`.
+fn merged_place_view() -> Element {
+    use_context_provider(NavState::new);
+    let loc = loc();
+    let onedit = use_callback(|_: PlaceEditForm| {});
+    let onretract = use_callback(|_: (String, String, bool)| {});
+    let mut detail = sample();
+    detail.names = sample_names();
+    detail.names[1].merged_from = Some("P0002".to_owned());
+    detail.hierarchy[0].merged_from = Some("P0002".to_owned());
+    detail.predecessors[0].merged_from = Some("P0002".to_owned());
+    rsx! {
+        {place_names_table(&loc, &detail, onedit, onretract)}
+        {place_hierarchy_table(&loc, &detail, onedit, onretract)}
+        {place_succession_card(&loc, &detail, onedit, onretract)}
+    }
+}
+
+#[test]
+fn a_merged_place_row_names_the_copy_it_came_from() {
+    let html = render(merged_place_view);
+    assert_eq!(html.matches("from P0002").count(), 3, "{html}");
 }

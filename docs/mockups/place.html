@@ -431,7 +431,7 @@
                 <td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td>
               </tr>
               <tr>
-                <td><b>Nieuw Amsterdam</b></td>
+                <td><b>Nieuw Amsterdam</b> <span class="badge">from P0012</span></td>
                 <td class="muted">nl</td>
                 <td>until 1664</td>
                 <td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td>
@@ -440,6 +440,10 @@
               </tr>
             </tbody>
           </table>
+          <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">A row marked
+            <span class="badge">from P0012</span> came from a duplicate record of this place merged into it
+            (ADR 0039 §5): the place reads as one record with every copy's names, jurisdictions, successions, geometries and attachments, each row still attributed.
+            Edit and Retract on that row are written to P0012; a new name goes on this place. This is an identity decision — two records of one place — and not a succession, which links different places.</div>
         </div>
 
         <!-- HIERARCHY -->
@@ -479,7 +483,7 @@
           <div class="card" style="margin-top:16px">
             <h3>Succession <span class="badge">ADR 0026</span></h3>
             <div class="tab-actions"><button class="btn sm primary" title="Assert a merge / split / absorb link to other places">+ Add succession</button></div>
-            <div class="faint" style="font-size:var(--fs-xs);margin-bottom:6px">Identity changes — a merge or split reaches <i>different</i> place records, navigable both ways.</div>
+            <div class="faint" style="font-size:var(--fs-xs);margin-bottom:6px">Historical changes — a merger or split of real places links <i>different</i> place records, navigable both ways. A duplicate record of this place is merged into it instead, and its rows read <span class="badge">from P0012</span>.</div>
             <div class="stack">
               <div class="fact-row"><span class="chip">absorbed</span><span class="grow"><a href="place.html">New Amsterdam</a> → <b>New York</b></span><span class="muted">1664</span><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></div>
               <div class="fact-row"><span class="chip">merged</span><span class="grow"><a href="place.html">Brooklyn</a> + others → <b>New York City</b></span><span class="muted">1898</span><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></div>
@@ -546,8 +550,16 @@
 
         <!-- HISTORY (audit trail — free from the event log) -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone. An identity decision — merged, or marked as a different place — also shows the matching engine's assessment it was made on.</div>
           <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 10:30</div>
+              <div class="tl-what">Duplicate place record merged</div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"The same place, recorded twice by two imports"</div>
+              <div class="tl-evidence muted" title="The matching engine's assessment the decision was made on (ADR 0039 §2) — not the 5-level assertion Confidence">Matched at 92% · probable match · engine 4</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-20 10:44</div>
               <div class="tl-what">Name added: <b>Nieuw Amsterdam</b> (nl, –1664)</div>

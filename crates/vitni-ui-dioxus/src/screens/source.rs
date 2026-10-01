@@ -564,7 +564,7 @@ pub fn source_repositories_table(
             ],
             for link in detail.repositories.iter() {
                 tr {
-                    td { "{link.name}" }
+                    td { "{link.name}" {merged_from_chip(loc, link.merged_from.as_deref())} }
                     td { class: "mono", {or_dash(link.call_number.clone())} }
                     td { Chip { label: link.media_type_label.clone() } }
                     td {
@@ -668,7 +668,7 @@ pub fn source_attributes_table(
             ],
             for attribute in detail.attributes.iter() {
                 tr {
-                    td { Chip { label: attribute.attribute_type.clone() } }
+                    td { Chip { label: attribute.attribute_type.clone() } {merged_from_chip(loc, attribute.merged_from.as_deref())} }
                     td { class: "mono", "{attribute.value}" }
                     {row_actions_cell(
                         loc,

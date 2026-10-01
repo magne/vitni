@@ -543,7 +543,7 @@ pub fn note_language_tab(
                 for translation in detail.translations.iter() {
                     tr {
                         td { Chip { label: or_dash(translation.language.clone()) } }
-                        td { "{translation.text}" }
+                        td { "{translation.text}" {merged_from_chip(loc, translation.merged_from.as_deref())} }
                         td { class: "muted", {or_dash(translation.translator.clone())} }
                         {row_actions_cell::<NoteEditForm>(
                             loc,

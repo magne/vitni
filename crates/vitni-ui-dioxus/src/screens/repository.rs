@@ -566,7 +566,7 @@ pub fn repository_urls_table(
                             span { class: "muted", "—" }
                         }
                     }
-                    td { a { href: "{url.href}", "{url.href}" } }
+                    td { a { href: "{url.href}", "{url.href}" } {merged_from_chip(loc, url.merged_from.as_deref())} }
                     td { class: "muted", {or_dash(url.description.clone())} }
                     {row_actions_cell(
                         loc,
