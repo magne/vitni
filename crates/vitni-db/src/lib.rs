@@ -19,6 +19,8 @@
 #[cfg(feature = "sqlite")]
 mod geo_index;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
+mod identity_links;
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod match_keys;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod place_succession_index;
@@ -49,4 +51,4 @@ pub use raw::{ProjectionRow, RawEvent, RawEventKey, decode_raw_event, event_vari
 pub use record_origins::{
     IndexedField, OriginRow, created_key, digest, field_key, indexed_field, resolved_key, single_valued,
 };
-pub use store::{CommandError, DbError, PlaceSuccessionRecord, Store, StoredEvent};
+pub use store::{CommandError, DbError, IdentityLink, PlaceSuccessionRecord, Store, StoredEvent};

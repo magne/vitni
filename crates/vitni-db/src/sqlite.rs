@@ -49,12 +49,18 @@ macro_rules! sqlite_open_cqrs {
     }};
 }
 
-/// Appends the Place-only geometry-index (ADR 0024 §3) and succession-index (ADR 0026 §4)
-/// `Query`s to the `place` `CqrsFramework`, leaving every other aggregate's framework untouched.
-/// Dispatches on the registry's literal `$snake` token — the same "wiring by tag" shape as
-/// [`sqlite_open_cqrs!`] — rather than naming `place` after the per-aggregate repetition, which a
-/// plain `let` can't see across macro hygiene.
-macro_rules! sqlite_wire_place_indexes {
+/// Appends the derived side indexes to the one framework each is fed by: the identity cluster index
+/// (ADR 0039 §4) to `person`, and the geometry index (ADR 0024 §3) and succession index (ADR 0026 §4)
+/// to `place`, leaving every other aggregate's framework untouched. Dispatches on the registry's
+/// literal `$snake` token — the same "wiring by tag" shape as [`sqlite_open_cqrs!`] — rather than
+/// naming the aggregate after the per-aggregate repetition, which a plain `let` can't see across
+/// macro hygiene.
+macro_rules! sqlite_wire_side_indexes {
+    (person, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::new(
+            $pool.clone(),
+        )))
+    };
     (place, $pool:expr, $framework:expr) => {
         $framework
             .append_query(Box::new(crate::geo_index::PlaceGeometryIndexQuery::new($pool.clone())))
@@ -141,13 +147,19 @@ macro_rules! sqlite_store {
                 crate::match_keys::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating match keys index: {e}")))?;
+                // The identity cluster index (ADR 0039 §4) is derived from the Person projection; its
+                // `Query` is appended only to the Person framework below, and a workspace that predates
+                // it gets it filled once the projections are open.
+                let identity_is_new = crate::identity_links::sqlite::create_tables(&pool)
+                    .await
+                    .map_err(|e| DbError::Backend(format!("creating identity index: {e}")))?;
                 let origins_are_new = crate::record_origins::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating record origins index: {e}")))?;
                 $(
                     let repo = Arc::new(SqliteViewRepository::<$View, $State>::new($table_const, pool.clone()));
                     let $snake = sqlite_open_cqrs!(pool, repo, $wiring);
-                    let $snake = sqlite_wire_place_indexes!($snake, pool, $snake).append_query(Box::new(
+                    let $snake = sqlite_wire_side_indexes!($snake, pool, $snake).append_query(Box::new(
                         crate::record_origins::sqlite::RecordOriginsQuery::new(pool.clone(), $table_const),
                     )).append_query(Box::new(crate::match_keys::sqlite::MatchDirtyQuery::new(pool.clone())));
                     if stale_tables.contains(&$table_const) {
@@ -161,6 +173,9 @@ macro_rules! sqlite_store {
                         replay_record_origins::<$State>(&pool, $table_const, $upcasters).await?;
                     }
                 )+
+                if identity_is_new {
+                    crate::identity_links::sqlite::rebuild_index(&pool).await?;
+                }
                 Ok(Self { $($snake,)+ pool })
             }
 
@@ -215,6 +230,8 @@ macro_rules! sqlite_store {
                 // above, not replayed from raw events themselves.
                 crate::geo_index::rebuild_index(&self.pool).await?;
                 crate::place_succession_index::sqlite::rebuild_index(&self.pool).await?;
+                // The identity clusters (ADR 0039 §4) are derived from the rebuilt Person projection.
+                crate::identity_links::sqlite::rebuild_index(&self.pool).await?;
                 // The record origins index is replayed from the raw events, after the projections
                 // its `live` flags are read from.
                 crate::record_origins::sqlite::clear_table(&self.pool).await?;
@@ -331,6 +348,14 @@ impl SqliteStore {
         max_lon: f64,
     ) -> Result<Vec<String>, DbError> {
         crate::geo_index::places_in_bbox(&self.pool, min_lat, min_lon, max_lat, max_lon).await
+    }
+
+    /// Every member of a `kind` cluster with its root (ADR 0039 §4).
+    pub(crate) async fn identity_links(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+    ) -> Result<Vec<crate::store::IdentityLink>, DbError> {
+        crate::identity_links::sqlite::links(&self.pool, kind).await
     }
 
     /// Every place a succession names `to`, from `place_id`'s perspective as a `from` endpoint
@@ -1450,6 +1475,130 @@ mod tests {
         store.rebuild_projections().await.unwrap();
         let after = dump_place_geometry(&store).await;
         assert_eq!(before, after, "rebuild must reproduce the spatial index identically");
+    }
+
+    /// Executes one person command on `person_id`'s stream under assertion `assertion`.
+    async fn person_command(store: &SqliteStore, person_id: PersonId, assertion: u128, command: PersonCommand) {
+        store
+            .execute_person(
+                &person_id.to_string(),
+                PersonCommandEnvelope {
+                    meta: meta(assertion),
+                    command,
+                },
+            )
+            .await
+            .unwrap();
+    }
+
+    /// The person clusters as `(member, root)` pairs.
+    async fn person_links(store: &SqliteStore) -> Vec<(String, String)> {
+        store
+            .identity_links(vitni_core::matching::MatchableKind::Person)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|link| (link.member, link.root))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn identity_links_follow_merges_retractions_and_rebuild() {
+        let (store, _dir) = store().await;
+        let a = PersonId::from_uuid(Uuid::from_u128(1));
+        let b = PersonId::from_uuid(Uuid::from_u128(2));
+        let c = PersonId::from_uuid(Uuid::from_u128(3));
+        for (n, person_id, human_id) in [(10, a, "I0001"), (11, b, "I0002"), (12, c, "I0003")] {
+            person_command(
+                &store,
+                person_id,
+                n,
+                PersonCommand::CreatePerson {
+                    person_id,
+                    human_id: HumanId::new(human_id),
+                    evidence_level: EvidenceLevel::Persona,
+                    external_ids: Vec::new(),
+                },
+            )
+            .await;
+        }
+        assert!(person_links(&store).await.is_empty(), "no merge, no cluster");
+
+        let merge = |surviving, merged| PersonCommand::MergePersons {
+            surviving,
+            merged,
+            assessment: None,
+        };
+        person_command(&store, b, 20, merge(b, c)).await;
+        assert_eq!(person_links(&store).await, vec![(c.to_string(), b.to_string())]);
+
+        // B, itself a survivor, is merged into A: the whole chain now roots at A.
+        person_command(&store, a, 21, merge(a, b)).await;
+        assert_eq!(
+            person_links(&store).await,
+            vec![(b.to_string(), a.to_string()), (c.to_string(), a.to_string())]
+        );
+
+        let before = person_links(&store).await;
+        store.rebuild_projections().await.unwrap();
+        assert_eq!(person_links(&store).await, before, "rebuild reproduces the clusters");
+
+        // Undoing A's merge splits the cluster back to C under B.
+        person_command(
+            &store,
+            a,
+            22,
+            PersonCommand::RetractAssertion {
+                person_id: a,
+                target: AssertionId::from_uuid(Uuid::from_u128(21)),
+            },
+        )
+        .await;
+        assert_eq!(person_links(&store).await, vec![(c.to_string(), b.to_string())]);
+    }
+
+    #[tokio::test]
+    async fn a_workspace_predating_the_identity_index_gets_it_filled_on_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let url = format!("sqlite://{}", dir.path().join("ws.sqlite3").display());
+        let store = SqliteStore::open(&url).await.unwrap();
+        let a = PersonId::from_uuid(Uuid::from_u128(1));
+        let b = PersonId::from_uuid(Uuid::from_u128(2));
+        for (n, person_id, human_id) in [(10, a, "I0001"), (11, b, "I0002")] {
+            person_command(
+                &store,
+                person_id,
+                n,
+                PersonCommand::CreatePerson {
+                    person_id,
+                    human_id: HumanId::new(human_id),
+                    evidence_level: EvidenceLevel::Persona,
+                    external_ids: Vec::new(),
+                },
+            )
+            .await;
+        }
+        person_command(
+            &store,
+            a,
+            20,
+            PersonCommand::MergePersons {
+                surviving: a,
+                merged: b,
+                assessment: None,
+            },
+        )
+        .await;
+        for table in ["identity_links", "identity_edges"] {
+            sqlx::query(&format!("DROP TABLE {table}"))
+                .execute(&store.pool)
+                .await
+                .unwrap();
+        }
+        drop(store);
+
+        let store = SqliteStore::open(&url).await.unwrap();
+        assert_eq!(person_links(&store).await, vec![(b.to_string(), a.to_string())]);
     }
 
     /// Dumps every `place_succession_link` row (ordered) for a byte-exact rebuild comparison.
