@@ -377,6 +377,10 @@ pub(crate) struct References<I> {
 
 /// How a reference names each person.
 pub(crate) type PersonReferences = References<PersonId>;
+/// How a reference names each event.
+pub(crate) type EventReferences = References<EventId>;
+/// How a reference names each family.
+pub(crate) type FamilyReferences = References<FamilyId>;
 
 impl<I: ClusterId> References<I> {
     /// Loads the clusters and every record's `human_id`.

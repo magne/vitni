@@ -520,6 +520,8 @@ mod event_detail_tests {
             notes: Vec::new(),
             tags: Vec::new(),
             restrictions: BTreeSet::new(),
+            merged: Vec::new(),
+            claim_owners: std::collections::BTreeMap::new(),
         }
     }
 

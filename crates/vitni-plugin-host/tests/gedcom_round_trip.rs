@@ -13,8 +13,9 @@ use uuid::Uuid;
 use vitni_app::{
     AgeBound, Agent, AgentKind, AiConfig, AppDefaults, ChildParentRelationship, EvidenceLevel, IdentityDecision,
     MutationMeta, NewPerson, NoteType, OperatorConfig, ParticipantRole, PersonSummary, Provenance, Session, Workspace,
-    WorkspaceDefaults, add_child, change_log_for_person, create_person, list_citations, list_events, list_families,
-    list_media, list_notes, list_persons, list_places, list_repositories, list_sources, merge_persons, undo_assertion,
+    WorkspaceDefaults, add_child, add_partner, change_log_for_person, create_family, create_person, list_citations,
+    list_events, list_families, list_media, list_notes, list_persons, list_places, list_repositories, list_sources,
+    merge_events, merge_families, merge_persons, undo_assertion,
 };
 use vitni_core::ids::AgentId;
 use vitni_plugin_host::{
@@ -1604,4 +1605,73 @@ async fn a_family_naming_two_records_of_one_cluster_exports_the_root_once() {
     let (_, document, _workspace) = export_gedcom(workspace, &io_dir.path().join("out.ged")).await;
     assert_eq!(document.matches(&format!("1 CHIL @{sam}@")).count(), 1, "{document}");
     assert!(!document.contains(&format!("@{twin}@")), "{document}");
+}
+
+/// A family recorded twice, each copy with its own marriage, exports as one family with one marriage
+/// once both pairs are merged (ADR 0039 §5): the copies' partners, child and event fold into the root.
+#[tokio::test]
+async fn a_merged_family_and_marriage_export_as_one() {
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, workspace) = common::host()
+        .run_bulk_import(
+            &common::component("gedcom-import"),
+            invocation(workspace, import_grants()),
+            write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    let family = list_families(&workspace).await.expect("families")[0].clone();
+    let marriage = family.events[0].human_id.clone();
+    let human = Session::new(Agent {
+        kind: AgentKind::Human,
+        id: AgentId::from_uuid(Uuid::from_u128(1)),
+        display: Some("Tester".to_owned()),
+    });
+    let new = vitni_app::NewEvent {
+        human_id: None,
+        event_type: vitni_core::enums::EventType::Marriage,
+    };
+    let copy_event = vitni_app::create_event(&workspace, &human, new, Provenance::default(), &[])
+        .await
+        .expect("event copy");
+    let copy = create_family(&workspace, &human, Provenance::default(), &[])
+        .await
+        .expect("family copy");
+    for partner in &family.partners {
+        add_partner(&workspace, &human, &copy, &partner.human_id, MutationMeta::default())
+            .await
+            .expect("partner");
+    }
+    add_child(
+        &workspace,
+        &human,
+        &copy,
+        &family.children[0].human_id,
+        Vec::new(),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("child");
+    vitni_app::link_family_event(&workspace, &human, &copy, &copy_event, MutationMeta::default())
+        .await
+        .expect("link");
+    merge_events(&workspace, &human, &marriage, &copy_event, IdentityDecision::default())
+        .await
+        .expect("merge events");
+    merge_families(&workspace, &human, &family.human_id, &copy, IdentityDecision::default())
+        .await
+        .expect("merge families");
+
+    let (count, document, _workspace) = export_gedcom(workspace, &io_dir.path().join("out.ged")).await;
+    assert_eq!(
+        count, 4,
+        "3 individuals + 1 family: the copy folds into the root\n{document}"
+    );
+    assert!(!document.contains(&format!("@{copy}@")), "{document}");
+    assert_eq!(document.matches("1 MARR").count(), 1, "{document}");
+    assert_eq!(document.matches("1 HUSB").count(), 1, "{document}");
+    assert_eq!(document.matches("1 CHIL").count(), 1, "{document}");
 }

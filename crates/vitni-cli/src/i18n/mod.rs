@@ -583,6 +583,8 @@ mod tests {
             notes: Vec::new(),
             tags: Vec::new(),
             restrictions: BTreeSet::new(),
+            merged: Vec::new(),
+            claim_owners: std::collections::BTreeMap::new(),
         };
         let line = localizer("no").family_summary_line(&summary);
         // Norwegian labels and the localized empty-list placeholder.

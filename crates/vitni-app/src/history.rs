@@ -991,8 +991,14 @@ pub async fn workspace_counts(workspace: &Workspace) -> Result<WorkspaceCounts, 
                 let members = crate::identity::PersonClusters::load(store).await?.member_count();
                 counts.person = count.saturating_sub(u64::try_from(members).unwrap_or(u64::MAX));
             }
-            "family" => counts.family = count,
-            "event" => counts.event = count,
+            "family" => {
+                let members = crate::identity::FamilyClusters::load(store).await?.member_count();
+                counts.family = count.saturating_sub(u64::try_from(members).unwrap_or(u64::MAX));
+            }
+            "event" => {
+                let members = crate::identity::EventClusters::load(store).await?.member_count();
+                counts.event = count.saturating_sub(u64::try_from(members).unwrap_or(u64::MAX));
+            }
             "place" => counts.place = count,
             "source" => counts.source = count,
             "citation" => counts.citation = count,

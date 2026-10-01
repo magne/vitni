@@ -8,7 +8,7 @@
 //! [`EventError::UnknownPlace`](vitni_core::event::EventError) — the §9 aggregate-tax check
 //! (ADR 0004 §3).
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use vitni_core::address::Address;
 use vitni_core::age::Age;
@@ -27,9 +27,9 @@ use vitni_core::text::{Attribute, MediaRef};
 use vitni_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, tag_refs};
+use crate::dto::{AggRef, AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, tag_refs};
 use crate::error::AppError;
-use crate::identity::{self, IdentityDecision, PairDecision};
+use crate::identity::{self, EventClusters, IdentityDecision, PairDecision};
 use crate::person::list_persons;
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
@@ -129,6 +129,24 @@ pub struct EventSummary {
     pub tags: Vec<TagRef>,
     /// The event's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+    /// Every event merged into this event's cluster, directly or through another member (ADR 0039
+    /// §4), in id order.
+    pub merged: Vec<AggRef>,
+    /// The `human_id` of the member each member-owned row came from, by the row's `AssertionId` — the
+    /// stream an edit or retraction of that row is written to (ADR 0039 §5). A row absent here is the
+    /// event's own. Never rendered as a key; see [`owner_of`](Self::owner_of).
+    pub claim_owners: BTreeMap<String, String>,
+}
+
+impl EventSummary {
+    /// The `human_id` of the record that owns the row introduced by `assertion_id`: the member it came
+    /// from, or this event for its own rows.
+    #[must_use]
+    pub fn owner_of(&self, assertion_id: &str) -> &str {
+        self.claim_owners
+            .get(assertion_id)
+            .map_or(self.human_id.as_str(), String::as_str)
+    }
 }
 
 /// What to create an event with (the auto/override `human_id` and its type).
@@ -723,14 +741,20 @@ pub async fn event_pair_decision(
 /// A store/read-model error.
 pub async fn show_event(workspace: &Workspace, human_id: &str) -> Result<Option<EventSummary>, AppError> {
     let store = workspace.store();
-    let Some(view) = store.find_event(human_id).await? else {
+    let Some(found) = store.find_event(human_id).await? else {
         return Ok(None);
     };
+    let Some(event_id) = found.event_id() else {
+        return Ok(None);
+    };
+    let clusters = EventClusters::load(store).await?;
+    let views = identity::views(store, &clusters.cluster(clusters.root(event_id))).await?;
     let lookups = EventLookups::load(workspace).await?;
-    Ok(Some(summarize(&view, &lookups)))
+    Ok(summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups))
 }
 
-/// Lists every event's summary, ordered by `human_id`.
+/// Lists every event's summary, ordered by `human_id`. A merged event is listed once, as its cluster's
+/// root (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -738,8 +762,23 @@ pub async fn show_event(workspace: &Workspace, human_id: &str) -> Result<Option<
 pub async fn list_events(workspace: &Workspace) -> Result<Vec<EventSummary>, AppError> {
     let store = workspace.store();
     let views = store.list_events().await?;
+    let clusters = EventClusters::load(store).await?;
+    let by_id: HashMap<EventId, &EventView> = views.iter().filter_map(|view| Some((view.event_id()?, view))).collect();
     let lookups = EventLookups::load(workspace).await?;
-    Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
+    let mut summaries = Vec::with_capacity(views.len());
+    for view in &views {
+        let Some(id) = view.event_id() else { continue };
+        if clusters.is_member(id) {
+            continue;
+        }
+        let cluster: Vec<&EventView> = clusters
+            .cluster(id)
+            .iter()
+            .filter_map(|id| by_id.get(id).copied())
+            .collect();
+        summaries.extend(summarize_cluster(&cluster, &lookups));
+    }
+    Ok(summaries)
 }
 
 /// The place on a lightweight event list row: the place's user-facing id and primary name.
@@ -765,7 +804,8 @@ pub struct EventRow {
     pub place: Option<EventPlaceRow>,
 }
 
-/// Lists every event as a lightweight [`EventRow`], ordered by `human_id`.
+/// Lists every event as a lightweight [`EventRow`], ordered by `human_id`, hiding merged events
+/// behind their cluster's root (ADR 0039 §5).
 ///
 /// Unlike [`list_events`], this reads the Event projection plus a narrow `PlaceId -> name` map (from
 /// the Place projection) — skipping [`EventLookups::load`], which runs the full person and citation
@@ -790,8 +830,12 @@ pub async fn list_event_rows(workspace: &Workspace) -> Result<Vec<EventRow>, App
         }
     }
     let views = store.list_events().await?;
+    let clusters = EventClusters::load(store).await?;
     let mut rows = Vec::with_capacity(views.len());
     for view in &views {
+        if view.event_id().is_some_and(|id| clusters.is_member(id)) {
+            continue;
+        }
         let place = view.asserted_place().map(|asserted| {
             places.get(&asserted.value).cloned().unwrap_or_else(|| EventPlaceRow {
                 human_id: asserted.value.to_string(),
@@ -1241,7 +1285,68 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         notes,
         tags,
         restrictions: view.restrictions().clone(),
+        merged: Vec::new(),
+        claim_owners: BTreeMap::new(),
     }
+}
+
+/// Summarises a cluster — its root first, then its members — as one event (ADR 0039 §5): the root's
+/// summary with every member's rows appended, each member-owned row recorded in `claim_owners`.
+/// `None` for an empty slice.
+fn summarize_cluster(views: &[&EventView], lookups: &EventLookups) -> Option<EventSummary> {
+    let (root, members) = views.split_first()?;
+    let mut summary = summarize(root, lookups);
+    for view in members {
+        let member = summarize(view, lookups);
+        summary.merged.push(AggRef {
+            human_id: member.human_id.clone(),
+            id: member.id.clone(),
+        });
+        adopt(&mut summary, member);
+    }
+    summary.merged.sort_by(|x, y| x.id.cmp(&y.id));
+    Some(summary)
+}
+
+/// Appends a member's rows to its root's summary, recording the member as each event-owned row's
+/// owner, and fills what the root lacks — type, date, place, description — from the member. The
+/// participants are person-owned (ADR 0019), so they carry their own correction target.
+fn adopt(root: &mut EventSummary, member: EventSummary) {
+    let owner = member.human_id.clone();
+    let mut owned: Vec<String> = Vec::new();
+    owned.extend(member.addresses.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.citations.iter().filter_map(|row| row.assertion_id.clone()));
+    owned.extend(member.media.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.notes.iter().map(|row| row.assertion_id.clone()));
+    for assertion_id in owned {
+        root.claim_owners.insert(assertion_id, owner.clone());
+    }
+    if root.event_type.is_none() {
+        root.event_type = member.event_type;
+        root.event_type_confidence = member.event_type_confidence;
+    }
+    if root.date.is_none() {
+        root.date = member.date;
+        root.date_confidence = member.date_confidence;
+        root.date_source_count = member.date_source_count;
+        root.date_citations = member.date_citations;
+    }
+    if root.place.is_none() {
+        root.place = member.place;
+        root.place_confidence = member.place_confidence;
+    }
+    root.description = root.description.take().or(member.description);
+    root.addresses.extend(member.addresses);
+    root.participants.extend(member.participants);
+    root.citations.extend(member.citations);
+    root.media.extend(member.media);
+    root.notes.extend(member.notes);
+    for tag in member.tags {
+        if !root.tags.iter().any(|held| held.id == tag.id) {
+            root.tags.push(tag);
+        }
+    }
+    root.restrictions.extend(member.restrictions);
 }
 
 #[cfg(test)]

@@ -1106,7 +1106,9 @@ struct Lookups {
 /// An event resolved from the Event projection for a participation join — its `human_id`, kind, and
 /// date. The kind lets [`vital_event_date`] pick out the Birth/Death event a person is Primary in
 /// (vital claims are Events with a Primary participant — ADR 0021 §2).
+#[derive(Clone)]
 struct EventJoin {
+    id: EventId,
     human_id: String,
     event_type: Option<EventType>,
     date: Option<GenealogicalDate>,
@@ -1179,25 +1181,40 @@ async fn event_lookups(store: &Store) -> Result<HashMap<EventId, EventJoin>, App
             place_names.insert(id, name);
         }
     }
-    let mut events = HashMap::new();
+    let mut own = HashMap::new();
     for view in store.list_events().await? {
-        let Some(id) = view.event_id() else {
+        let (Some(id), Some(human_id)) = (view.event_id(), view.human_id()) else {
             continue;
         };
-        if let Some(human_id) = view.human_id() {
-            let place = view
-                .asserted_place()
-                .and_then(|asserted| place_names.get(&asserted.value).cloned());
-            events.insert(
+        let place = view
+            .asserted_place()
+            .and_then(|asserted| place_names.get(&asserted.value).cloned());
+        own.insert(
+            id,
+            EventJoin {
                 id,
-                EventJoin {
-                    human_id: human_id.as_str().to_owned(),
-                    event_type: view.event_type().cloned(),
-                    date: view.date().cloned(),
-                    place,
-                },
-            );
+                human_id: human_id.as_str().to_owned(),
+                event_type: view.event_type().cloned(),
+                date: view.date().cloned(),
+                place,
+            },
+        );
+    }
+    // A merged event reads as its cluster's root: the root's id and `human_id`, and what the root
+    // lacks filled from its members (ADR 0039 §5).
+    let clusters = crate::identity::EventClusters::load(store).await?;
+    let mut events = HashMap::with_capacity(own.len());
+    for &id in own.keys() {
+        let root = clusters.root(id);
+        let mut cluster = clusters.cluster(root).into_iter().filter_map(|id| own.get(&id));
+        let Some(first) = cluster.next() else { continue };
+        let mut join = first.clone();
+        for member in cluster {
+            join.event_type = join.event_type.take().or_else(|| member.event_type.clone());
+            join.date = join.date.take().or_else(|| member.date.clone());
+            join.place = join.place.take().or_else(|| member.place.clone());
         }
+        events.insert(id, join);
     }
     Ok(events)
 }
@@ -1599,7 +1616,7 @@ fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<Participat
             events.get(&participation.event_id).map(|join| ParticipationRef {
                 event: AggRef {
                     human_id: join.human_id.clone(),
-                    id: participation.event_id.to_string(),
+                    id: join.id.to_string(),
                 },
                 role: participation.role.clone(),
                 date: join.date.clone(),
