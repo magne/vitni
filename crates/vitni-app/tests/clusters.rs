@@ -7,10 +7,10 @@ use std::collections::BTreeSet;
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, AppError, IdentityDecision, MutationMeta, NewFact, NewPerson, OperatorConfig, PersonNameParts,
-    Provenance, Session, Workspace, WorkspaceDefaults, assert_fact, change_log_for_person, create_person,
-    distinguish_persons, list_person_rows, list_persons, merge_persons, show_person, undo_assertion,
-    undo_distinction_and_merge, workspace_counts,
+    AppDefaults, AppError, IdentityDecision, MutationMeta, NewFact, NewPerson, OperatorConfig, PersonChangeSet,
+    PersonNameParts, PersonTarget, Provenance, Session, Workspace, WorkspaceDefaults, assert_fact,
+    change_log_for_person, commit_person_change_set, create_person, create_tag, distinguish_persons, list_person_rows,
+    list_persons, merge_persons, show_person, tag_person, undo_assertion, undo_distinction_and_merge, workspace_counts,
 };
 use vitni_core::enums::{EvidenceLevel, FactType};
 use vitni_core::ids::AgentId;
@@ -353,4 +353,81 @@ async fn undoing_the_merge_separates_the_records_again() {
     let member = show_person(&ws, &b).await.expect("show").expect("b");
     assert_eq!(member.human_id, b);
     assert_eq!(member.owner_of(&member.facts[0].assertion_id), b);
+}
+
+/// An edit of the whole record with only `name` and `tags` set, as the person dialog commits it.
+fn record_edit(human_id: &str, name: Option<PersonNameParts>, tags: Vec<String>) -> PersonChangeSet {
+    PersonChangeSet {
+        target: PersonTarget::Existing {
+            human_id: human_id.to_owned(),
+        },
+        name,
+        name_citation: None,
+        sex: None,
+        tags,
+        new_sources: Vec::new(),
+        new_citations: Vec::new(),
+        provenance: Provenance::default(),
+        citations: Vec::new(),
+    }
+}
+
+#[tokio::test]
+async fn renaming_a_root_named_only_by_its_member_names_the_root() {
+    let (ws, _dir) = workspace().await;
+    let unnamed = NewPerson {
+        human_id: None,
+        name: None,
+        evidence_level: EvidenceLevel::Conclusion,
+        external_ids: Vec::new(),
+    };
+    let a = create_person(&ws, &session(), unnamed, Provenance::default(), &[])
+        .await
+        .expect("create");
+    let b = person(&ws, "Kari", "Olsen").await;
+    merge(&ws, &a, &b).await;
+
+    let parts = PersonNameParts::simple(Some("Kari".to_owned()), Some("Olsdatter".to_owned()));
+    commit_person_change_set(&ws, &session(), record_edit(&a, Some(parts), Vec::new()))
+        .await
+        .expect("rename");
+    let root = show_person(&ws, &a).await.expect("show").expect("root");
+    let names: Vec<_> = root
+        .names
+        .iter()
+        .map(|name| {
+            (
+                name.name.surnames[0].surname.clone(),
+                root.owner_of(&name.assertion_id).to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        names,
+        [("Olsdatter".to_owned(), a.clone()), ("Olsen".to_owned(), b.clone())],
+        "the new name is the root's own; the member's stays the member's"
+    );
+}
+
+#[tokio::test]
+async fn removing_a_members_tag_in_the_record_editor_untags_the_member() {
+    let (ws, _dir) = workspace().await;
+    let a = person(&ws, "Ole", "Hansen").await;
+    let b = person(&ws, "Ole", "Hanssen").await;
+    let tag = create_tag(&ws, &session(), "Emigrant".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("tag");
+    tag_person(&ws, &session(), &b, &tag, false, MutationMeta::default())
+        .await
+        .expect("tag member");
+    merge(&ws, &a, &b).await;
+    assert_eq!(
+        show_person(&ws, &a).await.expect("show").expect("root").tags,
+        std::slice::from_ref(&tag)
+    );
+
+    commit_person_change_set(&ws, &session(), record_edit(&a, None, Vec::new()))
+        .await
+        .expect("untag");
+    assert!(show_person(&ws, &a).await.expect("show").expect("root").tags.is_empty());
 }
