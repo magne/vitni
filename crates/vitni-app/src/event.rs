@@ -132,9 +132,10 @@ pub struct EventSummary {
     /// Every event merged into this event's cluster, directly or through another member (ADR 0039
     /// §4), in id order.
     pub merged: Vec<AggRef>,
-    /// The `human_id` of the member each member-owned row came from, by the row's `AssertionId` — the
-    /// stream an edit or retraction of that row is written to (ADR 0039 §5). A row absent here is the
-    /// event's own. Never rendered as a key; see [`owner_of`](Self::owner_of).
+    /// The `human_id` of the member each member row came from, by the row's `AssertionId`. An
+    /// event-owned row's edit or retraction is written to that member's stream (ADR 0039 §5); a
+    /// participant's stays with its person (ADR 0019). A row absent here is the event's own. Never
+    /// rendered as a key; see [`owner_of`](Self::owner_of).
     pub claim_owners: BTreeMap<String, String>,
 }
 
@@ -230,7 +231,9 @@ pub async fn create_event(
     Ok(human_id)
 }
 
-/// Sets an event's privacy restrictions (GEDCOM `RESN` — data-model §6).
+/// Sets an event's privacy restrictions (GEDCOM `RESN` — data-model §6). A merged member restricted
+/// beyond the new set is narrowed to it first, so the cluster reads with exactly `restrictions`
+/// (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -244,6 +247,27 @@ pub async fn set_restrictions(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    for record in identity::cluster_records(store, event_id).await? {
+        let Some(id) = record.event_id() else { continue };
+        if id == event_id || record.restrictions().is_subset(&restrictions) {
+            continue;
+        }
+        let narrowed = record.restrictions().intersection(&restrictions).copied().collect();
+        let command = EventCommand::SetRestrictions {
+            event_id: id,
+            restrictions: narrowed,
+        };
+        execute(
+            store,
+            session,
+            &id.to_string(),
+            command,
+            meta.provenance.clone(),
+            citations.clone(),
+        )
+        .await?;
+    }
     execute_event_mutation(
         store,
         session,
@@ -599,7 +623,8 @@ pub async fn import_attach_event_note(
     attach_event_note(workspace, session, event_human_id, note_id, meta).await
 }
 
-/// Applies (or removes) a tag on an event, identified by `human_id`.
+/// Applies (or removes) a tag on an event, identified by `human_id`. A removed tag is untagged on
+/// every record of the event's cluster that holds it (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -615,11 +640,27 @@ pub async fn tag_event(
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
     let tag_id = parse_tag_id(tag_id)?;
-    let command = if remove {
-        EventCommand::Untag { event_id, tag_id }
-    } else {
-        EventCommand::Tag { event_id, tag_id }
-    };
+    if !remove {
+        let command = EventCommand::Tag { event_id, tag_id };
+        return execute_event_mutation(store, session, event_id, command, meta).await;
+    }
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    for record in identity::cluster_records(store, event_id).await? {
+        let Some(id) = record.event_id() else { continue };
+        if id != event_id && record.tags().contains(&tag_id) {
+            let command = EventCommand::Untag { event_id: id, tag_id };
+            execute(
+                store,
+                session,
+                &id.to_string(),
+                command,
+                meta.provenance.clone(),
+                citations.clone(),
+            )
+            .await?;
+        }
+    }
+    let command = EventCommand::Untag { event_id, tag_id };
     execute_event_mutation(store, session, event_id, command, meta).await
 }
 
@@ -732,6 +773,17 @@ pub async fn event_pair_decision(
     other_human_id: &str,
 ) -> Result<Option<PairDecision>, AppError> {
     identity::pair_decision::<EventView>(workspace, first_human_id, other_human_id).await
+}
+
+/// The `human_id` of the record of `human_id`'s event cluster whose stream holds the live assertion
+/// `assertion_id` — where an edit or retraction of that row is written (ADR 0039 §5).
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if `human_id` is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or a store error.
+pub async fn event_claim_owner(workspace: &Workspace, human_id: &str, assertion_id: &str) -> Result<String, AppError> {
+    identity::claim_owner::<EventView>(workspace, human_id, assertion_id).await
 }
 
 /// Loads a single event's summary by `human_id`.
@@ -1308,13 +1360,13 @@ fn summarize_cluster(views: &[&EventView], lookups: &EventLookups) -> Option<Eve
     Some(summary)
 }
 
-/// Appends a member's rows to its root's summary, recording the member as each event-owned row's
-/// owner, and fills what the root lacks — type, date, place, description — from the member. The
-/// participants are person-owned (ADR 0019), so they carry their own correction target.
+/// Appends a member's rows to its root's summary, recording the member each row came from, and fills
+/// what the root lacks — type, date, place, description — from the member.
 fn adopt(root: &mut EventSummary, member: EventSummary) {
     let owner = member.human_id.clone();
     let mut owned: Vec<String> = Vec::new();
     owned.extend(member.addresses.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.participants.iter().map(|row| row.assertion_id.clone()));
     owned.extend(member.citations.iter().filter_map(|row| row.assertion_id.clone()));
     owned.extend(member.media.iter().map(|row| row.assertion_id.clone()));
     owned.extend(member.notes.iter().map(|row| row.assertion_id.clone()));

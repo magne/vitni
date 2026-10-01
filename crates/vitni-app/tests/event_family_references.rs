@@ -12,11 +12,13 @@ use vitni_app::{
     NewResearchNote, NewResearchNoteSubject, NewSource, OperatorConfig, PersonNameParts, Provenance, Session,
     Workspace, WorkspaceDefaults, add_child, add_event_citation, add_partner, ancestors, assert_participation,
     attach_event_note, attach_family_note, create_citation, create_event, create_family, create_note, create_person,
-    create_research_note, create_source, descendants, families_for_person, link_family_event, list_event_rows,
-    list_events, list_families, list_family_rows, list_research_notes_about, merge_events, merge_families, show_event,
-    show_family, show_note, show_person, show_research_note, show_source, workspace_counts,
+    create_research_note, create_source, create_tag, descendants, event_claim_owner, families_for_person,
+    family_claim_owner, link_family_event, list_event_rows, list_events, list_families, list_family_rows,
+    list_research_notes_about, merge_events, merge_families, remove_child, set_event_restrictions,
+    set_family_restrictions, show_event, show_family, show_note, show_person, show_research_note, show_source,
+    tag_event, tag_family, undo_event_assertion, workspace_counts,
 };
-use vitni_core::enums::{ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole};
+use vitni_core::enums::{ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, Restriction};
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 
@@ -419,4 +421,106 @@ async fn a_child_both_copies_name_is_one_child_in_the_charts() {
     let families = families_for_person(&f.ws, &f.child).await.expect("families");
     assert_eq!(families.len(), 1, "{families:?}");
     assert_eq!(families[0].children.len(), 1, "{families:?}");
+}
+
+#[tokio::test]
+async fn a_correction_of_a_member_row_is_written_to_the_member() {
+    let f = fixture().await;
+    let ws = &f.ws;
+    let event = show_event(ws, &f.root_event).await.expect("show").expect("event");
+    let note = event.notes[0].assertion_id.clone();
+    assert_eq!(
+        event_claim_owner(ws, &f.root_event, &note).await.expect("owner"),
+        f.member_event
+    );
+    assert_eq!(
+        event_claim_owner(ws, &f.member_event, &note).await.expect("owner"),
+        f.member_event
+    );
+    undo_event_assertion(ws, &session(), &f.member_event, &note, None)
+        .await
+        .expect("undo the member's note");
+    let event = show_event(ws, &f.root_event).await.expect("show").expect("event");
+    assert!(event.notes.is_empty(), "{:?}", event.notes);
+
+    let family = show_family(ws, &f.root_family).await.expect("show").expect("family");
+    let note = family.notes[0].assertion_id.clone();
+    assert_eq!(
+        family_claim_owner(ws, &f.root_family, &note).await.expect("owner"),
+        f.member_family
+    );
+    let own = family.partners[0].assertion_id.clone();
+    assert_eq!(
+        family_claim_owner(ws, &f.root_family, &own).await.expect("owner"),
+        f.root_family
+    );
+}
+
+#[tokio::test]
+async fn removing_a_tag_or_child_from_a_cluster_removes_it_from_every_record() {
+    let f = fixture().await;
+    let ws = &f.ws;
+    let tag = create_tag(ws, &session(), "Duplicate copy".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("tag");
+    tag_event(ws, &session(), &f.member_event, &tag, false, MutationMeta::default())
+        .await
+        .expect("tag member");
+    tag_family(ws, &session(), &f.member_family, &tag, false, MutationMeta::default())
+        .await
+        .expect("tag member");
+    let event = show_event(ws, &f.root_event).await.expect("show").expect("event");
+    assert_eq!(event.tags.len(), 1, "the member's tag reads on the root");
+
+    tag_event(ws, &session(), &f.root_event, &tag, true, MutationMeta::default())
+        .await
+        .expect("untag cluster");
+    tag_family(ws, &session(), &f.root_family, &tag, true, MutationMeta::default())
+        .await
+        .expect("untag cluster");
+    let event = show_event(ws, &f.root_event).await.expect("show").expect("event");
+    assert!(event.tags.is_empty(), "{:?}", event.tags);
+    let family = show_family(ws, &f.root_family).await.expect("show").expect("family");
+    assert!(family.tags.is_empty(), "{:?}", family.tags);
+
+    remove_child(ws, &session(), &f.root_family, &f.child, MutationMeta::default())
+        .await
+        .expect("remove the member's child");
+    let family = show_family(ws, &f.root_family).await.expect("show").expect("family");
+    assert!(family.children.is_empty(), "{:?}", family.children);
+}
+
+#[tokio::test]
+async fn restricting_a_cluster_narrows_every_record() {
+    let f = fixture().await;
+    let ws = &f.ws;
+    let private = BTreeSet::from([Restriction::Privacy]);
+    set_event_restrictions(
+        ws,
+        &session(),
+        &f.member_event,
+        private.clone(),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("restrict member");
+    set_family_restrictions(ws, &session(), &f.member_family, private, MutationMeta::default())
+        .await
+        .expect("restrict member");
+    let event = show_event(ws, &f.root_event).await.expect("show").expect("event");
+    assert!(
+        !event.restrictions.is_empty(),
+        "the member's restriction reads on the root"
+    );
+
+    set_event_restrictions(ws, &session(), &f.root_event, BTreeSet::new(), MutationMeta::default())
+        .await
+        .expect("lift");
+    set_family_restrictions(ws, &session(), &f.root_family, BTreeSet::new(), MutationMeta::default())
+        .await
+        .expect("lift");
+    let event = show_event(ws, &f.root_event).await.expect("show").expect("event");
+    assert!(event.restrictions.is_empty(), "{:?}", event.restrictions);
+    let family = show_family(ws, &f.root_family).await.expect("show").expect("family");
+    assert!(family.restrictions.is_empty(), "{:?}", family.restrictions);
 }

@@ -842,18 +842,7 @@ pub(crate) async fn tag_holders(store: &Store, person: PersonId, tag_id: TagId) 
 /// [`AppError::PersonNotFound`] if `human_id` is unknown, [`AppError::Db`] if `assertion_id` is not a
 /// UUID, or a store error.
 pub async fn claim_owner(workspace: &Workspace, human_id: &str, assertion_id: &str) -> Result<String, AppError> {
-    let store = workspace.store();
-    let person_id = resolve_person_id(store, human_id).await?;
-    let target = use_case::parse_assertion_id(assertion_id)?;
-    let clusters = PersonClusters::load(store).await?;
-    let records = crate::identity::views(store, &clusters.cluster(clusters.root(person_id))).await?;
-    let holder = records
-        .iter()
-        .find(|record| record.holds_assertion(target))
-        .or_else(|| records.first());
-    Ok(holder
-        .and_then(PersonView::human_id)
-        .map_or_else(|| human_id.to_owned(), |id| id.as_str().to_owned()))
+    identity::claim_owner::<PersonView>(workspace, human_id, assertion_id).await
 }
 
 /// Parses a tag aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`]. Mirrors

@@ -35,6 +35,22 @@ fn marriage_citation() -> CitationRefVm {
     }
 }
 
+/// The family's marriage row, backed by `citations`.
+fn marriage_event(citations: Vec<CitationRefVm>) -> FamilyEventVm {
+    FamilyEventVm {
+        human_id: "E0001".to_owned(),
+        type_label: "Marriage".to_owned(),
+        date: Some("14 Jun 1876".to_owned()),
+        place: Some("Trinity Church, New York".to_owned()),
+        confidence: Some(ConfidenceLevel::High),
+        confidence_label: "High".to_owned(),
+        source_count: 1,
+        citations,
+        assertion_id: "01920000-0000-7000-8000-0000000000e5".to_owned(),
+        merged_from: None,
+    }
+}
+
 fn sample() -> FamilyDetail {
     FamilyDetail {
         human_id: "F0017".to_owned(),
@@ -48,6 +64,7 @@ fn sample() -> FamilyDetail {
                 source_count: 1,
                 citations: vec![marriage_citation()],
                 assertion_id: "01920000-0000-7000-8000-0000000000a1".to_owned(),
+                merged_from: None,
             },
             PartnerVm {
                 human_id: "I0002".to_owned(),
@@ -56,19 +73,10 @@ fn sample() -> FamilyDetail {
                 source_count: 0,
                 citations: Vec::new(),
                 assertion_id: "01920000-0000-7000-8000-0000000000a2".to_owned(),
+                merged_from: None,
             },
         ],
-        marriage: Some(FamilyEventVm {
-            human_id: "E0001".to_owned(),
-            type_label: "Marriage".to_owned(),
-            date: Some("14 Jun 1876".to_owned()),
-            place: Some("Trinity Church, New York".to_owned()),
-            confidence: Some(ConfidenceLevel::High),
-            confidence_label: "High".to_owned(),
-            source_count: 1,
-            citations: vec![marriage_citation()],
-            assertion_id: "01920000-0000-7000-8000-0000000000e5".to_owned(),
-        }),
+        marriage: Some(marriage_event(vec![marriage_citation()])),
         children: vec![FamilyChildVm {
             human_id: "I0003".to_owned(),
             name: "Jonathan Smith".to_owned(),
@@ -93,18 +101,9 @@ fn sample() -> FamilyDetail {
             confidence_label: "Normal".to_owned(),
             source_count: 0,
             assertion_id: "01920000-0000-7000-8000-0000000000c3".to_owned(),
+            merged_from: None,
         }],
-        events: vec![FamilyEventVm {
-            human_id: "E0001".to_owned(),
-            type_label: "Marriage".to_owned(),
-            date: Some("14 Jun 1876".to_owned()),
-            place: Some("Trinity Church, New York".to_owned()),
-            confidence: Some(ConfidenceLevel::High),
-            confidence_label: "High".to_owned(),
-            source_count: 1,
-            citations: Vec::new(),
-            assertion_id: "01920000-0000-7000-8000-0000000000e5".to_owned(),
-        }],
+        events: vec![marriage_event(Vec::new())],
         citations: vec![CitationRefVm {
             human_id: "C0001".to_owned(),
             source: Some("Trinity Church marriage register".to_owned()),
@@ -482,5 +481,34 @@ fn media_tab_opens_the_crop_viewer_on_a_card_click() {
     assert!(
         html.contains("Set region") && html.contains("Clear region"),
         "the crop viewer overlay renders with its Set/Clear region actions:\n{html}"
+    );
+}
+
+/// The sample with its first partner, child and event supplied by a merged copy, `F0002`.
+fn merged_family_view() -> Element {
+    let loc = loc();
+    let record = state(false);
+    let editing = use_signal(|| None::<FamilyEditForm>);
+    let on_retract = use_callback(|_target: (String, String, bool)| {});
+    let on_child_remove = use_callback(|_child: ChildRemoval| {});
+    let on_edit_open = use_callback(|_form: FamilyEditForm| {});
+    let mut detail = sample();
+    detail.partners[0].merged_from = Some("F0002".to_owned());
+    detail.children[0].merged_from = Some("F0002".to_owned());
+    detail.events[0].merged_from = Some("F0002".to_owned());
+    rsx! {
+        {family_overview(&loc, &detail, editing, record, on_retract)}
+        {family_children_table(&loc, &detail, on_edit_open, on_retract, on_child_remove)}
+        {family_events_table(&loc, &detail.events, on_retract)}
+    }
+}
+
+#[test]
+fn rows_from_a_merged_family_are_attributed_to_it() {
+    let html = render(merged_family_view);
+    assert_eq!(
+        html.matches(r#"<span class="badge">from F0002</span>"#).count(),
+        3,
+        "the partner, the child and the event name the copy they came from:\n{html}"
     );
 }

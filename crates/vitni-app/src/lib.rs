@@ -126,20 +126,20 @@ pub use event::{
     DateInput, DateParts, EventAddressRef, EventMergeResult, EventPlaceRow, EventRow, EventSummary, ImportedMediaRef,
     NewEvent, ParticipantRef, PlaceRefSummary, add_event_citation, assert_event_address, assert_event_date,
     assert_event_date_value, attach_event_media, attach_event_note, build_genealogical_date, create_event,
-    distinguish_events, event_pair_decision, gregorian_date, import_attach_event_media, import_attach_event_note,
-    link_place, list_event_rows, list_events, merge_events, set_event_description, set_event_human_id, set_event_type,
-    set_restrictions as set_event_restrictions, show_event, tag_event, undo_event_distinction_and_merge,
-    update_event_media_ref,
+    distinguish_events, event_claim_owner, event_pair_decision, gregorian_date, import_attach_event_media,
+    import_attach_event_note, link_place, list_event_rows, list_events, merge_events, set_event_description,
+    set_event_human_id, set_event_type, set_restrictions as set_event_restrictions, show_event, tag_event,
+    undo_event_distinction_and_merge, update_event_media_ref,
 };
 pub use event_change_set::{EventChangeSet, NewPlaceEntry, PlaceRefInput, commit_event_change_set};
 pub use family::{
     ChildRef, ChildRelationshipRef, FamilyEventRef, FamilyForPerson, FamilyMergeResult, FamilyPartnerRow, FamilyRow,
     FamilySummary, PartnerRef, PersonFamilyRole, add_child, add_external_id as add_family_external_id,
     add_family_citation, add_partner, assert_child_relationship, attach_family_media, attach_family_note,
-    create_family, distinguish_families, families_for_person, family_pair_decision, link_family_event, list_families,
-    list_family_rows, merge_families, remove_child, remove_partner, set_family_human_id,
-    set_restrictions as set_family_restrictions, show_family, tag_family, undo_family_distinction_and_merge,
-    update_family_media_ref,
+    create_family, distinguish_families, families_for_person, family_claim_owner, family_pair_decision,
+    link_family_event, list_families, list_family_rows, merge_families, remove_child, remove_partner,
+    set_family_human_id, set_restrictions as set_family_restrictions, show_family, tag_family,
+    undo_family_distinction_and_merge, update_family_media_ref,
 };
 pub use family_change_set::{FamilyChangeSet, PartnerInput, commit_family_change_set};
 pub use geography::{

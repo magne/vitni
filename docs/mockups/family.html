@@ -255,7 +255,7 @@
                 <td class="row-actions"><button class="btn sm ghost" title="Change the per-parent relationships">Edit</button><button class="btn sm ghost" title="Remove this child from the family — the membership ended; recorded in History">Remove</button><button class="btn sm ghost" title="Retract this child claim — the membership was recorded in error; it stays in History">Retract</button></td>
               </tr>
               <tr>
-                <td><a href="person.html">infant Smith</a></td>
+                <td><a href="person.html">infant Smith</a> <span class="badge">from F0012</span></td>
                 <td><span class="muted">abt 1884</span></td>
                 <td><span class="chip">foster</span></td>
                 <td><span class="chip">adopted</span></td>
@@ -265,6 +265,11 @@
               </tr>
             </tbody>
           </table>
+          <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">A row marked
+            <span class="badge">from F0012</span> came from a copy of this family merged into it (ADR 0039 §5):
+            the family reads as one record with every copy's partners, children, events and attachments, each row
+            still attributed, and the children table keeps one column per partner. Edit, Remove and Retract on
+            that row are written to F0012; a new child goes on this family.</div>
         </div>
 
         <!-- EVENTS (family-level) -->
@@ -275,7 +280,7 @@
             <thead><tr><th>Event</th><th>Date</th><th>Place</th><th>Confidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr><td><a href="event.html">Marriage</a></td><td>14 Jun 1876</td><td><a href="place.html">Trinity Church, NY</a></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Unlink this event from the family — recorded in History">Unlink</button></td></tr>
-              <tr><td><a href="event.html">Residence</a></td><td>1880</td><td>123 Mott St, New York</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Unlink this event from the family — recorded in History">Unlink</button></td></tr>
+              <tr><td><a href="event.html">Residence</a> <span class="badge">from F0012</span></td><td>1880</td><td>123 Mott St, New York</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Unlink this event from the family — recorded in History">Unlink</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -337,8 +342,16 @@
 
         <!-- HISTORY (audit trail — free from the event log) -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone. An identity decision — merged, or marked as a different family — also shows the matching engine's assessment it was made on.</div>
           <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 10:20</div>
+              <div class="tl-what">Family merged</div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"The 1880 census household is this family"</div>
+              <div class="tl-evidence muted" title="The matching engine's assessment the decision was made on (ADR 0039 §2) — not the 5-level assertion Confidence">Matched at 91% · probable match · engine 4</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-21 16:12</div>
               <div class="tl-what">Child added: <b>Elizabeth Smith</b> (step to partner 2)</div>

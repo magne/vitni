@@ -627,6 +627,7 @@ pub fn address_cards(
                                     onclick: move |_| onretract.call((assertion_id.clone(), retract_label.clone(), false)),
                                 }
                             }
+                            {merged_from_chip(loc, card.merged_from.as_deref())}
                             div { class: "stack",
                                 FactRow { label: loc.field_label("street"), label_width: ADDRESS_LABEL_WIDTH,
                                     span { class: "grow", {address.lines.join(", ")} }

@@ -368,6 +368,42 @@ pub(crate) async fn views<I: ClusterId>(store: &Store, ids: &[I]) -> Result<Vec<
     Ok(views)
 }
 
+/// Every record of `id`'s cluster, its root first.
+///
+/// # Errors
+///
+/// A store error.
+pub(crate) async fn cluster_records<I: ClusterId>(store: &Store, id: I) -> Result<Vec<I::View>, AppError> {
+    let clusters = Clusters::<I>::load(store).await?;
+    views(store, &clusters.cluster(clusters.root(id))).await
+}
+
+/// The `human_id` of the record of `human_id`'s cluster whose stream holds the live assertion
+/// `assertion_id` — where an edit or retraction of that row is written (ADR 0039 §5). The cluster's
+/// root when no record holds it, so the correction is refused there with the core's own error.
+///
+/// # Errors
+///
+/// `V`'s not-found error if `human_id` is unknown, [`AppError::Db`] if `assertion_id` is not a UUID,
+/// or a store error.
+pub(crate) async fn claim_owner<V: ClusterView>(
+    workspace: &Workspace,
+    human_id: &str,
+    assertion_id: &str,
+) -> Result<String, AppError> {
+    let store = workspace.store();
+    let id = resolve::<V>(store, human_id).await?;
+    let target = crate::use_case::parse_assertion_id(assertion_id)?;
+    let records = cluster_records(store, id).await?;
+    let holder = records
+        .iter()
+        .find(|record| record.holds_assertion(target))
+        .or_else(|| records.first());
+    Ok(holder
+        .and_then(ClusterRecord::record_human_id)
+        .map_or_else(|| human_id.to_owned(), |id| id.as_str().to_owned()))
+}
+
 /// How a reference names each record of one kind: a member by its root's id and `human_id`, every
 /// other record by its own (ADR 0039 §5).
 pub(crate) struct References<I> {

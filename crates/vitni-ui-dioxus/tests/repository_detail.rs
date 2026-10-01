@@ -38,6 +38,7 @@ fn sample() -> RepositoryDetail {
                 original_text: None,
             },
             assertion_id: "0190-addr-assert-1".to_owned(),
+            merged_from: None,
         }],
         urls: vec![RepositoryUrlVm {
             url_type: Some("website".to_owned()),

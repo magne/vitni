@@ -16,19 +16,19 @@ use vitni_app::{
     attach_family_media, attach_family_note, attach_person_media, attach_person_note, change_log_for_citation,
     change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person,
     change_log_for_place, change_log_for_repository, change_log_for_research_note, change_log_for_source, claim_owner,
-    families_for_person, import_attach_event_media, import_attach_event_note, import_attach_media_note,
-    import_attach_place_media, import_attach_place_note, import_attach_repository_note, import_attach_source_media,
-    import_attach_source_note, link_family_event, link_place, link_source_repository, list_citations, list_event_rows,
-    list_family_rows, list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories,
-    list_sources, pair_decision, recent_activity, remove_child, set_citation_confidence,
-    set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions, set_family_restrictions,
-    set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page, set_place_restrictions,
-    set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation, show_event, show_family,
-    show_media, show_note, show_person, show_place, show_repository, show_source, tag_citation, tag_event, tag_family,
-    tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion,
-    undo_distinction_and_merge, undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion,
-    undo_place_assertion, undo_repository_assertion, undo_research_note_assertion, undo_source_assertion,
-    workspace_counts,
+    event_claim_owner, families_for_person, family_claim_owner, import_attach_event_media, import_attach_event_note,
+    import_attach_media_note, import_attach_place_media, import_attach_place_note, import_attach_repository_note,
+    import_attach_source_media, import_attach_source_note, link_family_event, link_place, link_source_repository,
+    list_citations, list_event_rows, list_family_rows, list_media, list_notes, list_person_rows, list_persons,
+    list_places, list_repositories, list_sources, pair_decision, recent_activity, remove_child,
+    set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions,
+    set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page,
+    set_place_restrictions, set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation,
+    show_event, show_family, show_media, show_note, show_person, show_place, show_repository, show_source,
+    tag_citation, tag_event, tag_family, tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source,
+    undo_assertion, undo_citation_assertion, undo_distinction_and_merge, undo_event_assertion, undo_family_assertion,
+    undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion,
+    undo_research_note_assertion, undo_source_assertion, workspace_counts,
 };
 use vitni_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
@@ -1161,6 +1161,24 @@ pub async fn dispatch_family_edit(
     edit: &FamilyEdit,
     prov: &ProvenanceDraft,
 ) -> Result<String, AppError> {
+    let owner = match corrected_assertion(edit_correction_family(edit), prov) {
+        Some(assertion_id) => family_claim_owner(workspace, edit.target(), assertion_id).await?,
+        None => edit.target().to_owned(),
+    };
+    if owner != edit.target() {
+        dispatch_family_edit_to(workspace, session, &edit.retargeted(&owner), prov).await?;
+        return Ok(edit.target().to_owned());
+    }
+    dispatch_family_edit_to(workspace, session, edit, prov).await
+}
+
+/// Dispatches a [`FamilyEdit`] to the record it names.
+async fn dispatch_family_edit_to(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &FamilyEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
     match edit {
         FamilyEdit::SetHumanId { human_id, new_human_id } => {
             set_family_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance()).await
@@ -1313,6 +1331,71 @@ async fn event_set_region(
 /// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
 /// database failure).
 pub async fn dispatch_event_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &EventEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let owner = match corrected_assertion(edit_correction_event(edit), prov) {
+        Some(assertion_id) => event_claim_owner(workspace, edit.target(), assertion_id).await?,
+        None => edit.target().to_owned(),
+    };
+    if owner != edit.target() {
+        dispatch_event_edit_to(workspace, session, &edit.retargeted(&owner), prov).await?;
+        return Ok(edit.target().to_owned());
+    }
+    dispatch_event_edit_to(workspace, session, edit, prov).await
+}
+
+/// The assertion a correction targets: the row an undo or media-region edit names, else the one the
+/// provenance supersedes — the row whose owner the edit is written to (ADR 0039 §5).
+fn corrected_assertion<'a>(row: Option<&'a str>, prov: &'a ProvenanceDraft) -> Option<&'a str> {
+    row.or(prov.supersedes.as_deref())
+}
+
+/// The row an event undo or media-region edit names.
+fn edit_correction_event(edit: &EventEdit) -> Option<&str> {
+    match edit {
+        EventEdit::UndoAssertion { assertion_id, .. } | EventEdit::SetMediaRegion { assertion_id, .. } => {
+            Some(assertion_id)
+        }
+        EventEdit::SetHumanId { .. }
+        | EventEdit::SetType { .. }
+        | EventEdit::SetDate { .. }
+        | EventEdit::SetDescription { .. }
+        | EventEdit::LinkPlace { .. }
+        | EventEdit::AddAddress { .. }
+        | EventEdit::AddParticipant { .. }
+        | EventEdit::AttachCitation { .. }
+        | EventEdit::AttachMedia { .. }
+        | EventEdit::AttachNote { .. }
+        | EventEdit::Tag { .. }
+        | EventEdit::SetRestrictions { .. } => None,
+    }
+}
+
+/// The row a family undo or media-region edit names.
+fn edit_correction_family(edit: &FamilyEdit) -> Option<&str> {
+    match edit {
+        FamilyEdit::UndoAssertion { assertion_id, .. } | FamilyEdit::SetMediaRegion { assertion_id, .. } => {
+            Some(assertion_id)
+        }
+        FamilyEdit::SetHumanId { .. }
+        | FamilyEdit::AddPartner { .. }
+        | FamilyEdit::AddChild { .. }
+        | FamilyEdit::AssertChildRelationship { .. }
+        | FamilyEdit::RemoveChild { .. }
+        | FamilyEdit::LinkFamilyEvent { .. }
+        | FamilyEdit::AttachMedia { .. }
+        | FamilyEdit::AttachNote { .. }
+        | FamilyEdit::AttachCitation { .. }
+        | FamilyEdit::Tag { .. }
+        | FamilyEdit::SetRestrictions { .. } => None,
+    }
+}
+
+/// Dispatches an [`EventEdit`] to the record it names.
+async fn dispatch_event_edit_to(
     workspace: &Workspace,
     session: &Session,
     edit: &EventEdit,

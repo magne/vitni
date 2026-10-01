@@ -383,7 +383,8 @@ pub async fn assert_child_relationship(
     .await
 }
 
-/// Removes a child (by person `human_id`) from the family.
+/// Removes a child (by person `human_id`) from the family — from every record of the family's
+/// cluster that names the child, or any record of the child's own cluster (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -398,14 +399,41 @@ pub async fn remove_child(
     let store = workspace.store();
     let family_id = resolve_family_id(store, family_human_id).await?;
     let child_id = resolve_person_id(store, child_human_id).await?;
-    execute_family_mutation(
-        store,
-        session,
-        family_id,
-        FamilyCommand::RemoveChild { family_id, child_id },
-        meta,
-    )
-    .await
+    let persons = PersonClusters::load(store).await?;
+    let mut holders = Vec::new();
+    for record in identity::cluster_records(store, family_id).await? {
+        let Some(id) = record.family_id() else { continue };
+        for child in record.children() {
+            if persons.root(child.child_id) == persons.root(child_id) {
+                holders.push((id, child.child_id));
+            }
+        }
+    }
+    let Some((&(first, first_child), rest)) = holders.split_first() else {
+        let command = FamilyCommand::RemoveChild { family_id, child_id };
+        return execute_family_mutation(store, session, family_id, command, meta).await;
+    };
+    let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
+    for &(id, child_id) in rest {
+        let command = FamilyCommand::RemoveChild {
+            family_id: id,
+            child_id,
+        };
+        execute(
+            store,
+            session,
+            &id.to_string(),
+            command,
+            meta.provenance.clone(),
+            citations.clone(),
+        )
+        .await?;
+    }
+    let command = FamilyCommand::RemoveChild {
+        family_id: first,
+        child_id: first_child,
+    };
+    execute(store, session, &first.to_string(), command, meta.provenance, citations).await
 }
 
 /// Records a stable external identifier on a family (data-model §11).
@@ -435,7 +463,9 @@ pub async fn add_external_id(
     .await
 }
 
-/// Sets a family's privacy restrictions (GEDCOM `RESN` — data-model §6).
+/// Sets a family's privacy restrictions (GEDCOM `RESN` — data-model §6). A merged member restricted
+/// beyond the new set is narrowed to it first, so the cluster reads with exactly `restrictions`
+/// (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -449,6 +479,27 @@ pub async fn set_restrictions(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
+    let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
+    for record in identity::cluster_records(store, family_id).await? {
+        let Some(id) = record.family_id() else { continue };
+        if id == family_id || record.restrictions().is_subset(&restrictions) {
+            continue;
+        }
+        let narrowed = record.restrictions().intersection(&restrictions).copied().collect();
+        let command = FamilyCommand::SetRestrictions {
+            family_id: id,
+            restrictions: narrowed,
+        };
+        execute(
+            store,
+            session,
+            &id.to_string(),
+            command,
+            meta.provenance.clone(),
+            citations.clone(),
+        )
+        .await?;
+    }
     execute_family_mutation(
         store,
         session,
@@ -621,7 +672,8 @@ pub async fn attach_family_note(
     .await
 }
 
-/// Applies (or, with `remove`, removes) a tag on the family.
+/// Applies (or, with `remove`, removes) a tag on the family. A removed tag is untagged on every
+/// record of the family's cluster that holds it (ADR 0039 §5).
 ///
 /// The `tag_id` is a tag's aggregate id (a UUID string), resolved from a tag the user picked by
 /// name; it is never shown to the user (data-model §9). Mirrors [`tag_citation`](crate::tag_citation).
@@ -641,11 +693,27 @@ pub async fn tag_family(
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
     let tag_id = parse_tag_id(tag_id)?;
-    let command = if remove {
-        FamilyCommand::Untag { family_id, tag_id }
-    } else {
-        FamilyCommand::Tag { family_id, tag_id }
-    };
+    if !remove {
+        let command = FamilyCommand::Tag { family_id, tag_id };
+        return execute_family_mutation(store, session, family_id, command, meta).await;
+    }
+    let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
+    for record in identity::cluster_records(store, family_id).await? {
+        let Some(id) = record.family_id() else { continue };
+        if id != family_id && record.tags().contains(&tag_id) {
+            let command = FamilyCommand::Untag { family_id: id, tag_id };
+            execute(
+                store,
+                session,
+                &id.to_string(),
+                command,
+                meta.provenance.clone(),
+                citations.clone(),
+            )
+            .await?;
+        }
+    }
+    let command = FamilyCommand::Untag { family_id, tag_id };
     execute_family_mutation(store, session, family_id, command, meta).await
 }
 
@@ -758,6 +826,17 @@ pub async fn family_pair_decision(
     other_human_id: &str,
 ) -> Result<Option<PairDecision>, AppError> {
     identity::pair_decision::<FamilyView>(workspace, first_human_id, other_human_id).await
+}
+
+/// The `human_id` of the record of `human_id`'s family cluster whose stream holds the live assertion
+/// `assertion_id` — where an edit or retraction of that row is written (ADR 0039 §5).
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if `human_id` is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or a store error.
+pub async fn family_claim_owner(workspace: &Workspace, human_id: &str, assertion_id: &str) -> Result<String, AppError> {
+    identity::claim_owner::<FamilyView>(workspace, human_id, assertion_id).await
 }
 
 /// Loads a single family's summary by `human_id`.

@@ -220,6 +220,9 @@ pub struct AddressVm {
     pub address: vitni_app::Address,
     /// The `AssertionId` (a UUID string) that introduced this address. Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this address came from (ADR 0039 §5), or `None` for the
+    /// record's own — the "from E0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// A note attached to an aggregate at the record level, for a detail VM — its display `human_id`, the
