@@ -55,13 +55,14 @@ impl Capability {
     }
 
     /// The [`Capability`] a canonical short interface name denotes, or `None` for an unknown name.
+    /// `staging`, an importer's way of writing (ADR 0040 §1), is granted with [`Self::Commands`].
     /// The inverse of [`Self::interface_name`] and the single source of truth for the name→enum
     /// direction (both discovery's manifest cross-check and the grant resolver share it).
     #[must_use]
     pub fn from_interface_name(name: &str) -> Option<Self> {
         match name {
             "query" => Some(Self::Query),
-            "commands" => Some(Self::Commands),
+            "commands" | "staging" => Some(Self::Commands),
             "log" => Some(Self::Log),
             "progress" => Some(Self::Progress),
             "import-source" => Some(Self::ImportSource),

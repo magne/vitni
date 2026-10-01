@@ -29,6 +29,7 @@ mod net;
 mod present;
 mod run;
 pub mod signing;
+mod staging;
 mod state;
 mod trust;
 
@@ -302,13 +303,16 @@ impl PluginHost {
     }
 
     /// Runs a bulk import plugin (ADR 0013): the plugin reads its document from `source` through the
-    /// host-mediated `import-source`, drives `commands`, and reports progress to `progress`. Returns
-    /// the number of records imported and the workspace (recovered from the consumed store so the
-    /// caller can keep using it).
+    /// host-mediated `import-source`, submits its record graphs to `staging`, and reports progress to
+    /// `progress`; once it returns, the host plans the graphs and commits the plan, reporting its writes
+    /// to `progress` too (ADR 0040 §4). Returns the number of records the plugin read and the workspace
+    /// (recovered from the consumed store so the caller can keep using it). A cancel stops the commit
+    /// between two writes; importing the same file again finishes it.
     ///
     /// # Errors
     /// [`PluginError::ResourceLimit`] if the guest exhausts its fuel, [`PluginError::Guest`] if the
-    /// plugin reports a failure, or [`PluginError::Runtime`] on instantiation/trap.
+    /// plugin reports a failure or submits graphs that cannot be planned, [`PluginError::Commit`] if
+    /// a write fails, or [`PluginError::Runtime`] on instantiation/trap.
     pub async fn run_bulk_import(
         &self,
         component: &Component,
@@ -338,14 +342,21 @@ impl PluginHost {
             io,
         )?;
         if let Some(spec) = import {
-            store.data_mut().begin_run(spec);
+            store.data_mut().open_run(spec);
         }
         let bindings = import_world::BulkImport::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
         let outcome = bindings.call_run_import(&mut store).await;
-        let (workspace, active) = store.into_data().into_parts();
-        let result = interpret_result(outcome);
+        let mut state = store.into_data();
+        let mut result = interpret_result(outcome);
+        // The plan and its commit are large futures of their own; boxed, they leave the import's small.
+        if result.is_ok()
+            && let Err(error) = Box::pin(state.commit_staged()).await
+        {
+            result = Err(error);
+        }
+        let (workspace, active) = state.into_parts();
         close_run(&workspace, active, &run::Ending::Bulk(&result)).await?;
         Ok((result?, workspace))
     }
@@ -431,8 +442,9 @@ impl PluginHost {
             io,
         )?;
         if let Some(spec) = import {
-            store.data_mut().begin_run(spec);
+            store.data_mut().open_run(spec);
         }
+        store.data_mut().staging = state::Staging::Immediate;
         let bindings = assisted_import_world::AssistedImport::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;

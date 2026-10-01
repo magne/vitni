@@ -84,6 +84,11 @@ pub enum AbandonReason {
         /// The runtime's message.
         message: String,
     },
+    /// The importer's records could not be written.
+    Commit {
+        /// The write's error.
+        message: String,
+    },
 }
 
 /// The `ImportRun` event variants.

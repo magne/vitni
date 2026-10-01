@@ -1361,14 +1361,15 @@ async fn import_is_denied_without_the_commands_capability() {
 }
 
 #[tokio::test]
-async fn import_stops_when_progress_reports_cancel() {
+async fn a_cancel_while_reading_stops_the_import_before_anything_is_written() {
     let host = common::host();
     let importer = common::component("gedcom-import");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes());
 
-    // Cancel at the first progress report: the importer should stop after the first person.
+    // Cancel at the first progress report: the importer stops after reading the first person, and
+    // the host writes none of what it read.
     let cancel_after_first = |_: ProgressUpdate| ProgressControl::Cancel;
 
     let (root, _dir) = init_workspace();
@@ -1384,10 +1385,9 @@ async fn import_stops_when_progress_reports_cancel() {
         .expect("import");
 
     assert_eq!(count, 1, "cancel after the first report stops the import at one record");
-    assert_eq!(
-        list_persons(&workspace).await.expect("list").len(),
-        1,
-        "only the records imported before cancellation are persisted"
+    assert!(
+        list_persons(&workspace).await.expect("list").is_empty(),
+        "a cancelled import writes nothing it read"
     );
 }
 

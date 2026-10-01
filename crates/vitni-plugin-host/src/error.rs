@@ -17,6 +17,11 @@ pub enum PluginError {
     #[error("plugin reported an error: {0}")]
     Guest(String),
 
+    /// The guest's records could not be written to the workspace (ADR 0040 §5). What was written before
+    /// the failure stays, and a re-run finishes it.
+    #[error("the import could not be written: {0}")]
+    Commit(String),
+
     /// A present plugin-bundle signature was malformed, or verified against no trusted key — a
     /// present-but-unverifiable signature fails closed (ADR 0014 §3), distinct from an absent
     /// signature (unsigned, untrusted-but-loadable).

@@ -35,7 +35,7 @@ const KIND_ORDER: [MatchableKind; 10] = [
 ];
 
 /// Lets the caller follow a commit, and stop it between two writes.
-pub trait CommitControl {
+pub trait CommitControl: Send {
     /// Called before each write, `done` of `total` written so far. `false` stops the commit there.
     fn proceed(&mut self, done: u32, total: u32) -> bool;
 }
@@ -113,7 +113,7 @@ pub async fn commit_import(
         session,
         template,
         run: run.map(|run| (run.dataset(), run.id())),
-        file_asserted_at: run.and_then(|run| run.file_asserted_at()),
+        file_asserted_at: plan.file_asserted_at,
     };
     let mut commit = Commit {
         plan,

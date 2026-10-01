@@ -22,6 +22,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 use vitni_core::import_run::ResolvedItem;
 use vitni_core::matching::{MatchBand, MatchableKind};
+use vitni_core::provenance::Timestamp;
 
 use crate::ResolutionDecision;
 use crate::dto::AggRef;
@@ -154,6 +155,8 @@ pub struct ImportPlan {
     pub(crate) endpoints: HashMap<(usize, EntityRef), Endpoint>,
     /// The items resolved onto existing records this plan establishes, recorded on the run.
     pub(crate) resolved: Vec<ResolvedItem>,
+    /// The document's own export date, which single-valued fields are reconciled by (ADR 0029 §2).
+    pub(crate) file_asserted_at: Option<Timestamp>,
 }
 
 /// Why an import could not be planned.
@@ -261,6 +264,7 @@ impl Resolve for Resolver<'_> {
 
 /// Plans importing `graphs` into `workspace`, as `session` — whose import run, if any, names the
 /// dataset origins resolve in (ADR 0037 §4). Outside a run nothing resolves by origin.
+/// `file_asserted_at` is the document's own export date (ADR 0029 §2), if it has one.
 ///
 /// # Errors
 ///
@@ -270,8 +274,10 @@ pub async fn plan_import(
     workspace: &Workspace,
     session: &Session,
     graphs: Vec<RecordGraph>,
+    file_asserted_at: Option<Timestamp>,
 ) -> Result<ImportPlan, PlanError> {
     let mut planner = Planner::new(workspace, session, graphs)?;
+    planner.plan.file_asserted_at = file_asserted_at;
     planner.resolve().await?;
     planner.resolve_endpoints().await?;
     planner.scope();
@@ -335,6 +341,7 @@ impl<'a> Planner<'a> {
             links,
             endpoints: HashMap::new(),
             resolved: Vec::new(),
+            file_asserted_at: None,
         };
         Ok(Self {
             workspace,
@@ -628,7 +635,7 @@ impl<'a> Planner<'a> {
         let template = Provenance::default();
         let dataset = self.dataset().cloned();
         let run = self.session.import_run().map(|run| run.id());
-        let file_asserted_at = self.session.import_run().and_then(|run| run.file_asserted_at());
+        let file_asserted_at = self.plan.file_asserted_at;
         let writer = Writer {
             workspace: self.workspace,
             session: &session,

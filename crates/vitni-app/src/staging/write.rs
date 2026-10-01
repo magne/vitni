@@ -38,7 +38,7 @@ pub(crate) struct Writer<'a> {
 }
 
 /// The human id each reference of one write resolves to.
-pub(crate) trait Resolve {
+pub(crate) trait Resolve: Sync {
     /// The human id (a tag's id) `reference` names, or `None` when it names nothing written.
     fn human_id(&self, reference: &EntityRef) -> Option<String>;
     /// The kind of the record `reference` names, if it names one.

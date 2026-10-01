@@ -1,6 +1,6 @@
 //! Generated Wasmtime bindings for the `vitni:host-api` package (ADR 0011 §1).
 //!
-//! The capability interfaces (`log`, `query`, `commands`, `types`) are generated once from the
+//! The capability interfaces (`log`, `query`, `commands`, `staging`, `types`, …) are generated once from the
 //! `host-imports` world; each plugin world reuses them via `with` so there is a single `Host` trait
 //! per capability to implement and a single `add_to_linker` to wire.
 
@@ -28,7 +28,7 @@ pub mod import_world {
         with: {
             "vitni:host-api/types": crate::bindings::imports::vitni::host_api::types,
             "vitni:host-api/log": crate::bindings::imports::vitni::host_api::log,
-            "vitni:host-api/commands": crate::bindings::imports::vitni::host_api::commands,
+            "vitni:host-api/staging": crate::bindings::imports::vitni::host_api::staging,
             "vitni:host-api/progress": crate::bindings::imports::vitni::host_api::progress,
             "vitni:host-api/import-source": crate::bindings::imports::vitni::host_api::import_source,
         },
@@ -85,7 +85,7 @@ pub mod assisted_import_world {
             "vitni:host-api/types": crate::bindings::imports::vitni::host_api::types,
             "vitni:host-api/log": crate::bindings::imports::vitni::host_api::log,
             "vitni:host-api/query": crate::bindings::imports::vitni::host_api::query,
-            "vitni:host-api/commands": crate::bindings::imports::vitni::host_api::commands,
+            "vitni:host-api/staging": crate::bindings::imports::vitni::host_api::staging,
             "vitni:host-api/progress": crate::bindings::imports::vitni::host_api::progress,
             "vitni:host-api/net": crate::bindings::imports::vitni::host_api::net,
             "vitni:host-api/media-store": crate::bindings::imports::vitni::host_api::media_store,

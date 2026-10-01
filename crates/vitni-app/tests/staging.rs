@@ -229,7 +229,7 @@ fn tree() -> Vec<RecordGraph> {
 }
 
 async fn plan(workspace: &Workspace, session: &Session, graphs: Vec<RecordGraph>) -> ImportPlan {
-    plan_import(workspace, session, graphs).await.expect("plan")
+    plan_import(workspace, session, graphs, None).await.expect("plan")
 }
 
 async fn import(workspace: &Workspace, session: &Session, graphs: Vec<RecordGraph>) -> ImportPlan {
@@ -574,7 +574,7 @@ async fn an_interrupted_commit_finishes_on_re_run_with_no_duplicates() {
     for limit in 0..=steps {
         let (workspace, _dir) = workspace().await;
         let session = importer(dataset(1));
-        let first = plan_import(&workspace, &session, tree()).await.expect("plan");
+        let first = plan_import(&workspace, &session, tree(), None).await.expect("plan");
         let outcome = commit_import(
             &workspace,
             &session,
