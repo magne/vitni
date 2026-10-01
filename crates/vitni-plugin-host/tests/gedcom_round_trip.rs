@@ -11,9 +11,10 @@ use std::sync::{Arc, Mutex};
 
 use uuid::Uuid;
 use vitni_app::{
-    AgeBound, AiConfig, AppDefaults, ChildParentRelationship, NoteType, OperatorConfig, ParticipantRole, PersonSummary,
-    Session, Workspace, WorkspaceDefaults, list_citations, list_events, list_families, list_media, list_notes,
-    list_persons, list_places, list_repositories, list_sources,
+    AgeBound, Agent, AgentKind, AiConfig, AppDefaults, ChildParentRelationship, EvidenceLevel, IdentityDecision,
+    MutationMeta, NewPerson, NoteType, OperatorConfig, ParticipantRole, PersonSummary, Provenance, Session, Workspace,
+    WorkspaceDefaults, add_child, change_log_for_person, create_person, list_citations, list_events, list_families,
+    list_media, list_notes, list_persons, list_places, list_repositories, list_sources, merge_persons, undo_assertion,
 };
 use vitni_core::ids::AgentId;
 use vitni_plugin_host::{
@@ -1459,4 +1460,148 @@ async fn export_to_a_directory_lands_under_the_plugins_suggested_name() {
         original,
         "a directory export round-trips like a file export"
     );
+}
+
+/// Exports `workspace` as GEDCOM to `path`, returning the record count, the document and the
+/// workspace back.
+async fn export_gedcom(workspace: Workspace, path: &Path) -> (u32, String, Workspace) {
+    let (count, workspace) = common::host()
+        .run_bulk_export(
+            &common::component("gedcom-export"),
+            invocation(workspace, export_grants()),
+            ExportTarget::File(path.to_path_buf()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("export");
+    let document = std::fs::read_to_string(path).expect("read exported document");
+    (count, document, workspace)
+}
+
+/// A merged cluster exports as one person (ADR 0039 §5): the root carries the member's claims under its
+/// own xref, and every family reference to the member names the root. Undoing the merge exports both.
+#[tokio::test]
+async fn a_merged_cluster_exports_as_one_person_until_the_merge_is_undone() {
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, workspace) = common::host()
+        .run_bulk_import(
+            &common::component("gedcom-import"),
+            invocation(workspace, import_grants()),
+            write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    let john = list_persons(&workspace)
+        .await
+        .expect("persons")
+        .into_iter()
+        .find(|person| person.given.as_deref() == Some("John"))
+        .expect("John imported")
+        .human_id;
+
+    // A conclusion person the researcher made, then linked to the imported John persona.
+    let human = Session::new(Agent {
+        kind: AgentKind::Human,
+        id: AgentId::from_uuid(Uuid::from_u128(1)),
+        display: Some("Tester".to_owned()),
+    });
+    let conclusion = NewPerson {
+        human_id: None,
+        name: None,
+        evidence_level: EvidenceLevel::Conclusion,
+        external_ids: Vec::new(),
+    };
+    let person = create_person(&workspace, &human, conclusion, Provenance::default(), &[])
+        .await
+        .expect("conclusion person");
+    merge_persons(&workspace, &human, &person, &john, IdentityDecision::default())
+        .await
+        .expect("merge");
+
+    let (count, document, workspace) = export_gedcom(workspace, &io_dir.path().join("merged.ged")).await;
+    assert_eq!(count, 4, "3 individuals + 1 family: the cluster is one individual");
+    assert!(
+        document.contains(&format!("0 @{person}@ INDI")),
+        "the root is exported:\n{document}"
+    );
+    assert!(
+        !document.contains(&format!("@{john}@")),
+        "the member is never named:\n{document}"
+    );
+    assert!(
+        document.contains(&format!("1 HUSB @{person}@")),
+        "the family names the root:\n{document}"
+    );
+    assert!(
+        document.contains("1 NAME John /Smith/"),
+        "the member's name rides on the root:\n{document}"
+    );
+
+    let undo = change_log_for_person(&workspace, &person)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "PersonsMerged")
+        .expect("merge logged");
+    undo_assertion(&workspace, &human, &person, &undo.assertion_id, None)
+        .await
+        .expect("undo merge");
+    let (count, document, _workspace) = export_gedcom(workspace, &io_dir.path().join("unlinked.ged")).await;
+    assert_eq!(count, 5, "both individuals are back");
+    assert!(
+        document.contains(&format!("1 HUSB @{john}@")),
+        "the family names John again:\n{document}"
+    );
+}
+
+/// Two records of one cluster that are both children of a family export as one child (ADR 0039 §5).
+#[tokio::test]
+async fn a_family_naming_two_records_of_one_cluster_exports_the_root_once() {
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, workspace) = common::host()
+        .run_bulk_import(
+            &common::component("gedcom-import"),
+            invocation(workspace, import_grants()),
+            write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    let sam = list_persons(&workspace)
+        .await
+        .expect("persons")
+        .into_iter()
+        .find(|person| person.given.as_deref() == Some("Sam"))
+        .expect("Sam imported")
+        .human_id;
+    let family = list_families(&workspace).await.expect("families")[0].human_id.clone();
+    let human = Session::new(Agent {
+        kind: AgentKind::Human,
+        id: AgentId::from_uuid(Uuid::from_u128(1)),
+        display: Some("Tester".to_owned()),
+    });
+    let duplicate = NewPerson {
+        human_id: None,
+        name: None,
+        evidence_level: EvidenceLevel::Persona,
+        external_ids: Vec::new(),
+    };
+    let twin = create_person(&workspace, &human, duplicate, Provenance::default(), &[])
+        .await
+        .expect("duplicate child");
+    add_child(&workspace, &human, &family, &twin, Vec::new(), MutationMeta::default())
+        .await
+        .expect("second child");
+    merge_persons(&workspace, &human, &sam, &twin, IdentityDecision::default())
+        .await
+        .expect("merge");
+
+    let (_, document, _workspace) = export_gedcom(workspace, &io_dir.path().join("out.ged")).await;
+    assert_eq!(document.matches(&format!("1 CHIL @{sam}@")).count(), 1, "{document}");
+    assert!(!document.contains(&format!("@{twin}@")), "{document}");
 }

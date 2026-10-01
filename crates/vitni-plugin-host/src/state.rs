@@ -1821,6 +1821,18 @@ fn from_fact(fact: &vitni_core::fact::Fact) -> types::Fact {
     }
 }
 
+/// The first of each run of `items` sharing a key, in order: a family whose partners or children
+/// include two records of one merged cluster names its root once (ADR 0039 §5).
+fn first_of_each<T, K: PartialEq>(items: impl IntoIterator<Item = T>, key: impl Fn(&T) -> K) -> Vec<T> {
+    let mut kept: Vec<T> = Vec::new();
+    for item in items {
+        if !kept.iter().any(|existing| key(existing) == key(&item)) {
+            kept.push(item);
+        }
+    }
+    kept
+}
+
 impl query::Host for HostState {
     async fn list_persons(&mut self) -> Result<Vec<types::PersonDto>, types::CapabilityError> {
         if !self.grants.allows(Capability::Query) {
@@ -1881,9 +1893,11 @@ impl query::Host for HostState {
             .into_iter()
             .map(|family| types::FamilyDto {
                 human_id: family.human_id,
-                partners: family.partners.into_iter().map(|partner| partner.human_id).collect(),
-                children: family
-                    .children
+                partners: first_of_each(
+                    family.partners.into_iter().map(|partner| partner.human_id),
+                    Clone::clone,
+                ),
+                children: first_of_each(family.children, |child| child.human_id.clone())
                     .into_iter()
                     .map(|child| types::FamilyChild {
                         human_id: child.human_id,
