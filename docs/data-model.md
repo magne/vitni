@@ -214,12 +214,12 @@ synthesis* derived from the log; none is edited directly.
 | **Person**     | An individual (conclusion or persona).                           | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: occupation/residence/…), event participations (birth, death, and other vitals live here as Events — §7), associations, citations, media, notes, tags, `external_ids`, merged personas (`PersonsMerged` links), persons it is distinct from (`PersonsDistinguished` links), `evidence_level` (conclusion vs persona), `restrictions` (a `Restriction` set). |
 | **Family**     | A union and its children.                                        | `id`, `human_id`, partner participations (neutral roles), child list (`ChildParentRelationship` per partner per child), family-level events (marriage/divorce), citations, media, notes, tags, `external_ids`, merged copies (`FamiliesMerged` links), families it is distinct from (`FamiliesDistinguished` links), `restrictions` (a `Restriction` set).                                                |
 | **Event**      | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (a projection of the person-side `ParticipationAsserted` rows that reference this event — the Person aggregate owns participation), addresses, citations, media, notes, tags, merged copies (`EventsMerged` links), events it is distinct from (`EventsDistinguished` links), `restrictions` (a `Restriction` set). |
-| **Place**      | A location, hierarchical and dated.                              | `id`, `human_id`, `place_type`, names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                       |
-| **Source**     | A work / document.                                               | `id`, `human_id`, `title`, `author`, `pub_info`, `abbrev`, repository links (`RepoRef` with call number + media type), attributes, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                        |
-| **Citation**   | A specific reference within a Source.                            | `id`, `human_id`, `source_id`, `page`, `date`, `confidence`, `evidence_analysis`, attributes, media, notes, tags, a typed `CreationStamp` (creator `Agent` + time), `restrictions` (a `Restriction` set).                                                                                                 |
-| **Repository** | A place that holds sources.                                      | `id`, `human_id`, `repository_type`, `name`, addresses, urls, notes, tags, `restrictions` (a `Restriction` set).                                                                                                                                                                                    |
-| **Media**      | A digital artifact.                                              | `id`, `human_id`, `path`/web reference, `mime`, `checksum`, `date`, attributes, citations, notes, tags, `restrictions` (a `Restriction` set).                                                                                                                                                       |
-| **Note**       | Free or rich text.                                               | `id`, `human_id`, `note_type`, `RichText` (Markdown + language), tags, `restrictions` (a `Restriction` set).                                                                                                                                                                                        |
+| **Place**      | A location, hierarchical and dated.                              | `id`, `human_id`, `place_type`, names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, merged duplicate records (`PlacesMerged` links), places it is distinct from (`PlacesDistinguished` links), `restrictions` (a `Restriction` set).                                                                                                       |
+| **Source**     | A work / document.                                               | `id`, `human_id`, `title`, `author`, `pub_info`, `abbrev`, repository links (`RepoRef` with call number + media type), attributes, media, notes, tags, merged copies (`SourcesMerged` links), sources it is distinct from (`SourcesDistinguished` links), `restrictions` (a `Restriction` set).                                                                                                        |
+| **Citation**   | A specific reference within a Source.                            | `id`, `human_id`, `source_id`, `page`, `date`, `confidence`, `evidence_analysis`, attributes, media, notes, tags, a typed `CreationStamp` (creator `Agent` + time), merged copies (`CitationsMerged` links), citations it is distinct from (`CitationsDistinguished` links), `restrictions` (a `Restriction` set).                                                                                                 |
+| **Repository** | A place that holds sources.                                      | `id`, `human_id`, `repository_type`, `name`, addresses, urls, notes, tags, merged copies (`RepositoriesMerged` links), repositories it is distinct from (`RepositoriesDistinguished` links), `restrictions` (a `Restriction` set).                                                                                                                                                                                    |
+| **Media**      | A digital artifact.                                              | `id`, `human_id`, `path`/web reference, `mime`, `checksum`, `date`, attributes, citations, notes, tags, merged copies (`MediaMerged` links), media it is distinct from (`MediaDistinguished` links), `restrictions` (a `Restriction` set).                                                                                                                                                       |
+| **Note**       | Free or rich text.                                               | `id`, `human_id`, `note_type`, `RichText` (Markdown + language), tags, merged copies (`NotesMerged` links), notes it is distinct from (`NotesDistinguished` links), `restrictions` (a `Restriction` set).                                                                                                                                                                                        |
 | **Tag**        | A user-defined label (definition).                               | `id`, `name`, `color`, `priority`, `restrictions` (a `Restriction` set).                                                                                                                                                                                                                            |
 
 **A transcription is a Note, not a Citation field.** The transcribed words of a source — GEDCOM's
@@ -479,9 +479,13 @@ Boundary notes:
   shape, so the pair is never proposed again (ADR 0039 §1). Either decision lives on one person's
   stream and is undone by retracting it. Events and families carry the same pair —
   `EventsMerged` / `EventsDistinguished` and `FamiliesMerged` / `FamiliesDistinguished` — for two
-  records of one marriage or one household.
+  records of one marriage or one household — and so do places, sources, citations, repositories,
+  notes and media (`PlacesMerged` / `PlacesDistinguished`, …, `MediaMerged` / `MediaDistinguished`).
+  A `PlacesMerged` decision says two records describe *one* place; it is not an ADR 0026 succession,
+  which links *different* places that both stay real (ADR 0039 §6). Tags get neither: a tag is its
+  case-folded name and has no assertion chain to retract.
 - **Merged records form clusters (ADR 0039 §4, §5).** The `identity_links` projection holds the
-  transitive closure of the live merges of each kind — persons, events and families: each merged record names its cluster's **root**, the survivor
+  transitive closure of the live merges of each kind but tags: each merged record names its cluster's **root**, the survivor
   that is not itself merged, and retracting a merge splits the cluster again. A decision is judged
   between clusters: both records resolve to their roots first, so a merge into a member lands on its
   root and no record joins two clusters; a pair already in one cluster, or whose clusters hold a live
@@ -493,7 +497,9 @@ Boundary notes:
     while a new claim goes on the root;
   - every reference to a member — a family partner or child, an event participant, an association,
     a backlink, a research-note subject, a pedigree edge, a participation's event, a family's linked
-    event — names the root, and an export writes one record per cluster;
+    event, an event's place, a place's jurisdiction or succession, a citation's source, a source's
+    repository, an attached citation, note or media object — names the root, the records that use any
+    record of a cluster are listed under the root, and an export writes one record per cluster;
   - a merged event's participants are the union of every copy's (the person-side
     `ParticipationAsserted` rows that name any record of the cluster), and a merged family's
     partners and children are every copy's, each person once in the pedigree.
@@ -535,10 +541,12 @@ Representative **commands** (not exhaustive):
   `AddCitation`, `AttachMedia`, `AttachNote`, `Tag`, `MergeEvents`, `DistinguishEvents`. (Participation is asserted on the Person
   aggregate via `AssertParticipation`; the event's participant list is a projection of those rows.)
 - **Place:** `CreatePlace`, `SetPlaceType`, `AssertName`, `AssertEnclosedBy`, `AssertCoordinates`,
-  `SetCode`, `AddCitation`, `Tag`.
+  `SetCode`, `AddCitation`, `Tag`, `MergePlaces`, `DistinguishPlaces`.
 - **Source / Citation / Repository / Media / Note / Tag / DnaTest / DnaMatch:** the imperative form
   of each aggregate's events below (`CreateSource`/`SetTitle`/…, `CreateCitation`/`SetPage`/…,
-  `CreateDnaMatch`/`ObserveMatch`/`ConfirmMatch`/`RejectMatch`/…).
+  `CreateDnaMatch`/`ObserveMatch`/`ConfirmMatch`/`RejectMatch`/…). Source, Citation, Repository,
+  Media and Note add the identity pair (`MergeSources` / `DistinguishSources`, …, `MergeMedia` /
+  `DistinguishMedia`).
 
 The matching **events** are **assertions** — verbs naming a claim, each self-contained, carrying its
 own `AssertionId` and `EventContext`, and explicitly versioned (ADR 0004 §2, §4). Representative
@@ -564,17 +572,20 @@ verbs (not exhaustive):
   (each with an optional `assessment`, as on Person). (Participants come from the person-side
   `ParticipationAsserted` rows — the Event aggregate holds no participation events.)
 - **Place:** `PlaceCreated`, `PlaceTypeSet`, `NameAsserted` (dated, language), `EnclosedByAsserted`
-  (dated `PlaceRef`), `CoordinatesAsserted`, `CodeSet`, `CitationAdded`, `Tagged`.
+  (dated `PlaceRef`), `CoordinatesAsserted`, `CodeSet`, `CitationAdded`, `Tagged`,
+  `PlacesMerged` / `PlacesDistinguished` (each with an optional `assessment`, as on Person — and
+  distinct from `SuccessionAsserted`, ADR 0039 §6).
 - **Source:** `SourceCreated`, bibliographic setters (`TitleSet`, `AuthorSet`, `PubInfoSet`,
   `AbbrevSet`), `RepositoryLinked` (call number + media type), `AttributeAdded`, `MediaAttached`,
-  `NoteAttached`, `Tagged`.
+  `NoteAttached`, `Tagged`, `SourcesMerged` / `SourcesDistinguished`.
 - **Citation:** `CitationCreated` (→ source), `PageSet`, `DateAsserted`, `ConfidenceSet`,
-  `EvidenceAnalysisSet`, `AttributeAdded`, `MediaAttached`, `NoteAttached`, `Tagged`.
+  `EvidenceAnalysisSet`, `AttributeAdded`, `MediaAttached`, `NoteAttached`, `Tagged`,
+  `CitationsMerged` / `CitationsDistinguished`.
 - **Repository:** `RepositoryCreated`, `RepositoryTypeSet`, `NameSet`, `AddressAdded`, `UrlAdded`,
-  `NoteAttached`, `Tagged`.
+  `NoteAttached`, `Tagged`, `RepositoriesMerged` / `RepositoriesDistinguished`.
 - **Media:** `MediaCreated`, `PathSet` / web reference, `ChecksumSet`, `DateAsserted`,
-  `AttributeAdded`, `CitationAdded`, `NoteAttached`, `Tagged`.
-- **Note:** `NoteCreated`, `NoteTypeSet`, `RichTextSet`, `Tagged`.
+  `AttributeAdded`, `CitationAdded`, `NoteAttached`, `Tagged`, `MediaMerged` / `MediaDistinguished`.
+- **Note:** `NoteCreated`, `NoteTypeSet`, `RichTextSet`, `Tagged`, `NotesMerged` / `NotesDistinguished`.
 - **Tag:** `TagCreated`, `TagRenamed`, `TagColorSet`, `TagPrioritySet`.
 - **DnaTest:** `DnaTestCreated` (→ person), `ProviderSet`, `KitIdSet`, `TestTypeSet`,
   `GenomeBuildSet`, `HaplogroupAsserted`, `NoteAttached`, `Tagged`.
@@ -604,6 +615,8 @@ Representative variants (not exhaustive):
 - **Person:** `EmptyName` (a `PersonName` with neither given nor surname), `MergeConflict` (the two
   persons cannot be merged — e.g. contradicting irreversible facts), `SelfAssociation`,
   `DistinctFromItself`, `IdentityDecided` (the pair already holds a live merge or distinction).
+  Every other kind that can be merged — Family, Event, Place, Source, Citation, Repository, Media
+  and Note — has the same three identity refusals.
 - **Family:** `DuplicatePartner`, `DuplicateChild`, `ChildIsOwnAncestor` (cycle in the
   child/partner graph).
 - **Event:** `UnknownPlace` (a `LinkPlace` to a place id the projection does not know — the §9
@@ -642,7 +655,7 @@ around evidence and provenance.
    match — vitni's own engine (ADR 0038), a SmartMatch, a Record Match, a FamilySearch person match —
    is a function of the current data, so it is computed on demand and never stored: storing it would
    freeze a stale judgement into the log. The user's **confirm** (`PersonsMerged`, `EventsMerged`,
-   `FamiliesMerged`) or **reject** (`PersonsDistinguished`, …) is the audited assertion, and it records the engine's assessment as its
+   `PlacesMerged`, …) or **reject** (`PersonsDistinguished`, …) is the audited assertion, and it records the engine's assessment as its
    evidence. Every consumer of suggestions leaves out a merged record and a pair of clusters already
    decided either way (§9). Nothing is silently merged into the conclusion layer.
 
