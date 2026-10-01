@@ -95,9 +95,13 @@ impl TagUsage {
     }
 }
 
-/// Pushes one carrying record onto a tag's bucket.
+/// Pushes one carrying record onto a tag's bucket, once: the records of a merged person cluster all name
+/// its root (ADR 0039 §5).
 fn push(map: &mut HashMap<TagId, Vec<UsingRecordRef>>, tag: TagId, record: UsingRecordRef) {
-    map.entry(tag).or_default().push(record);
+    let records = map.entry(tag).or_default();
+    if !records.contains(&record) {
+        records.push(record);
+    }
 }
 
 /// The cross-aggregate lookups the scans need to resolve a human-readable example label (so no bare

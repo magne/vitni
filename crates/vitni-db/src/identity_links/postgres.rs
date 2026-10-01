@@ -1,6 +1,8 @@
 //! The Postgres half of the identity cluster index (ADR 0039 §4) — see the [module header](super)
 //! for what the two tables hold and why the index exists. A function-for-function twin of
-//! [`sqlite`](super::sqlite).
+//! [`sqlite`](super::sqlite), except that each writer first locks `identity_edges` ([`lock_index`]):
+//! SQLite serialises writers at the file, while Postgres would let two concurrent writers each rebuild
+//! the closure without the other's edge.
 
 use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
@@ -79,11 +81,12 @@ impl Query<PersonState> for IdentityLinksQuery {
 /// Mirrors one survivor's live merge edges from its projection, then recomputes the person clusters.
 async fn reindex_survivor(pool: &Pool<Postgres>, surviving: &str) -> Result<(), DbError> {
     let kind = MatchableKind::Person.as_str();
-    let view = postgres_query::find_view_by_id::<PersonView>(pool, PERSON_VIEW_TABLE, surviving).await?;
     let mut tx = pool
         .begin()
         .await
         .map_err(backend("opening an identity index transaction"))?;
+    lock_index(&mut tx).await?;
+    let view = postgres_query::find_view_by_id::<PersonView>(pool, PERSON_VIEW_TABLE, surviving).await?;
     sqlx::query(&format!(
         "DELETE FROM {IDENTITY_EDGES_TABLE} WHERE kind = $1 AND surviving = $2"
     ))
@@ -97,6 +100,18 @@ async fn reindex_survivor(pool: &Pool<Postgres>, surviving: &str) -> Result<(), 
     }
     recompute_links(&mut tx, kind).await?;
     tx.commit().await.map_err(backend("committing the identity index"))
+}
+
+/// Serialises index writers: each one replaces the whole closure from the edges it reads, so two
+/// concurrent ones would otherwise each miss the other's edge, and the later one's inserts collide.
+async fn lock_index(tx: &mut sqlx::Transaction<'_, Postgres>) -> Result<(), DbError> {
+    sqlx::query(&format!(
+        "LOCK TABLE {IDENTITY_EDGES_TABLE} IN SHARE ROW EXCLUSIVE MODE"
+    ))
+    .execute(&mut **tx)
+    .await
+    .map_err(backend("locking the identity index"))?;
+    Ok(())
 }
 
 /// Inserts one edge per record `view` has merged.
@@ -166,6 +181,7 @@ pub(crate) async fn rebuild_index(pool: &Pool<Postgres>) -> Result<(), DbError> 
         .begin()
         .await
         .map_err(backend("opening an identity index transaction"))?;
+    lock_index(&mut tx).await?;
     sqlx::query(&format!("DELETE FROM {IDENTITY_EDGES_TABLE} WHERE kind = $1"))
         .bind(kind)
         .execute(&mut *tx)

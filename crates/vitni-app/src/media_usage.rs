@@ -45,9 +45,13 @@ impl MediaUsage {
     }
 }
 
-/// Pushes one referencing record onto a media object's bucket.
+/// Pushes one referencing record onto a media object's bucket, once: the records of a merged person
+/// cluster all name its root (ADR 0039 §5).
 fn push(map: &mut HashMap<MediaId, Vec<UsingRecordRef>>, media: MediaId, record: UsingRecordRef) {
-    map.entry(media).or_default().push(record);
+    let records = map.entry(media).or_default();
+    if !records.contains(&record) {
+        records.push(record);
+    }
 }
 
 /// Inverts person media attachments.

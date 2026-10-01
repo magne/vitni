@@ -431,7 +431,9 @@ pub async fn assert_sex(
     .await
 }
 
-/// Sets a person's privacy restrictions (GEDCOM `RESN` — data-model §6).
+/// Sets a person's privacy restrictions (GEDCOM `RESN` — data-model §6). A cluster reads as the union
+/// of its records' restrictions, so every other record of the cluster holding one outside the new set
+/// is narrowed to it first (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -445,6 +447,28 @@ pub async fn set_restrictions(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
+    let clusters = PersonClusters::load(store).await?;
+    let records = crate::identity::person_views(store, &clusters.cluster(clusters.root(person_id))).await?;
+    let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
+    for record in &records {
+        let Some(id) = record.person_id() else { continue };
+        if id == person_id || record.restrictions().is_subset(&restrictions) {
+            continue;
+        }
+        let narrowed = record.restrictions().intersection(&restrictions).copied().collect();
+        execute_person_command(
+            store,
+            session,
+            &id.to_string(),
+            PersonCommand::SetRestrictions {
+                person_id: id,
+                restrictions: narrowed,
+            },
+            meta.provenance.clone(),
+            citations.clone(),
+        )
+        .await?;
+    }
     execute_person_mutation(
         store,
         session,
@@ -1677,9 +1701,13 @@ fn adopt(root: &mut PersonSummary, member: PersonSummary) {
     root.citations.extend(member.citations);
     root.media.extend(member.media);
     root.notes.extend(member.notes);
-    for (tag, tag_ref) in member.tags.into_iter().zip(member.tag_refs) {
+    for tag in member.tags {
         if !root.tags.contains(&tag) {
             root.tags.push(tag);
+        }
+    }
+    for tag_ref in member.tag_refs {
+        if !root.tag_refs.iter().any(|held| held.id == tag_ref.id) {
             root.tag_refs.push(tag_ref);
         }
     }

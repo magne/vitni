@@ -8,12 +8,12 @@ use std::collections::BTreeSet;
 use uuid::Uuid;
 use vitni_app::{
     AppDefaults, AppError, IdentityDecision, MutationMeta, NewFact, NewPerson, OperatorConfig, PairDecision,
-    PersonChangeSet, PersonNameParts, PersonTarget, Provenance, Session, Workspace, WorkspaceDefaults, assert_fact,
-    change_log_for_person, claim_owner, commit_person_change_set, create_person, create_tag, distinguish_persons,
-    list_person_rows, list_persons, merge_persons, pair_decision, show_person, tag_person, undo_assertion,
-    undo_distinction_and_merge, workspace_counts,
+    PersonChangeSet, PersonNameParts, PersonTarget, Provenance, Session, Workspace, WorkspaceDefaults, ancestors,
+    assert_fact, change_log_for_person, claim_owner, commit_person_change_set, create_person, create_tag,
+    distinguish_persons, list_person_rows, list_persons, list_tags, merge_persons, pair_decision, set_restrictions,
+    show_person, tag_person, undo_assertion, undo_distinction_and_merge, workspace_counts,
 };
-use vitni_core::enums::{EvidenceLevel, FactType};
+use vitni_core::enums::{EvidenceLevel, FactType, Restriction};
 use vitni_core::ids::AgentId;
 use vitni_core::matching::MatchableKind;
 use vitni_core::person::PersonError;
@@ -496,4 +496,62 @@ async fn the_decision_between_two_clusters_is_read_whichever_record_names_them()
         Some(PairDecision::Distinct)
     );
     assert_eq!(pair_decision(&ws, &a, &a).await.expect("decision"), None);
+}
+
+#[tokio::test]
+async fn a_tag_both_cluster_records_hold_counts_the_cluster_once() {
+    let (ws, _dir) = workspace().await;
+    let a = person(&ws, "Ole", "Hansen").await;
+    let b = person(&ws, "Ole", "Hanssen").await;
+    let tag = create_tag(&ws, &session(), "Emigrant".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("tag");
+    for record in [&a, &b] {
+        tag_person(&ws, &session(), record, &tag, false, MutationMeta::default())
+            .await
+            .expect("tag record");
+    }
+    merge(&ws, &a, &b).await;
+
+    let tags = list_tags(&ws).await.expect("tags");
+    assert_eq!(tags.iter().map(|tag| tag.usage_count).collect::<Vec<_>>(), vec![1]);
+}
+
+#[tokio::test]
+async fn clearing_a_restriction_clears_it_on_every_cluster_record() {
+    let (ws, _dir) = workspace().await;
+    let a = person(&ws, "Ole", "Hansen").await;
+    let b = person(&ws, "Ole", "Hanssen").await;
+    let private = BTreeSet::from([Restriction::Privacy]);
+    set_restrictions(&ws, &session(), &b, private.clone(), MutationMeta::default())
+        .await
+        .expect("restrict member");
+    merge(&ws, &a, &b).await;
+    assert_eq!(
+        show_person(&ws, &a).await.expect("show").expect("root").restrictions,
+        private
+    );
+
+    set_restrictions(&ws, &session(), &a, BTreeSet::new(), MutationMeta::default())
+        .await
+        .expect("clear through the root");
+    assert!(
+        show_person(&ws, &a)
+            .await
+            .expect("show")
+            .expect("root")
+            .restrictions
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn a_members_pedigree_is_its_roots() {
+    let (ws, _dir) = workspace().await;
+    let a = person(&ws, "Ole", "Hansen").await;
+    let b = person(&ws, "Ole", "Hanssen").await;
+    merge(&ws, &a, &b).await;
+
+    let chart = ancestors(&ws, &b, 2).await.expect("a member's pedigree");
+    assert_eq!(chart.focus.human_id, a);
 }

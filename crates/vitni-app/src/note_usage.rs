@@ -49,9 +49,13 @@ impl NoteUsage {
     }
 }
 
-/// Pushes one referencing record onto a note's bucket.
+/// Pushes one referencing record onto a note's bucket, once: the records of a merged person cluster all
+/// name its root (ADR 0039 §5).
 fn push(map: &mut HashMap<NoteId, Vec<UsingRecordRef>>, note: NoteId, record: UsingRecordRef) {
-    map.entry(note).or_default().push(record);
+    let records = map.entry(note).or_default();
+    if !records.contains(&record) {
+        records.push(record);
+    }
 }
 
 /// Inverts person note attachments.
