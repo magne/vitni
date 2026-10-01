@@ -1404,6 +1404,29 @@ impl FamilyEdit {
             | Self::UndoAssertion { human_id, .. } => human_id,
         }
     }
+
+    /// This edit written to `owner` instead of its target — a correction of a row a merged member
+    /// owns goes to that member's stream (ADR 0039 §5).
+    #[must_use]
+    pub fn retargeted(&self, owner: &str) -> Self {
+        let mut edit = self.clone();
+        match &mut edit {
+            Self::SetHumanId { human_id, .. }
+            | Self::AddPartner { human_id, .. }
+            | Self::AddChild { human_id, .. }
+            | Self::AssertChildRelationship { human_id, .. }
+            | Self::RemoveChild { human_id, .. }
+            | Self::LinkFamilyEvent { human_id, .. }
+            | Self::AttachMedia { human_id, .. }
+            | Self::SetMediaRegion { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::AttachCitation { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => owner.clone_into(human_id),
+        }
+        edit
+    }
 }
 
 /// A request to mutate an event, dispatched to a `vitni-app` command use-case via
@@ -1550,6 +1573,30 @@ impl EventEdit {
             | Self::SetRestrictions { human_id, .. }
             | Self::UndoAssertion { human_id, .. } => human_id,
         }
+    }
+
+    /// This edit written to `owner` instead of its target — a correction of a row a merged member
+    /// owns goes to that member's stream (ADR 0039 §5).
+    #[must_use]
+    pub fn retargeted(&self, owner: &str) -> Self {
+        let mut edit = self.clone();
+        match &mut edit {
+            Self::SetHumanId { human_id, .. }
+            | Self::SetType { human_id, .. }
+            | Self::SetDate { human_id, .. }
+            | Self::SetDescription { human_id, .. }
+            | Self::LinkPlace { human_id, .. }
+            | Self::AddAddress { human_id, .. }
+            | Self::AddParticipant { human_id, .. }
+            | Self::AttachCitation { human_id, .. }
+            | Self::AttachMedia { human_id, .. }
+            | Self::SetMediaRegion { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => owner.clone_into(human_id),
+        }
+        edit
     }
 }
 

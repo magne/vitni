@@ -46,6 +46,7 @@ pub mod family;
 pub mod fixed;
 pub mod geo;
 pub mod id_format;
+pub mod identity;
 pub mod ids;
 pub mod import_run;
 pub mod matching;

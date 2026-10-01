@@ -111,11 +111,12 @@ async fn scan_families(
     workspace: &Workspace,
     map: &mut HashMap<DnaMatchId, Vec<DnaInferenceRef>>,
 ) -> Result<(), AppError> {
+    let references = crate::identity::FamilyReferences::load(workspace.store()).await?;
     for view in workspace.store().list_families().await? {
-        let (Some(id), Some(human_id)) = (view.family_id(), view.human_id()) else {
+        let Some(id) = view.family_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let make = |context| CitingRecordRef {
             kind: CitingKind::Family,
             human_id: human_id.clone(),

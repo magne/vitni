@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use crate::assertions::Attributed;
 use crate::enums::{ChildParentRelationship, Restriction};
 use crate::ids::{AssertionId, CitationId, EventId, FamilyId, HumanId, NoteId, PersonId, TagId};
+use crate::matching::MatchEvidence;
 use crate::provenance::AssertionMeta;
 use crate::text::{ExternalId, MediaRef};
 
@@ -148,6 +149,24 @@ pub enum FamilyCommand {
         family_id: FamilyId,
         /// The new user-facing identifier.
         human_id: HumanId,
+    },
+    /// Record that `merged` is the same family as `surviving` (ADR 0039 §1).
+    MergeFamilies {
+        /// The surviving family — the stream the decision is written on.
+        surviving: FamilyId,
+        /// The family merged into it.
+        merged: FamilyId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
+    },
+    /// Record that `other` is a different family from `family` (ADR 0039 §1).
+    DistinguishFamilies {
+        /// The family the decision is written on.
+        family: FamilyId,
+        /// The family it is distinct from.
+        other: FamilyId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
     },
 }
 

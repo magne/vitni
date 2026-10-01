@@ -1,16 +1,20 @@
 //! The SQLite half of the identity cluster index (ADR 0039 §4) — see the [module header](super) for
 //! what the two tables hold and why the index exists.
 
+use std::marker::PhantomData;
+
 use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
 use sqlx::{Pool, Row, Sqlite};
+use vitni_core::event::EventView;
+use vitni_core::family::FamilyView;
+use vitni_core::identity::ClusterRecord;
 use vitni_core::matching::MatchableKind;
-use vitni_core::person::{PersonState, PersonView};
+use vitni_core::person::PersonView;
 
-use super::{IDENTITY_EDGES_TABLE, IDENTITY_LINKS_TABLE, changes_edges, closure};
+use super::{IDENTITY_EDGES_TABLE, IDENTITY_LINKS_TABLE, IndexedRecord, closure};
 use crate::sqlite_query;
 use crate::store::{DbError, IdentityLink};
-use crate::tables::PERSON_VIEW_TABLE;
 
 const CREATE_IDENTITY_EDGES_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS identity_edges (
@@ -50,35 +54,39 @@ pub(crate) async fn create_tables(pool: &Pool<Sqlite>) -> Result<bool, sqlx::Err
     Ok(!existed)
 }
 
-/// A `cqrs-es` query that keeps the person edges and clusters in step with the Person projection. Must
-/// be appended *after* the person `GenericQuery`, so the projection it reads is already up to date.
-pub(crate) struct IdentityLinksQuery {
+/// A `cqrs-es` query that keeps one kind's edges and clusters in step with its projection. Must be
+/// appended *after* that aggregate's `GenericQuery`, so the projection it reads is already up to date.
+pub(crate) struct IdentityLinksQuery<V> {
     pool: Pool<Sqlite>,
+    view: PhantomData<fn() -> V>,
 }
 
-impl IdentityLinksQuery {
+impl<V> IdentityLinksQuery<V> {
     /// Wraps the pool the projection and index tables share.
     pub(crate) fn new(pool: Pool<Sqlite>) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            view: PhantomData,
+        }
     }
 }
 
 #[async_trait]
-impl Query<PersonState> for IdentityLinksQuery {
-    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<PersonState>]) {
-        if !events.iter().any(|envelope| changes_edges(&envelope.payload)) {
+impl<V: IndexedRecord> Query<V::State> for IdentityLinksQuery<V> {
+    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<V::State>]) {
+        if !events.iter().any(|envelope| V::changes_edges(&envelope.payload)) {
             return;
         }
-        if let Err(error) = reindex_survivor(&self.pool, aggregate_id).await {
-            tracing::error!(person_id = aggregate_id, %error, "failed to update the identity index");
+        if let Err(error) = reindex_survivor::<V>(&self.pool, aggregate_id).await {
+            tracing::error!(kind = V::KIND.as_str(), aggregate_id, %error, "failed to update the identity index");
         }
     }
 }
 
-/// Mirrors one survivor's live merge edges from its projection, then recomputes the person clusters.
-async fn reindex_survivor(pool: &Pool<Sqlite>, surviving: &str) -> Result<(), DbError> {
-    let kind = MatchableKind::Person.as_str();
-    let view = sqlite_query::find_view_by_id::<PersonView>(pool, PERSON_VIEW_TABLE, surviving).await?;
+/// Mirrors one survivor's live merge edges from its projection, then recomputes its kind's clusters.
+async fn reindex_survivor<V: IndexedRecord>(pool: &Pool<Sqlite>, surviving: &str) -> Result<(), DbError> {
+    let kind = V::KIND.as_str();
+    let view = sqlite_query::find_view_by_id::<V>(pool, V::VIEW_TABLE, surviving).await?;
     let mut tx = pool
         .begin()
         .await
@@ -99,11 +107,11 @@ async fn reindex_survivor(pool: &Pool<Sqlite>, surviving: &str) -> Result<(), Db
 }
 
 /// Inserts one edge per record `view` has merged.
-async fn insert_edges(
+async fn insert_edges<V: ClusterRecord>(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
     kind: &str,
     surviving: &str,
-    view: &PersonView,
+    view: &V,
 ) -> Result<(), DbError> {
     for member in view.merged() {
         sqlx::query(&format!(
@@ -151,15 +159,22 @@ async fn recompute_links(tx: &mut sqlx::Transaction<'_, Sqlite>, kind: &str) -> 
     Ok(())
 }
 
-/// Rebuilds the whole index from every person's (already-rebuilt) projection — the maintenance path
-/// `Store::rebuild_projections` drives (ADR 0010), through the same inserts as the live path.
+/// Rebuilds the whole index from every matchable kind's (already-rebuilt) projection — the maintenance
+/// path `Store::rebuild_projections` drives (ADR 0010), through the same inserts as the live path.
 ///
 /// # Errors
 ///
 /// A [`DbError`] if reading a projection or writing the index fails.
 pub(crate) async fn rebuild_index(pool: &Pool<Sqlite>) -> Result<(), DbError> {
-    let kind = MatchableKind::Person.as_str();
-    let views: Vec<PersonView> = sqlite_query::list_views(pool, PERSON_VIEW_TABLE).await?;
+    rebuild_kind::<PersonView>(pool).await?;
+    rebuild_kind::<EventView>(pool).await?;
+    rebuild_kind::<FamilyView>(pool).await
+}
+
+/// Rebuilds one kind's edges and clusters from its projection.
+async fn rebuild_kind<V: IndexedRecord>(pool: &Pool<Sqlite>) -> Result<(), DbError> {
+    let kind = V::KIND.as_str();
+    let views: Vec<V> = sqlite_query::list_views(pool, V::VIEW_TABLE).await?;
     let mut tx = pool
         .begin()
         .await
@@ -170,8 +185,8 @@ pub(crate) async fn rebuild_index(pool: &Pool<Sqlite>) -> Result<(), DbError> {
         .await
         .map_err(backend("clearing the identity edges"))?;
     for view in &views {
-        let Some(person_id) = view.person_id() else { continue };
-        insert_edges(&mut tx, kind, &person_id.to_string(), view).await?;
+        let Some(id) = view.record_id() else { continue };
+        insert_edges(&mut tx, kind, &id.to_string(), view).await?;
     }
     recompute_links(&mut tx, kind).await?;
     tx.commit().await.map_err(backend("committing the identity index"))

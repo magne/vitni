@@ -7,14 +7,14 @@
 //! [`PersonId`](vitni_core::ids::PersonId) here, so the frontend never handles UUIDs. The
 //! Family `human_id` is auto-allocated using the workspace's configured format (ADR 0005).
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use vitni_core::date::GenealogicalDate;
 use vitni_core::enums::{ChildParentRelationship, EventType, Restriction};
 use vitni_core::event::EventView;
-use vitni_core::family::FamilyView;
 use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use vitni_core::family::error::FamilyError;
+use vitni_core::family::{ChildEntry, FamilyView};
 use vitni_core::ids::{AssertionId, CitationId, EventId, FamilyId, HumanId, MediaId, NoteId, PersonId, TagId};
 use vitni_core::person::PersonView;
 use vitni_core::provenance::Confidence;
@@ -23,10 +23,10 @@ use vitni_core::text::{ExternalId, MediaRef};
 use vitni_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AttachedRef, CitationRef, MediaLookup, MediaRefSummary};
+use crate::dto::{AggRef, AttachedRef, CitationRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{EventSummary, list_events};
-use crate::identity::PersonClusters;
+use crate::identity::{self, EventClusters, FamilyClusters, IdentityDecision, PairDecision, PersonClusters};
 use crate::person::{list_persons, render_name};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
@@ -146,6 +146,24 @@ pub struct FamilySummary {
     pub tags: Vec<TagRef>,
     /// The family's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+    /// Every family merged into this family's cluster, directly or through another member (ADR 0039
+    /// §4), in id order.
+    pub merged: Vec<AggRef>,
+    /// The `human_id` of the member each member-owned row came from, by the row's `AssertionId` — the
+    /// stream an edit or retraction of that row is written to (ADR 0039 §5). A row absent here is the
+    /// family's own. Never rendered as a key; see [`owner_of`](Self::owner_of).
+    pub claim_owners: BTreeMap<String, String>,
+}
+
+impl FamilySummary {
+    /// The `human_id` of the record that owns the row introduced by `assertion_id`: the member it came
+    /// from, or this family for its own rows.
+    #[must_use]
+    pub fn owner_of(&self, assertion_id: &str) -> &str {
+        self.claim_owners
+            .get(assertion_id)
+            .map_or(self.human_id.as_str(), String::as_str)
+    }
 }
 
 /// A person's role within a family: a partner/spouse, or a child (with the per-partner relationships).
@@ -330,7 +348,8 @@ pub async fn add_child(
 
 /// Asserts one child-to-partner relationship (GEDCOM `_FREL`/`_MREL` — ADR 0021), the per-link edit
 /// path: a `meta.supersedes` replaces the prior link's assertion, so an adoption link is corrected
-/// without touching the child's membership or the other links.
+/// without touching the child's membership or the other links. In a merged family the link is written
+/// to the record of the cluster that names both the child and the partner (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -350,6 +369,7 @@ pub async fn assert_child_relationship(
     let family_id = resolve_family_id(store, family_human_id).await?;
     let child_id = resolve_person_id(store, child_human_id).await?;
     let parent_id = resolve_person_id(store, partner_human_id).await?;
+    let (family_id, child_id, parent_id) = relationship_holder(store, family_id, child_id, parent_id).await?;
     execute_family_mutation(
         store,
         session,
@@ -365,7 +385,41 @@ pub async fn assert_child_relationship(
     .await
 }
 
-/// Removes a child (by person `human_id`) from the family.
+/// The record of `family_id`'s cluster a child-to-partner link is written to (ADR 0039 §5), with the
+/// child and partner ids as that record names them: `family_id` itself when it names both, else the
+/// first member that does. Unchanged when no record names both, so the core refuses it there.
+async fn relationship_holder(
+    store: &Store,
+    family_id: FamilyId,
+    child_id: PersonId,
+    parent_id: PersonId,
+) -> Result<(FamilyId, PersonId, PersonId), AppError> {
+    let persons = PersonClusters::load(store).await?;
+    let (child_root, parent_root) = (persons.root(child_id), persons.root(parent_id));
+    let mut holder = None;
+    for record in identity::cluster_records(store, family_id).await? {
+        let Some(id) = record.family_id() else { continue };
+        let child = record
+            .children()
+            .into_iter()
+            .find(|child| persons.root(child.child_id) == child_root);
+        let parent = record
+            .partners()
+            .into_iter()
+            .find(|partner| persons.root(*partner) == parent_root);
+        let (Some(child), Some(parent)) = (child, parent) else {
+            continue;
+        };
+        if id == family_id {
+            return Ok((id, child.child_id, parent));
+        }
+        holder = holder.or(Some((id, child.child_id, parent)));
+    }
+    Ok(holder.unwrap_or((family_id, child_id, parent_id)))
+}
+
+/// Removes a child (by person `human_id`) from the family — from every record of the family's
+/// cluster that names the child, or any record of the child's own cluster (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -380,14 +434,41 @@ pub async fn remove_child(
     let store = workspace.store();
     let family_id = resolve_family_id(store, family_human_id).await?;
     let child_id = resolve_person_id(store, child_human_id).await?;
-    execute_family_mutation(
-        store,
-        session,
-        family_id,
-        FamilyCommand::RemoveChild { family_id, child_id },
-        meta,
-    )
-    .await
+    let persons = PersonClusters::load(store).await?;
+    let mut holders = Vec::new();
+    for record in identity::cluster_records(store, family_id).await? {
+        let Some(id) = record.family_id() else { continue };
+        for child in record.children() {
+            if persons.root(child.child_id) == persons.root(child_id) {
+                holders.push((id, child.child_id));
+            }
+        }
+    }
+    let Some((&(first, first_child), rest)) = holders.split_first() else {
+        let command = FamilyCommand::RemoveChild { family_id, child_id };
+        return execute_family_mutation(store, session, family_id, command, meta).await;
+    };
+    let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
+    for &(id, child_id) in rest {
+        let command = FamilyCommand::RemoveChild {
+            family_id: id,
+            child_id,
+        };
+        execute(
+            store,
+            session,
+            &id.to_string(),
+            command,
+            meta.provenance.clone(),
+            citations.clone(),
+        )
+        .await?;
+    }
+    let command = FamilyCommand::RemoveChild {
+        family_id: first,
+        child_id: first_child,
+    };
+    execute(store, session, &first.to_string(), command, meta.provenance, citations).await
 }
 
 /// Records a stable external identifier on a family (data-model §11).
@@ -417,7 +498,9 @@ pub async fn add_external_id(
     .await
 }
 
-/// Sets a family's privacy restrictions (GEDCOM `RESN` — data-model §6).
+/// Sets a family's privacy restrictions (GEDCOM `RESN` — data-model §6). A merged member restricted
+/// beyond the new set is narrowed to it first, so the cluster reads with exactly `restrictions`
+/// (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -431,6 +514,27 @@ pub async fn set_restrictions(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
+    let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
+    for record in identity::cluster_records(store, family_id).await? {
+        let Some(id) = record.family_id() else { continue };
+        if id == family_id || record.restrictions().is_subset(&restrictions) {
+            continue;
+        }
+        let narrowed = record.restrictions().intersection(&restrictions).copied().collect();
+        let command = FamilyCommand::SetRestrictions {
+            family_id: id,
+            restrictions: narrowed,
+        };
+        execute(
+            store,
+            session,
+            &id.to_string(),
+            command,
+            meta.provenance.clone(),
+            citations.clone(),
+        )
+        .await?;
+    }
     execute_family_mutation(
         store,
         session,
@@ -603,7 +707,8 @@ pub async fn attach_family_note(
     .await
 }
 
-/// Applies (or, with `remove`, removes) a tag on the family.
+/// Applies (or, with `remove`, removes) a tag on the family. A removed tag is untagged on every
+/// record of the family's cluster that holds it (ADR 0039 §5).
 ///
 /// The `tag_id` is a tag's aggregate id (a UUID string), resolved from a tag the user picked by
 /// name; it is never shown to the user (data-model §9). Mirrors [`tag_citation`](crate::tag_citation).
@@ -623,11 +728,27 @@ pub async fn tag_family(
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
     let tag_id = parse_tag_id(tag_id)?;
-    let command = if remove {
-        FamilyCommand::Untag { family_id, tag_id }
-    } else {
-        FamilyCommand::Tag { family_id, tag_id }
-    };
+    if !remove {
+        let command = FamilyCommand::Tag { family_id, tag_id };
+        return execute_family_mutation(store, session, family_id, command, meta).await;
+    }
+    let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
+    for record in identity::cluster_records(store, family_id).await? {
+        let Some(id) = record.family_id() else { continue };
+        if id != family_id && record.tags().contains(&tag_id) {
+            let command = FamilyCommand::Untag { family_id: id, tag_id };
+            execute(
+                store,
+                session,
+                &id.to_string(),
+                command,
+                meta.provenance.clone(),
+                citations.clone(),
+            )
+            .await?;
+        }
+    }
+    let command = FamilyCommand::Untag { family_id, tag_id };
     execute_family_mutation(store, session, family_id, command, meta).await
 }
 
@@ -638,6 +759,121 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
+/// The outcome of [`merge_families`]: the survivor's refreshed summary and the merged family's
+/// `human_id`.
+///
+/// The merge is a same-as link on the survivor (ADR 0039 §1): no record that names the merged family
+/// is rewritten. Every reader resolves those references to the cluster's root instead (ADR 0039 §5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyMergeResult {
+    /// The survivor's summary after the merge, composed with every record now in its cluster.
+    pub survivor: FamilySummary,
+    /// The merged family's `human_id` (its own record/stream is untouched).
+    pub merged_human_id: String,
+}
+
+/// Merges `merged_human_id`'s cluster into `surviving_human_id`'s, recording a same-as link
+/// (ADR 0039 §1). Both records resolve to their cluster roots first (§4), and one `FamiliesMerged`
+/// event is emitted on the surviving root's stream, carrying the decision's provenance and assessment.
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if either `human_id` does not resolve; [`AppError::FamilyDomain`] with
+/// `MergeConflict` if they resolve to the same family, or `IdentityDecided` if the two are already one
+/// cluster or a record of one cluster is distinguished from a record of the other; or a store error.
+pub async fn merge_families(
+    workspace: &Workspace,
+    session: &Session,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<FamilyMergeResult, AppError> {
+    let pair = identity::merge::<FamilyView>(workspace, session, surviving_human_id, merged_human_id, decision).await?;
+    family_merge_result(workspace, &pair.first_human_id, merged_human_id).await
+}
+
+/// Undoes every live distinction between the two family clusters, then merges them (ADR 0039 §4).
+///
+/// # Errors
+///
+/// As [`merge_families`], except that a distinction between the clusters no longer refuses the merge.
+pub async fn undo_family_distinction_and_merge(
+    workspace: &Workspace,
+    session: &Session,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<FamilyMergeResult, AppError> {
+    let pair = identity::undo_distinction_and_merge::<FamilyView>(
+        workspace,
+        session,
+        surviving_human_id,
+        merged_human_id,
+        decision,
+    )
+    .await?;
+    family_merge_result(workspace, &pair.first_human_id, merged_human_id).await
+}
+
+/// The survivor's composed summary after a merge.
+async fn family_merge_result(
+    workspace: &Workspace,
+    survivor_human_id: &str,
+    merged_human_id: &str,
+) -> Result<FamilyMergeResult, AppError> {
+    let survivor = show_family(workspace, survivor_human_id)
+        .await?
+        .ok_or_else(|| AppError::FamilyNotFound(survivor_human_id.to_owned()))?;
+    Ok(FamilyMergeResult {
+        survivor,
+        merged_human_id: merged_human_id.to_owned(),
+    })
+}
+
+/// Records that the two families are different (ADR 0039 §1), so neither cluster is proposed as a
+/// duplicate of the other again. One `FamiliesDistinguished` event is emitted on the first root's
+/// stream; undoing it lifts the decision.
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if either `human_id` does not resolve; [`AppError::FamilyDomain`] with
+/// `DistinctFromItself` if they resolve to the same family, or `IdentityDecided` if the two are already
+/// one cluster or already distinguished; or a store error.
+pub async fn distinguish_families(
+    workspace: &Workspace,
+    session: &Session,
+    family_human_id: &str,
+    other_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<(), AppError> {
+    identity::distinguish::<FamilyView>(workspace, session, family_human_id, other_human_id, decision).await
+}
+
+/// The live identity decision between the clusters of two families, or `None` when the pair is
+/// undecided (ADR 0039 §4).
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if either `human_id` does not resolve, or a store error.
+pub async fn family_pair_decision(
+    workspace: &Workspace,
+    first_human_id: &str,
+    other_human_id: &str,
+) -> Result<Option<PairDecision>, AppError> {
+    identity::pair_decision::<FamilyView>(workspace, first_human_id, other_human_id).await
+}
+
+/// The `human_id` of the record of `human_id`'s family cluster whose stream holds the live assertion
+/// `assertion_id` — where an edit or retraction of that row is written (ADR 0039 §5).
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if `human_id` is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or a store error.
+pub async fn family_claim_owner(workspace: &Workspace, human_id: &str, assertion_id: &str) -> Result<String, AppError> {
+    identity::claim_owner::<FamilyView>(workspace, human_id, assertion_id).await
+}
+
 /// Loads a single family's summary by `human_id`.
 ///
 /// # Errors
@@ -645,14 +881,20 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
 /// A store/read-model error.
 pub async fn show_family(workspace: &Workspace, human_id: &str) -> Result<Option<FamilySummary>, AppError> {
     let store = workspace.store();
-    let Some(view) = store.find_family(human_id).await? else {
+    let Some(found) = store.find_family(human_id).await? else {
         return Ok(None);
     };
+    let Some(family_id) = found.family_id() else {
+        return Ok(None);
+    };
+    let clusters = FamilyClusters::load(store).await?;
+    let views = identity::views(store, &clusters.cluster(clusters.root(family_id))).await?;
     let lookups = FamilyLookups::load(workspace).await?;
-    Ok(Some(summarize(&view, &lookups)))
+    Ok(summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups))
 }
 
-/// Lists every family's summary, ordered by `human_id`.
+/// Lists every family's summary, ordered by `human_id`. A merged family is listed once, as its
+/// cluster's root (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -660,8 +902,37 @@ pub async fn show_family(workspace: &Workspace, human_id: &str) -> Result<Option
 pub async fn list_families(workspace: &Workspace) -> Result<Vec<FamilySummary>, AppError> {
     let store = workspace.store();
     let views = store.list_families().await?;
+    let clusters = FamilyClusters::load(store).await?;
     let lookups = FamilyLookups::load(workspace).await?;
-    Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
+    let mut summaries = Vec::with_capacity(views.len());
+    for cluster in root_clusters(&views, &clusters) {
+        summaries.extend(summarize_cluster(&cluster, &lookups));
+    }
+    Ok(summaries)
+}
+
+/// Groups `views` into their clusters, root first, one per root in `views` order; a member never
+/// starts a group of its own (ADR 0039 §5).
+pub(crate) fn root_clusters<'a>(views: &'a [FamilyView], clusters: &FamilyClusters) -> Vec<Vec<&'a FamilyView>> {
+    let by_id: HashMap<FamilyId, &FamilyView> = views
+        .iter()
+        .filter_map(|view| Some((view.family_id()?, view)))
+        .collect();
+    let mut groups = Vec::new();
+    for view in views {
+        let Some(id) = view.family_id() else { continue };
+        if clusters.is_member(id) {
+            continue;
+        }
+        groups.push(
+            clusters
+                .cluster(id)
+                .iter()
+                .filter_map(|id| by_id.get(id).copied())
+                .collect(),
+        );
+    }
+    groups
 }
 
 /// A partner on a lightweight family list row: the partner's user-facing id and display name.
@@ -700,6 +971,7 @@ pub struct FamilyRow {
 pub async fn list_family_rows(workspace: &Workspace) -> Result<Vec<FamilyRow>, AppError> {
     let store = workspace.store();
     let clusters = PersonClusters::load(store).await?;
+    let event_clusters = EventClusters::load(store).await?;
     let mut partners: HashMap<PersonId, FamilyPartnerRow> = HashMap::new();
     for view in store.list_persons().await? {
         if let (Some(id), Some(human_id)) = (view.person_id(), view.human_id()) {
@@ -719,32 +991,38 @@ pub async fn list_family_rows(workspace: &Workspace) -> Result<Vec<FamilyRow>, A
         }
     }
     let views = store.list_families().await?;
+    let family_clusters = FamilyClusters::load(store).await?;
     let mut rows = Vec::with_capacity(views.len());
-    for view in &views {
-        let partners_row = view
-            .partners_with_assertions()
-            .iter()
-            .map(|attributed| {
-                let partner_id = clusters.root(attributed.value.value);
+    for cluster in root_clusters(&views, &family_clusters) {
+        let Some(root) = cluster.first() else { continue };
+        let partner_ids = cluster_partners(&cluster, &clusters);
+        let child_count = cluster_children(&cluster, &clusters).len();
+        let mut marriage_date = None;
+        for view in &cluster {
+            marriage_date = marriage_date.or_else(|| {
+                view.linked_events()
+                    .into_iter()
+                    .find_map(|event_id| {
+                        let (event_type, date) = events.get(&event_clusters.root(event_id))?;
+                        (*event_type == Some(EventType::Marriage)).then(|| date.clone())
+                    })
+                    .flatten()
+            });
+        }
+        let partners_row = partner_ids
+            .into_iter()
+            .map(|partner_id| {
                 partners.get(&partner_id).cloned().unwrap_or_else(|| FamilyPartnerRow {
                     human_id: partner_id.to_string(),
                     name: None,
                 })
             })
             .collect();
-        let marriage_date = view
-            .linked_events_with_assertions()
-            .iter()
-            .find_map(|attributed| {
-                let (event_type, date) = events.get(&attributed.value.value)?;
-                (*event_type == Some(EventType::Marriage)).then(|| date.clone())
-            })
-            .flatten();
         rows.push(FamilyRow {
-            human_id: view.human_id().map(ToString::to_string).unwrap_or_default(),
+            human_id: root.human_id().map(ToString::to_string).unwrap_or_default(),
             partners: partners_row,
             marriage_date,
-            child_count: view.children_with_assertions().len(),
+            child_count,
         });
     }
     Ok(rows)
@@ -785,13 +1063,17 @@ pub async fn families_for_person(
             .collect::<Vec<_>>()
     };
 
+    let views = store.list_families().await?;
+    let family_clusters = FamilyClusters::load(store).await?;
     let mut families = Vec::new();
-    for view in store.list_families().await? {
-        let partner = view.partners().into_iter().any(|id| clusters.root(id) == person_id);
-        let child_relationships = view
-            .children()
-            .into_iter()
-            .find(|child| clusters.root(child.child_id) == person_id)
+    for cluster in root_clusters(&views, &family_clusters) {
+        let Some(root) = cluster.first() else { continue };
+        let partner_ids = cluster_partners(&cluster, &clusters);
+        let children = cluster_children(&cluster, &clusters);
+        let partner = partner_ids.contains(&person_id);
+        let child_relationships = children
+            .iter()
+            .find(|child| child.child_id == person_id)
             .map(|child| resolve_relationships(&child.relationships));
         let role = match (partner, child_relationships) {
             (true, _) => PersonFamilyRole::Partner,
@@ -799,17 +1081,59 @@ pub async fn families_for_person(
             (false, None) => continue,
         };
         families.push(FamilyForPerson {
-            family_human_id: view.human_id().map(ToString::to_string).unwrap_or_default(),
+            family_human_id: root.human_id().map(ToString::to_string).unwrap_or_default(),
             role,
-            partners: view.partners().into_iter().map(resolve).collect(),
-            children: view
-                .children()
-                .into_iter()
+            partners: partner_ids.into_iter().map(resolve).collect(),
+            children: children
+                .iter()
                 .map(|child| (resolve(child.child_id), resolve_relationships(&child.relationships)))
                 .collect(),
         });
     }
     Ok(families)
+}
+
+/// The distinct partners of a family cluster, each resolved to its person root, in assertion order.
+fn cluster_partners(cluster: &[&FamilyView], clusters: &PersonClusters) -> Vec<PersonId> {
+    let mut partners = Vec::new();
+    for view in cluster {
+        for partner in view.partners() {
+            let partner = clusters.root(partner);
+            if !partners.contains(&partner) {
+                partners.push(partner);
+            }
+        }
+    }
+    partners
+}
+
+/// The distinct children of a family cluster, each resolved to its person root, with the distinct
+/// relationships (to partner roots) of every record that names it.
+fn cluster_children(cluster: &[&FamilyView], clusters: &PersonClusters) -> Vec<ChildEntry> {
+    let mut children: Vec<ChildEntry> = Vec::new();
+    for view in cluster {
+        for child in view.children() {
+            let child_id = clusters.root(child.child_id);
+            let relationships = child
+                .relationships
+                .into_iter()
+                .map(|(partner, relationship)| (clusters.root(partner), relationship));
+            match children.iter_mut().find(|held| held.child_id == child_id) {
+                Some(held) => {
+                    for relationship in relationships {
+                        if !held.relationships.contains(&relationship) {
+                            held.relationships.push(relationship);
+                        }
+                    }
+                }
+                None => children.push(ChildEntry {
+                    child_id,
+                    relationships: relationships.collect(),
+                }),
+            }
+        }
+    }
+    children
 }
 
 /// Sets (or changes) a family's user-facing identifier, identified by its current `human_id`,
@@ -858,7 +1182,7 @@ pub async fn set_family_human_id(
 
 /// Executes one command through the store, stamping the operator `provenance` and backing
 /// `citations`, and mapping the command outcome to [`AppError`].
-async fn execute(
+pub(crate) async fn execute(
     store: &Store,
     session: &Session,
     aggregate_id: &str,
@@ -987,6 +1311,7 @@ struct EventInfo {
 struct FamilyLookups {
     persons: HashMap<PersonId, PersonInfo>,
     clusters: PersonClusters,
+    event_clusters: EventClusters,
     events: HashMap<EventId, EventInfo>,
     citations: HashMap<CitationId, CitationRef>,
     media: HashMap<MediaId, MediaLookup>,
@@ -1040,6 +1365,7 @@ impl FamilyLookups {
         Ok(Self {
             persons,
             clusters: PersonClusters::load(store).await?,
+            event_clusters: EventClusters::load(store).await?,
             events,
             citations,
             media: crate::dto::media_lookups(store).await?,
@@ -1148,7 +1474,57 @@ fn summarize(view: &FamilyView, lookups: &FamilyLookups) -> FamilySummary {
         notes,
         tags,
         restrictions: view.restrictions().clone(),
+        merged: Vec::new(),
+        claim_owners: BTreeMap::new(),
     }
+}
+
+/// Summarises a cluster — its root first, then its members — as one family (ADR 0039 §5): the root's
+/// summary with every member's rows appended, each member-owned row recorded in `claim_owners`.
+/// `None` for an empty slice.
+fn summarize_cluster(views: &[&FamilyView], lookups: &FamilyLookups) -> Option<FamilySummary> {
+    let (root, members) = views.split_first()?;
+    let mut summary = summarize(root, lookups);
+    for view in members {
+        let member = summarize(view, lookups);
+        summary.merged.push(AggRef {
+            human_id: member.human_id.clone(),
+            id: member.id.clone(),
+        });
+        adopt(&mut summary, member);
+    }
+    summary.merged.sort_by(|x, y| x.id.cmp(&y.id));
+    Some(summary)
+}
+
+/// Appends a member's rows to its root's summary, recording the member as each row's owner.
+fn adopt(root: &mut FamilySummary, member: FamilySummary) {
+    let owner = member.human_id.clone();
+    let mut owned: Vec<String> = Vec::new();
+    owned.extend(member.partners.iter().map(|row| row.assertion_id.clone()));
+    for child in &member.children {
+        owned.push(child.assertion_id.clone());
+        owned.extend(child.relationships.iter().map(|link| link.assertion_id.clone()));
+    }
+    owned.extend(member.events.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.citations.iter().filter_map(|row| row.assertion_id.clone()));
+    owned.extend(member.media.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.notes.iter().map(|row| row.assertion_id.clone()));
+    for assertion_id in owned {
+        root.claim_owners.insert(assertion_id, owner.clone());
+    }
+    root.partners.extend(member.partners);
+    root.children.extend(member.children);
+    root.events.extend(member.events);
+    root.citations.extend(member.citations);
+    root.media.extend(member.media);
+    root.notes.extend(member.notes);
+    for tag in member.tags {
+        if !root.tags.iter().any(|held| held.id == tag.id) {
+            root.tags.push(tag);
+        }
+    }
+    root.restrictions.extend(member.restrictions);
 }
 
 /// Joins each family partner to the person projection (name, lifespan, stable id) with its surety.
@@ -1226,10 +1602,11 @@ fn summarize_events(view: &FamilyView, lookups: &FamilyLookups) -> Vec<FamilyEve
         .iter()
         .map(|attributed| {
             let linked = &attributed.value;
-            let info = lookups.events.get(&linked.value);
+            let event_id = lookups.event_clusters.root(linked.value);
+            let info = lookups.events.get(&event_id);
             FamilyEventRef {
-                human_id: info.map_or_else(|| linked.value.to_string(), |i| i.human_id.clone()),
-                id: linked.value.to_string(),
+                human_id: info.map_or_else(|| event_id.to_string(), |i| i.human_id.clone()),
+                id: event_id.to_string(),
                 event_type: info.and_then(|i| i.event_type.clone()),
                 date: info.and_then(|i| i.date.clone()),
                 place: info.and_then(|i| i.place.clone()),

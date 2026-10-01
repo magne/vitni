@@ -52,6 +52,26 @@ impl Localizer {
             FamilyError::RetractsMissingAssertion(id) | FamilyError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
+            FamilyError::MergeConflict {
+                surviving,
+                merged,
+                reason,
+            } => fl!(
+                self.loader,
+                "err-family-merge-conflict",
+                surviving = surviving.to_string(),
+                merged = merged.to_string(),
+                reason = reason.clone()
+            ),
+            FamilyError::DistinctFromItself(id) => {
+                fl!(self.loader, "err-family-distinct-from-itself", id = id.to_string())
+            }
+            FamilyError::IdentityDecided { family, other } => fl!(
+                self.loader,
+                "err-family-identity-decided",
+                family = family.to_string(),
+                other = other.to_string()
+            ),
         }
     }
 }

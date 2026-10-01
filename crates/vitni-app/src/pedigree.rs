@@ -424,16 +424,26 @@ impl PedigreeLookups {
 
         let mut parents_of: HashMap<PersonId, Vec<Edge>> = HashMap::new();
         let mut children_of: HashMap<PersonId, Vec<Edge>> = HashMap::new();
+        // A merged family lists every copy's partners and children (ADR 0039 §5); each person is one
+        // edge however many copies name them.
         for family in list_families(workspace).await? {
-            let partner_ids: Vec<PersonId> = family
-                .partners
-                .iter()
-                .filter_map(|partner| person_ids.get(&partner.human_id).copied())
-                .collect();
+            let mut partner_ids: Vec<PersonId> = Vec::new();
+            for partner in &family.partners {
+                if let Some(&id) = person_ids.get(&partner.human_id)
+                    && !partner_ids.contains(&id)
+                {
+                    partner_ids.push(id);
+                }
+            }
+            let mut seen_children: Vec<PersonId> = Vec::new();
             for child in &family.children {
                 let Some(&child_id) = person_ids.get(&child.human_id) else {
                     continue;
                 };
+                if seen_children.contains(&child_id) {
+                    continue;
+                }
+                seen_children.push(child_id);
                 for &parent_id in &partner_ids {
                     let edge = Edge {
                         person_id: parent_id,

@@ -212,8 +212,8 @@ synthesis* derived from the log; none is edited directly.
 | Entity         | Purpose                                                          | Key projected fields                                                                                                                                                                                                                                                                                |
 | -------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Person**     | An individual (conclusion or persona).                           | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: occupation/residence/…), event participations (birth, death, and other vitals live here as Events — §7), associations, citations, media, notes, tags, `external_ids`, merged personas (`PersonsMerged` links), persons it is distinct from (`PersonsDistinguished` links), `evidence_level` (conclusion vs persona), `restrictions` (a `Restriction` set). |
-| **Family**     | A union and its children.                                        | `id`, `human_id`, partner participations (neutral roles), child list (`ChildParentRelationship` per partner per child), family-level events (marriage/divorce), citations, media, notes, tags, `external_ids`, `restrictions` (a `Restriction` set).                                                |
-| **Event**      | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (a projection of the person-side `ParticipationAsserted` rows that reference this event — the Person aggregate owns participation), addresses, citations, media, notes, tags, `restrictions` (a `Restriction` set). |
+| **Family**     | A union and its children.                                        | `id`, `human_id`, partner participations (neutral roles), child list (`ChildParentRelationship` per partner per child), family-level events (marriage/divorce), citations, media, notes, tags, `external_ids`, merged copies (`FamiliesMerged` links), families it is distinct from (`FamiliesDistinguished` links), `restrictions` (a `Restriction` set).                                                |
+| **Event**      | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (a projection of the person-side `ParticipationAsserted` rows that reference this event — the Person aggregate owns participation), addresses, citations, media, notes, tags, merged copies (`EventsMerged` links), events it is distinct from (`EventsDistinguished` links), `restrictions` (a `Restriction` set). |
 | **Place**      | A location, hierarchical and dated.                              | `id`, `human_id`, `place_type`, names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                       |
 | **Source**     | A work / document.                                               | `id`, `human_id`, `title`, `author`, `pub_info`, `abbrev`, repository links (`RepoRef` with call number + media type), attributes, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                        |
 | **Citation**   | A specific reference within a Source.                            | `id`, `human_id`, `source_id`, `page`, `date`, `confidence`, `evidence_analysis`, attributes, media, notes, tags, a typed `CreationStamp` (creator `Agent` + time), `restrictions` (a `Restriction` set).                                                                                                 |
@@ -477,9 +477,11 @@ Boundary notes:
   is non-destructive, exactly as FamilySearch/Geni require but as audit-by-construction. The opposite
   conclusion — two records are *different* individuals — is a `PersonsDistinguished` event of the same
   shape, so the pair is never proposed again (ADR 0039 §1). Either decision lives on one person's
-  stream and is undone by retracting it.
-- **Merged persons form clusters (ADR 0039 §4, §5).** The `identity_links` projection holds the
-  transitive closure of the live merges: each merged record names its cluster's **root**, the survivor
+  stream and is undone by retracting it. Events and families carry the same pair —
+  `EventsMerged` / `EventsDistinguished` and `FamiliesMerged` / `FamiliesDistinguished` — for two
+  records of one marriage or one household.
+- **Merged records form clusters (ADR 0039 §4, §5).** The `identity_links` projection holds the
+  transitive closure of the live merges of each kind — persons, events and families: each merged record names its cluster's **root**, the survivor
   that is not itself merged, and retracting a merge splits the cluster again. A decision is judged
   between clusters: both records resolve to their roots first, so a merge into a member lands on its
   root and no record joins two clusters; a pair already in one cluster, or whose clusters hold a live
@@ -490,8 +492,11 @@ Boundary notes:
     record and assertion it came from, so a correction of a member's row is written to that member,
     while a new claim goes on the root;
   - every reference to a member — a family partner or child, an event participant, an association,
-    a backlink, a research-note subject, a pedigree edge — names the root, and an export writes one
-    person per cluster.
+    a backlink, a research-note subject, a pedigree edge, a participation's event, a family's linked
+    event — names the root, and an export writes one record per cluster;
+  - a merged event's participants are the union of every copy's (the person-side
+    `ParticipationAsserted` rows that name any record of the cluster), and a merged family's
+    partners and children are every copy's, each person once in the pedigree.
 - **`DnaMatch` is owned by neither person.** It is a pairwise observation between two `DnaTest`s
   (referenced by id, self-contained) that genealogists research over time — so it is its own
   aggregate, not a value on a Person. `DnaTest` is anchored to one Person. See §12.
@@ -525,9 +530,9 @@ Representative **commands** (not exhaustive):
   `RetractAssertion`, `SupersedeAssertion`, `MergePersons`, `DistinguishPersons`.
 - **Family:** `CreateFamily`, `AddPartner` / `RemovePartner`, `AddChild` (child membership) /
   `AssertChildRelationship` (one child-to-partner link) / `RemoveChild`, `LinkFamilyEvent`, `Tag`,
-  `SetRestrictions`, plus the retract/supersede pair.
+  `SetRestrictions`, `MergeFamilies`, `DistinguishFamilies`, plus the retract/supersede pair.
 - **Event:** `CreateEvent`, `SetEventType`, `AssertDate`, `LinkPlace`, `SetDescription`,
-  `AddCitation`, `AttachMedia`, `AttachNote`, `Tag`. (Participation is asserted on the Person
+  `AddCitation`, `AttachMedia`, `AttachNote`, `Tag`, `MergeEvents`, `DistinguishEvents`. (Participation is asserted on the Person
   aggregate via `AssertParticipation`; the event's participant list is a projection of those rows.)
 - **Place:** `CreatePlace`, `SetPlaceType`, `AssertName`, `AssertEnclosedBy`, `AssertCoordinates`,
   `SetCode`, `AddCitation`, `Tag`.
@@ -552,9 +557,11 @@ verbs (not exhaustive):
   `ChildParentRelationship` — GEDCOM `_FREL`/`_MREL`, each its own assertion so an adoption link
   corrects independently — ADR 0021) / `ChildRemoved` (cascades the child's relationship rows),
   `FamilyEventLinked` (a categorization link, not a participation claim — §9), `Tagged`,
-  `RestrictionsChanged`, retraction/supersede verbs.
+  `RestrictionsChanged`, `FamiliesMerged` / `FamiliesDistinguished` (each with an optional
+  `assessment`, as on Person), retraction/supersede verbs.
 - **Event:** `EventCreated`, `EventTypeSet`, `DateAsserted`, `PlaceLinked`, `DescriptionSet`,
-  `CitationAdded`, `MediaAttached`, `NoteAttached`, `Tagged`. (Participants come from the person-side
+  `CitationAdded`, `MediaAttached`, `NoteAttached`, `Tagged`, `EventsMerged` / `EventsDistinguished`
+  (each with an optional `assessment`, as on Person). (Participants come from the person-side
   `ParticipationAsserted` rows — the Event aggregate holds no participation events.)
 - **Place:** `PlaceCreated`, `PlaceTypeSet`, `NameAsserted` (dated, language), `EnclosedByAsserted`
   (dated `PlaceRef`), `CoordinatesAsserted`, `CodeSet`, `CitationAdded`, `Tagged`.
@@ -634,8 +641,8 @@ around evidence and provenance.
 3. **Matches are computed, not asserted; only the user's decision is (ADR 0039 §3).** A proposed
    match — vitni's own engine (ADR 0038), a SmartMatch, a Record Match, a FamilySearch person match —
    is a function of the current data, so it is computed on demand and never stored: storing it would
-   freeze a stale judgement into the log. The user's **confirm** (`PersonsMerged`) or **reject**
-   (`PersonsDistinguished`) is the audited assertion, and it records the engine's assessment as its
+   freeze a stale judgement into the log. The user's **confirm** (`PersonsMerged`, `EventsMerged`,
+   `FamiliesMerged`) or **reject** (`PersonsDistinguished`, …) is the audited assertion, and it records the engine's assessment as its
    evidence. Every consumer of suggestions leaves out a merged record and a pair of clusters already
    decided either way (§9). Nothing is silently merged into the conclusion layer.
 

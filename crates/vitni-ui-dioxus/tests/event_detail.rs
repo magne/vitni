@@ -52,6 +52,7 @@ fn sample_address() -> AddressVm {
             original_text: None,
         },
         assertion_id: "0190-event-addr-assert-1".to_owned(),
+        merged_from: None,
     }
 }
 
@@ -108,6 +109,7 @@ fn sample() -> EventDetail {
                 confidence_label: "High".to_owned(),
                 source_count: 1,
                 assertion_id: "0190-participant-assertion-1".to_owned(),
+                merged_from: None,
             },
             ParticipantVm {
                 human_id: "I0004".to_owned(),
@@ -123,6 +125,7 @@ fn sample() -> EventDetail {
                 confidence_label: "Low".to_owned(),
                 source_count: 0,
                 assertion_id: "0190-participant-assertion-2".to_owned(),
+                merged_from: None,
             },
         ],
         citations: vec![CitationRefVm {
@@ -592,5 +595,37 @@ fn media_tab_opens_the_crop_viewer_on_a_card_click() {
     assert!(
         html.contains("Set region") && html.contains("Clear region"),
         "the crop viewer overlay renders with its Set/Clear region actions:\n{html}"
+    );
+}
+
+/// The sample with its first address and participant supplied by a merged copy, `E0002`.
+fn merged_event_view() -> Element {
+    use_context_provider(NavState::new);
+    let loc = loc();
+    let on_edit_open = use_callback(|_: EventEditForm| {});
+    let on_edit_address = use_callback(|_: AddressVm| {});
+    let on_retract = use_callback(|_: (String, String, bool)| {});
+    let on_person_retract = use_callback(|_: (String, String, bool, String)| {});
+    let mut detail = sample();
+    detail.addresses[0].merged_from = Some("E0002".to_owned());
+    detail.participants[0].merged_from = Some("E0002".to_owned());
+    rsx! {
+        {address_cards(&loc, &detail.addresses, on_edit_address, on_retract)}
+        {event_participants_table(&loc, &detail, on_edit_open, on_person_retract)}
+    }
+}
+
+#[test]
+fn rows_from_a_merged_event_are_attributed_to_it() {
+    let html = render(merged_event_view);
+    assert_eq!(
+        html.matches(r#"<span class="badge">from E0002</span>"#).count(),
+        2,
+        "the address and the participant name the copy they came from:\n{html}"
+    );
+    let own = render(event_view);
+    assert!(
+        !own.contains("from E0002"),
+        "the event's own rows carry no chip:\n{own}"
     );
 }

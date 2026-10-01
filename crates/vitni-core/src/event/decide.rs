@@ -12,6 +12,7 @@ use crate::event::events::{EventEvent, EventEventBody};
 use crate::event::ref_resolver::EventRefs;
 use crate::event::state::EventState;
 use crate::ids::EventId;
+use crate::matching::MatchEvidence;
 use crate::provenance::AssertionMeta;
 
 /// Decides the events a command produces, or rejects it with a domain error.
@@ -107,6 +108,16 @@ pub fn decide(
             events.extend(decide(state, *replacement, meta, refs)?);
             Ok(events)
         }
+        EventCommand::MergeEvents {
+            surviving,
+            merged,
+            assessment,
+        } => decide_merge(state, [surviving, merged], assessment, meta),
+        EventCommand::DistinguishEvents {
+            event,
+            other,
+            assessment,
+        } => decide_distinguish(state, [event, other], assessment, meta),
     }
 }
 
@@ -131,13 +142,72 @@ fn setter_body(command: EventCommand) -> EventEventBody {
         | EventCommand::SetRestrictions { .. }
         | EventCommand::RetractAssertion { .. }
         | EventCommand::SupersedeAssertion { .. }
-        | EventCommand::SetHumanId { .. } => unreachable!("handled by decide"),
+        | EventCommand::SetHumanId { .. }
+        | EventCommand::MergeEvents { .. }
+        | EventCommand::DistinguishEvents { .. } => unreachable!("handled by decide"),
     }
 }
 
 /// Builds the single-event vector for a body stamped with `meta`.
 fn one(meta: &AssertionMeta, body: EventEventBody) -> Vec<EventEvent> {
     vec![EventEvent::new(meta, body)]
+}
+
+/// Decides a merge of `merged` into `surviving` (ADR 0039 §1): the survivor must exist, the pair must
+/// be two records, and the survivor must not already hold a live decision about the other.
+fn decide_merge(
+    state: &EventState,
+    [surviving, merged]: [EventId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<EventEvent>, EventError> {
+    ensure_exists(state, surviving)?;
+    if surviving == merged {
+        return Err(EventError::MergeConflict {
+            surviving,
+            merged,
+            reason: "an event cannot be merged with itself".to_owned(),
+        });
+    }
+    ensure_undecided(state, surviving, merged)?;
+    Ok(one(
+        meta,
+        EventEventBody::EventsMerged {
+            surviving,
+            merged,
+            assessment,
+        },
+    ))
+}
+
+/// Decides that `other` is a different event from `event` (ADR 0039 §1), under the same rules as a merge.
+fn decide_distinguish(
+    state: &EventState,
+    [event, other]: [EventId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<EventEvent>, EventError> {
+    ensure_exists(state, event)?;
+    if event == other {
+        return Err(EventError::DistinctFromItself(event));
+    }
+    ensure_undecided(state, event, other)?;
+    Ok(one(
+        meta,
+        EventEventBody::EventsDistinguished {
+            event,
+            other,
+            assessment,
+        },
+    ))
+}
+
+/// Refuses a second identity decision about a pair this event already decided (ADR 0039 §1).
+fn ensure_undecided(state: &EventState, event: EventId, other: EventId) -> Result<(), EventError> {
+    if state.has_decided(other) {
+        return Err(EventError::IdentityDecided { event, other });
+    }
+    Ok(())
 }
 
 /// Rejects a command that targets an event which has not been created yet.
@@ -218,6 +288,20 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
             fold_attachment(state, assertion_id, &event.body);
             state.live_assertions.insert(assertion_id);
         }
+        EventEventBody::EventsMerged { merged, .. } => {
+            state.merged.push(Attributed {
+                assertion_id,
+                value: *merged,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        EventEventBody::EventsDistinguished { other, .. } => {
+            state.distinguished.push(Attributed {
+                assertion_id,
+                value: *other,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
         EventEventBody::AssertionRetracted { target, .. } | EventEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
@@ -259,6 +343,7 @@ mod tests {
     use crate::event::ref_resolver::EventRefs;
     use crate::event::state::EventState;
     use crate::ids::{AgentId, AssertionId, EventId, HumanId, PlaceId};
+    use crate::matching::{CultureId, EngineVersion, MatchBand, MatchEvidence};
     use crate::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
     use time::macros::datetime;
     use uuid::Uuid;
@@ -621,5 +706,115 @@ mod tests {
         apply_all(&mut state, &retract);
         assert!(state.restrictions.is_empty(), "retracting the change clears the set");
         assert_eq!(state.restrictions_assertion, None);
+    }
+
+    fn evidence() -> MatchEvidence {
+        MatchEvidence {
+            score_bp: 9100,
+            band: MatchBand::Probable,
+            engine: EngineVersion(4),
+            cultures: vec![CultureId::new("universal")],
+            features: Vec::new(),
+        }
+    }
+
+    fn merge(surviving: u128, merged: u128) -> EventCommand {
+        EventCommand::MergeEvents {
+            surviving: event(surviving),
+            merged: event(merged),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn distinguish(first: u128, other: u128) -> EventCommand {
+        EventCommand::DistinguishEvents {
+            event: event(first),
+            other: event(other),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn retract(event_id: u128, assertion: u128) -> EventCommand {
+        EventCommand::RetractAssertion {
+            event_id: event(event_id),
+            target: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+        }
+    }
+
+    #[test]
+    fn merging_two_events_emits_events_merged_with_its_assessment() {
+        let events = decide(&created_event(100), merge(100, 200), &meta(2), &PLACE_PRESENT).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].body,
+            EventEventBody::EventsMerged {
+                surviving: event(100),
+                merged: event(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn an_event_cannot_be_merged_with_itself() {
+        let err = decide(&created_event(100), merge(100, 100), &meta(2), &PLACE_PRESENT).unwrap_err();
+        assert!(matches!(err, EventError::MergeConflict { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn merging_into_an_absent_event_is_not_found() {
+        let err = decide(&EventState::default(), merge(100, 200), &meta(2), &PLACE_PRESENT).unwrap_err();
+        assert_eq!(err, EventError::NotFound(event(100)));
+    }
+
+    #[test]
+    fn distinguishing_two_events_emits_events_distinguished_with_its_assessment() {
+        let events = decide(&created_event(100), distinguish(100, 200), &meta(2), &PLACE_PRESENT).unwrap();
+        assert_eq!(
+            events[0].body,
+            EventEventBody::EventsDistinguished {
+                event: event(100),
+                other: event(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn an_event_cannot_be_distinguished_from_itself() {
+        let err = decide(&created_event(100), distinguish(100, 100), &meta(2), &PLACE_PRESENT).unwrap_err();
+        assert_eq!(err, EventError::DistinctFromItself(event(100)));
+    }
+
+    #[test]
+    fn identity_decisions_fold_into_state_and_undo_removes_them() {
+        for (decision, assertion) in [(merge(100, 200), 2), (distinguish(100, 200), 2)] {
+            let mut state = created_event(100);
+            let events = decide(&state, decision.clone(), &meta(assertion), &PLACE_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            assert!(state.has_decided(event(200)), "{decision:?}");
+
+            let events = decide(&state, retract(100, assertion), &meta(3), &PLACE_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            assert!(!state.has_decided(event(200)), "undo lifts {decision:?}");
+            assert!(state.merged.is_empty() && state.distinguished.is_empty());
+        }
+    }
+
+    #[test]
+    fn an_event_pair_decided_either_way_cannot_be_decided_again() {
+        let decided = EventError::IdentityDecided {
+            event: event(100),
+            other: event(200),
+        };
+        for first in [merge(100, 200), distinguish(100, 200)] {
+            let mut state = created_event(100);
+            let events = decide(&state, first.clone(), &meta(2), &PLACE_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            for second in [merge(100, 200), distinguish(100, 200)] {
+                let err = decide(&state, second.clone(), &meta(3), &PLACE_PRESENT).unwrap_err();
+                assert_eq!(err, decided, "{first:?} then {second:?}");
+            }
+        }
     }
 }

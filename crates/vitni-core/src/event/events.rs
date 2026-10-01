@@ -12,6 +12,7 @@ use crate::assertions::{Envelope, EventBody};
 use crate::date::GenealogicalDate;
 use crate::enums::{EventType, Restriction};
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PlaceId, TagId};
+use crate::matching::MatchEvidence;
 use crate::text::MediaRef;
 
 /// A single Event assertion plus its provenance envelope (ADR 0004 §1).
@@ -130,6 +131,28 @@ pub enum EventEventBody {
         /// The identifier in effect before this change (for the audit trail).
         old_human_id: HumanId,
     },
+    /// Another event was concluded to be this one (ADR 0039 §1): a same-as link on the survivor that
+    /// leaves the merged event's own stream untouched (data-model §9).
+    EventsMerged {
+        /// The event that survives as the cluster's record.
+        surviving: EventId,
+        /// The event merged into it.
+        merged: EventId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a merge made
+        /// without the engine.
+        assessment: Option<MatchEvidence>,
+    },
+    /// Another event was concluded to be a different event from this one (ADR 0039 §1), so the pair
+    /// is never proposed as a duplicate again.
+    EventsDistinguished {
+        /// The event the decision is recorded on.
+        event: EventId,
+        /// The event it is distinct from.
+        other: EventId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a decision
+        /// made without the engine.
+        assessment: Option<MatchEvidence>,
+    },
 }
 
 impl EventBody for EventEventBody {
@@ -150,6 +173,8 @@ impl EventBody for EventEventBody {
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
             Self::HumanIdChanged { .. } => "HumanIdChanged",
+            Self::EventsMerged { .. } => "EventsMerged",
+            Self::EventsDistinguished { .. } => "EventsDistinguished",
         }
     }
 

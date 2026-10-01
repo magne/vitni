@@ -5,12 +5,15 @@
 //! with no I/O. [`evolve`] applies an event to the state. Together they are the framework-agnostic
 //! kernel the `cqrs-es` adapter wraps (ADR 0002).
 
+use std::collections::BTreeSet;
+
 use crate::assertions::{Asserted, Attributed};
 use crate::family::command::FamilyCommand;
 use crate::family::error::FamilyError;
 use crate::family::event::{FamilyEvent, FamilyEventBody};
 use crate::family::state::{ChildRelationship, FamilyState};
-use crate::ids::FamilyId;
+use crate::ids::{AssertionId, FamilyId};
+use crate::matching::MatchEvidence;
 use crate::provenance::AssertionMeta;
 use crate::text::distinct_external_ids;
 
@@ -73,6 +76,16 @@ pub fn decide(
             events.extend(decide(&post_supersession, *replacement, meta)?);
             Ok(events)
         }
+        FamilyCommand::MergeFamilies {
+            surviving,
+            merged,
+            assessment,
+        } => decide_merge(state, [surviving, merged], assessment, meta),
+        FamilyCommand::DistinguishFamilies {
+            family,
+            other,
+            assessment,
+        } => decide_distinguish(state, [family, other], assessment, meta),
         assertion => decide_assertion(state, assertion, meta),
     }
 }
@@ -173,7 +186,9 @@ fn decide_assertion(
         // The lifecycle/correction commands are handled by `decide`; they never reach here.
         FamilyCommand::CreateFamily { .. }
         | FamilyCommand::RetractAssertion { .. }
-        | FamilyCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
+        | FamilyCommand::SupersedeAssertion { .. }
+        | FamilyCommand::MergeFamilies { .. }
+        | FamilyCommand::DistinguishFamilies { .. } => unreachable!("handled by decide"),
     };
     Ok(one(meta, body))
 }
@@ -210,6 +225,63 @@ fn one(meta: &AssertionMeta, body: FamilyEventBody) -> Vec<FamilyEvent> {
     vec![FamilyEvent::new(meta, body)]
 }
 
+/// Decides a merge of `merged` into `surviving` (ADR 0039 §1): the survivor must exist, the pair must
+/// be two records, and the survivor must not already hold a live decision about the other.
+fn decide_merge(
+    state: &FamilyState,
+    [surviving, merged]: [FamilyId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<FamilyEvent>, FamilyError> {
+    ensure_exists(state, surviving)?;
+    if surviving == merged {
+        return Err(FamilyError::MergeConflict {
+            surviving,
+            merged,
+            reason: "a family cannot be merged with itself".to_owned(),
+        });
+    }
+    ensure_undecided(state, surviving, merged)?;
+    Ok(one(
+        meta,
+        FamilyEventBody::FamiliesMerged {
+            surviving,
+            merged,
+            assessment,
+        },
+    ))
+}
+
+/// Decides that `other` is a different family from `family` (ADR 0039 §1), under the same rules as a merge.
+fn decide_distinguish(
+    state: &FamilyState,
+    [family, other]: [FamilyId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<FamilyEvent>, FamilyError> {
+    ensure_exists(state, family)?;
+    if family == other {
+        return Err(FamilyError::DistinctFromItself(family));
+    }
+    ensure_undecided(state, family, other)?;
+    Ok(one(
+        meta,
+        FamilyEventBody::FamiliesDistinguished {
+            family,
+            other,
+            assessment,
+        },
+    ))
+}
+
+/// Refuses a second identity decision about a pair this family already decided (ADR 0039 §1).
+fn ensure_undecided(state: &FamilyState, family: FamilyId, other: FamilyId) -> Result<(), FamilyError> {
+    if state.has_decided(other) {
+        return Err(FamilyError::IdentityDecided { family, other });
+    }
+    Ok(())
+}
+
 /// Rejects a command that targets a family which has not been created yet.
 fn ensure_exists(state: &FamilyState, family_id: FamilyId) -> Result<(), FamilyError> {
     if state.exists {
@@ -241,6 +313,20 @@ fn fold_child_relationship(state: &mut FamilyState, assertion_id: crate::ids::As
     );
     state.child_relationships.push(Attributed { assertion_id, value });
     state.live_assertions.insert(assertion_id);
+}
+
+/// Folds an identity decision about `other` into its decision set (merged or distinguished).
+fn fold_decision(
+    decisions: &mut Vec<Attributed<FamilyId>>,
+    live: &mut BTreeSet<AssertionId>,
+    assertion_id: AssertionId,
+    other: FamilyId,
+) {
+    decisions.push(Attributed {
+        assertion_id,
+        value: other,
+    });
+    live.insert(assertion_id);
 }
 
 /// Applies an event to the state (the fold). No business logic lives here (ADR 0004 §3).
@@ -330,6 +416,17 @@ pub fn evolve(state: &mut FamilyState, event: &FamilyEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
+        FamilyEventBody::FamiliesMerged { merged, .. } => {
+            fold_decision(&mut state.merged, &mut state.live_assertions, assertion_id, *merged);
+        }
+        FamilyEventBody::FamiliesDistinguished { other, .. } => {
+            let FamilyState {
+                distinguished,
+                live_assertions,
+                ..
+            } = state;
+            fold_decision(distinguished, live_assertions, assertion_id, *other);
+        }
         FamilyEventBody::AssertionRetracted { target, .. } | FamilyEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
@@ -345,6 +442,7 @@ mod tests {
     use crate::family::event::{FamilyEvent, FamilyEventBody};
     use crate::family::state::FamilyState;
     use crate::ids::{AgentId, AssertionId, FamilyId, HumanId, PersonId};
+    use crate::matching::{CultureId, EngineVersion, MatchBand, MatchEvidence};
     use crate::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
     use crate::text::ExternalId;
     use time::macros::datetime;
@@ -1133,5 +1231,112 @@ mod tests {
         // meta is copied verbatim onto the emitted event (ADR 0004 §3).
         assert_eq!(events[0].assertion_id, m.assertion_id);
         assert_eq!(events[0].context, m.context);
+    }
+
+    fn evidence() -> MatchEvidence {
+        MatchEvidence {
+            score_bp: 9100,
+            band: MatchBand::Probable,
+            engine: EngineVersion(4),
+            cultures: vec![CultureId::new("universal")],
+            features: Vec::new(),
+        }
+    }
+
+    fn merge(surviving: u128, merged: u128) -> FamilyCommand {
+        FamilyCommand::MergeFamilies {
+            surviving: fid(surviving),
+            merged: fid(merged),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn distinguish(family: u128, other: u128) -> FamilyCommand {
+        FamilyCommand::DistinguishFamilies {
+            family: fid(family),
+            other: fid(other),
+            assessment: Some(evidence()),
+        }
+    }
+
+    #[test]
+    fn merging_two_families_emits_families_merged_with_its_assessment() {
+        let events = decide(&created_family(100), merge(100, 200), &meta(2)).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].body,
+            FamilyEventBody::FamiliesMerged {
+                surviving: fid(100),
+                merged: fid(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_family_cannot_be_merged_with_itself() {
+        let err = decide(&created_family(100), merge(100, 100), &meta(2)).unwrap_err();
+        assert!(matches!(err, FamilyError::MergeConflict { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn merging_into_an_absent_family_is_not_found() {
+        let err = decide(&FamilyState::default(), merge(100, 200), &meta(2)).unwrap_err();
+        assert_eq!(err, FamilyError::NotFound(fid(100)));
+    }
+
+    #[test]
+    fn distinguishing_two_families_emits_families_distinguished_with_its_assessment() {
+        let events = decide(&created_family(100), distinguish(100, 200), &meta(2)).unwrap();
+        assert_eq!(
+            events[0].body,
+            FamilyEventBody::FamiliesDistinguished {
+                family: fid(100),
+                other: fid(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_family_cannot_be_distinguished_from_itself() {
+        let err = decide(&created_family(100), distinguish(100, 100), &meta(2)).unwrap_err();
+        assert_eq!(err, FamilyError::DistinctFromItself(fid(100)));
+    }
+
+    #[test]
+    fn family_identity_decisions_fold_into_state_and_undo_removes_them() {
+        for decision in [merge(100, 200), distinguish(100, 200)] {
+            let mut state = created_family(100);
+            let events = decide(&state, decision.clone(), &meta(2)).unwrap();
+            apply_all(&mut state, &events);
+            assert!(state.has_decided(fid(200)), "{decision:?}");
+
+            let retract = FamilyCommand::RetractAssertion {
+                family_id: fid(100),
+                target: AssertionId::from_uuid(Uuid::from_u128(2)),
+            };
+            let events = decide(&state, retract, &meta(3)).unwrap();
+            apply_all(&mut state, &events);
+            assert!(!state.has_decided(fid(200)), "undo lifts {decision:?}");
+            assert!(state.merged.is_empty() && state.distinguished.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_family_pair_decided_either_way_cannot_be_decided_again() {
+        let decided = FamilyError::IdentityDecided {
+            family: fid(100),
+            other: fid(200),
+        };
+        for first in [merge(100, 200), distinguish(100, 200)] {
+            let mut state = created_family(100);
+            let events = decide(&state, first.clone(), &meta(2)).unwrap();
+            apply_all(&mut state, &events);
+            for second in [merge(100, 200), distinguish(100, 200)] {
+                let err = decide(&state, second.clone(), &meta(3)).unwrap_err();
+                assert_eq!(err, decided, "{first:?} then {second:?}");
+            }
+        }
     }
 }

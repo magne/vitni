@@ -37,56 +37,49 @@ pub struct ResearchNoteSubjectRef {
     pub id: String,
 }
 
-/// The four subject kinds, as the `Aggregate::TYPE` strings the store keys on.
-const SUBJECT_KINDS: [&str; 4] = ["person", "family", "event", "place"];
-
-/// Per-kind aggregate-id → `human_id` maps, loaded once per query so every subject of every returned
-/// research note resolves without a lookup per subject. A person subject resolves through its cluster
-/// (ADR 0039 §5), so a note about a merged record names the root.
+/// The aggregate-id → `human_id` lookups for the four subject kinds, loaded once per query so every
+/// subject of every returned research note resolves without a lookup per subject. A person, family or
+/// event subject resolves through its cluster (ADR 0039 §5), so a note about a merged record names the
+/// root.
 struct SubjectIndex {
-    by_kind: HashMap<&'static str, HashMap<String, String>>,
+    places: HashMap<String, String>,
     persons: crate::identity::PersonReferences,
+    families: crate::identity::FamilyReferences,
+    events: crate::identity::EventReferences,
 }
 
 /// Loads the [`SubjectIndex`] for the four conclusion-bearing aggregates.
 async fn subject_index(store: &Store) -> Result<SubjectIndex, AppError> {
-    let mut by_kind = HashMap::new();
-    for kind in SUBJECT_KINDS {
-        let pairs = store.human_id_index(kind).await?;
-        by_kind.insert(kind, pairs.into_iter().collect());
-    }
     Ok(SubjectIndex {
-        by_kind,
+        places: store.human_id_index("place").await?.into_iter().collect(),
         persons: crate::identity::PersonReferences::load(store).await?,
+        families: crate::identity::FamilyReferences::load(store).await?,
+        events: crate::identity::EventReferences::load(store).await?,
     })
 }
 
 /// Resolves one stored [`SubjectRef`] against `index` into the display/navigation DTO.
 fn resolve_subject_ref(subject: SubjectRef, index: &SubjectIndex) -> ResearchNoteSubjectRef {
-    let (kind, id) = match subject {
-        SubjectRef::Person(id) => {
-            let (root, human_id) = index.persons.resolve(id);
-            return ResearchNoteSubjectRef {
-                kind: "person".to_owned(),
-                human_id,
-                id: root.to_string(),
-            };
+    let (kind, (id, human_id)) = match subject {
+        SubjectRef::Person(id) => ("person", stringify(index.persons.resolve(id))),
+        SubjectRef::Family(id) => ("family", stringify(index.families.resolve(id))),
+        SubjectRef::Event(id) => ("event", stringify(index.events.resolve(id))),
+        SubjectRef::Place(id) => {
+            let id = id.to_string();
+            let human_id = index.places.get(&id).cloned().unwrap_or_default();
+            ("place", (id, human_id))
         }
-        SubjectRef::Family(id) => ("family", id.to_string()),
-        SubjectRef::Event(id) => ("event", id.to_string()),
-        SubjectRef::Place(id) => ("place", id.to_string()),
     };
-    let human_id = index
-        .by_kind
-        .get(kind)
-        .and_then(|by_id| by_id.get(&id))
-        .cloned()
-        .unwrap_or_default();
     ResearchNoteSubjectRef {
         kind: kind.to_owned(),
         human_id,
         id,
     }
+}
+
+/// A resolved reference as its aggregate id string and `human_id`.
+fn stringify<I: std::fmt::Display>((id, human_id): (I, String)) -> (String, String) {
+    (id.to_string(), human_id)
 }
 
 /// A frontend-neutral summary of a research note (the DTO the CLI renders), carrying its stable id,
@@ -455,8 +448,8 @@ pub async fn list_research_notes_for_subject(
 
 /// Lists every research note arguing about the record `subject` names by its `human_id` — the
 /// reverse-lookup tab on the four conclusion-bearing detail screens. Resolves the `human_id` to its
-/// aggregate id and then queries [`list_research_notes_for_subject`] — for a person, once per record of
-/// its cluster (ADR 0039 §5).
+/// aggregate id and then queries [`list_research_notes_for_subject`] — for a person, family or event,
+/// once per record of its cluster (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -467,13 +460,27 @@ pub async fn list_research_notes_about(
 ) -> Result<Vec<ResearchNoteSummary>, AppError> {
     let store = workspace.store();
     let subject = resolve_subject(store, subject).await?;
-    let SubjectRef::Person(person) = subject else {
-        return list_research_notes_for_subject(workspace, subject).await;
+    let records: Vec<SubjectRef> = match subject {
+        SubjectRef::Person(id) => cluster_of(store, id)
+            .await?
+            .into_iter()
+            .map(SubjectRef::Person)
+            .collect(),
+        SubjectRef::Family(id) => cluster_of(store, id)
+            .await?
+            .into_iter()
+            .map(SubjectRef::Family)
+            .collect(),
+        SubjectRef::Event(id) => cluster_of(store, id)
+            .await?
+            .into_iter()
+            .map(SubjectRef::Event)
+            .collect(),
+        SubjectRef::Place(_) => vec![subject],
     };
-    let clusters = crate::identity::PersonClusters::load(store).await?;
     let mut notes: Vec<ResearchNoteSummary> = Vec::new();
-    for id in clusters.cluster(clusters.root(person)) {
-        for note in list_research_notes_for_subject(workspace, SubjectRef::Person(id)).await? {
+    for record in records {
+        for note in list_research_notes_for_subject(workspace, record).await? {
             if notes.iter().all(|listed| listed.human_id != note.human_id) {
                 notes.push(note);
             }
@@ -481,6 +488,12 @@ pub async fn list_research_notes_about(
     }
     notes.sort_by(|a, b| a.human_id.cmp(&b.human_id));
     Ok(notes)
+}
+
+/// Every record of `id`'s cluster, its root first.
+async fn cluster_of<I: crate::identity::ClusterId>(store: &Store, id: I) -> Result<Vec<I>, AppError> {
+    let clusters = crate::identity::Clusters::<I>::load(store).await?;
+    Ok(clusters.cluster(clusters.root(id)))
 }
 
 /// Executes one command through the store, stamping it with `provenance` and `citations`

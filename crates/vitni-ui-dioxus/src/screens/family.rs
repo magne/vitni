@@ -832,7 +832,7 @@ pub fn family_overview(
             div { class: "stack",
                 for partner in detail.partners.iter() {
                     div { class: "fact-row",
-                        span { class: "grow", "{partner.name}" }
+                        span { class: "grow", "{partner.name}" {merged_from_chip(loc, partner.merged_from.as_deref())} }
                         if let Some(vitals) = partner.vitals.clone() {
                             span { class: "muted", "{vitals}" }
                         }
@@ -1017,19 +1017,23 @@ pub fn family_children_table(
     if detail.children.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
+    // A merged family lists each copy's partners (ADR 0039 §5): one relationship column per person.
     let mut headers = vec![loc.field_label("child"), loc.field_label("born")];
+    let mut partner_ids: Vec<String> = Vec::new();
     for partner in &detail.partners {
-        headers.push(partner.name.clone());
+        if !partner_ids.contains(&partner.human_id) {
+            partner_ids.push(partner.human_id.clone());
+            headers.push(partner.name.clone());
+        }
     }
     headers.push(loc.field_label("confidence"));
     headers.push(loc.field_label("source"));
     headers.push(String::new());
-    let partner_ids: Vec<String> = detail.partners.iter().map(|partner| partner.human_id.clone()).collect();
     rsx! {
         Table { caption: loc.tab_label("children"), headers,
             for child in detail.children.iter() {
                 tr {
-                    td { "{child.name}" }
+                    td { "{child.name}" {merged_from_chip(loc, child.merged_from.as_deref())} }
                     td { class: "muted", {or_dash(child.born.clone())} }
                     for partner_id in partner_ids.iter() {
                         td {
@@ -1072,7 +1076,7 @@ pub fn family_events_table(
             ],
             for event in events.iter() {
                 tr {
-                    td { "{event.type_label}" }
+                    td { "{event.type_label}" {merged_from_chip(loc, event.merged_from.as_deref())} }
                     td { class: "muted", {or_dash(event.date.clone())} }
                     td { {or_dash(event.place.clone())} }
                     td { ConfidenceBadge { level: event.confidence, label: event.confidence_label.clone() } }

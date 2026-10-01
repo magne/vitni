@@ -957,7 +957,7 @@ fn event_participant_row(
     ));
     rsx! {
         tr {
-            td { "{participant.name}" }
+            td { "{participant.name}" {merged_from_chip(loc, participant.merged_from.as_deref())} }
             td { Chip { label: participant.role_label.clone() } }
             td { class: "muted", {or_dash(participant.age_label.clone())} }
             td { ConfidenceBadge { level: participant.confidence, label: participant.confidence_label.clone() } }

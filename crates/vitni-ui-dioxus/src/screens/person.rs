@@ -1055,17 +1055,6 @@ fn fact_value_date(fact: &FactVm) -> String {
     }
 }
 
-/// The attribution chip on a row a merged record supplied to its cluster (ADR 0039 §5), naming the
-/// record it came from; nothing on the person's own rows.
-fn merged_from_chip(loc: &Localizer, merged_from: Option<&str>) -> Element {
-    let Some(record) = merged_from else {
-        return rsx! {};
-    };
-    rsx! {
-        span { class: "badge", "{loc.merged_from(record)}" }
-    }
-}
-
 /// The Names tab: every asserted name variant with its type chip, date / language, and its
 /// evidence cues (surety badge + source-count / no-source flag — colour is never the only signal).
 pub fn names_table(

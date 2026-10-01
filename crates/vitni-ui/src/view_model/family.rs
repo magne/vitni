@@ -69,6 +69,9 @@ pub struct PartnerVm {
     /// The `AssertionId` (a UUID string) that introduced this partner — the Remove retract target
     /// (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from E0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// One child-to-partner relationship on a child row (GEDCOM `_FREL`/`_MREL`, ADR 0021): its own
@@ -110,6 +113,9 @@ pub struct FamilyChildVm {
     /// (the row's *correct a mistake* action), cascading its relationships (ADR 0004 §2, ADR 0021).
     /// The row's Remove action ends the membership by `human_id` instead. Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from E0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// A family event row (Overview "Marriage" card + Events tab): kind, date, place, surety + source.
@@ -134,6 +140,9 @@ pub struct FamilyEventVm {
     /// The `AssertionId` (a UUID string) that introduced this family-event link — the Unlink retract
     /// target (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from E0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// A family's detail view — partners, the marriage/events, children with per-partner relationships,
@@ -192,20 +201,25 @@ impl FamilyDetail {
                     .map(|c| citation_ref_from_ref(c, loc))
                     .collect(),
                 assertion_id: partner.assertion_id.clone(),
+                merged_from: summary.claim_owners.get(&partner.assertion_id).cloned(),
             })
             .collect();
         let children = summary
             .children
             .iter()
-            .map(|child| family_child_vm(child, loc))
+            .map(|child| family_child_vm(child, summary, loc))
             .collect();
-        let events: Vec<FamilyEventVm> = summary.events.iter().map(|event| family_event_vm(event, loc)).collect();
+        let events: Vec<FamilyEventVm> = summary
+            .events
+            .iter()
+            .map(|event| family_event_vm(event, summary, loc))
+            .collect();
         let marriage = summary
             .events
             .iter()
             .find(|event| event.event_type == Some(EventType::Marriage))
             .or_else(|| summary.events.first())
-            .map(|event| family_event_vm(event, loc));
+            .map(|event| family_event_vm(event, summary, loc));
         let media = summary.media.iter().map(MediaRefVm::from_ref).collect();
         Self {
             human_id: summary.human_id.clone(),
@@ -230,13 +244,16 @@ impl FamilyDetail {
     }
 }
 
-/// The partners' names joined for the header (e.g. `Mary Doe & John Smith`), or a fallback.
+/// The partners' names joined for the header (e.g. `Mary Doe & John Smith`), or a fallback. A merged
+/// family lists each copy's partners (ADR 0039 §5), so each partner is named once.
 fn family_title(summary: &FamilySummary) -> String {
-    let names: Vec<String> = summary
-        .partners
-        .iter()
-        .map(|partner| partner.name.clone().unwrap_or_else(|| partner.human_id.clone()))
-        .collect();
+    let mut names: Vec<String> = Vec::new();
+    for partner in &summary.partners {
+        let name = partner.name.clone().unwrap_or_else(|| partner.human_id.clone());
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
     if names.is_empty() {
         summary.human_id.clone()
     } else {
@@ -245,7 +262,7 @@ fn family_title(summary: &FamilySummary) -> String {
 }
 
 /// Builds a [`FamilyChildVm`] from an app `ChildRef`, localizing each per-partner link + confidence.
-fn family_child_vm(child: &vitni_app::ChildRef, loc: &Localizer) -> FamilyChildVm {
+fn family_child_vm(child: &vitni_app::ChildRef, summary: &FamilySummary, loc: &Localizer) -> FamilyChildVm {
     let confidence = child.confidence.map(ConfidenceLevel::from);
     FamilyChildVm {
         human_id: child.human_id.clone(),
@@ -266,11 +283,12 @@ fn family_child_vm(child: &vitni_app::ChildRef, loc: &Localizer) -> FamilyChildV
         confidence_label: loc.confidence_label_opt(confidence),
         source_count: child.source_count,
         assertion_id: child.assertion_id.clone(),
+        merged_from: summary.claim_owners.get(&child.assertion_id).cloned(),
     }
 }
 
 /// Builds a [`FamilyEventVm`] from an app `FamilyEventRef`, localizing the type, date, and confidence.
-fn family_event_vm(event: &vitni_app::FamilyEventRef, loc: &Localizer) -> FamilyEventVm {
+fn family_event_vm(event: &vitni_app::FamilyEventRef, summary: &FamilySummary, loc: &Localizer) -> FamilyEventVm {
     let confidence = event.confidence.map(ConfidenceLevel::from);
     let type_label = event
         .event_type
@@ -286,6 +304,7 @@ fn family_event_vm(event: &vitni_app::FamilyEventRef, loc: &Localizer) -> Family
         source_count: event.source_count,
         citations: event.citations.iter().map(|c| citation_ref_from_ref(c, loc)).collect(),
         assertion_id: event.assertion_id.clone(),
+        merged_from: summary.claim_owners.get(&event.assertion_id).cloned(),
     }
 }
 

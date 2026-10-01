@@ -41,3 +41,6 @@ err-event-not-found = ingen hendelse med human_id "{ $id }"
 err-event-not-exist = hendelse { $id } finnes ikke
 err-event-exists = hendelse { $id } finnes allerede
 err-unknown-place = hendelse viser til ukjent sted { $id }
+err-event-merge-conflict = hendelsene { $surviving } og { $merged } kan ikke slås sammen: { $reason }
+err-event-distinct-from-itself = hendelse { $id } kan ikke skilles fra seg selv
+err-event-identity-decided = hendelsene { $event } og { $other } har allerede en gjeldende identitetsavgjørelse; angre den først

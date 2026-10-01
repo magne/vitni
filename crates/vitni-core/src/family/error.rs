@@ -40,4 +40,26 @@ pub enum FamilyError {
     /// The superseded assertion is unknown or already retracted.
     #[error("assertion {0} is not present or already retracted")]
     SupersedesMissingAssertion(AssertionId),
+    /// The two families cannot be merged.
+    #[error("families {surviving} and {merged} cannot be merged: {reason}")]
+    MergeConflict {
+        /// The intended surviving family.
+        surviving: FamilyId,
+        /// The family that would have been merged in.
+        merged: FamilyId,
+        /// Why the merge was refused.
+        reason: String,
+    },
+    /// A family was distinguished from itself.
+    #[error("family {0} cannot be distinguished from itself")]
+    DistinctFromItself(FamilyId),
+    /// The pair already holds a live identity decision — merged or distinguished — on this family
+    /// (ADR 0039 §1); undo it before deciding again.
+    #[error("families {family} and {other} already have a live identity decision")]
+    IdentityDecided {
+        /// The family the decision was asked on.
+        family: FamilyId,
+        /// The other family of the pair.
+        other: FamilyId,
+    },
 }

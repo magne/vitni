@@ -667,6 +667,15 @@ record's rows, each attributed (`claim_owners`, a *from I0007* chip), and a corr
 is written to that member. Families, event participants, associations, pedigrees, backlinks and
 research-note subjects name the root, and a GEDCOM or Gramps export writes one person per cluster.
 Undoing the merge restores both.
+✅ Event and family merge (ADR 0039 §1, #405): `EventsMerged`/`EventsDistinguished` and
+`FamiliesMerged`/`FamiliesDistinguished` carry the decision's assessment like the person pair, and
+`identity_links` indexes them per kind. `merge_events`, `merge_families` and their distinguish,
+undo-and-merge and pair-decision twins share the person code's decision path, and the duplicate check
+leaves decided pairs out. Two copies of one marriage read as one event with every copy's participants;
+a merged family reads every copy's partners, children and events, each row attributed (a *from E0002*
+chip) and corrected on the copy that owns it. Lists, counts and pickers hide members; a participation's
+event, a family's linked events, the families a person belongs to, backlinks, research-note subjects
+and the pedigree name the root, and a GEDCOM export writes one family and one marriage.
 
 ## Risk register
 

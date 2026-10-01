@@ -8,7 +8,7 @@
 //! [`EventError::UnknownPlace`](vitni_core::event::EventError) — the §9 aggregate-tax check
 //! (ADR 0004 §3).
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use vitni_core::address::Address;
 use vitni_core::age::Age;
@@ -27,8 +27,9 @@ use vitni_core::text::{Attribute, MediaRef};
 use vitni_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, tag_refs};
+use crate::dto::{AggRef, AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, tag_refs};
 use crate::error::AppError;
+use crate::identity::{self, EventClusters, IdentityDecision, PairDecision};
 use crate::person::list_persons;
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
@@ -128,6 +129,25 @@ pub struct EventSummary {
     pub tags: Vec<TagRef>,
     /// The event's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+    /// Every event merged into this event's cluster, directly or through another member (ADR 0039
+    /// §4), in id order.
+    pub merged: Vec<AggRef>,
+    /// The `human_id` of the member each member row came from, by the row's `AssertionId`. An
+    /// event-owned row's edit or retraction is written to that member's stream (ADR 0039 §5); a
+    /// participant's stays with its person (ADR 0019). A row absent here is the event's own. Never
+    /// rendered as a key; see [`owner_of`](Self::owner_of).
+    pub claim_owners: BTreeMap<String, String>,
+}
+
+impl EventSummary {
+    /// The `human_id` of the record that owns the row introduced by `assertion_id`: the member it came
+    /// from, or this event for its own rows.
+    #[must_use]
+    pub fn owner_of(&self, assertion_id: &str) -> &str {
+        self.claim_owners
+            .get(assertion_id)
+            .map_or(self.human_id.as_str(), String::as_str)
+    }
 }
 
 /// What to create an event with (the auto/override `human_id` and its type).
@@ -211,7 +231,9 @@ pub async fn create_event(
     Ok(human_id)
 }
 
-/// Sets an event's privacy restrictions (GEDCOM `RESN` — data-model §6).
+/// Sets an event's privacy restrictions (GEDCOM `RESN` — data-model §6). A merged member restricted
+/// beyond the new set is narrowed to it first, so the cluster reads with exactly `restrictions`
+/// (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -225,6 +247,27 @@ pub async fn set_restrictions(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    for record in identity::cluster_records(store, event_id).await? {
+        let Some(id) = record.event_id() else { continue };
+        if id == event_id || record.restrictions().is_subset(&restrictions) {
+            continue;
+        }
+        let narrowed = record.restrictions().intersection(&restrictions).copied().collect();
+        let command = EventCommand::SetRestrictions {
+            event_id: id,
+            restrictions: narrowed,
+        };
+        execute(
+            store,
+            session,
+            &id.to_string(),
+            command,
+            meta.provenance.clone(),
+            citations.clone(),
+        )
+        .await?;
+    }
     execute_event_mutation(
         store,
         session,
@@ -580,7 +623,8 @@ pub async fn import_attach_event_note(
     attach_event_note(workspace, session, event_human_id, note_id, meta).await
 }
 
-/// Applies (or removes) a tag on an event, identified by `human_id`.
+/// Applies (or removes) a tag on an event, identified by `human_id`. A removed tag is untagged on
+/// every record of the event's cluster that holds it (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -596,11 +640,27 @@ pub async fn tag_event(
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
     let tag_id = parse_tag_id(tag_id)?;
-    let command = if remove {
-        EventCommand::Untag { event_id, tag_id }
-    } else {
-        EventCommand::Tag { event_id, tag_id }
-    };
+    if !remove {
+        let command = EventCommand::Tag { event_id, tag_id };
+        return execute_event_mutation(store, session, event_id, command, meta).await;
+    }
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    for record in identity::cluster_records(store, event_id).await? {
+        let Some(id) = record.event_id() else { continue };
+        if id != event_id && record.tags().contains(&tag_id) {
+            let command = EventCommand::Untag { event_id: id, tag_id };
+            execute(
+                store,
+                session,
+                &id.to_string(),
+                command,
+                meta.provenance.clone(),
+                citations.clone(),
+            )
+            .await?;
+        }
+    }
+    let command = EventCommand::Untag { event_id, tag_id };
     execute_event_mutation(store, session, event_id, command, meta).await
 }
 
@@ -611,6 +671,121 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
+/// The outcome of [`merge_events`]: the survivor's refreshed summary and the merged event's
+/// `human_id`.
+///
+/// The merge is a same-as link on the survivor (ADR 0039 §1): no record that names the merged event
+/// is rewritten. Every reader resolves those references to the cluster's root instead (ADR 0039 §5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventMergeResult {
+    /// The survivor's summary after the merge, composed with every record now in its cluster.
+    pub survivor: EventSummary,
+    /// The merged event's `human_id` (its own record/stream is untouched).
+    pub merged_human_id: String,
+}
+
+/// Merges `merged_human_id`'s cluster into `surviving_human_id`'s, recording a same-as link
+/// (ADR 0039 §1). Both records resolve to their cluster roots first (§4), and one `EventsMerged`
+/// event is emitted on the surviving root's stream, carrying the decision's provenance and assessment.
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if either `human_id` does not resolve; [`AppError::EventDomain`] with
+/// `MergeConflict` if they resolve to the same event, or `IdentityDecided` if the two are already one
+/// cluster or a record of one cluster is distinguished from a record of the other; or a store error.
+pub async fn merge_events(
+    workspace: &Workspace,
+    session: &Session,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<EventMergeResult, AppError> {
+    let pair = identity::merge::<EventView>(workspace, session, surviving_human_id, merged_human_id, decision).await?;
+    event_merge_result(workspace, &pair.first_human_id, merged_human_id).await
+}
+
+/// Undoes every live distinction between the two event clusters, then merges them (ADR 0039 §4).
+///
+/// # Errors
+///
+/// As [`merge_events`], except that a distinction between the clusters no longer refuses the merge.
+pub async fn undo_event_distinction_and_merge(
+    workspace: &Workspace,
+    session: &Session,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<EventMergeResult, AppError> {
+    let pair = identity::undo_distinction_and_merge::<EventView>(
+        workspace,
+        session,
+        surviving_human_id,
+        merged_human_id,
+        decision,
+    )
+    .await?;
+    event_merge_result(workspace, &pair.first_human_id, merged_human_id).await
+}
+
+/// The survivor's composed summary after a merge.
+async fn event_merge_result(
+    workspace: &Workspace,
+    survivor_human_id: &str,
+    merged_human_id: &str,
+) -> Result<EventMergeResult, AppError> {
+    let survivor = show_event(workspace, survivor_human_id)
+        .await?
+        .ok_or_else(|| AppError::EventNotFound(survivor_human_id.to_owned()))?;
+    Ok(EventMergeResult {
+        survivor,
+        merged_human_id: merged_human_id.to_owned(),
+    })
+}
+
+/// Records that the two events are different (ADR 0039 §1), so neither cluster is proposed as a
+/// duplicate of the other again. One `EventsDistinguished` event is emitted on the first root's
+/// stream; undoing it lifts the decision.
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if either `human_id` does not resolve; [`AppError::EventDomain`] with
+/// `DistinctFromItself` if they resolve to the same event, or `IdentityDecided` if the two are already
+/// one cluster or already distinguished; or a store error.
+pub async fn distinguish_events(
+    workspace: &Workspace,
+    session: &Session,
+    event_human_id: &str,
+    other_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<(), AppError> {
+    identity::distinguish::<EventView>(workspace, session, event_human_id, other_human_id, decision).await
+}
+
+/// The live identity decision between the clusters of two events, or `None` when the pair is
+/// undecided (ADR 0039 §4).
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if either `human_id` does not resolve, or a store error.
+pub async fn event_pair_decision(
+    workspace: &Workspace,
+    first_human_id: &str,
+    other_human_id: &str,
+) -> Result<Option<PairDecision>, AppError> {
+    identity::pair_decision::<EventView>(workspace, first_human_id, other_human_id).await
+}
+
+/// The `human_id` of the record of `human_id`'s event cluster whose stream holds the live assertion
+/// `assertion_id` — where an edit or retraction of that row is written (ADR 0039 §5).
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if `human_id` is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or a store error.
+pub async fn event_claim_owner(workspace: &Workspace, human_id: &str, assertion_id: &str) -> Result<String, AppError> {
+    identity::claim_owner::<EventView>(workspace, human_id, assertion_id).await
+}
+
 /// Loads a single event's summary by `human_id`.
 ///
 /// # Errors
@@ -618,14 +793,20 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
 /// A store/read-model error.
 pub async fn show_event(workspace: &Workspace, human_id: &str) -> Result<Option<EventSummary>, AppError> {
     let store = workspace.store();
-    let Some(view) = store.find_event(human_id).await? else {
+    let Some(found) = store.find_event(human_id).await? else {
         return Ok(None);
     };
+    let Some(event_id) = found.event_id() else {
+        return Ok(None);
+    };
+    let clusters = EventClusters::load(store).await?;
+    let views = identity::views(store, &clusters.cluster(clusters.root(event_id))).await?;
     let lookups = EventLookups::load(workspace).await?;
-    Ok(Some(summarize(&view, &lookups)))
+    Ok(summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups))
 }
 
-/// Lists every event's summary, ordered by `human_id`.
+/// Lists every event's summary, ordered by `human_id`. A merged event is listed once, as its cluster's
+/// root (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -633,8 +814,23 @@ pub async fn show_event(workspace: &Workspace, human_id: &str) -> Result<Option<
 pub async fn list_events(workspace: &Workspace) -> Result<Vec<EventSummary>, AppError> {
     let store = workspace.store();
     let views = store.list_events().await?;
+    let clusters = EventClusters::load(store).await?;
+    let by_id: HashMap<EventId, &EventView> = views.iter().filter_map(|view| Some((view.event_id()?, view))).collect();
     let lookups = EventLookups::load(workspace).await?;
-    Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
+    let mut summaries = Vec::with_capacity(views.len());
+    for view in &views {
+        let Some(id) = view.event_id() else { continue };
+        if clusters.is_member(id) {
+            continue;
+        }
+        let cluster: Vec<&EventView> = clusters
+            .cluster(id)
+            .iter()
+            .filter_map(|id| by_id.get(id).copied())
+            .collect();
+        summaries.extend(summarize_cluster(&cluster, &lookups));
+    }
+    Ok(summaries)
 }
 
 /// The place on a lightweight event list row: the place's user-facing id and primary name.
@@ -660,7 +856,8 @@ pub struct EventRow {
     pub place: Option<EventPlaceRow>,
 }
 
-/// Lists every event as a lightweight [`EventRow`], ordered by `human_id`.
+/// Lists every event as a lightweight [`EventRow`], ordered by `human_id`, hiding merged events
+/// behind their cluster's root (ADR 0039 §5).
 ///
 /// Unlike [`list_events`], this reads the Event projection plus a narrow `PlaceId -> name` map (from
 /// the Place projection) — skipping [`EventLookups::load`], which runs the full person and citation
@@ -685,8 +882,12 @@ pub async fn list_event_rows(workspace: &Workspace) -> Result<Vec<EventRow>, App
         }
     }
     let views = store.list_events().await?;
+    let clusters = EventClusters::load(store).await?;
     let mut rows = Vec::with_capacity(views.len());
     for view in &views {
+        if view.event_id().is_some_and(|id| clusters.is_member(id)) {
+            continue;
+        }
         let place = view.asserted_place().map(|asserted| {
             places.get(&asserted.value).cloned().unwrap_or_else(|| EventPlaceRow {
                 human_id: asserted.value.to_string(),
@@ -867,7 +1068,7 @@ pub async fn set_event_human_id(
 
 /// Executes one command through the store, stamping the operator `provenance` and backing
 /// `citations`, and mapping the command outcome to [`AppError`].
-async fn execute(
+pub(crate) async fn execute(
     store: &Store,
     session: &Session,
     aggregate_id: &str,
@@ -1136,7 +1337,68 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         notes,
         tags,
         restrictions: view.restrictions().clone(),
+        merged: Vec::new(),
+        claim_owners: BTreeMap::new(),
     }
+}
+
+/// Summarises a cluster — its root first, then its members — as one event (ADR 0039 §5): the root's
+/// summary with every member's rows appended, each member-owned row recorded in `claim_owners`.
+/// `None` for an empty slice.
+fn summarize_cluster(views: &[&EventView], lookups: &EventLookups) -> Option<EventSummary> {
+    let (root, members) = views.split_first()?;
+    let mut summary = summarize(root, lookups);
+    for view in members {
+        let member = summarize(view, lookups);
+        summary.merged.push(AggRef {
+            human_id: member.human_id.clone(),
+            id: member.id.clone(),
+        });
+        adopt(&mut summary, member);
+    }
+    summary.merged.sort_by(|x, y| x.id.cmp(&y.id));
+    Some(summary)
+}
+
+/// Appends a member's rows to its root's summary, recording the member each row came from, and fills
+/// what the root lacks — type, date, place, description — from the member.
+fn adopt(root: &mut EventSummary, member: EventSummary) {
+    let owner = member.human_id.clone();
+    let mut owned: Vec<String> = Vec::new();
+    owned.extend(member.addresses.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.participants.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.citations.iter().filter_map(|row| row.assertion_id.clone()));
+    owned.extend(member.media.iter().map(|row| row.assertion_id.clone()));
+    owned.extend(member.notes.iter().map(|row| row.assertion_id.clone()));
+    for assertion_id in owned {
+        root.claim_owners.insert(assertion_id, owner.clone());
+    }
+    if root.event_type.is_none() {
+        root.event_type = member.event_type;
+        root.event_type_confidence = member.event_type_confidence;
+    }
+    if root.date.is_none() {
+        root.date = member.date;
+        root.date_confidence = member.date_confidence;
+        root.date_source_count = member.date_source_count;
+        root.date_citations = member.date_citations;
+    }
+    if root.place.is_none() {
+        root.place = member.place;
+        root.place_confidence = member.place_confidence;
+    }
+    root.description = root.description.take().or(member.description);
+    root.addresses.extend(member.addresses);
+    root.participants.extend(member.participants);
+    root.citations.extend(member.citations);
+    root.media.extend(member.media);
+    root.notes.extend(member.notes);
+    for tag in member.tags {
+        if !root.tags.iter().any(|held| held.id == tag.id) {
+            root.tags.push(tag);
+        }
+    }
+    root.restrictions.extend(member.restrictions);
 }
 
 #[cfg(test)]

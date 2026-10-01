@@ -98,6 +98,7 @@ impl RepositoryDetail {
                 .map(|a| AddressVm {
                     address: a.address.clone(),
                     assertion_id: a.assertion_id.clone(),
+                    merged_from: None,
                 })
                 .collect(),
             urls: summary

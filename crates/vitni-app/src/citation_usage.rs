@@ -183,11 +183,12 @@ async fn scan_events(
     workspace: &Workspace,
     map: &mut HashMap<CitationId, Vec<CitingRecordRef>>,
 ) -> Result<(), AppError> {
+    let references = crate::identity::EventReferences::load(workspace.store()).await?;
     for view in workspace.store().list_events().await? {
-        let (Some(id), Some(human_id)) = (view.event_id(), view.human_id()) else {
+        let Some(id) = view.event_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = view.description().map(ToOwned::to_owned);
         let make = |context| CitingRecordRef {
             kind: CitingKind::Event,
@@ -208,11 +209,12 @@ async fn scan_families(
     workspace: &Workspace,
     map: &mut HashMap<CitationId, Vec<CitingRecordRef>>,
 ) -> Result<(), AppError> {
+    let references = crate::identity::FamilyReferences::load(workspace.store()).await?;
     for view in workspace.store().list_families().await? {
-        let (Some(id), Some(human_id)) = (view.family_id(), view.human_id()) else {
+        let Some(id) = view.family_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let make = |context| CitingRecordRef {
             kind: CitingKind::Family,
             human_id: human_id.clone(),

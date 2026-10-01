@@ -50,16 +50,26 @@ macro_rules! sqlite_open_cqrs {
 }
 
 /// Appends the derived side indexes to the one framework each is fed by: the identity cluster index
-/// (ADR 0039 §4) to `person`, and the geometry index (ADR 0024 §3) and succession index (ADR 0026 §4)
+/// (ADR 0039 §4) to `person`, `event` and `family`, and the geometry index (ADR 0024 §3) and succession index (ADR 0026 §4)
 /// to `place`, leaving every other aggregate's framework untouched. Dispatches on the registry's
 /// literal `$snake` token — the same "wiring by tag" shape as [`sqlite_open_cqrs!`] — rather than
 /// naming the aggregate after the per-aggregate repetition, which a plain `let` can't see across
 /// macro hygiene.
 macro_rules! sqlite_wire_side_indexes {
     (person, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::new(
-            $pool.clone(),
-        )))
+        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::person::PersonView,
+        >::new($pool.clone())))
+    };
+    (event, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::event::EventView,
+        >::new($pool.clone())))
+    };
+    (family, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::family::FamilyView,
+        >::new($pool.clone())))
     };
     (place, $pool:expr, $framework:expr) => {
         $framework
@@ -147,9 +157,9 @@ macro_rules! sqlite_store {
                 crate::match_keys::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating match keys index: {e}")))?;
-                // The identity cluster index (ADR 0039 §4) is derived from the Person projection; its
-                // `Query` is appended only to the Person framework below, and a workspace that predates
-                // it gets it filled once the projections are open.
+                // The identity cluster index (ADR 0039 §4) is derived from the Person, Event and Family
+                // projections; its `Query` is appended to those frameworks below, and a workspace that
+                // predates it gets it filled once the projections are open.
                 let identity_is_new = crate::identity_links::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating identity index: {e}")))?;
@@ -230,7 +240,8 @@ macro_rules! sqlite_store {
                 // above, not replayed from raw events themselves.
                 crate::geo_index::rebuild_index(&self.pool).await?;
                 crate::place_succession_index::sqlite::rebuild_index(&self.pool).await?;
-                // The identity clusters (ADR 0039 §4) are derived from the rebuilt Person projection.
+                // The identity clusters (ADR 0039 §4) are derived from the rebuilt Person, Event and Family
+                // projections.
                 crate::identity_links::sqlite::rebuild_index(&self.pool).await?;
                 // The record origins index is replayed from the raw events, after the projections
                 // its `live` flags are read from.
@@ -1555,6 +1566,112 @@ mod tests {
         )
         .await;
         assert_eq!(person_links(&store).await, vec![(c.to_string(), b.to_string())]);
+    }
+
+    /// The `kind` clusters as `(member, root)` pairs.
+    async fn links_of(store: &SqliteStore, kind: vitni_core::matching::MatchableKind) -> Vec<(String, String)> {
+        store
+            .identity_links(kind)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|link| (link.member, link.root))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn event_and_family_merges_are_indexed_under_their_own_kind() {
+        use vitni_core::enums::EventType;
+        use vitni_core::event::{EventCommand, EventCommandEnvelope};
+        use vitni_core::family::{FamilyCommand, FamilyCommandEnvelope};
+        use vitni_core::ids::{EventId, FamilyId};
+        use vitni_core::matching::MatchableKind;
+
+        let (store, _dir) = store().await;
+        let (e1, e2) = (
+            EventId::from_uuid(Uuid::from_u128(1)),
+            EventId::from_uuid(Uuid::from_u128(2)),
+        );
+        let (f1, f2) = (
+            FamilyId::from_uuid(Uuid::from_u128(3)),
+            FamilyId::from_uuid(Uuid::from_u128(4)),
+        );
+        let event = |assertion, command| EventCommandEnvelope {
+            meta: meta(assertion),
+            command,
+        };
+        let family = |assertion, command| FamilyCommandEnvelope {
+            meta: meta(assertion),
+            command,
+        };
+        for (n, event_id, human_id) in [(10, e1, "E0001"), (11, e2, "E0002")] {
+            let create = EventCommand::CreateEvent {
+                event_id,
+                human_id: HumanId::new(human_id),
+                event_type: EventType::Marriage,
+            };
+            store
+                .execute_event(&event_id.to_string(), event(n, create))
+                .await
+                .unwrap();
+        }
+        for (n, family_id, human_id) in [(12, f1, "F0001"), (13, f2, "F0002")] {
+            let create = FamilyCommand::CreateFamily {
+                family_id,
+                human_id: HumanId::new(human_id),
+                external_ids: Vec::new(),
+            };
+            store
+                .execute_family(&family_id.to_string(), family(n, create))
+                .await
+                .unwrap();
+        }
+        let merge_events = EventCommand::MergeEvents {
+            surviving: e1,
+            merged: e2,
+            assessment: None,
+        };
+        store
+            .execute_event(&e1.to_string(), event(20, merge_events))
+            .await
+            .unwrap();
+        let merge_families = FamilyCommand::MergeFamilies {
+            surviving: f1,
+            merged: f2,
+            assessment: None,
+        };
+        store
+            .execute_family(&f1.to_string(), family(21, merge_families))
+            .await
+            .unwrap();
+
+        let events = vec![(e2.to_string(), e1.to_string())];
+        let families = vec![(f2.to_string(), f1.to_string())];
+        assert_eq!(links_of(&store, MatchableKind::Event).await, events);
+        assert_eq!(links_of(&store, MatchableKind::Family).await, families);
+        assert!(
+            person_links(&store).await.is_empty(),
+            "each kind keeps its own clusters"
+        );
+
+        store.rebuild_projections().await.unwrap();
+        assert_eq!(
+            links_of(&store, MatchableKind::Event).await,
+            events,
+            "rebuild reproduces them"
+        );
+        assert_eq!(links_of(&store, MatchableKind::Family).await, families);
+
+        let undo = EventCommand::RetractAssertion {
+            event_id: e1,
+            target: AssertionId::from_uuid(Uuid::from_u128(20)),
+        };
+        store.execute_event(&e1.to_string(), event(22, undo)).await.unwrap();
+        assert!(
+            links_of(&store, MatchableKind::Event).await.is_empty(),
+            "undo splits the event cluster"
+        );
+        assert_eq!(links_of(&store, MatchableKind::Family).await, families);
     }
 
     #[tokio::test]

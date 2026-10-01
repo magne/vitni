@@ -49,6 +49,9 @@ pub struct ParticipantVm {
     /// Edit supersedes and a Remove retracts (ADR 0004 §2). Never rendered. Always the person-side
     /// (canonical) assertion.
     pub assertion_id: String,
+    /// The `human_id` of the merged member this row came from (ADR 0039 §5), or `None` for the
+    /// record's own row — the "from E0002" chip.
+    pub merged_from: Option<String>,
 }
 
 /// The place an event occurred (Overview link): its name and the navigation ids.
@@ -144,6 +147,7 @@ impl EventDetail {
                     confidence_label: loc.confidence_label_opt(confidence),
                     source_count: participant.source_count,
                     assertion_id: participant.assertion_id.clone(),
+                    merged_from: summary.claim_owners.get(&participant.assertion_id).cloned(),
                 }
             })
             .collect();
@@ -179,6 +183,7 @@ impl EventDetail {
                 .map(|a| AddressVm {
                     address: a.address.clone(),
                     assertion_id: a.assertion_id.clone(),
+                    merged_from: summary.claim_owners.get(&a.assertion_id).cloned(),
                 })
                 .collect(),
             participants,
@@ -520,6 +525,8 @@ mod event_detail_tests {
             notes: Vec::new(),
             tags: Vec::new(),
             restrictions: BTreeSet::new(),
+            merged: Vec::new(),
+            claim_owners: std::collections::BTreeMap::new(),
         }
     }
 

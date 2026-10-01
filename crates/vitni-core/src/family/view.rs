@@ -14,7 +14,7 @@ use crate::assertions::{Asserted, Attributed};
 use crate::enums::Restriction;
 use crate::family::decide::evolve;
 use crate::family::state::{ChildEntry, ChildRelationship, FamilyState};
-use crate::ids::{CitationId, EventId, FamilyId, HumanId, NoteId, PersonId, TagId};
+use crate::ids::{AssertionId, CitationId, EventId, FamilyId, HumanId, NoteId, PersonId, TagId};
 use crate::text::{ExternalId, MediaRef};
 
 /// The current best synthesis of a Family, derived from the event log (data-model §6).
@@ -176,6 +176,33 @@ impl FamilyView {
     #[must_use]
     pub fn citations_with_assertions(&self) -> &[Attributed<CitationId>] {
         &self.state.citations
+    }
+
+    /// The ids of families currently merged into this survivor (ADR 0039 §1) — whose `FamiliesMerged`
+    /// assertion has not been undone.
+    #[must_use]
+    pub fn merged(&self) -> Vec<FamilyId> {
+        self.state.merged.iter().map(|m| m.value).collect()
+    }
+
+    /// The ids of families concluded to be different from this one (ADR 0039 §1).
+    #[must_use]
+    pub fn distinguished(&self) -> Vec<FamilyId> {
+        self.state.distinguished.iter().map(|d| d.value).collect()
+    }
+
+    /// The live distinctions, each paired with the `AssertionId` of its `FamiliesDistinguished` — the
+    /// target an undo retracts (ADR 0039 §4).
+    #[must_use]
+    pub fn distinguished_with_assertions(&self) -> &[Attributed<FamilyId>] {
+        &self.state.distinguished
+    }
+
+    /// Whether `assertion` is a live assertion on this family's stream — one a retraction or
+    /// supersession of it may target.
+    #[must_use]
+    pub fn holds_assertion(&self, assertion: AssertionId) -> bool {
+        self.state.live_assertions.contains(&assertion)
     }
 }
 

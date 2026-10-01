@@ -2,7 +2,7 @@
 //! signal carries a text label or icon, never colour by itself).
 
 use dioxus::prelude::*;
-use vitni_ui::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
+use vitni_ui::{ConfidenceLevel, EvidenceAxis, Localizer, RestrictionKind};
 
 /// A surety badge: a colour dot plus a text label. A `None` level means no judgment was recorded
 /// (ADR 0021 §5) — rendered as faint text with no dot and no `data-level` attribute.
@@ -146,5 +146,16 @@ pub fn RestrictionSet(
                 }
             }
         }
+    }
+}
+
+/// The attribution chip on a row a merged record supplied to its cluster (ADR 0039 §5), naming the
+/// record it came from; nothing on the record's own rows.
+pub fn merged_from_chip(loc: &Localizer, merged_from: Option<&str>) -> Element {
+    let Some(record) = merged_from else {
+        return rsx! {};
+    };
+    rsx! {
+        span { class: "badge", "{loc.merged_from(record)}" }
     }
 }

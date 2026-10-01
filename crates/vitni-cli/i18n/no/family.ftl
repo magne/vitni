@@ -15,3 +15,6 @@ err-child-present = person { $id } er allerede et barn i denne familien
 err-child-absent = person { $id } er ikke et barn i denne familien
 err-parent-not-partner = person { $id } er ikke en partner i denne familien
 err-child-relationship-present = barn { $child } har allerede en relasjon til partner { $parent }
+err-family-merge-conflict = familiene { $surviving } og { $merged } kan ikke slås sammen: { $reason }
+err-family-distinct-from-itself = familie { $id } kan ikke skilles fra seg selv
+err-family-identity-decided = familiene { $family } og { $other } har allerede en gjeldende identitetsavgjørelse; angre den først
