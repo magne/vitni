@@ -154,10 +154,9 @@ long-standing "DNA match views in the UI" item is closed.
   with the person list it already holds, so GUI coverage is *equivalent* — nothing is missing there.
   Either delete the wrapper, or keep it to back a `vitni check` subcommand so quality findings are
   scriptable.
-- **Data-quality checks are person-only** — both `CheckKind`s are `DeathBeforeBirth` and
-  `PossibleDuplicates`. Widening checks to the other twelve aggregates is its own item. The duplicate
-  half is taken by *The duplicate check scores through the engine* (under *Record matching & identity*),
-  which leaves the consistency checks (such as a date inversion on an Event or Place).
+- **Consistency checks are person-only** — the one consistency check, `CheckFinding::DeathBeforeBirth`,
+  reads persons only; the duplicate check already covers every matchable kind. Widening consistency
+  checks to the other aggregates (such as a date inversion on an Event or Place) is its own item.
 - **Repository media refs (U31)** — should Repository carry media refs (e.g. archive photos)? A
   data-model question.
 
@@ -454,7 +453,8 @@ record origins with import runs (#393) and resolve-by-origin (#394), then the xr
 (#389), tombstones by origin (#395), the matching core (#396), the person profile (#397), the
 family and event profiles (#398), the other seven kinds' profiles (#399), the `match_keys` blocking
 index with `find_similar` (#400), the evaluation corpus with `cargo xtask match-eval` (#402) and
-`PersonsDistinguished` with the assessment on identity decisions (#403), which have landed.
+`PersonsDistinguished` with the assessment on identity decisions (#403), and the duplicate check
+through the engine (#401), which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
@@ -465,12 +465,6 @@ does.
   re-import then misses the earlier imports' origins until `vitni rebuild`. *Shape:* a completion
   marker written after the replay, or the backfill in one transaction. *Exit:* a test that interrupts
   the backfill and reopens gets the full index.
-- **The duplicate check scores through the engine** — ADR 0038 §8. `PossibleDuplicates` covers every
-  matchable kind with the engine's score, band and features, and excludes decided pairs. The
-  Dashboard data-quality card and the palette's *Find duplicates* show the probability and the
-  reasons. This supersedes the duplicate half of *Data-quality checks are person-only*. *Needs:*
-  `find_similar`, and distinct decisions. *Exit:* a place duplicate appears on the Dashboard with its
-  reasons. — #401
 - **`find_similar` reads every profile view** — each lookup builds its candidates' profiles from
   `Profiles::load`, which lists every person, event, place and family (`vitni-app/src/profile.rs`), so
   one lookup costs about 0.9 s at 100k persons (`cargo bench -p vitni-app --bench similar`) though it
@@ -480,10 +474,10 @@ does.
 - **The all-pairs duplicate scan does not scale to 100k persons** — `similar_pairs` scores every
   candidate pair (about 86 per person on the bench's name pools, rising with the workspace) and holds
   every pair's `MatchAssessment`; at 100k persons one scan took 452 s on one core before it was spread
-  over the cores, and its pairs run to gigabytes. The Dashboard's data-quality card and the Merge
-  screen run it on every show. *Shape:* keep the pairs as a projection refreshed from the dirty
-  records like `match_keys`, or keep only the pair ids and score on display. *Needs:* the duplicate
-  check through the engine (#401). *Exit:* the Dashboard opens a 100k-person workspace in under a
+  over the cores, and its pairs run to gigabytes. The Dashboard's data-quality card runs it for
+  every matchable kind and the Merge screen for persons, on every show. *Shape:* keep the pairs as a
+  projection refreshed from the dirty records like `match_keys`, or keep only the pair ids and score on
+  display. *Exit:* the Dashboard opens a 100k-person workspace in under a
   second.
 - **Blocking loses a given name that is only similar, not keyed alike** — the proptest
   `every_pair_the_engine_shows_meets` (`vitni-core/src/matching/keys/tests.rs`), at 2000 cases, finds
