@@ -610,6 +610,81 @@ async fn identity_links_follow_merges_retractions_and_rebuild_on_postgres() {
     assert_eq!(person_links(&store).await, vec![(id(3).to_string(), id(2).to_string())]);
 }
 
+#[tokio::test]
+async fn event_and_family_merges_are_indexed_under_their_own_kind_on_postgres() {
+    use vitni_core::enums::EventType;
+    use vitni_core::event::{EventCommand, EventCommandEnvelope};
+    use vitni_core::family::{FamilyCommand, FamilyCommandEnvelope};
+    use vitni_core::ids::{EventId, FamilyId};
+    use vitni_core::matching::MatchableKind;
+
+    let (store, _db) = store().await;
+    let links = async |kind| -> Vec<(String, String)> {
+        let links = store.identity_links(kind).await.unwrap();
+        links.into_iter().map(|link| (link.member, link.root)).collect()
+    };
+    let (e1, e2) = (
+        EventId::from_uuid(Uuid::from_u128(1)),
+        EventId::from_uuid(Uuid::from_u128(2)),
+    );
+    let (f1, f2) = (
+        FamilyId::from_uuid(Uuid::from_u128(3)),
+        FamilyId::from_uuid(Uuid::from_u128(4)),
+    );
+    for (n, event_id, human_id) in [(10, e1, "E0001"), (11, e2, "E0002")] {
+        let command = EventCommand::CreateEvent {
+            event_id,
+            human_id: HumanId::new(human_id),
+            event_type: EventType::Marriage,
+        };
+        let envelope = EventCommandEnvelope { meta: meta(n), command };
+        store.execute_event(&event_id.to_string(), envelope).await.unwrap();
+    }
+    for (n, family_id, human_id) in [(12, f1, "F0001"), (13, f2, "F0002")] {
+        let command = FamilyCommand::CreateFamily {
+            family_id,
+            human_id: HumanId::new(human_id),
+            external_ids: Vec::new(),
+        };
+        let envelope = FamilyCommandEnvelope { meta: meta(n), command };
+        store.execute_family(&family_id.to_string(), envelope).await.unwrap();
+    }
+    let command = EventCommand::MergeEvents {
+        surviving: e1,
+        merged: e2,
+        assessment: None,
+    };
+    let envelope = EventCommandEnvelope {
+        meta: meta(20),
+        command,
+    };
+    store.execute_event(&e1.to_string(), envelope).await.unwrap();
+    let command = FamilyCommand::MergeFamilies {
+        surviving: f1,
+        merged: f2,
+        assessment: None,
+    };
+    let envelope = FamilyCommandEnvelope {
+        meta: meta(21),
+        command,
+    };
+    store.execute_family(&f1.to_string(), envelope).await.unwrap();
+
+    let events = vec![(e2.to_string(), e1.to_string())];
+    let families = vec![(f2.to_string(), f1.to_string())];
+    assert_eq!(links(MatchableKind::Event).await, events);
+    assert_eq!(links(MatchableKind::Family).await, families);
+    assert!(links(MatchableKind::Person).await.is_empty());
+
+    store.rebuild_projections().await.unwrap();
+    assert_eq!(
+        links(MatchableKind::Event).await,
+        events,
+        "rebuild reproduces the clusters"
+    );
+    assert_eq!(links(MatchableKind::Family).await, families);
+}
+
 /// The ordered `human_id`s of every person projection.
 async fn person_ids(store: &Store) -> Vec<String> {
     store

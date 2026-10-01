@@ -1,6 +1,7 @@
 //! The identity cluster index (ADR 0039 §4).
 //!
-//! A merge decision (`PersonsMerged`) is recorded once, on the survivor's own stream, so the merged
+//! A merge decision (`PersonsMerged`, `EventsMerged`, `FamiliesMerged`) is recorded once, on the
+//! survivor's own stream, so the merged
 //! record's projection never learns it was merged, and a chain of merges (C into B, then B into A) is
 //! spread over several streams. Asking "which cluster is this record in, and what is its root?" needs
 //! a cross-aggregate read no single projection can answer — the derived, rebuildable index this module
@@ -22,35 +23,119 @@ pub(crate) mod sqlite;
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use cqrs_es::Aggregate;
+use serde::de::DeserializeOwned;
+use vitni_core::event::{EventEventBody, EventState, EventView};
+use vitni_core::family::{FamilyEventBody, FamilyState, FamilyView};
+use vitni_core::identity::ClusterRecord;
 use vitni_core::person::event::{PersonEvent, PersonEventBody};
+use vitni_core::person::{PersonState, PersonView};
+
+use crate::tables::{EVENT_VIEW_TABLE, FAMILY_VIEW_TABLE, PERSON_VIEW_TABLE};
 
 /// The live merge edges: one row per `(kind, surviving, member)`.
 const IDENTITY_EDGES_TABLE: &str = "identity_edges";
 /// The transitive closure: one row per `(kind, member)`, naming the member's root.
 const IDENTITY_LINKS_TABLE: &str = "identity_links";
 
-/// Whether a person event can change the survivor's live merge edges: a merge adds one, and a
-/// retraction or supersession may remove one.
-fn changes_edges(event: &PersonEvent) -> bool {
-    match &event.body {
-        PersonEventBody::PersonsMerged { .. }
-        | PersonEventBody::AssertionRetracted { .. }
-        | PersonEventBody::AssertionSuperseded { .. } => true,
-        PersonEventBody::PersonCreated { .. }
-        | PersonEventBody::NameAsserted { .. }
-        | PersonEventBody::SexAsserted { .. }
-        | PersonEventBody::FactAsserted { .. }
-        | PersonEventBody::ParticipationAsserted { .. }
-        | PersonEventBody::AssociationAsserted { .. }
-        | PersonEventBody::MediaAttached { .. }
-        | PersonEventBody::NoteAttached { .. }
-        | PersonEventBody::CitationAdded { .. }
-        | PersonEventBody::ExternalIdAdded { .. }
-        | PersonEventBody::Tagged { .. }
-        | PersonEventBody::Untagged { .. }
-        | PersonEventBody::RestrictionsChanged { .. }
-        | PersonEventBody::HumanIdChanged { .. }
-        | PersonEventBody::PersonsDistinguished { .. } => false,
+/// A projection the index mirrors merge edges from: its aggregate, its table, and which of its events
+/// can change the survivor's live edges — a merge adds one, and a retraction or supersession may remove
+/// one.
+pub(crate) trait IndexedRecord: ClusterRecord + DeserializeOwned + Send + Sync + 'static {
+    /// The aggregate the projection folds.
+    type State: Aggregate;
+
+    /// The projection table the view is read from.
+    const VIEW_TABLE: &'static str;
+
+    /// Whether `event` can change the survivor's live merge edges.
+    fn changes_edges(event: &<Self::State as Aggregate>::Event) -> bool;
+}
+
+impl IndexedRecord for PersonView {
+    type State = PersonState;
+
+    const VIEW_TABLE: &'static str = PERSON_VIEW_TABLE;
+
+    fn changes_edges(event: &PersonEvent) -> bool {
+        match &event.body {
+            PersonEventBody::PersonsMerged { .. }
+            | PersonEventBody::AssertionRetracted { .. }
+            | PersonEventBody::AssertionSuperseded { .. } => true,
+            PersonEventBody::PersonCreated { .. }
+            | PersonEventBody::NameAsserted { .. }
+            | PersonEventBody::SexAsserted { .. }
+            | PersonEventBody::FactAsserted { .. }
+            | PersonEventBody::ParticipationAsserted { .. }
+            | PersonEventBody::AssociationAsserted { .. }
+            | PersonEventBody::MediaAttached { .. }
+            | PersonEventBody::NoteAttached { .. }
+            | PersonEventBody::CitationAdded { .. }
+            | PersonEventBody::ExternalIdAdded { .. }
+            | PersonEventBody::Tagged { .. }
+            | PersonEventBody::Untagged { .. }
+            | PersonEventBody::RestrictionsChanged { .. }
+            | PersonEventBody::HumanIdChanged { .. }
+            | PersonEventBody::PersonsDistinguished { .. } => false,
+        }
+    }
+}
+
+impl IndexedRecord for EventView {
+    type State = EventState;
+
+    const VIEW_TABLE: &'static str = EVENT_VIEW_TABLE;
+
+    fn changes_edges(event: &vitni_core::event::EventEvent) -> bool {
+        match &event.body {
+            EventEventBody::EventsMerged { .. }
+            | EventEventBody::AssertionRetracted { .. }
+            | EventEventBody::AssertionSuperseded { .. } => true,
+            EventEventBody::EventCreated { .. }
+            | EventEventBody::EventTypeSet { .. }
+            | EventEventBody::DateAsserted { .. }
+            | EventEventBody::DescriptionSet { .. }
+            | EventEventBody::PlaceLinked { .. }
+            | EventEventBody::AddressAdded { .. }
+            | EventEventBody::CitationAdded { .. }
+            | EventEventBody::MediaAttached { .. }
+            | EventEventBody::NoteAttached { .. }
+            | EventEventBody::Tagged { .. }
+            | EventEventBody::Untagged { .. }
+            | EventEventBody::RestrictionsChanged { .. }
+            | EventEventBody::HumanIdChanged { .. }
+            | EventEventBody::EventsDistinguished { .. } => false,
+        }
+    }
+}
+
+impl IndexedRecord for FamilyView {
+    type State = FamilyState;
+
+    const VIEW_TABLE: &'static str = FAMILY_VIEW_TABLE;
+
+    fn changes_edges(event: &vitni_core::family::FamilyEvent) -> bool {
+        match &event.body {
+            FamilyEventBody::FamiliesMerged { .. }
+            | FamilyEventBody::AssertionRetracted { .. }
+            | FamilyEventBody::AssertionSuperseded { .. } => true,
+            FamilyEventBody::FamilyCreated { .. }
+            | FamilyEventBody::PartnerAdded { .. }
+            | FamilyEventBody::PartnerRemoved { .. }
+            | FamilyEventBody::ChildAdded { .. }
+            | FamilyEventBody::ChildRelationshipAsserted { .. }
+            | FamilyEventBody::ChildRemoved { .. }
+            | FamilyEventBody::RestrictionsChanged { .. }
+            | FamilyEventBody::CitationAdded { .. }
+            | FamilyEventBody::FamilyEventLinked { .. }
+            | FamilyEventBody::MediaAttached { .. }
+            | FamilyEventBody::NoteAttached { .. }
+            | FamilyEventBody::Tagged { .. }
+            | FamilyEventBody::Untagged { .. }
+            | FamilyEventBody::ExternalIdAdded { .. }
+            | FamilyEventBody::HumanIdChanged { .. }
+            | FamilyEventBody::FamiliesDistinguished { .. } => false,
+        }
     }
 }
 
