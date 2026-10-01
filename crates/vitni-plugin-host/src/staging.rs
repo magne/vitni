@@ -16,7 +16,6 @@ use vitni_core::matching::MatchableKind;
 use crate::bindings::imports::vitni::host_api::{staging, types};
 use crate::capability::Capability;
 use crate::error::PluginError;
-use crate::run::ActiveRun;
 use crate::state::{
     HostState, Staging, media_ref_input, to_address, to_age, to_association_role, to_attribute, to_capability_error,
     to_child_relationship, to_confidence, to_event_type, to_external_id, to_fact_type, to_genealogical_date,
@@ -112,7 +111,7 @@ impl HostState {
     /// [`PluginError::Commit`] when the workspace cannot be read or a write fails.
     pub(crate) async fn commit_staged(&mut self) -> Result<(), PluginError> {
         let graphs = std::mem::take(&mut self.staged);
-        if graphs.is_empty() || self.run.as_ref().is_some_and(ActiveRun::cancelled) {
+        if graphs.is_empty() || self.cancelled {
             return Ok(());
         }
         let template = self.provenance();

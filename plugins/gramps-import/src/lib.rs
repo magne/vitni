@@ -399,7 +399,7 @@ impl<'a> Resolver<'a> {
                 if let Some(repository) = self.repository(&reporef.hlink)? {
                     let media_type = reporef.medium.as_ref().map_or(
                         vitni_plugin_api::types::SourceMediaType::Custom(String::new()),
-                        |medium| convert::source_media_kind_to_wit(medium),
+                        convert::source_media_kind_to_wit,
                     );
                     graph.link(
                         None,

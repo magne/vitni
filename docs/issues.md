@@ -532,10 +532,6 @@ does.
   of every record a re-import resolves. *Shape:* the by-id profile loading the `find_similar` bullet
   above describes, and a cached matcher across an assisted session's submits. *Exit:* planning one
   assisted record at 100k persons under 100 ms in a bench.
-- **Two staged tags of one name become two tags** — ADR 0038 §6. A tag resolves by its case-folded name
-  against the workspace's tags only, so two tag records of one import carrying the same name are both
-  created. *Shape:* resolve a tag against the plan's earlier tags too. *Exit:* importing two same-named
-  tags creates one.
 - **Shared match-compare view** — ADR 0038 §3, ADR 0039. A view-model and component generalized from
   the Merge compare grid (`vitni-ui/src/view_model/merge.rs:198`): per-kind rows, the feature
   explanations, origin chips, an evidence snippet (the scan crop), and *Same* / *Not the same* /

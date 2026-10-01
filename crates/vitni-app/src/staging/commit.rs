@@ -162,7 +162,13 @@ impl Commit<'_> {
                 let writes = match (&entity.disposition, entity.scope) {
                     (_, WriteScope::Withheld)
                     | (Disposition::Unchanged { .. } | Disposition::Link { .. }, WriteScope::Full) => false,
-                    (Disposition::New | Disposition::Candidates(_) | Disposition::Update { .. }, WriteScope::Full)
+                    (
+                        Disposition::New
+                        | Disposition::Candidates(_)
+                        | Disposition::Update { .. }
+                        | Disposition::Duplicate { .. },
+                        WriteScope::Full,
+                    )
                     | (_, WriteScope::Identity) => true,
                 };
                 if entity.kind == kind && writes {
@@ -224,6 +230,13 @@ impl Commit<'_> {
         };
         let record = graph.record.as_str();
         match (&planned.disposition, planned.scope) {
+            (Disposition::Duplicate { of }, scope) => {
+                // The entity it duplicates is of the same kind and earlier, so already written.
+                self.ids[index] = self.ids.get(*of).cloned().flatten();
+                if let (Some(human_id), WriteScope::Identity) = (&self.ids[index], scope) {
+                    self.writer.identity(record, entity, human_id).await?;
+                }
+            }
             (Disposition::Update { target, .. }, WriteScope::Full) => {
                 self.writer.update(record, entity, &target.human_id).await?;
             }
@@ -292,7 +305,7 @@ impl Commit<'_> {
                 | Disposition::Update { .. }
                 | Disposition::Candidates(_)
                 | Disposition::New => true,
-                Disposition::Link { .. } => false,
+                Disposition::Link { .. } | Disposition::Duplicate { .. } => false,
             };
             self.outcome.entities.push(CommittedEntity {
                 graph: entity.graph,

@@ -84,11 +84,6 @@ impl ActiveRun {
         self.resolved.extend(outcome.resolved.iter().cloned());
     }
 
-    /// Whether the operator asked the import to stop.
-    pub(crate) fn cancelled(&self) -> bool {
-        self.cancelled
-    }
-
     /// Notes that the operator asked the import to stop.
     pub(crate) fn cancel(&mut self) {
         self.cancelled = true;

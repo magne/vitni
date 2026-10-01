@@ -71,6 +71,8 @@ pub struct HostState {
     pub(crate) staging: Staging,
     /// The record graphs a bulk import submitted, written once it returns.
     pub(crate) staged: Vec<RecordGraph>,
+    /// Whether the frontend cancelled a progress report, with or without an import run.
+    pub(crate) cancelled: bool,
 }
 
 /// When the host writes the record graphs an importer submits (ADR 0040 §4).
@@ -118,6 +120,7 @@ impl HostState {
             run: None,
             staging: Staging::Held,
             staged: Vec::new(),
+            cancelled: false,
         }
     }
 
@@ -2007,10 +2010,11 @@ impl HostState {
             processed,
             total,
         });
-        if control == ProgressControl::Cancel
-            && let Some(run) = self.run.as_mut()
-        {
-            run.cancel();
+        if control == ProgressControl::Cancel {
+            self.cancelled = true;
+            if let Some(run) = self.run.as_mut() {
+                run.cancel();
+            }
         }
         Ok(match control {
             ProgressControl::Proceed => progress::Control::Proceed,

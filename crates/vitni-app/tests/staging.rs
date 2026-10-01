@@ -616,3 +616,49 @@ async fn a_record_a_sibling_resolved_onto_is_never_a_candidate() {
         "the father's record is taken"
     );
 }
+
+#[tokio::test]
+async fn two_records_with_one_external_id_import_one_person() {
+    let (workspace, _dir) = workspace().await;
+    let graphs = vec![
+        RecordGraph {
+            record: "I1".to_owned(),
+            entities: vec![with_uid(person(0, None, "Ole", "Hansen"), "UID-1")],
+            links: Vec::new(),
+        },
+        RecordGraph {
+            record: "I2".to_owned(),
+            entities: vec![with_occupation(
+                with_uid(person(0, None, "Ole", "Hansen"), "UID-1"),
+                "Farmer",
+            )],
+            links: Vec::new(),
+        },
+    ];
+    let plan = import(&workspace, &importer(dataset(1)), graphs).await;
+    assert_eq!(disposition(&plan, 1, 0), &Disposition::Duplicate { of: 0 });
+    let persons = vitni_app::list_persons(&workspace).await.expect("persons");
+    assert_eq!(persons.len(), 1, "{persons:?}");
+}
+
+#[tokio::test]
+async fn two_tags_of_one_name_import_one_tag() {
+    let (workspace, _dir) = workspace().await;
+    let tag = |record: &str, name: &str| RecordGraph {
+        record: record.to_owned(),
+        entities: vec![StagedEntity {
+            local_id: 0,
+            item: None,
+            fields: EntityFields::Tag(StagedTag { name: name.to_owned() }),
+        }],
+        links: Vec::new(),
+    };
+    let plan = import(
+        &workspace,
+        &importer(dataset(1)),
+        vec![tag("T1", "Emigrant"), tag("T2", "emigrant")],
+    )
+    .await;
+    assert_eq!(disposition(&plan, 1, 0), &Disposition::Duplicate { of: 0 });
+    assert_eq!(vitni_app::list_tags(&workspace).await.expect("tags").len(), 1);
+}

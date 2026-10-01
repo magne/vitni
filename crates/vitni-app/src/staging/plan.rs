@@ -58,6 +58,12 @@ pub enum Disposition {
         /// How it was established.
         basis: LinkBasis,
     },
+    /// The record an earlier entity of the plan is — one with the same external id, or a tag of the
+    /// same case-folded name — which the commit writes first.
+    Duplicate {
+        /// The earlier entity's index in [`ImportPlan::entities`].
+        of: usize,
+    },
     /// Records the engine judged possibly the same; committed as new, with the pairs left for review.
     Candidates(Vec<SimilarRecord>),
     /// Nothing resolved: a new record.
@@ -70,7 +76,7 @@ impl Disposition {
     pub fn target(&self) -> Option<&AggRef> {
         match self {
             Self::Unchanged { target } | Self::Update { target, .. } | Self::Link { target, .. } => Some(target),
-            Self::Candidates(_) | Self::New => None,
+            Self::Duplicate { .. } | Self::Candidates(_) | Self::New => None,
         }
     }
 }
@@ -128,7 +134,7 @@ pub struct PlannedLink {
 }
 
 /// Where a reference of the plan points.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum Endpoint {
     /// An entity of the plan, by its index in [`ImportPlan::entities`].
     Planned(usize),
@@ -192,7 +198,7 @@ impl ImportPlan {
             match entity.disposition {
                 Disposition::Unchanged { .. } => counts.unchanged += 1,
                 Disposition::Update { .. } => counts.updated += 1,
-                Disposition::Link { .. } => counts.linked += 1,
+                Disposition::Link { .. } | Disposition::Duplicate { .. } => counts.linked += 1,
                 Disposition::Candidates(_) => counts.candidates += 1,
                 Disposition::New => counts.new += 1,
             }
@@ -360,6 +366,8 @@ impl<'a> Planner<'a> {
     /// The deterministic pass: by origin, then by external id, then a tag by its name.
     async fn resolve(&mut self) -> Result<(), AppError> {
         let tags = tag_names(self.workspace).await?;
+        // The identities of the plan's new entities so far, so a later one with the same is the same.
+        let mut identities: HashMap<String, usize> = HashMap::new();
         for index in 0..self.plan.entities.len() {
             let Some((graph, entity)) = self.plan.staged(index) else {
                 continue;
@@ -403,6 +411,12 @@ impl<'a> Planner<'a> {
                 | EntityFields::Repository(_) => None,
             };
             let Some((target, basis)) = found else {
+                let keys = identity_keys(&entity.fields);
+                if let Some(of) = keys.iter().find_map(|key| identities.get(key)) {
+                    self.plan.entities[index].disposition = Disposition::Duplicate { of: *of };
+                } else {
+                    identities.extend(keys.into_iter().map(|key| (key, index)));
+                }
                 continue;
             };
             if let Ok(aggregate_id) = Uuid::parse_str(&target.id) {
@@ -504,7 +518,23 @@ impl<'a> Planner<'a> {
         Ok(())
     }
 
+    /// Where `reference`, made in `graph`, points; a reference to a duplicate points at the entity it
+    /// duplicates.
     async fn endpoint_of(&self, graph: usize, reference: &EntityRef) -> Result<Endpoint, AppError> {
+        Ok(match self.named(graph, reference).await? {
+            Endpoint::Planned(index) => match self.plan.entities[index].disposition {
+                Disposition::Duplicate { of } => Endpoint::Planned(of),
+                Disposition::Unchanged { .. }
+                | Disposition::Update { .. }
+                | Disposition::Link { .. }
+                | Disposition::Candidates(_)
+                | Disposition::New => Endpoint::Planned(index),
+            },
+            endpoint @ (Endpoint::Stored { .. } | Endpoint::Dangling) => endpoint,
+        })
+    }
+
+    async fn named(&self, graph: usize, reference: &EntityRef) -> Result<Endpoint, AppError> {
         Ok(match reference {
             EntityRef::Local(local_id) => self
                 .by_local
@@ -811,7 +841,7 @@ fn is_membership(link: &LinkKind) -> bool {
 /// Whether `disposition` resolved onto a record this dataset did not make.
 fn is_link(disposition: &Disposition) -> bool {
     match disposition {
-        Disposition::Link { .. } => true,
+        Disposition::Link { .. } | Disposition::Duplicate { .. } => true,
         Disposition::Unchanged { .. } | Disposition::Update { .. } | Disposition::Candidates(_) | Disposition::New => {
             false
         }
@@ -827,6 +857,28 @@ fn is_subject(entity: &PlannedEntity, graphs: &[RecordGraph]) -> bool {
                 .iter()
                 .any(|staged| staged.local_id == entity.local_id && staged.item.is_none())
         })
+}
+
+/// What makes two entities of one import the same record: a person's or family's external ids, a
+/// tag's folded name.
+fn identity_keys(fields: &EntityFields) -> Vec<String> {
+    let external = |kind: &str, ids: &[vitni_core::text::ExternalId]| -> Vec<String> {
+        ids.iter()
+            .map(|id| format!("{kind}\u{1f}{}\u{1f}{}", id.authority, id.value))
+            .collect()
+    };
+    match fields {
+        EntityFields::Person(person) => external("person", &person.external_ids),
+        EntityFields::Family(family) => external("family", &family.external_ids),
+        EntityFields::Tag(tag) => vec![format!("tag\u{1f}{}", fold(&tag.name))],
+        EntityFields::Event(_)
+        | EntityFields::Place(_)
+        | EntityFields::Source(_)
+        | EntityFields::Citation(_)
+        | EntityFields::Media(_)
+        | EntityFields::Note(_)
+        | EntityFields::Repository(_) => Vec::new(),
+    }
 }
 
 /// A tag name as identity compares it.

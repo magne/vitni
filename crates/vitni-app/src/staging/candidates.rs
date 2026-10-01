@@ -6,7 +6,7 @@
 //! family links. A relative that resolved onto a stored record is that record as the workspace knows it,
 //! so a confirmed father brings his recorded birth and names to his child's match.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use uuid::Uuid;
 use vitni_core::enums::{FactType, ParticipantRole};
@@ -23,7 +23,7 @@ use crate::person::build_name;
 use crate::profile::{Profile, vital_kind};
 use crate::similar::{Matcher, SimilarRecord};
 use crate::staging::graph::{EntityFields, LinkKind, StagedPerson};
-use crate::staging::plan::{CANDIDATE_BAND, Disposition, Endpoint, ImportPlan, WriteScope};
+use crate::staging::plan::{CANDIDATE_BAND, Disposition, Endpoint, ImportPlan, PlannedEntity, WriteScope};
 use crate::workspace::Workspace;
 
 /// The kinds matched against the workspace. The rest belong to their record — an event, citation, note
@@ -46,28 +46,25 @@ pub(crate) async fn find(
 ) -> Result<Vec<(usize, Vec<SimilarRecord>)>, AppError> {
     let mut kinds: Vec<MatchableKind> = Vec::new();
     for entity in &plan.entities {
-        if is_wanted(plan, entity.graph, entity.local_id) && !kinds.contains(&entity.kind) {
+        if is_wanted(entity) && !kinds.contains(&entity.kind) {
             kinds.push(entity.kind);
         }
     }
     let matcher = Matcher::load(workspace, &kinds).await?;
-    let builder = Builder {
-        plan,
-        matcher: &matcher,
-        origin,
-        families: families(plan),
-    };
+    let builder = Builder::new(plan, &matcher, origin);
+    let claimed = claimed_by_graph(plan);
+    let unclaimed = HashSet::new();
     let mut found = Vec::new();
     for (index, entity) in plan.entities.iter().enumerate() {
-        if !is_wanted(plan, entity.graph, entity.local_id) {
+        if !is_wanted(entity) {
             continue;
         }
         let Some(profile) = builder.profile(index) else {
             continue;
         };
-        let excluded = claimed_by_siblings(plan, entity.graph);
+        let excluded = claimed.get(&entity.graph).unwrap_or(&unclaimed);
         let similar = matcher
-            .similar(workspace, entity.kind, &profile, &excluded, CANDIDATE_BAND, LIMIT)
+            .similar(workspace, entity.kind, &profile, excluded, CANDIDATE_BAND, LIMIT)
             .await?;
         found.push((index, similar));
     }
@@ -75,20 +72,20 @@ pub(crate) async fn find(
 }
 
 /// Whether the entity is new, written in full and of a matched kind.
-fn is_wanted(plan: &ImportPlan, graph: usize, local_id: u32) -> bool {
-    plan.entity(graph, local_id).is_some_and(|entity| {
-        entity.scope == WriteScope::Full && entity.disposition == Disposition::New && MATCHED.contains(&entity.kind)
-    })
+fn is_wanted(entity: &PlannedEntity) -> bool {
+    entity.scope == WriteScope::Full && entity.disposition == Disposition::New && MATCHED.contains(&entity.kind)
 }
 
-/// The stored records the entities of `graph` resolved onto, which none of its other entities may
-/// match (ADR 0038 §4).
-fn claimed_by_siblings(plan: &ImportPlan, graph: usize) -> HashSet<String> {
-    plan.entities
-        .iter()
-        .filter(|entity| entity.graph == graph)
-        .filter_map(|entity| entity.disposition.target().map(|target| target.id.clone()))
-        .collect()
+/// The stored records each graph's entities resolved onto, which none of its other entities may match
+/// (ADR 0038 §4).
+fn claimed_by_graph(plan: &ImportPlan) -> HashMap<usize, HashSet<String>> {
+    let mut claimed: HashMap<usize, HashSet<String>> = HashMap::new();
+    for entity in &plan.entities {
+        if let Some(target) = entity.disposition.target() {
+            claimed.entry(entity.graph).or_default().insert(target.id.clone());
+        }
+    }
+    claimed
 }
 
 /// A family of the plan: its partners and its children, as endpoints.
@@ -98,9 +95,10 @@ struct Family {
     children: Vec<Endpoint>,
 }
 
-/// Every family the plan's partner and child links make, by the family's endpoint.
-fn families(plan: &ImportPlan) -> Vec<(Endpoint, Family)> {
-    let mut families: Vec<(Endpoint, Family)> = Vec::new();
+/// Every family the plan's partner and child links make.
+fn families(plan: &ImportPlan) -> Vec<Family> {
+    let mut families: Vec<Family> = Vec::new();
+    let mut positions: HashMap<Endpoint, usize> = HashMap::new();
     for planned in &plan.links {
         let link = &plan.graphs[planned.graph].links[planned.index].link;
         let (family, member, is_child) = match link {
@@ -119,13 +117,11 @@ fn families(plan: &ImportPlan) -> Vec<(Endpoint, Family)> {
         };
         let family = plan.endpoint(planned.graph, family).clone();
         let member = plan.endpoint(planned.graph, member).clone();
-        let position = if let Some(position) = families.iter().position(|(key, _)| *key == family) {
-            position
-        } else {
-            families.push((family, Family::default()));
+        let position = *positions.entry(family).or_insert_with(|| {
+            families.push(Family::default());
             families.len() - 1
-        };
-        let slot = &mut families[position].1;
+        });
+        let slot = &mut families[position];
         if is_child {
             slot.children.push(member);
         } else {
@@ -140,10 +136,72 @@ struct Builder<'a> {
     plan: &'a ImportPlan,
     matcher: &'a Matcher<'a>,
     origin: Option<(&'a DatasetId, ImportRunId)>,
-    families: Vec<(Endpoint, Family)>,
+    families: Vec<Family>,
+    /// The families each person endpoint is a partner or child of, by index in `families`.
+    memberships: HashMap<Endpoint, Vec<usize>>,
+    /// The planned events each planned person is the primary participant in, in link order.
+    primary_events: HashMap<usize, Vec<usize>>,
+    /// The place each planned event's first place link names.
+    event_places: HashMap<usize, Endpoint>,
 }
 
-impl Builder<'_> {
+impl<'a> Builder<'a> {
+    /// A builder over `plan`, with its family, participation and place links indexed once.
+    fn new(plan: &'a ImportPlan, matcher: &'a Matcher<'a>, origin: Option<(&'a DatasetId, ImportRunId)>) -> Self {
+        let families = families(plan);
+        let mut memberships: HashMap<Endpoint, Vec<usize>> = HashMap::new();
+        for (position, family) in families.iter().enumerate() {
+            for member in family.partners.iter().chain(&family.children) {
+                let of = memberships.entry(member.clone()).or_default();
+                if !of.contains(&position) {
+                    of.push(position);
+                }
+            }
+        }
+        let mut primary_events: HashMap<usize, Vec<usize>> = HashMap::new();
+        let mut event_places: HashMap<usize, Endpoint> = HashMap::new();
+        for planned in &plan.links {
+            match &plan.graphs[planned.graph].links[planned.index].link {
+                LinkKind::Participation {
+                    person, event, role, ..
+                } if *role == ParticipantRole::Primary => {
+                    if let (Endpoint::Planned(person), Endpoint::Planned(event)) = (
+                        plan.endpoint(planned.graph, person),
+                        plan.endpoint(planned.graph, event),
+                    ) {
+                        primary_events.entry(*person).or_default().push(*event);
+                    }
+                }
+                LinkKind::EventPlace { event, place } => {
+                    if let Endpoint::Planned(event) = plan.endpoint(planned.graph, event) {
+                        let place = plan.endpoint(planned.graph, place).clone();
+                        event_places.entry(*event).or_insert(place);
+                    }
+                }
+                LinkKind::Participation { .. }
+                | LinkKind::Partner { .. }
+                | LinkKind::Child { .. }
+                | LinkKind::FamilyEvent { .. }
+                | LinkKind::Enclosure { .. }
+                | LinkKind::CitationOf { .. }
+                | LinkKind::MediaOf { .. }
+                | LinkKind::NoteOf { .. }
+                | LinkKind::TagOf { .. }
+                | LinkKind::SourceRepository { .. }
+                | LinkKind::Association { .. } => {}
+            }
+        }
+        Self {
+            plan,
+            matcher,
+            origin,
+            families,
+            memberships,
+            primary_events,
+            event_places,
+        }
+    }
+
     /// The profile of the entity `index`, if it is of a matched kind.
     fn profile(&self, index: usize) -> Option<Profile> {
         let (graph, entity) = self.plan.staged(index)?;
@@ -198,7 +256,8 @@ impl Builder<'_> {
             external_ids: person.external_ids.clone(),
             ..PersonProfile::default()
         };
-        for (_, family) in &self.families {
+        let memberships = self.memberships.get(&me).map(Vec::as_slice).unwrap_or_default();
+        for family in memberships.iter().filter_map(|position| self.families.get(*position)) {
             let is_partner = family.partners.contains(&me);
             if family.children.contains(&me) {
                 profile
@@ -221,23 +280,8 @@ impl Builder<'_> {
     /// The vital events of the plan the person `index` is the primary participant in.
     fn vitals(&self, index: usize) -> Vec<VitalEvent> {
         let mut vitals = Vec::new();
-        for planned in &self.plan.links {
-            let link = &self.plan.graphs[planned.graph].links[planned.index].link;
-            let LinkKind::Participation {
-                person, event, role, ..
-            } = link
-            else {
-                continue;
-            };
-            if *role != ParticipantRole::Primary
-                || *self.plan.endpoint(planned.graph, person) != Endpoint::Planned(index)
-            {
-                continue;
-            }
-            let Endpoint::Planned(event_index) = self.plan.endpoint(planned.graph, event) else {
-                continue;
-            };
-            let Some((_, staged)) = self.plan.staged(*event_index) else {
+        for &event_index in self.primary_events.get(&index).map(Vec::as_slice).unwrap_or_default() {
+            let Some((_, staged)) = self.plan.staged(event_index) else {
                 continue;
             };
             let EntityFields::Event(fields) = &staged.fields else {
@@ -250,32 +294,22 @@ impl Builder<'_> {
                 kind,
                 date: fields.date.clone(),
                 basis: DateBasis::Recorded,
-                place: self.place_of(*event_index),
+                place: self.place_of(event_index),
             });
         }
         vitals
     }
 
-    /// The place of the planned event `event`, through its place link.
+    /// The place of the planned event `event`, through its first place link.
     fn place_of(&self, event: usize) -> Option<PlaceProfile> {
-        for planned in &self.plan.links {
-            let link = &self.plan.graphs[planned.graph].links[planned.index].link;
-            let LinkKind::EventPlace { event: of, place } = link else {
-                continue;
-            };
-            if *self.plan.endpoint(planned.graph, of) != Endpoint::Planned(event) {
-                continue;
+        match self.event_places.get(&event)? {
+            Endpoint::Planned(place) => self.planned_place(*place),
+            Endpoint::Stored { aggregate_id, .. } => {
+                let id = Uuid::parse_str(aggregate_id.as_deref()?).ok()?;
+                self.matcher.profiles.place(PlaceId::from_uuid(id))
             }
-            return match self.plan.endpoint(planned.graph, place) {
-                Endpoint::Planned(place) => self.planned_place(*place),
-                Endpoint::Stored { aggregate_id, .. } => {
-                    let id = Uuid::parse_str(aggregate_id.as_deref()?).ok()?;
-                    self.matcher.profiles.place(PlaceId::from_uuid(id))
-                }
-                Endpoint::Dangling => None,
-            };
+            Endpoint::Dangling => None,
         }
-        None
     }
 
     fn planned_place(&self, index: usize) -> Option<PlaceProfile> {

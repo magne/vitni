@@ -710,6 +710,8 @@ around evidence and provenance.
    - **Update** — the same, naming the fields the writes would assert;
    - **Link** — a record identity is established for deterministically: by a recorded resolution, by
      `ExternalId`, or a tag by its case-folded name (ADR 0038 §6), recorded as `ItemResolved`;
+   - **Duplicate** — the same record as an earlier entity of the import: one with the same
+     `ExternalId`, or a tag of the same folded name; references to it point at that entity;
    - **Candidates** — a new person, place, source or repository the matching engine judges at least
      Possible against the workspace; relatives that resolved stand in as the records they resolved
      onto, and two items of one graph are never matched to each other. Until the review stages land
