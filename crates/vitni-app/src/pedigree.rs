@@ -477,11 +477,13 @@ impl PedigreeLookups {
     }
 }
 
-/// Resolves a person `human_id` to its aggregate [`PersonId`], or [`AppError::PersonNotFound`].
+/// Resolves a person `human_id` to its cluster root's aggregate [`PersonId`] — the record the charts
+/// read a merged person as (ADR 0039 §5) — or [`AppError::PersonNotFound`].
 async fn resolve_person_id(store: &Store, human_id: &str) -> Result<PersonId, AppError> {
-    use_case::resolve_id(store.find_person(human_id).await?, PersonView::person_id, || {
+    let person_id = use_case::resolve_id(store.find_person(human_id).await?, PersonView::person_id, || {
         AppError::PersonNotFound(human_id.to_owned())
-    })
+    })?;
+    Ok(crate::identity::PersonClusters::load(store).await?.root(person_id))
 }
 
 #[cfg(test)]

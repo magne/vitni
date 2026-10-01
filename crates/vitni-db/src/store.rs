@@ -45,6 +45,16 @@ pub struct PlaceSuccessionRecord {
     pub assertion_id: String,
 }
 
+/// One merged record and the root of the cluster it belongs to (ADR 0039 §4). Engine-neutral (string
+/// aggregate ids).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdentityLink {
+    /// The merged record's aggregate id.
+    pub member: String,
+    /// The aggregate id of its cluster's root: the survivor that is not itself merged.
+    pub root: String,
+}
+
 /// An infrastructure failure (engine-neutral — no `sqlx`/`cqrs-es` types escape).
 #[derive(Debug, thiserror::Error)]
 pub enum DbError {
@@ -556,6 +566,36 @@ impl Store {
         }
         #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
         {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Every merged record of `kind` with the root of its cluster, ordered by member (ADR 0039 §4) — the
+    /// transitive closure of the live merge decisions.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn identity_links(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+    ) -> Result<Vec<IdentityLink>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.identity_links(kind).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.identity_links(kind).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = kind;
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
     }

@@ -491,6 +491,7 @@ fn summary() -> PersonSummary {
         tag_refs: Vec::new(),
         restrictions: BTreeSet::new(),
         merged: Vec::new(),
+        claim_owners: std::collections::BTreeMap::new(),
     }
 }
 
@@ -722,6 +723,21 @@ fn detail_view_models_thread_assertion_ids_and_structured_prefill_fields() {
     );
 }
 
+/// A merged cluster's rows name the member they came from, so the detail can attribute them; the
+/// person's own rows name none (ADR 0039 §5).
+#[test]
+fn rows_from_a_merged_member_name_their_record() {
+    let loc = Localizer::for_test("en");
+    let mut summary = summary();
+    summary
+        .claim_owners
+        .insert("aaaaaaaa-0000-7000-8000-000000000002".to_owned(), "I0007".to_owned());
+    let detail = PersonDetail::from_summary(&summary, &loc);
+    assert_eq!(detail.facts[0].merged_from.as_deref(), Some("I0007"));
+    assert_eq!(detail.names[0].merged_from, None);
+    assert_eq!(detail.associations[0].merged_from, None);
+}
+
 #[test]
 fn persona_evidence_level_surfaces_on_the_badge() {
     let loc = Localizer::for_test("en");
@@ -797,6 +813,7 @@ fn missing_name_and_sex_use_placeholders() {
         tag_refs: Vec::new(),
         restrictions: BTreeSet::from([Restriction::Privacy]),
         merged: Vec::new(),
+        claim_owners: std::collections::BTreeMap::new(),
     };
     let row = person_row(&summary, &loc);
     assert_eq!(row.title, "(no name)");

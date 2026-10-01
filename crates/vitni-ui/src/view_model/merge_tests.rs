@@ -38,6 +38,7 @@ fn bare_summary(human_id: &str, display_name: Option<&str>) -> PersonSummary {
         tag_refs: Vec::new(),
         restrictions: BTreeSet::new(),
         merged: Vec::new(),
+        claim_owners: std::collections::BTreeMap::new(),
     }
 }
 
@@ -124,7 +125,6 @@ fn merge_result_summary_never_claims_repointing() {
     let result = MergeResult {
         survivor: bare_summary("I0042", Some("John Smith")),
         merged_human_id: "I0099".to_owned(),
-        still_referenced: 3,
     };
     let vm = MergeResultVm::build(&result, &loc);
     assert!(

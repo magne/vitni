@@ -1029,9 +1029,9 @@ async fn merge_links_the_merged_person_as_a_persona_of_the_survivor() {
         result.survivor.merged
     );
 
-    // The merged person's own record is untouched — it still resolves.
+    // The merged person's record still resolves, now as the survivor's cluster (ADR 0039 §5).
     let merged_summary = show_person(&ws, &merged).await.expect("show").expect("still exists");
-    assert_eq!(merged_summary.human_id, merged);
+    assert_eq!(merged_summary.human_id, survivor);
 }
 
 #[tokio::test]

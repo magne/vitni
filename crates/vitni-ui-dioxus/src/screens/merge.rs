@@ -9,12 +9,12 @@
 //! **informational** ("which record currently holds this value" — [`Chrome::merge_radio_group_label`]),
 //! never a granular-apply mechanism: the "Merge" button always performs one atomic
 //! `vitni_app::merge_persons` call, never a field-by-field reconciliation. The footer never claims
-//! "N relationships re-pointed" — it reports how many other records still *reference* the merged
-//! persona ([`Chrome`]/[`Localizer::merge_result_summary`](vitni_ui::Localizer)).
+//! "N relationships re-pointed": references to the merged persona read as the survivor (ADR 0039 §5).
 //!
 //! *Not the same person* is the other decision (ADR 0039 §1): one `vitni_app::distinguish_persons`
 //! call. Either decision records the reason, confidence and engine assessment the wizard shows, and the
-//! pair then never returns to the duplicates table.
+//! pair then never returns to the duplicates table. A pair an earlier decision holds distinct shows that
+//! decision and offers *Undo "not the same" and merge* (ADR 0039 §4).
 
 use super::prelude::*;
 use super::shared::confidence_choices;
@@ -139,10 +139,30 @@ pub fn MergeScreen() -> Element {
             }
         });
     });
+    let undo_merge_services = state.services().clone();
+    let on_undo_and_merge = use_callback(move |()| {
+        let MergeMode::Compare { surviving, merged } = mode() else {
+            return;
+        };
+        let request = MergePersons {
+            surviving_human_id: surviving,
+            merged_human_id: merged,
+            judgment: judgment(),
+        };
+        let services = undo_merge_services.clone();
+        spawn(async move {
+            blocked.set(None);
+            match undo_distinction_and_merge(services, request).await {
+                Ok(result) => decided.call(result.summary),
+                Err(failure) => on_failure.call(failure),
+            }
+        });
+    });
     let actions = DecisionActions {
         cancel: on_cancel,
         merge: on_merge,
         distinguish: on_distinguish,
+        undo_and_merge: on_undo_and_merge,
     };
 
     rsx! {
@@ -157,6 +177,7 @@ pub fn MergeScreen() -> Element {
                     rsx! {
                         Button { label: chrome.0.merge_back(), small: true, onclick: move |_| on_cancel.call(()) }
                     },
+                    actions,
                     rsx! {
                         if let Some(vm) = blocked() {
                             {merge_blocked_card(&vm)}
@@ -267,13 +288,14 @@ pub fn DuplicatesTable(
 }
 
 /// Renders the compare/merge wizard body: `back`, then the loaded [`MergeCompareVm`]'s heading,
-/// assessment and field grid, then `tail` — the blocked-decision card and the decision foot, built by
-/// the screen.
+/// assessment, the earlier distinction (with `actions`' undo-and-merge) when one holds, and field
+/// grid, then `tail` — the blocked-decision card and the decision foot, built by the screen.
 fn compare_body(
     chrome: &Chrome,
     loading: &str,
     data: Option<&Option<ScreenData>>,
     back: Element,
+    actions: DecisionActions,
     tail: Element,
 ) -> Element {
     match data {
@@ -282,6 +304,9 @@ fn compare_body(
         Some(Some(ScreenData::Loaded(IntentOutcome::MergeCompare(vm)))) => rsx! {
             {back}
             {merge_compare_heading(chrome, vm)}
+            if vm.earlier_decision == Some(PairDecision::Distinct) {
+                {earlier_distinction_card(chrome, actions.undo_and_merge)}
+            }
             MergeCompareGrid { vm: (**vm).clone() }
             {tail}
         },
@@ -316,6 +341,8 @@ pub struct DecisionActions {
     pub merge: Callback<()>,
     /// Record that the pair are different people.
     pub distinguish: Callback<()>,
+    /// Undo the earlier decision that the pair are different people, then merge them.
+    pub undo_and_merge: Callback<()>,
 }
 
 /// The compare/merge wizard's foot (`merge.html`): the reason and confidence recorded with the
@@ -372,6 +399,20 @@ pub fn merge_wizard_foot(
                 label: chrome.merge_submit(),
                 variant: ButtonVariant::Primary,
                 onclick: move |_| actions.merge.call(()),
+            }
+        }
+    }
+}
+
+/// The notice that an earlier decision holds the pair distinct (`merge.html`), offering *Undo "not the
+/// same" and merge* (ADR 0039 §4). Pure over its args, so an SSR test renders it directly.
+pub fn earlier_distinction_card(chrome: &Chrome, undo_and_merge: Callback<()>) -> Element {
+    rsx! {
+        div { class: "card", role: "status",
+            h3 { "{chrome.merge_earlier_distinct_heading()}" }
+            div { class: "muted", style: "font-size:var(--fs-sm)", "{chrome.merge_earlier_distinct_guidance()}" }
+            div { style: "margin-top:var(--sp-2)",
+                Button { label: chrome.merge_undo_distinction(), onclick: move |_| undo_and_merge.call(()) }
             }
         }
     }

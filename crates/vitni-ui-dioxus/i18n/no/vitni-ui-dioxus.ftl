@@ -405,6 +405,9 @@ merge-reason-label = Årsak til avgjørelsen
 merge-reason-hint = (registreres på avgjørelsen)
 merge-confidence-label = Sikkerhet
 merge-distinguish = Ikke samme person
+merge-earlier-distinct-heading = Markert som ulike personer
+merge-earlier-distinct-guidance = En tidligere avgjørelse sier at disse to er ulike personer, så de kan ikke slås sammen slik de er. Å angre den og slå sammen registrerer begge stegene i historikken.
+merge-undo-distinction = Angre «ikke samme» og slå sammen
 
 # Tilleggshåndtering – rammestrenger (PR21). Kapabilitets-/rolle-/tillitsetiketter leses fra selve
 # komponenten av vitni-plugin-host::discover — dette er kun visningsnavnene.

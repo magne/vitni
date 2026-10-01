@@ -752,6 +752,7 @@ impl EventLookups {
     async fn load(workspace: &Workspace) -> Result<Self, AppError> {
         let store = workspace.store();
         let person_views = store.list_persons().await?;
+        let clusters = crate::identity::PersonClusters::load(store).await?;
         let person_ids: HashMap<String, PersonId> = person_views
             .iter()
             .filter_map(|p| Some((p.human_id()?.to_string(), p.person_id()?)))
@@ -773,6 +774,7 @@ impl EventLookups {
             let Some(person_id) = view.person_id() else {
                 continue;
             };
+            let person_id = clusters.root(person_id);
             let info = persons.get(&person_id);
             let human_id = info.map_or_else(|| person_id.to_string(), |i| i.human_id.clone());
             let name = info.and_then(|i| i.name.clone());

@@ -50,12 +50,12 @@
     <div class="section-note">
       <b>Non-destructive and reversible.</b> Merging does <i>not</i> delete the merged-from record. I0099
       is kept as a <b>persona</b> of the survivor and every assertion it carried stays in the event log with
-      its original operator and citations. Committing writes a <b>sequenced change-set</b> — the
-      <span class="mono">PersonsMerged</span> event plus follow-up assertions that take the picked values
-      and re-point relationships, committed <i>per aggregate</i> (not one atomic transaction, same as
-      <a href="record-editing.html">cascading create</a>). <b>Undo reverses the whole set</b>; a partial
-      failure can leave an orphaned follow-up, never corruption. This is the opposite of the destructive,
-      irreversible merges other tools force on you — here you never lose evidence.
+      its original operator and citations. Committing writes one <span class="mono">PersonsMerged</span> event
+      on the survivor (ADR 0039 §5). From then on the two read as one person: lists, pickers and counts show
+      the survivor only; families, events, backlinks and exports that name I0099 name the survivor; and the
+      survivor's tabs show I0099's claims, each marked with the record it came from. <b>Undoing the merge</b> in
+      History restores both. This is the opposite of the destructive, irreversible merges other tools force on
+      you — here you never lose evidence.
     </div>
 
     <!-- Field-by-field merge grid -->
@@ -190,10 +190,21 @@
             <a class="grow" href="person.html">Mary Doe</a>
             <span class="muted">m. 1876</span>
           </div>
-          <div class="muted" style="font-size:var(--fs-xs);margin-top:2px">same family — relationships re-pointed, not duplicated</div>
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:2px">same family — after the merge it names the survivor</div>
         </div>
 
       </div>
+    </div>
+
+    <!-- Earlier-decision notice: a live PersonsDistinguished between the two clusters -->
+    <div class="card" role="status">
+      <h3>Marked as different people</h3>
+      <div class="muted" style="font-size:var(--fs-sm)">An earlier decision says these two are different people, so
+        they cannot be merged as they are. Undoing it and merging records both steps in History.</div>
+      <div style="margin-top:var(--sp-2)"><button class="btn">Undo “not the same” and merge</button></div>
+      <div class="muted" style="font-size:var(--fs-xs);margin-top:var(--sp-2)">Specimen: shown under the heading when
+        a record of one person's cluster holds a live <span class="mono">PersonsDistinguished</span> about a record of
+        the other's (ADR 0039 §4). The action retracts every such distinction, then merges.</div>
     </div>
 
     <!-- Blocked-decision specimen: IdentityDecided -->
@@ -201,9 +212,10 @@
       <h3 style="color:var(--err)">Already decided</h3>
       <div class="muted" style="font-size:var(--fs-sm)">These two people already have an identity decision. Undo it
         in History before deciding again.</div>
-      <div class="muted" style="font-size:var(--fs-xs);margin-top:var(--sp-2)">Specimen: shown when either person
-        already holds a live <span class="mono">PersonsMerged</span> or <span class="mono">PersonsDistinguished</span>
-        about the other — nothing is written.</div>
+      <div class="muted" style="font-size:var(--fs-xs);margin-top:var(--sp-2)">Specimen: shown when the two are
+        already one cluster, or a record of one cluster holds a live
+        <span class="mono">PersonsDistinguished</span> about a record of the other — nothing is written. A merge
+        into a record that is itself merged lands on its cluster's root.</div>
     </div>
 
     <!-- Blocked-merge specimen: MergeConflict -->

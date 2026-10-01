@@ -304,7 +304,13 @@ async fn edit_person_graph(
         let assert = PersonCommand::AssertName { person_id, name };
         // Supersede the current primary name so the changed preferred name replaces it (rather than
         // becoming a buried second name — the projection's primary is the first-asserted).
-        let command = match current.primary_name_assertion.as_deref().and_then(parse_assertion_id) {
+        // Only the root's own primary name is superseded on its stream; a primary name a merged
+        // member supplied stays that member's claim, and the new name goes on the root (ADR 0039 §5).
+        let own_primary = current
+            .primary_name_assertion
+            .as_deref()
+            .filter(|assertion| current.owner_of(assertion) == current.human_id);
+        let command = match own_primary.and_then(parse_assertion_id) {
             Some(target) => PersonCommand::SupersedeAssertion {
                 person_id,
                 target,
@@ -352,7 +358,9 @@ async fn edit_person_graph(
     .await
 }
 
-/// Emits `Tag`/`Untag` for the difference between the person's current tags and the desired set.
+/// Emits `Tag`/`Untag` for the difference between the person's current tags and the desired set. A
+/// tag is added on the person; a removed tag is untagged on every record of its cluster that holds
+/// it (ADR 0039 §5).
 async fn commit_tag_diff(
     session: &Session,
     store: &Store,
@@ -382,15 +390,20 @@ async fn commit_tag_diff(
     for current_tag in &current.tags {
         if !desired_tags.contains(current_tag.as_str()) {
             let tag_id = parse_tag_id(current_tag)?;
-            execute_person_command(
-                store,
-                session,
-                aggregate_id,
-                PersonCommand::Untag { person_id, tag_id },
-                change_set.provenance.clone(),
-                block_citations.to_vec(),
-            )
-            .await?;
+            for owner in crate::person::tag_holders(store, person_id, tag_id).await? {
+                execute_person_command(
+                    store,
+                    session,
+                    &owner.to_string(),
+                    PersonCommand::Untag {
+                        person_id: owner,
+                        tag_id,
+                    },
+                    change_set.provenance.clone(),
+                    block_citations.to_vec(),
+                )
+                .await?;
+            }
         }
     }
     Ok(())

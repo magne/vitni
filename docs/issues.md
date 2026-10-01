@@ -453,8 +453,8 @@ record origins with import runs (#393) and resolve-by-origin (#394), then the xr
 (#389), tombstones by origin (#395), the matching core (#396), the person profile (#397), the
 family and event profiles (#398), the other seven kinds' profiles (#399), the `match_keys` blocking
 index with `find_similar` (#400), the evaluation corpus with `cargo xtask match-eval` (#402) and
-`PersonsDistinguished` with the assessment on identity decisions (#403), and the duplicate check
-through the engine (#401), which have landed.
+`PersonsDistinguished` with the assessment on identity decisions (#403), the duplicate check
+through the engine (#401) and persona clusters (#404), which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
@@ -487,13 +487,6 @@ does.
   surnames differ. The default 256 cases rarely reach it. *Shape:* a key the Jaro–Winkler floor
   implies (a short prefix of the normalized given name), or *Katherine* in the same class as *Kari*.
   *Exit:* the proptest passes at 10 000 cases.
-- **Persona clusters** — ADR 0039 §4, §5. `identity_links(kind, member, root)` holds the transitive
-  closure, refusing cycles and blocking a merge on a live distinct decision. Read-time composition in
-  `vitni-app`: the root's detail is the union of every member's claims, each still attributed, and a
-  row edit is routed to its owner. Members are hidden from lists and pickers, references resolve to
-  the root, and exporters fold clusters. Data-model §9 is updated. *Needs:* distinct decisions.
-  *Exit:* after a link, the person appears once in lists, pickers, families and a GEDCOM export;
-  *Unlink* restores both. — #404
 - **Merge and distinguish for Event and Family** — ADR 0039 §1. `EventsMerged`/`EventsDistinguished`
   and `FamiliesMerged`/`FamiliesDistinguished`, redirected through `identity_links`. Participants of a
   merged event are unioned in the projection. *Needs:* persona clusters. *Exit:* two copies of one

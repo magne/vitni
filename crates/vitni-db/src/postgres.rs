@@ -60,14 +60,20 @@ macro_rules! postgres_open_cqrs {
     }};
 }
 
-/// Appends the Place-only succession-index (ADR 0026 §4) `Query` to the `place` `CqrsFramework`,
-/// leaving every other aggregate's framework untouched. Dispatches on the registry's literal
-/// `$snake` token — the same "wiring by tag" shape as [`postgres_open_cqrs!`] — rather than naming
-/// `place` after the per-aggregate repetition, which a plain `let` can't see across macro hygiene.
+/// Appends the derived side indexes to the one framework each is fed by: the identity cluster index
+/// (ADR 0039 §4) to `person` and the succession index (ADR 0026 §4) to `place`, leaving every other
+/// aggregate's framework untouched. Dispatches on the registry's literal `$snake` token — the same
+/// "wiring by tag" shape as [`postgres_open_cqrs!`] — rather than naming the aggregate after the
+/// per-aggregate repetition, which a plain `let` can't see across macro hygiene.
 ///
 /// The SQLite twin also appends a geometry index; that one is `geo-types`/`geozero`-backed and
 /// sqlite-only, so the Postgres mirror is a separate follow-up (ADR 0024 §3).
-macro_rules! postgres_wire_place_indexes {
+macro_rules! postgres_wire_side_indexes {
+    (person, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::new(
+            $pool.clone(),
+        )))
+    };
     (place, $pool:expr, $framework:expr) => {
         $framework.append_query(Box::new(
             place_succession_index::postgres::PlaceSuccessionIndexQuery::new($pool.clone()),
@@ -140,7 +146,7 @@ macro_rules! postgres_store {
                 // The Place succession cross-reference index (ADR 0026 §4) is not one of the generic
                 // per-aggregate projections: it is derived from the Place projection and keyed by its
                 // own tables. Its DDL is created up front, and its `Query` is appended only to the
-                // Place framework below (`postgres_wire_place_indexes!`).
+                // Place framework below (`postgres_wire_side_indexes!`).
                 place_succession_index::postgres::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating place succession index: {e}")))?;
@@ -151,13 +157,19 @@ macro_rules! postgres_store {
                 crate::match_keys::postgres::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating match keys index: {e}")))?;
+                // The identity cluster index (ADR 0039 §4) is derived from the Person projection; its
+                // `Query` is appended only to the Person framework below, and a workspace that predates
+                // it gets it filled once the projections are open.
+                let identity_is_new = crate::identity_links::postgres::create_tables(&pool)
+                    .await
+                    .map_err(|e| DbError::Backend(format!("creating identity index: {e}")))?;
                 let origins_are_new = crate::record_origins::postgres::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating record origins index: {e}")))?;
                 $(
                     let repo = Arc::new(PostgresViewRepository::<$View, $State>::new($table_const, pool.clone()));
                     let $snake = postgres_open_cqrs!(pool, repo, $wiring);
-                    let $snake = postgres_wire_place_indexes!($snake, pool, $snake).append_query(Box::new(
+                    let $snake = postgres_wire_side_indexes!($snake, pool, $snake).append_query(Box::new(
                         crate::record_origins::postgres::RecordOriginsQuery::new(pool.clone(), $table_const),
                     )).append_query(Box::new(crate::match_keys::postgres::MatchDirtyQuery::new(pool.clone())));
                     if stale_tables.contains(&$table_const) {
@@ -171,6 +183,9 @@ macro_rules! postgres_store {
                         replay_record_origins::<$State>(&pool, $table_const, $upcasters).await?;
                     }
                 )+
+                if identity_is_new {
+                    crate::identity_links::postgres::rebuild_index(&pool).await?;
+                }
                 Ok(Self { $($snake,)+ pool })
             }
 
@@ -223,6 +238,8 @@ macro_rules! postgres_store {
                 // Place's succession cross-reference index (ADR 0026 §4) is derived from the (now
                 // freshly rebuilt) Place projection above, not replayed from raw events itself.
                 place_succession_index::postgres::rebuild_index(&self.pool).await?;
+                // The identity clusters (ADR 0039 §4) are derived from the rebuilt Person projection.
+                crate::identity_links::postgres::rebuild_index(&self.pool).await?;
                 // The record origins index is replayed from the raw events, after the projections
                 // its `live` flags are read from.
                 crate::record_origins::postgres::clear_table(&self.pool).await?;
@@ -409,6 +426,14 @@ impl PostgresStore {
     /// a rebuilt one.
     pub(crate) async fn record_origins_dump(&self) -> Result<Vec<Vec<String>>, DbError> {
         crate::record_origins::postgres::all_rows(&self.pool).await
+    }
+
+    /// Every member of a `kind` cluster with its root (ADR 0039 §4).
+    pub(crate) async fn identity_links(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+    ) -> Result<Vec<crate::store::IdentityLink>, DbError> {
+        crate::identity_links::postgres::links(&self.pool, kind).await
     }
 
     /// Every place a succession names `to`, from `place_id`'s perspective as a `from` endpoint

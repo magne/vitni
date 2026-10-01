@@ -975,7 +975,8 @@ pub async fn change_log_for_tag(workspace: &Workspace, id: &str) -> Result<Vec<C
     label_runs(store, entries).await
 }
 
-/// Counts every aggregate's projected records for the Dashboard and the rail badges.
+/// Counts every aggregate's projected records for the Dashboard and the rail badges. A person merged
+/// into another is not counted: its cluster is one person (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -986,7 +987,10 @@ pub async fn workspace_counts(workspace: &Workspace) -> Result<WorkspaceCounts, 
     for kind in AGGREGATE_KINDS {
         let count = store.count(kind).await?;
         match kind {
-            "person" => counts.person = count,
+            "person" => {
+                let members = crate::identity::PersonClusters::load(store).await?.member_count();
+                counts.person = count.saturating_sub(u64::try_from(members).unwrap_or(u64::MAX));
+            }
             "family" => counts.family = count,
             "event" => counts.event = count,
             "place" => counts.place = count,

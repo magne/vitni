@@ -55,6 +55,7 @@ use vitni_db::Store;
 
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
+use crate::identity::PersonClusters;
 use crate::person::resolve_person_id_public;
 use crate::use_case;
 use crate::workspace::Workspace;
@@ -221,6 +222,8 @@ pub(crate) struct Profiles {
     tags: HashMap<TagId, TagView>,
     /// The origin of the creating assertion of each imported record, by aggregate id.
     origins: HashMap<String, Vec<RecordOrigin>>,
+    /// The person clusters, read with the people.
+    person_clusters: PersonClusters,
 }
 
 impl Profiles {
@@ -232,6 +235,7 @@ impl Profiles {
         let mut origin_kinds = Vec::new();
         if wants(&[Person, Family, Event]) {
             profiles.people = Some(ProfileLookups::load(store).await?);
+            profiles.person_clusters = PersonClusters::load(store).await?;
             origin_kinds.extend([Person, Family, Event]);
         }
         if wants(&[Place]) {
@@ -268,19 +272,22 @@ impl Profiles {
         Ok(profiles)
     }
 
-    /// Every pair of `kind` holding a live identity decision either way — merged or distinguished
-    /// (ADR 0039 §3) — as aggregate ids, the lower first. Only persons can be decided yet.
-    pub(crate) fn decided_pairs(&self, kind: MatchableKind) -> HashSet<(String, String)> {
-        let mut pairs = HashSet::new();
-        let (MatchableKind::Person, Some(people)) = (kind, &self.people) else {
-            return pairs;
-        };
-        for (id, view) in &people.persons {
-            for other in view.merged().into_iter().chain(view.distinguished()) {
-                pairs.insert(ordered_pair(id.to_string(), other.to_string()));
+    /// The identity decisions on `kind` that keep a pair out of every suggestion (ADR 0039 §3, §4).
+    /// Only persons can be decided yet.
+    pub(crate) fn decisions(&self, kind: MatchableKind) -> Decisions {
+        let mut distinct = HashSet::new();
+        if let (MatchableKind::Person, Some(people)) = (kind, &self.people) {
+            for (id, view) in &people.persons {
+                for other in view.distinguished() {
+                    let (a, b) = (self.person_clusters.root(*id), self.person_clusters.root(other));
+                    distinct.insert(ordered_pair(a.to_string(), b.to_string()));
+                }
             }
         }
-        pairs
+        Decisions {
+            clusters: (kind == MatchableKind::Person).then(|| self.person_clusters.clone()),
+            distinct,
+        }
     }
 
     /// The aggregate id of every record of `kind` read, in id order.
@@ -597,6 +604,40 @@ struct ProfileLookups {
     parents_of: HashMap<PersonId, Vec<PersonId>>,
     partners_of: HashMap<PersonId, Vec<PersonId>>,
     children_of: HashMap<PersonId, Vec<PersonId>>,
+}
+
+/// The identity decisions on one kind (ADR 0039 §4): its clusters, and every pair of cluster roots
+/// held distinct.
+pub(crate) struct Decisions {
+    clusters: Option<PersonClusters>,
+    distinct: HashSet<(String, String)>,
+}
+
+impl Decisions {
+    /// The aggregate id of the root of `id`'s cluster: `id` itself unless it is merged.
+    pub(crate) fn root(&self, id: &str) -> String {
+        let (Some(clusters), Ok(uuid)) = (&self.clusters, Uuid::parse_str(id)) else {
+            return id.to_owned();
+        };
+        clusters.root(PersonId::from_uuid(uuid)).to_string()
+    }
+
+    /// Whether the pair `a`, `b` (aggregate ids) is never proposed: either is merged into another
+    /// record and so hidden behind its root, both are one cluster, or their clusters are held
+    /// distinct.
+    pub(crate) fn exclude(&self, a: &str, b: &str) -> bool {
+        let Some(clusters) = &self.clusters else {
+            return false;
+        };
+        let (Ok(a), Ok(b)) = (Uuid::parse_str(a), Uuid::parse_str(b)) else {
+            return false;
+        };
+        let (a, b) = (PersonId::from_uuid(a), PersonId::from_uuid(b));
+        if clusters.is_member(a) || clusters.is_member(b) {
+            return true;
+        }
+        a == b || self.distinct.contains(&ordered_pair(a.to_string(), b.to_string()))
+    }
 }
 
 /// The two ids of a pair, the lower first.

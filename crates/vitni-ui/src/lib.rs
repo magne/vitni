@@ -55,7 +55,7 @@ pub use intent::{
     dispatch_note_change_set, dispatch_note_edit, dispatch_person_change_set, dispatch_person_edit,
     dispatch_place_change_set, dispatch_place_edit, dispatch_repository_change_set, dispatch_repository_edit,
     dispatch_research_note_change_set, dispatch_research_note_edit, dispatch_source_change_set, dispatch_source_edit,
-    dispatch_tag_change_set, pin_publisher, resolve_record_name, unpin_publisher,
+    dispatch_tag_change_set, dispatch_undo_distinction_and_merge, pin_publisher, resolve_record_name, unpin_publisher,
 };
 pub use list::{ListQuery, RowSort, RowVm, step_row, visible_rows};
 pub use navigation::{

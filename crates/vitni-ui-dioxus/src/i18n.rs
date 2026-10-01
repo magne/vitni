@@ -1632,6 +1632,24 @@ impl Chrome {
         fl!(self.loader, "merge-confidence-label")
     }
 
+    /// The heading of the compare view's notice that an earlier decision holds the pair distinct.
+    #[must_use]
+    pub fn merge_earlier_distinct_heading(&self) -> String {
+        fl!(self.loader, "merge-earlier-distinct-heading")
+    }
+
+    /// The guidance under [`Self::merge_earlier_distinct_heading`].
+    #[must_use]
+    pub fn merge_earlier_distinct_guidance(&self) -> String {
+        fl!(self.loader, "merge-earlier-distinct-guidance")
+    }
+
+    /// The *Undo "not the same" and merge* button label (ADR 0039 §4).
+    #[must_use]
+    pub fn merge_undo_distinction(&self) -> String {
+        fl!(self.loader, "merge-undo-distinction")
+    }
+
     /// The wizard's "Not the same person" button label.
     #[must_use]
     pub fn merge_distinguish(&self) -> String {

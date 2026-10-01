@@ -49,9 +49,13 @@ impl NoteUsage {
     }
 }
 
-/// Pushes one referencing record onto a note's bucket.
+/// Pushes one referencing record onto a note's bucket, once: the records of a merged person cluster all
+/// name its root (ADR 0039 §5).
 fn push(map: &mut HashMap<NoteId, Vec<UsingRecordRef>>, note: NoteId, record: UsingRecordRef) {
-    map.entry(note).or_default().push(record);
+    let records = map.entry(note).or_default();
+    if !records.contains(&record) {
+        records.push(record);
+    }
 }
 
 /// Inverts person note attachments.
@@ -60,11 +64,12 @@ async fn scan_persons(
     person_names: &HashMap<String, String>,
     map: &mut HashMap<NoteId, Vec<UsingRecordRef>>,
 ) -> Result<(), AppError> {
+    let references = crate::identity::PersonReferences::load(workspace.store()).await?;
     for view in workspace.store().list_persons().await? {
-        let (Some(id), Some(human_id)) = (view.person_id(), view.human_id()) else {
+        let Some(id) = view.person_id() else {
             continue;
         };
-        let human_id = human_id.as_str().to_owned();
+        let (id, human_id) = references.resolve(id);
         let label = person_names.get(&human_id).cloned();
         for note in view.notes() {
             push(

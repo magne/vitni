@@ -551,6 +551,65 @@ async fn rebuild_reproduces_the_postgres_succession_index() {
     assert_eq!(before, after, "rebuild must reproduce the succession index");
 }
 
+async fn person_command(store: &Store, n: u128, assertion: u128, command: PersonCommand) {
+    store
+        .execute_person(
+            &PersonId::from_uuid(Uuid::from_u128(n)).to_string(),
+            PersonCommandEnvelope {
+                meta: meta(assertion),
+                command,
+            },
+        )
+        .await
+        .unwrap();
+}
+
+async fn person_links(store: &Store) -> Vec<(String, String)> {
+    store
+        .identity_links(vitni_core::matching::MatchableKind::Person)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|link| (link.member, link.root))
+        .collect()
+}
+
+#[tokio::test]
+async fn identity_links_follow_merges_retractions_and_rebuild_on_postgres() {
+    let (store, _db) = store().await;
+    for (n, human_id) in [(1, "I0001"), (2, "I0002"), (3, "I0003")] {
+        create(&store, n, human_id).await;
+    }
+    let id = |n: u128| PersonId::from_uuid(Uuid::from_u128(n));
+    let merge = |surviving: u128, merged: u128| PersonCommand::MergePersons {
+        surviving: id(surviving),
+        merged: id(merged),
+        assessment: None,
+    };
+    person_command(&store, 2, 200, merge(2, 3)).await;
+    person_command(&store, 1, 201, merge(1, 2)).await;
+    let chain = vec![
+        (id(2).to_string(), id(1).to_string()),
+        (id(3).to_string(), id(1).to_string()),
+    ];
+    assert_eq!(person_links(&store).await, chain);
+
+    store.rebuild_projections().await.unwrap();
+    assert_eq!(person_links(&store).await, chain, "rebuild reproduces the clusters");
+
+    person_command(
+        &store,
+        1,
+        202,
+        PersonCommand::RetractAssertion {
+            person_id: id(1),
+            target: AssertionId::from_uuid(Uuid::from_u128(201)),
+        },
+    )
+    .await;
+    assert_eq!(person_links(&store).await, vec![(id(3).to_string(), id(2).to_string())]);
+}
+
 /// The ordered `human_id`s of every person projection.
 async fn person_ids(store: &Store) -> Vec<String> {
     store

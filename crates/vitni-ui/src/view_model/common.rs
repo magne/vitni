@@ -67,6 +67,9 @@ pub struct NameVm {
     /// The `AssertionId` (a UUID string) that introduced this name — a per-row Edit's supersede
     /// target and a Retract's target (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged record this row came from (ADR 0039 §5), shown as an attribution
+    /// chip; `None` for the person's own row.
+    pub merged_from: Option<String>,
 }
 
 impl NameVm {
@@ -99,6 +102,9 @@ pub struct FactVm {
     /// The `AssertionId` (a UUID string) that introduced this fact — a per-row Edit's supersede
     /// target and a Retract's target (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged record this row came from (ADR 0039 §5), shown as an attribution
+    /// chip; `None` for the person's own row.
+    pub merged_from: Option<String>,
 }
 
 impl FactVm {
@@ -140,6 +146,9 @@ pub struct EventRefVm {
     /// supersede target and a Retract's target (ADR 0004 §2). Never rendered. Always the person-side
     /// (canonical) assertion.
     pub assertion_id: String,
+    /// The `human_id` of the merged record this row came from (ADR 0039 §5), shown as an attribution
+    /// chip; `None` for the person's own row.
+    pub merged_from: Option<String>,
 }
 
 /// One person-to-person association, for the Associations tab — with its evidence cues.
@@ -160,6 +169,9 @@ pub struct AssociationVm {
     /// The `AssertionId` (a UUID string) that introduced this association — a per-row Edit's
     /// supersede target and a Retract's target (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
+    /// The `human_id` of the merged record this row came from (ADR 0039 §5), shown as an attribution
+    /// chip; `None` for the person's own row.
+    pub merged_from: Option<String>,
 }
 
 impl AssociationVm {

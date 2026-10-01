@@ -26,6 +26,7 @@ use crate::citation::TagRef;
 use crate::dto::{AttachedRef, CitationRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{EventSummary, list_events};
+use crate::identity::PersonClusters;
 use crate::person::{list_persons, render_name};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
@@ -698,6 +699,7 @@ pub struct FamilyRow {
 /// A store/read-model error.
 pub async fn list_family_rows(workspace: &Workspace) -> Result<Vec<FamilyRow>, AppError> {
     let store = workspace.store();
+    let clusters = PersonClusters::load(store).await?;
     let mut partners: HashMap<PersonId, FamilyPartnerRow> = HashMap::new();
     for view in store.list_persons().await? {
         if let (Some(id), Some(human_id)) = (view.person_id(), view.human_id()) {
@@ -723,7 +725,7 @@ pub async fn list_family_rows(workspace: &Workspace) -> Result<Vec<FamilyRow>, A
             .partners_with_assertions()
             .iter()
             .map(|attributed| {
-                let partner_id = attributed.value.value;
+                let partner_id = clusters.root(attributed.value.value);
                 partners.get(&partner_id).cloned().unwrap_or_else(|| FamilyPartnerRow {
                     human_id: partner_id.to_string(),
                     name: None,
@@ -750,8 +752,9 @@ pub async fn list_family_rows(workspace: &Workspace) -> Result<Vec<FamilyRow>, A
 
 /// Lists the families a person belongs to, with their role in each (partner or child).
 ///
-/// Scans every family for one referencing the person as a partner or a child, resolving member
-/// `PersonId`s back to `human_id`s via a single lookup. Returns the families in `human_id` order.
+/// Scans every family for one referencing the person — or any record of its cluster (ADR 0039 §5) —
+/// as a partner or a child, resolving member `PersonId`s back to their roots' `human_id`s via a single
+/// lookup. Returns the families in `human_id` order.
 ///
 /// # Errors
 ///
@@ -761,14 +764,18 @@ pub async fn families_for_person(
     person_human_id: &str,
 ) -> Result<Vec<FamilyForPerson>, AppError> {
     let store = workspace.store();
-    let person_id = resolve_person_id(store, person_human_id).await?;
+    let clusters = PersonClusters::load(store).await?;
+    let person_id = clusters.root(resolve_person_id(store, person_human_id).await?);
     let persons: HashMap<PersonId, String> = store
         .list_persons()
         .await?
         .iter()
         .filter_map(|p| Some((p.person_id()?, p.human_id()?.to_string())))
         .collect();
-    let resolve = |id: PersonId| persons.get(&id).cloned().unwrap_or_else(|| id.to_string());
+    let resolve = |id: PersonId| {
+        let id = clusters.root(id);
+        persons.get(&id).cloned().unwrap_or_else(|| id.to_string())
+    };
 
     // Maps a child's per-`PersonId` relationships to per-partner-`human_id` relationships.
     let resolve_relationships = |relationships: &[(PersonId, ChildParentRelationship)]| {
@@ -780,11 +787,11 @@ pub async fn families_for_person(
 
     let mut families = Vec::new();
     for view in store.list_families().await? {
-        let partner = view.partners().into_iter().any(|id| id == person_id);
+        let partner = view.partners().into_iter().any(|id| clusters.root(id) == person_id);
         let child_relationships = view
             .children()
             .into_iter()
-            .find(|child| child.child_id == person_id)
+            .find(|child| clusters.root(child.child_id) == person_id)
             .map(|child| resolve_relationships(&child.relationships));
         let role = match (partner, child_relationships) {
             (true, _) => PersonFamilyRole::Partner,
@@ -979,6 +986,7 @@ struct EventInfo {
 /// projections without a per-row query (the cross-aggregate join lives here — the app/db layer).
 struct FamilyLookups {
     persons: HashMap<PersonId, PersonInfo>,
+    clusters: PersonClusters,
     events: HashMap<EventId, EventInfo>,
     citations: HashMap<CitationId, CitationRef>,
     media: HashMap<MediaId, MediaLookup>,
@@ -1031,6 +1039,7 @@ impl FamilyLookups {
 
         Ok(Self {
             persons,
+            clusters: PersonClusters::load(store).await?,
             events,
             citations,
             media: crate::dto::media_lookups(store).await?,
@@ -1148,10 +1157,11 @@ fn summarize_partners(view: &FamilyView, lookups: &FamilyLookups) -> Vec<Partner
         .iter()
         .map(|attributed| {
             let partner = &attributed.value;
-            let info = lookups.persons.get(&partner.value);
+            let partner_id = lookups.clusters.root(partner.value);
+            let info = lookups.persons.get(&partner_id);
             PartnerRef {
-                human_id: info.map_or_else(|| partner.value.to_string(), |i| i.human_id.clone()),
-                id: partner.value.to_string(),
+                human_id: info.map_or_else(|| partner_id.to_string(), |i| i.human_id.clone()),
+                id: partner_id.to_string(),
                 name: info.and_then(|i| i.name.clone()),
                 vitals: info.and_then(|i| crate::dto::lifespan(i.birth_year, i.death_year)),
                 confidence: partner.confidence,
@@ -1172,6 +1182,7 @@ fn summarize_partners(view: &FamilyView, lookups: &FamilyLookups) -> Vec<Partner
 /// (ADR 0021) into per-partner-`human_id` links, each carrying its own surety + source + assertion id.
 fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRef> {
     let resolve_partner_human = |partner_id: PersonId| {
+        let partner_id = lookups.clusters.root(partner_id);
         lookups
             .persons
             .get(&partner_id)
@@ -1182,7 +1193,8 @@ fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRe
         .iter()
         .map(|attributed| {
             let child = &attributed.value;
-            let info = lookups.persons.get(&child.value);
+            let child_id = lookups.clusters.root(child.value);
+            let info = lookups.persons.get(&child_id);
             let relationships = links
                 .iter()
                 .filter(|link| link.value.value.child_id == child.value)
@@ -1195,8 +1207,8 @@ fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRe
                 })
                 .collect();
             ChildRef {
-                human_id: info.map_or_else(|| child.value.to_string(), |i| i.human_id.clone()),
-                id: child.value.to_string(),
+                human_id: info.map_or_else(|| child_id.to_string(), |i| i.human_id.clone()),
+                id: child_id.to_string(),
                 name: info.and_then(|i| i.name.clone()),
                 born: info.and_then(|i| i.birth_year).map(|year| year.to_string()),
                 relationships,

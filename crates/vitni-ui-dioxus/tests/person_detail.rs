@@ -43,6 +43,7 @@ fn person_tables() -> Element {
         confidence_label: "High".to_owned(),
         source_count: 1,
         assertion_id: "0190a2b3-0000-7000-8000-000000000001".to_owned(),
+        merged_from: None,
     }];
     let facts = vec![
         FactVm {
@@ -55,6 +56,7 @@ fn person_tables() -> Element {
             source_count: 2,
             citations: Vec::new(),
             assertion_id: "0190a2b3-0000-7000-8000-000000000002".to_owned(),
+            merged_from: None,
         },
         FactVm {
             type_label: "Residence".to_owned(),
@@ -66,6 +68,7 @@ fn person_tables() -> Element {
             source_count: 0,
             citations: Vec::new(),
             assertion_id: "0190a2b3-0000-7000-8000-000000000003".to_owned(),
+            merged_from: Some("I0007".to_owned()),
         },
     ];
     let onretract = use_callback(|_| {});
@@ -74,6 +77,24 @@ fn person_tables() -> Element {
         {names_table(&loc, &names, onedit, onretract)}
         {facts_table(&loc, &facts, onedit, onretract)}
     }
+}
+
+/// A row a merged record supplied names that record; the person's own rows carry no chip (ADR 0039
+/// §5).
+#[test]
+fn a_row_from_a_merged_record_is_attributed_to_it() {
+    let mut vdom = VirtualDom::new(person_tables);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"<span class="badge">from I0007</span>"#),
+        "the member's fact names its record:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"class="badge""#).count(),
+        1,
+        "only the member's row is attributed:\n{html}"
+    );
 }
 
 /// A single fact asserted with no surety judgment (ADR 0021 §5) — its confidence badge renders the
@@ -90,6 +111,7 @@ fn unjudged_fact_table() -> Element {
         source_count: 1,
         citations: Vec::new(),
         assertion_id: "0190a2b3-0000-7000-8000-00000000000f".to_owned(),
+        merged_from: None,
     }];
     let onretract = use_callback(|_| {});
     let onedit = use_callback(|_| {});
@@ -140,6 +162,7 @@ fn names_table_with_chrome() -> Element {
         confidence_label: "High".to_owned(),
         source_count: 1,
         assertion_id: "0190a2b3-0000-7000-8000-000000000001".to_owned(),
+        merged_from: None,
     }];
     let onretract = use_callback(|_| {});
     let onedit = use_callback(|_| {});
@@ -367,6 +390,7 @@ fn person_evidence_tables() -> Element {
         confidence_label: "Low".to_owned(),
         source_count: 0,
         assertion_id: "0190a2b3-0000-7000-8000-000000000004".to_owned(),
+        merged_from: None,
     }];
     let citations = vec![
         CitationRefVm {
@@ -429,6 +453,7 @@ fn person_relation_tables() -> Element {
         confidence_label: "High".to_owned(),
         source_count: 1,
         assertion_id: "0190a2b3-0000-7000-8000-000000000005".to_owned(),
+        merged_from: None,
     }];
     let families = vec![FamilyVm {
         family_id: "F0017".to_owned(),
