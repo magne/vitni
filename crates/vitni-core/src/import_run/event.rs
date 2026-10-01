@@ -18,6 +18,8 @@ pub type ImportRunEvent = Envelope<ImportRunEventBody>;
 pub enum ResolutionDecision {
     /// Deterministic identity: the item's `ExternalId` already named an aggregate (ADR 0013 §6).
     ExternalId,
+    /// Deterministic identity: a tag of the same case-folded name already existed (ADR 0038 §6).
+    TagName,
 }
 
 /// One incoming item the run resolved onto an existing aggregate.

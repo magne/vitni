@@ -14,7 +14,7 @@ use vitni_core::ids::{AgentId, AssertionId};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, EventContext, EvidenceRef, Timestamp};
 
 use crate::aggregates::for_each_aggregate;
-use crate::origin_gate::PendingRun;
+use crate::origin_gate::{DryRun, PendingRun};
 use crate::use_case::Provenance;
 
 /// Per-invocation context carrying the operator identity and the impure id/clock sources.
@@ -22,6 +22,7 @@ use crate::use_case::Provenance;
 pub struct Session {
     operator: Agent,
     import_run: Option<Arc<PendingRun>>,
+    dry_run: Option<Arc<DryRun>>,
 }
 
 /// Generates one UUID-v7 id minter per aggregate (ADR 0004 §5) from the canonical registry.
@@ -48,6 +49,7 @@ impl Session {
         Self {
             operator,
             import_run: None,
+            dry_run: None,
         }
     }
 
@@ -63,6 +65,20 @@ impl Session {
     #[must_use]
     pub fn import_run(&self) -> Option<&Arc<PendingRun>> {
         self.import_run.as_ref()
+    }
+
+    /// This session, recording into `dry_run` every write the origin gate would let through instead
+    /// of executing any (ADR 0040 §2).
+    #[must_use]
+    pub fn with_dry_run(mut self, dry_run: Arc<DryRun>) -> Self {
+        self.dry_run = Some(dry_run);
+        self
+    }
+
+    /// The dry run this session records into, if any.
+    #[must_use]
+    pub fn dry_run(&self) -> Option<&Arc<DryRun>> {
+        self.dry_run.as_ref()
     }
 
     /// Creates a session whose operator is a software agent (ADR 0007 §7): every change a plugin

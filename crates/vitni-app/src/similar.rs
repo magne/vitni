@@ -65,7 +65,7 @@ pub async fn find_similar(
 ) -> Result<Vec<SimilarRecord>, AppError> {
     let matching = workspace.matching()?;
     let keys = BlockingKeys::new(&matching.data);
-    let profiles = refreshed_profiles(workspace, &keys, kind).await?;
+    let profiles = refreshed_profiles(workspace, &keys, &[kind]).await?;
     let decisions = profiles.decisions(kind);
     let target_id = profiles
         .aggregate_id_of(kind, target)
@@ -132,7 +132,7 @@ pub async fn similar_pairs(
 ) -> Result<Vec<SimilarPair>, AppError> {
     let matching = workspace.matching()?;
     let keys = BlockingKeys::new(&matching.data);
-    let profiles = refreshed_profiles(workspace, &keys, kind).await?;
+    let profiles = refreshed_profiles(workspace, &keys, &[kind]).await?;
     let mut by_key: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut by_record: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (aggregate_id, key) in workspace.store().match_keys_of_kind(kind).await? {
@@ -223,11 +223,71 @@ fn rank(x: &MatchAssessment, y: &MatchAssessment) -> std::cmp::Ordering {
     y.band.cmp(&x.band).then_with(|| y.score.total_cmp(&x.score))
 }
 
-/// Brings the index up to date, and returns the profiles of `kind` — read once for both.
+/// Matches records that are not yet in the workspace — an import's staged entities (ADR 0040 §2) —
+/// against those that are, with the index brought up to date and the profiles read once.
+pub(crate) struct Matcher<'a> {
+    matching: &'a Matching,
+    keys: BlockingKeys<'a>,
+    /// The profiles of the kinds the matcher was loaded for.
+    pub(crate) profiles: Profiles,
+}
+
+impl<'a> Matcher<'a> {
+    /// A matcher over `workspace`'s records of `kinds`.
+    pub(crate) async fn load(workspace: &'a Workspace, kinds: &[MatchableKind]) -> Result<Self, AppError> {
+        let matching = workspace.matching()?;
+        let keys = BlockingKeys::new(&matching.data);
+        let profiles = refreshed_profiles(workspace, &keys, kinds).await?;
+        Ok(Self {
+            matching,
+            keys,
+            profiles,
+        })
+    }
+
+    /// The records of `kind` at least `min_band` similar to `profile`, most similar first, at most
+    /// `limit` of them, leaving out `excluded` (aggregate ids) and every merged record.
+    pub(crate) async fn similar(
+        &self,
+        workspace: &Workspace,
+        kind: MatchableKind,
+        profile: &Profile,
+        excluded: &HashSet<String>,
+        min_band: MatchBand,
+        limit: usize,
+    ) -> Result<Vec<SimilarRecord>, AppError> {
+        let decisions = self.profiles.decisions(kind);
+        let probe = Probe::of(&keys_of(&self.keys, profile));
+        let mut similar = Vec::new();
+        for candidate in workspace.store().match_candidates(kind, &probe).await? {
+            if excluded.contains(&candidate) || decisions.root(&candidate) != candidate {
+                continue;
+            }
+            let Some(other) = self.profiles.profile(kind, &candidate) else {
+                continue;
+            };
+            let Some(assessment) = assess_pair(profile, &other, self.matching) else {
+                continue;
+            };
+            if assessment.band >= min_band {
+                similar.push(SimilarRecord {
+                    record: agg_ref(&self.profiles, kind, &candidate),
+                    assessment,
+                });
+            }
+        }
+        similar
+            .sort_by(|x, y| rank(&x.assessment, &y.assessment).then_with(|| x.record.human_id.cmp(&y.record.human_id)));
+        similar.truncate(limit);
+        Ok(similar)
+    }
+}
+
+/// Brings the index up to date, and returns the profiles of `wanted` — read once for both.
 async fn refreshed_profiles(
     workspace: &Workspace,
     keys: &BlockingKeys<'_>,
-    kind: MatchableKind,
+    wanted: &[MatchableKind],
 ) -> Result<Profiles, AppError> {
     let store = workspace.store();
     let dirty = store.match_dirty().await?;
@@ -242,7 +302,7 @@ async fn refreshed_profiles(
         store.reset_match_keys(keys.fingerprint(), &records, &dirty).await?;
         return Ok(profiles);
     }
-    let mut kinds = vec![kind];
+    let mut kinds = wanted.to_vec();
     for record in &dirty {
         kinds.extend(affected_kinds(record.kind));
     }

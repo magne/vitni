@@ -27,8 +27,9 @@ use uuid::Uuid;
 use vitni_core::assertions::{Envelope, EventBody};
 use vitni_core::ids::{AssertionId, ImportRunId};
 use vitni_core::import_run::{ImportRunCommand, ImportRunCommandEnvelope, NewImportRun};
+use vitni_core::origin::{DatasetId, RecordOrigin};
 use vitni_core::provenance::{AssertionMeta, Timestamp};
-use vitni_db::Store;
+use vitni_db::{IndexedField, Store};
 
 use crate::error::AppError;
 use crate::session::Session;
@@ -68,6 +69,12 @@ impl PendingRun {
     #[must_use]
     pub fn id(&self) -> ImportRunId {
         self.id
+    }
+
+    /// The dataset the run's records belong to.
+    #[must_use]
+    pub fn dataset(&self) -> &DatasetId {
+        &self.run.dataset
     }
 
     /// The invoking human's session.
@@ -133,6 +140,42 @@ impl PendingRun {
     }
 }
 
+/// A dry run of an import's writes (ADR 0040 §2): the gate decides each write as it would, records the
+/// ones it would let through, and executes none. A plan runs an existing record's writes under one to
+/// tell an unchanged record from an updated one, through the very use-cases its commit runs.
+#[derive(Debug, Default)]
+pub struct DryRun {
+    writes: Mutex<Vec<DryWrite>>,
+}
+
+/// A write a dry run would have made: the aggregate it lands on and the field it asserts, when it
+/// asserts one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DryWrite {
+    /// The aggregate's kind (`Aggregate::TYPE`).
+    pub kind: &'static str,
+    /// The aggregate's id.
+    pub aggregate_id: String,
+    /// The field it asserts (`person.FactAsserted.Occupation`), if any.
+    pub field: Option<String>,
+}
+
+impl DryRun {
+    /// The writes recorded so far, emptying the record.
+    pub fn take(&self) -> Vec<DryWrite> {
+        self.writes
+            .lock()
+            .map(|mut writes| std::mem::take(&mut *writes))
+            .unwrap_or_default()
+    }
+
+    fn record(&self, write: DryWrite) {
+        if let Ok(mut writes) = self.writes.lock() {
+            writes.push(write);
+        }
+    }
+}
+
 /// A command envelope the gate can preview and redirect: implemented for every aggregate that
 /// imports write to.
 pub(crate) trait GatedEnvelope: Sized + Clone {
@@ -160,7 +203,8 @@ enum Decision {
 
 /// Passes `envelope` through the origin gate: returns the envelope to execute (possibly rewritten to
 /// supersede an earlier import's value), or `None` when the write is already on record. An envelope
-/// without an origin passes through untouched.
+/// without an origin passes through untouched. Under a [`DryRun`] nothing passes: a write that would
+/// go ahead is recorded instead.
 ///
 /// # Errors
 ///
@@ -172,6 +216,14 @@ pub(crate) async fn gate<E: GatedEnvelope>(
     mut envelope: E,
 ) -> Result<Option<E>, AppError> {
     if envelope.meta().context.origin.is_none() {
+        if let Some(dry_run) = session.dry_run() {
+            dry_run.record(DryWrite {
+                kind: E::KIND,
+                aggregate_id: aggregate_id.to_owned(),
+                field: None,
+            });
+            return Ok(None);
+        }
         return Ok(Some(envelope));
     }
     let previewed = E::preview(store, aggregate_id, envelope.clone()).await?;
@@ -179,7 +231,18 @@ pub(crate) async fn gate<E: GatedEnvelope>(
         kind: E::KIND,
         aggregate_id,
     };
-    let decision = decide(store, session, envelope.meta(), &previewed, target).await?;
+    let (decision, field) = decide(store, session, envelope.meta(), &previewed, target).await?;
+    if let Some(dry_run) = session.dry_run() {
+        match decision {
+            Decision::Skip => {}
+            Decision::Write | Decision::Supersede(_) => dry_run.record(DryWrite {
+                kind: E::KIND,
+                aggregate_id: aggregate_id.to_owned(),
+                field,
+            }),
+        }
+        return Ok(None);
+    }
     let envelope = match decision {
         Decision::Skip => return Ok(None),
         Decision::Write => envelope,
@@ -201,13 +264,14 @@ struct Target<'a> {
     aggregate_id: &'a str,
 }
 
+/// Decides one write, returning the decision and the field the write asserts, if any.
 async fn decide<B: EventBody + Serialize>(
     store: &Store,
     session: &Session,
     meta: &mut AssertionMeta,
     previewed: &[Envelope<B>],
     target: Target<'_>,
-) -> Result<Decision, AppError> {
+) -> Result<(Decision, Option<String>), AppError> {
     let mut bodies = Vec::with_capacity(previewed.len());
     let mut primary = None;
     for event in previewed {
@@ -218,12 +282,24 @@ async fn decide<B: EventBody + Serialize>(
         primary.get_or_insert(field);
     }
     let Some(origin) = meta.context.origin.as_deref_mut() else {
-        return Ok(Decision::Write);
+        return Ok((Decision::Write, primary.map(|field| field.field_key)));
     };
     origin.digest = Some(vitni_db::digest(&bodies)?);
     let Some(field) = primary else {
-        return Ok(Decision::Write);
+        return Ok((Decision::Write, None));
     };
+    let decision = decide_field(store, session, origin, &field, target).await?;
+    Ok((decision, Some(field.field_key)))
+}
+
+/// Decides a write asserting `field` from `origin`, against what earlier runs asserted there.
+async fn decide_field(
+    store: &Store,
+    session: &Session,
+    origin: &RecordOrigin,
+    field: &IndexedField,
+    target: Target<'_>,
+) -> Result<Decision, AppError> {
     let rows = store
         .origin_rows(
             origin.dataset.as_str(),

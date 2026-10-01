@@ -501,6 +501,11 @@ impl Profiles {
         self.origins.get(&aggregate_id.to_string()).cloned().unwrap_or_default()
     }
 
+    /// The names, sex and birth of the person `person_id`, as a relative of another.
+    pub(crate) fn relative(&self, person_id: PersonId) -> Option<Relative> {
+        self.people.as_ref()?.relative(person_id)
+    }
+
     /// The person profile of `person_id`.
     pub(crate) fn person(&self, person_id: PersonId) -> Option<PersonProfile> {
         self.people.as_ref()?.profile(person_id, self.origins_of(&person_id))
@@ -968,7 +973,7 @@ impl PlaceLookup {
 }
 
 /// The vital kind an event type is, if any. A christening is a baptism.
-fn vital_kind(event_type: &EventType) -> Option<VitalKind> {
+pub(crate) fn vital_kind(event_type: &EventType) -> Option<VitalKind> {
     match event_type {
         EventType::Birth => Some(VitalKind::Birth),
         EventType::Baptism | EventType::Christening => Some(VitalKind::Baptism),
