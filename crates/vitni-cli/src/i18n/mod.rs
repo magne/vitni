@@ -215,6 +215,12 @@ impl Localizer {
         fl!(self.loader, "import-cancelled")
     }
 
+    /// The progress step while the host writes an import's records (ADR 0040 §4).
+    #[must_use]
+    pub fn import_progress_writing(&self) -> String {
+        fl!(self.loader, "import-progress-writing")
+    }
+
     /// The localized trust-tier label for a discovered plugin (ADR 0014 §3).
     #[must_use]
     fn plugin_trust_label(&self, trust: vitni_plugin_host::TrustTier) -> String {

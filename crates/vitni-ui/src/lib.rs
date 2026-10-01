@@ -84,7 +84,7 @@ pub use shortcuts::{
 };
 pub use view_model::{
     ActivityVm, AddressVm, AssociationVm, AttachSaveAction, AttachedRefVm, BulkImportProgress, BulkImportSession,
-    BulkImportStage, BulkImportSummary, CATEGORY_CONVENTION, CapabilityGrantVm, ChildRelationshipVm,
+    BulkImportStage, BulkImportStep, BulkImportSummary, CATEGORY_CONVENTION, CapabilityGrantVm, ChildRelationshipVm,
     CitationAttributeVm, CitationDetail, CitationDraft, CitationRefVm, CitingRecordVm, CropCorner, DATE_CALENDARS,
     DATE_QUALITIES, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DataQualityVm, DateDraft,
     DateEntryError, DateModifierKind, DnaInferenceVm, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, DnaTestDetail,

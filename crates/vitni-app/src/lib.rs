@@ -72,6 +72,7 @@ pub mod session;
 pub mod similar;
 pub mod source;
 pub mod source_change_set;
+pub mod staging;
 pub mod tag;
 pub mod tag_change_set;
 mod tag_usage;
@@ -180,7 +181,7 @@ pub use note::{
     set_restrictions as set_note_restrictions, show_note, tag_note, undo_note_distinction_and_merge,
 };
 pub use note_change_set::{NoteChangeSet, commit_note_change_set};
-pub use origin_gate::PendingRun;
+pub use origin_gate::{DryRun, DryWrite, PendingRun};
 pub use pedigree::{
     AncestorNode, AncestorSlot, DescendantChart, DescendantNode, Kinship, PedigreeChart,
     PersonRef as PedigreePersonRef, RelationshipResult, ancestors, descendants, relationship,
@@ -235,6 +236,12 @@ pub use source::{
     source_claim_owner, source_pair_decision, tag_source, undo_source_distinction_and_merge, update_source_media_ref,
 };
 pub use source_change_set::{SourceChangeSet, commit_source_change_set};
+pub use staging::{
+    CommitControl, CommitFailure, CommitOutcome, CommittedEntity, Disposition, EntityFields, EntityRef, GraphError,
+    ImportPlan, LinkBasis, LinkKind, LocalId, PlanCounts, PlanError, PlannedEntity, PlannedLink, RecordGraph, RunToEnd,
+    StagedCitation, StagedEntity, StagedEvent, StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson,
+    StagedPlace, StagedRepository, StagedSource, StagedTag, WriteScope, commit_import, plan_import,
+};
 pub use tag::{
     TagSummary, create_tag, list_tags, rename_tag, set_restrictions as set_tag_restrictions, set_tag_color,
     set_tag_priority, show_tag,

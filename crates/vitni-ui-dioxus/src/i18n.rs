@@ -2120,6 +2120,12 @@ impl Chrome {
         fl!(self.loader, "bulk-import-progress-starting")
     }
 
+    /// The step name while the host writes the records the plugin read (ADR 0040 §4).
+    #[must_use]
+    pub fn bulk_import_progress_writing(&self) -> String {
+        fl!(self.loader, "bulk-import-progress-writing")
+    }
+
     /// The progress count: "{processed} of {total}", or just the processed count while the plugin
     /// does not yet know the total.
     #[must_use]

@@ -456,8 +456,8 @@ async fn import(request: ImportRequest) -> ExitCode {
 
     // The dataset is resolved before any prompt, so an import that must name its dataset is refused
     // before the operator is asked to confirm it.
-    let plan = match commands::io::ImportPlan::prepare(&workspace, &plugin, &file, choice, operator).await {
-        Ok(plan) => plan,
+    let prepared = match commands::io::PreparedImport::prepare(&workspace, &plugin, &file, choice, operator).await {
+        Ok(prepared) => prepared,
         Err(error) => return report(&localizer, Err(error)),
     };
 
@@ -475,7 +475,7 @@ async fn import(request: ImportRequest) -> ExitCode {
     }
 
     // The plugin-host future is large (Wasmtime store + workspace); box it.
-    report(&localizer, Box::pin(plan.run(workspace, &localizer, file)).await)
+    report(&localizer, Box::pin(prepared.run(workspace, &localizer, file)).await)
 }
 
 /// Resolves the import target: `--new NAME PATH` creates and registers a fresh workspace; `--into

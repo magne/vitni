@@ -3,8 +3,8 @@
 //! This crate generates the host-API **import** bindings once from the shared WIT (`host-imports`
 //! world) and re-exports each capability module, so a plugin component maps the shared interfaces to
 //! this crate via `with` and only generates its own export. On top of the raw bindings it provides
-//! the boilerplate every bulk plugin repeats: draining the host-opened import source, writing the
-//! host-resolved export sink, reporting progress, and logging. The host owns the actual path; a
+//! the boilerplate every bulk plugin repeats: building and submitting record graphs, draining the
+//! host-opened import source, writing the host-resolved export sink, reporting progress, and logging. The host owns the actual path; a
 //! plugin reads or writes through these helpers without ever naming a file.
 
 wit_bindgen::generate!({
@@ -13,46 +13,79 @@ wit_bindgen::generate!({
 });
 
 pub use vitni::host_api::{
-    ai, commands, export_sink, import_source, log, media_store, net, present, progress, query, types,
+    ai, commands, export_sink, import_source, log, media_store, net, present, progress, query, staging, types,
 };
 
 pub mod convert;
 
-thread_local! {
-    /// The origins entered by [`with_origin`] and not yet left, innermost last.
-    static ORIGINS: std::cell::RefCell<Vec<types::OriginKey>> = const { std::cell::RefCell::new(Vec::new()) };
+/// One source record's graph under construction (ADR 0040 §1): its entities, each given the next local
+/// id, and the links between them.
+pub struct Graph {
+    graph: staging::RecordGraph,
 }
 
-/// Runs `write` with every host write it makes stamped with the source record `record` and, when the
-/// record yields several entities, the stable `item` key of the one being written (ADR 0037 §1).
-///
-/// Scopes nest: an inner call (a place created while writing an event) sets its own origin and puts
-/// the outer one back when it returns, so a resolver that creates shared records on demand keeps each
-/// record's own origin.
+impl Graph {
+    /// An empty graph of the record `record` (its id within the importer's dataset).
+    #[must_use]
+    pub fn new(record: &str) -> Self {
+        Self {
+            graph: staging::RecordGraph {
+                record: record.to_owned(),
+                entities: Vec::new(),
+                links: Vec::new(),
+            },
+        }
+    }
+
+    /// Adds an entity under `item` (`None` for the record's own entity), returning a reference to it.
+    /// Local ids are given in order from 0.
+    pub fn entity(&mut self, item: Option<&str>, fields: staging::EntityFields) -> staging::EntityRef {
+        let local_id = u32::try_from(self.graph.entities.len()).unwrap_or(u32::MAX);
+        self.graph.entities.push(staging::StagedEntity {
+            local_id,
+            item: item.map(ToOwned::to_owned),
+            fields,
+        });
+        staging::EntityRef::Local(local_id)
+    }
+
+    /// Adds a link whose assertion is stamped with `item` of the record.
+    pub fn link(&mut self, item: Option<&str>, link: staging::LinkKind) {
+        self.graph.links.push(staging::StagedLink {
+            item: item.map(ToOwned::to_owned),
+            link,
+        });
+    }
+
+    /// Submits the graph to the host.
+    ///
+    /// # Errors
+    /// Returns a message if the host refuses the graph.
+    pub fn submit(self) -> Result<staging::SubmitOutcome, String> {
+        let record = self.graph.record.clone();
+        staging::submit(&self.graph).map_err(|error| format!("submitting {record} failed: {error:?}"))
+    }
+}
+
+/// A reference to another graph's entity of `kind`, by its record and item (ADR 0037 §1).
+#[must_use]
+pub fn origin_ref(kind: staging::EntityKind, record: &str, item: Option<&str>) -> staging::EntityRef {
+    staging::EntityRef::Origin(staging::OriginRef {
+        kind,
+        key: types::OriginKey {
+            record: record.to_owned(),
+            item: item.map(ToOwned::to_owned),
+        },
+    })
+}
+
+/// Declares the import to the host before the first graph: the document's own export date (RFC 3339,
+/// ADR 0029 §2), when it has one.
 ///
 /// # Errors
-/// Returns `write`'s error, or a message if the host refuses the origin.
-pub fn with_origin<T>(
-    record: &str,
-    item: Option<&str>,
-    write: impl FnOnce() -> Result<T, String>,
-) -> Result<T, String> {
-    let key = types::OriginKey {
-        record: record.to_owned(),
-        item: item.map(ToOwned::to_owned),
-    };
-    commands::set_origin(Some(&key)).map_err(|error| format!("set-origin failed: {error:?}"))?;
-    ORIGINS.with(|origins| origins.borrow_mut().push(key));
-    let result = write();
-    let outer = ORIGINS.with(|origins| {
-        let mut origins = origins.borrow_mut();
-        origins.pop();
-        origins.last().cloned()
-    });
-    let restored = commands::set_origin(outer.as_ref());
-    let value = result?;
-    restored.map_err(|error| format!("set-origin failed: {error:?}"))?;
-    Ok(value)
+/// Returns a message if the host refuses the declaration.
+pub fn begin_run(file_asserted_at: Option<&str>) -> Result<(), String> {
+    staging::begin_run(None, None, file_asserted_at).map_err(|error| format!("begin-run failed: {error:?}"))
 }
 
 /// The chunk size used when draining the import source.

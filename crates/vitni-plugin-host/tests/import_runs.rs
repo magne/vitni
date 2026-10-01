@@ -17,7 +17,7 @@ use vitni_app::{
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, EventContext};
 use vitni_plugin_host::{
-    Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, ProgressControl,
+    Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, ProgressControl, ProgressStep,
     ProgressUpdate, ResourceBudget,
 };
 
@@ -556,8 +556,41 @@ async fn a_changed_date_supersedes_the_imported_one_only_when_the_file_is_newer(
     assert_eq!(superseded, 1, "the imported date was superseded, not overwritten");
 }
 
+/// Cancels a bulk import at the commit's first progress report past its start.
+fn cancel_mid_commit(update: &ProgressUpdate) -> ProgressControl {
+    if update.step == ProgressStep::Writing && update.processed > 0 {
+        ProgressControl::Cancel
+    } else {
+        ProgressControl::Proceed
+    }
+}
+
 #[tokio::test]
-async fn a_cancelled_bulk_import_abandons_its_run() {
+async fn a_bulk_import_cancelled_while_writing_abandons_its_run() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let workspace = workspace(dir.path()).await;
+    let source = write_file(dir.path(), "tree.ged", GEDCOM);
+    let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+    let (_, workspace) = common::host()
+        .run_bulk_import(
+            &common::component("gedcom-import"),
+            invocation(workspace, Some(spec("gedcom-import", dataset, "tree.ged"))),
+            source,
+            |update| cancel_mid_commit(&update),
+        )
+        .await
+        .expect("a cancelled import returns normally");
+    let run = only_run(&workspace).await;
+    assert_eq!(
+        run.status,
+        ImportRunStatus::Abandoned {
+            reason: AbandonReason::Cancelled
+        }
+    );
+}
+
+#[tokio::test]
+async fn a_bulk_import_cancelled_while_reading_writes_nothing_and_leaves_no_run() {
     let dir = tempfile::tempdir().expect("tempdir");
     let workspace = workspace(dir.path()).await;
     let source = write_file(dir.path(), "tree.ged", GEDCOM);
@@ -571,13 +604,60 @@ async fn a_cancelled_bulk_import_abandons_its_run() {
         )
         .await
         .expect("a cancelled import returns normally");
-    let run = only_run(&workspace).await;
-    assert_eq!(
-        run.status,
-        ImportRunStatus::Abandoned {
-            reason: AbandonReason::Cancelled
-        }
-    );
+    assert_eq!(event_count(&workspace).await, 0);
+    let runs = list_import_runs(&workspace).await.expect("runs");
+    assert!(runs.is_empty(), "{runs:?}");
+}
+
+#[tokio::test]
+async fn an_interrupted_bulk_commit_finishes_on_re_run_without_duplicates() {
+    for (plugin, name, text) in [
+        ("gedcom-import", "tree.ged", GEDCOM),
+        ("gramps-import", "tree.gramps", GRAMPS),
+    ] {
+        let dataset = DatasetId::lineage(plugin, Uuid::from_u128(5));
+        let clean_dir = tempfile::tempdir().expect("tempdir");
+        let clean = workspace(clean_dir.path()).await;
+        let clean = import(clean, plugin, &dataset, clean_dir.path(), name, text).await;
+        let expected = workspace_counts(&clean).await.expect("counts");
+        let (clean_events, clean_keys) = (event_count(&clean).await, origin_keys(&clean).await);
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let source = write_file(dir.path(), name, text);
+        let (_, workspace) = common::host()
+            .run_bulk_import(
+                &common::component(plugin),
+                invocation(workspace, Some(spec(plugin, dataset.clone(), name))),
+                source,
+                |update| cancel_mid_commit(&update),
+            )
+            .await
+            .expect("interrupted");
+        assert!(
+            event_count(&workspace).await < clean_events,
+            "{plugin} stopped part-way"
+        );
+
+        let workspace = import(workspace, plugin, &dataset, dir.path(), name, text).await;
+        assert_eq!(
+            workspace_counts(&workspace).await.expect("counts"),
+            expected,
+            "{plugin}"
+        );
+        assert_eq!(origin_keys(&workspace).await, clean_keys, "{plugin}: every claim, once");
+        let runs = list_import_runs(&workspace).await.expect("runs");
+        let statuses: Vec<ImportRunStatus> = runs.into_iter().map(|run| run.status).collect();
+        assert!(statuses.contains(&ImportRunStatus::Finished), "{plugin}: {statuses:?}");
+
+        let before = event_count(&workspace).await;
+        let workspace = import(workspace, plugin, &dataset, dir.path(), name, text).await;
+        assert_eq!(
+            event_count(&workspace).await,
+            before,
+            "{plugin}: a third run writes nothing"
+        );
+    }
 }
 
 #[tokio::test]

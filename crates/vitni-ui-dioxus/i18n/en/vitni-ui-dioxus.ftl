@@ -543,6 +543,7 @@ bulk-import-target-workspace-label = Workspace
 bulk-import-run = Import
 bulk-import-running-heading = Importing…
 bulk-import-progress-starting = Starting…
+bulk-import-progress-writing = Writing records
 bulk-import-progress-count = { $processed } of { $total }
 bulk-import-progress-processed = { $processed } imported
 bulk-import-cancel = Cancel

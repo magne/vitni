@@ -23,7 +23,9 @@
       workspace already holds earlier imports in the same format, the confirm also asks <b>which tree
       the file belongs to</b> — a later export of one of them, or a different tree — and waits for the
       answer (ADR 0037 §3; the CLI's <span class="mono">--dataset</span> /
-      <span class="mono">--new-dataset</span>). Every import is recorded as an import run.
+      <span class="mono">--new-dataset</span>). Every import is recorded as an import run. The plugin
+      reads the whole file first, naming its own steps; Vitni then writes the records, and a cancel
+      before then writes nothing.
     </div>
 
     <!-- Mode switch -->
@@ -118,6 +120,22 @@
       <div class="run-progress indeterminate" role="progressbar" aria-label="Importing"
            aria-valuemin="0" aria-valuenow="0">
         <div class="run-progress-fill" style="width:100%"></div>
+      </div>
+    </div>
+
+    <!-- Specimen: the plugin has read the whole file; Vitni now writes its records (ADR 0040 §4). -->
+    <div class="card">
+      <h3>Stage 2 · Running <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, writing: the plugin has read the file and Vitni writes its records; Cancel stops between two writes, and importing the same file again finishes the rest</span></h3>
+      <div class="wrap" style="align-items:baseline">
+        <span class="grow">Writing records</span>
+        <span class="muted mono">2 140 of 9 860</span>
+      </div>
+      <div class="run-progress" role="progressbar" aria-label="Importing"
+           aria-valuemin="0" aria-valuenow="2140" aria-valuemax="9860">
+        <div class="run-progress-fill" style="width:21.7%"></div>
+      </div>
+      <div style="margin-top:var(--sp-3)">
+        <button class="btn ghost">Cancel</button>
       </div>
     </div>
 

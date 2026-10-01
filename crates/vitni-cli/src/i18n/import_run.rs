@@ -38,7 +38,10 @@ impl Localizer {
             ImportRunStatus::Finished => fl!(self.loader, "import-run-status-finished"),
             ImportRunStatus::Abandoned { reason } => match reason {
                 AbandonReason::Cancelled => fl!(self.loader, "import-run-status-cancelled"),
-                AbandonReason::GuestError { .. } | AbandonReason::ResourceLimit | AbandonReason::Runtime { .. } => {
+                AbandonReason::GuestError { .. }
+                | AbandonReason::ResourceLimit
+                | AbandonReason::Runtime { .. }
+                | AbandonReason::Commit { .. } => {
                     fl!(self.loader, "import-run-status-failed")
                 }
             },

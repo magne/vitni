@@ -542,6 +542,7 @@ bulk-import-target-workspace-label = Arbeidsområde
 bulk-import-run = Importer
 bulk-import-running-heading = Importerer…
 bulk-import-progress-starting = Starter…
+bulk-import-progress-writing = Skriver poster
 bulk-import-progress-count = { $processed } av { $total }
 bulk-import-progress-processed = { $processed } importert
 bulk-import-cancel = Avbryt

@@ -13,6 +13,7 @@ import-success = Importerte { $count } post(er) med { $plugin }.
 export-success = Eksporterte { $count } post(er) til { $path }.
 import-confirm = Arbeidsområdet "{ $name }" inneholder allerede { $count } person(er). Importere likevel? [j/N]
 import-cancelled = Import avbrutt.
+import-progress-writing = skriver poster
 error-prefix = feil: { $message }
 
 ## Date qualifiers (selve datoen formateres av ICU4X; disse omslutter den — data-model §7.1)

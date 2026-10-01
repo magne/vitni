@@ -15,13 +15,13 @@ use std::io::{Read, Write};
 
 use std::sync::Arc;
 
-use crate::run::{ActiveRun, ImportRunSpec, NoOrigin};
+use crate::run::{ActiveRun, ImportRunSpec};
 use vitni_app::{
     Address, Age, AgeBound, AiConfig, AssociationRole, Attribute, Calendar, Confidence, DateInput, DateModifier,
     DatePoint, DateQuality, ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MediaRefInput,
     MediaRefSummary, MutationMeta, NameType, NewCitation, NewEvent, NewMedia, NewNote, NewParticipation, NewPerson,
-    NewPlace, NewSource, PersonName, PersonNameParts, Provenance, Rect, RepositoryLinkRef, Session, Timestamp,
-    Workspace, build_genealogical_date,
+    NewPlace, NewSource, PersonName, PersonNameParts, Provenance, RecordGraph, Rect, RepositoryLinkRef, Session,
+    Timestamp, Workspace, build_genealogical_date,
 };
 use vitni_core::enums::{
     ChildParentRelationship, EventType, EvidenceLevel, NoteType, ParticipantRole, PlaceType, Restriction, Sex,
@@ -36,7 +36,7 @@ use crate::bindings::imports::vitni::host_api::{
 };
 use crate::capability::{Capability, Grants};
 use crate::net::{self as net_impl, NetError, NetPolicy};
-use crate::{BulkIo, ProgressControl, ProgressUpdate, ai as ai_impl, media};
+use crate::{BulkIo, ProgressControl, ProgressStep, ProgressUpdate, ai as ai_impl, media};
 
 /// The data owned by one plugin instance's Wasmtime store.
 pub struct HostState {
@@ -44,9 +44,9 @@ pub struct HostState {
     table: ResourceTable,
     /// Memory/instance caps enforced by Wasmtime (ADR 0011 §4).
     pub limits: StoreLimits,
-    grants: Grants,
-    workspace: Workspace,
-    session: Session,
+    pub(crate) grants: Grants,
+    pub(crate) workspace: Workspace,
+    pub(crate) session: Session,
     /// The network policy for host-mediated fetches (ADR 0017 §2).
     net_policy: NetPolicy,
     /// The AI provider inventory for `ai.interpret-media` (ADR 0017 §4).
@@ -56,18 +56,32 @@ pub struct HostState {
     /// `Some(Confidence::Low)`.
     provenance_confidence: Option<Confidence>,
     /// The bulk source/sink configuration and progress sink (ADR 0013).
-    io: BulkIo,
+    pub(crate) io: BulkIo,
     /// The opened import source, set by `import-source.open`.
     source: Option<File>,
     /// The opened export sink, set by `export-sink.open`.
     sink: Option<File>,
-    /// The current import session's file-own export date (ADR 0029 §2), set once by
-    /// `commands.begin-import` before any per-record command. `None` until then, or if the guest
-    /// never calls it (equivalent to a `none` argument — today's additive-only behavior, §3).
-    file_asserted_at: Option<Timestamp>,
+    /// The document's own export date (ADR 0029 §2), declared by `staging.begin-run`. `None` until
+    /// then, or if the guest never declares one (today's additive-only behavior, §3).
+    pub(crate) file_asserted_at: Option<Timestamp>,
     /// The import run this invocation writes (ADR 0037 §5); `None` outside an import, where writes
-    /// carry no origin and are not refused for lacking one.
-    run: Option<ActiveRun>,
+    /// carry no origin.
+    pub(crate) run: Option<ActiveRun>,
+    /// When submitted record graphs are written (ADR 0040 §4).
+    pub(crate) staging: Staging,
+    /// The record graphs a bulk import submitted, written once it returns.
+    pub(crate) staged: Vec<RecordGraph>,
+    /// Whether the frontend cancelled a progress report, with or without an import run.
+    pub(crate) cancelled: bool,
+}
+
+/// When the host writes the record graphs an importer submits (ADR 0040 §4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Staging {
+    /// Held until the guest returns, then planned as one: a bulk import.
+    Held,
+    /// Planned and written on each `submit`: an assisted import.
+    Immediate,
 }
 
 impl HostState {
@@ -104,11 +118,14 @@ impl HostState {
             sink: None,
             file_asserted_at: None,
             run: None,
+            staging: Staging::Held,
+            staged: Vec::new(),
+            cancelled: false,
         }
     }
 
     /// Makes this invocation an import that writes the run `spec` describes (ADR 0037 §5).
-    pub(crate) fn begin_run(&mut self, spec: ImportRunSpec) {
+    pub(crate) fn open_run(&mut self, spec: ImportRunSpec) {
         let run = ActiveRun::new(spec);
         self.session = self.session.clone().with_import_run(Arc::clone(run.pending()));
         self.run = Some(run);
@@ -136,7 +153,7 @@ impl WasiView for HostState {
 
 /// Maps an application error onto the capability-error a guest sees. Domain rejections and missing
 /// references are `invalid-input`; infrastructure failures are `backend`.
-fn to_capability_error(error: &vitni_app::AppError) -> types::CapabilityError {
+pub(crate) fn to_capability_error(error: &vitni_app::AppError) -> types::CapabilityError {
     use vitni_app::AppError;
     match error {
         AppError::Db(_) | AppError::Config(_) | AppError::Workspace(_) => {
@@ -148,7 +165,7 @@ fn to_capability_error(error: &vitni_app::AppError) -> types::CapabilityError {
 
 /// Builds a [`MediaRefInput`] from the WIT attach-media crop/caption arguments, mapping the
 /// `media-crop` record's percentages onto the core [`Rect`] (ADR 0017 §9).
-fn media_ref_input(crop: Option<types::MediaCrop>, caption: Option<String>) -> MediaRefInput {
+pub(crate) fn media_ref_input(crop: Option<types::MediaCrop>, caption: Option<String>) -> MediaRefInput {
     MediaRefInput {
         crop: crop.map(|c| Rect {
             left: c.left,
@@ -187,58 +204,15 @@ impl HostState {
             log::Level::Error => tracing::error!(target: "plugin", "{message}"),
         }
     }
-
-    /// Records the import's file-asserted-at date on the session (see [`commands::Host`]).
-    fn begin_import_now(&mut self, file_asserted_at: Option<String>) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
-        // A missing or unparseable date degrades to `None` — the conservative, additive-only
-        // default (ADR 0029 §3), not an error: a malformed date is the guest's format-parsing
-        // problem, not a capability violation.
-        self.file_asserted_at = file_asserted_at.and_then(|value| Timestamp::parse_rfc3339(&value));
-        if let Some(run) = &self.run {
-            run.pending().set_file_asserted_at(self.file_asserted_at);
-        }
-        Ok(())
-    }
 }
 
 impl commands::Host for HostState {
-    fn begin_import(
-        &mut self,
-        file_asserted_at: Option<String>,
-    ) -> impl Future<Output = Result<(), types::CapabilityError>> {
-        std::future::ready(self.begin_import_now(file_asserted_at))
-    }
-
-    fn set_origin(
-        &mut self,
-        origin: Option<types::OriginKey>,
-    ) -> impl Future<Output = Result<(), types::CapabilityError>> {
-        std::future::ready(self.set_origin_now(origin))
-    }
-
     async fn create_person(
         &mut self,
         name: Option<types::PersonName>,
         external_id: Option<types::ExternalId>,
     ) -> Result<types::ImportResult, types::CapabilityError> {
         self.begin_write()?;
-        if let Some((human_id, created)) = self.resolve_by_origin("person").await? {
-            if let Some(name) = name.filter(|_| created) {
-                vitni_app::add_name(
-                    &self.workspace,
-                    &self.session,
-                    &human_id,
-                    to_person_name(name),
-                    self.mutation_meta(),
-                )
-                .await
-                .map_err(|error| to_capability_error(&error))?;
-            }
-            return Ok(types::ImportResult { human_id, created });
-        }
         let name = name.map(to_person_name);
         // Without an external identity, always create (no record to resolve against).
         let Some(external_id) = external_id else {
@@ -251,7 +225,6 @@ impl commands::Host for HostState {
             let human_id = vitni_app::create_person(&self.workspace, &self.session, new, self.provenance(), &[])
                 .await
                 .map_err(|error| to_capability_error(&error))?;
-            self.record_created("person");
             return Ok(types::ImportResult {
                 human_id,
                 created: true,
@@ -267,14 +240,6 @@ impl commands::Host for HostState {
         )
         .await
         .map_err(|error| to_capability_error(&error))?;
-        if created {
-            self.record_created("person");
-        } else {
-            let view = self.workspace.store().find_person(&human_id).await;
-            let view = view.map_err(|error| types::CapabilityError::Backend(error.to_string()))?;
-            let person_id = view.and_then(|view| view.person_id());
-            self.record_resolved("person", person_id.map(|id| id.as_uuid()));
-        }
         Ok(types::ImportResult { human_id, created })
     }
 
@@ -296,14 +261,10 @@ impl commands::Host for HostState {
         external_id: Option<types::ExternalId>,
     ) -> Result<types::ImportResult, types::CapabilityError> {
         self.begin_write()?;
-        if let Some((human_id, created)) = self.resolve_by_origin("family").await? {
-            return Ok(types::ImportResult { human_id, created });
-        }
         let Some(external_id) = external_id else {
             let human_id = vitni_app::create_family(&self.workspace, &self.session, self.provenance(), &[])
                 .await
                 .map_err(|error| to_capability_error(&error))?;
-            self.record_created("family");
             return Ok(types::ImportResult {
                 human_id,
                 created: true,
@@ -317,14 +278,6 @@ impl commands::Host for HostState {
         )
         .await
         .map_err(|error| to_capability_error(&error))?;
-        if created {
-            self.record_created("family");
-        } else {
-            let view = self.workspace.store().find_family(&human_id).await;
-            let view = view.map_err(|error| types::CapabilityError::Backend(error.to_string()))?;
-            let family_id = view.and_then(|view| view.family_id());
-            self.record_resolved("family", family_id.map(|id| id.as_uuid()));
-        }
         Ok(types::ImportResult { human_id, created })
     }
 
@@ -419,12 +372,6 @@ impl commands::Host for HostState {
 
     async fn create_place(&mut self, name: String) -> Result<String, types::CapabilityError> {
         self.begin_write()?;
-        if let Some((human_id, _)) = self.resolve_by_origin("place").await? {
-            vitni_app::add_place_name(&self.workspace, &self.session, &human_id, name, self.mutation_meta())
-                .await
-                .map_err(|error| to_capability_error(&error))?;
-            return Ok(human_id);
-        }
         let human_id = vitni_app::create_place(
             &self.workspace,
             &self.session,
@@ -439,15 +386,11 @@ impl commands::Host for HostState {
         )
         .await
         .map_err(|error| to_capability_error(&error))?;
-        self.record_created("place");
         Ok(human_id)
     }
 
     async fn create_event(&mut self, kind: types::EventType) -> Result<String, types::CapabilityError> {
         self.begin_write()?;
-        if let Some((human_id, _)) = self.resolve_by_origin("event").await? {
-            return Ok(human_id);
-        }
         let human_id = vitni_app::create_event(
             &self.workspace,
             &self.session,
@@ -460,7 +403,6 @@ impl commands::Host for HostState {
         )
         .await
         .map_err(|error| to_capability_error(&error))?;
-        self.record_created("event");
         Ok(human_id)
     }
 
@@ -532,14 +474,6 @@ impl commands::Host for HostState {
 
     async fn create_source(&mut self, title: Option<String>) -> Result<String, types::CapabilityError> {
         self.begin_write()?;
-        if let Some((human_id, _)) = self.resolve_by_origin("source").await? {
-            if let Some(title) = title {
-                vitni_app::set_title(&self.workspace, &self.session, &human_id, title, self.mutation_meta())
-                    .await
-                    .map_err(|error| to_capability_error(&error))?;
-            }
-            return Ok(human_id);
-        }
         let human_id = vitni_app::create_source(
             &self.workspace,
             &self.session,
@@ -549,7 +483,6 @@ impl commands::Host for HostState {
         )
         .await
         .map_err(|error| to_capability_error(&error))?;
-        self.record_created("source");
         Ok(human_id)
     }
 
@@ -559,14 +492,6 @@ impl commands::Host for HostState {
         page: Option<String>,
     ) -> Result<String, types::CapabilityError> {
         self.begin_write()?;
-        if let Some((human_id, _)) = self.resolve_by_origin("citation").await? {
-            if let Some(page) = page {
-                vitni_app::set_page(&self.workspace, &self.session, &human_id, page, self.mutation_meta())
-                    .await
-                    .map_err(|error| to_capability_error(&error))?;
-            }
-            return Ok(human_id);
-        }
         let human_id = vitni_app::create_citation(
             &self.workspace,
             &self.session,
@@ -580,15 +505,11 @@ impl commands::Host for HostState {
         )
         .await
         .map_err(|error| to_capability_error(&error))?;
-        self.record_created("citation");
         Ok(human_id)
     }
 
     async fn create_media(&mut self, file: Option<String>) -> Result<String, types::CapabilityError> {
         self.begin_write()?;
-        if let Some((human_id, _)) = self.resolve_by_origin("media").await? {
-            return Ok(human_id);
-        }
         let human_id = vitni_app::create_media(
             &self.workspace,
             &self.session,
@@ -601,7 +522,6 @@ impl commands::Host for HostState {
         )
         .await
         .map_err(|error| to_capability_error(&error))?;
-        self.record_created("media");
         Ok(human_id)
     }
 
@@ -614,19 +534,6 @@ impl commands::Host for HostState {
 
     async fn create_note(&mut self, text: String) -> Result<String, types::CapabilityError> {
         self.begin_write()?;
-        if let Some((human_id, _)) = self.resolve_by_origin("note").await? {
-            vitni_app::set_note_text(
-                &self.workspace,
-                &self.session,
-                &human_id,
-                text,
-                None,
-                self.mutation_meta(),
-            )
-            .await
-            .map_err(|error| to_capability_error(&error))?;
-            return Ok(human_id);
-        }
         let human_id = vitni_app::create_note(
             &self.workspace,
             &self.session,
@@ -639,18 +546,11 @@ impl commands::Host for HostState {
         )
         .await
         .map_err(|error| to_capability_error(&error))?;
-        self.record_created("note");
         Ok(human_id)
     }
 
     async fn create_repository(&mut self, name: String) -> Result<String, types::CapabilityError> {
         self.begin_write()?;
-        if let Some((human_id, _)) = self.resolve_by_origin("repository").await? {
-            vitni_app::set_repository_name(&self.workspace, &self.session, &human_id, name, self.mutation_meta())
-                .await
-                .map_err(|error| to_capability_error(&error))?;
-            return Ok(human_id);
-        }
         let human_id = vitni_app::create_repository(
             &self.workspace,
             &self.session,
@@ -663,19 +563,14 @@ impl commands::Host for HostState {
         )
         .await
         .map_err(|error| to_capability_error(&error))?;
-        self.record_created("repository");
         Ok(human_id)
     }
 
     async fn create_tag(&mut self, name: String) -> Result<String, types::CapabilityError> {
         self.begin_write()?;
-        if let Some((tag_id, _)) = self.resolve_by_origin("tag").await? {
-            return Ok(tag_id);
-        }
         let human_id = vitni_app::create_tag(&self.workspace, &self.session, name, self.provenance(), &[])
             .await
             .map_err(|error| to_capability_error(&error))?;
-        self.record_created("tag");
         Ok(human_id)
     }
 
@@ -1084,86 +979,20 @@ impl commands::Host for HostState {
 
 impl HostState {
     /// Admits one `commands` write: rejects it when the instance lacks the [`Capability::Commands`]
-    /// grant and, during an import run, when the guest has declared no origin (ADR 0037 §1).
+    /// grant.
     fn begin_write(&self) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
-        let Some(run) = self.run.as_ref() else {
-            return Ok(());
-        };
-        run.admit_write().map_err(|NoOrigin| {
-            types::CapabilityError::InvalidInput(
-                "no origin set: call set-origin with the source record before writing (ADR 0037)".to_owned(),
-            )
-        })
-    }
-
-    /// During an import run, the existing aggregate of `kind` the current item resolves onto (ADR
-    /// 0037 §4): its human id (a Tag's own id), and whether this dataset created it — as opposed to a
-    /// run having resolved the item onto an aggregate another dataset made, whose contents stay that
-    /// dataset's.
-    async fn resolve_by_origin(&mut self, kind: &str) -> Result<Option<(String, bool)>, types::CapabilityError> {
-        let Some(origin) = self.run.as_ref().and_then(ActiveRun::origin) else {
-            return Ok(None);
-        };
-        let store = self.workspace.store();
-        let resolved = store
-            .resolve_origin(origin.dataset.as_str(), &origin.record, origin.item.as_deref(), kind)
-            .await
-            .map_err(|error| types::CapabilityError::Backend(error.to_string()))?;
-        let Some(resolution) = resolved else {
-            return Ok(None);
-        };
-        if kind == "tag" {
-            return Ok(Some((resolution.aggregate_id, resolution.created)));
-        }
-        let human_id = store
-            .human_id_of(kind, &resolution.aggregate_id)
-            .await
-            .map_err(|error| types::CapabilityError::Backend(error.to_string()))?;
-        Ok(human_id.map(|human_id| (human_id, resolution.created)))
-    }
-
-    /// Records the source record later writes are stamped with (see [`commands::Host`]). Outside an
-    /// import run there is nothing to stamp, so the call has no effect.
-    fn set_origin_now(&mut self, origin: Option<types::OriginKey>) -> Result<(), types::CapabilityError> {
-        if !self.grants.allows(Capability::Commands) {
-            return Err(types::CapabilityError::Denied);
-        }
-        if let Some(run) = self.run.as_mut() {
-            run.set_origin(origin.map(|key| (key.record, key.item)));
-        }
-        Ok(())
-    }
-
-    /// Records that the current item resolved onto an existing aggregate of `kind`. A resolved
-    /// aggregate with no projected id is logged and left out of the run's resolutions.
-    fn record_resolved(&mut self, kind: &str, aggregate_id: Option<uuid::Uuid>) {
-        let Some(run) = self.run.as_mut() else {
-            return;
-        };
-        let Some(aggregate_id) = aggregate_id else {
-            tracing::warn!(kind, "a resolved import item's aggregate could not be read back");
-            return;
-        };
-        run.resolved(kind, aggregate_id);
-    }
-
-    /// Counts an aggregate of `kind` the current import run created.
-    fn record_created(&mut self, kind: &str) {
-        if let Some(run) = self.run.as_mut() {
-            run.created(kind);
+        if self.grants.allows(Capability::Commands) {
+            Ok(())
+        } else {
+            Err(types::CapabilityError::Denied)
         }
     }
 
-    /// The provenance stamped on a `create_*` command: the instance's confidence template (ADR 0017
-    /// §7) and, during an import, the record the guest is writing from; no rationale or evidence
-    /// analysis. `None` confidence keeps the pre-assisted behavior.
-    fn provenance(&self) -> Provenance {
+    /// The provenance stamped on every write: the instance's confidence template (ADR 0017 §7); no
+    /// rationale, evidence analysis or origin. `None` confidence keeps the pre-assisted behavior.
+    pub(crate) fn provenance(&self) -> Provenance {
         Provenance {
             confidence: self.provenance_confidence,
-            origin: self.run.as_ref().and_then(ActiveRun::origin),
             ..Provenance::default()
         }
     }
@@ -1179,7 +1008,7 @@ impl HostState {
 }
 
 /// Maps a WIT `restriction` list onto the domain restriction set (GEDCOM `RESN` — data-model §6).
-fn to_restrictions(restrictions: Vec<types::Restriction>) -> std::collections::BTreeSet<Restriction> {
+pub(crate) fn to_restrictions(restrictions: Vec<types::Restriction>) -> std::collections::BTreeSet<Restriction> {
     restrictions
         .into_iter()
         .map(|restriction| match restriction {
@@ -1203,7 +1032,7 @@ fn from_restrictions(restrictions: &std::collections::BTreeSet<Restriction>) -> 
 }
 
 /// Maps the WIT `sex` enum onto the domain [`Sex`] (data-model §10).
-fn to_sex(sex: types::Sex) -> Sex {
+pub(crate) fn to_sex(sex: types::Sex) -> Sex {
     match sex {
         types::Sex::Male => Sex::Male,
         types::Sex::Female => Sex::Female,
@@ -1224,7 +1053,7 @@ fn from_sex(sex: &Sex) -> types::Sex {
 }
 
 /// Maps the WIT `event-type` enum onto the domain [`EventType`] (data-model §10).
-fn to_event_type(kind: types::EventType) -> EventType {
+pub(crate) fn to_event_type(kind: types::EventType) -> EventType {
     match kind {
         types::EventType::Birth => EventType::Birth,
         types::EventType::Death => EventType::Death,
@@ -1260,7 +1089,7 @@ fn to_event_type(kind: types::EventType) -> EventType {
 }
 
 /// Maps the WIT `participant-role` enum onto the domain [`ParticipantRole`] (data-model §10).
-fn to_role(role: types::ParticipantRole) -> ParticipantRole {
+pub(crate) fn to_role(role: types::ParticipantRole) -> ParticipantRole {
     match role {
         types::ParticipantRole::Primary => ParticipantRole::Primary,
         types::ParticipantRole::Witness => ParticipantRole::Witness,
@@ -1283,7 +1112,7 @@ fn to_role(role: types::ParticipantRole) -> ParticipantRole {
 }
 
 /// Maps the WIT `age` record onto the domain [`Age`] (data-model §7, ADR 0019).
-fn to_age(age: types::Age) -> Age {
+pub(crate) fn to_age(age: types::Age) -> Age {
     Age {
         bound: age.bound.map(|bound| match bound {
             types::AgeBound::LessThan => AgeBound::LessThan,
@@ -1311,7 +1140,7 @@ fn from_age(age: &Age) -> types::Age {
 }
 
 /// Maps the WIT `attribute` record onto the domain [`Attribute`] (data-model §7).
-fn to_attribute(attribute: types::Attribute) -> Attribute {
+pub(crate) fn to_attribute(attribute: types::Attribute) -> Attribute {
     Attribute {
         attribute_type: attribute.attribute_type,
         value: attribute.value,
@@ -1355,7 +1184,7 @@ fn from_name_type(name_type: NameType) -> types::NameType {
 }
 
 /// Maps the WIT `person-name` record onto the application [`PersonNameParts`] (data-model §7).
-fn to_person_name(name: types::PersonName) -> PersonNameParts {
+pub(crate) fn to_person_name(name: types::PersonName) -> PersonNameParts {
     PersonNameParts {
         name_type: to_name_type(name.name_type),
         given: name.given,
@@ -1407,7 +1236,7 @@ fn from_media_ref(media_ref: &MediaRefSummary) -> types::MediaRef {
 }
 
 /// Maps the WIT `source-media-type` onto the domain [`SourceMediaType`] (data-model §17).
-fn to_source_media_type(media_type: types::SourceMediaType) -> SourceMediaType {
+pub(crate) fn to_source_media_type(media_type: types::SourceMediaType) -> SourceMediaType {
     match media_type {
         types::SourceMediaType::Book => SourceMediaType::Book,
         types::SourceMediaType::Card => SourceMediaType::Card,
@@ -1459,7 +1288,7 @@ fn from_repository_ref(link: &RepositoryLinkRef) -> Option<types::RepositoryRef>
 }
 
 /// Maps the WIT `fact-type` variant onto the domain [`FactType`] (data-model §7).
-fn to_fact_type(fact: types::FactType) -> FactType {
+pub(crate) fn to_fact_type(fact: types::FactType) -> FactType {
     match fact {
         types::FactType::Occupation => FactType::Occupation,
         types::FactType::Residence => FactType::Residence,
@@ -1480,7 +1309,7 @@ fn to_fact_type(fact: types::FactType) -> FactType {
 }
 
 /// Maps the WIT `association-role` variant onto the domain [`AssociationRole`] (data-model §7).
-fn to_association_role(role: types::AssociationRole) -> AssociationRole {
+pub(crate) fn to_association_role(role: types::AssociationRole) -> AssociationRole {
     match role {
         types::AssociationRole::Clergy => AssociationRole::Clergy,
         types::AssociationRole::Friend => AssociationRole::Friend,
@@ -1501,7 +1330,7 @@ fn to_association_role(role: types::AssociationRole) -> AssociationRole {
 }
 
 /// Maps the WIT `address` record onto the domain [`Address`] (data-model §7).
-fn to_address(address: types::Address) -> Address {
+pub(crate) fn to_address(address: types::Address) -> Address {
     Address {
         lines: address.lines,
         locality: address.locality,
@@ -1527,7 +1356,7 @@ fn to_date_point(point: types::DatePoint) -> DatePoint {
 
 /// Maps the WIT `genealogical-date` record onto a domain [`GenealogicalDate`], computing the sort key
 /// via [`build_genealogical_date`].
-fn to_genealogical_date(date: types::GenealogicalDate) -> GenealogicalDate {
+pub(crate) fn to_genealogical_date(date: types::GenealogicalDate) -> GenealogicalDate {
     let calendar = match date.calendar {
         types::DateCalendar::Gregorian => Calendar::Gregorian,
         types::DateCalendar::Julian => Calendar::Julian,
@@ -1581,7 +1410,7 @@ fn to_genealogical_date(date: types::GenealogicalDate) -> GenealogicalDate {
 }
 
 /// Maps the WIT `external-id` record onto the domain [`ExternalId`] (data-model §11).
-fn to_external_id(external_id: types::ExternalId) -> ExternalId {
+pub(crate) fn to_external_id(external_id: types::ExternalId) -> ExternalId {
     ExternalId {
         authority: external_id.authority,
         value: external_id.value,
@@ -1698,7 +1527,7 @@ fn from_association_role(role: &AssociationRole) -> types::AssociationRole {
 }
 
 /// Maps the WIT `child-relationship` variant onto the domain [`ChildParentRelationship`].
-fn to_child_relationship(relationship: &types::ChildRelationship) -> ChildParentRelationship {
+pub(crate) fn to_child_relationship(relationship: &types::ChildRelationship) -> ChildParentRelationship {
     match relationship {
         types::ChildRelationship::Birth => ChildParentRelationship::Birth,
         types::ChildRelationship::Adopted => ChildParentRelationship::Adopted,
@@ -2089,7 +1918,7 @@ fn distinct(ids: impl IntoIterator<Item = String>) -> Vec<String> {
 }
 
 /// Maps the WIT `confidence` enum onto the domain [`Confidence`](vitni_app::Confidence).
-fn to_confidence(confidence: types::Confidence) -> vitni_app::Confidence {
+pub(crate) fn to_confidence(confidence: types::Confidence) -> vitni_app::Confidence {
     match confidence {
         types::Confidence::VeryLow => vitni_app::Confidence::VeryLow,
         types::Confidence::Low => vitni_app::Confidence::Low,
@@ -2111,7 +1940,7 @@ fn from_confidence(confidence: vitni_app::Confidence) -> types::Confidence {
 }
 
 /// Maps the WIT `note-type` variant onto the domain [`NoteType`].
-fn to_note_type(note_type: types::NoteType) -> NoteType {
+pub(crate) fn to_note_type(note_type: types::NoteType) -> NoteType {
     match note_type {
         types::NoteType::General => NoteType::General,
         types::NoteType::Research => NoteType::Research,
@@ -2133,7 +1962,7 @@ fn from_note_type(note_type: NoteType) -> types::NoteType {
 }
 
 /// Maps the WIT `place-type` variant onto the domain [`PlaceType`].
-fn to_place_type(place_type: types::PlaceType) -> PlaceType {
+pub(crate) fn to_place_type(place_type: types::PlaceType) -> PlaceType {
     match place_type {
         types::PlaceType::Country => PlaceType::Country,
         types::PlaceType::County => PlaceType::County,
@@ -2176,11 +2005,16 @@ impl HostState {
         if !self.grants.allows(Capability::Progress) {
             return Err(types::CapabilityError::Denied);
         }
-        let control = (self.io.progress)(ProgressUpdate { step, processed, total });
-        if control == ProgressControl::Cancel
-            && let Some(run) = self.run.as_mut()
-        {
-            run.cancel();
+        let control = (self.io.progress)(ProgressUpdate {
+            step: ProgressStep::Plugin(step),
+            processed,
+            total,
+        });
+        if control == ProgressControl::Cancel {
+            self.cancelled = true;
+            if let Some(run) = self.run.as_mut() {
+                run.cancel();
+            }
         }
         Ok(match control {
             ProgressControl::Proceed => progress::Control::Proceed,

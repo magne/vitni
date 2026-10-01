@@ -4,8 +4,9 @@
 //! Flow (prototype-proven, `sort-inbox.py`): classify the request URL, fetch the page(s) over `net`,
 //! parse them with the pure `vitni-digitalarkivet` crate, present each record to the user through
 //! `present` (suspending until they confirm or skip), file the scan once per source page through
-//! `media-store`, and record the confirmed record as low-confidence Software-agent assertions through
-//! `commands`, resolving-or-creating by `ExternalId` so a re-run imports no duplicates.
+//! `media-store`, and submit the confirmed record as a record graph through `staging` — the host
+//! writes it as low-confidence Software-agent assertions, resolving the person by `ExternalId` so a
+//! re-run imports no duplicates (ADR 0040).
 //!
 //! - **Census residence** (`/census/{rural,urban}-residence/`): fetch the household page, fetch and
 //!   parse each linked person page, present the records list, then review each picked record.
@@ -21,15 +22,15 @@ wit_bindgen::generate!({
     world: "assisted-import",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.24.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.24.0": vitni_plugin_api::log,
-        "vitni:host-api/query@0.24.0": vitni_plugin_api::query,
-        "vitni:host-api/commands@0.24.0": vitni_plugin_api::commands,
-        "vitni:host-api/progress@0.24.0": vitni_plugin_api::progress,
-        "vitni:host-api/net@0.24.0": vitni_plugin_api::net,
-        "vitni:host-api/media-store@0.24.0": vitni_plugin_api::media_store,
-        "vitni:host-api/ai@0.24.0": vitni_plugin_api::ai,
-        "vitni:host-api/present@0.24.0": vitni_plugin_api::present,
+        "vitni:host-api/types@0.25.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.25.0": vitni_plugin_api::log,
+        "vitni:host-api/query@0.25.0": vitni_plugin_api::query,
+        "vitni:host-api/staging@0.25.0": vitni_plugin_api::staging,
+        "vitni:host-api/progress@0.25.0": vitni_plugin_api::progress,
+        "vitni:host-api/net@0.25.0": vitni_plugin_api::net,
+        "vitni:host-api/media-store@0.25.0": vitni_plugin_api::media_store,
+        "vitni:host-api/ai@0.25.0": vitni_plugin_api::ai,
+        "vitni:host-api/present@0.25.0": vitni_plugin_api::present,
     },
 });
 
@@ -37,8 +38,14 @@ use vitni_digitalarkivet::{
     AUTHORITY, PageKind, ParseError, PersonRecord, REPOSITORY, census_year, classify_url, extract_urn,
     parse_person_page, parse_residence_page, parse_viewer_page, slugify, suggest_filename,
 };
-use vitni_plugin_api::types::{Confidence, ExternalId, FactType, MediaCrop, NameType, PersonName, SourceMediaType};
-use vitni_plugin_api::{commands, log_info, log_warn, media_store, query, report, with_origin};
+use vitni_plugin_api::staging::{
+    EntityFields, EntityKind, EntityRef, ExistingRef, LinkKind, MediaLink, PairLink, RepositoryLink, StagedCitation,
+    StagedMedia, StagedPerson, StagedRepository, StagedSource, SubmitOutcome,
+};
+use vitni_plugin_api::types::{
+    Confidence, ExternalId, Fact, FactType, MediaCrop, NameType, PersonName, SourceMediaType,
+};
+use vitni_plugin_api::{Graph, log_info, log_warn, media_store, query, report};
 
 mod contract;
 
@@ -65,12 +72,12 @@ struct Importer;
 struct Session {
     /// The scan stored for this source page (filed once, reused by every record on it).
     stored: Option<StoredScan>,
-    /// The source human id (deduped by title within the run and against existing sources).
-    source: Option<String>,
-    /// The managing repository human id (deduped by name).
-    repository: Option<String>,
-    /// The media human id for the stored scan (deduped by path).
-    media: Option<String>,
+    /// The source (deduped by title within the run and against existing sources).
+    source: Option<EntityRef>,
+    /// The managing repository (deduped by name).
+    repository: Option<EntityRef>,
+    /// The media object for the stored scan (deduped by path).
+    media: Option<EntityRef>,
     /// The imported records, for the summary (human id + display name).
     imported: Vec<(String, String)>,
     /// How many records the user skipped.
@@ -199,8 +206,8 @@ fn fetch_household(links: &[String]) -> Result<Vec<PersonRecord>, String> {
     Ok(records)
 }
 
-/// Presents one record's confirm stage and, on import, files the scan (once) and records the
-/// person, source, citation, and media through `commands`. Returns which outcome the user chose.
+/// Presents one record's confirm stage and, on import, files the scan (once) and submits the person,
+/// source, citation, and media through `staging`. Returns which outcome the user chose.
 fn review(record: &PersonRecord, scan_url: Option<&str>, session: &mut Session) -> Result<Outcome, String> {
     loop {
         let response = show(&Payload::confirm(record, scan_url))?;
@@ -223,9 +230,8 @@ fn review(record: &PersonRecord, scan_url: Option<&str>, session: &mut Session) 
 }
 
 /// Records a confirmed record: files the scan first (so cancelling the save dialog aborts before any
-/// write), then resolves-or-creates the person and — when it is this dataset's own — records the
-/// source, citation, and media under the record's origin, so a re-run writes only what changed
-/// (ADR 0037 §4).
+/// write), then submits the person and — when it is this dataset's own — the source, citation, and
+/// media under the record's origin, so a re-run writes only what changed (ADR 0037 §4).
 fn import(
     record: &PersonRecord,
     scan_url: Option<&str>,
@@ -250,48 +256,98 @@ fn import(
     };
 
     let name = field_value(values, "name").unwrap_or_else(|| record.name.clone());
-    let person = with_origin(&record.external_id.value, None, || {
-        let person = commands::create_person(person_name(&name).as_ref(), Some(&external_id(record)))
-            .map_err(|error| format!("create-person failed: {error:?}"))?;
-        if person.created {
-            record_claims(&person.human_id, record, effective, values, stored.as_ref(), session)?;
-        }
-        Ok(person)
-    })?;
-    session.imported.push((person.human_id, name));
+    let mut graph = Graph::new(&record.external_id.value);
+    graph.entity(None, person_fields(&name, record, None));
+    let (human_id, created) = committed(&graph.submit()?, 0)?;
+    if created {
+        record_claims(&name, record, effective, values, stored.as_ref(), session)?;
+    }
+    session.imported.push((human_id, name));
     Ok(Outcome::Imported)
 }
 
-/// Records the owned claims for a newly-created person: an occupation fact, the source + citation
+/// The person a record names: its name, and its external id.
+fn person_fields(name: &str, record: &PersonRecord, occupation: Option<String>) -> EntityFields {
+    EntityFields::Person(StagedPerson {
+        names: person_name(name).into_iter().collect(),
+        sex: None,
+        facts: occupation
+            .into_iter()
+            .map(|occupation| Fact {
+                fact_type: FactType::Occupation,
+                value: Some(occupation),
+                date: None,
+            })
+            .collect(),
+        external_ids: vec![external_id(record)],
+        restrictions: Vec::new(),
+    })
+}
+
+/// The human id the host gave the submitted entity `local_id`, and whether its record is this
+/// dataset's own.
+fn committed(outcome: &SubmitOutcome, local_id: u32) -> Result<(String, bool), String> {
+    let SubmitOutcome::Committed(entities) = outcome else {
+        return Err("the host held an assisted record instead of writing it".to_owned());
+    };
+    entities
+        .iter()
+        .find(|entity| entity.local_id == local_id)
+        .map(|entity| (entity.human_id.clone(), entity.created))
+        .ok_or_else(|| format!("the host wrote no record for entity {local_id}"))
+}
+
+/// A reference to the existing record `human_id` of `kind`.
+fn existing(kind: EntityKind, human_id: String) -> EntityRef {
+    EntityRef::Existing(ExistingRef { kind, human_id })
+}
+
+/// Records the owned claims of a person this dataset made: an occupation fact, the source + citation
 /// (confidence from the confirm form), and — when a scan was filed — the media with the user's crop.
 fn record_claims(
-    person: &str,
+    name: &str,
     record: &PersonRecord,
     scan_url: Option<&str>,
     values: &contract::Values,
     stored: Option<&StoredScan>,
     session: &mut Session,
 ) -> Result<(), String> {
-    if let Some(occupation) = field_value(values, "occupation").filter(|value| !value.trim().is_empty()) {
-        commands::assert_fact(person, &FactType::Occupation, Some(&occupation), None)
-            .map_err(|error| format!("assert-fact failed: {error:?}"))?;
-    }
     let source = ensure_source(record, session)?;
-    let citation = with_origin(&record.external_id.value, Some("citation"), || {
-        let citation = commands::create_citation(&source, Some(&citation_locator(record, scan_url)))
-            .map_err(|error| format!("create-citation failed: {error:?}"))?;
-        commands::set_citation_confidence(&citation, confidence(values.confidence.as_deref()))
-            .map_err(|error| format!("set-citation-confidence failed: {error:?}"))?;
-        Ok(citation)
-    })?;
-    commands::attach_person_citation(person, &citation)
-        .map_err(|error| format!("attach-citation failed: {error:?}"))?;
-    if let Some(stored) = stored {
-        let media = ensure_media(stored, scan_url, session)?;
-        let crop = values.region.map(to_crop);
-        commands::attach_person_media(person, &media, crop, None)
-            .map_err(|error| format!("attach-media failed: {error:?}"))?;
+    let media = match stored {
+        Some(stored) => Some(ensure_media(stored, scan_url, session)?),
+        None => None,
+    };
+    let occupation = field_value(values, "occupation").filter(|value| !value.trim().is_empty());
+    let mut graph = Graph::new(&record.external_id.value);
+    let person = graph.entity(None, person_fields(name, record, occupation));
+    let citation = graph.entity(
+        Some("citation"),
+        EntityFields::Citation(StagedCitation {
+            source,
+            page: Some(citation_locator(record, scan_url)),
+            confidence: Some(confidence(values.confidence.as_deref())),
+            restrictions: Vec::new(),
+        }),
+    );
+    graph.link(
+        None,
+        LinkKind::CitationOf(PairLink {
+            owner: person.clone(),
+            target: citation,
+        }),
+    );
+    if let Some(media) = media {
+        graph.link(
+            None,
+            LinkKind::MediaOf(MediaLink {
+                owner: person,
+                media,
+                crop: values.region.map(to_crop),
+                caption: None,
+            }),
+        );
     }
+    graph.submit()?;
     Ok(())
 }
 
@@ -337,49 +393,73 @@ fn media_root_relative(path: String) -> String {
 
 /// Resolves-or-creates the citing source, deduping by title within the run and against existing
 /// sources, and links its managing repository. Cached on the session for the rest of the page.
-fn ensure_source(record: &PersonRecord, session: &mut Session) -> Result<String, String> {
+fn ensure_source(record: &PersonRecord, session: &mut Session) -> Result<EntityRef, String> {
     if let Some(source) = &session.source {
         return Ok(source.clone());
     }
     let title = record.source.title.clone().unwrap_or_else(|| record.record_url.clone());
     if let Ok(sources) = query::list_sources()
-        && let Some(existing) = sources
+        && let Some(found) = sources
             .iter()
             .find(|source| source.title.as_deref() == Some(title.as_str()))
     {
-        session.source = Some(existing.human_id.clone());
-        return Ok(existing.human_id.clone());
+        let source = existing(EntityKind::Source, found.human_id.clone());
+        session.source = Some(source.clone());
+        return Ok(source);
     }
+    let repository = ensure_repository(session)?;
     // A listing's source has no record id on the page: its title is the key.
-    let source = with_origin(&format!("source:{title}"), None, || {
-        let source =
-            commands::create_source(Some(&title)).map_err(|error| format!("create-source failed: {error:?}"))?;
-        let repository = ensure_repository(session)?;
-        // No call number or medium concept in a Digitalarkivet page; both default (unspecified).
-        commands::link_source_repository(&source, &repository, None, &SourceMediaType::Custom(String::new()))
-            .map_err(|error| format!("link-source-repository failed: {error:?}"))?;
-        Ok(source)
-    })?;
+    let mut graph = Graph::new(&format!("source:{title}"));
+    let entity = graph.entity(
+        None,
+        EntityFields::Source(StagedSource {
+            title: Some(title),
+            author: None,
+            pub_info: None,
+            abbrev: None,
+            restrictions: Vec::new(),
+        }),
+    );
+    // No call number or medium concept in a Digitalarkivet page; both default (unspecified).
+    graph.link(
+        None,
+        LinkKind::SourceRepository(RepositoryLink {
+            source: entity,
+            repository,
+            call_number: None,
+            media_type: SourceMediaType::Custom(String::new()),
+        }),
+    );
+    let (human_id, _) = committed(&graph.submit()?, 0)?;
+    let source = existing(EntityKind::Source, human_id);
     session.source = Some(source.clone());
     Ok(source)
 }
 
 /// Resolves-or-creates the managing repository (`Digitalarkivet (Arkivverket)`), deduping by name.
-fn ensure_repository(session: &mut Session) -> Result<String, String> {
+fn ensure_repository(session: &mut Session) -> Result<EntityRef, String> {
     if let Some(repository) = &session.repository {
         return Ok(repository.clone());
     }
     if let Ok(repositories) = query::list_repositories()
-        && let Some(existing) = repositories
+        && let Some(found) = repositories
             .iter()
             .find(|repo| repo.name.as_deref() == Some(REPOSITORY))
     {
-        session.repository = Some(existing.human_id.clone());
-        return Ok(existing.human_id.clone());
+        let repository = existing(EntityKind::Repository, found.human_id.clone());
+        session.repository = Some(repository.clone());
+        return Ok(repository);
     }
-    let repository = with_origin("repository:arkivverket", None, || {
-        commands::create_repository(REPOSITORY).map_err(|error| format!("create-repository failed: {error:?}"))
-    })?;
+    let mut graph = Graph::new("repository:arkivverket");
+    graph.entity(
+        None,
+        EntityFields::Repository(StagedRepository {
+            name: REPOSITORY.to_owned(),
+            restrictions: Vec::new(),
+        }),
+    );
+    let (human_id, _) = committed(&graph.submit()?, 0)?;
+    let repository = existing(EntityKind::Repository, human_id);
     session.repository = Some(repository.clone());
     Ok(repository)
 }
@@ -387,29 +467,35 @@ fn ensure_repository(session: &mut Session) -> Result<String, String> {
 /// Resolves-or-creates the media object for the stored scan, deduping by path (within the run and
 /// against existing media), and setting its MIME type. Its origin is the scan's URL, since the
 /// filing path is the operator's choice and changes between runs.
-fn ensure_media(stored: &StoredScan, scan_url: Option<&str>, session: &mut Session) -> Result<String, String> {
+fn ensure_media(stored: &StoredScan, scan_url: Option<&str>, session: &mut Session) -> Result<EntityRef, String> {
     if let Some(media) = &session.media {
         return Ok(media.clone());
     }
     if let Ok(objects) = query::list_media()
-        && let Some(existing) = objects
+        && let Some(found) = objects
             .iter()
             .find(|media| media.path.as_deref() == Some(stored.relative_path.as_str()))
     {
-        session.media = Some(existing.human_id.clone());
-        return Ok(existing.human_id.clone());
+        let media = existing(EntityKind::Media, found.human_id.clone());
+        session.media = Some(media.clone());
+        return Ok(media);
     }
     let key = match scan_url {
         Some(url) => format!("scan:{url}"),
         None => format!("file:{}", stored.relative_path),
     };
-    let media = with_origin(&key, None, || {
-        let media = commands::create_media(Some(&stored.relative_path))
-            .map_err(|error| format!("create-media failed: {error:?}"))?;
-        commands::set_media_mime(&media, &stored.mime).map_err(|error| format!("set-media-mime failed: {error:?}"))?;
-        Ok(media)
-    })?;
+    let mut graph = Graph::new(&key);
+    graph.entity(
+        None,
+        EntityFields::Media(StagedMedia {
+            path: Some(stored.relative_path.clone()),
+            mime: Some(stored.mime.clone()),
+            restrictions: Vec::new(),
+        }),
+    );
+    let (human_id, _) = committed(&graph.submit()?, 0)?;
     log_info(&format!("stored scan {} ({})", stored.relative_path, stored.checksum));
+    let media = existing(EntityKind::Media, human_id);
     session.media = Some(media.clone());
     Ok(media)
 }

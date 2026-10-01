@@ -173,7 +173,20 @@
 // next call. During an import run the host refuses a write while no origin is set, so no imported
 // claim can lose its record. The dataset and the run are the host's, never the guest's. Additive to
 // `commands`.
-package vitni:host-api@0.24.0;
+//
+// Version 0.25.0 makes importers parsers (ADR 0040 §1 — which names this version 0.24.0, already taken
+// by `set-origin` when it was accepted). A new `staging` interface takes one `record-graph` per source
+// record: its entities, each with a local id, an item key and its incoming fields, and the links
+// between them, each stamped with an item. A link end is an entity of the same graph, another graph's
+// entity by its origin, or an existing record by its human id — the last only while the Digitalarkivet
+// importer still looks records up through `query`. `begin-run` declares the document's export date
+// (replacing `commands.begin-import`) with a dataset hint and source label. The host plans every
+// entity — by origin, external id, tag name and the matching engine — and commits the plan in
+// dependency order, every write stamped with its origin: after `run-import` returns in the bulk world,
+// on each `submit` in the assisted world. The `bulk-import` and `assisted-import` worlds no longer
+// import `commands`, and `commands` loses `begin-import` and `set-origin`. A breaking change to both
+// import worlds and to `commands`.
+package vitni:host-api@0.25.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `vitni_core::name::NameType`.
@@ -740,25 +753,10 @@ interface query {
 
 // Submit domain commands through `vitni-app` use-cases (ADR 0007 §6 `commands`). Every change
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
-// assigned human ids, which the guest maps back to source-file cross-references.
+// assigned human ids. Importers do not use it: they submit record graphs through `staging`.
 interface commands {
-    use types.{external-id, origin-key, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, media-crop, source-media-type, note-type, capability-error};
+    use types.{external-id, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, media-crop, source-media-type, note-type, capability-error};
 
-    // Declares the file's own asserted-as-of date (its export/header date, RFC 3339) for the rest of
-    // this import session — the input the app-layer timestamp-gated reconciliation rule gates on
-    // (ADR 0029 §2). Called by the guest at most once, before any per-record command; `none` when the
-    // format/document has no such date or it could not be resolved to a specific day (ADR 0029 §3).
-    // Not calling it at all is equivalent to calling it with `none` (today's additive-only behavior).
-    begin-import: func(file-asserted-at: option<string>) -> result<_, capability-error>;
-    // Sets the source record every later write in this import is stamped with (ADR 0037 §1), until the
-    // next call; `none` clears it. During an import run a write with no origin set is refused with
-    // `invalid-input`. Outside a run (an invocation the frontend started without one) the call has no
-    // effect. During a run the origin is also what re-import resolves by (ADR 0037 §4): every
-    // `create-*` under an origin an earlier run of the same dataset created from returns that
-    // aggregate instead, a write that asserts what the same origin already asserted is a no-op, and a
-    // changed single-valued field is reconciled by the file's export date (ADR 0029). An unchanged
-    // file therefore writes nothing.
-    set-origin: func(origin: option<origin-key>) -> result<_, capability-error>;
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
     // person is returned (`created = false`) and the name is asserted only if not already present
     // (idempotent, additive re-import); otherwise a new person is created (`created = true`). When
@@ -865,6 +863,253 @@ interface commands {
     set-note-restrictions: func(note: string, restrictions: list<restriction>) -> result<_, capability-error>;
     set-repository-restrictions: func(repository: string, restrictions: list<restriction>) -> result<_, capability-error>;
     set-place-restrictions: func(place: string, restrictions: list<restriction>) -> result<_, capability-error>;
+}
+
+// An importer's output (ADR 0040 §1): one record graph per source record, planned and written by the
+// host. The guest resolves nothing and computes no digest: the host resolves each entity by its origin
+// (the graph's record and the entity's item, ADR 0037 §1), a person or family by external id, a tag by
+// its name, and matches the rest against the workspace, so a re-import of an unchanged document writes
+// nothing. Granted with the `commands` capability.
+interface staging {
+    use types.{person-name, sex, fact, external-id, restriction, event-type, genealogical-date, address, place-type, confidence, note-type, participant-role, age, attribute, association-role, child-relationship, media-crop, source-media-type, origin-key, capability-error};
+
+    // The kinds of record a graph holds.
+    enum entity-kind {
+        person,
+        family,
+        event,
+        place,
+        source,
+        citation,
+        media,
+        note,
+        repository,
+        tag,
+    }
+
+    // Another graph's entity, by its origin: its kind, its record and its item.
+    record origin-ref {
+        kind: entity-kind,
+        key: origin-key,
+    }
+
+    // An existing record, by its human id (a tag's id).
+    record existing-ref {
+        kind: entity-kind,
+        human-id: string,
+    }
+
+    // Where a link end, or a citation's source, points: an entity of the same graph by its local id,
+    // another graph's entity by its origin (the host resolves it in this run, or onto the record an
+    // earlier run of the dataset made from it), or an existing record.
+    variant entity-ref {
+        local(u32),
+        origin(origin-ref),
+        existing(existing-ref),
+    }
+
+    // A person: every name (the first is primary), sex, facts, external ids and restrictions.
+    record staged-person {
+        names: list<person-name>,
+        sex: option<sex>,
+        facts: list<fact>,
+        external-ids: list<external-id>,
+        restrictions: list<restriction>,
+    }
+
+    // A family; its partners and children are links.
+    record staged-family {
+        external-ids: list<external-id>,
+        restrictions: list<restriction>,
+    }
+
+    // An event; its place and participants are links.
+    record staged-event {
+        event-type: event-type,
+        date: option<genealogical-date>,
+        addresses: list<address>,
+        restrictions: list<restriction>,
+    }
+
+    // A place; the place enclosing it is a link.
+    record staged-place {
+        name: string,
+        place-type: option<place-type>,
+        restrictions: list<restriction>,
+    }
+
+    record staged-source {
+        title: option<string>,
+        author: option<string>,
+        pub-info: option<string>,
+        abbrev: option<string>,
+        restrictions: list<restriction>,
+    }
+
+    record staged-citation {
+        source: entity-ref,
+        page: option<string>,
+        confidence: option<confidence>,
+        restrictions: list<restriction>,
+    }
+
+    record staged-media {
+        path: option<string>,
+        mime: option<string>,
+        restrictions: list<restriction>,
+    }
+
+    record staged-note {
+        text: string,
+        note-type: option<note-type>,
+        restrictions: list<restriction>,
+    }
+
+    record staged-repository {
+        name: string,
+        restrictions: list<restriction>,
+    }
+
+    record staged-tag {
+        name: string,
+    }
+
+    // An entity's incoming fields, by kind.
+    variant entity-fields {
+        person(staged-person),
+        family(staged-family),
+        event(staged-event),
+        place(staged-place),
+        source(staged-source),
+        citation(staged-citation),
+        media(staged-media),
+        note(staged-note),
+        repository(staged-repository),
+        tag(staged-tag),
+    }
+
+    // One entity of a record: its id within the graph, its item key within the record (`event:BIRT:0`;
+    // none for the record's own entity), and its fields. One item names one entity of a kind.
+    record staged-entity {
+        local-id: u32,
+        item: option<string>,
+        fields: entity-fields,
+    }
+
+    // A person taking part in an event, with the participation's own payload (ADR 0019).
+    record participation-link {
+        person: entity-ref,
+        event: entity-ref,
+        role: participant-role,
+        age: option<age>,
+        attributes: list<attribute>,
+        notes: list<entity-ref>,
+        citations: list<entity-ref>,
+    }
+
+    // A family partner.
+    record member-link {
+        family: entity-ref,
+        person: entity-ref,
+    }
+
+    // A child's relationship to one family partner.
+    record staged-child-rel {
+        partner: entity-ref,
+        relationship: child-relationship,
+    }
+
+    // A family child.
+    record child-link {
+        family: entity-ref,
+        child: entity-ref,
+        relationships: list<staged-child-rel>,
+    }
+
+    // A link from an owner to a target: a family's event, an event's place, a place's enclosing
+    // place, or a citation, note or tag of a person, family or event (a note also of a citation).
+    record pair-link {
+        owner: entity-ref,
+        target: entity-ref,
+    }
+
+    // A media object of a person, family or event, with this use's crop and caption.
+    record media-link {
+        owner: entity-ref,
+        media: entity-ref,
+        crop: option<media-crop>,
+        caption: option<string>,
+    }
+
+    // A repository holding a source.
+    record repository-link {
+        source: entity-ref,
+        repository: entity-ref,
+        call-number: option<string>,
+        media-type: source-media-type,
+    }
+
+    // A person-to-person association (GEDCOM `ASSO`).
+    record association-link {
+        person: entity-ref,
+        other: entity-ref,
+        role: association-role,
+    }
+
+    variant link-kind {
+        participation(participation-link),
+        partner(member-link),
+        child(child-link),
+        family-event(pair-link),
+        event-place(pair-link),
+        enclosure(pair-link),
+        citation-of(pair-link),
+        media-of(media-link),
+        note-of(pair-link),
+        tag-of(pair-link),
+        source-repository(repository-link),
+        association(association-link),
+    }
+
+    // One link, and the item of the graph's record its assertion is stamped with.
+    record staged-link {
+        item: option<string>,
+        link: link-kind,
+    }
+
+    // One source record: its id within the importer's dataset (a GEDCOM xref, a Gramps handle, a
+    // Digitalarkivet record id), its entities and its links. The same record and item must produce the
+    // same keys on every run of the importer.
+    record record-graph {
+        %record: string,
+        entities: list<staged-entity>,
+        links: list<staged-link>,
+    }
+
+    // An entity the host wrote or resolved: its record's human id (a tag's id), and whether the record
+    // is the dataset's own — created now, or by an earlier run from the same origin — rather than one
+    // another dataset or the user made.
+    record committed-entity {
+        local-id: u32,
+        human-id: string,
+        created: bool,
+    }
+
+    // What `submit` did: a bulk import's graph is held until `run-import` returns; an assisted import's
+    // is planned and written at once.
+    variant submit-outcome {
+        staged,
+        committed(list<committed-entity>),
+    }
+
+    // Declares the import, at most once and before the first `submit`: a hint at which dataset the
+    // document is (its header's fingerprint), what it is called, and its own export date (RFC 3339) —
+    // the date ADR 0029 reconciles single-valued fields by; `none` when the document has none or its
+    // date names no specific day (ADR 0029 §3). Not calling it is calling it with `none` throughout.
+    begin-run: func(dataset-hint: option<string>, source-label: option<string>, file-asserted-at: option<string>) -> result<_, capability-error>;
+    // Submits one record. `invalid-input` when the graph is malformed: a repeated local id or item, a
+    // reference to a missing local id, or one of a kind its place cannot hold.
+    submit: func(graph: record-graph) -> result<submit-outcome, capability-error>;
 }
 
 // Coarse-grained progress reporting for a bulk operation (ADR 0013). The guest reports as it
@@ -999,6 +1244,7 @@ world host-imports {
     import log;
     import query;
     import commands;
+    import staging;
     import progress;
     import import-source;
     import export-sink;
@@ -1008,12 +1254,13 @@ world host-imports {
     import present;
 }
 
-// A bulk import plugin: reads the document from the host-opened `import-source`, drives `commands`,
-// reports `progress`, and returns the number of records imported. Format-neutral — GEDCOM, Gramps
-// XML, and future formats all use this world (ADR 0013).
+// A bulk import plugin: reads the document from the host-opened `import-source`, submits one record
+// graph per source record to `staging`, reports `progress`, and returns the number of records read; the
+// host plans and writes the graphs once it returns (ADR 0040 §4). Format-neutral — GEDCOM, Gramps XML,
+// and future formats all use this world (ADR 0013).
 world bulk-import {
     import log;
-    import commands;
+    import staging;
     import progress;
     import import-source;
 
@@ -1054,14 +1301,14 @@ world ui-panel {
 // An assisted-import plugin: one long-running `run-assisted(request)` invocation drives a whole
 // record-by-record session (ADR 0017 §5). It fetches source pages over `net`, files scans through
 // `media-store`, optionally interprets a hard-to-read page with `ai`, reviews each record with the
-// user through `present` (suspending until they confirm or skip), and drives audited mutations through
-// `commands`, deduping against existing records with `query` and reporting long steps to `progress`.
+// user through `present` (suspending until they confirm or skip), and submits each confirmed record's
+// graph to `staging`, which writes it at once (ADR 0040 §4), reporting long steps to `progress`.
 // `request` selects what to import (a record URL today; additive kinds later); the result is a JSON
 // summary of what was imported. Source-neutral: no archive appears in the world (ADR 0017 §6).
 world assisted-import {
     import log;
     import query;
-    import commands;
+    import staging;
     import progress;
     import net;
     import media-store;

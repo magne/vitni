@@ -1604,13 +1604,13 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     use tokio::sync::mpsc;
-    use vitni_plugin_host::{PresentError, Presenter, ProgressControl, ProgressUpdate};
+    use vitni_plugin_host::{PresentError, Presenter, ProgressControl, ProgressStep, ProgressUpdate};
 
     use super::{ChannelPresenter, PresentRequest, bulk_progress_sink};
 
     fn update(step: &str, processed: u32) -> ProgressUpdate {
         ProgressUpdate {
-            step: step.to_owned(),
+            step: ProgressStep::Plugin(step.to_owned()),
             processed,
             total: Some(120),
         }
@@ -1628,11 +1628,11 @@ mod tests {
 
         let first = reports.recv().await.expect("the first report arrives");
         assert_eq!(
-            (first.step.as_str(), first.processed, first.total),
-            ("persons", 40, Some(120))
+            (first.step, first.processed, first.total),
+            (ProgressStep::Plugin("persons".to_owned()), 40, Some(120))
         );
         let second = reports.recv().await.expect("the second report arrives");
-        assert_eq!(second.step, "families");
+        assert_eq!(second.step, ProgressStep::Plugin("families".to_owned()));
     }
 
     /// Raising the cancel flag is the whole cancel mechanism: the next report answers `Cancel`.

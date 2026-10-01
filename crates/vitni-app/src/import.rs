@@ -213,6 +213,27 @@ async fn ensure_name(
     person::add_name(workspace, session, &human_id, name, stamped(provenance)).await
 }
 
+/// Asserts `name` on the person `human_id` only if that exact name is not already present (as
+/// [`import_person`] does for a person it resolved).
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if no such person exists, or a workspace/store error.
+pub(crate) async fn ensure_name_of(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    name: person::PersonNameParts,
+    provenance: Provenance,
+) -> Result<(), AppError> {
+    let view = workspace
+        .store()
+        .find_person(human_id)
+        .await?
+        .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))?;
+    ensure_name(workspace, session, &view, Some(name), provenance).await
+}
+
 /// Asserts a person's sex during import, reconciling against any existing value using the file's
 /// own export date (ADR 0029 — the one field this PR's timestamp-gated rule covers): a person with
 /// no live sex assertion yet gets it asserted plainly (additive — new information landing on an

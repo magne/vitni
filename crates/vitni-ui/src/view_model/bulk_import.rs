@@ -14,12 +14,28 @@
 
 use std::path::{Component, Path, PathBuf};
 
+/// What a running bulk import is doing — the framework-free mirror of the plugin host's
+/// `ProgressStep`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BulkImportStep {
+    /// A phase the plugin reads in, in the plugin's own vocabulary; empty before its first report.
+    Plugin(String),
+    /// The host writing the records the plugin read (ADR 0040 §4).
+    Writing,
+}
+
+impl Default for BulkImportStep {
+    fn default() -> Self {
+        Self::Plugin(String::new())
+    }
+}
+
 /// A progress report from a running bulk import — the framework-free mirror of the plugin host's
 /// `ProgressUpdate`. `total` is absent until the plugin knows the record count.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BulkImportProgress {
-    /// The phase the plugin is in, in the plugin's own vocabulary.
-    pub step: String,
+    /// What the import is doing.
+    pub step: BulkImportStep,
     /// How many records the plugin has imported so far.
     pub processed: u32,
     /// The total it expects, if known.
@@ -278,13 +294,13 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        BulkImportProgress, BulkImportSession, BulkImportStage, BulkImportSummary, ImportSourcePath,
+        BulkImportProgress, BulkImportSession, BulkImportStage, BulkImportStep, BulkImportSummary, ImportSourcePath,
         ImportTargetChoice, ImportTargetError,
     };
 
     fn progress(step: &str, processed: u32) -> BulkImportProgress {
         BulkImportProgress {
-            step: step.to_owned(),
+            step: BulkImportStep::Plugin(step.to_owned()),
             processed,
             total: Some(40),
         }

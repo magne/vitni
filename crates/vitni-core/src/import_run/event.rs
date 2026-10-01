@@ -18,6 +18,8 @@ pub type ImportRunEvent = Envelope<ImportRunEventBody>;
 pub enum ResolutionDecision {
     /// Deterministic identity: the item's `ExternalId` already named an aggregate (ADR 0013 §6).
     ExternalId,
+    /// Deterministic identity: a tag of the same case-folded name already existed (ADR 0038 §6).
+    TagName,
 }
 
 /// One incoming item the run resolved onto an existing aggregate.
@@ -80,6 +82,11 @@ pub enum AbandonReason {
     /// The importer trapped or could not be run.
     Runtime {
         /// The runtime's message.
+        message: String,
+    },
+    /// The importer's records could not be written.
+    Commit {
+        /// The write's error.
         message: String,
     },
 }
