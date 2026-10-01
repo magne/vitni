@@ -454,7 +454,8 @@ record origins with import runs (#393) and resolve-by-origin (#394), then the xr
 family and event profiles (#398), the other seven kinds' profiles (#399), the `match_keys` blocking
 index with `find_similar` (#400), the evaluation corpus with `cargo xtask match-eval` (#402) and
 `PersonsDistinguished` with the assessment on identity decisions (#403), the duplicate check
-through the engine (#401) and persona clusters (#404), which have landed.
+through the engine (#401), persona clusters (#404) and merge and distinguish for events and families
+(#405), which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
@@ -487,10 +488,6 @@ does.
   surnames differ. The default 256 cases rarely reach it. *Shape:* a key the Jaro–Winkler floor
   implies (a short prefix of the normalized given name), or *Katherine* in the same class as *Kari*.
   *Exit:* the proptest passes at 10 000 cases.
-- **Merge and distinguish for Event and Family** — ADR 0039 §1. `EventsMerged`/`EventsDistinguished`
-  and `FamiliesMerged`/`FamiliesDistinguished`, redirected through `identity_links`. Participants of a
-  merged event are unioned in the projection. *Needs:* persona clusters. *Exit:* two copies of one
-  marriage merge into one event with every participant. — #405
 - **Merge and distinguish for Place, Source, Citation, Repository, Note and Media** — ADR 0039 §1, §6.
   The same pair of variants per kind, and the same redirect. Place identity is named apart from ADR
   0026 succession in the UI. Tag is excluded: it has no assertion chain to retract, and it resolves by
