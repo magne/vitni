@@ -348,7 +348,8 @@ pub async fn add_child(
 
 /// Asserts one child-to-partner relationship (GEDCOM `_FREL`/`_MREL` — ADR 0021), the per-link edit
 /// path: a `meta.supersedes` replaces the prior link's assertion, so an adoption link is corrected
-/// without touching the child's membership or the other links.
+/// without touching the child's membership or the other links. In a merged family the link is written
+/// to the record of the cluster that names both the child and the partner (ADR 0039 §5).
 ///
 /// # Errors
 ///
@@ -368,6 +369,7 @@ pub async fn assert_child_relationship(
     let family_id = resolve_family_id(store, family_human_id).await?;
     let child_id = resolve_person_id(store, child_human_id).await?;
     let parent_id = resolve_person_id(store, partner_human_id).await?;
+    let (family_id, child_id, parent_id) = relationship_holder(store, family_id, child_id, parent_id).await?;
     execute_family_mutation(
         store,
         session,
@@ -381,6 +383,39 @@ pub async fn assert_child_relationship(
         meta,
     )
     .await
+}
+
+/// The record of `family_id`'s cluster a child-to-partner link is written to (ADR 0039 §5), with the
+/// child and partner ids as that record names them: `family_id` itself when it names both, else the
+/// first member that does. Unchanged when no record names both, so the core refuses it there.
+async fn relationship_holder(
+    store: &Store,
+    family_id: FamilyId,
+    child_id: PersonId,
+    parent_id: PersonId,
+) -> Result<(FamilyId, PersonId, PersonId), AppError> {
+    let persons = PersonClusters::load(store).await?;
+    let (child_root, parent_root) = (persons.root(child_id), persons.root(parent_id));
+    let mut holder = None;
+    for record in identity::cluster_records(store, family_id).await? {
+        let Some(id) = record.family_id() else { continue };
+        let child = record
+            .children()
+            .into_iter()
+            .find(|child| persons.root(child.child_id) == child_root);
+        let parent = record
+            .partners()
+            .into_iter()
+            .find(|partner| persons.root(*partner) == parent_root);
+        let (Some(child), Some(parent)) = (child, parent) else {
+            continue;
+        };
+        if id == family_id {
+            return Ok((id, child.child_id, parent));
+        }
+        holder = holder.or(Some((id, child.child_id, parent)));
+    }
+    Ok(holder.unwrap_or((family_id, child_id, parent_id)))
 }
 
 /// Removes a child (by person `human_id`) from the family — from every record of the family's

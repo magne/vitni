@@ -524,3 +524,26 @@ async fn restricting_a_cluster_narrows_every_record() {
     let family = show_family(ws, &f.root_family).await.expect("show").expect("family");
     assert!(family.restrictions.is_empty(), "{:?}", family.restrictions);
 }
+
+#[tokio::test]
+async fn a_new_relationship_for_a_members_child_is_written_to_the_member() {
+    let f = fixture().await;
+    let ws = &f.ws;
+    vitni_app::assert_child_relationship(
+        ws,
+        &session(),
+        &f.root_family,
+        &f.child,
+        &f.bride,
+        ChildParentRelationship::Birth,
+        MutationMeta::default(),
+    )
+    .await
+    .expect("relate the member's child to the other partner");
+    let family = show_family(ws, &f.root_family).await.expect("show").expect("family");
+    let child = family.children.first().expect("child");
+    assert_eq!(child.relationships.len(), 2, "{:?}", child.relationships);
+    for link in &child.relationships {
+        assert_eq!(family.owner_of(&link.assertion_id), f.member_family);
+    }
+}
