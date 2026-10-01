@@ -233,7 +233,6 @@ fn one(meta: &AssertionMeta, body: PersonEventBody) -> Vec<PersonEvent> {
     vec![PersonEvent::new(meta, body)]
 }
 
-/// Rejects a command that targets a person which has not been created yet.
 /// Refuses a second identity decision about a pair this person already decided (ADR 0039 §1).
 fn ensure_undecided(state: &PersonState, person: PersonId, other: PersonId) -> Result<(), PersonError> {
     if state.has_decided(other) {
@@ -242,6 +241,7 @@ fn ensure_undecided(state: &PersonState, person: PersonId, other: PersonId) -> R
     Ok(())
 }
 
+/// Rejects a command that targets a person which has not been created yet.
 fn ensure_exists(state: &PersonState, person_id: PersonId) -> Result<(), PersonError> {
     if state.exists {
         Ok(())
