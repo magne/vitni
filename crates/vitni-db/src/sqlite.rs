@@ -50,8 +50,8 @@ macro_rules! sqlite_open_cqrs {
 }
 
 /// Appends the derived side indexes to the one framework each is fed by: the identity cluster index
-/// (ADR 0039 §4) to `person`, `event` and `family`, and the geometry index (ADR 0024 §3) and succession index (ADR 0026 §4)
-/// to `place`, leaving every other aggregate's framework untouched. Dispatches on the registry's
+/// (ADR 0039 §4) to every matchable kind but `tag`, and the geometry index (ADR 0024 §3) and succession index
+/// (ADR 0026 §4) to `place`, leaving every other aggregate's framework untouched. Dispatches on the registry's
 /// literal `$snake` token — the same "wiring by tag" shape as [`sqlite_open_cqrs!`] — rather than
 /// naming the aggregate after the per-aggregate repetition, which a plain `let` can't see across
 /// macro hygiene.
@@ -77,6 +77,34 @@ macro_rules! sqlite_wire_side_indexes {
             .append_query(Box::new(
                 crate::place_succession_index::sqlite::PlaceSuccessionIndexQuery::new($pool.clone()),
             ))
+            .append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+                vitni_core::place::PlaceView,
+            >::new($pool.clone())))
+    };
+    (source, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::source::SourceView,
+        >::new($pool.clone())))
+    };
+    (citation, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::citation::CitationView,
+        >::new($pool.clone())))
+    };
+    (repository, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::repository::RepositoryView,
+        >::new($pool.clone())))
+    };
+    (note, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::note::NoteView,
+        >::new($pool.clone())))
+    };
+    (media, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::media::MediaView,
+        >::new($pool.clone())))
     };
     ($other:ident, $pool:expr, $framework:expr) => {
         $framework
@@ -157,8 +185,8 @@ macro_rules! sqlite_store {
                 crate::match_keys::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating match keys index: {e}")))?;
-                // The identity cluster index (ADR 0039 §4) is derived from the Person, Event and Family
-                // projections; its `Query` is appended to those frameworks below, and a workspace that
+                // The identity cluster index (ADR 0039 §4) is derived from the projections of every
+                // matchable kind; its `Query` is appended to those frameworks below, and a workspace that
                 // predates it gets it filled once the projections are open.
                 let identity_is_new = crate::identity_links::sqlite::create_tables(&pool)
                     .await
@@ -240,8 +268,8 @@ macro_rules! sqlite_store {
                 // above, not replayed from raw events themselves.
                 crate::geo_index::rebuild_index(&self.pool).await?;
                 crate::place_succession_index::sqlite::rebuild_index(&self.pool).await?;
-                // The identity clusters (ADR 0039 §4) are derived from the rebuilt Person, Event and Family
-                // projections.
+                // The identity clusters (ADR 0039 §4) are derived from the rebuilt projections of every
+                // matchable kind.
                 crate::identity_links::sqlite::rebuild_index(&self.pool).await?;
                 // The record origins index is replayed from the raw events, after the projections
                 // its `live` flags are read from.
@@ -563,10 +591,19 @@ mod tests {
     use sqlx::Row;
     use time::macros::datetime;
     use uuid::Uuid;
-    use vitni_core::enums::EvidenceLevel;
-    use vitni_core::ids::{AgentId, AssertionId, HumanId, PersonId};
+    use vitni_core::citation::{CitationCommand, CitationCommandEnvelope};
+    use vitni_core::enums::{EvidenceLevel, PlaceType};
+    use vitni_core::ids::{
+        AgentId, AssertionId, CitationId, HumanId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId,
+    };
+    use vitni_core::matching::MatchableKind;
+    use vitni_core::media::{MediaCommand, MediaCommandEnvelope};
+    use vitni_core::note::{NoteCommand, NoteCommandEnvelope};
     use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
+    use vitni_core::place::{PlaceCommand, PlaceCommandEnvelope};
     use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
+    use vitni_core::repository::{RepositoryCommand, RepositoryCommandEnvelope};
+    use vitni_core::source::{SourceCommand, SourceCommandEnvelope};
 
     async fn store() -> (SqliteStore, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
@@ -1672,6 +1709,160 @@ mod tests {
             "undo splits the event cluster"
         );
         assert_eq!(links_of(&store, MatchableKind::Family).await, families);
+    }
+
+    /// Creates two records of one kind on `$store`, merges the second into the first, and returns the root
+    /// and the expected `(member, root)` link.
+    macro_rules! merged_pair {
+        ($store:expr, $execute:ident, $Envelope:ident, $Command:ident, $Id:ident, $base:literal, $create:expr, $merge:ident) => {{
+            let (root, member) = (
+                $Id::from_uuid(Uuid::from_u128($base)),
+                $Id::from_uuid(Uuid::from_u128($base + 1)),
+            );
+            for (offset, id) in [(0, root), (1, member)] {
+                let command = $create(id, HumanId::new(format!("X{}", $base + offset)));
+                let envelope = $Envelope {
+                    meta: meta($base + 100 + offset),
+                    command,
+                };
+                $store.$execute(&id.to_string(), envelope).await.unwrap();
+            }
+            let merge = $Envelope {
+                meta: meta($base + 200),
+                command: $Command::$merge {
+                    surviving: root,
+                    merged: member,
+                    assessment: None,
+                },
+            };
+            $store.$execute(&root.to_string(), merge).await.unwrap();
+            (root, vec![(member.to_string(), root.to_string())])
+        }};
+    }
+
+    /// Merges one pair of each kind but person, event, family and tag, and returns the place root with every
+    /// kind's expected `(member, root)` links.
+    async fn merge_one_pair_of_every_record_kind(
+        store: &SqliteStore,
+    ) -> (PlaceId, Vec<(MatchableKind, Vec<(String, String)>)>) {
+        let create_place = |place_id, human_id| PlaceCommand::CreatePlace {
+            place_id,
+            human_id,
+            place_type: PlaceType::Parish,
+        };
+        let (place, places) = merged_pair!(
+            store,
+            execute_place,
+            PlaceCommandEnvelope,
+            PlaceCommand,
+            PlaceId,
+            1000,
+            create_place,
+            MergePlaces
+        );
+        let create_source = |source_id, human_id| SourceCommand::CreateSource { source_id, human_id };
+        let (source, sources) = merged_pair!(
+            store,
+            execute_source,
+            SourceCommandEnvelope,
+            SourceCommand,
+            SourceId,
+            2000,
+            create_source,
+            MergeSources
+        );
+        let create_citation = |citation_id, human_id| CitationCommand::CreateCitation {
+            citation_id,
+            human_id,
+            source_id: source,
+        };
+        let (_, citations) = merged_pair!(
+            store,
+            execute_citation,
+            CitationCommandEnvelope,
+            CitationCommand,
+            CitationId,
+            3000,
+            create_citation,
+            MergeCitations
+        );
+        let create_repository = |repository_id, human_id| RepositoryCommand::CreateRepository {
+            repository_id,
+            human_id,
+        };
+        let (_, repositories) = merged_pair!(
+            store,
+            execute_repository,
+            RepositoryCommandEnvelope,
+            RepositoryCommand,
+            RepositoryId,
+            4000,
+            create_repository,
+            MergeRepositories
+        );
+        let create_note = |note_id, human_id| NoteCommand::CreateNote { note_id, human_id };
+        let (_, notes) = merged_pair!(
+            store,
+            execute_note,
+            NoteCommandEnvelope,
+            NoteCommand,
+            NoteId,
+            5000,
+            create_note,
+            MergeNotes
+        );
+        let create_media = |media_id, human_id| MediaCommand::CreateMedia { media_id, human_id };
+        let (_, media) = merged_pair!(
+            store,
+            execute_media,
+            MediaCommandEnvelope,
+            MediaCommand,
+            MediaId,
+            6000,
+            create_media,
+            MergeMedia
+        );
+        let expected = vec![
+            (MatchableKind::Place, places),
+            (MatchableKind::Source, sources),
+            (MatchableKind::Citation, citations),
+            (MatchableKind::Repository, repositories),
+            (MatchableKind::Note, notes),
+            (MatchableKind::Media, media),
+        ];
+        (place, expected)
+    }
+
+    #[tokio::test]
+    async fn every_record_kind_indexes_its_merges_under_its_own_kind() {
+        let (store, _dir) = store().await;
+        let (place, expected) = merge_one_pair_of_every_record_kind(&store).await;
+        for (kind, links) in &expected {
+            assert_eq!(&links_of(&store, *kind).await, links, "{kind:?}");
+        }
+        assert!(
+            person_links(&store).await.is_empty(),
+            "each kind keeps its own clusters"
+        );
+
+        store.rebuild_projections().await.unwrap();
+        for (kind, links) in &expected {
+            assert_eq!(&links_of(&store, *kind).await, links, "rebuild reproduces {kind:?}");
+        }
+
+        let undo = PlaceCommandEnvelope {
+            meta: meta(9000),
+            command: PlaceCommand::RetractAssertion {
+                place_id: place,
+                target: AssertionId::from_uuid(Uuid::from_u128(1200)),
+            },
+        };
+        store.execute_place(&place.to_string(), undo).await.unwrap();
+        assert!(
+            links_of(&store, MatchableKind::Place).await.is_empty(),
+            "undo splits the place cluster"
+        );
+        assert_eq!(links_of(&store, MatchableKind::Source).await, expected[1].1);
     }
 
     #[tokio::test]

@@ -23,11 +23,18 @@ use vitni_core::citation::command::{CitationCommand, CitationCommandEnvelope};
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::enums::{EvidenceLevel, PlaceType, SuccessionKind};
 use vitni_core::id_format::IdFormat;
-use vitni_core::ids::{AgentId, AssertionId, CitationId, HumanId, PersonId, PlaceId, SourceId};
+use vitni_core::ids::{
+    AgentId, AssertionId, CitationId, HumanId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId,
+};
+use vitni_core::matching::MatchableKind;
+use vitni_core::media::{MediaCommand, MediaCommandEnvelope};
 use vitni_core::name::{NameType, PersonName, Surname};
+use vitni_core::note::{NoteCommand, NoteCommandEnvelope};
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
+use vitni_core::repository::{RepositoryCommand, RepositoryCommandEnvelope};
+use vitni_core::source::{SourceCommand, SourceCommandEnvelope};
 use vitni_db::{CommandError, PlaceSuccessionRecord, Store};
 
 /// The shared container name; one container is started per test process and reused across tests.
@@ -683,6 +690,145 @@ async fn event_and_family_merges_are_indexed_under_their_own_kind_on_postgres() 
         "rebuild reproduces the clusters"
     );
     assert_eq!(links(MatchableKind::Family).await, families);
+}
+
+/// Creates two records of one kind on `$store`, merges the second into the first, and returns the root
+/// and the expected `(member, root)` link.
+macro_rules! merged_pair {
+    ($store:expr, $execute:ident, $Envelope:ident, $Command:ident, $Id:ident, $base:literal, $create:expr, $merge:ident) => {{
+        let (root, member) = (
+            $Id::from_uuid(Uuid::from_u128($base)),
+            $Id::from_uuid(Uuid::from_u128($base + 1)),
+        );
+        for (offset, id) in [(0, root), (1, member)] {
+            let command = $create(id, HumanId::new(format!("X{}", $base + offset)));
+            let envelope = $Envelope {
+                meta: meta($base + 100 + offset),
+                command,
+            };
+            $store.$execute(&id.to_string(), envelope).await.unwrap();
+        }
+        let merge = $Envelope {
+            meta: meta($base + 200),
+            command: $Command::$merge {
+                surviving: root,
+                merged: member,
+                assessment: None,
+            },
+        };
+        $store.$execute(&root.to_string(), merge).await.unwrap();
+        (root, vec![(member.to_string(), root.to_string())])
+    }};
+}
+
+/// Merges one pair of each kind but person, event, family and tag, and returns the place root with every
+/// kind's expected `(member, root)` links.
+async fn merge_one_pair_of_every_record_kind(store: &Store) -> (PlaceId, Vec<(MatchableKind, Vec<(String, String)>)>) {
+    let create_place = |place_id, human_id| PlaceCommand::CreatePlace {
+        place_id,
+        human_id,
+        place_type: PlaceType::Parish,
+    };
+    let (place, places) = merged_pair!(
+        store,
+        execute_place,
+        PlaceCommandEnvelope,
+        PlaceCommand,
+        PlaceId,
+        1000,
+        create_place,
+        MergePlaces
+    );
+    let create_source = |source_id, human_id| SourceCommand::CreateSource { source_id, human_id };
+    let (source, sources) = merged_pair!(
+        store,
+        execute_source,
+        SourceCommandEnvelope,
+        SourceCommand,
+        SourceId,
+        2000,
+        create_source,
+        MergeSources
+    );
+    let create_citation = |citation_id, human_id| CitationCommand::CreateCitation {
+        citation_id,
+        human_id,
+        source_id: source,
+    };
+    let (_, citations) = merged_pair!(
+        store,
+        execute_citation,
+        CitationCommandEnvelope,
+        CitationCommand,
+        CitationId,
+        3000,
+        create_citation,
+        MergeCitations
+    );
+    let create_repository = |repository_id, human_id| RepositoryCommand::CreateRepository {
+        repository_id,
+        human_id,
+    };
+    let (_, repositories) = merged_pair!(
+        store,
+        execute_repository,
+        RepositoryCommandEnvelope,
+        RepositoryCommand,
+        RepositoryId,
+        4000,
+        create_repository,
+        MergeRepositories
+    );
+    let create_note = |note_id, human_id| NoteCommand::CreateNote { note_id, human_id };
+    let (_, notes) = merged_pair!(
+        store,
+        execute_note,
+        NoteCommandEnvelope,
+        NoteCommand,
+        NoteId,
+        5000,
+        create_note,
+        MergeNotes
+    );
+    let create_media = |media_id, human_id| MediaCommand::CreateMedia { media_id, human_id };
+    let (_, media) = merged_pair!(
+        store,
+        execute_media,
+        MediaCommandEnvelope,
+        MediaCommand,
+        MediaId,
+        6000,
+        create_media,
+        MergeMedia
+    );
+    let expected = vec![
+        (MatchableKind::Place, places),
+        (MatchableKind::Source, sources),
+        (MatchableKind::Citation, citations),
+        (MatchableKind::Repository, repositories),
+        (MatchableKind::Note, notes),
+        (MatchableKind::Media, media),
+    ];
+    (place, expected)
+}
+
+#[tokio::test]
+async fn every_record_kind_indexes_its_merges_on_postgres() {
+    let (store, _db) = store().await;
+    let links = async |kind| -> Vec<(String, String)> {
+        let links = store.identity_links(kind).await.unwrap();
+        links.into_iter().map(|link| (link.member, link.root)).collect()
+    };
+    let (_, expected) = merge_one_pair_of_every_record_kind(&store).await;
+    for (kind, kind_links) in &expected {
+        assert_eq!(&links(*kind).await, kind_links, "{kind:?}");
+    }
+    assert!(links(MatchableKind::Person).await.is_empty());
+
+    store.rebuild_projections().await.unwrap();
+    for (kind, kind_links) in &expected {
+        assert_eq!(&links(*kind).await, kind_links, "rebuild reproduces {kind:?}");
+    }
 }
 
 /// The ordered `human_id`s of every person projection.

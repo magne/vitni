@@ -1,6 +1,6 @@
 //! The identity cluster index (ADR 0039 §4).
 //!
-//! A merge decision (`PersonsMerged`, `EventsMerged`, `FamiliesMerged`) is recorded once, on the
+//! A merge decision (`PersonsMerged`, `EventsMerged`, `PlacesMerged`, …) is recorded once, on the
 //! survivor's own stream, so the merged
 //! record's projection never learns it was merged, and a chain of merges (C into B, then B into A) is
 //! spread over several streams. Asking "which cluster is this record in, and what is its root?" needs
@@ -25,13 +25,22 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use cqrs_es::Aggregate;
 use serde::de::DeserializeOwned;
+use vitni_core::citation::{CitationEvent, CitationEventBody, CitationState, CitationView};
 use vitni_core::event::{EventEventBody, EventState, EventView};
 use vitni_core::family::{FamilyEventBody, FamilyState, FamilyView};
 use vitni_core::identity::ClusterRecord;
+use vitni_core::media::{MediaEvent, MediaEventBody, MediaState, MediaView};
+use vitni_core::note::{NoteEvent, NoteEventBody, NoteState, NoteView};
 use vitni_core::person::event::{PersonEvent, PersonEventBody};
 use vitni_core::person::{PersonState, PersonView};
+use vitni_core::place::{PlaceEvent, PlaceEventBody, PlaceState, PlaceView};
+use vitni_core::repository::{RepositoryEvent, RepositoryEventBody, RepositoryState, RepositoryView};
+use vitni_core::source::{SourceEvent, SourceEventBody, SourceState, SourceView};
 
-use crate::tables::{EVENT_VIEW_TABLE, FAMILY_VIEW_TABLE, PERSON_VIEW_TABLE};
+use crate::tables::{
+    CITATION_VIEW_TABLE, EVENT_VIEW_TABLE, FAMILY_VIEW_TABLE, MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE, PERSON_VIEW_TABLE,
+    PLACE_VIEW_TABLE, REPOSITORY_VIEW_TABLE, SOURCE_VIEW_TABLE,
+};
 
 /// The live merge edges: one row per `(kind, surviving, member)`.
 const IDENTITY_EDGES_TABLE: &str = "identity_edges";
@@ -135,6 +144,165 @@ impl IndexedRecord for FamilyView {
             | FamilyEventBody::ExternalIdAdded { .. }
             | FamilyEventBody::HumanIdChanged { .. }
             | FamilyEventBody::FamiliesDistinguished { .. } => false,
+        }
+    }
+}
+
+impl IndexedRecord for PlaceView {
+    type State = PlaceState;
+
+    const VIEW_TABLE: &'static str = PLACE_VIEW_TABLE;
+
+    fn changes_edges(event: &PlaceEvent) -> bool {
+        match &event.body {
+            PlaceEventBody::PlacesMerged { .. }
+            | PlaceEventBody::AssertionRetracted { .. }
+            | PlaceEventBody::AssertionSuperseded { .. } => true,
+            PlaceEventBody::PlaceCreated { .. }
+            | PlaceEventBody::PlaceTypeSet { .. }
+            | PlaceEventBody::NameAsserted { .. }
+            | PlaceEventBody::EnclosedByAsserted { .. }
+            | PlaceEventBody::CoordinatesAsserted { .. }
+            | PlaceEventBody::GeometryAsserted { .. }
+            | PlaceEventBody::SuccessionAsserted { .. }
+            | PlaceEventBody::CodeSet { .. }
+            | PlaceEventBody::CitationAdded { .. }
+            | PlaceEventBody::MediaAttached { .. }
+            | PlaceEventBody::NoteAttached { .. }
+            | PlaceEventBody::Tagged { .. }
+            | PlaceEventBody::Untagged { .. }
+            | PlaceEventBody::RestrictionsChanged { .. }
+            | PlaceEventBody::HumanIdChanged { .. }
+            | PlaceEventBody::PlacesDistinguished { .. } => false,
+        }
+    }
+}
+
+impl IndexedRecord for SourceView {
+    type State = SourceState;
+
+    const VIEW_TABLE: &'static str = SOURCE_VIEW_TABLE;
+
+    fn changes_edges(event: &SourceEvent) -> bool {
+        match &event.body {
+            SourceEventBody::SourcesMerged { .. }
+            | SourceEventBody::AssertionRetracted { .. }
+            | SourceEventBody::AssertionSuperseded { .. } => true,
+            SourceEventBody::SourceCreated { .. }
+            | SourceEventBody::TitleSet { .. }
+            | SourceEventBody::AuthorSet { .. }
+            | SourceEventBody::PubInfoSet { .. }
+            | SourceEventBody::AbbrevSet { .. }
+            | SourceEventBody::RepositoryLinked { .. }
+            | SourceEventBody::AttributeAdded { .. }
+            | SourceEventBody::MediaAttached { .. }
+            | SourceEventBody::NoteAttached { .. }
+            | SourceEventBody::Tagged { .. }
+            | SourceEventBody::Untagged { .. }
+            | SourceEventBody::RestrictionsChanged { .. }
+            | SourceEventBody::HumanIdChanged { .. }
+            | SourceEventBody::SourcesDistinguished { .. } => false,
+        }
+    }
+}
+
+impl IndexedRecord for CitationView {
+    type State = CitationState;
+
+    const VIEW_TABLE: &'static str = CITATION_VIEW_TABLE;
+
+    fn changes_edges(event: &CitationEvent) -> bool {
+        match &event.body {
+            CitationEventBody::CitationsMerged { .. }
+            | CitationEventBody::AssertionRetracted { .. }
+            | CitationEventBody::AssertionSuperseded { .. } => true,
+            CitationEventBody::CitationCreated { .. }
+            | CitationEventBody::PageSet { .. }
+            | CitationEventBody::DateAsserted { .. }
+            | CitationEventBody::ConfidenceSet { .. }
+            | CitationEventBody::EvidenceAnalysisSet { .. }
+            | CitationEventBody::AttributeAdded { .. }
+            | CitationEventBody::MediaAttached { .. }
+            | CitationEventBody::NoteAttached { .. }
+            | CitationEventBody::Tagged { .. }
+            | CitationEventBody::Untagged { .. }
+            | CitationEventBody::RestrictionsChanged { .. }
+            | CitationEventBody::HumanIdChanged { .. }
+            | CitationEventBody::CitationsDistinguished { .. } => false,
+        }
+    }
+}
+
+impl IndexedRecord for RepositoryView {
+    type State = RepositoryState;
+
+    const VIEW_TABLE: &'static str = REPOSITORY_VIEW_TABLE;
+
+    fn changes_edges(event: &RepositoryEvent) -> bool {
+        match &event.body {
+            RepositoryEventBody::RepositoriesMerged { .. }
+            | RepositoryEventBody::AssertionRetracted { .. }
+            | RepositoryEventBody::AssertionSuperseded { .. } => true,
+            RepositoryEventBody::RepositoryCreated { .. }
+            | RepositoryEventBody::RepositoryTypeSet { .. }
+            | RepositoryEventBody::NameSet { .. }
+            | RepositoryEventBody::AddressAdded { .. }
+            | RepositoryEventBody::UrlAdded { .. }
+            | RepositoryEventBody::NoteAttached { .. }
+            | RepositoryEventBody::Tagged { .. }
+            | RepositoryEventBody::Untagged { .. }
+            | RepositoryEventBody::RestrictionsChanged { .. }
+            | RepositoryEventBody::HumanIdChanged { .. }
+            | RepositoryEventBody::RepositoriesDistinguished { .. } => false,
+        }
+    }
+}
+
+impl IndexedRecord for NoteView {
+    type State = NoteState;
+
+    const VIEW_TABLE: &'static str = NOTE_VIEW_TABLE;
+
+    fn changes_edges(event: &NoteEvent) -> bool {
+        match &event.body {
+            NoteEventBody::NotesMerged { .. }
+            | NoteEventBody::AssertionRetracted { .. }
+            | NoteEventBody::AssertionSuperseded { .. } => true,
+            NoteEventBody::NoteCreated { .. }
+            | NoteEventBody::NoteTypeSet { .. }
+            | NoteEventBody::RichTextSet { .. }
+            | NoteEventBody::Tagged { .. }
+            | NoteEventBody::Untagged { .. }
+            | NoteEventBody::RestrictionsChanged { .. }
+            | NoteEventBody::HumanIdChanged { .. }
+            | NoteEventBody::NotesDistinguished { .. } => false,
+        }
+    }
+}
+
+impl IndexedRecord for MediaView {
+    type State = MediaState;
+
+    const VIEW_TABLE: &'static str = MEDIA_VIEW_TABLE;
+
+    fn changes_edges(event: &MediaEvent) -> bool {
+        match &event.body {
+            MediaEventBody::MediaMerged { .. }
+            | MediaEventBody::AssertionRetracted { .. }
+            | MediaEventBody::AssertionSuperseded { .. } => true,
+            MediaEventBody::MediaCreated { .. }
+            | MediaEventBody::PathSet { .. }
+            | MediaEventBody::ChecksumSet { .. }
+            | MediaEventBody::MimeSet { .. }
+            | MediaEventBody::DateAsserted { .. }
+            | MediaEventBody::AttributeAdded { .. }
+            | MediaEventBody::CitationAdded { .. }
+            | MediaEventBody::NoteAttached { .. }
+            | MediaEventBody::Tagged { .. }
+            | MediaEventBody::Untagged { .. }
+            | MediaEventBody::RestrictionsChanged { .. }
+            | MediaEventBody::HumanIdChanged { .. }
+            | MediaEventBody::MediaDistinguished { .. } => false,
         }
     }
 }

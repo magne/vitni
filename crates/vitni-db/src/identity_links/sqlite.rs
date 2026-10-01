@@ -6,11 +6,17 @@ use std::marker::PhantomData;
 use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
 use sqlx::{Pool, Row, Sqlite};
+use vitni_core::citation::CitationView;
 use vitni_core::event::EventView;
 use vitni_core::family::FamilyView;
 use vitni_core::identity::ClusterRecord;
 use vitni_core::matching::MatchableKind;
+use vitni_core::media::MediaView;
+use vitni_core::note::NoteView;
 use vitni_core::person::PersonView;
+use vitni_core::place::PlaceView;
+use vitni_core::repository::RepositoryView;
+use vitni_core::source::SourceView;
 
 use super::{IDENTITY_EDGES_TABLE, IDENTITY_LINKS_TABLE, IndexedRecord, closure};
 use crate::sqlite_query;
@@ -168,7 +174,13 @@ async fn recompute_links(tx: &mut sqlx::Transaction<'_, Sqlite>, kind: &str) -> 
 pub(crate) async fn rebuild_index(pool: &Pool<Sqlite>) -> Result<(), DbError> {
     rebuild_kind::<PersonView>(pool).await?;
     rebuild_kind::<EventView>(pool).await?;
-    rebuild_kind::<FamilyView>(pool).await
+    rebuild_kind::<FamilyView>(pool).await?;
+    rebuild_kind::<PlaceView>(pool).await?;
+    rebuild_kind::<SourceView>(pool).await?;
+    rebuild_kind::<CitationView>(pool).await?;
+    rebuild_kind::<RepositoryView>(pool).await?;
+    rebuild_kind::<NoteView>(pool).await?;
+    rebuild_kind::<MediaView>(pool).await
 }
 
 /// Rebuilds one kind's edges and clusters from its projection.
