@@ -15,14 +15,14 @@ use crate::i18n::Localizer;
 /// A bulk import resolved up to the point of running: the plugin, its grants, and the import run it
 /// will write (ADR 0037 §3, §5). Resolving it first lets a dataset choice be refused before anything
 /// is asked or written.
-pub struct ImportPlan {
+pub struct PreparedImport {
     host: PluginHost,
     bundle: PathBuf,
     grants: Grants,
     run: ImportRunSpec,
 }
 
-impl ImportPlan {
+impl PreparedImport {
     /// Resolves the plugin and the dataset `choice` for importing `file` into `workspace`, with
     /// `operator` as the run's operator.
     ///
