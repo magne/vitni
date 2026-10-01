@@ -10,6 +10,7 @@ use crate::date::GenealogicalDate;
 use crate::enums::{PlaceType, Restriction, SuccessionKind};
 use crate::geo::{GeoCoordinates, PlaceGeometry};
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
+use crate::matching::MatchEvidence;
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
 use crate::provenance::AssertionMeta;
@@ -153,6 +154,24 @@ pub enum PlaceCommand {
         place_id: PlaceId,
         /// The new user-facing identifier.
         human_id: HumanId,
+    },
+    /// Record that `merged` is the same place as `surviving` (ADR 0039 §1).
+    MergePlaces {
+        /// The surviving place — the stream the decision is written on.
+        surviving: PlaceId,
+        /// The place merged into it.
+        merged: PlaceId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
+    },
+    /// Record that `other` is a different place from `place` (ADR 0039 §1).
+    DistinguishPlaces {
+        /// The place the decision is written on.
+        place: PlaceId,
+        /// The place it is distinct from.
+        other: PlaceId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
     },
 }
 

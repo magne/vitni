@@ -42,4 +42,26 @@ pub enum PlaceError {
     /// `SupersedeAssertion` referenced an assertion that is unknown or already retracted.
     #[error("assertion {0} is not present or already retracted")]
     SupersedesMissingAssertion(AssertionId),
+    /// The two places cannot be merged.
+    #[error("places {surviving} and {merged} cannot be merged: {reason}")]
+    MergeConflict {
+        /// The intended surviving place.
+        surviving: PlaceId,
+        /// The place that would have been merged in.
+        merged: PlaceId,
+        /// Why the merge was refused.
+        reason: String,
+    },
+    /// A place was distinguished from itself.
+    #[error("place {0} cannot be distinguished from itself")]
+    DistinctFromItself(PlaceId),
+    /// The pair already holds a live identity decision — merged or distinguished — on this place
+    /// (ADR 0039 §1); undo it before deciding again.
+    #[error("places {place} and {other} already have a live identity decision")]
+    IdentityDecided {
+        /// The place the decision was asked on.
+        place: PlaceId,
+        /// The other place of the pair.
+        other: PlaceId,
+    },
 }

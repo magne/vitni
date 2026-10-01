@@ -214,7 +214,10 @@ fn push_attachments(
     }
 }
 
+/// The place's corrections and identity decisions: merged with one duplicate copy and distinguished
+/// from another, both minted here — the projection needs neither to exist.
 fn push_corrections(builder: &mut Builder, farm_id: PlaceId, target: AssertionId) {
+    let (duplicate, other) = (PlaceId::from_uuid(builder.uuid()), PlaceId::from_uuid(builder.uuid()));
     let bodies = [
         PlaceEventBody::AssertionRetracted {
             place_id: farm_id,
@@ -228,6 +231,16 @@ fn push_corrections(builder: &mut Builder, farm_id: PlaceId, target: AssertionId
             place_id: farm_id,
             human_id: HumanId::new("P0099"),
             old_human_id: HumanId::new("P0001"),
+        },
+        PlaceEventBody::PlacesMerged {
+            surviving: farm_id,
+            merged: duplicate,
+            assessment: None,
+        },
+        PlaceEventBody::PlacesDistinguished {
+            place: farm_id,
+            other,
+            assessment: None,
         },
     ];
     for body in bodies {

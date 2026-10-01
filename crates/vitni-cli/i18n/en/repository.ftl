@@ -18,3 +18,6 @@ err-repository-not-found = no repository with human_id "{ $id }"
 err-repository-not-exist = repository { $id } does not exist
 err-repository-exists = repository { $id } already exists
 err-repository-empty-name = a repository name must not be empty
+err-repository-merge-conflict = repositories { $surviving } and { $merged } cannot be merged: { $reason }
+err-repository-distinct-from-itself = repository { $id } cannot be distinguished from itself
+err-repository-identity-decided = repositories { $repository } and { $other } already have a live identity decision; undo it first

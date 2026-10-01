@@ -45,6 +45,26 @@ impl Localizer {
             NoteError::RetractsMissingAssertion(id) | NoteError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
+            NoteError::MergeConflict {
+                surviving,
+                merged,
+                reason,
+            } => fl!(
+                self.loader,
+                "err-note-merge-conflict",
+                surviving = surviving.to_string(),
+                merged = merged.to_string(),
+                reason = reason.clone()
+            ),
+            NoteError::DistinctFromItself(id) => {
+                fl!(self.loader, "err-note-distinct-from-itself", id = id.to_string())
+            }
+            NoteError::IdentityDecided { note, other } => fl!(
+                self.loader,
+                "err-note-identity-decided",
+                note = note.to_string(),
+                other = other.to_string()
+            ),
         }
     }
 }

@@ -12,7 +12,8 @@ use crate::citation::error::CitationError;
 use crate::citation::event::{CitationEvent, CitationEventBody};
 use crate::citation::ref_resolver::CitationRefs;
 use crate::citation::state::{CitationState, CreationStamp};
-use crate::ids::CitationId;
+use crate::ids::{CitationId, HumanId, SourceId};
+use crate::matching::MatchEvidence;
 use crate::provenance::AssertionMeta;
 
 /// Decides the events a command produces, or rejects it with a domain error.
@@ -78,6 +79,16 @@ pub fn decide(
                 },
             ))
         }
+        CitationCommand::MergeCitations {
+            surviving,
+            merged,
+            assessment,
+        } => decide_merge(state, [surviving, merged], assessment, meta),
+        CitationCommand::DistinguishCitations {
+            citation,
+            other,
+            assessment,
+        } => decide_distinguish(state, [citation, other], assessment, meta),
         CitationCommand::RetractAssertion { citation_id, target } => {
             ensure_exists(state, citation_id)?;
             if !state.live_assertions.contains(&target) {
@@ -136,6 +147,8 @@ fn simple_body(command: CitationCommand) -> CitationEventBody {
         },
         CitationCommand::CreateCitation { .. }
         | CitationCommand::RetractAssertion { .. }
+        | CitationCommand::MergeCitations { .. }
+        | CitationCommand::DistinguishCitations { .. }
         | CitationCommand::SupersedeAssertion { .. }
         | CitationCommand::SetHumanId { .. } => unreachable!("handled by decide"),
     }
@@ -144,6 +157,64 @@ fn simple_body(command: CitationCommand) -> CitationEventBody {
 /// Builds the single-event vector for a body stamped with `meta`.
 fn one(meta: &AssertionMeta, body: CitationEventBody) -> Vec<CitationEvent> {
     vec![CitationEvent::new(meta, body)]
+}
+
+/// Decides a merge of `merged` into `surviving` (ADR 0039 §1): the survivor must exist, the pair must
+/// be two records, and the survivor must not already hold a live decision about the other.
+fn decide_merge(
+    state: &CitationState,
+    [surviving, merged]: [CitationId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<CitationEvent>, CitationError> {
+    ensure_exists(state, surviving)?;
+    if surviving == merged {
+        return Err(CitationError::MergeConflict {
+            surviving,
+            merged,
+            reason: "a citation cannot be merged with itself".to_owned(),
+        });
+    }
+    ensure_undecided(state, surviving, merged)?;
+    Ok(one(
+        meta,
+        CitationEventBody::CitationsMerged {
+            surviving,
+            merged,
+            assessment,
+        },
+    ))
+}
+
+/// Decides that `other` is a different citation from `citation` (ADR 0039 §1), under the same rules as a
+/// merge.
+fn decide_distinguish(
+    state: &CitationState,
+    [citation, other]: [CitationId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<CitationEvent>, CitationError> {
+    ensure_exists(state, citation)?;
+    if citation == other {
+        return Err(CitationError::DistinctFromItself(citation));
+    }
+    ensure_undecided(state, citation, other)?;
+    Ok(one(
+        meta,
+        CitationEventBody::CitationsDistinguished {
+            citation,
+            other,
+            assessment,
+        },
+    ))
+}
+
+/// Refuses a second identity decision about a pair this citation already decided (ADR 0039 §1).
+fn ensure_undecided(state: &CitationState, citation: CitationId, other: CitationId) -> Result<(), CitationError> {
+    if state.has_decided(other) {
+        return Err(CitationError::IdentityDecided { citation, other });
+    }
+    Ok(())
 }
 
 /// Rejects a command that targets a citation which has not been created yet.
@@ -163,17 +234,7 @@ pub fn evolve(state: &mut CitationState, event: &CitationEvent) {
             citation_id,
             human_id,
             source_id,
-        } => {
-            state.exists = true;
-            state.citation_id = Some(*citation_id);
-            state.human_id = Some(human_id.clone());
-            state.source_id = Some(*source_id);
-            state.created = Some(CreationStamp {
-                by: event.context.operator.clone(),
-                at: event.context.occurred_at,
-            });
-            state.live_assertions.insert(assertion_id);
-        }
+        } => evolve_created(state, event, *citation_id, human_id, *source_id),
         CitationEventBody::PageSet { page, .. } => {
             state.page = Some(Attributed {
                 assertion_id,
@@ -242,11 +303,44 @@ pub fn evolve(state: &mut CitationState, event: &CitationEvent) {
         CitationEventBody::HumanIdChanged { human_id, .. } => {
             state.human_id = Some(human_id.clone());
         }
+        CitationEventBody::CitationsMerged { merged, .. } => {
+            state.merged.push(Attributed {
+                assertion_id,
+                value: *merged,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::CitationsDistinguished { other, .. } => {
+            state.distinguished.push(Attributed {
+                assertion_id,
+                value: *other,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
         CitationEventBody::AssertionRetracted { target, .. }
         | CitationEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
     }
+}
+
+/// Folds `CitationCreated`: seeds the citation's identity, its source, and who created it.
+fn evolve_created(
+    state: &mut CitationState,
+    event: &CitationEvent,
+    citation_id: CitationId,
+    human_id: &HumanId,
+    source_id: SourceId,
+) {
+    state.exists = true;
+    state.citation_id = Some(citation_id);
+    state.human_id = Some(human_id.clone());
+    state.source_id = Some(source_id);
+    state.created = Some(CreationStamp {
+        by: event.context.operator.clone(),
+        at: event.context.occurred_at,
+    });
+    state.live_assertions.insert(event.assertion_id);
 }
 
 #[cfg(test)]
@@ -695,5 +789,115 @@ mod tests {
         assert!(state.tags.is_empty(), "untag clears the tag");
         assert!(state.media.is_empty(), "retract removes the attached media");
         assert_eq!(state.notes.len(), 1, "the note remains");
+    }
+
+    fn evidence() -> crate::matching::MatchEvidence {
+        crate::matching::MatchEvidence {
+            score_bp: 9100,
+            band: crate::matching::MatchBand::Probable,
+            engine: crate::matching::EngineVersion(4),
+            cultures: vec![crate::matching::CultureId::new("universal")],
+            features: Vec::new(),
+        }
+    }
+
+    fn merge(surviving: u128, merged: u128) -> CitationCommand {
+        CitationCommand::MergeCitations {
+            surviving: citation(surviving),
+            merged: citation(merged),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn distinguish(first: u128, other: u128) -> CitationCommand {
+        CitationCommand::DistinguishCitations {
+            citation: citation(first),
+            other: citation(other),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn retract_decision(id: u128, assertion: u128) -> CitationCommand {
+        CitationCommand::RetractAssertion {
+            citation_id: citation(id),
+            target: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+        }
+    }
+
+    #[test]
+    fn merging_two_citations_emits_citations_merged_with_its_assessment() {
+        let events = decide(&created_citation(100), merge(100, 200), &meta(2), &SOURCE_PRESENT).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].body,
+            crate::citation::event::CitationEventBody::CitationsMerged {
+                surviving: citation(100),
+                merged: citation(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_citation_cannot_be_merged_with_itself() {
+        let err = decide(&created_citation(100), merge(100, 100), &meta(2), &SOURCE_PRESENT).unwrap_err();
+        assert!(matches!(err, CitationError::MergeConflict { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn merging_into_an_absent_citation_is_not_found() {
+        let err = decide(&CitationState::default(), merge(100, 200), &meta(2), &SOURCE_PRESENT).unwrap_err();
+        assert_eq!(err, CitationError::NotFound(citation(100)));
+    }
+
+    #[test]
+    fn distinguishing_two_citations_emits_citations_distinguished_with_its_assessment() {
+        let events = decide(&created_citation(100), distinguish(100, 200), &meta(2), &SOURCE_PRESENT).unwrap();
+        assert_eq!(
+            events[0].body,
+            crate::citation::event::CitationEventBody::CitationsDistinguished {
+                citation: citation(100),
+                other: citation(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_citation_cannot_be_distinguished_from_itself() {
+        let err = decide(&created_citation(100), distinguish(100, 100), &meta(2), &SOURCE_PRESENT).unwrap_err();
+        assert_eq!(err, CitationError::DistinctFromItself(citation(100)));
+    }
+
+    #[test]
+    fn citation_identity_decisions_fold_into_state_and_undo_removes_them() {
+        for (decision, assertion) in [(merge(100, 200), 2), (distinguish(100, 200), 2)] {
+            let mut state = created_citation(100);
+            let events = decide(&state, decision.clone(), &meta(assertion), &SOURCE_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            assert!(state.has_decided(citation(200)), "{decision:?}");
+
+            let events = decide(&state, retract_decision(100, assertion), &meta(3), &SOURCE_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            assert!(!state.has_decided(citation(200)), "undo lifts {decision:?}");
+            assert!(state.merged.is_empty() && state.distinguished.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_citation_pair_decided_either_way_cannot_be_decided_again() {
+        let decided = CitationError::IdentityDecided {
+            citation: citation(100),
+            other: citation(200),
+        };
+        for first in [merge(100, 200), distinguish(100, 200)] {
+            let mut state = created_citation(100);
+            let events = decide(&state, first.clone(), &meta(2), &SOURCE_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            for second in [merge(100, 200), distinguish(100, 200)] {
+                let err = decide(&state, second.clone(), &meta(3), &SOURCE_PRESENT).unwrap_err();
+                assert_eq!(err, decided, "{first:?} then {second:?}");
+            }
+        }
     }
 }

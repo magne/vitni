@@ -62,12 +62,26 @@ pub struct PlaceState {
     /// replaced wholesale, not accumulated, so it cannot be attributed per-element — ADR 0021 §3).
     #[serde(default)]
     pub restrictions_assertion: Option<AssertionId>,
+    /// The places merged into this survivor (ADR 0039 §1), each attributed to the `PlacesMerged`
+    /// assertion that recorded it, so undoing that assertion removes the link.
+    #[serde(default)]
+    pub merged: Vec<Attributed<PlaceId>>,
+    /// The places concluded to be different from this one, each attributed to the
+    /// `PlacesDistinguished` assertion that recorded it, so undoing that assertion lifts it.
+    #[serde(default)]
+    pub distinguished: Vec<Attributed<PlaceId>>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,
 }
 
 impl PlaceState {
+    /// Whether this place holds a live identity decision — merged or distinguished — about `other`.
+    #[must_use]
+    pub(crate) fn has_decided(&self, other: PlaceId) -> bool {
+        self.merged.iter().chain(&self.distinguished).any(|d| d.value == other)
+    }
+
     /// Removes every value introduced by `target` and drops it from the live set.
     ///
     /// This is the non-destructive-correction fold: the *event log* keeps the original assertion
@@ -94,6 +108,8 @@ impl PlaceState {
             self.restrictions.clear();
             self.restrictions_assertion = None;
         }
+        self.merged.retain(|m| m.assertion_id != target);
+        self.distinguished.retain(|d| d.assertion_id != target);
         self.live_assertions.remove(&target);
     }
 }

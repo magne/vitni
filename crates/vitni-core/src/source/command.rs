@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::enums::Restriction;
 use crate::ids::{AssertionId, HumanId, NoteId, SourceId, TagId};
+use crate::matching::MatchEvidence;
 use crate::provenance::AssertionMeta;
 use crate::repo_ref::RepoRef;
 use crate::text::{Attribute, MediaRef};
@@ -117,6 +118,24 @@ pub enum SourceCommand {
         source_id: SourceId,
         /// The new user-facing identifier.
         human_id: HumanId,
+    },
+    /// Record that `merged` is the same source as `surviving` (ADR 0039 §1).
+    MergeSources {
+        /// The surviving source — the stream the decision is written on.
+        surviving: SourceId,
+        /// The source merged into it.
+        merged: SourceId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
+    },
+    /// Record that `other` is a different source from `source` (ADR 0039 §1).
+    DistinguishSources {
+        /// The source the decision is written on.
+        source: SourceId,
+        /// The source it is distinct from.
+        other: SourceId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
     },
 }
 

@@ -24,4 +24,26 @@ pub enum CitationError {
     /// `SupersedeAssertion` referenced an assertion that is unknown or already retracted.
     #[error("assertion {0} is not present or already retracted")]
     SupersedesMissingAssertion(AssertionId),
+    /// The two citations cannot be merged.
+    #[error("citations {surviving} and {merged} cannot be merged: {reason}")]
+    MergeConflict {
+        /// The intended surviving citation.
+        surviving: CitationId,
+        /// The citation that would have been merged in.
+        merged: CitationId,
+        /// Why the merge was refused.
+        reason: String,
+    },
+    /// A citation was distinguished from itself.
+    #[error("citation {0} cannot be distinguished from itself")]
+    DistinctFromItself(CitationId),
+    /// The pair already holds a live identity decision — merged or distinguished — on this citation
+    /// (ADR 0039 §1); undo it before deciding again.
+    #[error("citations {citation} and {other} already have a live identity decision")]
+    IdentityDecided {
+        /// The citation the decision was asked on.
+        citation: CitationId,
+        /// The other citation of the pair.
+        other: CitationId,
+    },
 }

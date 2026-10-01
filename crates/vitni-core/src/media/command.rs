@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use crate::date::GenealogicalDate;
 use crate::enums::Restriction;
 use crate::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, TagId};
+use crate::matching::MatchEvidence;
 use crate::media_path::MediaPath;
 use crate::provenance::AssertionMeta;
 use crate::text::Attribute;
@@ -111,6 +112,24 @@ pub enum MediaCommand {
         media_id: MediaId,
         /// The new user-facing identifier.
         human_id: HumanId,
+    },
+    /// Record that `merged` is the same media object as `surviving` (ADR 0039 §1).
+    MergeMedia {
+        /// The surviving media object — the stream the decision is written on.
+        surviving: MediaId,
+        /// The media object merged into it.
+        merged: MediaId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
+    },
+    /// Record that `other` is a different media object from `media` (ADR 0039 §1).
+    DistinguishMedia {
+        /// The media object the decision is written on.
+        media: MediaId,
+        /// The media object it is distinct from.
+        other: MediaId,
+        /// The matching engine's assessment the user decided on, if any (ADR 0039 §2).
+        assessment: Option<MatchEvidence>,
     },
 }
 

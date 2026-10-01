@@ -45,6 +45,26 @@ impl Localizer {
             CitationError::RetractsMissingAssertion(id) | CitationError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
+            CitationError::MergeConflict {
+                surviving,
+                merged,
+                reason,
+            } => fl!(
+                self.loader,
+                "err-citation-merge-conflict",
+                surviving = surviving.to_string(),
+                merged = merged.to_string(),
+                reason = reason.clone()
+            ),
+            CitationError::DistinctFromItself(id) => {
+                fl!(self.loader, "err-citation-distinct-from-itself", id = id.to_string())
+            }
+            CitationError::IdentityDecided { citation, other } => fl!(
+                self.loader,
+                "err-citation-identity-decided",
+                citation = citation.to_string(),
+                other = other.to_string()
+            ),
         }
     }
 }

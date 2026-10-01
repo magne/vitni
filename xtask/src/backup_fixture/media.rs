@@ -139,7 +139,10 @@ fn push_attachments(builder: &mut Builder, media_id: MediaId, citation_id: Citat
     }
 }
 
+/// The media's corrections and identity decisions: merged with one duplicate copy and distinguished
+/// from another, both minted here — the projection needs neither to exist.
 fn push_corrections(builder: &mut Builder, media_id: MediaId, target: AssertionId) {
+    let (duplicate, other) = (MediaId::from_uuid(builder.uuid()), MediaId::from_uuid(builder.uuid()));
     let bodies = [
         MediaEventBody::AssertionRetracted { media_id, target },
         MediaEventBody::AssertionSuperseded { media_id, target },
@@ -147,6 +150,16 @@ fn push_corrections(builder: &mut Builder, media_id: MediaId, target: AssertionI
             media_id,
             human_id: HumanId::new("O0099"),
             old_human_id: HumanId::new("O0001"),
+        },
+        MediaEventBody::MediaMerged {
+            surviving: media_id,
+            merged: duplicate,
+            assessment: None,
+        },
+        MediaEventBody::MediaDistinguished {
+            media: media_id,
+            other,
+            assessment: None,
         },
     ];
     for body in bodies {

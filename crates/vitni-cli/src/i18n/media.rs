@@ -35,6 +35,26 @@ impl Localizer {
             MediaError::RetractsMissingAssertion(id) | MediaError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
+            MediaError::MergeConflict {
+                surviving,
+                merged,
+                reason,
+            } => fl!(
+                self.loader,
+                "err-media-merge-conflict",
+                surviving = surviving.to_string(),
+                merged = merged.to_string(),
+                reason = reason.clone()
+            ),
+            MediaError::DistinctFromItself(id) => {
+                fl!(self.loader, "err-media-distinct-from-itself", id = id.to_string())
+            }
+            MediaError::IdentityDecided { media, other } => fl!(
+                self.loader,
+                "err-media-identity-decided",
+                media = media.to_string(),
+                other = other.to_string()
+            ),
         }
     }
 }

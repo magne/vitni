@@ -2,6 +2,7 @@
 
 use crate::assertions::Attributed;
 use crate::ids::{AssertionId, HumanId, RepositoryId};
+use crate::matching::MatchEvidence;
 use crate::provenance::AssertionMeta;
 use crate::repository::command::RepositoryCommand;
 use crate::repository::error::RepositoryError;
@@ -24,18 +25,7 @@ pub fn decide(
         RepositoryCommand::CreateRepository {
             repository_id,
             human_id,
-        } => {
-            if state.exists {
-                return Err(RepositoryError::AlreadyExists(repository_id));
-            }
-            Ok(one(
-                meta,
-                RepositoryEventBody::RepositoryCreated {
-                    repository_id,
-                    human_id,
-                },
-            ))
-        }
+        } => create_repository(state, meta, repository_id, human_id),
         RepositoryCommand::SetRepositoryType {
             repository_id,
             repository_type,
@@ -96,6 +86,16 @@ pub fn decide(
             ensure_exists(state, repository_id)?;
             Ok(one(meta, repository_human_id_changed(state, repository_id, human_id)))
         }
+        RepositoryCommand::MergeRepositories {
+            surviving,
+            merged,
+            assessment,
+        } => decide_merge(state, [surviving, merged], assessment, meta),
+        RepositoryCommand::DistinguishRepositories {
+            repository,
+            other,
+            assessment,
+        } => decide_distinguish(state, [repository, other], assessment, meta),
         RepositoryCommand::RetractAssertion { repository_id, target } => {
             ensure_exists(state, repository_id)?;
             if !state.live_assertions.contains(&target) {
@@ -139,6 +139,88 @@ fn repository_human_id_changed(
         human_id,
         old_human_id,
     }
+}
+
+/// Decides `CreateRepository`: rejects a repository that already exists, otherwise emits
+/// `RepositoryCreated`.
+fn create_repository(
+    state: &RepositoryState,
+    meta: &AssertionMeta,
+    repository_id: RepositoryId,
+    human_id: HumanId,
+) -> Result<Vec<RepositoryEvent>, RepositoryError> {
+    if state.exists {
+        return Err(RepositoryError::AlreadyExists(repository_id));
+    }
+    Ok(one(
+        meta,
+        RepositoryEventBody::RepositoryCreated {
+            repository_id,
+            human_id,
+        },
+    ))
+}
+
+/// Decides a merge of `merged` into `surviving` (ADR 0039 §1): the survivor must exist, the pair must
+/// be two records, and the survivor must not already hold a live decision about the other.
+fn decide_merge(
+    state: &RepositoryState,
+    [surviving, merged]: [RepositoryId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<RepositoryEvent>, RepositoryError> {
+    ensure_exists(state, surviving)?;
+    if surviving == merged {
+        return Err(RepositoryError::MergeConflict {
+            surviving,
+            merged,
+            reason: "a repository cannot be merged with itself".to_owned(),
+        });
+    }
+    ensure_undecided(state, surviving, merged)?;
+    Ok(one(
+        meta,
+        RepositoryEventBody::RepositoriesMerged {
+            surviving,
+            merged,
+            assessment,
+        },
+    ))
+}
+
+/// Decides that `other` is a different repository from `repository` (ADR 0039 §1), under the same rules as a
+/// merge.
+fn decide_distinguish(
+    state: &RepositoryState,
+    [repository, other]: [RepositoryId; 2],
+    assessment: Option<MatchEvidence>,
+    meta: &AssertionMeta,
+) -> Result<Vec<RepositoryEvent>, RepositoryError> {
+    ensure_exists(state, repository)?;
+    if repository == other {
+        return Err(RepositoryError::DistinctFromItself(repository));
+    }
+    ensure_undecided(state, repository, other)?;
+    Ok(one(
+        meta,
+        RepositoryEventBody::RepositoriesDistinguished {
+            repository,
+            other,
+            assessment,
+        },
+    ))
+}
+
+/// Refuses a second identity decision about a pair this repository already decided (ADR 0039 §1).
+fn ensure_undecided(
+    state: &RepositoryState,
+    repository: RepositoryId,
+    other: RepositoryId,
+) -> Result<(), RepositoryError> {
+    if state.has_decided(other) {
+        return Err(RepositoryError::IdentityDecided { repository, other });
+    }
+    Ok(())
 }
 
 /// Rejects a command that targets a repository which has not been created yet.
@@ -204,6 +286,20 @@ pub fn evolve(state: &mut RepositoryState, event: &RepositoryEvent) {
         }
         RepositoryEventBody::HumanIdChanged { human_id, .. } => {
             state.human_id = Some(human_id.clone());
+        }
+        RepositoryEventBody::RepositoriesMerged { merged, .. } => {
+            state.merged.push(Attributed {
+                assertion_id,
+                value: *merged,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        RepositoryEventBody::RepositoriesDistinguished { other, .. } => {
+            state.distinguished.push(Attributed {
+                assertion_id,
+                value: *other,
+            });
+            state.live_assertions.insert(assertion_id);
         }
         RepositoryEventBody::AssertionRetracted { target, .. }
         | RepositoryEventBody::AssertionSuperseded { target, .. } => {
@@ -501,5 +597,115 @@ mod tests {
         apply_all(&mut state, &retract);
         assert!(state.restrictions.is_empty(), "retracting the change clears the set");
         assert_eq!(state.restrictions_assertion, None);
+    }
+
+    fn evidence() -> crate::matching::MatchEvidence {
+        crate::matching::MatchEvidence {
+            score_bp: 9100,
+            band: crate::matching::MatchBand::Probable,
+            engine: crate::matching::EngineVersion(4),
+            cultures: vec![crate::matching::CultureId::new("universal")],
+            features: Vec::new(),
+        }
+    }
+
+    fn merge(surviving: u128, merged: u128) -> RepositoryCommand {
+        RepositoryCommand::MergeRepositories {
+            surviving: repo(surviving),
+            merged: repo(merged),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn distinguish(first: u128, other: u128) -> RepositoryCommand {
+        RepositoryCommand::DistinguishRepositories {
+            repository: repo(first),
+            other: repo(other),
+            assessment: Some(evidence()),
+        }
+    }
+
+    fn retract_decision(id: u128, assertion: u128) -> RepositoryCommand {
+        RepositoryCommand::RetractAssertion {
+            repository_id: repo(id),
+            target: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+        }
+    }
+
+    #[test]
+    fn merging_two_repositories_emits_repositorys_merged_with_its_assessment() {
+        let events = decide(&created_repository(100), merge(100, 200), &meta(2)).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].body,
+            crate::repository::event::RepositoryEventBody::RepositoriesMerged {
+                surviving: repo(100),
+                merged: repo(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_repository_cannot_be_merged_with_itself() {
+        let err = decide(&created_repository(100), merge(100, 100), &meta(2)).unwrap_err();
+        assert!(matches!(err, RepositoryError::MergeConflict { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn merging_into_an_absent_repository_is_not_found() {
+        let err = decide(&RepositoryState::default(), merge(100, 200), &meta(2)).unwrap_err();
+        assert_eq!(err, RepositoryError::NotFound(repo(100)));
+    }
+
+    #[test]
+    fn distinguishing_two_repositories_emits_repositorys_distinguished_with_its_assessment() {
+        let events = decide(&created_repository(100), distinguish(100, 200), &meta(2)).unwrap();
+        assert_eq!(
+            events[0].body,
+            crate::repository::event::RepositoryEventBody::RepositoriesDistinguished {
+                repository: repo(100),
+                other: repo(200),
+                assessment: Some(evidence()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_repository_cannot_be_distinguished_from_itself() {
+        let err = decide(&created_repository(100), distinguish(100, 100), &meta(2)).unwrap_err();
+        assert_eq!(err, RepositoryError::DistinctFromItself(repo(100)));
+    }
+
+    #[test]
+    fn repository_identity_decisions_fold_into_state_and_undo_removes_them() {
+        for (decision, assertion) in [(merge(100, 200), 2), (distinguish(100, 200), 2)] {
+            let mut state = created_repository(100);
+            let events = decide(&state, decision.clone(), &meta(assertion)).unwrap();
+            apply_all(&mut state, &events);
+            assert!(state.has_decided(repo(200)), "{decision:?}");
+
+            let events = decide(&state, retract_decision(100, assertion), &meta(3)).unwrap();
+            apply_all(&mut state, &events);
+            assert!(!state.has_decided(repo(200)), "undo lifts {decision:?}");
+            assert!(state.merged.is_empty() && state.distinguished.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_repository_pair_decided_either_way_cannot_be_decided_again() {
+        let decided = RepositoryError::IdentityDecided {
+            repository: repo(100),
+            other: repo(200),
+        };
+        for first in [merge(100, 200), distinguish(100, 200)] {
+            let mut state = created_repository(100);
+            let events = decide(&state, first.clone(), &meta(2)).unwrap();
+            apply_all(&mut state, &events);
+            for second in [merge(100, 200), distinguish(100, 200)] {
+                let err = decide(&state, second.clone(), &meta(3)).unwrap_err();
+                assert_eq!(err, decided, "{first:?} then {second:?}");
+            }
+        }
     }
 }

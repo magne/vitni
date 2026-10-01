@@ -80,7 +80,10 @@ fn push_tags(builder: &mut Builder, note_id: NoteId) {
     }
 }
 
+/// The note's corrections and identity decisions: merged with one duplicate copy and distinguished
+/// from another, both minted here — the projection needs neither to exist.
 fn push_corrections(builder: &mut Builder, note_id: NoteId, target: AssertionId) {
+    let (duplicate, other) = (NoteId::from_uuid(builder.uuid()), NoteId::from_uuid(builder.uuid()));
     let bodies = [
         NoteEventBody::AssertionRetracted { note_id, target },
         NoteEventBody::AssertionSuperseded { note_id, target },
@@ -88,6 +91,16 @@ fn push_corrections(builder: &mut Builder, note_id: NoteId, target: AssertionId)
             note_id,
             human_id: HumanId::new("N0099"),
             old_human_id: HumanId::new("N0001"),
+        },
+        NoteEventBody::NotesMerged {
+            surviving: note_id,
+            merged: duplicate,
+            assessment: None,
+        },
+        NoteEventBody::NotesDistinguished {
+            note: note_id,
+            other,
+            assessment: None,
         },
     ];
     for body in bodies {

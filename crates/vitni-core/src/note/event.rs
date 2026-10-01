@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use crate::assertions::{Envelope, EventBody};
 use crate::enums::{NoteType, Restriction};
 use crate::ids::{AssertionId, HumanId, NoteId, TagId};
+use crate::matching::MatchEvidence;
 use crate::text::RichText;
 
 /// A single Note assertion plus its provenance envelope (ADR 0004 §1).
@@ -81,6 +82,28 @@ pub enum NoteEventBody {
         /// The identifier in effect before this change (for the audit trail).
         old_human_id: HumanId,
     },
+    /// Another note record was concluded to be this one (ADR 0039 §1): a same-as link on the survivor
+    /// that leaves the merged record's own stream untouched (data-model §9).
+    NotesMerged {
+        /// The note that survives as the cluster's record.
+        surviving: NoteId,
+        /// The note merged into it.
+        merged: NoteId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a merge made
+        /// without the engine.
+        assessment: Option<MatchEvidence>,
+    },
+    /// Another note record was concluded to be a different note from this one (ADR 0039 §1), so the
+    /// pair is never proposed as a duplicate again.
+    NotesDistinguished {
+        /// The note the decision is recorded on.
+        note: NoteId,
+        /// The note it is distinct from.
+        other: NoteId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a decision
+        /// made without the engine.
+        assessment: Option<MatchEvidence>,
+    },
 }
 
 impl EventBody for NoteEventBody {
@@ -95,6 +118,8 @@ impl EventBody for NoteEventBody {
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
             Self::HumanIdChanged { .. } => "HumanIdChanged",
+            Self::NotesMerged { .. } => "NotesMerged",
+            Self::NotesDistinguished { .. } => "NotesDistinguished",
         }
     }
 

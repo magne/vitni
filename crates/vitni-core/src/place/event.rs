@@ -13,6 +13,7 @@ use crate::date::GenealogicalDate;
 use crate::enums::{PlaceType, Restriction, SuccessionKind};
 use crate::geo::{GeoCoordinates, PlaceGeometry};
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
+use crate::matching::MatchEvidence;
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
 use crate::text::MediaRef;
@@ -157,6 +158,28 @@ pub enum PlaceEventBody {
         /// The identifier in effect before this change (for the audit trail).
         old_human_id: HumanId,
     },
+    /// Another place record was concluded to be this one (ADR 0039 §1): a same-as link on the survivor
+    /// that leaves the merged record's own stream untouched (data-model §9).
+    PlacesMerged {
+        /// The place that survives as the cluster's record.
+        surviving: PlaceId,
+        /// The place merged into it.
+        merged: PlaceId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a merge made
+        /// without the engine.
+        assessment: Option<MatchEvidence>,
+    },
+    /// Another place record was concluded to be a different place from this one (ADR 0039 §1), so the
+    /// pair is never proposed as a duplicate again.
+    PlacesDistinguished {
+        /// The place the decision is recorded on.
+        place: PlaceId,
+        /// The place it is distinct from.
+        other: PlaceId,
+        /// The matching engine's assessment the user decided on (ADR 0039 §2); `None` for a decision
+        /// made without the engine.
+        assessment: Option<MatchEvidence>,
+    },
 }
 
 impl EventBody for PlaceEventBody {
@@ -179,6 +202,8 @@ impl EventBody for PlaceEventBody {
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
             Self::HumanIdChanged { .. } => "HumanIdChanged",
+            Self::PlacesMerged { .. } => "PlacesMerged",
+            Self::PlacesDistinguished { .. } => "PlacesDistinguished",
         }
     }
 

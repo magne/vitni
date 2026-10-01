@@ -280,8 +280,9 @@ mod tests {
     #[test]
     fn variant_names_list_every_media_variant() {
         let names = super::Envelope::<crate::media::MediaEventBody>::variant_names();
-        assert_eq!(names.len(), 14);
+        assert_eq!(names.len(), 16);
         assert!(names.contains(&"MediaCreated"));
         assert!(names.contains(&"HumanIdChanged"));
+        assert!(names.contains(&"MediaMerged"));
     }
 }

@@ -25,3 +25,6 @@ err-place-unknown = place references unknown place { $id }
 err-place-invalid-geometry = a place geometry polygon ring must have at least 3 points
 err-place-empty-succession-endpoints = a place succession must name at least one "from" and one "to" place
 err-place-succession-anchor-mismatch = place { $id } must be one of the succession's "from" places
+err-place-merge-conflict = places { $surviving } and { $merged } cannot be merged: { $reason }
+err-place-distinct-from-itself = place { $id } cannot be distinguished from itself
+err-place-identity-decided = places { $place } and { $other } already have a live identity decision; undo it first

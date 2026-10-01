@@ -113,6 +113,33 @@ impl MediaView {
     pub fn notes_with_assertions(&self) -> &[Attributed<NoteId>] {
         &self.state.notes
     }
+
+    /// The ids of media objects currently merged into this survivor (ADR 0039 §1) — whose `MediaMerged`
+    /// assertion has not been undone.
+    #[must_use]
+    pub fn merged(&self) -> Vec<MediaId> {
+        self.state.merged.iter().map(|m| m.value).collect()
+    }
+
+    /// The ids of media objects concluded to be different from this one (ADR 0039 §1).
+    #[must_use]
+    pub fn distinguished(&self) -> Vec<MediaId> {
+        self.state.distinguished.iter().map(|d| d.value).collect()
+    }
+
+    /// The live distinctions, each paired with the `AssertionId` of its `MediaDistinguished` — the
+    /// target an undo retracts (ADR 0039 §4).
+    #[must_use]
+    pub fn distinguished_with_assertions(&self) -> &[crate::assertions::Attributed<MediaId>] {
+        &self.state.distinguished
+    }
+
+    /// Whether `assertion` is a live assertion on this media object's stream — one a retraction or
+    /// supersession of it may target.
+    #[must_use]
+    pub fn holds_assertion(&self, assertion: crate::ids::AssertionId) -> bool {
+        self.state.live_assertions.contains(&assertion)
+    }
 }
 
 impl View<MediaState> for MediaView {
