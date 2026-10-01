@@ -15,7 +15,6 @@ use vitni_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, Par
 use vitni_core::event::EventView;
 use vitni_core::fact::Fact;
 use vitni_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
-use vitni_core::matching::MatchEvidence;
 use vitni_core::name::{NameType, PersonName, Surname};
 use vitni_core::person::PersonView;
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
@@ -26,7 +25,7 @@ use vitni_db::Store;
 
 use crate::dto::{AggRef, AttachedRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
-use crate::identity::PersonClusters;
+use crate::identity::{self, IdentityDecision, PairDecision, PersonClusters};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
@@ -448,7 +447,7 @@ pub async fn set_restrictions(
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
     let clusters = PersonClusters::load(store).await?;
-    let records = crate::identity::person_views(store, &clusters.cluster(clusters.root(person_id))).await?;
+    let records = crate::identity::views(store, &clusters.cluster(clusters.root(person_id))).await?;
     let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
     for record in &records {
         let Some(id) = record.person_id() else { continue };
@@ -822,7 +821,7 @@ pub async fn tag_person(
 /// cluster writes (ADR 0039 §5).
 pub(crate) async fn tag_holders(store: &Store, person: PersonId, tag_id: TagId) -> Result<Vec<PersonId>, AppError> {
     let clusters = PersonClusters::load(store).await?;
-    let records = crate::identity::person_views(store, &clusters.cluster(clusters.root(person))).await?;
+    let records = crate::identity::views(store, &clusters.cluster(clusters.root(person))).await?;
     let mut holders = Vec::new();
     for record in &records {
         if let Some(id) = record.person_id()
@@ -847,7 +846,7 @@ pub async fn claim_owner(workspace: &Workspace, human_id: &str, assertion_id: &s
     let person_id = resolve_person_id(store, human_id).await?;
     let target = use_case::parse_assertion_id(assertion_id)?;
     let clusters = PersonClusters::load(store).await?;
-    let records = crate::identity::person_views(store, &clusters.cluster(clusters.root(person_id))).await?;
+    let records = crate::identity::views(store, &clusters.cluster(clusters.root(person_id))).await?;
     let holder = records
         .iter()
         .find(|record| record.holds_assertion(target))
@@ -879,17 +878,6 @@ pub struct MergeResult {
     pub merged_human_id: String,
 }
 
-/// The user's identity decision about a pair (ADR 0039 §1, §2): their surety and reason, and the
-/// matching engine's assessment they decided on. Nothing is defaulted — a decision made without a
-/// judgment records none, and one made without the engine carries no assessment.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct IdentityDecision {
-    /// The operator's confidence and rationale.
-    pub provenance: Provenance,
-    /// The engine's assessment of the pair as the user was shown it.
-    pub assessment: Option<MatchEvidence>,
-}
-
 /// Merges `merged_human_id`'s cluster into `surviving_human_id`'s, recording a same-as link.
 ///
 /// Both records resolve to their cluster roots first (ADR 0039 §4), so a record already merged
@@ -911,13 +899,8 @@ pub async fn merge_persons(
     merged_human_id: &str,
     decision: IdentityDecision,
 ) -> Result<MergeResult, AppError> {
-    let store = workspace.store();
-    let pair = decidable_pair(store, surviving_human_id, merged_human_id).await?;
-    if !pair.distinctions().is_empty() {
-        return Err(pair.decided());
-    }
-    record_merge(workspace, session, &pair, decision).await?;
-    merge_result(workspace, &pair, merged_human_id).await
+    let pair = identity::merge::<PersonView>(workspace, session, surviving_human_id, merged_human_id, decision).await?;
+    merge_result(workspace, &pair.first_human_id, merged_human_id).await
 }
 
 /// Undoes every live distinction between the two clusters, then merges them — the compare view's
@@ -934,55 +917,26 @@ pub async fn undo_distinction_and_merge(
     merged_human_id: &str,
     decision: IdentityDecision,
 ) -> Result<MergeResult, AppError> {
-    let store = workspace.store();
-    let pair = decidable_pair(store, surviving_human_id, merged_human_id).await?;
-    for (view, target) in pair.distinctions() {
-        let Some(person_id) = view.person_id() else { continue };
-        execute_person_command(
-            store,
-            session,
-            &person_id.to_string(),
-            PersonCommand::RetractAssertion { person_id, target },
-            decision.provenance.clone(),
-            Vec::new(),
-        )
-        .await?;
-    }
-    record_merge(workspace, session, &pair, decision).await?;
-    merge_result(workspace, &pair, merged_human_id).await
-}
-
-/// Emits the `PersonsMerged` for a decidable pair on its first root's stream.
-async fn record_merge(
-    workspace: &Workspace,
-    session: &Session,
-    pair: &DecidablePair,
-    decision: IdentityDecision,
-) -> Result<(), AppError> {
-    execute_person_command(
-        workspace.store(),
+    let pair = identity::undo_distinction_and_merge::<PersonView>(
+        workspace,
         session,
-        &pair.first.to_string(),
-        PersonCommand::MergePersons {
-            surviving: pair.first,
-            merged: pair.second,
-            assessment: decision.assessment,
-        },
-        decision.provenance,
-        Vec::new(),
+        surviving_human_id,
+        merged_human_id,
+        decision,
     )
-    .await
+    .await?;
+    merge_result(workspace, &pair.first_human_id, merged_human_id).await
 }
 
 /// The survivor's composed summary after a merge.
 async fn merge_result(
     workspace: &Workspace,
-    pair: &DecidablePair,
+    survivor_human_id: &str,
     merged_human_id: &str,
 ) -> Result<MergeResult, AppError> {
-    let survivor = show_person(workspace, &pair.first_human_id)
+    let survivor = show_person(workspace, survivor_human_id)
         .await?
-        .ok_or_else(|| AppError::PersonNotFound(pair.first_human_id.clone()))?;
+        .ok_or_else(|| AppError::PersonNotFound(survivor_human_id.to_owned()))?;
     Ok(MergeResult {
         survivor,
         merged_human_id: merged_human_id.to_owned(),
@@ -1007,81 +961,7 @@ pub async fn distinguish_persons(
     other_human_id: &str,
     decision: IdentityDecision,
 ) -> Result<(), AppError> {
-    let store = workspace.store();
-    let pair = decidable_pair(store, person_human_id, other_human_id).await?;
-    if !pair.distinctions().is_empty() {
-        return Err(pair.decided());
-    }
-    execute_person_command(
-        store,
-        session,
-        &pair.first.to_string(),
-        PersonCommand::DistinguishPersons {
-            person: pair.first,
-            other: pair.second,
-            assessment: decision.assessment,
-        },
-        decision.provenance,
-        Vec::new(),
-    )
-    .await
-}
-
-/// A pair about to be decided, resolved to its cluster roots (ADR 0039 §4).
-struct DecidablePair {
-    /// The first record as named.
-    first_id: PersonId,
-    /// The second record as named.
-    second_id: PersonId,
-    /// The first record's cluster root — the stream the decision is written on.
-    first: PersonId,
-    /// The first root's `human_id`.
-    first_human_id: String,
-    /// The second record's cluster root.
-    second: PersonId,
-    /// Every record of the first cluster.
-    first_views: Vec<PersonView>,
-    /// Every record of the second cluster.
-    second_views: Vec<PersonView>,
-}
-
-impl DecidablePair {
-    /// The refusal for a pair already decided.
-    fn decided(&self) -> AppError {
-        PersonError::IdentityDecided {
-            person: self.first,
-            other: self.second,
-        }
-        .into()
-    }
-
-    /// Every live distinction between the two clusters, with the record whose stream holds it — the
-    /// rule that distinctness is judged between clusters (ADR 0039 §4).
-    fn distinctions(&self) -> Vec<(&PersonView, AssertionId)> {
-        let ids =
-            |views: &[PersonView]| -> BTreeSet<PersonId> { views.iter().filter_map(PersonView::person_id).collect() };
-        let (first_ids, second_ids) = (ids(&self.first_views), ids(&self.second_views));
-        let mut found = Vec::new();
-        for (views, others) in [(&self.first_views, &second_ids), (&self.second_views, &first_ids)] {
-            for view in views {
-                for distinction in view.distinguished_with_assertions() {
-                    if others.contains(&distinction.value) {
-                        found.push((view, distinction.assertion_id));
-                    }
-                }
-            }
-        }
-        found
-    }
-}
-
-/// The live identity decision between two persons' clusters (ADR 0039 §4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PairDecision {
-    /// Both records are in one cluster: a merge joined them.
-    SameCluster,
-    /// A record of one cluster is held distinct from a record of the other.
-    Distinct,
+    identity::distinguish::<PersonView>(workspace, session, person_human_id, other_human_id, decision).await
 }
 
 /// The live identity decision between the clusters of `first_human_id` and `other_human_id`, or `None`
@@ -1096,56 +976,7 @@ pub async fn pair_decision(
     first_human_id: &str,
     other_human_id: &str,
 ) -> Result<Option<PairDecision>, AppError> {
-    let pair = cluster_pair(workspace.store(), first_human_id, other_human_id).await?;
-    if pair.first_id == pair.second_id {
-        return Ok(None);
-    }
-    if pair.first == pair.second {
-        return Ok(Some(PairDecision::SameCluster));
-    }
-    Ok((!pair.distinctions().is_empty()).then_some(PairDecision::Distinct))
-}
-
-/// Resolves a pair about to be decided to its cluster roots, refusing it when both are already one
-/// cluster — checked against the lagging `identity_links` projection per ADR 0002. A record decided
-/// about itself passes through, for the core to refuse.
-async fn decidable_pair(store: &Store, first: &str, second: &str) -> Result<DecidablePair, AppError> {
-    let pair = cluster_pair(store, first, second).await?;
-    if pair.first_id != pair.second_id && pair.first == pair.second {
-        return Err(PersonError::IdentityDecided {
-            person: pair.first_id,
-            other: pair.second_id,
-        }
-        .into());
-    }
-    Ok(pair)
-}
-
-/// Resolves two records to their cluster roots and reads every record of both clusters.
-async fn cluster_pair(store: &Store, first: &str, second: &str) -> Result<DecidablePair, AppError> {
-    let first_id = resolve_person_id(store, first).await?;
-    let second_id = resolve_person_id(store, second).await?;
-    let clusters = crate::identity::PersonClusters::load(store).await?;
-    let (first_root, second_root) = (clusters.root(first_id), clusters.root(second_id));
-    let first_human_id = store
-        .human_id_of("person", &first_root.to_string())
-        .await?
-        .ok_or_else(|| AppError::PersonNotFound(first.to_owned()))?;
-    let first_views = crate::identity::person_views(store, &clusters.cluster(first_root)).await?;
-    let second_views = if second_root == first_root {
-        Vec::new()
-    } else {
-        crate::identity::person_views(store, &clusters.cluster(second_root)).await?
-    };
-    Ok(DecidablePair {
-        first_id,
-        second_id,
-        first: first_root,
-        first_human_id,
-        second: second_root,
-        first_views,
-        second_views,
-    })
+    identity::pair_decision::<PersonView>(workspace, first_human_id, other_human_id).await
 }
 
 /// Loads a single person's summary by `human_id`. A record merged into another resolves to its
@@ -1168,7 +999,7 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
     if cluster == [id] {
         return Ok(Some(summarize(&found, &lookups)));
     }
-    let views = crate::identity::person_views(store, &cluster).await?;
+    let views = crate::identity::views(store, &cluster).await?;
     let views: Vec<&PersonView> = views.iter().collect();
     Ok(summarize_cluster(&views, &lookups))
 }

@@ -26,7 +26,7 @@ use crate::citation::TagRef;
 use crate::dto::{AttachedRef, CitationRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{EventSummary, list_events};
-use crate::identity::PersonClusters;
+use crate::identity::{self, IdentityDecision, PairDecision, PersonClusters};
 use crate::person::{list_persons, render_name};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
@@ -638,6 +638,110 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
+/// The outcome of [`merge_families`]: the survivor's refreshed summary and the merged family's
+/// `human_id`.
+///
+/// The merge is a same-as link on the survivor (ADR 0039 §1): no record that names the merged family
+/// is rewritten. Every reader resolves those references to the cluster's root instead (ADR 0039 §5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyMergeResult {
+    /// The survivor's summary after the merge, composed with every record now in its cluster.
+    pub survivor: FamilySummary,
+    /// The merged family's `human_id` (its own record/stream is untouched).
+    pub merged_human_id: String,
+}
+
+/// Merges `merged_human_id`'s cluster into `surviving_human_id`'s, recording a same-as link
+/// (ADR 0039 §1). Both records resolve to their cluster roots first (§4), and one `FamiliesMerged`
+/// event is emitted on the surviving root's stream, carrying the decision's provenance and assessment.
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if either `human_id` does not resolve; [`AppError::FamilyDomain`] with
+/// `MergeConflict` if they resolve to the same family, or `IdentityDecided` if the two are already one
+/// cluster or a record of one cluster is distinguished from a record of the other; or a store error.
+pub async fn merge_families(
+    workspace: &Workspace,
+    session: &Session,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<FamilyMergeResult, AppError> {
+    let pair = identity::merge::<FamilyView>(workspace, session, surviving_human_id, merged_human_id, decision).await?;
+    family_merge_result(workspace, &pair.first_human_id, merged_human_id).await
+}
+
+/// Undoes every live distinction between the two family clusters, then merges them (ADR 0039 §4).
+///
+/// # Errors
+///
+/// As [`merge_families`], except that a distinction between the clusters no longer refuses the merge.
+pub async fn undo_family_distinction_and_merge(
+    workspace: &Workspace,
+    session: &Session,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<FamilyMergeResult, AppError> {
+    let pair = identity::undo_distinction_and_merge::<FamilyView>(
+        workspace,
+        session,
+        surviving_human_id,
+        merged_human_id,
+        decision,
+    )
+    .await?;
+    family_merge_result(workspace, &pair.first_human_id, merged_human_id).await
+}
+
+/// The survivor's composed summary after a merge.
+async fn family_merge_result(
+    workspace: &Workspace,
+    survivor_human_id: &str,
+    merged_human_id: &str,
+) -> Result<FamilyMergeResult, AppError> {
+    let survivor = show_family(workspace, survivor_human_id)
+        .await?
+        .ok_or_else(|| AppError::FamilyNotFound(survivor_human_id.to_owned()))?;
+    Ok(FamilyMergeResult {
+        survivor,
+        merged_human_id: merged_human_id.to_owned(),
+    })
+}
+
+/// Records that the two families are different (ADR 0039 §1), so neither cluster is proposed as a
+/// duplicate of the other again. One `FamiliesDistinguished` event is emitted on the first root's
+/// stream; undoing it lifts the decision.
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if either `human_id` does not resolve; [`AppError::FamilyDomain`] with
+/// `DistinctFromItself` if they resolve to the same family, or `IdentityDecided` if the two are already
+/// one cluster or already distinguished; or a store error.
+pub async fn distinguish_families(
+    workspace: &Workspace,
+    session: &Session,
+    family_human_id: &str,
+    other_human_id: &str,
+    decision: IdentityDecision,
+) -> Result<(), AppError> {
+    identity::distinguish::<FamilyView>(workspace, session, family_human_id, other_human_id, decision).await
+}
+
+/// The live identity decision between the clusters of two families, or `None` when the pair is
+/// undecided (ADR 0039 §4).
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if either `human_id` does not resolve, or a store error.
+pub async fn family_pair_decision(
+    workspace: &Workspace,
+    first_human_id: &str,
+    other_human_id: &str,
+) -> Result<Option<PairDecision>, AppError> {
+    identity::pair_decision::<FamilyView>(workspace, first_human_id, other_human_id).await
+}
+
 /// Loads a single family's summary by `human_id`.
 ///
 /// # Errors
@@ -858,7 +962,7 @@ pub async fn set_family_human_id(
 
 /// Executes one command through the store, stamping the operator `provenance` and backing
 /// `citations`, and mapping the command outcome to [`AppError`].
-async fn execute(
+pub(crate) async fn execute(
     store: &Store,
     session: &Session,
     aggregate_id: &str,

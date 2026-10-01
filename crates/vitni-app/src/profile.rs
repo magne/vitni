@@ -34,6 +34,7 @@ use vitni_core::date::{DateQuality, GenealogicalDate};
 use vitni_core::enums::{ChildParentRelationship, EventType, FactType, ParticipantRole, PlaceType};
 use vitni_core::event::EventView;
 use vitni_core::family::{ChildEntry, FamilyView};
+use vitni_core::identity::ClusterRecord;
 use vitni_core::ids::{
     CitationId, EventId, FamilyId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId, TagId,
 };
@@ -55,7 +56,7 @@ use vitni_db::Store;
 
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
-use crate::identity::PersonClusters;
+use crate::identity::{ClusterId, Clusters, EventClusters, FamilyClusters, PersonClusters};
 use crate::person::resolve_person_id_public;
 use crate::use_case;
 use crate::workspace::Workspace;
@@ -224,6 +225,10 @@ pub(crate) struct Profiles {
     origins: HashMap<String, Vec<RecordOrigin>>,
     /// The person clusters, read with the people.
     person_clusters: PersonClusters,
+    /// The event clusters, read with the people.
+    event_clusters: EventClusters,
+    /// The family clusters, read with the people.
+    family_clusters: FamilyClusters,
 }
 
 impl Profiles {
@@ -236,6 +241,8 @@ impl Profiles {
         if wants(&[Person, Family, Event]) {
             profiles.people = Some(ProfileLookups::load(store).await?);
             profiles.person_clusters = PersonClusters::load(store).await?;
+            profiles.event_clusters = EventClusters::load(store).await?;
+            profiles.family_clusters = FamilyClusters::load(store).await?;
             origin_kinds.extend([Person, Family, Event]);
         }
         if wants(&[Place]) {
@@ -273,20 +280,22 @@ impl Profiles {
     }
 
     /// The identity decisions on `kind` that keep a pair out of every suggestion (ADR 0039 §3, §4).
-    /// Only persons can be decided yet.
+    /// Only persons, events and families can be decided.
     pub(crate) fn decisions(&self, kind: MatchableKind) -> Decisions {
-        let mut distinct = HashSet::new();
-        if let (MatchableKind::Person, Some(people)) = (kind, &self.people) {
-            for (id, view) in &people.persons {
-                for other in view.distinguished() {
-                    let (a, b) = (self.person_clusters.root(*id), self.person_clusters.root(other));
-                    distinct.insert(ordered_pair(a.to_string(), b.to_string()));
-                }
-            }
-        }
-        Decisions {
-            clusters: (kind == MatchableKind::Person).then(|| self.person_clusters.clone()),
-            distinct,
+        let Some(people) = &self.people else {
+            return Decisions::default();
+        };
+        match kind {
+            MatchableKind::Person => Decisions::of(&self.person_clusters, people.persons.values()),
+            MatchableKind::Event => Decisions::of(&self.event_clusters, people.events.values()),
+            MatchableKind::Family => Decisions::of(&self.family_clusters, people.families.values()),
+            MatchableKind::Place
+            | MatchableKind::Source
+            | MatchableKind::Repository
+            | MatchableKind::Citation
+            | MatchableKind::Media
+            | MatchableKind::Note
+            | MatchableKind::Tag => Decisions::default(),
         }
     }
 
@@ -606,37 +615,48 @@ struct ProfileLookups {
     children_of: HashMap<PersonId, Vec<PersonId>>,
 }
 
-/// The identity decisions on one kind (ADR 0039 §4): its clusters, and every pair of cluster roots
-/// held distinct.
+/// The identity decisions on one kind (ADR 0039 §4): each merged record's cluster root, and every
+/// pair of cluster roots held distinct, by aggregate id.
+#[derive(Default)]
 pub(crate) struct Decisions {
-    clusters: Option<PersonClusters>,
+    root_of: HashMap<String, String>,
     distinct: HashSet<(String, String)>,
 }
 
 impl Decisions {
+    /// The decisions recorded in `clusters` and on the `views` of their kind.
+    fn of<'a, V: ClusterRecord<Id: ClusterId> + 'a>(
+        clusters: &Clusters<V::Id>,
+        views: impl Iterator<Item = &'a V>,
+    ) -> Self {
+        let mut root_of = HashMap::new();
+        for (member, root) in clusters.links() {
+            root_of.insert(member.to_string(), root.to_string());
+        }
+        let mut distinct = HashSet::new();
+        for view in views {
+            let Some(id) = view.record_id() else { continue };
+            for other in view.distinguished_with_assertions() {
+                let (a, b) = (clusters.root(id), clusters.root(other.value));
+                distinct.insert(ordered_pair(a.to_string(), b.to_string()));
+            }
+        }
+        Self { root_of, distinct }
+    }
+
     /// The aggregate id of the root of `id`'s cluster: `id` itself unless it is merged.
     pub(crate) fn root(&self, id: &str) -> String {
-        let (Some(clusters), Ok(uuid)) = (&self.clusters, Uuid::parse_str(id)) else {
-            return id.to_owned();
-        };
-        clusters.root(PersonId::from_uuid(uuid)).to_string()
+        self.root_of.get(id).cloned().unwrap_or_else(|| id.to_owned())
     }
 
     /// Whether the pair `a`, `b` (aggregate ids) is never proposed: either is merged into another
     /// record and so hidden behind its root, both are one cluster, or their clusters are held
     /// distinct.
     pub(crate) fn exclude(&self, a: &str, b: &str) -> bool {
-        let Some(clusters) = &self.clusters else {
-            return false;
-        };
-        let (Ok(a), Ok(b)) = (Uuid::parse_str(a), Uuid::parse_str(b)) else {
-            return false;
-        };
-        let (a, b) = (PersonId::from_uuid(a), PersonId::from_uuid(b));
-        if clusters.is_member(a) || clusters.is_member(b) {
+        if self.root_of.contains_key(a) || self.root_of.contains_key(b) {
             return true;
         }
-        a == b || self.distinct.contains(&ordered_pair(a.to_string(), b.to_string()))
+        a == b || self.distinct.contains(&ordered_pair(a.to_owned(), b.to_owned()))
     }
 }
 
