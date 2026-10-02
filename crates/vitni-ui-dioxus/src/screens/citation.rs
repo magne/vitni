@@ -1,4 +1,5 @@
 use super::prelude::*;
+use super::similar::find_similar_action;
 // The citation attribute row view-model (seeds the per-row attribute edit) and the record-link
 // view-model enum (citation source); the latter shadows the prelude's `RecordLink` link component,
 // which this screen does not use.
@@ -72,6 +73,7 @@ pub fn CitationCreateRecord(draft_id: DraftId) -> Element {
             name: "citation-source".to_owned(),
             entity_label: loc.picker_entity(Category::Sources),
             allow_new: true,
+            similar: Some(Category::Sources),
         },
         state: source_state,
         options: picker_options(source_rows.read_unchecked().as_ref()),
@@ -713,7 +715,7 @@ fn citation_detail(
                 id_label: Some(detail.human_id.clone()),
                 avatar: "❝".to_owned(),
                 extras: restriction_display(loc, &detail.restrictions),
-                actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
+                actions: record_head_actions(&labels, record, find_similar_action(loc, Category::Citations, &detail.human_id, &detail.human_id), on_record_save),
                 tabs: tab_items,
                 active,
                 {citation_tab_content(state, detail, &active_tab, editing, record, CitationTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove, media_state })}

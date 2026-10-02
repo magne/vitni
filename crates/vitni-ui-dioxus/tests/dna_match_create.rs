@@ -19,6 +19,7 @@ fn test_picker(name: &str) -> RecordPicker {
             name: name.to_owned(),
             entity_label: "DNA test".to_owned(),
             allow_new: false,
+            similar: None,
         },
         state: use_signal(PickerState::default),
         options: PickerOptions::Ready(vec![RowVm {

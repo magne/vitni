@@ -5,6 +5,7 @@ use vitni_ui::{
 };
 
 use super::prelude::*;
+use super::similar::SimilarHint;
 use crate::components::{
     MediaCropLabels, MediaCropTools, MediaViewer, MediaViewerLabels, PickerOptions, ProvenanceAxis, ProvenanceBlock,
 };
@@ -1129,6 +1130,7 @@ pub fn use_existing_picker(
             name,
             entity_label,
             allow_new: false,
+            similar: None,
         },
         state,
         options,
@@ -1195,6 +1197,7 @@ pub fn use_attach_picker(
 ) -> AttachPicker {
     let mut picker = use_existing_picker(services, category, label, name, entity_label, exclude);
     picker.config.allow_new = NewRecordDraft::supports(category);
+    picker.config.similar = vitni_ui::ranks_by_similarity(category).then_some(category);
     let mut link = use_signal(vitni_ui::RecordLink::<NewRecordDraft>::default);
     picker.callbacks.onpick =
         use_callback(move |selection: PickerSelection| link.set(vitni_ui::RecordLink::Existing(selection)));
@@ -1219,15 +1222,32 @@ pub fn use_attach_picker(
 /// The attach link's field: the existing-record picker while unset/picked, or the nested
 /// [`NewRecordCard`] while drafting a new one — the same picker-vs-card branching
 /// `event_place_create_field`/`person_name_citation_field` use for the framework-free record-editor
-/// cascades, applied to the attach picker's own [`AttachLink`] instead of a `RecordDraft` field.
+/// cascades, applied to the attach picker's own [`AttachLink`] instead of a `RecordDraft` field. Under
+/// the card, the similar-record hint: *Use existing* links the stored record instead of the new one.
 pub fn attach_link_field(loc: &Localizer, attach: &AttachPicker) -> Element {
-    let is_new = matches!(&*attach.link.link.read(), vitni_ui::RecordLink::New(_));
-    if is_new {
+    let similar = match &*attach.link.link.read() {
+        vitni_ui::RecordLink::New(draft) => Some(draft.similar_draft()),
+        vitni_ui::RecordLink::Empty | vitni_ui::RecordLink::Existing(_) => None,
+    };
+    if let Some(similar) = similar {
+        let mut link = attach.link.link;
+        let mut state = attach.link.state;
         rsx! {
             NewRecordCard {
                 link: attach.link.link,
                 error: attach.link.error,
                 onclose: attach.picker.callbacks.onclear,
+            }
+            SimilarHint {
+                draft: similar,
+                onuse: move |record: RecordRef| {
+                    let selection = PickerSelection {
+                        human_id: record.human_id,
+                        title: record.label,
+                    };
+                    state.write().selection = Some(selection.clone());
+                    link.set(vitni_ui::RecordLink::Existing(selection));
+                },
             }
         }
     } else {

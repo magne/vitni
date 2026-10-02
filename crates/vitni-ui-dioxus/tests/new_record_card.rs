@@ -44,6 +44,20 @@ fn person_view() -> Element {
     })))
 }
 
+fn person_unreadable_birth_view() -> Element {
+    card(&RecordLink::New(NewRecordDraft::Person(NewPersonFields {
+        given: "Ada".to_owned(),
+        surname: "Lovelace".to_owned(),
+        born: "spring".to_owned(),
+    })))
+}
+
+#[test]
+fn a_new_persons_unreadable_birth_is_flagged() {
+    let html = render(person_unreadable_birth_view);
+    assert!(html.contains(r#"class="field-error""#), "{html}");
+}
+
 fn place_view() -> Element {
     card(&RecordLink::New(NewRecordDraft::Place(NewPlaceFields {
         place_type: vitni_app::PlaceType::City,
@@ -98,6 +112,10 @@ fn person_card_renders_given_and_surname_inputs() {
     assert!(
         html.contains(r#"id="new-record-person-surname""#),
         "the surname input:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="new-record-person-born""#),
+        "the birth input:\n{html}"
     );
 }
 
@@ -273,6 +291,7 @@ fn attach_over(link_value: RecordLink<NewRecordDraft>) -> AttachPicker {
             name: "field".to_owned(),
             entity_label: "record".to_owned(),
             allow_new: true,
+            similar: None,
         },
         state,
         options: PickerOptions::Ready(Vec::new()),

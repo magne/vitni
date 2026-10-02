@@ -52,6 +52,9 @@ pub fn ListRow(
     /// An optional trailing id (e.g. `I0042`).
     #[props(default)]
     id_label: Option<String>,
+    /// An optional score ahead of the id: how similar the matching engine judges the row (`87%`).
+    #[props(default)]
+    score: Option<String>,
     /// An optional element id (e.g. for `aria-activedescendant` wiring from a search input).
     #[props(default)]
     id: Option<String>,
@@ -112,6 +115,9 @@ pub fn ListRow(
                 if let Some(subtitle) = subtitle {
                     div { class: "row-sub", "{subtitle}" }
                 }
+            }
+            if let Some(score) = score {
+                div { class: "row-score", "{score}" }
             }
             if let Some(id_label) = id_label {
                 div { class: "row-id", "{id_label}" }

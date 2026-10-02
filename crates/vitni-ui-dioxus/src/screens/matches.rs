@@ -54,6 +54,17 @@ pub fn MatchesScreen() -> Element {
     // A decision in flight: a second one (a quick second key or click) waits for it to land.
     let mut deciding = use_signal(|| false);
     let confidence_options = confidence_choices(state.data_loc());
+    // A *Find similar* hit's *Compare* hands its pair over through `match_focus`; take it, whether the
+    // tool mounts for it or was already open.
+    use_effect(move || {
+        let focus = nav.match_focus.read().clone();
+        if let Some((kind, left, right)) = focus {
+            nav.match_focus.set(None);
+            draft.set(DecisionDraft::default());
+            blocked.set(None);
+            mode.set(MatchesMode::Compare { kind, left, right });
+        }
+    });
 
     let queue_services = state.services().clone();
     let queue_data = use_resource(move || {

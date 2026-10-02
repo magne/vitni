@@ -11,6 +11,7 @@ use super::map_shared::{
     map_surface, markers_geojson, push_map_data, shape_to_draft, use_draft_push,
 };
 use super::prelude::*;
+use super::similar::{create_form_hint, find_similar_action};
 use crate::services::{map_config, resolve_map_source};
 
 /// The create-mode place record: an uncommitted [`PlaceDraft`] rendered as the create form in the
@@ -73,6 +74,7 @@ pub fn PlaceCreateRecord(draft_id: DraftId) -> Element {
                 value: draft().name.clone(),
                 oninput: move |event: FormEvent| draft.write().name = event.value(),
             }
+            {create_form_hint(draft, draft_id, nav)}
             {record_edit_provenance(loc, record)}
         },
     )
@@ -552,7 +554,7 @@ fn place_detail(
             id_label: Some(detail.human_id.clone()),
             avatar: "📍".to_owned(),
             extras: restriction_display(loc, &detail.restrictions),
-            actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
+            actions: record_head_actions(&labels, record, find_similar_action(loc, Category::Places, &detail.human_id, &detail.title), callbacks.on_record_save),
             tabs: tab_items,
             active,
             {place_tab_content(state, detail, &active_tab, editing, record, PlaceTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove, on_map_saved, media_state })}

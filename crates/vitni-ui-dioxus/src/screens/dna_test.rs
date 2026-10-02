@@ -69,6 +69,7 @@ pub fn DnaTestCreateRecord(draft_id: DraftId) -> Element {
             name: "dna-test-person".to_owned(),
             entity_label: loc.picker_entity(Category::People),
             allow_new: false,
+            similar: None,
         },
         state: person_state,
         options: picker_options(person_rows.read_unchecked().as_ref()),

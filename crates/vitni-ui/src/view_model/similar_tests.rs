@@ -5,7 +5,7 @@ use vitni_app::{
 
 use super::{
     NewNoteFields, NewPersonFields, NewPlaceFields, NewRecordDraft, PersonDraft, PickerHit, PickerRowVm, PlaceDraft,
-    RecordDraft, RepositoryDraft, SimilarHitVm, SourceDraft, query_draft, rank_picker_rows,
+    RecordDraft, RepositoryDraft, SimilarHitVm, SourceDraft, query_draft, rank_picker_rows, ranks_by_similarity,
 };
 use crate::i18n::Localizer;
 use crate::list::RowVm;
@@ -145,6 +145,17 @@ fn place_source_and_repository_drafts_are_matched_but_a_note_is_not() {
         Some(DraftRecord::Repository { .. })
     ));
     assert_eq!(RepositoryDraft::new().similar_draft(), None);
+}
+
+#[test]
+fn exactly_the_kinds_a_query_names_are_ranked_by_similarity() {
+    for category in Category::all() {
+        assert_eq!(
+            ranks_by_similarity(category),
+            query_draft(category, "Ole Olsen").is_some(),
+            "{category:?}"
+        );
+    }
 }
 
 #[test]

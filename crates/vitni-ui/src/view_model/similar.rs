@@ -66,6 +66,25 @@ pub fn query_draft(category: Category, query: &str) -> Option<DraftRecord> {
     NewRecordDraft::seed(category, query)?.similar_draft()
 }
 
+/// Whether a picker over `category` ranks its records by similarity to the typed query — the kinds a
+/// typed query names a record of ([`query_draft`]).
+#[must_use]
+pub fn ranks_by_similarity(category: Category) -> bool {
+    match category {
+        Category::People | Category::Places | Category::Sources | Category::Repositories => true,
+        Category::Dashboard
+        | Category::Families
+        | Category::Events
+        | Category::Citations
+        | Category::Media
+        | Category::Notes
+        | Category::ResearchNotes
+        | Category::Tags
+        | Category::DnaTests
+        | Category::DnaMatches => false,
+    }
+}
+
 /// A stored record the engine ranks for a picker's query.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PickerHit {

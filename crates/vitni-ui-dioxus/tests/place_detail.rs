@@ -514,6 +514,7 @@ fn succession_picker(loc: &Localizer, name: &str) -> RecordPicker {
             name: name.to_owned(),
             entity_label: loc.picker_entity(Category::Places),
             allow_new: false,
+            similar: None,
         },
         state: use_signal(PickerState::default),
         options: PickerOptions::Ready(Vec::new()),

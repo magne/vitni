@@ -2,6 +2,7 @@
 use vitni_ui::{RepositoryLinkVm, SourceAttributeVm};
 
 use super::prelude::*;
+use super::similar::{create_form_hint, find_similar_action};
 
 /// The label column width of every source record row (`docs/mockups/source.html:112-116`, `:152-156`)
 /// — already the shared record floor, which `RESTRIKSJONER` (102px) and `ABBREVIATION` (93px) both fit.
@@ -64,6 +65,7 @@ pub fn SourceCreateRecord(draft_id: DraftId) -> Element {
         actions,
         rsx! {
             {source_record_fields(loc, record)}
+            {create_form_hint(record.draft, draft_id, nav)}
             {record_edit_provenance(loc, record)}
         },
     )
@@ -397,7 +399,7 @@ fn source_detail(
             id_label: Some(detail.human_id.clone()),
             avatar: "📚".to_owned(),
             extras: restriction_display(loc, &detail.restrictions),
-            actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
+            actions: record_head_actions(&labels, record, find_similar_action(loc, Category::Sources, &detail.human_id, &detail.title), callbacks.on_record_save),
             tabs: tab_items,
             active,
             {source_tab_content(state, detail, &active_tab, editing, record, SourceTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove, media_state })}

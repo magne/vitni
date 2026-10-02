@@ -292,6 +292,9 @@ action-add-attribute = Add attribute
 action-add-segment = Add segment
 action-add-shared-ancestor = Link shared ancestor
 action-compare = Compare
+action-find-similar = Find similar
+action-use-existing = Use existing
+action-open-record = Open
 action-detach-citation = Detach citation
 action-detach-dna-match = Remove DNA-match evidence
 
@@ -1325,3 +1328,5 @@ field-restrictions = Restrictions
 ## Similar records (ADR 0038 §8) — the hint a record being created raises, and *Find similar*.
 similar-hint = Possibly the same as { $record } ({ $score }%)
 similar-draft-side = New
+similar-panel-title = Similar records
+similar-none = No similar records found.

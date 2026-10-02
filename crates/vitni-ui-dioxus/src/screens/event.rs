@@ -1,4 +1,5 @@
 use super::prelude::*;
+use super::similar::find_similar_action;
 use vitni_app::EventType;
 // The record-link view-model enum (event place); shadows the prelude's `RecordLink` link component
 // (the participant edit form reaches it as `super::shared::RecordLink`). `ParticipantVm` seeds the
@@ -71,6 +72,7 @@ pub fn EventCreateRecord(draft_id: DraftId) -> Element {
             name: "event-place".to_owned(),
             entity_label: loc.picker_entity(Category::Places),
             allow_new: true,
+            similar: Some(Category::Places),
         },
         state: place_state,
         options: picker_options(place_rows.read_unchecked().as_ref()),
@@ -622,6 +624,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
                     name: "event-place".to_owned(),
                     entity_label: loc.picker_entity(Category::Places),
                     allow_new: false,
+                    similar: Some(Category::Places),
                 },
                 state: place_state,
                 options: picker_options(place_rows.read_unchecked().as_ref()),
@@ -766,7 +769,7 @@ fn event_detail(
                 id_label: Some(detail.human_id.clone()),
                 avatar: "📅".to_owned(),
                 extras: restriction_display(loc, &detail.restrictions),
-                actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
+                actions: record_head_actions(&labels, record, find_similar_action(loc, Category::Events, &detail.human_id, &detail.title), on_record_save),
                 tabs: tab_items,
                 active,
                 {event_tab_content(state, detail, &active_tab, editing, &ctx, EventTabCallbacks { on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove, media_state })}

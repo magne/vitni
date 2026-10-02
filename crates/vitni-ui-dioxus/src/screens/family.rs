@@ -1,7 +1,9 @@
 use super::prelude::*;
 // The family-create view-model types the prelude doesn't re-export (the partner draft + its new-person
 // fields). `PartnerInput` is the vitni-ui view-model twin, not vitni-app's.
-use vitni_ui::{FamilyChildVm, NewPersonFields, PartnerInput};
+use vitni_ui::{FamilyChildVm, NewPersonFields, PartnerInput, parse_birth};
+
+use super::similar::{SimilarHint, find_similar_action};
 
 /// The selectable child-parent relationships offered when adding a child (the standard set; a custom
 /// relationship is not entered from the UI).
@@ -96,6 +98,7 @@ pub fn FamilyCreateRecord(draft_id: DraftId) -> Element {
             name: "family-partner".to_owned(),
             entity_label: loc.picker_entity(Category::People),
             allow_new: true,
+            similar: Some(Category::People),
         },
         state: partner_state,
         options: picker_options(partner_rows.read_unchecked().as_ref()),
@@ -284,15 +287,18 @@ fn family_partner_entry(
     record_picker(loc, partner)
 }
 
-/// The inline new-partner fields inside the draft card: a given-name and surname input bound to the
-/// pending buffer, plus an add action that commits the named partner to the draft and closes the card.
+/// The inline new-partner fields inside the draft card: given name, surname and birth inputs bound to
+/// the pending buffer, the similar-record hint over them — whose *Use existing* adds the stored person as
+/// the partner instead — and an add action that commits the named partner to the draft and closes the
+/// card. An unreadable birth keeps the add disabled.
 fn family_new_partner_body(
     loc: &Localizer,
     mut pending_new: Signal<Option<NewPersonFields>>,
     mut draft: Signal<vitni_ui::FamilyDraft>,
 ) -> Element {
     let fields = pending_new().unwrap_or_default();
-    let can_add = !(fields.given.trim().is_empty() && fields.surname.trim().is_empty());
+    let born_error = parse_birth(&fields.born).is_err();
+    let can_add = fields.to_request().is_some();
     rsx! {
         Input {
             label: loc.field_label("given"),
@@ -312,6 +318,29 @@ fn family_new_partner_body(
                 if let Some(fields) = pending_new.write().as_mut() {
                     fields.surname = event.value();
                 }
+            },
+        }
+        Input {
+            label: loc.field_label("born"),
+            name: "new-partner-born".to_owned(),
+            value: fields.born.clone(),
+            oninput: move |event: FormEvent| {
+                if let Some(fields) = pending_new.write().as_mut() {
+                    fields.born = event.value();
+                }
+            },
+        }
+        if born_error {
+            span { class: "field-error", role: "alert", "{loc.date_invalid_error()}" }
+        }
+        SimilarHint {
+            draft: fields.similar_draft(),
+            onuse: move |record: RecordRef| {
+                draft.write().add_partner(PickerSelection {
+                    human_id: record.human_id,
+                    title: record.label,
+                });
+                pending_new.set(None);
             },
         }
         Button {
@@ -704,7 +733,7 @@ fn family_detail(
                 id_label: Some(detail.human_id.clone()),
                 avatar: "👪".to_owned(),
                 extras: restriction_display(loc, &detail.restrictions),
-                actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
+                actions: record_head_actions(&labels, record, find_similar_action(loc, Category::Families, &detail.human_id, &detail.title), on_record_save),
                 tabs: tab_items,
                 active,
                 {family_tab_content(state, detail, &active_tab, editing, record, FamilyTabCallbacks { on_retract, on_child_remove, on_edit_open, on_undo, on_tag_remove, media_state })}

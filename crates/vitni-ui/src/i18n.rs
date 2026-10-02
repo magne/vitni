@@ -1208,6 +1208,9 @@ impl Localizer {
             ActionLabel::AddChild => fl!(self.loader, "action-add-child"),
             ActionLabel::LinkEvent => fl!(self.loader, "action-link-event"),
             ActionLabel::Compare => fl!(self.loader, "action-compare"),
+            ActionLabel::FindSimilar => fl!(self.loader, "action-find-similar"),
+            ActionLabel::UseExisting => fl!(self.loader, "action-use-existing"),
+            ActionLabel::OpenRecord => fl!(self.loader, "action-open-record"),
             ActionLabel::DetachCitation => fl!(self.loader, "action-detach-citation"),
             ActionLabel::DetachDnaMatch => fl!(self.loader, "action-detach-dna-match"),
             ActionLabel::Retract => fl!(self.loader, "action-retract"),
@@ -2932,6 +2935,18 @@ impl Localizer {
     #[must_use]
     pub fn similar_hint(&self, record: &str, percent: u8) -> String {
         fl!(self.loader, "similar-hint", record = record, score = percent)
+    }
+
+    /// The *Find similar* panel's title.
+    #[must_use]
+    pub fn similar_panel_title(&self) -> String {
+        fl!(self.loader, "similar-panel-title")
+    }
+
+    /// What the *Find similar* panel says when the engine finds nothing.
+    #[must_use]
+    pub fn similar_none(&self) -> String {
+        fl!(self.loader, "similar-none")
     }
 
     /// What the compare view shows in place of the id of a record not yet created: "New".

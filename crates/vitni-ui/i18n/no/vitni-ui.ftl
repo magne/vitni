@@ -292,6 +292,9 @@ action-add-attribute = Legg til attributt
 action-add-segment = Legg til segment
 action-add-shared-ancestor = Koble felles ane
 action-compare = Sammenlign
+action-find-similar = Finn lignende
+action-use-existing = Bruk eksisterende
+action-open-record = Åpne
 action-detach-citation = Fjern kilde
 action-detach-dna-match = Fjern DNA-treff-bevis
 
@@ -1325,3 +1328,5 @@ field-restrictions = Restriksjoner
 ## Similar records (ADR 0038 §8) — the hint a record being created raises, and *Find similar*.
 similar-hint = Kanskje den samme som { $record } ({ $score } %)
 similar-draft-side = Ny
+similar-panel-title = Lignende poster
+similar-none = Fant ingen lignende poster.

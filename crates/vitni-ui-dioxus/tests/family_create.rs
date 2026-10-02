@@ -47,6 +47,7 @@ fn partner_picker(state: Signal<PickerState>) -> RecordPicker {
             name: "family-partner".to_owned(),
             entity_label: "person".to_owned(),
             allow_new: true,
+            similar: None,
         },
         state,
         options: people(),

@@ -27,9 +27,14 @@
 
 use dioxus::prelude::*;
 use vitni_ui::ActionLabel;
-use vitni_ui::{ActiveMove, Localizer, PickerSelection, PickerState, RowVm, next_active, picker_rows};
+use vitni_ui::{
+    ActiveMove, Category, Localizer, PickerHit, PickerRowVm, PickerSelection, PickerState, RowVm, next_active,
+    picker_rows, rank_picker_rows,
+};
 
+use crate::app::AppCtx;
 use crate::components::{IconButton, ListRow, TextInput, or_dash};
+use crate::services::load_picker_hits;
 use crate::shell::focus_trap::refocus_dialog_start;
 
 /// The already-localized configuration of one picker: its field label, the element-id base, the entity
@@ -44,6 +49,9 @@ pub struct PickerConfig {
     pub entity_label: String,
     /// Whether the picker offers a "+ New …" create row (a find-or-create picker vs existing-only).
     pub allow_new: bool,
+    /// The category whose records the matching engine ranks for the typed query, first and with their
+    /// score (ADR 0038 §8), or `None` for a picker that only filters by text.
+    pub similar: Option<Category>,
 }
 
 /// The load state of a picker's options, loaded via `load_picker_rows` when the form opens and again
@@ -239,11 +247,13 @@ enum PickerResultsView {
     Hidden,
     /// Loading failed with an already-localized message.
     Failed(String),
-    /// The matched rows (already capped, already excluded) plus the empty/"+ New" labels — each
-    /// `None` when that line does not show (rows found; creation disallowed).
+    /// The rows the typed text matched (already capped, already excluded), the ids to keep out of the
+    /// engine's ranked hits too, the line shown when no row is left, and the "+ New" label — `None` when
+    /// creation is disallowed.
     Ready {
         matched: Vec<RowVm>,
-        empty_label: Option<String>,
+        exclude: Vec<String>,
+        empty_label: String,
         new_label: Option<String>,
     },
 }
@@ -257,7 +267,7 @@ fn picker_results_view(loc: &Localizer, picker: &RecordPicker, query: &str) -> P
         PickerOptions::Ready(rows) => rows,
     };
     let matched = picker_rows(rows, query, &picker.exclude);
-    let empty_label = matched.is_empty().then(|| loc.picker_empty());
+    let empty_label = loc.picker_empty();
     let new_label = picker.config.allow_new.then(|| {
         if query.is_empty() {
             loc.picker_new(&picker.config.entity_label)
@@ -267,6 +277,7 @@ fn picker_results_view(loc: &Localizer, picker: &RecordPicker, query: &str) -> P
     });
     PickerResultsView::Ready {
         matched,
+        exclude: picker.exclude.clone(),
         empty_label,
         new_label,
     }
@@ -289,6 +300,7 @@ fn picker_search(loc: &Localizer, picker: &RecordPicker) -> Element {
             scrim_label,
             state,
             results,
+            similar: picker.config.similar,
             onpick: picker.callbacks.onpick,
             onnew: picker.callbacks.onnew,
         }
@@ -335,6 +347,8 @@ fn PickerSearch(
     mut state: Signal<PickerState>,
     /// The already-resolved result-list content.
     results: PickerResultsView,
+    /// The category the engine ranks for the typed query, or `None` to only filter by text.
+    similar: Option<Category>,
     /// Fired when a result row is picked.
     onpick: Callback<PickerSelection>,
     /// Fired when "+ New …" is chosen, with the live query.
@@ -359,14 +373,17 @@ fn PickerSearch(
             measure_anchor(node, anchor_style);
         }
     });
+    let hits = use_similar_hits(similar, state);
     let query = value.clone();
-    let (nav_matched, nav_len) = match &results {
-        PickerResultsView::Ready { matched, new_label, .. } => {
-            let len = matched.len() + usize::from(new_label.is_some());
-            (matched.clone(), len)
-        }
-        PickerResultsView::Hidden | PickerResultsView::Failed(_) => (Vec::new(), 0),
+    let ranked = match &results {
+        PickerResultsView::Ready { matched, exclude, .. } => rank_picker_rows(matched.clone(), &hits, exclude),
+        PickerResultsView::Hidden | PickerResultsView::Failed(_) => Vec::new(),
     };
+    let nav_len = match &results {
+        PickerResultsView::Ready { new_label, .. } => ranked.len() + usize::from(new_label.is_some()),
+        PickerResultsView::Hidden | PickerResultsView::Failed(_) => 0,
+    };
+    let nav_matched: Vec<RowVm> = ranked.iter().map(|ranked| ranked.row.clone()).collect();
     let active_index = active().min(nav_len.saturating_sub(1));
     let listbox_id = format!("{name}-listbox");
     let active_id = (open && nav_len > 0).then(|| format!("{name}-opt-{active_index}"));
@@ -440,7 +457,7 @@ fn PickerSearch(
                 },
             }
             if open {
-                {picker_results(&results, &nav, onpick, onnew, state)}
+                {picker_results(&results, &ranked, &nav, PickerResultCallbacks { onpick, onnew }, state)}
                 button {
                     class: "picker-scrim",
                     r#type: "button",
@@ -451,6 +468,39 @@ fn PickerSearch(
             }
         }
     }
+}
+
+/// The stored records the engine ranks for the picker's typed query, reloaded as the query changes —
+/// none for a picker that only filters by text, a query under two characters, or with no app (SSR).
+fn use_similar_hits(similar: Option<Category>, state: Signal<PickerState>) -> Vec<PickerHit> {
+    let services = match try_consume_context::<AppCtx>() {
+        Some(AppCtx::Ready(app)) => Some(app.services().clone()),
+        Some(AppCtx::Failed(_)) | None => None,
+    };
+    let query = use_memo(move || state.read().query.trim().to_owned());
+    let hits = use_resource(move || {
+        let query = query();
+        let services = services.clone();
+        async move {
+            match (similar, services) {
+                (Some(category), Some(services)) if query.chars().count() >= 2 => {
+                    load_picker_hits(services, category, &query).await
+                }
+                _ => Vec::new(),
+            }
+        }
+    });
+    hits.read_unchecked().clone().unwrap_or_default()
+}
+
+/// The two callbacks a result row and the "+ New …" row fire, bundled to keep [`picker_results`]
+/// within the positional-parameter budget.
+#[derive(Clone, Copy)]
+struct PickerResultCallbacks {
+    /// Fired when a result row is picked.
+    onpick: Callback<PickerSelection>,
+    /// Fired when "+ New …" is chosen, with the live query.
+    onnew: Callback<String>,
 }
 
 /// The already-derived id base + live query + clamped highlight index [`picker_results`] renders
@@ -534,12 +584,13 @@ fn unwatch_scroll_close(key: &str) {
 /// draws with nothing to measure it. Either way this fn stays pure.
 fn picker_results(
     view: &PickerResultsView,
+    matched: &[PickerRowVm],
     nav: &PickerNav<'_>,
-    onpick: Callback<PickerSelection>,
-    onnew: Callback<String>,
+    callbacks: PickerResultCallbacks,
     mut state: Signal<PickerState>,
 ) -> Element {
-    let (matched, empty_label, new_label) = match view {
+    let PickerResultCallbacks { onpick, onnew } = callbacks;
+    let (empty_label, new_label) = match view {
         PickerResultsView::Hidden => return rsx! {},
         PickerResultsView::Failed(message) => {
             return rsx! {
@@ -549,16 +600,14 @@ fn picker_results(
             };
         }
         PickerResultsView::Ready {
-            matched,
-            empty_label,
-            new_label,
-        } => (matched, empty_label, new_label),
+            empty_label, new_label, ..
+        } => (matched.is_empty().then_some(empty_label), new_label),
     };
     let query = nav.query.to_owned();
     let active = nav.active;
     rsx! {
         div { class: "picker-results picker-results-viewport", id: "{nav.name}-listbox", role: "listbox",
-            for (index , row) in matched.iter().cloned().enumerate() {
+            for (index , PickerRowVm { row , percent }) in matched.iter().cloned().enumerate() {
                 ListRow {
                     key: "{row.id}",
                     id: Some(format!("{}-opt-{index}", nav.name)),
@@ -566,6 +615,7 @@ fn picker_results(
                     subtitle: row.subtitle.clone(),
                     id_label: Some(row.id.clone()),
                     avatar: row.avatar.clone(),
+                    score: percent.map(|percent| format!("{percent}%")),
                     selected: index == active,
                     onmousedown: move |event: MouseEvent| event.prevent_default(),
                     onclick: {

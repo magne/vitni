@@ -109,10 +109,10 @@ pub use view_model::{
     dna_test_row, dna_test_tabs, event_list_row, event_row, event_tabs, evidence_axes, family_list_row, family_row,
     family_tabs, first_undoable, format_date_point, link_is_savable, media_row, media_tabs, name_matches, note_row,
     note_tabs, parse_birth, parse_date_point, person_list_row, person_row, person_tabs, place_map_display_shape,
-    place_row, place_tabs, plan_writes_nothing, plugin_grant_vm, query_draft, rank_picker_rows, rect_contains,
-    rect_css, rect_from_drag, rect_moved, rect_resized, repository_row, repository_tabs, research_note_row,
-    research_note_tabs, resolve_attach_save, resolve_geometry_as_of, shortcuts_vm, slugify, source_row, source_tabs,
-    suggest_filename, tag_row, tag_tabs, toggled_restrictions, trust_store_vm,
+    place_row, place_tabs, plan_writes_nothing, plugin_grant_vm, query_draft, rank_picker_rows, ranks_by_similarity,
+    rect_contains, rect_css, rect_from_drag, rect_moved, rect_resized, repository_row, repository_tabs,
+    research_note_row, research_note_tabs, resolve_attach_save, resolve_geometry_as_of, shortcuts_vm, slugify,
+    source_row, source_tabs, suggest_filename, tag_row, tag_tabs, toggled_restrictions, trust_store_vm,
 };
 pub use vocabulary::{
     Action, Field, Form, Panel, SelectOption, SubmitResult, Table, VocabularyError, parse, parse_submit_result,

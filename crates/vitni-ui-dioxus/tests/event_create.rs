@@ -31,6 +31,7 @@ fn view(seed: EventDraft) -> Element {
             name: "event-place".to_owned(),
             entity_label: "place".to_owned(),
             allow_new: true,
+            similar: None,
         },
         state: use_signal(PickerState::default),
         options: PickerOptions::Ready(Vec::new()),

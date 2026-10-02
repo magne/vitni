@@ -18,7 +18,7 @@ use vitni_app::EventType;
 use vitni_ui::{
     Category, Localizer, NEW_EVENT_TYPES, NEW_PLACE_TYPES, NewCitationFields, NewEventFields, NewMediaFields,
     NewNoteFields, NewPersonFields, NewPlaceFields, NewRecordDraft, NewRepositoryFields, NewSourceFields,
-    PickerSelection, PickerState, RecordLink,
+    PickerSelection, PickerState, RecordLink, parse_birth,
 };
 
 use crate::app::AppCtx;
@@ -128,8 +128,9 @@ fn new_record_fields(
 }
 
 /// The new-person fields: given name and surname, both optional individually (Save requires at least
-/// one non-blank — [`NewRecordDraft::is_valid`]).
+/// one non-blank — [`NewRecordDraft::is_valid`]), and the birth date, flagged when it cannot be read.
 fn person_body(loc: &Localizer, link: Signal<RecordLink<NewRecordDraft>>, fields: &NewPersonFields) -> Element {
+    let born_error = parse_birth(&fields.born).is_err();
     rsx! {
         Input {
             label: loc.label_given(),
@@ -146,6 +147,17 @@ fn person_body(loc: &Localizer, link: Signal<RecordLink<NewRecordDraft>>, fields
             oninput: move |event: FormEvent| {
                 with_new(link, |draft| if let NewRecordDraft::Person(fields) = draft { fields.surname = event.value(); });
             },
+        }
+        Input {
+            label: loc.field_label("born"),
+            name: "new-record-person-born".to_owned(),
+            value: fields.born.clone(),
+            oninput: move |event: FormEvent| {
+                with_new(link, |draft| if let NewRecordDraft::Person(fields) = draft { fields.born = event.value(); });
+            },
+        }
+        if born_error {
+            span { class: "field-error", role: "alert", "{loc.date_invalid_error()}" }
         }
     }
 }
@@ -231,6 +243,7 @@ fn citation_body(
             name: "new-record-citation-source".to_owned(),
             entity_label: loc.picker_entity(Category::Sources),
             allow_new: true,
+            similar: Some(Category::Sources),
         },
         state: source_state,
         options: picker_options(source_rows.read_unchecked().as_ref()),
