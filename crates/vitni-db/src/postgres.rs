@@ -416,6 +416,15 @@ impl PostgresStore {
         crate::record_origins::postgres::created(&self.pool, kind).await
     }
 
+    /// The creating origin of one aggregate of `kind`, if an import created it (ADR 0037 §4).
+    pub(crate) async fn created_origin(
+        &self,
+        kind: &str,
+        aggregate_id: &str,
+    ) -> Result<Option<vitni_core::origin::RecordOrigin>, DbError> {
+        crate::record_origins::postgres::created_one(&self.pool, kind, aggregate_id).await
+    }
+
     /// How many of `records` each dataset holds as an aggregate of `kind` (ADR 0037 §3).
     pub(crate) async fn origin_overlap(
         &self,

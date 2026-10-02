@@ -12,7 +12,7 @@ use vitni_app::{
     LinkBasis, LinkKind, MutationMeta, NewEvent, NewFact, NewImportRun, NewParticipation, NewPerson, OperatorConfig,
     PendingRun, PersonNameParts, Provenance, RecordGraph, RunToEnd, Session, StagedEntity, StagedEvent, StagedFamily,
     StagedLink, StagedPerson, StagedPlace, StagedTag, Workspace, WorkspaceDefaults, WriteScope, commit_import,
-    gregorian_date, plan_import,
+    gregorian_date, plan_import, record_origin,
 };
 use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Sex};
 use vitni_core::ids::AgentId;
@@ -584,6 +584,45 @@ async fn every_write_carries_its_entity_origin_and_the_run() {
     found.sort();
     let birth = Some("event:BIRT:0".to_owned());
     assert_eq!(found, [("I1".to_owned(), birth.clone()), ("I2".to_owned(), birth)]);
+}
+
+#[tokio::test]
+async fn a_records_origin_names_the_dataset_record_it_was_imported_from() {
+    let (workspace, _dir) = workspace().await;
+    let session = importer(dataset(1));
+    import(&workspace, &session, tree()).await;
+    let keyed = stored_person(&workspace, "Per", 1850, None).await;
+
+    let mut imported = Vec::new();
+    for person in vitni_app::list_persons(&workspace).await.expect("persons") {
+        let origin = record_origin(&workspace, MatchableKind::Person, &person.human_id)
+            .await
+            .expect("origin");
+        imported.push((person.human_id, origin.map(|o| (o.dataset, o.record, o.item))));
+    }
+    imported.sort();
+    let place = vitni_app::list_places(&workspace).await.expect("places");
+    let place_origin = record_origin(&workspace, MatchableKind::Place, &place[0].human_id)
+        .await
+        .expect("place origin")
+        .expect("imported place");
+
+    let from = |record: &str| Some((dataset(1), record.to_owned(), None));
+    assert_eq!(
+        imported,
+        [
+            ("I0001".to_owned(), from("I1")),
+            ("I0002".to_owned(), from("I2")),
+            (keyed, None),
+        ],
+        "a keyboard record has no origin"
+    );
+    assert_eq!(place_origin.record, "plac:Mandal");
+    let missing = record_origin(&workspace, MatchableKind::Person, "I9999").await;
+    assert!(
+        matches!(missing, Err(vitni_app::AppError::PersonNotFound(_))),
+        "{missing:?}"
+    );
 }
 
 /// Stops a commit before its `limit`-th write.

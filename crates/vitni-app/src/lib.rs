@@ -64,6 +64,7 @@ pub mod place_change_set;
 mod place_hierarchy;
 pub mod plugins;
 pub mod profile;
+mod record_origin;
 pub mod repository;
 pub mod repository_change_set;
 pub mod research_note;
@@ -211,6 +212,7 @@ pub use profile::{
     citation_profile, event_profile, family_profile, media_profile, note_profile, person_profile, place_profile,
     repository_profile, source_profile, tag_profile,
 };
+pub use record_origin::record_origin;
 pub use repository::{
     NewRepository, RepositoryAddressRef, RepositoryMergeResult, RepositorySummary, RepositoryUrlRef,
     add_repository_address, add_repository_url, attach_repository_note, create_repository, distinguish_repositories,
