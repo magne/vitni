@@ -6,6 +6,7 @@
 //! from the shell. The plugin panel renders a plugin-supplied form through the vocabulary interpreter.
 
 mod bulk_import;
+mod bulk_review;
 mod citation;
 mod dashboard;
 mod detail_commits;
@@ -41,7 +42,11 @@ mod tag;
 pub use bulk_import::{
     BulkConfirmDialog, BulkConfirmLabels, BulkImportBody, BulkImportWizardLabels, BulkRunningLabels, BulkRunningStage,
     BulkSourceLabels, BulkSourceStage, BulkSummaryLabels, BulkSummaryStage, DatasetQuestionView, ProposedDataset,
-    dataset_question,
+    bulk_step_indicator, dataset_question,
+};
+pub use bulk_review::{
+    BulkPlanLabels, BulkPlanStage, BulkReviewLabels, BulkReviewStage, PlanRowLabels, bulk_plan_labels,
+    bulk_review_labels,
 };
 pub use citation::{
     CitationEditForm, citation_attributes_table, citation_create_fields, citation_overview, citation_record_fields,

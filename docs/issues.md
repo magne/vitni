@@ -504,7 +504,7 @@ does.
   with `PersonsMerged`. That needs the commit to route links into existing records to the cluster root
   and links among new records to the persona. A person decided *Same* in the assisted Match stage already
   gets one: it is imported as new and merged into the candidate after the commit. *Shape:* the same for a
-  `Link`, with that routing, landing with the bulk review stage (#413). *Exit:* re-importing a person
+  `Link`, with that routing. *Exit:* re-importing a person
   from a second dataset leaves two persons in one cluster, each with its own record's facts.
 - **The origin index is written after the event commit** — ADR 0040 §5. `RecordOriginsQuery`
   (`vitni-db/src/record_origins/sqlite.rs:75`) indexes an aggregate's events in a cqrs-es query run
@@ -531,12 +531,6 @@ does.
   only an empty single-valued field and adds a list value not already recorded, with the origin.
   *Exit:* deciding *Same* on a stored source without an author adds the incoming author and leaves its
   title unchanged.
-- **Bulk import Plan and Review stages, and `vitni import --plan`** — ADR 0040 §3, §4. A plan summary by
-  kind and disposition, a review list with bulk actions (*Treat all Probable places as the same*,
-  *Decide the rest later*), and commit. CLI: `--plan` (text or `--json`, writes nothing),
-  `--defer-matches` (the non-interactive default), and interactive review on a TTY. The mockups are
-  updated. *Needs:* the compare view. *Exit:* `--plan` over a re-import
-  reports all Unchanged. — #413
 - **Possible-matches review queue** — ADR 0039 §3. The Merge tool becomes *Matches*: the computed queue
   across kinds, filtered by run, kind and band, with a Dashboard card. CLI:
   `vitni match list|show|same|distinct`. The mockups are updated. *Needs:* the duplicate check and the

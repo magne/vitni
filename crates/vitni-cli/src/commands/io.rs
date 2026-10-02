@@ -5,12 +5,16 @@
 use std::path::{Path, PathBuf};
 
 use tokio::sync::oneshot;
-use vitni_app::{AiConfig, AppError, ConfigStore, DatasetChoice, DatasetProposal, FileConfigStore, Session, Workspace};
+use vitni_app::{
+    AiConfig, AppError, ConfigStore, DatasetChoice, DatasetProposal, FileConfigStore, PlanSummary, Session, Workspace,
+};
 use vitni_plugin_host::{
-    ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, PluginHost, PluginInfo, ProgressControl,
-    ProgressStep, ProgressUpdate, ResourceBudget, RunDataset, TrustRoots, resolve_trust_roots,
+    DeferMatches, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, PluginHost, PluginInfo,
+    ProgressControl, ProgressStep, ProgressUpdate, ResourceBudget, RunDataset, TrustRoots, channel_reviewer,
+    resolve_trust_roots,
 };
 
+use crate::commands::review::{self, PlanFormat, ReviewMode, Reviewed, Terminal};
 use crate::i18n::Localizer;
 
 /// A dataset proposal the host asks the operator about, with where to send the answer.
@@ -78,6 +82,7 @@ impl PreparedImport {
             source_label,
             plugin: info.id,
             plugin_version: info.version,
+            reviewer: Box::new(DeferMatches),
         };
         Ok(Self {
             host,
@@ -90,7 +95,8 @@ impl PreparedImport {
 
     /// Runs the import, streaming `file` in and reporting progress to stderr (ADR 0013). The plugin's
     /// claims are attributed to a Software operator; the run to the invoking human. When the host
-    /// proposes a dataset, the operator confirms it, or `yes` accepts it (ADR 0037 §3).
+    /// proposes a dataset, the operator confirms it, or `options.yes` accepts it (ADR 0037 §3). The
+    /// plan is printed, reviewed or committed as `options.mode` says (ADR 0040 §4).
     ///
     /// # Errors
     /// [`AppError::Plugin`] if the component cannot be loaded or the import fails; [`AppError::Dataset`]
@@ -100,15 +106,19 @@ impl PreparedImport {
         workspace: Workspace,
         localizer: &Localizer,
         file: PathBuf,
-        yes: bool,
+        options: ImportOptions,
     ) -> Result<(), AppError> {
         let Self {
             host,
             bundle,
             grants,
-            run,
+            mut run,
             question,
         } = self;
+        let ImportOptions { yes, mode } = options;
+        let (reviewer, requests) = channel_reviewer();
+        run.reviewer = reviewer;
+        let source = run.source_label.clone();
         let component = host
             .load_bundle(&bundle)
             .map_err(|error| AppError::Plugin(error.to_string()))?;
@@ -132,14 +142,46 @@ impl PreparedImport {
                 drop(reply.send(Some(answer_proposal(localizer, &proposal, yes))));
             }
         };
-        let (imported, ()) = tokio::join!(import, answer);
+        let mut terminal = Terminal {
+            // Unlocked: the dataset proposal's `confirm` reads stdin too, before the review does.
+            input: std::io::BufReader::new(std::io::stdin()),
+            prompts: std::io::stderr(),
+            output: std::io::stdout(),
+        };
+        let review = review::answer(requests, localizer, (mode, &source), &mut terminal);
+        let (imported, (), reviewed) = tokio::join!(import, answer, review);
         let (count, _workspace) = imported.map_err(|error| match error {
             PluginError::Dataset(error) => AppError::Dataset(error),
             other => AppError::Plugin(other.to_string()),
         })?;
-        println!("{}", localizer.import_success(count, &plugin));
+        match (reviewed, mode) {
+            (Reviewed::Printed, _) => {}
+            (Reviewed::NotPlanned, ReviewMode::Print(format)) => {
+                let empty = PlanSummary::default();
+                let lines = match format {
+                    PlanFormat::Text => review::plan_lines(localizer, &source, &empty, true),
+                    PlanFormat::Json => vec![review::plan_json(&source, &empty)],
+                };
+                for line in lines {
+                    println!("{line}");
+                }
+            }
+            (Reviewed::Cancelled, _) => println!("{}", localizer.import_cancelled()),
+            (Reviewed::NotPlanned | Reviewed::Committed, _) => {
+                println!("{}", localizer.import_success(count, &plugin));
+            }
+        }
         Ok(())
     }
+}
+
+/// How `vitni import` runs once prepared.
+#[derive(Debug, Clone, Copy)]
+pub struct ImportOptions {
+    /// Accept the host's dataset proposal without asking.
+    pub yes: bool,
+    /// How the plan is shown and its possible matches decided.
+    pub mode: ReviewMode,
 }
 
 /// The operator's answer to the host's dataset proposal: the proposed dataset once confirmed, or

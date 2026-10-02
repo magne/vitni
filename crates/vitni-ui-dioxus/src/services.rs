@@ -26,9 +26,9 @@ use vitni_app::{
     read_surety_label_overrides, workspace_counts,
 };
 use vitni_plugin_host::{
-    Capability, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PluginHost, PluginInfo,
-    PluginRole, PresentError, Presenter, ProgressControl, ProgressUpdate, ResourceBudget, RunDataset, TrustRoots,
-    TrustTier, resolve_trust_roots,
+    Capability, DeferMatches, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PlanReviewer,
+    PluginHost, PluginInfo, PluginRole, PresentError, Presenter, ProgressControl, ProgressUpdate, ResourceBudget,
+    ReviewRequest, RunDataset, TrustRoots, TrustTier, channel_reviewer, resolve_trust_roots,
 };
 use vitni_ui::{
     Category, CitationChangeSetRequest, DataQualityVm, DistinguishPersons, DnaMatchChangeSetRequest,
@@ -106,7 +106,7 @@ impl Services {
 
     /// The data-string localizer for the open workspace, honouring the configured UI language and
     /// the workspace's own surety-scheme label overrides (ADR 0027).
-    fn localizer(&self) -> Localizer {
+    pub(crate) fn localizer(&self) -> Localizer {
         Localizer::for_workspace(&self.dir, self.config_ui_language().as_ref())
             .with_surety_overrides(read_resolved_surety_labels(&self.dir, &self.config.workspace_defaults))
     }
@@ -240,6 +240,7 @@ impl Services {
             source_label,
             plugin: info.id.clone(),
             plugin_version: info.version.clone(),
+            reviewer: Box::new(DeferMatches),
         })
     }
 }
@@ -1254,6 +1255,10 @@ pub struct BulkImportHandle {
     /// operator named none while the target holds datasets of the plugin's scheme (ADR 0037 §3). The
     /// run waits for the answer; a dropped answer cancels it.
     pub question: oneshot::Receiver<DatasetQuestion>,
+    /// The host's Plan and Review questions once the file is read (ADR 0040 §4): the plan, then each
+    /// possible match the operator chose to review. The run waits for each answer; a dropped answer
+    /// fails it.
+    pub reviews: mpsc::Receiver<ReviewRequest>,
     /// Set to `true` to cancel: the next progress report answers [`ProgressControl::Cancel`].
     pub cancel: Arc<AtomicBool>,
     /// Resolves with the number of records imported, or a localized error.
@@ -1278,6 +1283,7 @@ pub fn start_bulk_import(
     let (progress_tx, progress_rx) = mpsc::channel::<ProgressUpdate>(BULK_PROGRESS_BUFFER);
     let (outcome_tx, outcome_rx) = oneshot::channel();
     let (question_tx, question_rx) = oneshot::channel();
+    let (reviewer, reviews) = channel_reviewer();
     let cancel = Arc::new(AtomicBool::new(false));
     let sink = bulk_progress_sink(progress_tx, Arc::clone(&cancel));
     let future = async move {
@@ -1287,6 +1293,7 @@ pub fn start_bulk_import(
             target,
             dataset,
             question: question_tx,
+            reviewer,
         };
         let outcome = run_bulk_import_session(services, request, sink).await;
         // A dropped receiver just means the wizard closed first; nothing else needs the outcome.
@@ -1296,6 +1303,7 @@ pub fn start_bulk_import(
         BulkImportHandle {
             progress: progress_rx,
             question: question_rx,
+            reviews,
             cancel,
             outcome: outcome_rx,
         },
@@ -1416,6 +1424,7 @@ struct BulkImportRequest {
     target: ImportTargetChoice,
     dataset: DatasetChoice,
     question: oneshot::Sender<DatasetQuestion>,
+    reviewer: Box<dyn PlanReviewer>,
 }
 
 /// Runs the bulk-import invocation to completion, returning the number of records imported or a
@@ -1434,6 +1443,7 @@ async fn run_bulk_import_session(
         target,
         dataset,
         question,
+        reviewer,
     } = request;
     let chrome = services.chrome();
     let (bundle, info) = services.resolve_plugin(&plugin_id)?;
@@ -1447,9 +1457,10 @@ async fn run_bulk_import_session(
         || source.display().to_string(),
         |name| name.to_string_lossy().into_owned(),
     );
-    let run = services
+    let mut run = services
         .import_run_spec(&workspace, &info, (dataset, source_label), Some(question))
         .await?;
+    run.reviewer = reviewer;
     let invocation = Invocation {
         session: Session::software(plugin_id, info.version.clone()),
         net_policy: NetPolicy::deny_all(),
@@ -1841,6 +1852,7 @@ mod tests {
             },
             position: 1,
             total: 1,
+            group: None,
         };
         let reply = presenter.review_match(question).await.expect("the wizard answers");
         assert_eq!(reply, MatchReply::Skip);

@@ -42,7 +42,7 @@ pub fn match_stage_labels(chrome: &Chrome, stage: &MatchStageVm) -> MatchStageLa
 }
 
 /// The Fluent selector for a kind the host asks about.
-fn kind_key(kind: MatchableKind) -> &'static str {
+pub(crate) fn kind_key(kind: MatchableKind) -> &'static str {
     match kind {
         MatchableKind::Person => "person",
         MatchableKind::Place => "place",

@@ -692,8 +692,8 @@ record and item keys. `vitni-app` plans every entity before writing — Unchange
 of its writes through the origin gate, Link by recorded resolution, `ExternalId` or tag name, Candidates
 from the matching engine with resolved relatives standing in, New otherwise — and withholds the contents
 of a record resolved onto another dataset's. The commit writes in dependency order, each write stamped
-with its origin, and an interrupted commit finishes when the import is run again. Candidates are written
-as new until the review stages (#411–#413) land.
+with its origin, and an interrupted commit finishes when the import is run again. The review stages
+(#411–#413) put the candidates to the user.
 ✅ Dataset proposal (ADR 0037 §3, #408): the GEDCOM and Gramps importers declare their header's
 fingerprint (`HEAD.SOUR`/`HEAD.FILE`, the Gramps researcher) to `begin-run`, recorded on
 `ImportRunStarted`. An import that names no dataset while lineages of its format exist is read first;
@@ -738,6 +738,15 @@ candidate; *Decide later* imports it as new. *Skip record* and *Cancel import* w
 0.28.0's `submit-outcome` reports them to the plugin. A record with no possible match never meets the
 stage. Merges and distinctions are the run's human operator's decisions. `cargo xtask gui-pass` drives
 the stage against a local stand-in for the archive.
+✅ Bulk import Plan and Review stages (ADR 0040 §3, §4, #413): once a GEDCOM or Gramps file is read, the
+host shows its plan — each kind's new, unchanged, updated, already linked, possibly matched and withheld
+records — before anything is written. The wizard's Plan stage offers *Review N possible matches*, *Decide
+all later and import*, or *Import* when there are none; *Cancel* writes nothing. The Review stage puts
+each pair in the shared compare view, with the bulk answers *Treat all N probable matches of this kind
+as the same*, each pair recorded with its own assessment, and *Decide the rest later*. `vitni import
+--plan` prints the plan (text or `--json`) and writes nothing, a re-import of an unchanged file planning
+every record unchanged; on a terminal the CLI reviews each pair, and off one, or with `--defer-matches`,
+leaves them for later.
 
 ## Risk register
 

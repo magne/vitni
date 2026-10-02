@@ -31,6 +31,7 @@ use crate::origin_gate::DryRun;
 use crate::session::Session;
 use crate::similar::SimilarRecord;
 use crate::staging::candidates;
+use crate::staging::commit::KIND_ORDER;
 use crate::staging::graph::{EntityFields, EntityRef, GraphError, LinkKind, LocalId, RecordGraph};
 use crate::staging::write::{LinkError, Resolve, Writer};
 use crate::use_case::Provenance;
@@ -206,19 +207,29 @@ impl ImportPlan {
     pub fn counts(&self) -> PlanCounts {
         let mut counts = PlanCounts::default();
         for entity in &self.entities {
-            if entity.scope == WriteScope::Withheld {
-                counts.withheld += 1;
-                continue;
-            }
-            match entity.disposition {
-                Disposition::Unchanged { .. } => counts.unchanged += 1,
-                Disposition::Update { .. } => counts.updated += 1,
-                Disposition::Link { .. } | Disposition::Duplicate { .. } => counts.linked += 1,
-                Disposition::Candidates(_) => counts.candidates += 1,
-                Disposition::New => counts.new += 1,
-            }
+            counts.add(entity);
         }
         counts
+    }
+
+    /// The plan's counts kind by kind, in the order the commit writes the kinds, leaving out a kind the
+    /// plan has no entity of.
+    #[must_use]
+    pub fn summary(&self) -> PlanSummary {
+        let mut kinds = Vec::new();
+        for kind in KIND_ORDER {
+            let mut counts = PlanCounts::default();
+            let mut any = false;
+            for entity in self.entities.iter().filter(|entity| entity.kind == kind) {
+                any = true;
+                counts.add(entity);
+            }
+            if any {
+                kinds.push(KindCounts { kind, counts });
+            }
+        }
+        let candidates = kinds.iter().map(|row| row.counts.candidates).sum();
+        PlanSummary { kinds, candidates }
     }
 
     /// The staged entity a planned one stands for.
@@ -255,6 +266,41 @@ pub struct PlanCounts {
     pub new: u32,
     /// Not written: another dataset's record.
     pub withheld: u32,
+}
+
+impl PlanCounts {
+    /// Counts `entity` under its disposition, or as withheld.
+    fn add(&mut self, entity: &PlannedEntity) {
+        if entity.scope == WriteScope::Withheld {
+            self.withheld += 1;
+            return;
+        }
+        match entity.disposition {
+            Disposition::Unchanged { .. } => self.unchanged += 1,
+            Disposition::Update { .. } => self.updated += 1,
+            Disposition::Link { .. } | Disposition::Duplicate { .. } => self.linked += 1,
+            Disposition::Candidates(_) => self.candidates += 1,
+            Disposition::New => self.new += 1,
+        }
+    }
+}
+
+/// A plan's counts by kind (ADR 0040 §4): what its Plan stage shows.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlanSummary {
+    /// Each kind the plan has entities of, in the order the commit writes them.
+    pub kinds: Vec<KindCounts>,
+    /// How many entities, of every kind, have candidates to review.
+    pub candidates: u32,
+}
+
+/// One kind's counts in a [`PlanSummary`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KindCounts {
+    /// The kind.
+    pub kind: MatchableKind,
+    /// Its entities by disposition.
+    pub counts: PlanCounts,
 }
 
 /// The human ids a plan's references resolve to: those of existing records, and those `ids` holds for

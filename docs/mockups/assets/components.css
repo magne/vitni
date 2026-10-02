@@ -578,6 +578,8 @@ table.tbl th {
   padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line);
 }
 table.tbl td { padding: var(--sp-3); border-bottom: 1px solid var(--line); vertical-align: top; }
+/* A count column, right-aligned on tabular figures so its digits line up (the import plan). */
+table.tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
 table.tbl tr:hover td { background: var(--panel-2); }
 table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .fact-row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }

@@ -129,6 +129,7 @@ fn invocation(workspace: Workspace, grants: Grants) -> Invocation {
             source_label: "census person".to_owned(),
             plugin: PLUGIN.to_owned(),
             plugin_version: "0.1.0".to_owned(),
+            reviewer: Box::new(vitni_plugin_host::DeferMatches),
         }),
     }
 }

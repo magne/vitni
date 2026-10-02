@@ -56,6 +56,7 @@ fn stage() -> MatchStageVm {
         },
         position: 1,
         total: 2,
+        group: None,
     }
 }
 

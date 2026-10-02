@@ -549,6 +549,56 @@ bulk-import-heading = Masseimport
 bulk-import-stage-source = Kilde
 bulk-import-stage-running = Kjører
 bulk-import-stage-summary = Oppsummering
+bulk-import-stage-plan = Plan
+bulk-import-stage-review = Gjennomgang
+bulk-import-plan-heading = Hva denne importen vil skrive
+bulk-import-plan-kind-heading = Poster
+bulk-import-plan-kind = { $kind ->
+    [person] Personer
+    [family] Familier
+    [event] Hendelser
+    [place] Steder
+    [source] Kilder
+    [citation] Kildehenvisninger
+    [media] Medier
+    [note] Notater
+    [repository] Arkiver
+    [tag] Etiketter
+   *[other] { $kind }
+}
+bulk-import-plan-new = Nye
+bulk-import-plan-unchanged = Uendret
+bulk-import-plan-updated = Oppdatert
+bulk-import-plan-linked = Allerede i treet
+bulk-import-plan-candidates = Mulige treff
+bulk-import-plan-withheld = Beholdt som registrert
+bulk-import-plan-nothing = Alle poster er allerede registrert: å importere denne filen skriver ingenting.
+bulk-import-plan-empty = Filen har ingen poster.
+bulk-import-plan-matches = { $count ->
+    [one] 1 post kan allerede være i treet ditt. Gå gjennom den, eller importer den som ny og avgjør senere.
+   *[other] { $count } poster kan allerede være i treet ditt. Gå gjennom dem én og én, eller importer dem som nye og avgjør senere.
+}
+bulk-import-plan-import = Importer
+bulk-import-plan-review = { $count ->
+    [one] Gå gjennom 1 mulig treff
+   *[other] Gå gjennom { $count } mulige treff
+}
+bulk-import-plan-defer = Avgjør alle senere og importer
+bulk-import-plan-cancel = Avbryt
+bulk-import-review-incoming-caption = fra denne filen
+bulk-import-review-group = { $count ->
+    [one] Behandle det siste sannsynlige treffet av typen { $kind } som det samme
+   *[other] Behandle alle { $count } sannsynlige treff av typen { $kind } som de samme
+}
+bulk-import-review-kind = { $kind ->
+    [person] person
+    [place] sted
+    [source] kilde
+    [repository] arkiv
+   *[other] { $kind }
+}
+bulk-import-review-rest = Avgjør resten senere
+bulk-import-review-cancel = Avbryt importen
 bulk-import-source-heading = Velg hva som skal leses, og hvor det skal importeres
 bulk-import-plugin-label = Importformat
 bulk-import-no-plugins = Ingen tillegg for masseimport er installert. Kjør `cargo xtask build-plugins`.

@@ -27,6 +27,7 @@ mod error;
 mod media;
 mod net;
 mod present;
+mod review;
 mod run;
 pub mod signing;
 mod staging;
@@ -50,6 +51,7 @@ pub use crate::discovery::{PluginInfo, PluginRole};
 pub use crate::error::PluginError;
 pub use crate::net::{HostPattern, NetPolicy};
 pub use crate::present::{PresentError, Presenter};
+pub use crate::review::{DeferMatches, PlanReviewer, ReviewRequest, channel_reviewer};
 pub use crate::run::{ConfirmDataset, ImportRunSpec, RunDataset};
 pub use crate::trust::{TrustRoots, TrustTier, classify, resolve_trust_roots};
 
@@ -463,7 +465,7 @@ impl PluginHost {
             io,
         )?;
         if let Some(spec) = import {
-            let (RunDataset::Chosen(dataset), template) = spec.into_parts() else {
+            let (RunDataset::Chosen(dataset), template, _) = spec.into_parts() else {
                 return Err(PluginError::Runtime(
                     "an assisted import's dataset is chosen before it starts".to_owned(),
                 ));

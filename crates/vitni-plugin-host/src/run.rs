@@ -20,6 +20,7 @@ use vitni_app::{
 };
 
 use crate::error::PluginError;
+use crate::review::PlanReviewer;
 
 /// The operator's answer to a dataset proposal: the dataset the file belongs to, or `None` to cancel
 /// the import.
@@ -64,17 +65,21 @@ pub struct ImportRunSpec {
     pub plugin: String,
     /// The importing plugin's own version, from its manifest.
     pub plugin_version: String,
+    /// Shows a bulk import's plan and reviews its possible matches (ADR 0040 §4). An assisted import
+    /// asks through its [`Presenter`](crate::Presenter) instead and ignores it.
+    pub reviewer: Box<dyn PlanReviewer>,
 }
 
 impl ImportRunSpec {
-    /// Splits off the dataset decision, leaving what describes the run.
-    pub(crate) fn into_parts(self) -> (RunDataset, RunTemplate) {
+    /// Splits off the dataset decision and the reviewer, leaving what describes the run.
+    pub(crate) fn into_parts(self) -> (RunDataset, RunTemplate, Box<dyn PlanReviewer>) {
         let Self {
             operator,
             dataset,
             source_label,
             plugin,
             plugin_version,
+            reviewer,
         } = self;
         let template = RunTemplate {
             operator,
@@ -82,7 +87,7 @@ impl ImportRunSpec {
             plugin,
             plugin_version,
         };
-        (dataset, template)
+        (dataset, template, reviewer)
     }
 }
 
@@ -259,6 +264,7 @@ mod tests {
     use vitni_core::provenance::Agent;
 
     use super::{ActiveRun, Ending, ImportRunSpec, RunDataset, close};
+    use crate::DeferMatches;
 
     fn operator() -> OperatorConfig {
         OperatorConfig {
@@ -279,6 +285,7 @@ mod tests {
             source_label: "tree.ged".to_owned(),
             plugin: "gedcom-import".to_owned(),
             plugin_version: "0.1.0".to_owned(),
+            reviewer: Box::new(DeferMatches),
         }
     }
 

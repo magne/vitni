@@ -165,6 +165,7 @@ fn run_invocation(workspace: Workspace) -> Invocation {
             source_label: "in.gramps".to_owned(),
             plugin: "gramps-import".to_owned(),
             plugin_version: "0.1.0".to_owned(),
+            reviewer: Box::new(vitni_plugin_host::DeferMatches),
         }),
         ..invocation(workspace, import_grants())
     }

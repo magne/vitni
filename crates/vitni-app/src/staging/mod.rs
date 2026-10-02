@@ -21,7 +21,7 @@ pub use graph::{
     StagedTag,
 };
 pub use plan::{
-    DecidedMatch, Disposition, ImportPlan, LinkBasis, PlanCounts, PlanError, PlannedEntity, PlannedLink, WriteScope,
-    plan_import,
+    DecidedMatch, Disposition, ImportPlan, KindCounts, LinkBasis, PlanCounts, PlanError, PlanSummary, PlannedEntity,
+    PlannedLink, WriteScope, plan_import,
 };
-pub use review::{ImportReview, MatchQuestion, MatchReply, PairAnswer};
+pub use review::{ImportReview, MatchGroup, MatchQuestion, MatchReply, PairAnswer, PlanStep, ReviewReply};

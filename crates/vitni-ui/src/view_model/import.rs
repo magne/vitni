@@ -12,7 +12,7 @@
 //! stage. The stages carry the parsed payload structs directly; resolving their Fluent chrome labels
 //! against the plugin catalogue is the renderer's job (PR8), not this state machine's.
 
-use vitni_app::{MatchQuestion, MatchReply, MatchableKind, PairAnswer};
+use vitni_app::{MatchGroup, MatchQuestion, MatchReply, MatchableKind, PairAnswer, ReviewReply};
 
 use crate::i18n::Localizer;
 use crate::import_payload::{
@@ -128,6 +128,8 @@ pub struct MatchStageVm {
     pub position: usize,
     /// How many of the record's entities have possible matches.
     pub total: usize,
+    /// The open probable pairs of this kind a bulk *Same* decides, when this pair is one.
+    pub group: Option<MatchGroup>,
 }
 
 impl MatchStageVm {
@@ -153,27 +155,49 @@ impl MatchStageVm {
             compare: MatchCompareVm::build(stored, incoming, &question.assessment, loc),
             position: question.position,
             total: question.total,
+            group: question.group,
         }
     }
 
     /// The reply to the host for `decision`, recording `judgment` with the assessment the stage showed.
     #[must_use]
     pub fn reply(&self, decision: CompareDecision, judgment: PairJudgment) -> MatchReply {
-        let judgment = PairJudgment {
-            assessment: Some(self.compare.assessment.clone()),
-            ..judgment
-        };
-        let answer = match decision {
+        MatchReply::Pair(Box::new(self.answer(decision, judgment)))
+    }
+
+    /// The bulk import's reply for `decision`, as [`reply`](Self::reply).
+    #[must_use]
+    pub fn review_reply(&self, decision: CompareDecision, judgment: PairJudgment) -> ReviewReply {
+        ReviewReply::Pair(Box::new(self.answer(decision, judgment)))
+    }
+
+    /// The bulk *Same* for this pair's group, recording `judgment`; the host gives each pair its own
+    /// assessment.
+    #[must_use]
+    pub fn group_reply(&self, judgment: PairJudgment) -> ReviewReply {
+        ReviewReply::SameForGroup(Box::new(self.judged(judgment).decision()))
+    }
+
+    fn answer(&self, decision: CompareDecision, judgment: PairJudgment) -> PairAnswer {
+        let judgment = self.judged(judgment);
+        match decision {
             CompareDecision::Same => PairAnswer::Same(judgment.decision()),
             CompareDecision::Distinct => PairAnswer::Distinct(judgment.decision()),
             CompareDecision::Later => PairAnswer::Later,
-        };
-        MatchReply::Pair(Box::new(answer))
+        }
+    }
+
+    /// `judgment` with the assessment the stage showed.
+    fn judged(&self, judgment: PairJudgment) -> PairJudgment {
+        PairJudgment {
+            assessment: Some(self.compare.assessment.clone()),
+            ..judgment
+        }
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{ImportSession, ImportStage, MatchStageVm};
     use crate::i18n::Localizer;
     use crate::navigation::PairJudgment;
@@ -181,10 +205,11 @@ mod tests {
     use crate::shortcuts::CompareDecision;
     use vitni_app::{
         AggRef, DatasetId, Feature, FeatureComparison, FeatureValue, ImportRunId, MatchAssessment, MatchBand,
-        MatchQuestion, MatchReply, MatchableKind, Outcome, PairAnswer, RecordOrigin,
+        MatchGroup, MatchQuestion, MatchReply, MatchableKind, Outcome, PairAnswer, RecordOrigin, ReviewReply,
     };
 
-    fn question() -> MatchQuestion {
+    /// A possible match of an incoming person with a stored one.
+    pub(crate) fn question() -> MatchQuestion {
         let given = |value: &str| Some(FeatureValue::Name(value.to_owned()));
         MatchQuestion {
             kind: MatchableKind::Person,
@@ -218,6 +243,7 @@ mod tests {
             },
             position: 1,
             total: 2,
+            group: None,
         }
     }
 
@@ -332,5 +358,29 @@ mod tests {
         session.cancel();
         assert_eq!(*session.stage(), ImportStage::Cancelled);
         assert!(session.is_finished());
+    }
+
+    #[test]
+    fn a_bulk_review_replies_with_the_pair_or_its_whole_group() {
+        let mut question = question();
+        question.group = Some(MatchGroup {
+            band: MatchBand::Probable,
+            remaining: 4,
+        });
+        let stage = MatchStageVm::build(&question, &Localizer::for_test("en"));
+        assert_eq!(stage.group.map(|group| group.remaining), Some(4));
+        let judgment = PairJudgment {
+            rationale: Some("same farm".to_owned()),
+            ..PairJudgment::default()
+        };
+        let ReviewReply::SameForGroup(decision) = stage.group_reply(judgment.clone()) else {
+            panic!("expected the group's Same");
+        };
+        assert_eq!(decision.provenance.rationale.as_deref(), Some("same farm"));
+        assert!(decision.assessment.is_some());
+        assert_eq!(
+            stage.review_reply(CompareDecision::Later, judgment),
+            ReviewReply::Pair(Box::new(PairAnswer::Later))
+        );
     }
 }

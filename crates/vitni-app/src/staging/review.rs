@@ -11,11 +11,15 @@
 //!   from each candidate rejected. An entity with every candidate rejected is simply new.
 //! - *Decide later* imports it as new with the pairs left for the review queue.
 //!
+//! A bulk import adds two explicit bulk answers (ADR 0040 §3): *Same* for every pair of the current
+//! kind whose candidate is probable, each recorded with the assessment of its own pair, and *Decide the
+//! rest later*.
+//!
 //! Merges and distinctions are the user's decisions, written as the run's human operator; the import's
 //! own writes stay the importer's.
 
 use vitni_core::ids::ImportRunId;
-use vitni_core::matching::{MatchAssessment, MatchableKind};
+use vitni_core::matching::{MatchAssessment, MatchBand, MatchableKind};
 use vitni_core::origin::{DatasetId, RecordOrigin};
 use vitni_core::provenance::Timestamp;
 
@@ -24,9 +28,10 @@ use crate::error::AppError;
 use crate::identity::IdentityDecision;
 use crate::person::{build_name, render_name};
 use crate::session::Session;
-use crate::staging::commit::{CommitFailure, CommitOutcome, RunToEnd, commit_import};
+use crate::similar::SimilarRecord;
+use crate::staging::commit::{CommitControl, CommitFailure, CommitOutcome, commit_import};
 use crate::staging::graph::{EntityFields, RecordGraph};
-use crate::staging::plan::{DecidedMatch, Disposition, ImportPlan, PlanError, plan_decided};
+use crate::staging::plan::{DecidedMatch, Disposition, ImportPlan, PlanError, PlanSummary, plan_decided};
 use crate::use_case::Provenance;
 use crate::workspace::Workspace;
 
@@ -52,7 +57,22 @@ pub struct MatchQuestion {
     pub position: usize,
     /// How many of the plan's entities have candidates.
     pub total: usize,
+    /// The pairs a bulk *Same* would decide with this one, when its candidate is probable.
+    pub group: Option<MatchGroup>,
 }
+
+/// The still-open pairs of one kind whose candidate is in one band: what *Treat all as the same*
+/// decides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MatchGroup {
+    /// The least band every pair's candidate is in.
+    pub band: MatchBand,
+    /// How many entities have such a pair, the current one included.
+    pub remaining: usize,
+}
+
+/// The least band a bulk *Same* is offered at.
+const GROUP_BAND: MatchBand = MatchBand::Probable;
 
 /// The user's answer to a [`MatchQuestion`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,6 +94,31 @@ pub enum MatchReply {
     /// Import nothing of this record.
     Skip,
     /// End the import session, importing nothing of this record.
+    Cancel,
+}
+
+/// What the user does with a bulk import's plan once it is shown (ADR 0040 §4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanStep {
+    /// Commit it, asking about each possible match first.
+    Review,
+    /// Commit it, leaving every possible match for later.
+    DeferMatches,
+    /// Write nothing.
+    Discard,
+}
+
+/// What the user answers to a [`MatchQuestion`] in a bulk import: the pair's answer, a bulk answer
+/// (ADR 0040 §3), or ending the import.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReviewReply {
+    /// An answer about the pair.
+    Pair(Box<PairAnswer>),
+    /// *Same* for every open pair of the question's [`MatchGroup`], with this decision's provenance.
+    SameForGroup(Box<IdentityDecision>),
+    /// *Decide later* for this and every remaining pair.
+    DeferRest,
+    /// Write nothing.
     Cancel,
 }
 
@@ -132,6 +177,12 @@ impl ImportReview {
         })
     }
 
+    /// The plan's counts by kind, as the answers so far leave it.
+    #[must_use]
+    pub fn summary(&self) -> PlanSummary {
+        self.plan.summary()
+    }
+
     /// The plan as the answers so far leave it.
     #[must_use]
     pub fn plan_so_far(&self) -> &ImportPlan {
@@ -165,6 +216,10 @@ impl ImportReview {
         let candidate = similar.record.clone();
         let candidate_label = stored_label(workspace, entity.kind, &candidate.human_id).await?;
         let candidate_origin = crate::record_origin(workspace, entity.kind, &candidate.human_id).await?;
+        let group = (similar.assessment.band >= GROUP_BAND).then(|| MatchGroup {
+            band: GROUP_BAND,
+            remaining: self.group(entity.kind).len(),
+        });
         Ok(Some(MatchQuestion {
             kind: entity.kind,
             incoming_label,
@@ -175,6 +230,7 @@ impl ImportReview {
             assessment: similar.assessment.clone().mirrored(),
             position,
             total,
+            group,
         }))
     }
 
@@ -220,7 +276,68 @@ impl ImportReview {
         Ok(())
     }
 
+    /// Answers *Same* for every open pair of the current question's kind whose candidate is probable —
+    /// the current one included — each with `decision`'s provenance and the assessment of its own pair.
+    /// Nothing is answered when the current question has no group (its candidate is not probable).
+    /// A *Same* on a place, source or repository plans the import again once, with every such decision.
+    ///
+    /// # Errors
+    ///
+    /// As [`plan_import`](crate::plan_import), when the import is planned again.
+    pub async fn answer_group(
+        &mut self,
+        workspace: &Workspace,
+        session: &Session,
+        decision: IdentityDecision,
+    ) -> Result<(), PlanError> {
+        let Some((index, current)) = self.pending() else {
+            return Ok(());
+        };
+        if current.assessment.band < GROUP_BAND {
+            return Ok(());
+        }
+        let kind = self.plan.entities[index].kind;
+        let mut replan = false;
+        for (index, similar) in self.group(kind) {
+            let target = similar.record.clone();
+            let decision = IdentityDecision {
+                assessment: Some(similar.assessment.clone().mirrored().evidence()),
+                ..decision.clone()
+            };
+            if kind == MatchableKind::Person {
+                self.answers[index].settled = Some(Settled::Merge(Box::new((target, decision))));
+                continue;
+            }
+            let Some((graph, staged)) = self.plan.staged(index) else {
+                continue;
+            };
+            self.decided.push(DecidedMatch {
+                kind,
+                record: graph.record.clone(),
+                item: staged.item.clone(),
+                target,
+            });
+            self.answers[index].settled = Some(Settled::Reused);
+            replan = true;
+        }
+        if replan {
+            let graphs = self.plan.graphs.clone();
+            self.plan = plan_decided(workspace, session, graphs, self.file_asserted_at, &self.decided).await?;
+        }
+        Ok(())
+    }
+
+    /// Answers *Decide later* for every entity still with a pair to ask about.
+    pub fn defer_rest(&mut self) {
+        while let Some((index, _)) = self.pending() {
+            self.answers[index].settled = Some(Settled::Later);
+        }
+    }
+
     /// Commits the plan as `session`, then writes the user's merges and distinctions as `operator`.
+    /// `control` follows the plan's writes and may stop them, as in
+    /// [`commit_import`](crate::commit_import); the decisions are still written for every entity the
+    /// commit wrote before it stopped.
     ///
     /// # Errors
     ///
@@ -231,6 +348,7 @@ impl ImportReview {
         session: &Session,
         operator: &Session,
         template: &Provenance,
+        control: &mut dyn CommitControl,
     ) -> Result<CommitOutcome, CommitFailure> {
         for (index, answers) in self.answers.iter().enumerate() {
             let entity = &mut self.plan.entities[index];
@@ -243,7 +361,7 @@ impl ImportReview {
                 entity.disposition = Disposition::New;
             }
         }
-        let outcome = commit_import(workspace, session, &self.plan, template, &mut RunToEnd).await?;
+        let outcome = commit_import(workspace, session, &self.plan, template, control).await?;
         match self.decide(workspace, operator, &outcome).await {
             Ok(()) => Ok(outcome),
             Err(error) => Err(CommitFailure {
@@ -294,26 +412,42 @@ impl ImportReview {
     }
 
     /// The first entity with a candidate still to ask about, and that candidate.
-    fn pending(&self) -> Option<(usize, &crate::similar::SimilarRecord)> {
+    fn pending(&self) -> Option<(usize, &SimilarRecord)> {
+        (0..self.plan.entities.len()).find_map(|index| self.next_candidate(index).map(|next| (index, next)))
+    }
+
+    /// Every entity of `kind` whose next candidate to ask about is at least in the group band, with it.
+    fn group(&self, kind: MatchableKind) -> Vec<(usize, SimilarRecord)> {
+        let mut group = Vec::new();
         for (index, entity) in self.plan.entities.iter().enumerate() {
-            let Disposition::Candidates(similar) = &entity.disposition else {
-                continue;
-            };
-            let answers = &self.answers[index];
-            if answers.settled.is_some() {
+            if entity.kind != kind {
                 continue;
             }
-            let next = similar.iter().find(|candidate| {
-                !answers
-                    .rejected
-                    .iter()
-                    .any(|(rejected, _)| rejected.id == candidate.record.id)
-            });
-            if let Some(candidate) = next {
-                return Some((index, candidate));
+            if let Some(next) = self.next_candidate(index)
+                && next.assessment.band >= GROUP_BAND
+            {
+                group.push((index, next.clone()));
             }
         }
-        None
+        group
+    }
+
+    /// Entity `index`'s next candidate to ask about: its best one not yet rejected, unless an answer
+    /// settled it.
+    fn next_candidate(&self, index: usize) -> Option<&SimilarRecord> {
+        let Disposition::Candidates(similar) = &self.plan.entities.get(index)?.disposition else {
+            return None;
+        };
+        let answers = &self.answers[index];
+        if answers.settled.is_some() {
+            return None;
+        }
+        similar.iter().find(|candidate| {
+            !answers
+                .rejected
+                .iter()
+                .any(|(rejected, _)| rejected.id == candidate.record.id)
+        })
     }
 
     /// Where entity `index` stands among the plan's entities with candidates: its position from 1, and

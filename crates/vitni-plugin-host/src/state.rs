@@ -38,6 +38,7 @@ use crate::bindings::imports::vitni::host_api::{
 use crate::capability::{Capability, Grants};
 use crate::error::PluginError;
 use crate::net::{self as net_impl, NetError, NetPolicy};
+use crate::review::PlanReviewer;
 use crate::{BulkIo, ProgressControl, ProgressStep, ProgressUpdate, ai as ai_impl, media};
 
 /// The data owned by one plugin instance's Wasmtime store.
@@ -77,6 +78,8 @@ pub struct HostState {
     pub(crate) staged: Vec<RecordGraph>,
     /// Whether the frontend cancelled a progress report, with or without an import run.
     pub(crate) cancelled: bool,
+    /// Shows a bulk import's plan and reviews it, once its run is open (ADR 0040 §4).
+    pub(crate) reviewer: Option<Box<dyn PlanReviewer>>,
 }
 
 /// When the host writes the record graphs an importer submits (ADR 0040 §4).
@@ -126,6 +129,7 @@ impl HostState {
             staging: Staging::Held,
             staged: Vec::new(),
             cancelled: false,
+            reviewer: None,
         }
     }
 
@@ -147,7 +151,8 @@ impl HostState {
     /// [`PluginError::Dataset`] when the decision names no dataset, or an unknown or ambiguous one;
     /// [`PluginError::Commit`] when the workspace cannot be read.
     pub(crate) async fn open_proposed_run(&mut self, spec: ImportRunSpec) -> Result<bool, PluginError> {
-        let (dataset, template) = spec.into_parts();
+        let (dataset, template, reviewer) = spec.into_parts();
+        self.reviewer = Some(reviewer);
         let chosen = match dataset {
             RunDataset::Chosen(chosen) => chosen,
             RunDataset::Propose { spec: dataset, confirm } => {

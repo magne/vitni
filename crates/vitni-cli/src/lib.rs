@@ -22,7 +22,7 @@ mod args;
 mod commands;
 mod i18n;
 
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -131,6 +131,17 @@ macro_rules! cli_command_enum {
                 /// Import as a new dataset: the file is a different tree from any imported before.
                 #[arg(long)]
                 new_dataset: bool,
+                /// Print what the import would do — each kind's new, unchanged, updated and possibly
+                /// matched records — and write nothing (ADR 0040 §4).
+                #[arg(long, conflicts_with_all = ["new", "defer_matches"])]
+                plan: bool,
+                /// Print the plan as one JSON object.
+                #[arg(long, requires = "plan")]
+                json: bool,
+                /// Import every possibly matched record as new and leave the pairs for later, without
+                /// asking; the default when stdin is not a terminal.
+                #[arg(long)]
+                defer_matches: bool,
             },
             /// Export the workspace through a bulk export plugin (ADR 0013).
             Export {
@@ -255,6 +266,9 @@ async fn run_command(cli: Cli) -> ExitCode {
         yes,
         dataset,
         new_dataset,
+        plan,
+        json,
+        defer_matches,
     } = cli.command
     {
         let choice = match (dataset, new_dataset) {
@@ -262,13 +276,19 @@ async fn run_command(cli: Cli) -> ExitCode {
             (None, true) => DatasetChoice::New,
             (None, false) => DatasetChoice::Unspecified,
         };
+        let flags = commands::review::PlanFlags {
+            plan,
+            json,
+            defer_matches,
+        };
+        let mode = commands::review::review_mode(flags, std::io::stdin().is_terminal());
         let request = ImportRequest {
             plugin,
             file,
             new,
             into,
-            yes,
             choice,
+            options: commands::io::ImportOptions { yes, mode },
         };
         // The import future is large (Wasmtime store + workspace); box it.
         return Box::pin(import(request)).await;
@@ -425,8 +445,8 @@ struct ImportRequest {
     file: PathBuf,
     new: Option<Vec<String>>,
     into: Option<String>,
-    yes: bool,
     choice: DatasetChoice,
+    options: commands::io::ImportOptions,
 }
 
 /// Imports through a bulk plugin (ADR 0013) into a fresh `--new` workspace or an existing `--into`
@@ -438,8 +458,8 @@ async fn import(request: ImportRequest) -> ExitCode {
         file,
         new,
         into,
-        yes,
         choice,
+        options,
     } = request;
     let baseline = Localizer::baseline();
     let target = match prepare_import_target(new, into).await {
@@ -463,8 +483,9 @@ async fn import(request: ImportRequest) -> ExitCode {
     };
 
     // Importing into a workspace that already holds data is confirmed first (unless --yes); a fresh
-    // --new workspace is always empty, so it never prompts.
-    if !created && !yes {
+    // --new workspace is always empty, and a printed plan writes nothing, so neither prompts.
+    let printing = matches!(options.mode, commands::review::ReviewMode::Print(_));
+    if !created && !options.yes && !printing {
         let count = match vitni_app::list_persons(&workspace).await {
             Ok(persons) => persons.len(),
             Err(error) => return report(&localizer, Err(error)),
@@ -478,7 +499,7 @@ async fn import(request: ImportRequest) -> ExitCode {
     // The plugin-host future is large (Wasmtime store + workspace); box it.
     report(
         &localizer,
-        Box::pin(prepared.run(workspace, &localizer, file, yes)).await,
+        Box::pin(prepared.run(workspace, &localizer, file, options)).await,
     )
 }
 
