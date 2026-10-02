@@ -497,10 +497,6 @@ does.
   (ADR 0043). Which researcher field carries it is open, because Gramps shows the researcher's name to
   its user. *Exit:* exporting a workspace as Gramps XML, importing it elsewhere, then importing a later
   export proposes the first import's dataset. — #469
-- **Digitalarkivet imports what it drops today** — ADR 0040. For a census: the residence event with its
-  participants, roles and ages; an estimated birth from the age; birthplace and residence places; and
-  household relationships. For a church book: the event, with participants by role. Without these a
-  census or marriage record has nothing to match on beyond a name. *Exit:* a household import yields its event, places and family links, each carrying an origin. — #410
 - **A person linked by identity gets no persona** — ADR 0040 §3. A staged person that resolves onto
   another dataset's person (`Link`, by `ExternalId` or a recorded resolution) is reused, as every other
   kind is: the plan writes its name and sex onto the target and withholds the rest of its record. The ADR
