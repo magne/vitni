@@ -527,6 +527,38 @@ async fn a_place_only_withheld_events_reach_is_withheld() {
 }
 
 #[tokio::test]
+async fn a_person_linked_elsewhere_joins_no_family_its_record_names() {
+    let (workspace, _dir) = workspace().await;
+    stored_person(&workspace, "Ole", 1850, Some("UID-1")).await;
+    let mut household = family("F1", "I2", "I3");
+    household.links.clear();
+    household.entities[0].item = Some("family".to_owned());
+    let mut graphs = vec![individual("I1", "Ole"), household];
+    graphs[0].entities[0] = with_uid(graphs[0].entities[0].clone(), "UID-1");
+    graphs[0].links.push(StagedLink {
+        item: Some("household".to_owned()),
+        link: LinkKind::Partner {
+            family: EntityRef::Origin {
+                kind: MatchableKind::Family,
+                record: "F1".to_owned(),
+                item: Some("family".to_owned()),
+            },
+            person: EntityRef::Local(0),
+        },
+    });
+
+    let plan = import(&workspace, &importer(dataset(2)), graphs).await;
+
+    assert_eq!(plan.entity(0, 0).expect("person").scope, WriteScope::Identity);
+    assert_eq!(plan.entity(1, 0).expect("family").scope, WriteScope::Withheld);
+    assert_eq!(
+        records(&workspace).await,
+        [1, 1, 0, 0],
+        "no family for the other dataset's person"
+    );
+}
+
+#[tokio::test]
 async fn a_link_to_an_origin_nothing_holds_is_left_out() {
     let (workspace, _dir) = workspace().await;
     let plan = import(&workspace, &importer(dataset(1)), vec![individual("I1", "Ole")]).await;

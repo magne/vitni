@@ -43,9 +43,10 @@ pub use help::{
 };
 pub use i18n::{Localizer, resolve_confirm_record, resolve_panel, resolve_submit_result};
 pub use import_payload::{
-    ConfirmRecord, ConfirmRecordPayload, CropRegion, FieldValue, ImportPayload, ImportPayloadError, ImportResponse,
-    ImportedRecord, PayloadAction, PayloadConfidence, PayloadField, ProvenancePreview, RecordRow, RecordsPayload,
-    ResponseValues, SaveScanPayload, SaveSuggestion, ScanRef, SourceRef, SummaryPayload, parse_payload, parse_response,
+    ConfirmRecord, ConfirmRecordPayload, CropRegion, FieldValue, HouseholdPosition, HouseholdPreview, ImportPayload,
+    ImportPayloadError, ImportResponse, ImportedRecord, PayloadAction, PayloadConfidence, PayloadField,
+    ProvenancePreview, RecordRow, RecordsPayload, ResponseValues, SaveScanPayload, SaveSuggestion, ScanRef, SourceRef,
+    SummaryPayload, parse_payload, parse_response,
 };
 pub use intent::{
     IntentOutcome, approve_plugin_grants, dispatch, dispatch_citation_change_set, dispatch_citation_edit,

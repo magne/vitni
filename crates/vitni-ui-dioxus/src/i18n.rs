@@ -1786,9 +1786,9 @@ impl Chrome {
     }
 
     /// The provenance-preview row labels: operator, source, repository, citation, external id,
-    /// confidence.
+    /// confidence, event, places, household.
     #[must_use]
-    pub fn import_prov_labels(&self) -> [String; 6] {
+    pub fn import_prov_labels(&self) -> [String; 9] {
         [
             fl!(self.loader, "import-prov-operator"),
             fl!(self.loader, "import-prov-source"),
@@ -1796,6 +1796,18 @@ impl Chrome {
             fl!(self.loader, "import-prov-citation"),
             fl!(self.loader, "import-prov-external-id"),
             fl!(self.loader, "import-prov-confidence"),
+            fl!(self.loader, "import-prov-event"),
+            fl!(self.loader, "import-prov-places"),
+            fl!(self.loader, "import-prov-household"),
+        ]
+    }
+
+    /// A household position's label in the provenance preview: partner, child.
+    #[must_use]
+    pub fn import_household_positions(&self) -> [String; 2] {
+        [
+            fl!(self.loader, "import-household-partner"),
+            fl!(self.loader, "import-household-child"),
         ]
     }
 

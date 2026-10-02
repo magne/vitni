@@ -2,8 +2,10 @@
 //! `digitalarkivet-import` component drives a full `run-assisted` session against a local `wiremock`
 //! server and a scripted [`Presenter`] that answers each `present` payload. The server serves the
 //! `vitni-digitalarkivet` page fixtures (a census person page, a residence page and a scan-viewer
-//! page, all invented per ADR 0042) plus a scan JPEG. Asserts the created aggregates, the crop,
-//! re-run idempotence, cancellation, and denied-capability behaviour.
+//! page, all invented per ADR 0042) plus a scan JPEG. Asserts the created aggregates — the person,
+//! its census and birth events, their places and the household's family, each under its origin —
+//! the crop, re-run idempotence, a church-book record's event, cancellation, and denied-capability
+//! behaviour.
 //!
 //! The fixtures' absolute Digitalarkivet URLs are rewritten to the mock host so every fetch hits
 //! wiremock; the request carries an explicit `page` hint so the flow routes without the
@@ -20,11 +22,14 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use uuid::Uuid;
 use vitni_app::{
-    AiConfig, AppDefaults, ChosenDataset, Confidence, DatasetId, ExternalId, ImportRunStatus, NewPerson,
+    AiConfig, AppDefaults, ChosenDataset, Confidence, DatasetId, EventSummary, ExternalId, ImportRunStatus, NewPerson,
     OperatorConfig, PersonNameParts, Provenance, Rect, Session, Workspace, WorkspaceDefaults, change_log_for_person,
-    create_person, list_citations, list_import_runs, list_media, list_persons, list_repositories, list_sources,
+    create_person, list_citations, list_events, list_families, list_import_runs, list_media, list_persons, list_places,
+    list_repositories, list_sources,
 };
+use vitni_core::date::{DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::enums::EvidenceLevel;
+use vitni_core::enums::{EventType, ParticipantRole, PlaceType};
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 use vitni_plugin_host::{
@@ -296,10 +301,10 @@ async fn run(
     presenter: ScriptedPresenter,
 ) -> Result<String, PluginError> {
     let base = format!("http://localhost:{}", server.address().port());
-    let url = if page == "census-residence" {
-        format!("{base}/census/rural-residence/bf01099901000100")
-    } else {
-        person_url(&base)
+    let url = match page {
+        "census-residence" => format!("{base}/census/rural-residence/bf01099901000100"),
+        "churchbook-record" => format!("{base}/view/999/pd00000099901001"),
+        _ => person_url(&base),
     };
     let (workspace, grants) = component_workspace;
     common::host()
@@ -528,6 +533,21 @@ async fn re_running_the_same_url_imports_no_duplicates() {
         1,
         "no duplicate repository"
     );
+    assert_eq!(
+        list_events(&workspace).await.expect("events").len(),
+        2,
+        "no duplicate census or birth event"
+    );
+    assert_eq!(
+        list_places(&workspace).await.expect("places").len(),
+        2,
+        "no duplicate residence or municipality"
+    );
+    assert_eq!(
+        list_families(&workspace).await.expect("families").len(),
+        1,
+        "no duplicate household"
+    );
 }
 
 // ----- residence flow: records-pick -----
@@ -754,6 +774,468 @@ async fn a_record_of_a_person_another_dataset_made_writes_only_its_identity() {
     assert!(
         list_media(&workspace).await.expect("media").is_empty(),
         "no media only the record carries"
+    );
+    assert!(
+        list_events(&workspace).await.expect("events").is_empty(),
+        "no census or birth on another dataset's person"
+    );
+    assert!(
+        list_places(&workspace).await.expect("places").is_empty(),
+        "no place only withheld events reach"
+    );
+    assert!(
+        list_families(&workspace).await.expect("families").is_empty(),
+        "no household family for another dataset's person"
+    );
+}
+
+// ----- what a record says beyond the person: events, places, the household -----
+
+/// The event of `event_type` in `events`.
+fn event_of<'a>(events: &'a [EventSummary], event_type: &EventType) -> &'a EventSummary {
+    events
+        .iter()
+        .find(|event| event.event_type.as_ref() == Some(event_type))
+        .expect("an event of the type")
+}
+
+/// The structured date `date` holds, when it holds one.
+fn modifier(date: Option<&GenealogicalDate>) -> Option<(&DateModifier, DateQuality)> {
+    let date = date?;
+    match &date.modifier {
+        GenealogicalDateBody::Structured(modifier) => Some((modifier, date.quality)),
+        GenealogicalDateBody::TextOnly { .. } => None,
+    }
+}
+
+fn point(year: i32, month: Option<u8>, day: Option<u8>) -> DatePoint {
+    DatePoint {
+        year: Some(year),
+        month,
+        day,
+    }
+}
+
+#[tokio::test]
+async fn a_census_person_imports_its_census_its_birth_their_places_and_its_household() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    let (presenter, seen) = ScriptedPresenter::new(|payload| Ok(single_person_reply(payload)));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "census-person",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    let confirm = seen
+        .lock()
+        .expect("seen")
+        .iter()
+        .find(|payload| kind_of(payload) == "confirm-record")
+        .and_then(|payload| serde_json::from_str::<Value>(payload).ok())
+        .expect("a confirm payload");
+    let preview = &confirm["record"]["provenance"];
+    assert_eq!(preview["event"], "Folketelling 1920 for 9901 Eksempelvik herred");
+    assert_eq!(preview["places"], json!(["Fjellstue", "Eksempelvik"]));
+    assert_eq!(
+        preview["household"],
+        json!({ "position": "partner", "residence": "Fjellstue" })
+    );
+
+    let workspace = open_workspace(&root).await;
+    let events = list_events(&workspace).await.expect("events");
+    assert_eq!(events.len(), 2, "the census and the birth: {events:#?}");
+
+    let census = event_of(&events, &EventType::Census);
+    assert_eq!(
+        modifier(census.date.as_ref()),
+        Some((&DateModifier::None(point(1920, None, None)), DateQuality::Normal)),
+        "the census is dated by its year"
+    );
+    assert_eq!(
+        census.place.as_ref().and_then(|place| place.name.as_deref()),
+        Some("Fjellstue"),
+        "the census took place at the residence"
+    );
+    assert_eq!(census.participants.len(), 1, "the person took part in the census");
+    let participant = &census.participants[0];
+    assert_eq!(participant.role, ParticipantRole::Primary);
+    assert!(
+        participant
+            .attributes
+            .iter()
+            .any(|attribute| attribute.attribute_type == "Familiestilling" && attribute.value == "hp"),
+        "the family position is kept on the participation: {participant:?}"
+    );
+
+    let birth = event_of(&events, &EventType::Birth);
+    assert_eq!(
+        modifier(birth.date.as_ref()),
+        Some((&DateModifier::None(point(1887, Some(3), Some(14))), DateQuality::Normal)),
+        "the birth carries the transcribed date"
+    );
+    assert_eq!(
+        birth.place.as_ref().and_then(|place| place.name.as_deref()),
+        Some("Eksempelvik"),
+        "the birthplace is the municipality of the same name"
+    );
+    assert_eq!(birth.participants.len(), 1);
+    assert_eq!(birth.participants[0].role, ParticipantRole::Primary);
+
+    let places = list_places(&workspace).await.expect("places");
+    assert_eq!(places.len(), 2, "the residence and its municipality: {places:#?}");
+    let residence = places
+        .iter()
+        .find(|place| place.resolved_name.as_deref() == Some("Fjellstue"))
+        .expect("the residence");
+    assert_eq!(
+        residence.place_type,
+        Some(PlaceType::Farm),
+        "a rural residence is a farm"
+    );
+    assert!(
+        residence
+            .enclosing
+            .iter()
+            .any(|enclosing| enclosing.name.as_deref() == Some("Eksempelvik")
+                && enclosing.place_type == Some(PlaceType::Municipality)),
+        "the residence lies in the census municipality: {residence:#?}"
+    );
+
+    let families = list_families(&workspace).await.expect("families");
+    assert_eq!(families.len(), 1, "the household's family");
+    assert_eq!(families[0].partners.len(), 1, "the head is a partner");
+    assert!(families[0].children.is_empty(), "the head alone is no child");
+
+    for origin in [
+        r#""record":"census:bf01099901000100""#,
+        r#""record":"residence:bf01099901000100""#,
+        r#""record":"municipality:9901""#,
+        r#""record":"household:bf01099901000100:01""#,
+        r#""item":"event:BIRT","record":"pf01099901000101""#,
+    ] {
+        assert!(events_contain(&root, origin).await, "an assertion carries {origin}");
+    }
+}
+
+/// Serves the household's second member as a `role` (`Familiestilling`), under its own record id.
+async fn mount_member_as(server: &MockServer, role: &str) {
+    mount_member_with(
+        server,
+        r#"<div class="ssp-semibold">hp</div>"#,
+        &format!(r#"<div class="ssp-semibold">{role}</div>"#),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn two_members_of_a_household_share_its_census_and_its_family() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    mount_member_as(&server, "s").await;
+    let (presenter, _seen) = ScriptedPresenter::new(household_reply(&["pf01099901000101", "pf01099901000102"]));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "census-residence",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    let workspace = open_workspace(&root).await;
+    let events = list_events(&workspace).await.expect("events");
+    assert_eq!(events.len(), 3, "one census and a birth each: {events:#?}");
+    assert_eq!(
+        event_of(&events, &EventType::Census).participants.len(),
+        2,
+        "both members took part in the one census"
+    );
+    assert_eq!(
+        list_places(&workspace).await.expect("places").len(),
+        2,
+        "the places are shared"
+    );
+    let families = list_families(&workspace).await.expect("families");
+    assert_eq!(families.len(), 1, "one household family");
+    assert_eq!(families[0].partners.len(), 1, "the head is the partner");
+    assert_eq!(families[0].children.len(), 1, "the son is the child");
+    assert_ne!(families[0].partners[0].id, families[0].children[0].id);
+}
+
+/// Serves the household's second member with `from` replaced by `to` in its page.
+async fn mount_member_with(server: &MockServer, from: &str, to: &str) {
+    let base = format!("http://localhost:{}", server.address().port());
+    let html = fixture("census", "person.html", &base)
+        .replace(
+            &format!(r#"content="{base}/census/person/pf01099901000101""#),
+            &format!(r#"content="{base}/census/person/pf01099901000102""#),
+        )
+        .replace(from, to);
+    Mock::given(method("GET"))
+        .and(path_regex(r"^/census/person/pf01099901000102$"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/html")
+                .set_body_string(html),
+        )
+        .with_priority(1)
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn two_households_of_one_residence_found_two_families() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    mount_member_with(
+        &server,
+        r#"<div class="ssp-semibold">01</div>"#,
+        r#"<div class="ssp-semibold">02</div>"#,
+    )
+    .await;
+    let (presenter, _seen) = ScriptedPresenter::new(household_reply(&["pf01099901000101", "pf01099901000102"]));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "census-residence",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    let workspace = open_workspace(&root).await;
+    let families = list_families(&workspace).await.expect("families");
+    assert_eq!(families.len(), 2, "a family per household number: {families:#?}");
+    let events = list_events(&workspace).await.expect("events");
+    assert_eq!(
+        event_of(&events, &EventType::Census).participants.len(),
+        2,
+        "both households took part in the residence's one census"
+    );
+}
+
+#[tokio::test]
+async fn a_birthplace_is_one_place_only_within_its_census_municipality() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    mount_member_with(
+        &server,
+        r#"<div class="ssp-semibold">Eksempelvik</div>"#,
+        r#"<div class="ssp-semibold">Nes</div>"#,
+    )
+    .await;
+    let (presenter, _seen) = ScriptedPresenter::new(household_reply(&["pf01099901000102"]));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "census-residence",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    assert!(
+        events_contain(&root, r#""record":"birthplace:municipality:9901:Nes""#).await,
+        "the birthplace is keyed within the census municipality"
+    );
+}
+
+#[tokio::test]
+async fn a_servant_takes_part_in_the_census_but_not_the_family() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    mount_member_as(&server, "tj").await;
+    let (presenter, _seen) = ScriptedPresenter::new(household_reply(&["pf01099901000102"]));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "census-residence",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    let workspace = open_workspace(&root).await;
+    let events = list_events(&workspace).await.expect("events");
+    assert_eq!(event_of(&events, &EventType::Census).participants.len(), 1);
+    assert!(
+        list_families(&workspace).await.expect("families").is_empty(),
+        "a servant joins no family"
+    );
+}
+
+#[tokio::test]
+async fn a_head_living_alone_founds_no_family() {
+    let (root, _dir) = init_workspace();
+    let server = MockServer::start().await;
+    let base = format!("http://localhost:{}", server.address().port());
+    let alone = fixture("census", "person.html", &base).replace(r#"<div class="data-item">"#, "<div>");
+    mount(&server, r"^/census/person/.*", alone).await;
+    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(single_person_reply(payload)));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "census-person",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    let workspace = open_workspace(&root).await;
+    assert_eq!(list_persons(&workspace).await.expect("persons").len(), 1);
+    assert_eq!(
+        list_events(&workspace).await.expect("events").len(),
+        2,
+        "the census and the birth"
+    );
+    assert!(
+        list_families(&workspace).await.expect("families").is_empty(),
+        "a household of one is no family"
+    );
+}
+
+/// Starts a mock server serving the church-book record page, its `Rolle` replaced by `role`. Its scan
+/// link points at a host the policy denies, so the record imports without a scan.
+async fn churchbook_server(role: &str) -> MockServer {
+    let server = MockServer::start().await;
+    let base = format!("http://localhost:{}", server.address().port());
+    let html = fixture("churchbook", "person.html", &base).replace(
+        r#"<div class="ssp-semibold">far</div>"#,
+        &format!(r#"<div class="ssp-semibold">{role}</div>"#),
+    );
+    mount(&server, r"^/view/999/pd.*", html).await;
+    server
+}
+
+/// The church-book reply: import the confirm, finish the summary (no scan resolves to save).
+fn churchbook_reply(payload: &str) -> String {
+    match kind_of(payload).as_str() {
+        "confirm-record" => {
+            json!({ "kind": "submit", "action": "import", "values": { "confidence": "low" } }).to_string()
+        }
+        _ => done(),
+    }
+}
+
+#[tokio::test]
+async fn a_church_book_record_imports_its_event_with_the_participant_by_role() {
+    let (root, _dir) = init_workspace();
+    let server = churchbook_server("far").await;
+    let (presenter, seen) = ScriptedPresenter::new(|payload| Ok(churchbook_reply(payload)));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "churchbook-record",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    let confirm = seen
+        .lock()
+        .expect("seen")
+        .iter()
+        .find(|payload| kind_of(payload) == "confirm-record")
+        .and_then(|payload| serde_json::from_str::<Value>(payload).ok())
+        .expect("a confirm payload");
+    assert_eq!(confirm["record"]["provenance"]["event"], "Fødte og døpte: 1925-02-15");
+    assert_eq!(
+        confirm["record"]["provenance"].get("household"),
+        None,
+        "no household in a church book"
+    );
+
+    let workspace = open_workspace(&root).await;
+    let events = list_events(&workspace).await.expect("events");
+    let baptism = event_of(&events, &EventType::Baptism);
+    assert_eq!(
+        modifier(baptism.date.as_ref()),
+        Some((&DateModifier::None(point(1925, Some(2), Some(15))), DateQuality::Normal)),
+        "the baptism carries the heading's date"
+    );
+    assert_eq!(baptism.participants.len(), 1);
+    assert_eq!(
+        baptism.participants[0].role,
+        ParticipantRole::Father,
+        "the father by his role"
+    );
+    let birth = event_of(&events, &EventType::Birth);
+    assert_eq!(
+        modifier(birth.date.as_ref()),
+        Some((&DateModifier::None(point(1887, None, None)), DateQuality::Normal)),
+        "the father's birth year"
+    );
+    assert!(
+        list_families(&workspace).await.expect("families").is_empty(),
+        "a church-book event founds no family"
+    );
+    assert!(
+        events_contain(&root, r#""record":"churchbook-event:hd00000099901000""#).await,
+        "the event carries its record's origin"
+    );
+}
+
+#[tokio::test]
+async fn a_church_book_age_dates_the_birth_from_the_event_not_the_book() {
+    let (root, _dir) = init_workspace();
+    let server = MockServer::start().await;
+    let base = format!("http://localhost:{}", server.address().port());
+    let html = fixture("churchbook", "person.html", &base).replace(
+        r#"<div class="ssp-semibold">1887</div>"#,
+        r#"<div class="ssp-semibold">38</div>"#,
+    );
+    mount(&server, r"^/view/999/pd.*", html).await;
+    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(churchbook_reply(payload)));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "churchbook-record",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    let events = list_events(&open_workspace(&root).await).await.expect("events");
+    assert_eq!(
+        modifier(event_of(&events, &EventType::Birth).date.as_ref()),
+        Some((&DateModifier::About(point(1887, None, None)), DateQuality::Calculated)),
+        "the 1925 baptism less 38 years, not the book's 1904"
+    );
+}
+
+#[tokio::test]
+async fn a_church_book_role_no_rule_reads_asserts_no_participation() {
+    let (root, _dir) = init_workspace();
+    let server = churchbook_server("husbonde").await;
+    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(churchbook_reply(payload)));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "churchbook-record",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    let workspace = open_workspace(&root).await;
+    assert_eq!(list_persons(&workspace).await.expect("persons").len(), 1);
+    let events = list_events(&workspace).await.expect("events");
+    assert!(
+        event_of(&events, &EventType::Baptism).participants.is_empty(),
+        "no role is guessed"
     );
 }
 

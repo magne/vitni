@@ -6,7 +6,10 @@
 //! and scan host (`goto.digitalarkivet.no`). The viewer is the new
 //! `nye.digitalarkivet.no` IIIF SPA — no legacy permanent image.
 
-use vitni_digitalarkivet::{PageContext, PageKind, ParseError, classify_url, parse_person_page, parse_viewer_page};
+use vitni_digitalarkivet::{
+    ChurchbookEvent, ChurchbookEventKind, PageContext, PageKind, ParseError, churchbook_event, classify_url,
+    parse_person_page, parse_viewer_page, residence,
+};
 
 const PERSON_HTML: &str = include_str!("fixtures/churchbook/person.html");
 const PERSON_URL: &str = "https://www.digitalarkivet.no/view/999/pd00000099901001";
@@ -53,6 +56,20 @@ fn person_page_event_heading_and_source() {
     assert_eq!(record.source.year.as_deref(), Some("1904"));
     let event = record.source.headings.iter().find(|f| f.key == "Fødte og døpte");
     assert_eq!(event.map(|f| f.value.as_str()), Some("1925-02-15"));
+}
+
+#[test]
+fn person_page_names_its_event() {
+    let record = parse_person_page(PERSON_HTML, PERSON_URL).expect("parse churchbook record");
+    assert_eq!(
+        churchbook_event(&record),
+        Some(ChurchbookEvent {
+            id: "hd00000099901000".to_owned(),
+            kind: ChurchbookEventKind::Baptism,
+            date: "1925-02-15".to_owned(),
+        })
+    );
+    assert_eq!(residence(&record), None);
 }
 
 #[test]

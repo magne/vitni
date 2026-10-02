@@ -6,9 +6,9 @@
 
 use dioxus::prelude::*;
 use vitni_ui::{
-    ConfidenceLevel, ConfirmRecord, ConfirmRecordPayload, CropRegion, ImportedRecord, Localizer, PayloadAction,
-    PayloadConfidence, PayloadField, ProvenancePreview, RecordRow, RecordsPayload, SaveScanPayload, SaveSuggestion,
-    ScanRef, SourceRef,
+    ConfidenceLevel, ConfirmRecord, ConfirmRecordPayload, CropRegion, HouseholdPosition, HouseholdPreview,
+    ImportedRecord, Localizer, PayloadAction, PayloadConfidence, PayloadField, ProvenancePreview, RecordRow,
+    RecordsPayload, SaveScanPayload, SaveSuggestion, ScanRef, SourceRef,
 };
 use vitni_ui_dioxus::components::{MediaSaveLabels, SelectChoice};
 use vitni_ui_dioxus::screens::{
@@ -184,6 +184,12 @@ fn confirm_payload() -> ConfirmRecordPayload {
                 citation: "URN:NBN:no-a1450-fs10771822220997".to_owned(),
                 external_id_url: "https://www.digitalarkivet.no/census/person/pf01".to_owned(),
                 confidence: PayloadConfidence::Low,
+                event: Some("Folketelling 1920 for 1017 Greipstad herred".to_owned()),
+                places: vec!["Bergstøl".to_owned(), "Greipstad".to_owned()],
+                household: Some(HouseholdPreview {
+                    position: HouseholdPosition::Child,
+                    residence: "Bergstøl".to_owned(),
+                }),
             },
         },
         actions: vec![
@@ -209,26 +215,34 @@ fn confidence_labels() -> Vec<(ConfidenceLevel, String)> {
     ]
 }
 
+fn confirm_chrome() -> ConfirmChrome {
+    ConfirmChrome {
+        heading: "Confirm record".to_owned(),
+        provenance_heading: "What will be recorded".to_owned(),
+        prov: [
+            "Operator".to_owned(),
+            "Source".to_owned(),
+            "Repository".to_owned(),
+            "Citation".to_owned(),
+            "External id".to_owned(),
+            "Confidence".to_owned(),
+            "Event".to_owned(),
+            "Places".to_owned(),
+            "Household".to_owned(),
+        ],
+        household: ["Partner".to_owned(), "Child".to_owned()],
+        software_agent: "software agent".to_owned(),
+        scan_url_label: "Scanned page URL".to_owned(),
+        scan_url_placeholder: "Paste the scan URL".to_owned(),
+    }
+}
+
 fn confirm_view() -> Element {
     rsx! {
         ConfirmStage {
             viewer_labels: media_viewer_labels(&loc()),
             crop_labels: media_crop_labels(&loc()),
-            chrome: ConfirmChrome {
-                heading: "Confirm record".to_owned(),
-                provenance_heading: "What will be recorded".to_owned(),
-                prov: [
-                    "Operator".to_owned(),
-                    "Source".to_owned(),
-                    "Repository".to_owned(),
-                    "Citation".to_owned(),
-                    "External id".to_owned(),
-                    "Confidence".to_owned(),
-                ],
-                software_agent: "software agent".to_owned(),
-                scan_url_label: "Scanned page URL".to_owned(),
-                scan_url_placeholder: "Paste the scan URL".to_owned(),
-            },
+            chrome: confirm_chrome(),
             confidence_labels: confidence_labels(),
             payload: confirm_payload(),
             back_label: "Back".to_owned(),
@@ -242,25 +256,14 @@ fn confirm_view() -> Element {
 fn confirm_no_scan_view() -> Element {
     let mut payload = confirm_payload();
     payload.record.scan = None;
+    payload.record.provenance.event = None;
+    payload.record.provenance.places.clear();
+    payload.record.provenance.household = None;
     rsx! {
         ConfirmStage {
             viewer_labels: media_viewer_labels(&loc()),
             crop_labels: media_crop_labels(&loc()),
-            chrome: ConfirmChrome {
-                heading: "Confirm record".to_owned(),
-                provenance_heading: "What will be recorded".to_owned(),
-                prov: [
-                    "Operator".to_owned(),
-                    "Source".to_owned(),
-                    "Repository".to_owned(),
-                    "Citation".to_owned(),
-                    "External id".to_owned(),
-                    "Confidence".to_owned(),
-                ],
-                software_agent: "software agent".to_owned(),
-                scan_url_label: "Scanned page URL".to_owned(),
-                scan_url_placeholder: "Paste the scan URL".to_owned(),
-            },
+            chrome: confirm_chrome(),
             confidence_labels: confidence_labels(),
             payload,
             back_label: "Back".to_owned(),
@@ -296,6 +299,19 @@ fn confirm_stage_renders_fields_scan_provenance_and_confidence() {
         "citation locator: {html}"
     );
     assert!(html.contains("name=\"import-confidence\""), "confidence select: {html}");
+    // What the record says beyond the person: its event, its places, its place in the household.
+    assert!(
+        html.contains("Event") && html.contains("Folketelling 1920 for 1017 Greipstad herred"),
+        "event row: {html}"
+    );
+    assert!(
+        html.contains("Places") && html.contains("Bergstøl · Greipstad"),
+        "places row: {html}"
+    );
+    assert!(
+        html.contains("Household") && html.contains("Child · Bergstøl"),
+        "household row: {html}"
+    );
     // The action labels come from the plugin's (resolved) payload (`&` is HTML-escaped in SSR).
     assert!(
         html.contains("Import") && html.contains("next"),
@@ -317,6 +333,9 @@ fn confirm_stage_shows_the_scan_url_field_even_without_a_resolved_scan() {
         "scan-url field present without a scan: {html}"
     );
     assert!(html.contains("Scanned page URL"), "scan-url label: {html}");
+    // A record that names no event, place or household shows no row for them.
+    assert!(!html.contains("Places"), "no places row: {html}");
+    assert!(!html.contains("Household"), "no household row: {html}");
 }
 
 // ----- Save-scan stage -----

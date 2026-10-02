@@ -274,7 +274,10 @@
       <span class="mono">net</span> capability, stores the scan through <span class="mono">media-store</span>,
       and proposes fields; you confirm or edit each record before anything is written. Every imported
       claim is a <b>low-confidence Software-agent</b> assertion with an <span class="mono">ExternalId</span>
-      back to the source URL, so a re-run imports no duplicates.
+      back to the source URL, so a re-run imports no duplicates. Besides the person, a record brings its
+      birth (dated from the age when the census gives one), its part in the census of its residence —
+      the farm, inside the census municipality — with its place in the household's family, or its part
+      in a church-book event by its role.
     </div>
 
     <!-- Step indicator -->
@@ -432,6 +435,19 @@
               <span class="muted" style="width:96px">External id</span>
               <span class="grow mono" style="font-size:var(--fs-xs);word-break:break-all">digitalarkivet:census/person/…/pf01052209001842</span>
             </div>
+            <!-- Event, Places and Household appear only when the record names them. -->
+            <div class="prov-claim">
+              <span class="muted" style="width:96px">Event</span>
+              <span class="grow mono" style="font-size:var(--fs-xs);word-break:break-all">Folketelling 1920 for 1017 Greipstad herred</span>
+            </div>
+            <div class="prov-claim">
+              <span class="muted" style="width:96px">Places</span>
+              <span class="grow mono" style="font-size:var(--fs-xs);word-break:break-all">Bergstøl · Greipstad · Greipstad, Vest-Agder</span>
+            </div>
+            <div class="prov-claim">
+              <span class="muted" style="width:96px">Household</span>
+              <span class="grow mono" style="font-size:var(--fs-xs);word-break:break-all">Child · Bergstøl</span>
+            </div>
             <div class="prov-claim" style="align-items:center">
               <span class="muted" style="width:96px">Confidence</span>
               <select class="in" style="width:auto" aria-label="Confidence for imported claims">
@@ -521,7 +537,7 @@
       <div class="specimen wrap" style="align-items:center;margin-top:var(--sp-3)">
         <div class="toast">✓ Imported 3 records · <span class="src-link">Dismiss</span></div>
         <span class="muted" style="font-size:var(--fs-sm)">Re-running the same URL writes nothing new — each record, its
-          source, repository and scan resolve onto what the earlier run made, by origin and
+          source, repository, scan, census, places and household resolve onto what the earlier run made, by origin and
           <span class="mono">ExternalId</span>, and the scan checksum keeps the file single.</span>
       </div>
     </div>

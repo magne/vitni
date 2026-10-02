@@ -7,9 +7,12 @@
 //! `media-store`, and submit the confirmed record as one record graph through `staging` — the host
 //! writes it as low-confidence Software-agent assertions, resolving the person by `ExternalId` so a
 //! re-run imports no duplicates, and writing only the identity of a person another dataset made
-//! (ADR 0040). The source, its repository and the scan are records of their own, submitted with each
-//! record and referenced from its graph by origin, so every record of a page — and of a later
-//! session — shares them, and a withheld record withholds them too.
+//! (ADR 0040). Besides the person, a record yields its birth, and either its part in the census of its
+//! residence (with its place in the household's family) or its part in a church-book event
+//! ([`graph`]). The source, its repository, the scan, the census, the residence, its municipality,
+//! the household and the church-book event are records of their own, submitted with each record and
+//! referenced from its graph by origin, so every record of a page — and of a later session — shares
+//! them, and a withheld record withholds them too.
 //!
 //! - **Census residence** (`/census/{rural,urban}-residence/`): fetch the household page, fetch and
 //!   parse each linked person page, present the records list, then review each picked record.
@@ -51,8 +54,10 @@ use vitni_plugin_api::types::{
 use vitni_plugin_api::{Graph, log_info, log_warn, media_store, origin_ref, report};
 
 mod contract;
+mod graph;
 
 use contract::{Payload, Response, Suggestion};
+use graph::{References, add_record_content};
 
 /// The numbered media-library category folders offered in the save-scan dialog (the owner's archive
 /// convention; the host `media-store` is convention-free). Unioned with existing folders wizard-side.
@@ -228,8 +233,9 @@ fn review(record: &PersonRecord, scan_url: Option<&str>, session: &mut Session) 
 
 /// Records a confirmed record: files the scan first (so cancelling the save dialog aborts before any
 /// write), then submits the record's graph — the person with its occupation, the citation of the
-/// source, and the scan — under the record's origin, so a re-run writes only what changed
-/// (ADR 0037 §4). The source, repository and scan it references go with it, so a record the host
+/// source, the scan, the birth, and the census (with the household's family) or the church-book event
+/// — under the record's origin, so a re-run writes only what changed (ADR 0037 §4). The source,
+/// repository, scan, events, places and family it references go with it, so a record the host
 /// withholds withholds them too.
 fn import(
     record: &PersonRecord,
@@ -254,26 +260,25 @@ fn import(
         None => None,
     };
 
-    let name = field_value(values, "name").unwrap_or_else(|| record.name.clone());
-    let occupation = field_value(values, "occupation").filter(|value| !value.trim().is_empty());
-    let (repository_graph, repository) = repository_graph();
-    let (source_graph, source) = source_graph(record, repository);
-    let mut references = vec![repository_graph, source_graph];
-    let media = match &stored {
-        Some(stored) => {
-            let (media_graph, media) = media_graph(stored, effective);
-            references.push(media_graph);
-            Some(media)
-        }
-        None => None,
-    };
+    let record = edited(record, values);
+    let mut references = References::default();
+    let repository = origin_ref(EntityKind::Repository, REPOSITORY_RECORD, None);
+    references.add(REPOSITORY_RECORD, repository_graph);
+    let source_key = format!("source:{}", source_title(&record));
+    references.add(&source_key, |key| source_graph(key, &record, repository));
+    let source = origin_ref(EntityKind::Source, &source_key, None);
+    let media = stored.as_ref().map(|stored| {
+        let key = media_key(stored, effective);
+        references.add(&key, |key| media_graph(key, stored));
+        origin_ref(EntityKind::Media, &key, None)
+    });
     let mut graph = Graph::new(&record.external_id.value);
-    let person = graph.entity(None, person_fields(&name, record, occupation));
+    let person = graph.entity(None, person_fields(&record));
     let citation = graph.entity(
         Some("citation"),
         EntityFields::Citation(StagedCitation {
             source,
-            page: Some(citation_locator(record, effective)),
+            page: Some(citation_locator(&record, effective)),
             confidence: Some(confidence(values.confidence.as_deref())),
             restrictions: Vec::new(),
         }),
@@ -289,29 +294,56 @@ fn import(
         graph.link(
             None,
             LinkKind::MediaOf(MediaLink {
-                owner: person,
+                owner: person.clone(),
                 media,
                 crop: values.region.map(to_crop),
                 caption: None,
             }),
         );
     }
-    let record_id = record.external_id.value.clone();
-    let human_id = committed(&graph.submit_with(references)?, &record_id)?;
-    session.imported.push((human_id, name));
+    add_record_content(&mut graph, &mut references, &record, &person);
+    let human_id = committed(&graph.submit_with(references.into_graphs())?, &record.external_id.value)?;
+    session.imported.push((human_id, record.name));
     Ok(Outcome::Imported)
 }
 
+/// `record` with the user's edits on the confirm form: an edited field replaces the parsed value,
+/// and an emptied one clears it (the name excepted, which keeps the parsed name).
+fn edited(record: &PersonRecord, values: &contract::Values) -> PersonRecord {
+    let mut record = record.clone();
+    for field in &values.fields {
+        let value = Some(field.value.trim().to_owned()).filter(|value| !value.is_empty());
+        let slot = match field.key.as_str() {
+            "name" => {
+                if let Some(name) = value {
+                    record.name = name;
+                }
+                continue;
+            }
+            "birth" => &mut record.birth,
+            "birthplace" => &mut record.birthplace,
+            "residence" => &mut record.residence,
+            "role" => &mut record.role,
+            "marital-status" => &mut record.marital_status,
+            "occupation" => &mut record.occupation,
+            _ => continue,
+        };
+        *slot = value;
+    }
+    record
+}
+
 /// The person a record names: its name, occupation, and external id.
-fn person_fields(name: &str, record: &PersonRecord, occupation: Option<String>) -> EntityFields {
+fn person_fields(record: &PersonRecord) -> EntityFields {
     EntityFields::Person(StagedPerson {
-        names: person_name(name).into_iter().collect(),
+        names: person_name(&record.name).into_iter().collect(),
         sex: None,
-        facts: occupation
-            .into_iter()
+        facts: record
+            .occupation
+            .iter()
             .map(|occupation| Fact {
                 fact_type: FactType::Occupation,
-                value: Some(occupation),
+                value: Some(occupation.clone()),
                 date: None,
             })
             .collect(),
@@ -373,16 +405,22 @@ fn media_root_relative(path: String) -> String {
     }
 }
 
-/// The citing source's graph, with its managing repository, and a reference to it. A listing's source
-/// has no record id on the page, so its title is its record (`source:{title}`).
-fn source_graph(record: &PersonRecord, repository: EntityRef) -> (Graph, EntityRef) {
-    let title = record.source.title.clone().unwrap_or_else(|| record.record_url.clone());
-    let key = format!("source:{title}");
-    let mut graph = Graph::new(&key);
+/// The record of the managing repository's graph.
+const REPOSITORY_RECORD: &str = "repository:arkivverket";
+
+/// The citing source's title. A listing's source has no record id on the page, so its title is its
+/// record (`source:{title}`).
+fn source_title(record: &PersonRecord) -> String {
+    record.source.title.clone().unwrap_or_else(|| record.record_url.clone())
+}
+
+/// The citing source's graph `key`, held by `repository`.
+fn source_graph(key: &str, record: &PersonRecord, repository: EntityRef) -> Graph {
+    let mut graph = Graph::new(key);
     let entity = graph.entity(
         None,
         EntityFields::Source(StagedSource {
-            title: Some(title),
+            title: Some(source_title(record)),
             author: None,
             pub_info: None,
             abbrev: None,
@@ -399,12 +437,11 @@ fn source_graph(record: &PersonRecord, repository: EntityRef) -> (Graph, EntityR
             media_type: SourceMediaType::Custom(String::new()),
         }),
     );
-    (graph, origin_ref(EntityKind::Source, &key, None))
+    graph
 }
 
-/// The managing repository's graph (`Digitalarkivet (Arkivverket)`), and a reference to it.
-fn repository_graph() -> (Graph, EntityRef) {
-    let key = "repository:arkivverket";
+/// The managing repository's graph (`Digitalarkivet (Arkivverket)`).
+fn repository_graph(key: &str) -> Graph {
     let mut graph = Graph::new(key);
     graph.entity(
         None,
@@ -413,17 +450,21 @@ fn repository_graph() -> (Graph, EntityRef) {
             restrictions: Vec::new(),
         }),
     );
-    (graph, origin_ref(EntityKind::Repository, key, None))
+    graph
 }
 
-/// The stored scan's media graph, with its MIME type, and a reference to it. Its record is the scan's
-/// URL, since the filing path is the operator's choice and changes between runs.
-fn media_graph(stored: &StoredScan, scan_url: Option<&str>) -> (Graph, EntityRef) {
-    let key = match scan_url {
+/// The stored scan's record: the scan's URL, since the filing path is the operator's choice and
+/// changes between runs.
+fn media_key(stored: &StoredScan, scan_url: Option<&str>) -> String {
+    match scan_url {
         Some(url) => format!("scan:{url}"),
         None => format!("file:{}", stored.relative_path),
-    };
-    let mut graph = Graph::new(&key);
+    }
+}
+
+/// The stored scan's media graph `key`, with its MIME type.
+fn media_graph(key: &str, stored: &StoredScan) -> Graph {
+    let mut graph = Graph::new(key);
     graph.entity(
         None,
         EntityFields::Media(StagedMedia {
@@ -432,7 +473,7 @@ fn media_graph(stored: &StoredScan, scan_url: Option<&str>) -> (Graph, EntityRef
             restrictions: Vec::new(),
         }),
     );
-    (graph, origin_ref(EntityKind::Media, &key, None))
+    graph
 }
 
 /// Presents the session summary and returns it as the invocation result.
@@ -484,15 +525,6 @@ fn parse_response(json: &str) -> Result<Response, String> {
 fn show(payload: &Payload) -> Result<String, String> {
     let json = serde_json::to_string(payload).map_err(|error| format!("serializing the payload failed: {error}"))?;
     vitni_plugin_api::present(&json)
-}
-
-/// The value of a confirm field by key (the user's edited value).
-fn field_value(values: &contract::Values, key: &str) -> Option<String> {
-    values
-        .fields
-        .iter()
-        .find(|field| field.key == key)
-        .map(|field| field.value.clone())
 }
 
 /// Builds the `ExternalId` a record resolves-or-creates by: authority `digitalarkivet`, the record

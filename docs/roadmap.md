@@ -319,7 +319,7 @@ deferred and ADR 0013 left out of scope.
   churchbook pages and resolves the scan URL chain, consuming the `vitni-import` fixtures (never
   reformat them). Flow: fetch source page → store scan → parse transcribed fields or AI-interpret the
   scan → import as low-confidence Person/Source/Citation/Media with an `ExternalId` back to the record
-  URL.
+  URL, plus the record's birth, census or church-book event, places and household (#410).
 - **Interactive present-and-confirm (GUI).** A host `present` capability shows the interpreted record
   **and the scan** for confirm/edit before import. It suspends on a frontend presenter and carries a
   typed, versioned assisted-import payload rendered by a **first-party `Tool::Import` wizard** in the
@@ -712,6 +712,15 @@ scan are records of their own, submitted with each record and referenced by orig
 page, and of a later session, share them, and a withheld record withholds them too. host-api 0.27.0's
 `submit` takes a record with the records it references, planned as one, and drops the `existing` link
 end and the `created` flag the two-step submit and its `query` lookups needed.
+✅ Digitalarkivet imports its events, places and households (ADR 0040, #410): a record also brings its
+birth — dated from the transcribed date or year, or calculated from an age — and either its part in
+the census of its residence or its part in a church-book event by its role. The census is at the
+residence (a farm when rural), inside the census municipality; the head, spouse and children of a
+household (by its household number) join its family, a head only when someone else lives there; a
+birthplace name is one place only within its census municipality or church book. The census, the residence, the
+municipality, the household and the church-book event are records of their own, keyed by the archive's
+ids, so a household's members share them; the confirm stage previews them. A record resolved onto
+another dataset's person no longer adds that person to the household's family.
 
 ## Risk register
 
