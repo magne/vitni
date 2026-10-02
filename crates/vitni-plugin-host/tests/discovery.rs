@@ -136,7 +136,6 @@ fn digitalarkivet_import_declares_the_assisted_import_role_and_its_capabilities(
     // than the component imports (inspected ⊆ declared).
     for capability in [
         Capability::Log,
-        Capability::Query,
         Capability::Commands,
         Capability::Progress,
         Capability::Net,
@@ -149,6 +148,11 @@ fn digitalarkivet_import_declares_the_assisted_import_role_and_its_capabilities(
             "the assisted-import manifest declares {capability:?}"
         );
     }
+    // It resolves records by origin through `staging`, so it never reads the workspace.
+    assert!(
+        !info.capabilities.contains(&Capability::Query),
+        "the assisted-import manifest does not declare query"
+    );
     // `import-source` is a bulk-only capability the assisted manifest does not declare.
     assert!(
         !info.capabilities.contains(&Capability::ImportSource),
