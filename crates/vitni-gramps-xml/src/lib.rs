@@ -484,6 +484,21 @@ mod tests {
     }
 
     #[test]
+    fn text_keeps_its_entity_references_and_the_spaces_around_them() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<notes>
+<note handle="_n1" id="N0001" type="General">
+<text>  Hansen &amp; S&#248;nn &lt;1890&gt;  </text>
+</note>
+</notes>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(db.notes[0].text.as_deref(), Some("Hansen & Sønn <1890>"));
+    }
+
+    #[test]
     fn parses_the_header_export_date() {
         let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
 <database xmlns="http://gramps-project.org/xml/1.7.1/">

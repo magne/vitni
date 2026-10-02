@@ -68,8 +68,10 @@ pub fn read_tree(bytes: &[u8]) -> Result<Element, GrampsError> {
 
 /// Builds the element tree from XML `text`.
 fn build_tree(text: &str) -> Result<Element, GrampsError> {
+    // Text is kept whole and trimmed once its element ends: quick-xml reports an entity reference
+    // (`&amp;`) as its own event between two text events, so trimming each event would eat the
+    // spaces around it.
     let mut reader = Reader::from_str(text);
-    reader.config_mut().trim_text(true);
     // A synthetic root so we never pop an empty stack; the real document root is its first child.
     let mut stack: Vec<Element> = vec![Element::default()];
     loop {
@@ -85,17 +87,21 @@ fn build_tree(text: &str) -> Result<Element, GrampsError> {
                 push_child(&mut stack, element)?;
             }
             Event::End(_) => {
-                let finished = stack
+                let mut finished = stack
                     .pop()
                     .ok_or_else(|| GrampsError::Xml("unbalanced end tag".to_owned()))?;
+                trim_in_place(&mut finished.text);
                 push_child(&mut stack, finished)?;
             }
             Event::Text(bytes_text) => {
-                let decoded = bytes_text.xml10_content();
-                let value =
-                    quick_xml::escape::unescape(&decoded).map_err(|error| GrampsError::Xml(error.to_string()))?;
                 if let Some(current) = stack.last_mut() {
-                    current.text.push_str(value.trim());
+                    current.text.push_str(&bytes_text.xml10_content());
+                }
+            }
+            Event::GeneralRef(reference) => {
+                let resolved = resolve_reference(&reference)?;
+                if let Some(current) = stack.last_mut() {
+                    current.text.push_str(&resolved);
                 }
             }
             Event::Eof => break,
@@ -106,6 +112,27 @@ fn build_tree(text: &str) -> Result<Element, GrampsError> {
         .pop()
         .ok_or_else(|| GrampsError::Xml("no root element".to_owned()))?;
     Ok(root.children.pop().unwrap_or_default())
+}
+
+/// Strips `text`'s leading and trailing whitespace without reallocating.
+fn trim_in_place(text: &mut String) {
+    text.truncate(text.trim_end().len());
+    let leading = text.len() - text.trim_start().len();
+    text.drain(..leading);
+}
+
+/// The text an entity or character reference (`&amp;`, `&#233;`) stands for.
+fn resolve_reference(reference: &quick_xml::events::BytesRef<'_>) -> Result<String, GrampsError> {
+    if let Some(character) = reference
+        .resolve_char_ref()
+        .map_err(|error| GrampsError::Xml(error.to_string()))?
+    {
+        return Ok(character.to_string());
+    }
+    let name = reference.xml10_content();
+    quick_xml::escape::resolve_predefined_entity(&name)
+        .map(str::to_owned)
+        .ok_or_else(|| GrampsError::Xml(format!("unknown entity &{name};")))
 }
 
 /// Builds an [`Element`] from a start/empty tag, decoding its name and attributes.
