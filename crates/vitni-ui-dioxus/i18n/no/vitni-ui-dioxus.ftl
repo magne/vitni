@@ -54,7 +54,7 @@ nav-tags = Merker
 nav-dna-tests = DNA-tester
 nav-dna-matches = DNA-treff
 nav-pedigree = Anetavle
-nav-merge = Sammenlign / slå sammen
+nav-matches = Treff
 nav-import = Importer
 nav-export = Eksport
 nav-geography = Geografi
@@ -100,7 +100,7 @@ palette-group-recent = Nylig
 palette-kind-command = Kommando
 palette-kind-recent = Nylig
 palette-cmd-create = Opprett { $entity }…
-palette-cmd-find-duplicates = Finn duplikater
+palette-cmd-review-matches = Gå gjennom mulige treff
 palette-cmd-open = Åpne { $target }
 palette-hint-navigate = naviger
 palette-hint-open = åpne
@@ -387,24 +387,34 @@ prefs-save-error = Kunne ikke lagre: { $detail }
 # Sammenligne / slå sammen-verktøy – rammestrenger (PR 19). Dublett-begrunnelser, feltetiketter
 # og resultatoppsummeringen ligger i vitni-ui-katalogen (data, løst via Localizer) — dette er
 # kun tabell-/veiviserrammen.
-merge-duplicates-heading = Mulige dubletter
-merge-duplicates-count = { $count } kandidatpar
+merge-duplicates-heading = Mulige treff
+merge-duplicates-count = { $count ->
+    [one] 1 uavgjort par
+   *[other] { $count } uavgjorte par
+}
+merge-col-kind = Type
+matches-filter-run = Importkjøring
+matches-filter-all-runs = Alle kjøringer
+matches-filter-kind = Type
+matches-filter-all-kinds = Alle typer
+matches-filter-band = Minst
 merge-col-record-a = Post A
 merge-col-record-b = Post B
 merge-col-why = Hvorfor
 merge-col-score = Treffscore
 merge-score-tooltip = Sammenligningsmotorens treffscore — ikke den 5-nivåers påstands-sikkerheten
 merge-compare = Sammenlign
-merge-empty-duplicates = Ingen mulige dubletter funnet.
+merge-empty-duplicates = Ingen mulige treff: hvert par motoren foreslår her, er avgjort.
 merge-wizard-heading = Sammenlign & slå sammen — { $a } ⟷ { $b }
 merge-survivor-label = overlevende · behold id
 merge-persona-label = blir en persona
-merge-back = Tilbake til dubletter
+merge-merged-label = slås sammen med den overlevende
+merge-back = Tilbake til treff
 merge-reason-label = Årsak til avgjørelsen
 merge-reason-hint = (registreres på avgjørelsen)
 merge-confidence-label = Sikkerhet
-merge-earlier-distinct-heading = Markert som ulike personer
-merge-earlier-distinct-guidance = En tidligere avgjørelse sier at disse to er ulike personer, så de kan ikke slås sammen slik de er. Å angre den og slå sammen registrerer begge stegene i historikken.
+merge-earlier-distinct-heading = Markert som ikke de samme
+merge-earlier-distinct-guidance = En tidligere avgjørelse sier at disse to ikke er de samme, så de kan ikke slås sammen slik de er. Å angre den og slå sammen registrerer begge stegene i historikken.
 merge-undo-distinction = Angre «ikke samme» og slå sammen
 match-compare-label = Sammenlign de to postene
 match-not-recorded = — ikke registrert

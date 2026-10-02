@@ -192,7 +192,7 @@ fn command_vms(chrome: &ChromeCtx, loc: &Localizer) -> Vec<PaletteCommandVm> {
         .map(|command| {
             let label = match &command {
                 PaletteCommand::Create(category) => chrome.0.palette_cmd_create(&loc.picker_entity(*category)),
-                PaletteCommand::FindDuplicates => chrome.0.palette_cmd_find_duplicates(),
+                PaletteCommand::ReviewMatches => chrome.0.palette_cmd_review_matches(),
                 PaletteCommand::OpenTool(tool) => chrome.0.palette_cmd_open(&chrome.0.rail_label(tool.label_id())),
                 PaletteCommand::OpenHelp => chrome.0.palette_cmd_open(&chrome.0.rail_label("nav-help")),
             };
@@ -276,7 +276,7 @@ fn option_parts(chrome: &ChromeCtx, entry: &PaletteEntry) -> (String, String, St
 fn command_icon(command: &PaletteCommand) -> String {
     match command {
         PaletteCommand::Create(_) => "＋".to_owned(),
-        PaletteCommand::FindDuplicates => Tool::Merge.icon().to_owned(),
+        PaletteCommand::ReviewMatches => Tool::Matches.icon().to_owned(),
         PaletteCommand::OpenTool(tool) => tool.icon().to_owned(),
         PaletteCommand::OpenHelp => "❔".to_owned(),
     }
@@ -288,7 +288,7 @@ fn run_action(nav: &mut NavState, action: PaletteAction) {
         PaletteAction::Open(reference) => open_record(nav, reference),
         PaletteAction::Run(command) => match command {
             PaletteCommand::Create(category) => nav.request_new_for(category),
-            PaletteCommand::FindDuplicates => nav.go_to(Destination::Tool(Tool::Merge)),
+            PaletteCommand::ReviewMatches => nav.go_to(Destination::Tool(Tool::Matches)),
             PaletteCommand::OpenTool(tool) => nav.go_to(Destination::Tool(tool)),
             PaletteCommand::OpenHelp => nav.go_to(Destination::Help { topic: None }),
         },

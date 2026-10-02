@@ -747,6 +747,13 @@ as the same*, each pair recorded with its own assessment, and *Decide the rest l
 --plan` prints the plan (text or `--json`) and writes nothing, a re-import of an unchanged file planning
 every record unchanged; on a terminal the CLI reviews each pair, and off one, or with `--defer-matches`,
 leaves them for later.
+✅ Possible-matches review queue (ADR 0039 §3, #414): `vitni_app::match_queue` computes every undecided
+pair of every kind but tags, filtered by kind, band and the import run that created a record of the
+pair, so the pairs an import left for later are listed under its run; `decide_match` merges or
+distinguishes a pair of any kind. The Merge tool is now *Matches*: the queue under run, kind and band
+filters, any kind's pair decided in the shared compare view. The Dashboard's *Possible matches* card
+counts the pairs per kind, lists the strongest and opens the tool. `vitni match list` (`--run`, `--kind`,
+`--band`, `--json`), `show`, `same` and `distinct` do the same at the command line.
 
 ## Risk register
 

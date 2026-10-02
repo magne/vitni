@@ -219,7 +219,7 @@ fn candidates(probe: &Probe, by_key: &BTreeMap<String, Vec<String>>) -> BTreeSet
 }
 
 /// The more similar of two assessments first: by band, then by score.
-fn rank(x: &MatchAssessment, y: &MatchAssessment) -> std::cmp::Ordering {
+pub(crate) fn rank(x: &MatchAssessment, y: &MatchAssessment) -> std::cmp::Ordering {
     y.band.cmp(&x.band).then_with(|| y.score.total_cmp(&x.score))
 }
 

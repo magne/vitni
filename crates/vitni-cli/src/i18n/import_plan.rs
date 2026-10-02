@@ -129,11 +129,11 @@ impl Localizer {
         }
     }
 
-    fn import_review_kind(&self, kind: MatchableKind) -> String {
+    pub(super) fn import_review_kind(&self, kind: MatchableKind) -> String {
         fl!(self.loader, "import-review-kind", kind = kind.as_str())
     }
 
-    fn import_review_outcome(&self, outcome: Outcome) -> String {
+    pub(super) fn import_review_outcome(&self, outcome: Outcome) -> String {
         match outcome {
             Outcome::Agree => fl!(self.loader, "import-review-outcome-agree"),
             Outcome::Partial(_) => fl!(self.loader, "import-review-outcome-partial"),
@@ -143,7 +143,7 @@ impl Localizer {
         }
     }
 
-    fn import_review_feature(&self, feature: vitni_app::Feature) -> String {
+    pub(super) fn import_review_feature(&self, feature: vitni_app::Feature) -> String {
         use vitni_app::Feature;
         match feature {
             Feature::GivenName => fl!(self.loader, "import-review-feature-given-name"),

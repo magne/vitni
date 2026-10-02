@@ -20,12 +20,13 @@ use vitni_app::{
     create_source, create_tag, show_citation, show_event, show_family, show_media, show_person, show_place,
     show_source,
 };
+use vitni_app::{DecidableKind, MatchQueueFilter};
 use vitni_ui::{
-    CitationEdit, ConfidenceLevel, DistinguishPersons, EventEdit, EvidenceKind, FamilyEdit, InformationKind, Intent,
-    IntentOutcome, Localizer, MediaEdit, MergePersons, PairJudgment, PersonEdit, PlaceEdit, ProvenanceDraft,
-    SourceChangeSetRequest, SourceEdit, SourceQuality, dispatch, dispatch_citation_edit, dispatch_distinguish,
-    dispatch_event_edit, dispatch_family_edit, dispatch_media_edit, dispatch_merge, dispatch_person_edit,
-    dispatch_place_edit, dispatch_source_change_set, dispatch_source_edit,
+    CitationEdit, ConfidenceLevel, DecideMatch, EventEdit, EvidenceKind, FamilyEdit, InformationKind, Intent,
+    IntentOutcome, Localizer, MatchDecision, MediaEdit, PairJudgment, PersonEdit, PlaceEdit, ProvenanceDraft,
+    SourceChangeSetRequest, SourceEdit, SourceQuality, dispatch, dispatch_citation_edit, dispatch_decide_match,
+    dispatch_event_edit, dispatch_family_edit, dispatch_media_edit, dispatch_person_edit, dispatch_place_edit,
+    dispatch_source_change_set, dispatch_source_edit,
 };
 
 fn operator() -> OperatorConfig {
@@ -497,6 +498,14 @@ fn merge_entry(log: &[ChangeLogEntry]) -> &ChangeLogEntry {
 }
 
 /// The judgment the compare screen collects: a reason, a confidence and the assessment it showed.
+fn every_match() -> MatchQueueFilter {
+    MatchQueueFilter {
+        run: None,
+        kind: None,
+        min_band: MatchBand::Possible,
+    }
+}
+
 fn judgment(rationale: &str) -> PairJudgment {
     PairJudgment {
         rationale: Some(rationale.to_owned()),
@@ -520,13 +529,15 @@ async fn a_merge_carries_its_rationale_and_confidence_into_the_change_log() {
     let survivor = named_person(&ws, &session, "John", "Smith").await;
     let merged = named_person(&ws, &session, "John", "Smyth").await;
 
-    dispatch_merge(
+    dispatch_decide_match(
         &ws,
         &session,
         &loc,
-        &MergePersons {
-            surviving_human_id: survivor.clone(),
-            merged_human_id: merged,
+        &DecideMatch {
+            kind: DecidableKind::Person,
+            left: survivor.clone(),
+            right: merged,
+            decision: MatchDecision::Same,
             judgment: judgment("  Same person: name variant  "),
         },
     )
@@ -547,13 +558,15 @@ async fn a_blank_merge_rationale_records_none() {
     let survivor = named_person(&ws, &session, "Mary", "Doe").await;
     let merged = named_person(&ws, &session, "Mary", "Doe").await;
 
-    dispatch_merge(
+    dispatch_decide_match(
         &ws,
         &session,
         &loc,
-        &MergePersons {
-            surviving_human_id: survivor.clone(),
-            merged_human_id: merged,
+        &DecideMatch {
+            kind: DecidableKind::Person,
+            left: survivor.clone(),
+            right: merged,
+            decision: MatchDecision::Same,
             judgment: PairJudgment {
                 rationale: Some("   ".to_owned()),
                 ..PairJudgment::default()
@@ -568,33 +581,36 @@ async fn a_blank_merge_rationale_records_none() {
     assert_eq!(merge_entry(&log).confidence, None);
 }
 
-/// "Not the same" records the decision with its judgment, and the pair leaves the Merge tool's
-/// duplicates table for good.
+/// "Not the same" records the decision with its judgment, and the pair leaves the Matches tool's
+/// queue for good.
 #[tokio::test]
-async fn distinguishing_a_pair_removes_it_from_the_duplicates_table() {
+async fn distinguishing_a_pair_removes_it_from_the_matches_queue() {
     let (ws, session, dir) = setup().await;
     let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
     let smith = named_person(&ws, &session, "John", "Smith").await;
     let smyth = named_person(&ws, &session, "John", "Smyth").await;
     let pairs = |outcome: IntentOutcome| match outcome {
-        IntentOutcome::DuplicateCandidates(candidates) => candidates
+        IntentOutcome::MatchQueue(queue) => queue
+            .pairs
             .into_iter()
             .map(|c| (c.a.human_id, c.b.human_id))
             .collect::<Vec<_>>(),
-        other => panic!("expected the duplicates table, got {other:?}"),
+        other => panic!("expected the matches table, got {other:?}"),
     };
-    let before = dispatch(&ws, &loc, &Intent::ListDuplicateCandidates)
+    let before = dispatch(&ws, &loc, &Intent::ListMatches { filter: every_match() })
         .await
         .expect("list");
     assert_eq!(pairs(before).len(), 1, "Smith/Smyth is proposed before the decision");
 
-    let notice = dispatch_distinguish(
+    let notice = dispatch_decide_match(
         &ws,
         &session,
         &loc,
-        &DistinguishPersons {
-            person_human_id: smith.clone(),
-            other_human_id: smyth.clone(),
+        &DecideMatch {
+            kind: DecidableKind::Person,
+            left: smith.clone(),
+            right: smyth.clone(),
+            decision: MatchDecision::Distinct,
             judgment: judgment("different fathers"),
         },
     )
@@ -610,7 +626,7 @@ async fn distinguishing_a_pair_removes_it_from_the_duplicates_table() {
         .expect("the decision is logged");
     assert_eq!(entry.rationale.as_deref(), Some("different fathers"));
     assert_eq!(entry.confidence, Some(Confidence::High));
-    let after = dispatch(&ws, &loc, &Intent::ListDuplicateCandidates)
+    let after = dispatch(&ws, &loc, &Intent::ListMatches { filter: every_match() })
         .await
         .expect("list");
     assert!(pairs(after).is_empty(), "a distinguished pair never reappears");
@@ -1389,4 +1405,68 @@ async fn set_media_region_supersedes_the_source_media_crop() {
         log.iter().any(|entry| entry.event_type == "AssertionSuperseded"),
         "the region change is recorded as a supersession"
     );
+}
+
+/// The Matches tool lists a place pair under the place filter, opens it in the compare view by name,
+/// and a *Same* decision takes it off the queue.
+#[tokio::test]
+async fn a_place_pair_is_queued_compared_and_merged_from_the_matches_tool() {
+    let (ws, session, dir) = setup().await;
+    let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
+    let farm = |name: &str| NewPlace {
+        human_id: None,
+        place_type: PlaceType::Farm,
+        name: Some(name.to_owned()),
+    };
+    let nordaas = create_place(&ws, &session, farm("Nordaas"), Provenance::default(), &[])
+        .await
+        .expect("place");
+    let nordas = create_place(&ws, &session, farm("Nordås"), Provenance::default(), &[])
+        .await
+        .expect("place");
+    let places = Intent::ListMatches {
+        filter: MatchQueueFilter {
+            kind: Some(DecidableKind::Place),
+            ..every_match()
+        },
+    };
+    let IntentOutcome::MatchQueue(queue) = dispatch(&ws, &loc, &places).await.expect("list") else {
+        panic!("the list intent loads the matches table");
+    };
+    assert_eq!(queue.pairs.len(), 1, "{queue:?}");
+    assert_eq!(queue.pairs[0].kind_label, "Place");
+
+    let compare = Intent::MatchCompare {
+        kind: DecidableKind::Place,
+        left: nordaas.clone(),
+        right: nordas.clone(),
+    };
+    let IntentOutcome::MatchCompare(vm) = dispatch(&ws, &loc, &compare).await.expect("compare") else {
+        panic!("the compare intent loads the compare view");
+    };
+    assert_eq!((vm.left.label.as_str(), vm.right.label.as_str()), ("Nordaas", "Nordås"));
+    assert_eq!(vm.earlier_decision, None);
+
+    let notice = dispatch_decide_match(
+        &ws,
+        &session,
+        &loc,
+        &DecideMatch {
+            kind: DecidableKind::Place,
+            left: nordaas.clone(),
+            right: nordas.clone(),
+            decision: MatchDecision::Same,
+            judgment: judgment("one farm"),
+        },
+    )
+    .await
+    .expect("decide");
+    assert_eq!(
+        notice,
+        format!("{nordas} is merged into {nordaas}; one event added to History.")
+    );
+    let IntentOutcome::MatchQueue(queue) = dispatch(&ws, &loc, &places).await.expect("list") else {
+        panic!("the list intent loads the matches table");
+    };
+    assert!(queue.pairs.is_empty(), "{queue:?}");
 }

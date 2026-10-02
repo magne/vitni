@@ -21,8 +21,8 @@ mod import;
 mod import_match;
 mod map_shared;
 mod match_compare;
+mod matches;
 mod media;
-mod merge;
 mod note;
 mod pedigree;
 mod person;
@@ -88,10 +88,13 @@ pub use import::{
 pub use import_match::{MatchStage, MatchStageLabels, match_stage_labels};
 pub use map_shared::{DrawTool, MapControlLabels, MapDraft, MapZoomReadout, MovedCamera, effective_date_choice};
 pub use match_compare::{DecisionDraft, MatchCompare, decision_foot};
+pub use matches::{
+    FilterChoices, MatchFilters, MatchesScreen, MatchesTable, earlier_distinction_card, filter_choices,
+    merge_blocked_card, merge_compare_heading,
+};
 pub use media::{
     MediaEditForm, media_attributes_table, media_overview, media_preview_dialog, media_record_fields, media_used_by,
 };
-pub use merge::{DuplicatesTable, MergeScreen, earlier_distinction_card, merge_blocked_card, merge_compare_heading};
 pub use note::{NoteEditForm, note_content_tab, note_language_tab, note_record_fields, note_references_table};
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{

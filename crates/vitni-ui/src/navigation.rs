@@ -21,7 +21,7 @@ use vitni_app::{
     ParticipantRole, PercentShared, PersonNameParts, PlaceGeometry, PlaceType, Rect, RepositoryType, Sex,
     SourceMediaType, SuccessionKind, Url,
 };
-use vitni_app::{IdentityDecision, MatchEvidence, Provenance};
+use vitni_app::{DecidableKind, IdentityDecision, MatchEvidence, MatchQueueFilter, Provenance};
 
 use crate::help::HelpTopicId;
 use crate::presentation::{ConfidenceLevel, RestrictionKind};
@@ -307,8 +307,9 @@ impl Category {
 pub enum Tool {
     /// Ancestor/descendant chart (PR13).
     Pedigree,
-    /// Split-view compare + non-destructive merge wizard (PR14).
-    Merge,
+    /// The possible-matches review queue (ADR 0039 §3): every undecided pair, filtered by run, kind
+    /// and band, each decided in the shared compare view.
+    Matches,
     /// Assisted online import wizard (ADR 0017): fetch, review, and import records one at a time.
     Import,
     /// Bulk export wizard (ADR 0013): run an export plugin over the whole workspace to a file.
@@ -327,7 +328,7 @@ impl Tool {
     pub const fn all() -> [Self; 7] {
         [
             Self::Pedigree,
-            Self::Merge,
+            Self::Matches,
             Self::Import,
             Self::Export,
             Self::Geography,
@@ -341,7 +342,7 @@ impl Tool {
     pub const fn id(self) -> &'static str {
         match self {
             Self::Pedigree => "pedigree",
-            Self::Merge => "merge",
+            Self::Matches => "matches",
             Self::Import => "import",
             Self::Export => "export",
             Self::Geography => "geography",
@@ -355,7 +356,7 @@ impl Tool {
     pub fn from_id(id: &str) -> Option<Self> {
         match id {
             "pedigree" => Some(Self::Pedigree),
-            "merge" => Some(Self::Merge),
+            "matches" => Some(Self::Matches),
             "import" => Some(Self::Import),
             "export" => Some(Self::Export),
             "geography" => Some(Self::Geography),
@@ -370,7 +371,7 @@ impl Tool {
     pub const fn icon(self) -> &'static str {
         match self {
             Self::Pedigree => "🌳",
-            Self::Merge => "⇄",
+            Self::Matches => "⇄",
             Self::Import => "📥",
             Self::Export => "📤",
             Self::Geography => "🗺",
@@ -384,7 +385,7 @@ impl Tool {
     pub const fn label_id(self) -> &'static str {
         match self {
             Self::Pedigree => "nav-pedigree",
-            Self::Merge => "nav-merge",
+            Self::Matches => "nav-matches",
             Self::Import => "nav-import",
             Self::Export => "nav-export",
             Self::Geography => "nav-geography",
@@ -862,14 +863,19 @@ pub enum Intent {
         /// The second person's user-facing id.
         human_id_b: String,
     },
-    /// Scan the workspace for possible-duplicate person pairs (the Merge tool's landing table).
-    ListDuplicateCandidates,
-    /// Load both people's summaries for the Merge tool's compare/merge wizard.
-    MergeCompare {
-        /// The surviving person's `human_id` (keeps their id after a merge).
-        surviving_human_id: String,
-        /// The person who would become a persona of the survivor.
-        merged_human_id: String,
+    /// Compute the possible-matches queue under a filter (the Matches tool's table, ADR 0039 §3).
+    ListMatches {
+        /// Which pairs to list.
+        filter: MatchQueueFilter,
+    },
+    /// Load a pair of records of one kind into the shared compare view.
+    MatchCompare {
+        /// The kind of both records.
+        kind: DecidableKind,
+        /// The left record's `human_id`: it survives a *Same* decision.
+        left: String,
+        /// The right record's `human_id`.
+        right: String,
     },
     /// Load the Geography tool's markers and event pins (ADR 0025 §1), resolved **as of** `year`
     /// (ADR 0026 §1) — the current/primary resolution when `None`, the time slider's selected year
@@ -913,28 +919,31 @@ impl PairJudgment {
     }
 }
 
-/// A request to merge two persons, dispatched to `vitni_app::merge_persons` via
-/// [`dispatch_merge`](crate::intent::dispatch_merge). Distinct from [`Intent`] (a read): a merge
-/// emits an event and the renderer shows the outcome/reloads the duplicates list afterwards.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MergePersons {
-    /// The surviving person's `human_id`.
-    pub surviving_human_id: String,
-    /// The person to merge into the survivor (becomes a persona; their own record is untouched).
-    pub merged_human_id: String,
-    /// The operator's judgment, recorded on the `PersonsMerged` event.
-    pub judgment: PairJudgment,
+/// The identity decision a [`DecideMatch`] records (ADR 0039 §1, §4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchDecision {
+    /// The two records are one: the right one is merged into the left.
+    Same,
+    /// The two records are different.
+    Distinct,
+    /// Undo the live distinction between the two clusters, then merge the right one into the left.
+    UndoDistinctionAndSame,
 }
 
-/// A request to record that two persons are different people ("Not the same"), dispatched to
-/// `vitni_app::distinguish_persons` via [`dispatch_distinguish`](crate::intent::dispatch_distinguish).
+/// A request to decide a pair from the Matches tool, dispatched to `vitni_app::decide_match` (or its
+/// undo-and-merge twin) via [`dispatch_decide_match`](crate::intent::dispatch_decide_match). Distinct
+/// from [`Intent`] (a read): a decision emits an event, and the renderer reloads the queue afterwards.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DistinguishPersons {
-    /// The person the decision is recorded on.
-    pub person_human_id: String,
-    /// The person they are not.
-    pub other_human_id: String,
-    /// The operator's judgment, recorded on the `PersonsDistinguished` event.
+pub struct DecideMatch {
+    /// The kind of both records.
+    pub kind: DecidableKind,
+    /// The left record's `human_id`: it survives a merge.
+    pub left: String,
+    /// The right record's `human_id`.
+    pub right: String,
+    /// The decision.
+    pub decision: MatchDecision,
+    /// The operator's judgment, recorded on the decision event.
     pub judgment: PairJudgment,
 }
 

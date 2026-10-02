@@ -161,7 +161,7 @@
       records resolved without a question — by an id the file carries, or a decision an earlier import recorded.
       <b>Kept as recorded</b> counts what another tree already recorded for a person this file links to.
       <b>Decide all later and import</b> imports every possible match as new and leaves the pairs for the review
-      queue; <b>Cancel</b> writes nothing. A plan with no possible match offers <b>Import</b> alone.</div>
+      queue (<a href="matches.html">Matches</a>, filtered to this import's run); <b>Cancel</b> writes nothing. A plan with no possible match offers <b>Import</b> alone.</div>
 
     <!-- Specimen: re-importing an unchanged file into its own tree. -->
     <div class="card" style="margin-top:var(--sp-4)">
@@ -195,7 +195,7 @@
     </div>
     <p class="muted" style="margin:0">Possible match 2 of 405</p>
     <h3 style="margin:0">Is this place already in your tree?</h3>
-    <!-- The shared compare view (#411, merge.html), as in the assisted Match stage below; y / n / l decide. -->
+    <!-- The shared compare view (#411, matches.html), as in the assisted Match stage below; y / n / l decide. -->
     <section class="match-compare" tabindex="-1" aria-label="Compare the two records">
       <p class="muted" style="margin:0 0 12px">Matched at 97% · probable match · engine 4</p>
       <div class="card" style="padding:0">
@@ -254,7 +254,7 @@
       with the same decisions as the assisted Match stage. <b>Treat all N probable … matches as the same</b> appears
       only on a probable pair, and answers <b>Same</b> for every open probable pair of that kind — each recorded with
       its own assessment and the reason and confidence above. <b>Decide the rest later</b> imports every pair not yet
-      answered as new, for the review queue. <b>Cancel import</b> writes nothing. Once the last pair is answered the
+      answered as new, for the review queue (<a href="matches.html">Matches</a>). <b>Cancel import</b> writes nothing. Once the last pair is answered the
       import writes its records. A bulk import has no <b>Skip record</b>: the file is imported whole.</div>
 
     <!-- Specimen: the plan is answered; Vitni now writes its records (ADR 0040 §4). -->
@@ -653,7 +653,7 @@
     </div>
     <p class="muted" style="margin:0">Possible match 1 of 1</p>
     <h3 style="margin:0">Is this person already in your tree?</h3>
-    <!-- The shared match-compare view (#411, merge.html): the stored record on the left — the side Same keeps —
+    <!-- The shared match-compare view (#411, matches.html): the stored record on the left — the side Same keeps —
          and the record being imported on the right. Focus lands on it; y / n / l decide. -->
     <section id="match-compare" class="match-compare" tabindex="-1" aria-label="Compare the two records">
       <p class="muted" style="margin:0 0 12px">Matched at 88% · possible match · engine 4</p>

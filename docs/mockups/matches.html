@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Compare / merge — Phase 5 mockup</title>
+  <title>Matches — Phase 5 mockup</title>
   <link rel="stylesheet" href="assets/tokens.css">
   <link rel="stylesheet" href="assets/components.css">
 </head>
@@ -11,13 +11,48 @@
 <div id="workarea">
   <div style="padding:var(--sp-6);overflow:auto;height:100%">
 
-    <!-- Possible duplicates -->
+    <!-- The possible-matches queue (ADR 0039 §3): computed on demand, never stored -->
+    <div class="section-note">
+      <b>A queue you can empty.</b> Every pair the matching engine proposes, of every kind but tags, the most
+      similar first. Nothing is stored: the queue is worked out from the current records, so a record that
+      gains a fact moves up or down. Filter it to one import run to finish the pairs that import left for
+      later (<i>Decide later</i>, <i>Decide all later and import</i>, <span class="mono">vitni import
+      --defer-matches</span>); the same list is <span class="mono">vitni match list --run &lt;id&gt;</span>.
+    </div>
     <div class="card">
-      <h3>Possible duplicates <span class="muted">— 14 candidate pairs</span></h3>
+      <div class="grid-3">
+        <div class="field">
+          <label for="matches-run">Import run</label>
+          <select id="matches-run" class="in" name="matches-run">
+            <option value="">Every run</option>
+            <option>tree.ged — 2026-09-30</option>
+            <option selected>other.ged — 2026-10-02</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="matches-kind">Kind</label>
+          <select id="matches-kind" class="in" name="matches-kind">
+            <option value="" selected>Every kind</option>
+            <option>Person</option><option>Family</option><option>Event</option><option>Place</option>
+            <option>Source</option><option>Repository</option><option>Citation</option><option>Media object</option>
+            <option>Note</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="matches-band">At least</label>
+          <select id="matches-band" class="in" name="matches-band">
+            <option selected>possible match</option><option>probable match</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Possible matches <span class="muted">— 3 undecided pairs</span></h3>
       <table class="tbl" style="margin-top:4px">
-        <thead><tr><th>Record A</th><th>Record B</th><th>Why</th><th>Match score</th><th></th></tr></thead>
+        <thead><tr><th>Kind</th><th>Record A</th><th>Record B</th><th>Why</th><th>Match score</th><th></th></tr></thead>
         <tbody>
           <tr>
+            <td>Person</td>
             <td><a href="person.html">John Smith</a> <span class="muted mono">I0042</span></td>
             <td><a href="person.html">John Smyth</a> <span class="muted mono">I0099</span></td>
             <td class="muted" title="The matching engine's band, then its terms, the strongest first, each with its log₂ weight (ADR 0038 §3, §8)">probable match<div class="match-reasons">Same given name (+3.0) · Same birth (+2.4) · Similar surname (+1.5)</div></td>
@@ -25,23 +60,27 @@
             <td class="row-actions"><button class="btn sm primary">Compare</button></td>
           </tr>
           <tr>
-            <td><a href="person.html">Mary Doe</a> <span class="muted mono">I0043</span></td>
-            <td><a href="person.html">Mary Doe</a> <span class="muted mono">I0118</span></td>
-            <td class="muted">possible match<div class="match-reasons">Same given name (+3.0) · Same surname (+2.6) · Different birth (−2.9)</div></td>
-            <td><span class="badge" title="Matching-engine score — not the 5-level assertion Confidence">81%</span></td>
+            <td>Place</td>
+            <td><a href="place.html">Nordaas</a> <span class="muted mono">P0003</span></td>
+            <td><a href="place.html">Nordås</a> <span class="muted mono">P0041</span></td>
+            <td class="muted">possible match<div class="match-reasons">Same place name (+5.0) · Same place type (+1.0)</div></td>
+            <td><span class="badge" title="Matching-engine score — not the 5-level assertion Confidence">80%</span></td>
             <td class="row-actions"><button class="btn sm">Compare</button></td>
           </tr>
           <tr>
-            <td><a href="person.html">Jonathan Smith</a> <span class="muted mono">I0061</span></td>
-            <td><a href="person.html">Jon Smith</a> <span class="muted mono">I0140</span></td>
-            <td class="muted">possible match<div class="match-reasons">Same surname (+2.6) · Similar given name (+0.4) · Different birth place (−2.0)</div></td>
-            <td><span class="badge" title="Matching-engine score — not the 5-level assertion Confidence">63%</span></td>
+            <td>Source</td>
+            <td><a href="source.html">Ministerialbok for Fana</a> <span class="muted mono">S0002</span></td>
+            <td><a href="source.html">Fana ministerialbok</a> <span class="muted mono">S0017</span></td>
+            <td class="muted">possible match<div class="match-reasons">Similar title (+2.1) · Different author (−1.0)</div></td>
+            <td><span class="badge" title="Matching-engine score — not the 5-level assertion Confidence">74%</span></td>
             <td class="row-actions"><button class="btn sm">Compare</button></td>
           </tr>
         </tbody>
       </table>
-      <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">A pair you merged or marked as
-        <i>not the same person</i> never reappears here; undoing the decision in History brings it back.</div>
+      <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">A run's pairs are those with a
+        record that run created. A pair you merged or marked as <i>not the same</i> never reappears here;
+        undoing the decision in History brings it back. A run whose pairs are all decided lists none:
+        <i>No possible matches: every pair the engine proposes here is decided.</i></div>
     </div>
 
     <!-- Merge wizard -->
@@ -202,8 +241,8 @@
 
     <!-- Earlier-decision notice: a live PersonsDistinguished between the two clusters -->
     <div class="card" role="status">
-      <h3>Marked as different people</h3>
-      <div class="muted" style="font-size:var(--fs-sm)">An earlier decision says these two are different people, so
+      <h3>Marked as not the same</h3>
+      <div class="muted" style="font-size:var(--fs-sm)">An earlier decision says these two are not the same, so
         they cannot be merged as they are. Undoing it and merging records both steps in History.</div>
       <div style="margin-top:var(--sp-2)"><button class="btn">Undo “not the same” and merge</button></div>
       <div class="muted" style="font-size:var(--fs-xs);margin-top:var(--sp-2)">Specimen: shown under the heading when
@@ -214,7 +253,7 @@
     <!-- Blocked-decision specimen: IdentityDecided -->
     <div class="card" style="border-color:var(--err)">
       <h3 style="color:var(--err)">Already decided</h3>
-      <div class="muted" style="font-size:var(--fs-sm)">These two people already have an identity decision. Undo it
+      <div class="muted" style="font-size:var(--fs-sm)">These two records already have an identity decision. Undo it
         in History before deciding again.</div>
       <div class="muted" style="font-size:var(--fs-xs);margin-top:var(--sp-2)">Specimen: shown when the two are
         already one cluster, or a record of one cluster holds a live
@@ -251,15 +290,17 @@
     </div>
     </section>
     <div class="muted" style="font-size:var(--fs-sm)"><i>Decide later</i> writes nothing and returns to the
-      duplicates; the pair stays in the list. The keys work anywhere in the view except a text field —
+      queue; the pair stays in it. The keys work anywhere in the view except a text field —
       Tab out of the reason first. Either other decision records the reason, the confidence and the
       engine's assessment above on its event — <span class="mono">PersonsMerged</span> or
-      <span class="mono">PersonsDistinguished</span> — with nothing defaulted. A blank reason or an unset confidence
+      <span class="mono">PersonsDistinguished</span>, or the pair of the record's own kind (<span class="mono">PlacesMerged</span>, …) —
+      with nothing defaulted. A blank reason or an unset confidence
       records none.</div>
 
     <div class="specimen wrap" style="align-items:center">
       <div class="toast">✓ I0099 becomes a persona of I0042; one event added to History. · <span class="src-link">Dismiss</span></div>
       <div class="toast">✓ I0099 is marked as a different person from I0042; one event added to History. · <span class="src-link">Dismiss</span></div>
+      <div class="toast">✓ P0041 is merged into P0003; one event added to History. · <span class="src-link">Dismiss</span></div>
       <span class="muted" style="font-size:var(--fs-sm)">Confirmation is an <span class="mono">aria-live="polite"</span> region, mirroring the record-editing Save toast.</span>
     </div>
 
@@ -268,8 +309,8 @@
 
 <script>
 window.MOCK = {
-  active: "merge",
-  crumb: ["Compare / merge", "John Smith ⟷ John Smyth"],
+  active: "matches",
+  crumb: ["Matches", "John Smith ⟷ John Smyth"],
   record: "John Smith (1850–1920)"
 };
 </script>

@@ -4,9 +4,10 @@
 # again and presses `y` (Same — the pair merges and leaves the table). No click lands on a decision.
 #
 # The fixture seeds no persons (and must not — every scenario is measured against its lists), so the
-# scenario creates John Smith and John Smyth itself, as merge-distinguish.toml does.
+# scenario creates John Smith and John Smyth itself, as matches-distinguish.toml does.
 #
-# Every assertion is scoped to the duplicates card, y 75-235: the *Created* and decision notices
+# Every assertion is scoped to the matches table card, y 211-451, below the filters, where the person
+# pair is the second row, after the fixture's two media of one checksum: the *Created* and decision notices
 # repaint the bottom of the window. The baseline is shot with the pointer on the
 # row, as it is after the Compare click, so the row's hover highlight is in both.
 #
@@ -86,11 +87,11 @@ label = "New person: Save"
 [[step]]
 do = "click"
 at = [108, 749]
-label = "rail: Compare / merge"
+label = "rail: Matches"
 
 [[step]]
 do = "click"
-at = [1000, 200]
+at = [1000, 391]
 label = "row: an inert cell, so the baseline carries the row's hover like the later shot"
 
 [[step]]
@@ -99,8 +100,8 @@ name = "table"
 
 [[step]]
 do = "click"
-at = [1626, 190]
-label = "row: Compare"
+at = [1680, 391]
+label = "person row: Compare"
 
 [[step]]
 do = "shot"
@@ -117,8 +118,8 @@ name = "later"
 
 [[step]]
 do = "click"
-at = [1626, 190]
-label = "row: Compare — again"
+at = [1680, 391]
+label = "person row: Compare — again"
 
 [[step]]
 do = "key"
@@ -137,7 +138,7 @@ label = "rail: People — leave the tool"
 [[step]]
 do = "click"
 at = [108, 749]
-label = "rail: Compare / merge — come back"
+label = "rail: Matches — come back"
 
 [[step]]
 do = "shot"
@@ -147,22 +148,22 @@ name = "revisit"
 kind = "differ"
 shots = ["table", "compare"]
 because = "Compare must open the compare view for the proposed pair"
-region = [232, 75, 1568, 160]
+region = [232, 211, 1568, 240]
 
 [[assert]]
 kind = "match"
 shots = ["table", "later"]
-because = "l (Decide later) returns to the duplicates table with the pair still proposed"
-region = [232, 75, 1568, 160]
+because = "l (Decide later) returns to the matches table with the pair still proposed"
+region = [232, 211, 1568, 240]
 
 [[assert]]
 kind = "differ"
 shots = ["table", "merged"]
-because = "y (Same) merges the pair, which leaves the duplicates table"
-region = [232, 75, 1568, 160]
+because = "y (Same) merges the pair, which leaves the matches table"
+region = [232, 211, 1568, 240]
 
 [[assert]]
 kind = "match"
 shots = ["merged", "revisit"]
 because = "y left the compare view for the table the merged pair is gone from, which stays so on a revisit"
-region = [232, 75, 1568, 160]
+region = [232, 211, 1568, 240]

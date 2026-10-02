@@ -476,7 +476,7 @@ does.
   candidate pair (about 86 per person on the bench's name pools, rising with the workspace) and holds
   every pair's `MatchAssessment`; at 100k persons one scan took 452 s on one core before it was spread
   over the cores, and its pairs run to gigabytes. The Dashboard's data-quality card runs it for
-  every matchable kind and the Merge screen for persons, on every show. *Shape:* keep the pairs as a
+  every matchable kind and the Matches tool for every decidable kind, on every show. *Shape:* keep the pairs as a
   projection refreshed from the dirty records like `match_keys`, or keep only the pair ids and score on
   display. *Exit:* the Dashboard opens a 100k-person workspace in under a
   second.
@@ -531,11 +531,6 @@ does.
   only an empty single-valued field and adds a list value not already recorded, with the origin.
   *Exit:* deciding *Same* on a stored source without an author adds the incoming author and leaves its
   title unchanged.
-- **Possible-matches review queue** — ADR 0039 §3. The Merge tool becomes *Matches*: the computed queue
-  across kinds, filtered by run, kind and band, with a Dashboard card. CLI:
-  `vitni match list|show|same|distinct`. The mockups are updated. *Needs:* the duplicate check and the
-  compare view. *Exit:* deferred pairs from one run are listed under that run and emptied by deciding
-  them. — #414
 - **Similar-record hint on manual entry** — ADR 0038 §8. Creating a record, or adding a relative
   through a picker, warns *possibly the same as I0042 (87%)* and offers *Use existing* / *Compare*,
   never blocking. Pickers rank by similarity, and every record screen gets *Find similar*. The CLI

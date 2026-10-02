@@ -1,4 +1,4 @@
-//! The shared match-compare view (#411; ADR 0038 §3, ADR 0039; `merge.html`): two records side by
+//! The shared match-compare view (#411; ADR 0038 §3, ADR 0039; `matches.html`): two records side by
 //! side, one row per term the matching engine compared — both values, a non-colour outcome mark and
 //! the term's weighted explanation — under a header naming each side with its origin chip and the scan
 //! region it was read from. Every host decides with the same three keys (ADR 0030 §2): `y` *Same*,
@@ -155,7 +155,7 @@ fn value_cell(chrome: &Chrome, value: Option<&str>) -> Element {
     }
 }
 
-/// The decision foot (`merge.html`): the reason and confidence recorded with the decision, bound to
+/// The decision foot (`matches.html`): the reason and confidence recorded with the decision, bound to
 /// `draft`, then *Decide later*, *Not the same* and *Same (reversible)*, each showing its key. Pure over
 /// its args (the confidence options arrive localized), so an SSR test renders it without an `AppCtx`.
 /// A blank reason records no rationale ([`PairJudgment::decision`]).

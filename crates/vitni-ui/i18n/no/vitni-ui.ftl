@@ -456,11 +456,16 @@ dashboard-data-quality = Datakvalitet
 dashboard-data-quality-loading = Sjekker datakvalitet…
 dashboard-no-source-facts = Fakta uten kilde
 dashboard-death-before-birth = Død før fødsel
-dashboard-possible-duplicates = Mulige duplikater
-dashboard-compare = Sammenlign
-dashboard-compare-label = Sammenlign mulige duplikater
+dashboard-possible-matches = Mulige treff
+dashboard-matches-count = { $count ->
+    [one] 1 uavgjort par
+   *[other] { $count } uavgjorte par
+}
+dashboard-no-matches = Ingen mulige treff: hvert par motoren foreslår, er avgjort.
+dashboard-review = Gå gjennom
+dashboard-review-label = Gå gjennom de mulige treffene
 dashboard-score-tooltip = Sammenligningsmotorens sannsynlighet — ikke den 5-nivåers påstands-sikkerheten
-dashboard-attention-caption = { $unsourced } fakta uten kilde · { $deaths } død-før-fødsel · { $duplicates } duplikater
+dashboard-attention-caption = { $unsourced } fakta uten kilde · { $deaths } død-før-fødsel · { $duplicates } mulige treff
 dashboard-more = +{ $count } flere
 dashboard-activity-empty = Ingen aktivitet ennå.
 
@@ -1067,14 +1072,40 @@ match-band-deterministic = fastslått identitet
 match-band-probable = sannsynlig treff
 match-band-possible = mulig treff
 match-band-unlikely = lite sannsynlig treff
-merge-result-summary = { $merged } blir en persona av { $survivor }; én hendelse lagt til i historikken.
+merge-result-summary = { $kind ->
+    [person] { $merged } blir en persona av { $survivor }
+   *[other] { $merged } er slått sammen med { $survivor }
+}; én hendelse lagt til i historikken.
 claim-merged-from = fra { $record }
 merge-blocked-heading = Sammenslåing blokkert — motstridende fakta
 merge-blocked-guidance = Løs motsetningen først (trekk tilbake eller erstatt én påstand), og slå deretter sammen.
 identity-assessment = Samsvar { $score } % · { $band } · motor { $engine }
-distinguish-result-summary = { $other } er markert som en annen person enn { $person }; én hendelse lagt til i historikken.
+distinguish-result-summary = { $other } er markert som { $kind ->
+    [person] en annen person
+    [family] en annen familie
+    [event] en annen hendelse
+    [place] et annet sted
+    [source] en annen kilde
+    [repository] et annet arkiv
+    [citation] et annet sitat
+    [media] et annet medium
+   *[note] et annet notat
+} enn { $record }; én hendelse lagt til i historikken.
+match-kind = { $kind ->
+    [person] Person
+    [family] Familie
+    [event] Hendelse
+    [place] Sted
+    [source] Kilde
+    [repository] Arkiv
+    [citation] Sitat
+    [media] Medium
+   *[note] Notat
+}
+match-kind-count = { $kind }: { $count }
+match-run-option = { $source } — { $started }
 identity-decided-heading = Allerede avgjort
-identity-decided-guidance = Disse to personene har allerede en identitetsavgjørelse. Angre den i historikken før du avgjør på nytt.
+identity-decided-guidance = Disse to postene har allerede en identitetsavgjørelse. Angre den i historikken før du avgjør på nytt.
 
 ## Treffgrunner (ADR 0038 §3, §8) — én linje per ledd i motorens poengsum: egenskapen, hvordan verdiene
 ## sammenlignet, og leddets log₂-vekt. Et egenskapsnavn står først i setningen.

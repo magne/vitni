@@ -48,6 +48,7 @@ mod identity;
 pub mod import;
 pub mod import_run;
 pub mod map_source;
+pub mod match_queue;
 pub mod matching;
 pub mod media;
 pub mod media_change_set;
@@ -168,6 +169,10 @@ pub use import_run::{
     list_datasets, list_import_runs, propose_dataset, start_import_run,
 };
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
+pub use match_queue::{
+    DecidableKind, IdentityRefusal, MatchQueueFilter, MatchVerdict, QueuedMatch, decide_match, match_pair_decision,
+    match_queue, undo_match_distinction_and_merge,
+};
 pub use matching::{MatchDataError, load_match_data};
 pub use media::{
     MediaAttributeRef, MediaMergeResult, MediaSummary, NewMedia, add_media_attribute, add_media_citation,
@@ -276,6 +281,7 @@ pub use vitni_core::geo::{GeoCoordinates, Microdegrees, PlaceGeometry};
 pub use vitni_core::ids::AgentId;
 pub use vitni_core::ids::ImportRunId;
 pub use vitni_core::ids::PersonId;
+pub use vitni_core::ids::PlaceId;
 pub use vitni_core::import_run::{
     AbandonReason, ImportCounts, ImportRunError, ImportRunStatus, NewImportRun, ResolutionDecision, ResolvedItem,
 };

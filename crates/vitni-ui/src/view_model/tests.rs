@@ -170,8 +170,8 @@ fn data_quality_maps_check_findings_to_navigable_rows() {
     // The flagged person is a navigable People record labelled by display name, not the id.
     assert_eq!(vm.death_before_birth[0].human_id, "I0001");
     assert_eq!(vm.death_before_birth[0].label, "Ada Lovelace");
-    assert_eq!(vm.duplicates.len(), 1, "each duplicate finding is one pair");
-    let pair = &vm.duplicates[0];
+    assert_eq!(vm.matches.len(), 1, "each duplicate finding is one pair");
+    let pair = &vm.matches[0];
     assert_eq!(pair.a.category, crate::navigation::Category::People);
     assert_eq!(pair.a.label, "Ada Lovelace", "a person is named, not numbered");
     assert_eq!(pair.b.label, "I0002", "an unnamed person falls back to its id");
@@ -201,7 +201,7 @@ fn a_place_duplicate_is_a_place_row_with_its_reasons() {
     )];
     let vm = DataQualityVm::build(&[summary()], &findings, &loc);
 
-    let pair = &vm.duplicates[0];
+    let pair = &vm.matches[0];
     assert_eq!(pair.a.category, crate::navigation::Category::Places);
     assert_eq!((pair.a.human_id.as_str(), pair.b.human_id.as_str()), ("P0001", "P0002"));
     assert_eq!(pair.percent, 80);
@@ -217,7 +217,7 @@ fn a_place_duplicate_is_a_place_row_with_its_reasons() {
 }
 
 #[test]
-fn a_tag_duplicate_opens_by_id_and_shows_its_name() {
+fn a_tag_pair_is_no_possible_match() {
     use vitni_app::{MatchBand, MatchableKind};
     let loc = Localizer::for_test("en");
     let findings = vec![duplicate(
@@ -227,10 +227,28 @@ fn a_tag_duplicate_opens_by_id_and_shows_its_name() {
         evidence(7_000, MatchBand::Possible, &[]),
     )];
     let vm = DataQualityVm::build(&[], &findings, &loc);
-    let pair = &vm.duplicates[0];
-    assert_eq!(pair.a.category, crate::navigation::Category::Tags);
-    assert_eq!(pair.a.human_id, "0190-tag-a", "a tag opens by its id");
-    assert_eq!(pair.a.label, "Emigrant", "but is never shown by it");
+    assert!(
+        vm.matches.is_empty(),
+        "a tag is never decided as a pair: {:?}",
+        vm.matches
+    );
+    assert_eq!(vm.match_counts, [] as [String; 0]);
+}
+
+#[test]
+fn the_possible_matches_are_counted_per_kind() {
+    use vitni_app::{MatchBand, MatchableKind};
+    let loc = Localizer::for_test("en");
+    let pair =
+        |kind, a: &str, b: &str| duplicate(kind, agg(a, a), agg(b, b), evidence(7_000, MatchBand::Possible, &[]));
+    let findings = vec![
+        pair(MatchableKind::Place, "P0001", "P0002"),
+        pair(MatchableKind::Person, "I0001", "I0002"),
+        pair(MatchableKind::Place, "P0003", "P0004"),
+    ];
+    let vm = DataQualityVm::build(&[], &findings, &loc);
+    assert_eq!(vm.match_counts, ["Person: 1", "Place: 2"], "in kind order");
+    assert_eq!(vm.matches[0].kind_label, "Place");
 }
 
 #[test]
@@ -317,7 +335,7 @@ fn every_feature_and_outcome_has_a_reason_in_each_language() {
 fn data_quality_reports_zero_counts_with_no_findings() {
     let vm = DataQualityVm::build(&[summary()], &[], &Localizer::for_test("en"));
     assert!(vm.death_before_birth.is_empty(), "{:?}", vm.death_before_birth);
-    assert!(vm.duplicates.is_empty(), "{:?}", vm.duplicates);
+    assert!(vm.matches.is_empty(), "{:?}", vm.matches);
 }
 
 #[test]

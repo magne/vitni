@@ -44,6 +44,7 @@ mod geography;
 mod history;
 mod import;
 mod match_compare;
+mod match_queue;
 mod media;
 mod media_save;
 mod merge;
@@ -76,6 +77,7 @@ pub use geography::*;
 pub use history::*;
 pub use import::*;
 pub use match_compare::*;
+pub use match_queue::*;
 pub use media::*;
 pub use media_save::*;
 pub use merge::*;
@@ -96,7 +98,7 @@ pub use tag::*;
 #[cfg(test)]
 mod match_compare_tests;
 #[cfg(test)]
-mod merge_tests;
+mod match_queue_tests;
 #[cfg(test)]
 mod pedigree_tests;
 #[cfg(test)]
