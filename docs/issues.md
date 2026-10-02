@@ -488,13 +488,13 @@ does.
   surnames differ. The default 256 cases rarely reach it. *Shape:* a key the Jaro–Winkler floor
   implies (a short prefix of the normalized given name), or *Katherine* in the same class as *Kari*.
   *Exit:* the proptest passes at 10 000 cases.
-- **Propose a GEDCOM or Gramps file's dataset from its header and keys** — ADR 0040 §1, ADR 0037 §3. Both already
-  submit record graphs (#407), keyed as before: `INDI`/`FAM` xrefs or Gramps handles, events
-  `event:BIRT:0`, places `plac:<name>`, media `file:<path>`. What remains is the dataset: it is proposed
-  from the header fingerprint — `staging.begin-run`'s `dataset-hint`, which neither importer sends yet —
-  and key overlap, and the user confirms. The explicit choice it proposes into already exists (#393):
-  the CLI's `--dataset` / `--new-dataset` and the bulk-import confirm's *This file is* select. *Exit:* a
-  re-run fixture per importer proves stable item keys. — #408
+- **A vitni GEDCOM export is never proposed its dataset on re-import** — ADR 0037 §3. A GEDCOM file
+  declares a fingerprint only with a `HEAD.FILE` (#408), since `HEAD.SOUR` alone is shared by unrelated
+  files and so are their xrefs. The GEDCOM exporter writes `1 SOUR vitni` and no `HEAD.FILE`, so
+  re-importing a vitni export into a workspace with GEDCOM datasets proposes no tree and the operator
+  picks one by hand. *Shape:* the exporter writes a `HEAD.FILE` that stays the same across exports of one
+  workspace, such as the workspace's name. *Exit:* exporting a workspace, importing it elsewhere, then
+  importing a later export proposes the first import's dataset. — #463
 - **Submit each Digitalarkivet record as one record graph** — ADR 0040 §1, §4. The census-person, household
   and church-book records already submit graphs (#407), but in two steps: the person alone, then — only
   when the host reports it is this dataset's own — the person with its occupation, citation and scan.

@@ -694,6 +694,13 @@ from the matching engine with resolved relatives standing in, New otherwise — 
 of a record resolved onto another dataset's. The commit writes in dependency order, each write stamped
 with its origin, and an interrupted commit finishes when the import is run again. Candidates are written
 as new until the review stages (#411–#413) land.
+✅ Dataset proposal (ADR 0037 §3, #408): the GEDCOM and Gramps importers declare their header's
+fingerprint (`HEAD.SOUR`/`HEAD.FILE`, the Gramps researcher) to `begin-run`, recorded on
+`ImportRunStarted`. An import that names no dataset while lineages of its format exist is read first;
+the host proposes the lineage holding the file's people and families under the same fingerprint
+(never on shared file-local ids alone), and the
+operator confirms it — the bulk-import confirm starts on it with the evidence, the CLI asks, and
+`--yes` accepts. Re-run fixtures per importer prove stable item keys.
 
 ## Risk register
 
