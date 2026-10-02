@@ -721,6 +721,14 @@ birthplace name is one place only within its census municipality or church book.
 municipality, the household and the church-book event are records of their own, keyed by the archive's
 ids, so a household's members share them; the confirm stage previews them. A record resolved onto
 another dataset's person no longer adds that person to the household's family.
+✅ Shared match-compare view (ADR 0038 §3, ADR 0039, #411): `MatchCompareVm` and the `MatchCompare`
+component show any matchable kind's pair side by side, one row per term the engine compared — both
+values, an outcome mark that is spoken as well as coloured, and the term's weighted explanation ("Similar
+birth (+2.1)") — under a header naming each side with an origin chip (the dataset record an import
+created it from, `vitni_app::record_origin`) and the first attached scan with a region, outlined. The
+foot decides *Same*, *Not the same* or *Decide later*, also with the fixed keys `y`, `n` and `l`
+(ADR 0030 §2), which work as soon as the view opens. The Merge screen hosts it for person pairs; *Decide
+later* replaces Cancel and leaves the pair proposed.
 
 ## Risk register
 

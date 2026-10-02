@@ -1,18 +1,17 @@
-# #403: "Not the same" in the compare view records the decision, and the pair leaves the
-# duplicates table for good. SSR renders the button but cannot press it: this proves the click reaches
-# `distinguish_persons` through the screen's callbacks, that the screen returns to a table the pair has
-# left, and that the pair stays gone after leaving the tool and coming back.
+# #411: the shared match-compare view decides a pair by keyboard alone. SSR renders the keys' hints
+# but cannot prove the view takes focus when it opens, nor that a bare letter reaches its handler in
+# the webview: this opens the view and presses `l` (Decide later — the pair stays proposed), opens it
+# again and presses `y` (Same — the pair merges and leaves the table). No click lands on a decision.
 #
 # The fixture seeds no persons (and must not — every scenario is measured against its lists), so the
-# scenario creates John Smith and John Smyth itself, which the engine proposes as a possible match.
-# After the first Save the record sits in edit mode, where ⌘N does not open a draft, so the second
-# person comes from the tabstrip's "+" menu.
+# scenario creates John Smith and John Smyth itself, as merge-distinguish.toml does.
 #
 # Every assertion is scoped to the duplicates card, y 75-235: the *Created* and decision notices
-# repaint the bottom of the window, and the rail's selection moves between the visits.
+# repaint the bottom of the window. The baseline is shot with the pointer on the
+# row, as it is after the Compare click, so the row's hover highlight is in both.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
-description = "Not the same removes the pair from the duplicates table for good (#403)"
+description = "The compare view decides a pair by keyboard: l leaves it proposed, y merges it (#411)"
 
 [[step]]
 do = "click"
@@ -90,6 +89,11 @@ at = [108, 749]
 label = "rail: Compare / merge"
 
 [[step]]
+do = "click"
+at = [1000, 200]
+label = "row: an inert cell, so the baseline carries the row's hover like the later shot"
+
+[[step]]
 do = "shot"
 name = "table"
 
@@ -103,23 +107,27 @@ do = "shot"
 name = "compare"
 
 [[step]]
-do = "click"
-at = [463, 642]
-label = "field: Reason for this decision"
-
-[[step]]
-do = "text"
-text = "different fathers"
-label = "type: different fathers"
-
-[[step]]
-do = "click"
-at = [1515, 642]
-label = "Not the same"
+do = "key"
+chord = "l"
+label = "l: Decide later"
 
 [[step]]
 do = "shot"
-name = "decided"
+name = "later"
+
+[[step]]
+do = "click"
+at = [1626, 190]
+label = "row: Compare — again"
+
+[[step]]
+do = "key"
+chord = "y"
+label = "y: Same"
+
+[[step]]
+do = "shot"
+name = "merged"
 
 [[step]]
 do = "click"
@@ -138,17 +146,23 @@ name = "revisit"
 [[assert]]
 kind = "differ"
 shots = ["table", "compare"]
-because = "Compare must open the wizard for the proposed pair"
-region = [232, 75, 1568, 160]
-
-[[assert]]
-kind = "differ"
-shots = ["table", "decided"]
-because = "after Not the same the screen returns to a duplicates table the pair has left"
+because = "Compare must open the compare view for the proposed pair"
 region = [232, 75, 1568, 160]
 
 [[assert]]
 kind = "match"
-shots = ["decided", "revisit"]
-because = "a distinguished pair never reappears, not even after leaving the tool and coming back"
+shots = ["table", "later"]
+because = "l (Decide later) returns to the duplicates table with the pair still proposed"
+region = [232, 75, 1568, 160]
+
+[[assert]]
+kind = "differ"
+shots = ["table", "merged"]
+because = "y (Same) merges the pair, which leaves the duplicates table"
+region = [232, 75, 1568, 160]
+
+[[assert]]
+kind = "match"
+shots = ["merged", "revisit"]
+because = "y left the compare view for the table the merged pair is gone from, which stays so on a revisit"
 region = [232, 75, 1568, 160]

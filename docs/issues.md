@@ -522,12 +522,6 @@ does.
   of every record a re-import resolves. *Shape:* the by-id profile loading the `find_similar` bullet
   above describes, and a cached matcher across an assisted session's submits. *Exit:* planning one
   assisted record at 100k persons under 100 ms in a bench.
-- **Shared match-compare view** — ADR 0038 §3, ADR 0039. A view-model and component generalized from
-  the Merge compare grid (`vitni-ui/src/view_model/merge.rs:198`): per-kind rows, the feature
-  explanations, origin chips, an evidence snippet (the scan crop), and *Same* / *Not the same* /
-  *Decide later*, with shortcuts (ADR 0030). The mockups are updated in the same change. *Needs:* the
-  matching core and distinct decisions. *Exit:* SSR tests and a gui-pass scenario deciding a pair by
-  keyboard. — #411
 - **Assisted wizard match stage** — ADR 0040 §4. A host-owned `present` stage after *Confirm*, shown
   only when the record has candidates. `docs/mockups/import.html` is updated. *Needs:* the compare view.
   *Exit:* a gui-pass scenario covering a record with a candidate, and one
