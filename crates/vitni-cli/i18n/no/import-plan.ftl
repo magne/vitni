@@ -31,6 +31,11 @@ import-review-kind = { $kind ->
     [place] sted
     [source] kilde
     [repository] arkiv
+    [family] familie
+    [event] hendelse
+    [citation] sitat
+    [media] medium
+    [note] notat
    *[other] { $kind }
 }
 import-review-band = { $band ->

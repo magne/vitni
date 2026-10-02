@@ -42,6 +42,7 @@ mod event;
 mod family;
 mod import_plan;
 mod import_run;
+mod match_queue;
 mod matching;
 mod media;
 mod note;

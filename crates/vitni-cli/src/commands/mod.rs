@@ -10,6 +10,7 @@ pub mod event;
 pub mod family;
 pub mod import_run;
 pub mod io;
+pub mod match_queue;
 pub mod media;
 pub mod note;
 pub mod person;

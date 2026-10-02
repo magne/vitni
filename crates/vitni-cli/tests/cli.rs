@@ -878,3 +878,113 @@ fn a_json_plan_of_a_file_without_records_is_still_json() {
     let plan: serde_json::Value = serde_json::from_str(json.trim()).unwrap();
     assert_eq!(plan["kinds"].as_array().map(Vec::len), Some(0), "{json}");
 }
+
+/// Imports `TREE`, then a second export of it as another tree, every possible match left for later;
+/// returns the second run's id (runs are listed oldest first).
+fn import_deferred_copy(dir: &Path) -> String {
+    import_tree(dir, &[]).success();
+    let other = TREE.replace("1 FILE tree.ged", "1 FILE other.ged");
+    import_text(dir, &other, &["--yes", "--new-dataset", "--defer-matches"]).success();
+    let runs = stdout(&vitni(dir).args(["import-run", "list"]).assert().success());
+    let line = runs.lines().last().unwrap();
+    line.split_whitespace().next().unwrap().to_owned()
+}
+
+/// The `match list` lines of `extra`.
+fn match_lines(dir: &Path, extra: &[&str]) -> Vec<String> {
+    let text = stdout(&vitni(dir).args(["match", "list"]).args(extra).assert().success());
+    text.lines().map(str::to_owned).collect()
+}
+
+#[test]
+fn deferred_pairs_are_listed_under_their_run_and_emptied_by_deciding_them() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let run = import_deferred_copy(dir.path());
+
+    let lines = match_lines(dir.path(), &["--run", &run]);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    let fields: Vec<&str> = lines[0].split_whitespace().collect();
+    assert_eq!(fields[0], "person", "{lines:?}");
+    let (a, b) = (fields[1], fields[2]);
+    assert!(lines[0].contains('%'), "{lines:?}");
+
+    let shown = stdout(
+        &vitni(dir.path())
+            .args(["match", "show", "person", a, b])
+            .assert()
+            .success(),
+    );
+    assert!(shown.contains("given name: same"), "{shown}");
+
+    vitni(dir.path())
+        .args([
+            "match",
+            "same",
+            "person",
+            a,
+            b,
+            "--confidence",
+            "high",
+            "--rationale",
+            "one export",
+        ])
+        .assert()
+        .success();
+    assert_eq!(
+        match_lines(dir.path(), &["--run", &run]),
+        ["No possible matches."],
+        "the decided pair has left the queue"
+    );
+    vitni(dir.path())
+        .args(["person", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Smith").count(1));
+}
+
+#[test]
+fn a_pair_marked_distinct_leaves_the_queue_and_cannot_be_merged() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    import_deferred_copy(dir.path());
+    let json = stdout(&vitni(dir.path()).args(["match", "list", "--json"]).assert().success());
+    let queue: serde_json::Value = serde_json::from_str(json.trim()).unwrap();
+    let pairs = queue.as_array().unwrap();
+    assert_eq!(pairs.len(), 1, "{json}");
+    assert_eq!(pairs[0]["kind"], "person");
+    assert!(pairs[0]["score"].as_u64().unwrap() <= 100, "{json}");
+    let (a, b) = (pairs[0]["a"].as_str().unwrap(), pairs[0]["b"].as_str().unwrap());
+
+    vitni(dir.path())
+        .args(["match", "distinct", "person", a, b])
+        .assert()
+        .success();
+    assert_eq!(match_lines(dir.path(), &[]), ["No possible matches."]);
+    vitni(dir.path())
+        .args(["match", "same", "person", a, b])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("already"));
+}
+
+#[test]
+fn the_queue_is_filtered_by_kind_and_band() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    import_deferred_copy(dir.path());
+    assert_eq!(match_lines(dir.path(), &["--kind", "place"]), ["No possible matches."]);
+    assert_eq!(match_lines(dir.path(), &["--kind", "person"]).len(), 1);
+    assert_eq!(
+        match_lines(dir.path(), &["--band", "deterministic"]),
+        ["No possible matches."]
+    );
+    vitni(dir.path())
+        .args(["match", "list", "--kind", "tag"])
+        .assert()
+        .failure();
+    vitni(dir.path())
+        .args(["match", "list", "--run", "not-a-run"])
+        .assert()
+        .failure();
+}
