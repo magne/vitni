@@ -1067,7 +1067,7 @@ removed-once = once removed
 removed-twice = twice removed
 removed-n-times = { $n }× removed
 
-## Compare / merge (Phase 5 PR 19) — the duplicates table and the compare/merge wizard.
+## Matches (Phase 5 PR 19, ADR 0039 §3) — the possible-matches queue and the compare view.
 match-band-deterministic = established identity
 match-band-probable = probable match
 match-band-possible = possible match

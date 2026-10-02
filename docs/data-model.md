@@ -476,7 +476,9 @@ Boundary notes:
   conclusion person references the personas as evidence. **Both streams are retained** — the merge
   is non-destructive, exactly as FamilySearch/Geni require but as audit-by-construction. The opposite
   conclusion — two records are *different* individuals — is a `PersonsDistinguished` event of the same
-  shape, so the pair is never proposed again (ADR 0039 §1). Either decision lives on one person's
+  shape, so the pair is never proposed again (ADR 0039 §1). Suggestions themselves are never stored: the review
+  queue — the Matches tool, `vitni match list` — is computed from the current records minus every
+  decided pair, and narrows to the records one import run created (ADR 0039 §3). Either decision lives on one person's
   stream and is undone by retracting it. Events and families carry the same pair —
   `EventsMerged` / `EventsDistinguished` and `FamiliesMerged` / `FamiliesDistinguished` — for two
   records of one marriage or one household — and so do places, sources, citations, repositories,
@@ -729,7 +731,7 @@ around evidence and provenance.
      pair before committing (`ImportReview`, ADR 0040 §4): *Same* merges a person, written as its own
      persona, into the candidate (`PersonsMerged`) and links any other kind to it; *Not the same*
      records a `<Kind>sDistinguished` and asks about the next candidate; *Decide later* writes it as new
-     with the pairs left for the review queue. A bulk import adds two bulk answers (§3): *Same* for every
+     with the pairs left for the review queue, listed under the run. A bulk import adds two bulk answers (§3): *Same* for every
      open pair of the current kind whose candidate is Probable, each decision carrying its own pair's
      assessment, and *Decide the rest later*. The merges and distinctions are the run's human
      operator's;
