@@ -73,6 +73,11 @@ pub struct NetPolicy {
     /// Whether only `https` is permitted. Production keeps this `true` (ADR 0017 §2); the
     /// capability tests set it `false` to reach a local mock HTTP server.
     pub require_https: bool,
+    /// An origin (`http://localhost:8080`) every permitted request is sent to instead of its own —
+    /// scheme, host and port replaced, path and query kept. The policy still judges the URL the
+    /// plugin asked for, and the plugin still sees that URL as the final one. Production keeps this
+    /// `None`; a debug build of the GUI sets it to serve an archive's pages from local fixtures.
+    pub reroute: Option<String>,
 }
 
 impl Default for NetPolicy {
@@ -91,6 +96,7 @@ impl NetPolicy {
             max_binary_bytes: DEFAULT_MAX_BINARY_BYTES,
             timeout: Duration::from_secs(DEFAULT_TIMEOUT_SECS),
             require_https: true,
+            reroute: None,
         }
     }
 
@@ -197,6 +203,20 @@ fn validate_url(policy: &NetPolicy, url: &Url) -> Result<(), NetError> {
     Ok(())
 }
 
+/// Where a request for `url` goes: `url` itself, or the policy's reroute origin with `url`'s path and
+/// query.
+fn rerouted(policy: &NetPolicy, url: &Url) -> Result<Url, NetError> {
+    let Some(origin) = &policy.reroute else {
+        return Ok(url.clone());
+    };
+    let origin = Url::parse(origin).map_err(|error| NetError::InvalidUrl(format!("reroute origin: {error}")))?;
+    // `set_path`, not `join`: a path of `//host/…` would join as a scheme-relative URL to another host.
+    let mut target = origin;
+    target.set_path(url.path());
+    target.set_query(url.query());
+    Ok(target)
+}
+
 /// Sends a GET and follows redirects manually, re-checking each hop against the policy. Returns the
 /// final URL and the response whose body is still unread.
 async fn send_following_redirects(policy: &NetPolicy, url: &str) -> Result<(Url, reqwest::Response), NetError> {
@@ -204,7 +224,7 @@ async fn send_following_redirects(policy: &NetPolicy, url: &str) -> Result<(Url,
     validate_url(policy, &current)?;
     for _ in 0..=MAX_REDIRECTS {
         let response = client()
-            .get(current.clone())
+            .get(rerouted(policy, &current)?)
             .send()
             .await
             .map_err(|error| NetError::Backend(error.to_string()))?;
@@ -396,5 +416,19 @@ mod tests {
         let policy = policy(&["www.digitalarkivet.no"]);
         let hop = Url::parse("https://evil.example.com/").expect("url");
         assert!(matches!(validate_url(&policy, &hop), Err(NetError::Policy(_))));
+    }
+
+    #[test]
+    fn a_reroute_keeps_its_origin_whatever_the_path() {
+        let policy = NetPolicy {
+            reroute: Some("http://localhost:8080".to_owned()),
+            ..policy(&["www.digitalarkivet.no"])
+        };
+        let url = Url::parse("https://www.digitalarkivet.no//evil.example.com/a?b=1").expect("url");
+        let target = rerouted(&policy, &url).expect("rerouted");
+        assert_eq!(target.host_str(), Some("localhost"));
+        assert_eq!(target.port(), Some(8080));
+        assert_eq!(target.path(), "//evil.example.com/a");
+        assert_eq!(target.query(), Some("b=1"));
     }
 }

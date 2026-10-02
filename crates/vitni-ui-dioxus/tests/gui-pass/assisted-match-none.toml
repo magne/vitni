@@ -1,0 +1,92 @@
+# #412: an assisted record with no possible match never meets the host's Match stage — saving the scan
+# goes straight to the summary. The record comes from the archive stand-in `gui-pass` serves
+# (`xtask/src/archive_server.rs`), into the fixture, which holds no person it could match.
+#
+# The summary is proven by its Import another, which returns the wizard to its first stage: the step
+# indicator then matches the one shot there before the import. Had a Match stage come up instead, the
+# click would land inside the compare view and the indicator would still show Match.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "A record with no possible match goes from Save scan straight to the summary (#412)"
+
+[[step]]
+do = "click"
+at = [70, 786]
+label = "rail: Import"
+
+[[step]]
+do = "click"
+at = [455, 169]
+label = "mode: Assisted online import"
+
+[[step]]
+do = "click"
+at = [1394, 435]
+label = "field: Record or search URL"
+
+[[step]]
+do = "wait"
+seconds = 1
+label = "let the assisted wizard finish painting"
+
+[[step]]
+do = "shot"
+name = "source"
+
+[[step]]
+do = "text"
+text = "https://www.digitalarkivet.no/census/person/pf01099901000101"
+label = "type: the census person's URL"
+
+[[step]]
+do = "click"
+at = [297, 482]
+label = "Fetch"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the plugin fetch the record"
+
+[[step]]
+do = "click"
+at = [1706, 775]
+label = "Confirm: Import & next"
+
+[[step]]
+do = "shot"
+name = "save"
+
+[[step]]
+do = "click"
+at = [1168, 596]
+label = "Save scan"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the host plan the record"
+
+[[step]]
+do = "shot"
+name = "after-save"
+
+[[step]]
+do = "click"
+at = [330, 480]
+label = "Summary: Import another"
+
+[[step]]
+do = "shot"
+name = "again"
+
+[[assert]]
+kind = "differ"
+shots = ["save", "after-save"]
+because = "saving the scan writes the record and closes the dialog"
+
+[[assert]]
+kind = "match"
+shots = ["source", "again"]
+region = [248, 278, 700, 40]
+because = "the record went straight to the summary, whose Import another starts over at Source"

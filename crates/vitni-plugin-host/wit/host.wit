@@ -198,7 +198,14 @@
 // `existing-ref` goes), and `committed-entity` loses `created`. `submit` takes a record together with
 // the records it references, planned as one, so a withheld record withholds what only it reaches; each
 // `committed-entity` names its record. A breaking change to `staging`.
-package vitni:host-api@0.27.0;
+//
+// Version 0.28.0 lets the user decide an assisted record's possible matches before it is written
+// (ADR 0040 §4). When the plan finds a stored record possibly the same as one of the record's people,
+// places, sources or repositories, the host shows its own match stage through the frontend before
+// `submit` returns; the guest neither sees nor drives it. `submit-outcome` gains `skipped`, for a
+// record the user chose not to import there, and `cancelled`, for a session the user ended there;
+// either way nothing of the record was written. A breaking change to `staging`.
+package vitni:host-api@0.28.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `vitni_core::name::NameType`.
@@ -1100,10 +1107,13 @@ interface staging {
     }
 
     // What `submit` did: a bulk import's graph is held until `run-import` returns; an assisted import's
-    // is planned and written at once.
+    // is planned and written at once — unless the user, asked about its possible matches, skipped the
+    // record or cancelled the session, when nothing of it was written.
     variant submit-outcome {
         staged,
         committed(list<committed-entity>),
+        skipped,
+        cancelled,
     }
 
     // Declares the import, at most once and before the first `submit`: a hint at which dataset the

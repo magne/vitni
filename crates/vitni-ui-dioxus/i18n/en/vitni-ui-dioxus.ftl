@@ -454,6 +454,19 @@ import-stage-records = Records
 import-stage-confirm = Confirm
 import-stage-save = Save scan
 import-stage-summary = Summary
+import-stage-match = Match
+import-match-position = Possible match { $position } of { $total }
+import-match-heading = { $kind ->
+    [person] Is this person already in your tree?
+    [place] Is this place already in your tree?
+    [source] Is this source already in your tree?
+    [repository] Is this repository already in your tree?
+   *[other] Is this record already in your tree?
+}
+import-match-stored-caption = in your tree · keeps its id
+import-match-incoming-caption = from this record
+import-match-skip = Skip record
+import-match-cancel = Cancel import
 import-source-label = Source
 import-url-label = Record or search URL
 import-url-placeholder = https://www.digitalarkivet.no/…

@@ -76,6 +76,7 @@ const GUI_PASS: Fixture = Fixture {
     required_media: &[SEED_MEDIA_REL, SEED_MEDIA_NORDIC_REL],
     required_files: &[SEED_IMPORT_FILE],
     env: &[],
+    serve_archive: true,
 };
 
 /// A GEDCOM file placed beside the fixture workspace's data — never imported by the seed, so no
@@ -185,6 +186,9 @@ pub struct Fixture {
     /// Extra environment applied to both the seeding CLI and the GUI. `screenshots` pins
     /// `VITNI_LANGUAGE` with it, so the committed images are English whatever the machine's locale is.
     pub env: &'static [(&'static str, &'static str)],
+    /// Whether the GUI's assisted imports fetch from the local archive stand-in
+    /// ([`crate::archive_server`]) — the `assisted-match-*` scenarios import a census record from it.
+    pub serve_archive: bool,
 }
 
 /// One scenario: what it proves, the steps to drive, and the assertions over the shots taken.
@@ -234,7 +238,7 @@ enum Step {
     /// Send a chord in `xdotool key` syntax (`ctrl+k`, `Escape`, `question`).
     Key { chord: String, label: String },
     /// Type `text` into whatever has keyboard focus: one step and one settle for a whole word, not a
-    /// `key` step (and a settle) per character. Letters, digits, space and `-.,` only — see [`keysyms`].
+    /// `key` step (and a settle) per character. Letters, digits, space and `-.,:/` only — see [`keysyms`].
     Text { text: String, label: String },
     /// Press at `from`, move by `by`, release — a canvas drag (map pan).
     Drag {
@@ -389,9 +393,14 @@ pub fn run_fixture(options: &Options, fixture: &Fixture) -> Result<PathBuf> {
 
     let scripts = resolve_scripts(fixture, &options.scripts)?;
     let jobs = options.jobs.min(scripts.len()).max(1);
+    let archive = if fixture.serve_archive {
+        Some(crate::archive_server::start()?)
+    } else {
+        None
+    };
     let mut workers = Vec::new();
     for index in 0..jobs {
-        workers.push(Worker::new(options, fixture, &out, index)?);
+        workers.push(Worker::new(options, fixture, &out, index, archive.clone())?);
     }
     let outcomes = run_queue(jobs, &scripts, |index, path| {
         let mut log = Log::new(jobs == 1);
@@ -524,10 +533,12 @@ struct Worker {
     workspace: PathBuf,
     /// The fixture's output directory, holding the shared seeds and the shots.
     out: PathBuf,
+    /// The archive stand-in's origin the GUI's assisted imports fetch from, if the fixture serves one.
+    archive: Option<String>,
 }
 
 impl Worker {
-    fn new(options: &Options, fixture: &Fixture, out: &Path, index: usize) -> Result<Self> {
+    fn new(options: &Options, fixture: &Fixture, out: &Path, index: usize, archive: Option<String>) -> Result<Self> {
         let root = if index == 0 {
             out.to_owned()
         } else {
@@ -538,6 +549,7 @@ impl Worker {
             home: absolute(&root.join("home"))?,
             workspace: absolute(&root.join(fixture.workspace_dir))?,
             out: out.to_owned(),
+            archive,
         })
     }
 }
@@ -1048,6 +1060,9 @@ fn start_session(options: &Options, fixture: &Fixture, worker: &Worker, shots: &
     if !options.real_config {
         gui.envs(isolated_home(&worker.home));
     }
+    if let Some(origin) = &worker.archive {
+        gui.env(crate::archive_server::REROUTE_VAR, origin);
+    }
     if let Some(name) = options.workspace.as_deref() {
         gui.env("VITNI_WORKSPACE", name);
     } else if !options.real_config {
@@ -1263,8 +1278,9 @@ fn type_text(display: &str, text: &str) -> Result<()> {
 }
 
 /// The `xdotool key` keysym for each character of `text`: letters (upper case as `shift+`), digits,
-/// space and `-.,`. Anything else fails, naming the character — the default Xvfb keymap has no key for
-/// `æøå` and friends, and a remapped one would bring back the `xdotool type` unreliability.
+/// space and `-.,:/` — enough for a URL. Anything else fails, naming the character — the default
+/// Xvfb keymap has no key for `æøå` and friends, and a remapped one would bring back the
+/// `xdotool type` unreliability.
 fn keysyms(text: &str) -> Result<Vec<String>> {
     if text.is_empty() {
         bail!("gui-pass: a text step needs something to type");
@@ -1278,7 +1294,9 @@ fn keysyms(text: &str) -> Result<Vec<String>> {
             '-' => "minus".to_owned(),
             '.' => "period".to_owned(),
             ',' => "comma".to_owned(),
-            other => bail!("gui-pass: a text step cannot type {other:?} — use letters, digits, space or -.,"),
+            ':' => "colon".to_owned(),
+            '/' => "slash".to_owned(),
+            other => bail!("gui-pass: a text step cannot type {other:?} — use letters, digits, space or -.,:/"),
         };
         keys.push(key);
     }
@@ -1820,6 +1838,17 @@ mod tests {
             keys,
             [
                 "shift+t", "shift+r", "e", "e", "minus", "7", "space", "shift+o", "s", "l", "o"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_url_is_typeable() {
+        let keys = keysyms("https://a.no/x").expect("a URL is typeable");
+        assert_eq!(
+            keys,
+            [
+                "h", "t", "t", "p", "s", "colon", "slash", "slash", "a", "period", "n", "o", "slash", "x"
             ]
         );
     }

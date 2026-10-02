@@ -8,11 +8,12 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, CommitControl, DatasetId, DateParts, Disposition, EntityFields, EntityRef, ExternalId, ImportPlan,
-    LinkBasis, LinkKind, MutationMeta, NewEvent, NewFact, NewImportRun, NewParticipation, NewPerson, OperatorConfig,
-    PendingRun, PersonNameParts, Provenance, RecordGraph, RunToEnd, Session, StagedEntity, StagedEvent, StagedFamily,
-    StagedLink, StagedPerson, StagedPlace, StagedTag, Workspace, WorkspaceDefaults, WriteScope, commit_import,
-    gregorian_date, plan_import, record_origin,
+    AppDefaults, CommitControl, CommitOutcome, DatasetId, DateParts, Disposition, EntityFields, EntityRef, ExternalId,
+    IdentityDecision, ImportCounts, ImportPlan, ImportReview, LinkBasis, LinkKind, MutationMeta, NewEvent, NewFact,
+    NewImportRun, NewParticipation, NewPerson, NewPlace, OperatorConfig, PairAnswer, PairDecision, PendingRun,
+    PersonNameParts, PlaceType, Provenance, RecordGraph, ResolutionDecision, RunToEnd, Session, StagedEntity,
+    StagedEvent, StagedFamily, StagedLink, StagedPerson, StagedPlace, StagedTag, Workspace, WorkspaceDefaults,
+    WriteScope, commit_import, gregorian_date, plan_import, record_origin,
 };
 use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Sex};
 use vitni_core::ids::AgentId;
@@ -733,4 +734,240 @@ async fn two_tags_of_one_name_import_one_tag() {
     .await;
     assert_eq!(disposition(&plan, 1, 0), &Disposition::Duplicate { of: 0 });
     assert_eq!(vitni_app::list_tags(&workspace).await.expect("tags").len(), 1);
+}
+
+/// Plans `graphs` for review as `session`.
+async fn review(workspace: &Workspace, session: &Session, graphs: Vec<RecordGraph>) -> ImportReview {
+    ImportReview::plan(workspace, session, graphs, None)
+        .await
+        .expect("plan")
+}
+
+/// Commits `review` as `session`, the identity decisions made as the human operator.
+async fn commit_review(workspace: &Workspace, session: &Session, review: ImportReview) -> CommitOutcome {
+    review
+        .commit(workspace, session, &human(), &Provenance::default())
+        .await
+        .expect("commit")
+}
+
+/// The human id the commit gave the own entity of the graph `graph`.
+fn committed_id(outcome: &CommitOutcome, graph: usize) -> String {
+    outcome
+        .entities
+        .iter()
+        .find(|entity| entity.graph == graph && entity.local_id == 0)
+        .map(|entity| entity.human_id.clone())
+        .expect("committed")
+}
+
+fn decided() -> IdentityDecision {
+    IdentityDecision {
+        provenance: Provenance {
+            rationale: Some("same farm, same year".to_owned()),
+            ..Provenance::default()
+        },
+        assessment: None,
+    }
+}
+
+#[tokio::test]
+async fn a_record_without_candidates_asks_nothing() {
+    let (workspace, _dir) = workspace().await;
+    let review = review(&workspace, &importer(dataset(1)), vec![individual("I1", "Ole")]).await;
+    assert_eq!(review.next_question(&workspace).await.expect("question"), None);
+}
+
+#[tokio::test]
+async fn a_candidate_is_asked_about_with_both_records_labelled() {
+    let (workspace, _dir) = workspace().await;
+    let stored = stored_person(&workspace, "Ole", 1850, None).await;
+    let review = review(&workspace, &importer(dataset(1)), vec![individual("I1", "Ole")]).await;
+
+    let question = review
+        .next_question(&workspace)
+        .await
+        .expect("question")
+        .expect("a candidate");
+    assert_eq!(question.kind, MatchableKind::Person);
+    assert_eq!(question.candidate.human_id, stored);
+    assert_eq!(question.candidate_label, "Ole Hansen");
+    assert_eq!(question.incoming_label, "Ole Hansen");
+    assert_eq!(
+        question.incoming_origin.as_ref().map(|origin| origin.record.as_str()),
+        Some("I1")
+    );
+    assert_eq!((question.position, question.total), (1, 1));
+}
+
+#[tokio::test]
+async fn a_person_decided_same_is_imported_and_merged_into_the_candidate() {
+    let (workspace, _dir) = workspace().await;
+    let stored = stored_person(&workspace, "Ole", 1850, None).await;
+    let session = importer(dataset(1));
+    let mut review = review(&workspace, &session, vec![individual("I1", "Ole")]).await;
+    review
+        .answer(&workspace, &session, PairAnswer::Same(decided()))
+        .await
+        .expect("answer");
+    assert_eq!(review.next_question(&workspace).await.expect("question"), None);
+
+    let outcome = commit_review(&workspace, &session, review).await;
+    let imported = committed_id(&outcome, 0);
+    assert_ne!(imported, stored, "the record keeps its own persona");
+    assert_eq!(
+        vitni_app::pair_decision(&workspace, &stored, &imported)
+            .await
+            .expect("decision"),
+        Some(PairDecision::SameCluster)
+    );
+    assert_eq!(outcome.deferred, 0);
+}
+
+#[tokio::test]
+async fn a_place_decided_same_is_reused_and_resolves_so_on_the_next_run() {
+    let (workspace, _dir) = workspace().await;
+    let new = NewPlace {
+        human_id: None,
+        place_type: PlaceType::City,
+        name: Some("Mandal".to_owned()),
+    };
+    let stored = vitni_app::create_place(&workspace, &human(), new, Provenance::default(), &[])
+        .await
+        .expect("place");
+    let session = importer(dataset(1));
+    let mut review = review(&workspace, &session, vec![place("plac:Mandal", "Mandal")]).await;
+    let question = review
+        .next_question(&workspace)
+        .await
+        .expect("question")
+        .expect("a candidate");
+    assert_eq!(
+        (question.kind, question.candidate.human_id.as_str()),
+        (MatchableKind::Place, stored.as_str())
+    );
+    review
+        .answer(&workspace, &session, PairAnswer::Same(decided()))
+        .await
+        .expect("answer");
+
+    let outcome = commit_review(&workspace, &session, review).await;
+    assert_eq!(vitni_app::list_places(&workspace).await.expect("places").len(), 1);
+    assert_eq!(committed_id(&outcome, 0), stored);
+    assert_eq!(
+        outcome.resolved.iter().map(|item| item.decision).collect::<Vec<_>>(),
+        vec![ResolutionDecision::Matched]
+    );
+
+    let run = session.import_run().expect("a run");
+    run.ensure_started(workspace.store()).await.expect("start");
+    vitni_app::finish_import_run(
+        &workspace,
+        &human(),
+        run.id(),
+        outcome.resolved,
+        ImportCounts::default(),
+    )
+    .await
+    .expect("finish");
+    let again = plan(&workspace, &importer(dataset(1)), vec![place("plac:Mandal", "Mandal")]).await;
+    let Disposition::Link { target, basis } = disposition(&again, 0, 0) else {
+        panic!("expected a link: {:?}", disposition(&again, 0, 0));
+    };
+    assert_eq!(
+        (target.human_id.as_str(), *basis),
+        (stored.as_str(), LinkBasis::Recorded)
+    );
+}
+
+#[tokio::test]
+async fn the_position_moves_on_past_a_reused_record() {
+    let (workspace, _dir) = workspace().await;
+    let new = NewPlace {
+        human_id: None,
+        place_type: PlaceType::City,
+        name: Some("Mandal".to_owned()),
+    };
+    vitni_app::create_place(&workspace, &human(), new, Provenance::default(), &[])
+        .await
+        .expect("place");
+    stored_person(&workspace, "Ole", 1850, None).await;
+    let session = importer(dataset(1));
+    let graphs = vec![place("plac:Mandal", "Mandal"), individual("I1", "Ole")];
+    let mut review = review(&workspace, &session, graphs).await;
+    let first = review
+        .next_question(&workspace)
+        .await
+        .expect("question")
+        .expect("a candidate");
+    assert_eq!((first.kind, first.position, first.total), (MatchableKind::Place, 1, 2));
+    review
+        .answer(&workspace, &session, PairAnswer::Same(decided()))
+        .await
+        .expect("answer");
+
+    let second = review
+        .next_question(&workspace)
+        .await
+        .expect("question")
+        .expect("a candidate");
+    assert_eq!(
+        (second.kind, second.position, second.total),
+        (MatchableKind::Person, 2, 2)
+    );
+}
+
+#[tokio::test]
+async fn not_the_same_asks_the_next_candidate_and_records_each_distinction() {
+    let (workspace, _dir) = workspace().await;
+    let first = stored_person(&workspace, "Ole", 1850, None).await;
+    let second = stored_person(&workspace, "Ole", 1850, None).await;
+    let session = importer(dataset(1));
+    let mut review = review(&workspace, &session, vec![individual("I1", "Ole")]).await;
+
+    let mut asked = Vec::new();
+    while let Some(question) = review.next_question(&workspace).await.expect("question") {
+        asked.push(question.candidate.human_id);
+        review
+            .answer(&workspace, &session, PairAnswer::Distinct(decided()))
+            .await
+            .expect("answer");
+    }
+    asked.sort();
+    assert_eq!(asked, vec![first.clone(), second.clone()]);
+
+    let outcome = commit_review(&workspace, &session, review).await;
+    let imported = committed_id(&outcome, 0);
+    for stored in [first, second] {
+        assert_eq!(
+            vitni_app::pair_decision(&workspace, &imported, &stored)
+                .await
+                .expect("decision"),
+            Some(PairDecision::Distinct)
+        );
+    }
+    assert_eq!(outcome.deferred, 0, "every candidate was decided");
+}
+
+#[tokio::test]
+async fn decide_later_imports_as_new_and_leaves_the_pair_undecided() {
+    let (workspace, _dir) = workspace().await;
+    let stored = stored_person(&workspace, "Ole", 1850, None).await;
+    let session = importer(dataset(1));
+    let mut review = review(&workspace, &session, vec![individual("I1", "Ole")]).await;
+    review
+        .answer(&workspace, &session, PairAnswer::Later)
+        .await
+        .expect("answer");
+    assert_eq!(review.next_question(&workspace).await.expect("question"), None);
+
+    let outcome = commit_review(&workspace, &session, review).await;
+    let imported = committed_id(&outcome, 0);
+    assert_eq!(outcome.deferred, 1);
+    assert_eq!(
+        vitni_app::pair_decision(&workspace, &imported, &stored)
+            .await
+            .expect("decision"),
+        None
+    );
 }

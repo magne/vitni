@@ -20,6 +20,8 @@ pub enum ResolutionDecision {
     ExternalId,
     /// Deterministic identity: a tag of the same case-folded name already existed (ADR 0038 §6).
     TagName,
+    /// The user decided the item is the existing aggregate when the import asked (ADR 0040 §3).
+    Matched,
 }
 
 /// One incoming item the run resolved onto an existing aggregate.

@@ -90,6 +90,21 @@ pub enum LinkBasis {
     ExternalId,
     /// A tag of the same case-folded name.
     TagName,
+    /// The user decided it is the record when the import asked (ADR 0040 §3).
+    Decided,
+}
+
+/// The user's decision that a staged entity is a stored record, which planning applies before matching.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecidedMatch {
+    /// The entity's kind.
+    pub kind: MatchableKind,
+    /// The entity's record.
+    pub record: String,
+    /// The entity's item within its record.
+    pub item: Option<String>,
+    /// The stored record it is.
+    pub target: AggRef,
 }
 
 /// Which of an entity's or link's writes the commit makes.
@@ -282,9 +297,20 @@ pub async fn plan_import(
     graphs: Vec<RecordGraph>,
     file_asserted_at: Option<Timestamp>,
 ) -> Result<ImportPlan, PlanError> {
+    plan_decided(workspace, session, graphs, file_asserted_at, &[]).await
+}
+
+/// [`plan_import`], with every entity in `decided` resolved onto the record the user decided it is.
+pub(crate) async fn plan_decided(
+    workspace: &Workspace,
+    session: &Session,
+    graphs: Vec<RecordGraph>,
+    file_asserted_at: Option<Timestamp>,
+    decided: &[DecidedMatch],
+) -> Result<ImportPlan, PlanError> {
     let mut planner = Planner::new(workspace, session, graphs)?;
     planner.plan.file_asserted_at = file_asserted_at;
-    planner.resolve().await?;
+    planner.resolve(decided).await?;
     planner.resolve_endpoints().await?;
     planner.scope();
     planner.dry_run().await?;
@@ -363,8 +389,9 @@ impl<'a> Planner<'a> {
         self.session.import_run().map(|run| run.dataset())
     }
 
-    /// The deterministic pass: by origin, then by external id, then a tag by its name.
-    async fn resolve(&mut self) -> Result<(), AppError> {
+    /// The deterministic pass: by origin, then by the user's decision, then by external id, then a tag
+    /// by its name.
+    async fn resolve(&mut self, decided: &[DecidedMatch]) -> Result<(), AppError> {
         let tags = tag_names(self.workspace).await?;
         // The identities of the plan's new entities so far, so a later one with the same is the same.
         let mut identities: HashMap<String, usize> = HashMap::new();
@@ -384,16 +411,20 @@ impl<'a> Planner<'a> {
                 };
                 continue;
             }
-            let found = match &entity.fields {
-                EntityFields::Person(person) => {
+            let by_decision = decided
+                .iter()
+                .find(|decision| decision.kind == kind && decision.record == record && decision.item == item);
+            let found = match (&entity.fields, by_decision) {
+                (_, Some(decision)) => Some((decision.target.clone(), LinkBasis::Decided)),
+                (EntityFields::Person(person), None) => {
                     let found = self.by_external_id(kind, &person.external_ids).await?;
                     found.map(|target| (target, LinkBasis::ExternalId))
                 }
-                EntityFields::Family(family) => {
+                (EntityFields::Family(family), None) => {
                     let found = self.by_external_id(kind, &family.external_ids).await?;
                     found.map(|target| (target, LinkBasis::ExternalId))
                 }
-                EntityFields::Tag(tag) => tags.get(&fold(&tag.name)).map(|id| {
+                (EntityFields::Tag(tag), None) => tags.get(&fold(&tag.name)).map(|id| {
                     (
                         AggRef {
                             human_id: id.clone(),
@@ -402,13 +433,16 @@ impl<'a> Planner<'a> {
                         LinkBasis::TagName,
                     )
                 }),
-                EntityFields::Event(_)
-                | EntityFields::Place(_)
-                | EntityFields::Source(_)
-                | EntityFields::Citation(_)
-                | EntityFields::Media(_)
-                | EntityFields::Note(_)
-                | EntityFields::Repository(_) => None,
+                (
+                    EntityFields::Event(_)
+                    | EntityFields::Place(_)
+                    | EntityFields::Source(_)
+                    | EntityFields::Citation(_)
+                    | EntityFields::Media(_)
+                    | EntityFields::Note(_)
+                    | EntityFields::Repository(_),
+                    None,
+                ) => None,
             };
             let Some((target, basis)) = found else {
                 let keys = identity_keys(&entity.fields);
@@ -422,6 +456,7 @@ impl<'a> Planner<'a> {
             if let Ok(aggregate_id) = Uuid::parse_str(&target.id) {
                 let decision = match basis {
                     LinkBasis::TagName => ResolutionDecision::TagName,
+                    LinkBasis::Decided => ResolutionDecision::Matched,
                     LinkBasis::ExternalId | LinkBasis::Recorded => ResolutionDecision::ExternalId,
                 };
                 self.plan.resolved.push(ResolvedItem {

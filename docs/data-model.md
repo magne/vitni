@@ -718,13 +718,19 @@ around evidence and provenance.
      gate as a dry run, write nothing;
    - **Update** — the same, naming the fields the writes would assert;
    - **Link** — a record identity is established for deterministically: by a recorded resolution, by
-     `ExternalId`, or a tag by its case-folded name (ADR 0038 §6), recorded as `ItemResolved`;
+     `ExternalId`, or a tag by its case-folded name (ADR 0038 §6), recorded as `ItemResolved`; or by
+     the user deciding a place, source or repository is a candidate (`ItemResolved` with the decision
+     `Matched`), so the next run resolves it by the recorded resolution;
    - **Duplicate** — the same record as an earlier entity of the import: one with the same
      `ExternalId`, or a tag of the same folded name; references to it point at that entity;
    - **Candidates** — a new person, place, source or repository the matching engine judges at least
      Possible against the workspace; relatives that resolved stand in as the records they resolved
-     onto, and two items of one graph are never matched to each other. Until the review stages land
-     they are written as new, the pairs left for the review queue;
+     onto, and two items of one graph are never matched to each other. An assisted import asks the
+     user about each pair before committing (`ImportReview`, ADR 0040 §4): *Same* merges a person,
+     written as its own persona, into the candidate (`PersonsMerged`) and links any other kind to it;
+     *Not the same* records a `<Kind>sDistinguished` and asks about the next candidate; *Decide later*
+     writes it as new with the pairs left for the review queue. The merges and distinctions are the
+     run's human operator's. A bulk import writes them all as new until its review stage lands;
    - **New** — nothing resolved.
 
    `commit_import` writes the plan in dependency order (places, sources, repositories, tags, media,

@@ -185,7 +185,7 @@ Writing one:
   changing for 600 ms (4 s at most), so steps are fast and a timed effect no longer expires between two
   steps by accident. Most often that is a notice (the *Saved* toast lives 6 s, `NOTICE_TTL`). If a
   `match` spans a Save, add a `wait` that outlasts the notice before the first shot.
-- **`text` types letters, digits, space and `-.,` only**, 40 ms apart in one `xdotool key` call
+- **`text` types letters, digits, space and `-.,:/` only**, 40 ms apart in one `xdotool key` call
   (`xdotool type` drops characters on Xvfb). Keep per-character `key` steps where the point is a
   re-render *between* keystrokes (`restriction-edit`, `untag-reason` guard the reason field against being
   blanked after each one).

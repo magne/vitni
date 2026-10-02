@@ -17,6 +17,7 @@ mod family;
 mod geography;
 mod help;
 mod import;
+mod import_match;
 mod map_shared;
 mod match_compare;
 mod media;
@@ -77,8 +78,9 @@ pub use geography::{
 pub use help::{HelpScreen, render_doc};
 pub use import::{
     ConfirmChrome, ConfirmStage, ImportModeLabels, ImportModeSwitch, ImportRowStatus, ImportScreen, RecordsLabels,
-    RecordsStage, SaveStage, SourceLabels, SourceStage, SummaryLabels, SummaryStage, WizardLabels,
+    RecordsStage, SaveStage, SourceLabels, SourceStage, SummaryLabels, SummaryStage, WizardLabels, step_indicator,
 };
+pub use import_match::{MatchStage, MatchStageLabels, match_stage_labels};
 pub use map_shared::{DrawTool, MapControlLabels, MapDraft, MapZoomReadout, MovedCamera, effective_date_choice};
 pub use match_compare::{DecisionDraft, MatchCompare, decision_foot};
 pub use media::{

@@ -159,6 +159,12 @@ because a scripted click run writes real events. Parallel workers each get their
 workspace (`target/gui-pass/workers/<n>/`), restored from the same seed. Shots land in
 `target/gui-pass/shots/<scenario>/` and the GUI's own log in `gui.log` beside them.
 
+The assisted-import scenarios (`assisted-match-*`) never reach Digitalarkivet. The harness serves the
+bundled census pages from a local stand-in (`xtask/src/archive_server.rs`) and hands the GUI its origin
+in `VITNI_ASSISTED_NET_REROUTE`. A debug build then sends every permitted fetch there instead, keeping
+its path, while the plugin still asks for, and sees, `https://www.digitalarkivet.no/…`. A release build
+ignores the variable.
+
 When a screenshot disagrees with your reading of it, column-scan instead of squinting:
 
 ```bash

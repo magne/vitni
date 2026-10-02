@@ -63,6 +63,7 @@
 //! version of that world), the licensor grants you additional permission to convey the resulting
 //! work. Such a component is not required to be licensed under the GNU AGPL.
 
+mod archive_server;
 mod backup_fixture;
 mod backup_guard;
 mod build_plugins;
