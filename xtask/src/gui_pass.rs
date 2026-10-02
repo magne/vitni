@@ -1278,8 +1278,9 @@ fn type_text(display: &str, text: &str) -> Result<()> {
 }
 
 /// The `xdotool key` keysym for each character of `text`: letters (upper case as `shift+`), digits,
-/// space and `-.,:/` — enough for a URL. Anything else fails, naming the character — the default Xvfb keymap has no key for
-/// `æøå` and friends, and a remapped one would bring back the `xdotool type` unreliability.
+/// space and `-.,:/` — enough for a URL. Anything else fails, naming the character — the default
+/// Xvfb keymap has no key for `æøå` and friends, and a remapped one would bring back the
+/// `xdotool type` unreliability.
 fn keysyms(text: &str) -> Result<Vec<String>> {
     if text.is_empty() {
         bail!("gui-pass: a text step needs something to type");

@@ -317,12 +317,17 @@ impl ImportReview {
     }
 
     /// Where entity `index` stands among the plan's entities with candidates: its position from 1, and
-    /// their number.
+    /// their number. An entity a *Same* reused still counts, though the plan now resolves it, so the
+    /// positions after it do not step back.
     fn position(&self, index: usize) -> (usize, usize) {
         let mut position = 0;
         let mut total = 0;
         for (i, entity) in self.plan.entities.iter().enumerate() {
-            if has_candidates(&entity.disposition) {
+            let reused = match self.answers[i].settled {
+                Some(Settled::Reused) => true,
+                Some(Settled::Merge(_) | Settled::Later) | None => false,
+            };
+            if reused || has_candidates(&entity.disposition) {
                 total += 1;
                 if i <= index {
                     position += 1;
@@ -345,7 +350,8 @@ fn has_candidates(disposition: &Disposition) -> bool {
     }
 }
 
-/// Records that the imported record `imported` of `kind` is not `stored`.
+/// Records that the imported record `imported` of `kind` is not `stored`, the stored record first —
+/// the left side of the assessment the decision carries.
 async fn distinguish(
     workspace: &Workspace,
     operator: &Session,
@@ -356,11 +362,11 @@ async fn distinguish(
 ) -> Result<(), AppError> {
     let decision = decision.clone();
     match kind {
-        MatchableKind::Person => crate::distinguish_persons(workspace, operator, imported, stored, decision).await,
-        MatchableKind::Place => crate::distinguish_places(workspace, operator, imported, stored, decision).await,
-        MatchableKind::Source => crate::distinguish_sources(workspace, operator, imported, stored, decision).await,
+        MatchableKind::Person => crate::distinguish_persons(workspace, operator, stored, imported, decision).await,
+        MatchableKind::Place => crate::distinguish_places(workspace, operator, stored, imported, decision).await,
+        MatchableKind::Source => crate::distinguish_sources(workspace, operator, stored, imported, decision).await,
         MatchableKind::Repository => {
-            crate::distinguish_repositories(workspace, operator, imported, stored, decision).await
+            crate::distinguish_repositories(workspace, operator, stored, imported, decision).await
         }
         MatchableKind::Family
         | MatchableKind::Event

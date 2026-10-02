@@ -210,9 +210,9 @@ fn rerouted(policy: &NetPolicy, url: &Url) -> Result<Url, NetError> {
         return Ok(url.clone());
     };
     let origin = Url::parse(origin).map_err(|error| NetError::InvalidUrl(format!("reroute origin: {error}")))?;
-    let mut target = origin
-        .join(url.path())
-        .map_err(|error| NetError::InvalidUrl(error.to_string()))?;
+    // `set_path`, not `join`: a path of `//host/…` would join as a scheme-relative URL to another host.
+    let mut target = origin;
+    target.set_path(url.path());
     target.set_query(url.query());
     Ok(target)
 }
@@ -416,5 +416,19 @@ mod tests {
         let policy = policy(&["www.digitalarkivet.no"]);
         let hop = Url::parse("https://evil.example.com/").expect("url");
         assert!(matches!(validate_url(&policy, &hop), Err(NetError::Policy(_))));
+    }
+
+    #[test]
+    fn a_reroute_keeps_its_origin_whatever_the_path() {
+        let policy = NetPolicy {
+            reroute: Some("http://localhost:8080".to_owned()),
+            ..policy(&["www.digitalarkivet.no"])
+        };
+        let url = Url::parse("https://www.digitalarkivet.no//evil.example.com/a?b=1").expect("url");
+        let target = rerouted(&policy, &url).expect("rerouted");
+        assert_eq!(target.host_str(), Some("localhost"));
+        assert_eq!(target.port(), Some(8080));
+        assert_eq!(target.path(), "//evil.example.com/a");
+        assert_eq!(target.query(), Some("b=1"));
     }
 }

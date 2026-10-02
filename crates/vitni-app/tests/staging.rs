@@ -881,6 +881,43 @@ async fn a_place_decided_same_is_reused_and_resolves_so_on_the_next_run() {
 }
 
 #[tokio::test]
+async fn the_position_moves_on_past_a_reused_record() {
+    let (workspace, _dir) = workspace().await;
+    let new = NewPlace {
+        human_id: None,
+        place_type: PlaceType::City,
+        name: Some("Mandal".to_owned()),
+    };
+    vitni_app::create_place(&workspace, &human(), new, Provenance::default(), &[])
+        .await
+        .expect("place");
+    stored_person(&workspace, "Ole", 1850, None).await;
+    let session = importer(dataset(1));
+    let graphs = vec![place("plac:Mandal", "Mandal"), individual("I1", "Ole")];
+    let mut review = review(&workspace, &session, graphs).await;
+    let first = review
+        .next_question(&workspace)
+        .await
+        .expect("question")
+        .expect("a candidate");
+    assert_eq!((first.kind, first.position, first.total), (MatchableKind::Place, 1, 2));
+    review
+        .answer(&workspace, &session, PairAnswer::Same(decided()))
+        .await
+        .expect("answer");
+
+    let second = review
+        .next_question(&workspace)
+        .await
+        .expect("question")
+        .expect("a candidate");
+    assert_eq!(
+        (second.kind, second.position, second.total),
+        (MatchableKind::Person, 2, 2)
+    );
+}
+
+#[tokio::test]
 async fn not_the_same_asks_the_next_candidate_and_records_each_distinction() {
     let (workspace, _dir) = workspace().await;
     let first = stored_person(&workspace, "Ole", 1850, None).await;
