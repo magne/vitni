@@ -2,9 +2,11 @@
 //! (--new NAME PATH | --into NAME) [--yes]`, reached as a mode on `Tool::Import` (`screens/import.rs`)
 //! rather than a separate `Tool` — mirrors the shipped bulk-export wizard (`screens/export.rs`).
 //!
-//! Three stages: Source (pick an installed bulk-import plugin, a source file, and a target workspace)
-//! → Running (progress, cancellable) → Summary. A failed run and a cancelled run share the export
-//! wizard's [`NoticeStage`]/[`WizardNoticeTone`].
+//! Stages: Source (pick an installed bulk-import plugin, a source file, and a target workspace) →
+//! Running (progress, cancellable) → Plan (what the import would write, by kind; ADR 0040 §4) →
+//! Review (each possible match, only while one is asked about) → Summary. The Plan and Review stages
+//! are `screens/bulk_review.rs`. A failed run and a cancelled run share the export wizard's
+//! [`NoticeStage`]/[`WizardNoticeTone`].
 //!
 //! Unlike the export wizard the target may not be the workspace currently open: importing into an
 //! *existing* non-empty workspace is confirmed first in a [`Modal`], mirroring the CLI's own confirm
@@ -23,10 +25,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use vitni_plugin_host::{PluginRole, ProgressStep};
+use vitni_plugin_host::{PluginRole, ProgressStep, ReviewRequest};
 use vitni_ui::{
     BulkImportProgress, BulkImportSession, BulkImportStage, BulkImportStep, BulkImportSummary, ImportSourcePath,
-    ImportTargetChoice, ImportTargetError,
+    ImportTargetChoice, ImportTargetError, Localizer,
 };
 
 use super::export::{NoticeStage, WizardNoticeTone};
@@ -34,19 +36,21 @@ use super::prelude::*;
 use crate::app::request_restart;
 use crate::components::Modal;
 use crate::i18n::Chrome;
+use crate::screens::shared::confidence_choices;
+use crate::screens::{BulkPlanStage, BulkReviewStage, bulk_plan_labels, bulk_review_labels};
 use crate::services::{
     BulkImportHandle, DatasetQuestion, PluginRow, Services, discover_plugins, probe_import_target, start_bulk_import,
 };
 use tokio::sync::oneshot;
-use vitni_app::{DatasetChoice, DatasetProposal};
+use vitni_app::{DatasetChoice, DatasetProposal, PlanStep, ReviewReply};
 
 /// The wizard chrome shared across stages: the heading and the three step names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BulkImportWizardLabels {
     /// The wizard heading.
     pub heading: String,
-    /// The three stage names (Source, Running, Summary).
-    pub stages: [String; 3],
+    /// The stage names (Source, Running, Plan, Review, Summary).
+    pub stages: [String; 5],
 }
 
 /// The Source-stage labels.
@@ -211,13 +215,23 @@ struct AskedDataset {
     question: DatasetQuestionView,
 }
 
-/// The signals the post-read dataset confirm runs on: the question on screen, where its answer goes,
-/// and the select's value (shared with the pre-launch confirm).
+/// The signals the host's questions after the read run on: the dataset confirm's question on screen,
+/// where its answer goes, and the select's value (shared with the pre-launch confirm); and where the
+/// answer to the plan or the possible match on screen goes.
 #[derive(Clone, Copy)]
 struct Asking {
     asked: Signal<Option<AskedDataset>>,
     reply: Signal<Option<oneshot::Sender<Option<DatasetChoice>>>>,
     dataset: Signal<String>,
+    review: Signal<Option<ReviewResponder>>,
+}
+
+/// Where the answer to the host's Plan or Review question goes.
+enum ReviewResponder {
+    /// What to do with the plan.
+    Plan(oneshot::Sender<PlanStep>),
+    /// The answer to one possible match.
+    Match(oneshot::Sender<ReviewReply>),
 }
 
 impl Asking {
@@ -272,6 +286,7 @@ pub fn BulkImportBody() -> Element {
         asked: use_signal(|| None),
         reply: use_signal(|| None),
         dataset,
+        review: use_signal(|| None),
     };
     let default_dir = state.services().dir.clone();
 
@@ -295,6 +310,21 @@ pub fn BulkImportBody() -> Element {
                 labels: bulk_running_labels(&chrome, &progress),
                 progress,
                 oncancel: move |()| bulk_request_cancel(session, cancel),
+            }
+        },
+        BulkImportStage::Plan(summary) => rsx! {
+            BulkPlanStage {
+                labels: bulk_plan_labels(&chrome, &summary),
+                onstep: move |step| answer_plan(step, session, asking.review),
+            }
+        },
+        BulkImportStage::Review(stage) => rsx! {
+            BulkReviewStage {
+                key: "{stage.position}-{stage.compare.left.human_id}",
+                labels: bulk_review_labels(&chrome, &stage),
+                stage: *stage,
+                confidence_options: confidence_choices(state.data_loc()),
+                onanswer: move |reply| answer_review(reply, session, asking.review),
             }
         },
         BulkImportStage::Summary(summary) => rsx! {
@@ -877,17 +907,27 @@ pub fn BulkSummaryStage(labels: BulkSummaryLabels, source: String, onrestart: Ev
     }
 }
 
-/// The wizard step indicator, identical in shape to the export wizard's own (`.wiz-steps`).
-fn bulk_step_indicator(labels: &BulkImportWizardLabels, stage: &BulkImportStage) -> Element {
+/// The step index of the Review stage, shown only while it is up.
+const REVIEW_STEP: usize = 3;
+
+/// The wizard step indicator, identical in shape to the export wizard's own (`.wiz-steps`). The Review
+/// step shows only while its stage is up — a plan with no possible match never meets it.
+pub fn bulk_step_indicator(labels: &BulkImportWizardLabels, stage: &BulkImportStage) -> Element {
     let current = bulk_stage_index(stage);
+    let mut steps = Vec::with_capacity(labels.stages.len());
+    for (index, name) in labels.stages.iter().enumerate() {
+        if index != REVIEW_STEP || current == REVIEW_STEP {
+            steps.push((index, name.clone()));
+        }
+    }
     rsx! {
         div { class: "wiz-steps", role: "list", aria_label: "{labels.heading}",
-            for (index , name) in labels.stages.iter().enumerate() {
+            for (number , (index , name)) in steps.into_iter().enumerate() {
                 span {
                     class: if index == current { "wiz-step active" } else if index < current { "wiz-step done" } else { "wiz-step" },
                     role: "listitem",
                     aria_current: if index == current { Some("step") } else { None },
-                    span { class: "num", "{index + 1}" }
+                    span { class: "num", "{number + 1}" }
                     " {name}"
                 }
             }
@@ -900,7 +940,41 @@ fn bulk_stage_index(stage: &BulkImportStage) -> usize {
     match stage {
         BulkImportStage::Source | BulkImportStage::Cancelled => 0,
         BulkImportStage::Running(_) => 1,
-        BulkImportStage::Summary(_) | BulkImportStage::Error(_) => 2,
+        BulkImportStage::Plan(_) => 2,
+        BulkImportStage::Review(_) => REVIEW_STEP,
+        BulkImportStage::Summary(_) | BulkImportStage::Error(_) => 4,
+    }
+}
+
+/// Sends the operator's `step` for the plan on screen. Discarding it cancels the wizard, as the import
+/// writes nothing; otherwise the wizard moves on to writing until the host asks or reports.
+fn answer_plan(step: PlanStep, mut session: Signal<BulkImportSession>, mut review: Signal<Option<ReviewResponder>>) {
+    let Some(ReviewResponder::Plan(reply)) = review.write().take() else {
+        return;
+    };
+    // A dropped receiver means the import already ended; there is nothing left to answer.
+    let _ = reply.send(step);
+    match step {
+        PlanStep::Discard => session.write().cancel(),
+        PlanStep::Review | PlanStep::DeferMatches => session.write().resume(),
+    }
+}
+
+/// Sends the operator's `reply` to the possible match on screen. Cancelling cancels the wizard, as the
+/// import writes nothing; any other answer leaves the pair up until the host asks the next or writes.
+fn answer_review(
+    reply: ReviewReply,
+    mut session: Signal<BulkImportSession>,
+    mut review: Signal<Option<ReviewResponder>>,
+) {
+    let Some(ReviewResponder::Match(responder)) = review.write().take() else {
+        return;
+    };
+    let cancelled = reply == ReviewReply::Cancel;
+    // A dropped receiver means the import already ended; there is nothing left to answer.
+    let _ = responder.send(reply);
+    if cancelled {
+        session.write().cancel();
     }
 }
 
@@ -980,6 +1054,7 @@ fn launch_bulk_import(
     };
     let drive = BulkDrive {
         chrome: services.chrome(),
+        loc: services.localizer(),
         source_display: source.display().to_string(),
         workspace,
         persons,
@@ -997,6 +1072,8 @@ fn launch_bulk_import(
 /// What the driver loop needs beyond the run's handle.
 struct BulkDrive {
     chrome: Chrome,
+    /// The data localizer a possible match's comparison is labelled with.
+    loc: Localizer,
     source_display: String,
     /// The target workspace's name and person count, for the dataset question's dialog.
     workspace: String,
@@ -1013,6 +1090,7 @@ impl BulkDrive {
             mut asked,
             reply: mut reply_slot,
             mut dataset,
+            ..
         } = self.asking;
         let question = dataset_question(&self.chrome, &proposal);
         dataset.set(question.value.clone());
@@ -1022,6 +1100,21 @@ impl BulkDrive {
             persons: self.persons,
             question,
         }));
+    }
+
+    /// Shows the host's Plan or Review question, keeping where its answer goes.
+    fn review(&self, request: ReviewRequest, mut session: Signal<BulkImportSession>) {
+        let mut review = self.asking.review;
+        match request {
+            ReviewRequest::Plan { summary, reply } => {
+                session.write().on_plan(summary);
+                review.set(Some(ReviewResponder::Plan(reply)));
+            }
+            ReviewRequest::Match { question, reply } => {
+                session.write().on_match(&question, &self.loc);
+                review.set(Some(ReviewResponder::Match(reply)));
+            }
+        }
     }
 }
 
@@ -1037,10 +1130,12 @@ async fn bulk_drive(handle: BulkImportHandle, mut session: Signal<BulkImportSess
     let BulkImportHandle {
         mut progress,
         mut question,
+        mut reviews,
         outcome,
         cancel: _,
     } = handle;
     let mut asked = false;
+    let mut reviewing = true;
     loop {
         tokio::select! {
             update = progress.recv() => {
@@ -1063,10 +1158,18 @@ async fn bulk_drive(handle: BulkImportHandle, mut session: Signal<BulkImportSess
                     drive.ask(received);
                 }
             }
+            request = reviews.recv(), if reviewing => {
+                match request {
+                    Some(request) => drive.review(request, session),
+                    None => reviewing = false,
+                }
+            }
         }
     }
     // The run is over: a question still on screen can no longer be answered.
     drive.asking.answer(None);
+    let mut review = drive.asking.review;
+    review.set(None);
     let BulkDrive {
         source_display,
         refresh,

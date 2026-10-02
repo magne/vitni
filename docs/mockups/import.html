@@ -44,10 +44,12 @@
     <h2 style="margin-top:var(--sp-6)">Bulk file import</h2>
 
     <!-- Step indicator -->
+    <!-- A Review step joins between Plan and Summary only while the Review stage is up. -->
     <div class="wiz-steps" role="list" aria-label="Bulk import stages">
       <span class="wiz-step active" role="listitem" aria-current="step"><span class="num">1</span> Source</span>
       <span class="wiz-step" role="listitem"><span class="num">2</span> Running</span>
-      <span class="wiz-step" role="listitem"><span class="num">3</span> Summary</span>
+      <span class="wiz-step" role="listitem"><span class="num">3</span> Plan</span>
+      <span class="wiz-step" role="listitem"><span class="num">4</span> Summary</span>
     </div>
 
     <!-- ===================== BULK STAGE 1 — SOURCE (existing-workspace target) ===================== -->
@@ -128,9 +130,136 @@
       </div>
     </div>
 
-    <!-- Specimen: the plugin has read the whole file; Vitni now writes its records (ADR 0040 §4). -->
+
+    <!-- ===================== BULK STAGE 3 — PLAN (ADR 0040 §4) ===================== -->
+    <!-- Once the plugin has read the file, Vitni plans it: what each record would become, by kind, in the
+         order the commit writes them. Shown on every bulk import, before anything is written. -->
     <div class="card">
-      <h3>Stage 2 · Running <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, writing: the plugin has read the file and Vitni writes its records; Cancel stops between two writes, and importing the same file again finishes the rest</span></h3>
+      <h3>Stage 3 · Plan <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— the file is read and nothing is written yet; a second tree of people already in the workspace</span></h3>
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead><tr><th scope="col">Records</th><th scope="col" class="num">New</th><th scope="col" class="num">Unchanged</th><th scope="col" class="num">Updated</th><th scope="col" class="num">Already in the tree</th><th scope="col" class="num">Possible matches</th><th scope="col" class="num">Kept as recorded</th></tr></thead>
+          <tbody>
+            <tr><td>Places</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td><td class="num">312</td><td class="num faint">0</td></tr>
+            <tr><td>Sources</td><td class="num">4</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td><td class="num">9</td><td class="num faint">0</td></tr>
+            <tr><td>Citations</td><td class="num">1 840</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td></tr>
+            <tr><td>Persons</td><td class="num">1 160</td><td class="num faint">0</td><td class="num faint">0</td><td class="num">40</td><td class="num">84</td><td class="num faint">0</td></tr>
+            <tr><td>Families</td><td class="num">402</td><td class="num faint">0</td><td class="num faint">0</td><td class="num">12</td><td class="num faint">0</td><td class="num faint">0</td></tr>
+            <tr><td>Events</td><td class="num">3 610</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" role="status">405 records may already be in your tree. Review them one by one, or import them as new and decide later.</p>
+      <div class="wrap" style="gap:var(--sp-2);margin-top:var(--sp-3)">
+        <button class="btn">Cancel</button>
+        <div class="spacer"></div>
+        <button class="btn">Decide all later and import</button>
+        <button class="btn primary">Review 405 possible matches</button>
+      </div>
+    </div>
+    <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)"><b>Already in the tree</b> counts
+      records resolved without a question — by an id the file carries, or a decision an earlier import recorded.
+      <b>Kept as recorded</b> counts what another tree already recorded for a person this file links to.
+      <b>Decide all later and import</b> imports every possible match as new and leaves the pairs for the review
+      queue; <b>Cancel</b> writes nothing. A plan with no possible match offers <b>Import</b> alone.</div>
+
+    <!-- Specimen: re-importing an unchanged file into its own tree. -->
+    <div class="card" style="margin-top:var(--sp-4)">
+      <h3>Stage 3 · Plan <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, a re-import of an unchanged file into its own tree</span></h3>
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead><tr><th scope="col">Records</th><th scope="col" class="num">New</th><th scope="col" class="num">Unchanged</th><th scope="col" class="num">Updated</th><th scope="col" class="num">Already in the tree</th><th scope="col" class="num">Possible matches</th><th scope="col" class="num">Kept as recorded</th></tr></thead>
+          <tbody>
+            <tr><td>Places</td><td class="num faint">0</td><td class="num">312</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td></tr>
+            <tr><td>Persons</td><td class="num faint">0</td><td class="num">1 284</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td></tr>
+            <tr><td>Events</td><td class="num faint">0</td><td class="num">3 610</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td><td class="num faint">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" role="status">Every record is already on record: importing this file writes nothing.</p>
+      <div class="wrap" style="gap:var(--sp-2);margin-top:var(--sp-3)">
+        <button class="btn">Cancel</button>
+        <div class="spacer"></div>
+        <button class="btn primary">Import</button>
+      </div>
+    </div>
+
+    <!-- ===================== BULK STAGE — REVIEW (ADR 0040 §3) ===================== -->
+    <h3 style="margin-top:var(--sp-6)">Stage · Review <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen (only when the plan has possible matches and the operator chose to review them)</span></h3>
+    <div class="wiz-steps" role="list" aria-label="Bulk import stages">
+      <span class="wiz-step done" role="listitem"><span class="num">1</span> Source</span>
+      <span class="wiz-step done" role="listitem"><span class="num">2</span> Running</span>
+      <span class="wiz-step done" role="listitem"><span class="num">3</span> Plan</span>
+      <span class="wiz-step active" role="listitem" aria-current="step"><span class="num">4</span> Review</span>
+      <span class="wiz-step" role="listitem"><span class="num">5</span> Summary</span>
+    </div>
+    <p class="muted" style="margin:0">Possible match 2 of 405</p>
+    <h3 style="margin:0">Is this place already in your tree?</h3>
+    <!-- The shared compare view (#411, merge.html), as in the assisted Match stage below; y / n / l decide. -->
+    <section class="match-compare" tabindex="-1" aria-label="Compare the two records">
+      <p class="muted" style="margin:0 0 12px">Matched at 97% · probable match · engine 4</p>
+      <div class="card" style="padding:0">
+        <div class="merge-grid">
+          <div class="merge-col survivor">
+            <div style="font-weight:700;font-size:var(--fs-lg)">Mandal</div>
+            <div class="muted" style="font-size:var(--fs-xs)"><span class="badge">P0004</span> in your tree · keeps its id</div>
+          </div>
+          <div class="merge-pick" aria-hidden="true">⟷</div>
+          <div class="merge-col">
+            <div style="font-weight:700;font-size:var(--fs-lg)">Mandal</div>
+            <div class="muted" style="font-size:var(--fs-xs)"><span class="badge">new</span> from this file</div>
+          </div>
+
+          <div class="merge-col survivor">
+            <div class="field-label">Place name</div>
+            <div>Mandal</div>
+          </div>
+          <div class="merge-pick">
+            <span class="match-mark" data-outcome="agree" title="same"><span aria-hidden="true">=</span><span class="sr-only">same</span></span>
+          </div>
+          <div class="merge-col">
+            <div class="field-label">Place name</div>
+            <div>Mandal</div>
+            <div class="match-reasons muted">Same place name (+5.0)</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:var(--sp-4);margin-top:var(--sp-4)">
+        <div class="card" style="display:flex;align-items:flex-end;gap:var(--sp-4);flex-wrap:wrap">
+          <div class="field" style="flex:1;min-width:260px;margin:0">
+            <label for="review-reason">Reason for this decision <span class="faint">(recorded on the decision)</span></label>
+            <input id="review-reason" class="in" value="">
+          </div>
+          <div class="field" style="margin:0">
+            <label for="review-confidence">Confidence</label>
+            <select id="review-confidence" class="in" style="width:auto" aria-label="Confidence">
+              <option value="" selected>No judgment</option><option>Very low</option><option>Low</option>
+              <option>Normal</option><option>High</option><option>Very high</option>
+            </select>
+          </div>
+          <div class="spacer"></div>
+          <button class="btn" aria-keyshortcuts="l">Decide later <kbd>L</kbd></button>
+          <button class="btn" aria-keyshortcuts="n">Not the same <kbd>N</kbd></button>
+          <button class="btn primary" aria-keyshortcuts="y">Same (reversible) <kbd>Y</kbd></button>
+        </div>
+        <div class="wrap" style="gap:var(--sp-2)">
+          <button class="btn">Cancel import</button>
+          <div class="spacer"></div>
+          <button class="btn">Decide the rest later</button>
+          <button class="btn">Treat all 311 probable place matches as the same</button>
+        </div>
+      </div>
+    </section>
+    <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">One pair at a time, best candidate first,
+      with the same decisions as the assisted Match stage. <b>Treat all N probable … matches as the same</b> appears
+      only on a probable pair, and answers <b>Same</b> for every open probable pair of that kind — each recorded with
+      its own assessment and the reason and confidence above. <b>Decide the rest later</b> imports every pair not yet
+      answered as new, for the review queue. <b>Cancel import</b> writes nothing. Once the last pair is answered the
+      import writes its records. A bulk import has no <b>Skip record</b>: the file is imported whole.</div>
+
+    <!-- Specimen: the plan is answered; Vitni now writes its records (ADR 0040 §4). -->
+    <div class="card">
+      <h3>Stage 2 · Running <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, writing: the plan is answered and Vitni writes its records; Cancel stops between two writes, and importing the same file again finishes the rest</span></h3>
       <div class="wrap" style="align-items:baseline">
         <span class="grow">Writing records</span>
         <span class="muted mono">2 140 of 9 860</span>
@@ -144,9 +273,9 @@
       </div>
     </div>
 
-    <!-- ===================== BULK STAGE 3 — SUMMARY ===================== -->
+    <!-- ===================== BULK STAGE 4 — SUMMARY ===================== -->
     <div class="card">
-      <h3>Stage 3 · Summary</h3>
+      <h3>Stage 4 · Summary</h3>
       <div class="wrap" style="gap:var(--sp-4)">
         <span class="badge">1 284 records imported</span>
       </div>
@@ -161,18 +290,18 @@
       </div>
     </div>
 
-    <!-- ===================== BULK STAGE 3b — FAILED ===================== -->
+    <!-- ===================== BULK STAGE 4b — FAILED ===================== -->
     <div class="card">
-      <h3>Stage 3 · Failed <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen</span></h3>
+      <h3>Stage 4 · Failed <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen</span></h3>
       <p class="empty" role="alert">plugin error: malformed GEDCOM at line 4021</p>
       <div style="margin-top:var(--sp-3)">
         <button class="btn primary">Import another</button>
       </div>
     </div>
 
-    <!-- ===================== BULK STAGE 3c — CANCELLED ===================== -->
+    <!-- ===================== BULK STAGE 4c — CANCELLED ===================== -->
     <div class="card">
-      <h3>Stage 3 · Cancelled <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen</span></h3>
+      <h3>Stage 4 · Cancelled <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen</span></h3>
       <p class="empty" role="status">The import stopped before it finished.</p>
       <div style="margin-top:var(--sp-3)">
         <button class="btn primary">Import another</button>

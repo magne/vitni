@@ -14,6 +14,11 @@
 
 use std::path::{Component, Path, PathBuf};
 
+use vitni_app::{MatchQuestion, PlanSummary};
+
+use crate::i18n::Localizer;
+use crate::view_model::import::MatchStageVm;
+
 /// What a running bulk import is doing — the framework-free mirror of the plugin host's
 /// `ProgressStep`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,13 +57,18 @@ pub struct BulkImportSummary {
 }
 
 /// Where a bulk-import session currently is. It starts at [`Source`](Self::Source) and runs through
-/// [`Running`](Self::Running) to one of the three terminal stages.
+/// [`Running`](Self::Running), [`Plan`](Self::Plan) and, when the plan has possible matches,
+/// [`Review`](Self::Review), to one of the three terminal stages.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BulkImportStage {
     /// The initial stage: the operator picks a plugin, a source file, and a target workspace.
     Source,
     /// The import is running; the payload is its latest progress report.
     Running(BulkImportProgress),
+    /// The file is read and planned: what the import would write, by kind (ADR 0040 §4).
+    Plan(PlanSummary),
+    /// One possible match of the plan, compared side by side.
+    Review(Box<MatchStageVm>),
     /// The import finished and read records.
     Summary(BulkImportSummary),
     /// The import failed; the payload is the localized message to show.
@@ -121,6 +131,34 @@ impl BulkImportSession {
         self.stage = BulkImportStage::Running(progress);
     }
 
+    /// Shows the plan of the file just read. Ignored once the session is finished.
+    pub fn on_plan(&mut self, summary: PlanSummary) {
+        if self.is_finished() {
+            return;
+        }
+        self.stage = BulkImportStage::Plan(summary);
+    }
+
+    /// Puts one of the plan's possible matches to the operator. Ignored once the session is finished.
+    pub fn on_match(&mut self, question: &MatchQuestion, loc: &Localizer) {
+        if self.is_finished() {
+            return;
+        }
+        self.stage = BulkImportStage::Review(Box::new(MatchStageVm::build(question, loc)));
+    }
+
+    /// Moves on to writing once the operator answered the plan or the last pair, until the host's first
+    /// progress report. Ignored once the session is finished.
+    pub fn resume(&mut self) {
+        if self.is_finished() {
+            return;
+        }
+        self.stage = BulkImportStage::Running(BulkImportProgress {
+            step: BulkImportStep::Writing,
+            ..BulkImportProgress::default()
+        });
+    }
+
     /// Records a successful run. Ignored once the session is finished.
     pub fn on_success(&mut self, summary: BulkImportSummary) {
         if self.is_finished() {
@@ -142,6 +180,15 @@ impl BulkImportSession {
     pub fn cancel(&mut self) {
         self.stage = BulkImportStage::Cancelled;
     }
+}
+
+/// Whether importing as `summary` plans writes nothing: every record is already on record.
+#[must_use]
+pub fn plan_writes_nothing(summary: &PlanSummary) -> bool {
+    summary.kinds.iter().all(|row| {
+        let counts = row.counts;
+        counts.new + counts.updated + counts.linked + counts.candidates == 0
+    })
 }
 
 /// The source file a bulk import should read, as parsed from what the operator typed (lexical,
@@ -293,10 +340,70 @@ impl ImportTargetChoice {
 mod tests {
     use std::path::{Path, PathBuf};
 
+    use vitni_app::{KindCounts, MatchableKind, PlanCounts, PlanSummary};
+
     use super::{
         BulkImportProgress, BulkImportSession, BulkImportStage, BulkImportStep, BulkImportSummary, ImportSourcePath,
-        ImportTargetChoice, ImportTargetError,
+        ImportTargetChoice, ImportTargetError, plan_writes_nothing,
     };
+    use crate::i18n::Localizer;
+    use crate::view_model::import::tests::question;
+
+    fn plan(counts: PlanCounts) -> PlanSummary {
+        PlanSummary {
+            kinds: vec![KindCounts {
+                kind: MatchableKind::Person,
+                counts,
+            }],
+            candidates: counts.candidates,
+        }
+    }
+
+    #[test]
+    fn a_read_file_shows_its_plan_then_its_matches_then_writes() {
+        let mut session = BulkImportSession::new();
+        session.start();
+        let summary = plan(PlanCounts {
+            candidates: 1,
+            ..PlanCounts::default()
+        });
+        session.on_plan(summary.clone());
+        assert_eq!(*session.stage(), BulkImportStage::Plan(summary));
+        assert!(!session.is_finished());
+
+        session.on_match(&question(), &Localizer::for_test("en"));
+        let BulkImportStage::Review(stage) = session.stage() else {
+            panic!("expected the review: {:?}", session.stage());
+        };
+        assert_eq!(stage.compare.left.human_id, "I0001");
+
+        session.resume();
+        let BulkImportStage::Running(progress) = session.stage() else {
+            panic!("expected writing: {:?}", session.stage());
+        };
+        assert_eq!(progress.step, BulkImportStep::Writing);
+    }
+
+    #[test]
+    fn a_cancelled_session_shows_no_late_plan_or_match() {
+        let mut session = BulkImportSession::new();
+        session.cancel();
+        session.on_plan(PlanSummary::default());
+        session.on_match(&question(), &Localizer::for_test("en"));
+        session.resume();
+        assert_eq!(*session.stage(), BulkImportStage::Cancelled);
+    }
+
+    #[test]
+    fn a_plan_writes_nothing_only_when_every_record_is_already_on_record() {
+        let unchanged = PlanCounts {
+            unchanged: 3,
+            withheld: 1,
+            ..PlanCounts::default()
+        };
+        assert!(plan_writes_nothing(&plan(unchanged)));
+        assert!(!plan_writes_nothing(&plan(PlanCounts { new: 1, ..unchanged })));
+    }
 
     fn progress(step: &str, processed: u32) -> BulkImportProgress {
         BulkImportProgress {

@@ -550,6 +550,56 @@ bulk-import-heading = Bulk import
 bulk-import-stage-source = Source
 bulk-import-stage-running = Running
 bulk-import-stage-summary = Summary
+bulk-import-stage-plan = Plan
+bulk-import-stage-review = Review
+bulk-import-plan-heading = What this import will write
+bulk-import-plan-kind-heading = Records
+bulk-import-plan-kind = { $kind ->
+    [person] Persons
+    [family] Families
+    [event] Events
+    [place] Places
+    [source] Sources
+    [citation] Citations
+    [media] Media
+    [note] Notes
+    [repository] Repositories
+    [tag] Tags
+   *[other] { $kind }
+}
+bulk-import-plan-new = New
+bulk-import-plan-unchanged = Unchanged
+bulk-import-plan-updated = Updated
+bulk-import-plan-linked = Already in the tree
+bulk-import-plan-candidates = Possible matches
+bulk-import-plan-withheld = Kept as recorded
+bulk-import-plan-nothing = Every record is already on record: importing this file writes nothing.
+bulk-import-plan-empty = The file holds no records.
+bulk-import-plan-matches = { $count ->
+    [one] 1 record may already be in your tree. Review it, or import it as new and decide later.
+   *[other] { $count } records may already be in your tree. Review them one by one, or import them as new and decide later.
+}
+bulk-import-plan-import = Import
+bulk-import-plan-review = { $count ->
+    [one] Review 1 possible match
+   *[other] Review { $count } possible matches
+}
+bulk-import-plan-defer = Decide all later and import
+bulk-import-plan-cancel = Cancel
+bulk-import-review-incoming-caption = from this file
+bulk-import-review-group = { $count ->
+    [one] Treat the last probable { $kind } match as the same
+   *[other] Treat all { $count } probable { $kind } matches as the same
+}
+bulk-import-review-kind = { $kind ->
+    [person] person
+    [place] place
+    [source] source
+    [repository] repository
+   *[other] { $kind }
+}
+bulk-import-review-rest = Decide the rest later
+bulk-import-review-cancel = Cancel import
 bulk-import-source-heading = Choose what to read, and where to import it
 bulk-import-plugin-label = Import format
 bulk-import-no-plugins = No bulk-import plugins are installed. Run `cargo xtask build-plugins`.

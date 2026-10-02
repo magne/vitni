@@ -2077,12 +2077,113 @@ impl Chrome {
 
     /// The three wizard stage names, in order (Source, Running, Summary).
     #[must_use]
-    pub fn bulk_import_stages(&self) -> [String; 3] {
+    pub fn bulk_import_stages(&self) -> [String; 5] {
         [
             fl!(self.loader, "bulk-import-stage-source"),
             fl!(self.loader, "bulk-import-stage-running"),
+            fl!(self.loader, "bulk-import-stage-plan"),
+            fl!(self.loader, "bulk-import-stage-review"),
             fl!(self.loader, "bulk-import-stage-summary"),
         ]
+    }
+
+    /// The Plan stage's heading.
+    #[must_use]
+    pub fn bulk_import_plan_heading(&self) -> String {
+        fl!(self.loader, "bulk-import-plan-heading")
+    }
+
+    /// The Plan table's first column heading.
+    #[must_use]
+    pub fn bulk_import_plan_kind_heading(&self) -> String {
+        fl!(self.loader, "bulk-import-plan-kind-heading")
+    }
+
+    /// A kind's row heading in the Plan table: "Persons".
+    #[must_use]
+    pub fn bulk_import_plan_kind(&self, kind: &str) -> String {
+        fl!(self.loader, "bulk-import-plan-kind", kind = kind)
+    }
+
+    /// The Plan table's count column headings: new, unchanged, updated, already in the tree, possible
+    /// matches, kept as recorded.
+    #[must_use]
+    pub fn bulk_import_plan_columns(&self) -> [String; 6] {
+        [
+            fl!(self.loader, "bulk-import-plan-new"),
+            fl!(self.loader, "bulk-import-plan-unchanged"),
+            fl!(self.loader, "bulk-import-plan-updated"),
+            fl!(self.loader, "bulk-import-plan-linked"),
+            fl!(self.loader, "bulk-import-plan-candidates"),
+            fl!(self.loader, "bulk-import-plan-withheld"),
+        ]
+    }
+
+    /// The Plan stage's note when the import writes nothing.
+    #[must_use]
+    pub fn bulk_import_plan_nothing(&self) -> String {
+        fl!(self.loader, "bulk-import-plan-nothing")
+    }
+
+    /// The Plan stage's note when the file holds no records.
+    #[must_use]
+    pub fn bulk_import_plan_empty(&self) -> String {
+        fl!(self.loader, "bulk-import-plan-empty")
+    }
+
+    /// The Plan stage's note on its `count` records with possible matches.
+    #[must_use]
+    pub fn bulk_import_plan_matches(&self, count: u32) -> String {
+        fl!(self.loader, "bulk-import-plan-matches", count = count)
+    }
+
+    /// The Plan stage's *Import*.
+    #[must_use]
+    pub fn bulk_import_plan_import(&self) -> String {
+        fl!(self.loader, "bulk-import-plan-import")
+    }
+
+    /// The Plan stage's *Review N possible matches*.
+    #[must_use]
+    pub fn bulk_import_plan_review(&self, count: u32) -> String {
+        fl!(self.loader, "bulk-import-plan-review", count = count)
+    }
+
+    /// The Plan stage's *Decide all later and import*.
+    #[must_use]
+    pub fn bulk_import_plan_defer(&self) -> String {
+        fl!(self.loader, "bulk-import-plan-defer")
+    }
+
+    /// The Plan stage's *Cancel*.
+    #[must_use]
+    pub fn bulk_import_plan_cancel(&self) -> String {
+        fl!(self.loader, "bulk-import-plan-cancel")
+    }
+
+    /// Where the Review stage's incoming record comes from.
+    #[must_use]
+    pub fn bulk_import_review_incoming_caption(&self) -> String {
+        fl!(self.loader, "bulk-import-review-incoming-caption")
+    }
+
+    /// The Review stage's bulk *Same* over `count` probable pairs of `kind` (a Fluent selector).
+    #[must_use]
+    pub fn bulk_import_review_group(&self, count: usize, kind: &str) -> String {
+        let kind = fl!(self.loader, "bulk-import-review-kind", kind = kind);
+        fl!(self.loader, "bulk-import-review-group", count = count, kind = kind)
+    }
+
+    /// The Review stage's *Decide the rest later*.
+    #[must_use]
+    pub fn bulk_import_review_rest(&self) -> String {
+        fl!(self.loader, "bulk-import-review-rest")
+    }
+
+    /// The Review stage's *Cancel import*.
+    #[must_use]
+    pub fn bulk_import_review_cancel(&self) -> String {
+        fl!(self.loader, "bulk-import-review-cancel")
     }
 
     /// The Source-stage heading.
