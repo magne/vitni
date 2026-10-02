@@ -1,6 +1,7 @@
 //! The person change-set use-case (Phase 5): a deferred create/edit that commits a small graph of
-//! aggregates — one Person (name + gender inline), the tags applied to it, and optionally one new
-//! Source and/or Citation the person's assertions cite — in a single operator action.
+//! aggregates — one Person (name + gender inline), the tags applied to it, the Birth event a create may
+//! record, and optionally one new Source and/or Citation the person's assertions cite — in a single
+//! operator action.
 //!
 //! # Why a change-set
 //!
@@ -38,9 +39,10 @@ use crate::change_set::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, Resolution, commit_pending_sources_and_citations,
 };
 use crate::error::AppError;
-use crate::person::{PersonNameParts, PersonSummary, build_name, execute_person_command, show_person};
+use crate::event::DateParts;
+use crate::person::{PersonNameParts, PersonSummary, build_name, execute_person_command, record_birth, show_person};
 use crate::session::Session;
-use crate::use_case::{self, Provenance};
+use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// Whether the change-set creates a new person or edits an existing one.
@@ -50,6 +52,8 @@ pub enum PersonTarget {
     New {
         /// A caller-supplied `human_id` override; `None` auto-allocates the next free one.
         human_id: Option<String>,
+        /// The birth date, recorded as a dated Birth event with the person as its primary participant.
+        birth: Option<DateParts>,
     },
     /// Edit the existing person with this `human_id`; only the diff is committed.
     Existing {
@@ -122,7 +126,7 @@ pub async fn commit_person_change_set(
     let name_citations = resolve_name_citations(change_set.name_citation.as_ref(), &resolution)?;
 
     match &change_set.target {
-        PersonTarget::New { .. } => {
+        PersonTarget::New { birth, .. } => {
             create_person_graph(
                 session,
                 store,
@@ -132,6 +136,15 @@ pub async fn commit_person_change_set(
                 &block_citations,
             )
             .await?;
+            if let Some(birth) = birth {
+                let meta = MutationMeta {
+                    provenance: change_set.provenance.clone(),
+                    citations: &change_set.citations,
+                    dna_matches: &[],
+                    supersedes: None,
+                };
+                record_birth(workspace, session, &human_id, *birth, meta).await?;
+            }
         }
         PersonTarget::Existing { .. } => {
             let current = show_person(workspace, &human_id)
@@ -163,13 +176,15 @@ async fn resolve_person_human_id(
     target: &PersonTarget,
 ) -> Result<String, AppError> {
     match target {
-        PersonTarget::New { human_id: Some(id) } => {
+        PersonTarget::New { human_id: Some(id), .. } => {
             if store.find_person(id).await?.is_some() {
                 return Err(AppError::HumanIdTaken(id.clone()));
             }
             Ok(id.clone())
         }
-        PersonTarget::New { human_id: None } => Ok(store.next_person_human_id(&workspace.person_id_format()?).await?),
+        PersonTarget::New { human_id: None, .. } => {
+            Ok(store.next_person_human_id(&workspace.person_id_format()?).await?)
+        }
         PersonTarget::Existing { human_id } => Ok(human_id.clone()),
     }
 }
@@ -426,6 +441,7 @@ mod tests {
     use super::{PersonChangeSet, PersonTarget, commit_person_change_set};
     use crate::change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
+    use crate::event::{DateParts, gregorian_date, list_events};
     use crate::history::change_log_for_person;
     use crate::person::{PersonNameParts, show_person};
     use crate::session::Session;
@@ -434,7 +450,7 @@ mod tests {
     use crate::workspace::Workspace;
     use tempfile::TempDir;
     use uuid::Uuid;
-    use vitni_core::enums::Sex;
+    use vitni_core::enums::{EventType, Sex};
     use vitni_core::ids::AgentId;
     use vitni_core::provenance::{Agent, AgentKind, Confidence};
 
@@ -490,7 +506,10 @@ mod tests {
     async fn create_with_name_gender_and_a_new_shared_citation_commits_once() {
         let (workspace, session, _dir) = setup().await;
         let change_set = PersonChangeSet {
-            target: PersonTarget::New { human_id: None },
+            target: PersonTarget::New {
+                human_id: None,
+                birth: None,
+            },
             name: Some(name("John", "Smith")),
             name_citation: Some(CitationRefInput::Pending(PlaceholderRef("c1".to_owned()))),
             sex: Some(Sex::Male),
@@ -526,7 +545,10 @@ mod tests {
         // `s1`. Both placeholders resolve to a single minted aggregate id.
         let (workspace, session, _dir) = setup().await;
         let change_set = PersonChangeSet {
-            target: PersonTarget::New { human_id: None },
+            target: PersonTarget::New {
+                human_id: None,
+                birth: None,
+            },
             name: Some(name("Mary", "Doe")),
             name_citation: Some(CitationRefInput::Pending(PlaceholderRef("c1".to_owned()))),
             sex: None,
@@ -570,7 +592,10 @@ mod tests {
             &workspace,
             &session,
             PersonChangeSet {
-                target: PersonTarget::New { human_id: None },
+                target: PersonTarget::New {
+                    human_id: None,
+                    birth: None,
+                },
                 name: Some(name("First", "Person")),
                 name_citation: None,
                 sex: None,
@@ -591,6 +616,7 @@ mod tests {
             PersonChangeSet {
                 target: PersonTarget::New {
                     human_id: Some(taken.clone()),
+                    birth: None,
                 },
                 name: Some(name("Clash", "Person")),
                 name_citation: None,
@@ -616,13 +642,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_birth_on_create_is_a_dated_birth_event_the_person_is_primary_in() {
+        let (workspace, session, _dir) = setup().await;
+        let birth = DateParts {
+            year: 1852,
+            month: Some(3),
+            day: None,
+        };
+        let human_id = commit_person_change_set(
+            &workspace,
+            &session,
+            PersonChangeSet {
+                target: PersonTarget::New {
+                    human_id: None,
+                    birth: Some(birth),
+                },
+                name: Some(name("Guldbrand", "Olsen")),
+                name_citation: None,
+                sex: None,
+                tags: Vec::new(),
+                new_sources: Vec::new(),
+                new_citations: Vec::new(),
+                provenance: Provenance {
+                    confidence: Some(Confidence::High),
+                    ..Provenance::default()
+                },
+                citations: Vec::new(),
+            },
+        )
+        .await
+        .expect("create");
+
+        let summary = show_person(&workspace, &human_id).await.expect("show").expect("person");
+        assert_eq!(summary.birth_date, Some(gregorian_date(birth)));
+        let events = list_events(&workspace).await.expect("events");
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0].event_type, Some(EventType::Birth));
+    }
+
+    #[tokio::test]
     async fn an_edit_emits_only_the_diff() {
         let (workspace, session, _dir) = setup().await;
         let human_id = commit_person_change_set(
             &workspace,
             &session,
             PersonChangeSet {
-                target: PersonTarget::New { human_id: None },
+                target: PersonTarget::New {
+                    human_id: None,
+                    birth: None,
+                },
                 name: Some(name("Jane", "Doe")),
                 name_citation: None,
                 sex: Some(Sex::Female),
@@ -681,7 +749,10 @@ mod tests {
             &workspace,
             &session,
             PersonChangeSet {
-                target: PersonTarget::New { human_id: None },
+                target: PersonTarget::New {
+                    human_id: None,
+                    birth: None,
+                },
                 name: Some(name("Sam", "Vimes")),
                 name_citation: None,
                 sex: Some(Sex::Male),
@@ -732,7 +803,10 @@ mod tests {
             &workspace,
             &session,
             PersonChangeSet {
-                target: PersonTarget::New { human_id: None },
+                target: PersonTarget::New {
+                    human_id: None,
+                    birth: None,
+                },
                 name: Some(name("Tag", "Test")),
                 name_citation: None,
                 sex: None,
@@ -780,7 +854,10 @@ mod tests {
             &workspace,
             &session,
             PersonChangeSet {
-                target: PersonTarget::New { human_id: None },
+                target: PersonTarget::New {
+                    human_id: None,
+                    birth: None,
+                },
                 name: Some(PersonNameParts::simple(None, None)),
                 name_citation: None,
                 sex: None,
@@ -807,7 +884,10 @@ mod tests {
             &workspace,
             &session,
             PersonChangeSet {
-                target: PersonTarget::New { human_id: None },
+                target: PersonTarget::New {
+                    human_id: None,
+                    birth: None,
+                },
                 name: Some(name("Seed", "Person")),
                 name_citation: None,
                 sex: None,
@@ -835,7 +915,10 @@ mod tests {
             &workspace,
             &session,
             PersonChangeSet {
-                target: PersonTarget::New { human_id: None },
+                target: PersonTarget::New {
+                    human_id: None,
+                    birth: None,
+                },
                 name: Some(name("John", "Smith")),
                 name_citation: None,
                 sex: Some(Sex::Male),
@@ -890,7 +973,10 @@ mod tests {
             &workspace,
             &session,
             PersonChangeSet {
-                target: PersonTarget::New { human_id: None },
+                target: PersonTarget::New {
+                    human_id: None,
+                    birth: None,
+                },
                 name: Some(name("Ghost", "Citation")),
                 name_citation: None,
                 sex: None,
@@ -913,7 +999,10 @@ mod tests {
             workspace,
             session,
             PersonChangeSet {
-                target: PersonTarget::New { human_id: None },
+                target: PersonTarget::New {
+                    human_id: None,
+                    birth: None,
+                },
                 name: Some(name("John", "Smith")),
                 name_citation: None,
                 sex: None,
@@ -980,6 +1069,7 @@ mod tests {
             PersonChangeSet {
                 target: PersonTarget::New {
                     human_id: Some("I9000".to_owned()),
+                    birth: None,
                 },
                 name: Some(name("Mary", "Doe")),
                 name_citation: None,

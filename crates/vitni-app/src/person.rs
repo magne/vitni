@@ -25,6 +25,7 @@ use vitni_db::Store;
 
 use crate::dto::{AggRef, AttachedRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
+use crate::event::{DateParts, NewEvent, assert_event_date, create_event};
 use crate::identity::{self, IdentityDecision, PairDecision, PersonClusters};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
@@ -549,6 +550,39 @@ pub async fn assert_participation(
         meta,
     )
     .await
+}
+
+/// Records a person's birth: a new Birth event dated `birth`, with the person its primary participant.
+/// The event, its date and the participation all carry `meta`'s provenance and citations. Returns the
+/// event's `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if no such person exists, [`AppError::CitationNotFound`] if a cited
+/// citation is unknown, or a workspace/store error.
+pub async fn record_birth(
+    workspace: &Workspace,
+    session: &Session,
+    person_human_id: &str,
+    birth: DateParts,
+    meta: MutationMeta<'_>,
+) -> Result<String, AppError> {
+    resolve_person_id(workspace.store(), person_human_id).await?;
+    let new = NewEvent {
+        human_id: None,
+        event_type: EventType::Birth,
+    };
+    let event = create_event(workspace, session, new, meta.provenance.clone(), meta.citations).await?;
+    let date_meta = MutationMeta {
+        provenance: meta.provenance.clone(),
+        citations: meta.citations,
+        dna_matches: meta.dna_matches,
+        supersedes: None,
+    };
+    assert_event_date(workspace, session, &event, birth, date_meta).await?;
+    let participation = NewParticipation::with_role(ParticipantRole::Primary);
+    assert_participation(workspace, session, person_human_id, &event, participation, meta).await?;
+    Ok(event)
 }
 
 /// Asserts a single-person fact (data-model §10) — an occupation, religion, residence, and the

@@ -835,6 +835,7 @@ pub async fn dispatch_person_change_set(
         },
         None => PersonTarget::New {
             human_id: request.human_id_override.clone().filter(|id| !id.is_empty()),
+            birth: None,
         },
     };
     let change_set = PersonChangeSet {

@@ -103,6 +103,45 @@ fn init_create_show_list_round_trip() {
 }
 
 #[test]
+fn person_create_born_records_a_dated_birth_the_person_is_primary_in() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    vitni(dir.path())
+        .args(["person", "create", "--given", "Ada", "--born", "1852-03"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created I0001"));
+
+    vitni(dir.path())
+        .args(["event", "show", "E0001"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("type: birth")
+                .and(predicate::str::contains("date: March 1852"))
+                .and(predicate::str::contains("participants: 1")),
+        );
+}
+
+#[test]
+fn person_create_rejects_a_birth_date_it_cannot_read() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    vitni(dir.path())
+        .args(["person", "create", "--given", "Ada", "--born", "spring"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--born"));
+    vitni(dir.path())
+        .args(["person", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Ada").not());
+}
+
+#[test]
 fn second_create_gets_the_next_id() {
     let dir = TempDir::new().unwrap();
     init(dir.path());

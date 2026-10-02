@@ -169,7 +169,10 @@ async fn create_partner_person(
         workspace,
         session,
         PersonChangeSet {
-            target: PersonTarget::New { human_id: None },
+            target: PersonTarget::New {
+                human_id: None,
+                birth: None,
+            },
             name: Some(PersonNameParts::simple(given, surname)),
             name_citation: None,
             sex: None,

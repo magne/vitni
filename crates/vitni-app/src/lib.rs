@@ -197,8 +197,9 @@ pub use person::{
     AssociationSummary, FactSummary, MergeResult, NameSummary, NewFact, NewParticipation, NewPerson, ParticipationRef,
     PersonNameParts, PersonRow, PersonSummary, add_name, add_person_citation, assert_association, assert_fact,
     assert_participation, assert_sex, attach_person_media, attach_person_note, claim_owner, create_person,
-    distinguish_persons, list_person_rows, list_persons, merge_persons, pair_decision, set_person_human_id,
-    set_restrictions, show_person, tag_person, undo_distinction_and_merge, update_person_media_ref,
+    distinguish_persons, list_person_rows, list_persons, merge_persons, pair_decision, record_birth,
+    set_person_human_id, set_restrictions, show_person, tag_person, undo_distinction_and_merge,
+    update_person_media_ref,
 };
 pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
 pub use place::{

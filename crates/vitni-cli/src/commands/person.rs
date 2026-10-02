@@ -2,8 +2,8 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    Age, AppError, Attribute, MutationMeta, NewParticipation, NewPerson, PersonNameParts, Provenance, Session,
-    Workspace, add_name, assert_participation, create_person, list_persons, show_person,
+    Age, AppError, Attribute, DateParts, MutationMeta, NewParticipation, NewPerson, PersonNameParts, Provenance,
+    Session, Workspace, add_name, assert_participation, create_person, list_persons, record_birth, show_person,
 };
 
 use crate::args::{ConfidenceArg, EvidenceArg, ParticipantRoleArg};
@@ -19,6 +19,34 @@ fn parse_attribute(raw: &str) -> Result<Attribute, String> {
         }),
         None => Err(format!("expected TYPE=VALUE, got `{raw}`")),
     }
+}
+
+/// Parses a `--born YYYY[-MM[-DD]]` argument into a Gregorian [`DateParts`]. A month outside 1–12, a
+/// day outside 1–31 or anything else is an error. Used as a clap `value_parser`.
+fn parse_born(raw: &str) -> Result<DateParts, String> {
+    let invalid = || format!("expected YYYY, YYYY-MM or YYYY-MM-DD, got `{raw}`");
+    let mut fields = raw.trim().split('-');
+    let year = fields
+        .next()
+        .and_then(|year| year.parse::<i32>().ok())
+        .ok_or_else(invalid)?;
+    let mut part = |range: std::ops::RangeInclusive<u8>| -> Result<Option<u8>, String> {
+        match fields.next() {
+            None => Ok(None),
+            Some(field) => field
+                .parse::<u8>()
+                .ok()
+                .filter(|value| range.contains(value))
+                .map(Some)
+                .ok_or_else(invalid),
+        }
+    };
+    let month = part(1..=12)?;
+    let day = part(1..=31)?;
+    if fields.next().is_some() {
+        return Err(invalid());
+    }
+    Ok(DateParts { year, month, day })
 }
 
 /// Builds a participant [`Age`] from the CLI's optional parts; all-absent yields `None` so no age is
@@ -48,6 +76,10 @@ pub enum PersonCmd {
         /// The surname.
         #[arg(long)]
         surname: Option<String>,
+        /// The birth date (`YYYY`, `YYYY-MM` or `YYYY-MM-DD`), recorded as a Birth event the person is
+        /// the primary participant in.
+        #[arg(long, value_name = "DATE", value_parser = parse_born)]
+        born: Option<DateParts>,
         /// Whether this is a persona or a conclusion.
         #[arg(long, value_enum, default_value_t = EvidenceArg::Conclusion)]
         evidence: EvidenceArg,
@@ -124,6 +156,7 @@ pub async fn run(
             id,
             given,
             surname,
+            born,
             evidence,
         } => {
             let human_id = create_person(
@@ -139,6 +172,9 @@ pub async fn run(
                 &[],
             )
             .await?;
+            if let Some(born) = born {
+                record_birth(workspace, session, &human_id, born, MutationMeta::default()).await?;
+            }
             println!("{}", localizer.created(&human_id));
             Ok(())
         }
@@ -227,4 +263,34 @@ async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppErr
         println!("{}", localizer.summary_line(summary));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use vitni_app::DateParts;
+
+    use super::parse_born;
+
+    #[test]
+    fn a_birth_date_reads_as_year_month_and_day() {
+        let date = |year, month, day| DateParts { year, month, day };
+        assert_eq!(parse_born("1852"), Ok(date(1852, None, None)));
+        assert_eq!(parse_born("1852-03"), Ok(date(1852, Some(3), None)));
+        assert_eq!(parse_born(" 1852-03-14 "), Ok(date(1852, Some(3), Some(14))));
+    }
+
+    #[test]
+    fn a_birth_date_out_of_range_or_malformed_is_refused() {
+        for raw in [
+            "",
+            "spring",
+            "1852-13",
+            "1852-00",
+            "1852-03-32",
+            "1852-03-14-1",
+            "1852-",
+        ] {
+            assert!(parse_born(raw).is_err(), "{raw}");
+        }
+    }
 }
