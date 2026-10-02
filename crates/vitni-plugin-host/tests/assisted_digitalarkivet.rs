@@ -20,10 +20,11 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use uuid::Uuid;
 use vitni_app::{
-    AiConfig, AppDefaults, ChosenDataset, Confidence, DatasetId, ImportRunStatus, OperatorConfig, Rect, Session,
-    Workspace, WorkspaceDefaults, change_log_for_person, list_citations, list_import_runs, list_media, list_persons,
-    list_repositories, list_sources,
+    AiConfig, AppDefaults, ChosenDataset, Confidence, DatasetId, ExternalId, ImportRunStatus, NewPerson,
+    OperatorConfig, PersonNameParts, Provenance, Rect, Session, Workspace, WorkspaceDefaults, change_log_for_person,
+    create_person, list_citations, list_import_runs, list_media, list_persons, list_repositories, list_sources,
 };
+use vitni_core::enums::EvidenceLevel;
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 use vitni_plugin_host::{
@@ -572,6 +573,187 @@ async fn residence_presents_a_records_list_and_imports_a_pick() {
         list_persons(&workspace).await.expect("persons").len(),
         1,
         "the picked record was imported"
+    );
+}
+
+/// Serves `person.html` for the household's second member too, under its own record id, so a
+/// household import can pick two distinct records.
+async fn mount_second_member(server: &MockServer) {
+    let base = format!("http://localhost:{}", server.address().port());
+    let html = fixture("census", "person.html", &base).replace(
+        &format!(r#"content="{base}/census/person/pf01099901000101""#),
+        &format!(r#"content="{base}/census/person/pf01099901000102""#),
+    );
+    Mock::given(method("GET"))
+        .and(path_regex(r"^/census/person/pf01099901000102$"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/html")
+                .set_body_string(html),
+        )
+        .with_priority(1)
+        .mount(server)
+        .await;
+}
+
+/// Selects the record with id `row` from a records payload.
+fn select(row: &str) -> String {
+    json!({ "kind": "submit", "action": "select", "values": { "row": row } }).to_string()
+}
+
+/// A residence reply that picks each of `rows` in turn, then finishes.
+fn household_reply(rows: &'static [&'static str]) -> impl FnMut(&str) -> Result<String, PresentError> + Send {
+    let mut next = rows.iter();
+    move |payload: &str| {
+        Ok(match kind_of(payload).as_str() {
+            "records" => next.next().map_or_else(done, |row| select(row)),
+            "confirm-record" => import_response(),
+            "save-scan" => save_response(payload),
+            _ => done(),
+        })
+    }
+}
+
+/// Asserts the workspace holds `persons` persons, each citing the one source and carrying the one
+/// scan, held by the one repository.
+async fn assert_one_source_repository_and_scan(root: &Path, persons: usize) {
+    let workspace = open_workspace(root).await;
+    let listed = list_persons(&workspace).await.expect("persons");
+    assert_eq!(listed.len(), persons, "every picked record was imported");
+    for person in &listed {
+        assert_eq!(person.citations.len(), 1, "{} cites the record", person.human_id);
+        assert_eq!(person.media.len(), 1, "{} carries the scan", person.human_id);
+    }
+    assert_eq!(list_sources(&workspace).await.expect("sources").len(), 1, "one source");
+    assert_eq!(
+        list_repositories(&workspace).await.expect("repos").len(),
+        1,
+        "one repository"
+    );
+    assert_eq!(list_media(&workspace).await.expect("media").len(), 1, "one scan");
+    assert_eq!(
+        list_citations(&workspace).await.expect("citations").len(),
+        persons,
+        "a citation per record"
+    );
+}
+
+#[tokio::test]
+async fn two_records_of_one_household_share_its_source_repository_and_scan() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    mount_second_member(&server).await;
+    let (presenter, _seen) = ScriptedPresenter::new(household_reply(&["pf01099901000101", "pf01099901000102"]));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "census-residence",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    assert_one_source_repository_and_scan(&root, 2).await;
+}
+
+#[tokio::test]
+async fn a_later_session_reuses_the_source_repository_and_scan_an_earlier_one_made() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    mount_second_member(&server).await;
+
+    let sessions: [&'static [&'static str]; 2] = [&["pf01099901000101"], &["pf01099901000102"]];
+    for rows in sessions {
+        let (presenter, _seen) = ScriptedPresenter::new(household_reply(rows));
+        run(
+            (open_workspace(&root).await, grants(&[])),
+            &server,
+            "census-residence",
+            presenter,
+        )
+        .await
+        .expect("assisted import runs");
+    }
+
+    assert_one_source_repository_and_scan(&root, 2).await;
+}
+
+#[tokio::test]
+async fn a_record_of_a_person_another_dataset_made_writes_only_its_identity() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    let workspace = open_workspace(&root).await;
+    let human = Session::new(Agent {
+        kind: AgentKind::Human,
+        id: AgentId::from_uuid(Uuid::from_u128(1)),
+        display: Some("Tester".to_owned()),
+    });
+    let new = NewPerson {
+        human_id: None,
+        name: Some(PersonNameParts::simple(
+            Some("Ola".to_owned()),
+            Some("Fjellstue".to_owned()),
+        )),
+        evidence_level: EvidenceLevel::Persona,
+        external_ids: vec![ExternalId {
+            authority: "digitalarkivet".to_owned(),
+            value: "pf01099901000101".to_owned(),
+            kind: None,
+            url: None,
+        }],
+    };
+    let existing = create_person(&workspace, &human, new, Provenance::default(), &[])
+        .await
+        .expect("person");
+    let (presenter, _seen) = ScriptedPresenter::new(|payload: &str| {
+        Ok(match kind_of(payload).as_str() {
+            "confirm-record" => json!({
+                "kind": "submit",
+                "action": "import",
+                "values": {
+                    "fields": [
+                        { "key": "name", "value": "Edited Name" },
+                        { "key": "occupation", "value": "Gårdbruker S." }
+                    ],
+                    "region": { "left": 4, "top": 47, "width": 92, "height": 9 },
+                    "confidence": "low"
+                }
+            })
+            .to_string(),
+            "save-scan" => save_response(payload),
+            _ => done(),
+        })
+    });
+
+    let summary = run((workspace, grants(&[])), &server, "census-person", presenter)
+        .await
+        .expect("assisted import runs");
+
+    assert!(summary.contains(&existing), "the summary names the person: {summary}");
+    let workspace = open_workspace(&root).await;
+    let persons = list_persons(&workspace).await.expect("persons");
+    assert_eq!(persons.len(), 1, "the record resolved onto the existing person");
+    assert!(
+        persons[0].citations.is_empty(),
+        "no citation on another dataset's person"
+    );
+    assert!(persons[0].media.is_empty(), "no scan on another dataset's person");
+    assert!(
+        !events_contain(&root, "Gårdbruker").await,
+        "no occupation on another dataset's person"
+    );
+    assert!(
+        list_sources(&workspace).await.expect("sources").is_empty(),
+        "no source only the record cites"
+    );
+    assert!(
+        list_repositories(&workspace).await.expect("repos").is_empty(),
+        "no repository only its source holds"
+    );
+    assert!(
+        list_media(&workspace).await.expect("media").is_empty(),
+        "no media only the record carries"
     );
 }
 

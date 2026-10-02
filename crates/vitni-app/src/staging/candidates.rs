@@ -305,7 +305,7 @@ impl<'a> Builder<'a> {
         match self.event_places.get(&event)? {
             Endpoint::Planned(place) => self.planned_place(*place),
             Endpoint::Stored { aggregate_id, .. } => {
-                let id = Uuid::parse_str(aggregate_id.as_deref()?).ok()?;
+                let id = Uuid::parse_str(aggregate_id).ok()?;
                 self.matcher.profiles.place(PlaceId::from_uuid(id))
             }
             Endpoint::Dangling => None,
@@ -355,7 +355,7 @@ impl<'a> Builder<'a> {
                     birth,
                 })
             }
-            Endpoint::Stored { aggregate_id, .. } => stored(aggregate_id.as_deref()?),
+            Endpoint::Stored { aggregate_id, .. } => stored(aggregate_id),
             Endpoint::Dangling => None,
         }
     }

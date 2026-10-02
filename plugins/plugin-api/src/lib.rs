@@ -62,8 +62,22 @@ impl Graph {
     /// # Errors
     /// Returns a message if the host refuses the graph.
     pub fn submit(self) -> Result<staging::SubmitOutcome, String> {
+        self.submit_with(Vec::new())
+    }
+
+    /// Submits the graph with `references`, the records it references by origin, planned with it so
+    /// that what only a withheld record reaches is withheld too.
+    ///
+    /// # Errors
+    /// Returns a message if the host refuses a graph.
+    pub fn submit_with(self, references: Vec<Self>) -> Result<staging::SubmitOutcome, String> {
         let record = self.graph.record.clone();
-        staging::submit(&self.graph).map_err(|error| format!("submitting {record} failed: {error:?}"))
+        let mut graphs = Vec::new();
+        for reference in references {
+            graphs.push(reference.graph);
+        }
+        graphs.push(self.graph);
+        staging::submit(&graphs).map_err(|error| format!("submitting {record} failed: {error:?}"))
     }
 }
 

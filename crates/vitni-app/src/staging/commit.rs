@@ -50,8 +50,7 @@ impl CommitControl for RunToEnd {
     }
 }
 
-/// An entity the commit wrote or resolved: its record, and whether the record is this dataset's own —
-/// created now, or by an earlier run from the same origin.
+/// An entity the commit wrote or resolved, and its record.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommittedEntity {
     /// The index of its graph in [`ImportPlan::graphs`].
@@ -60,8 +59,6 @@ pub struct CommittedEntity {
     pub local_id: LocalId,
     /// The record's human id (a tag's id).
     pub human_id: String,
-    /// Whether the record is this dataset's own.
-    pub created: bool,
 }
 
 /// What a commit wrote.
@@ -300,18 +297,10 @@ impl Commit<'_> {
             let Some(human_id) = self.ids[index].clone() else {
                 continue;
             };
-            let created = match entity.disposition {
-                Disposition::Unchanged { .. }
-                | Disposition::Update { .. }
-                | Disposition::Candidates(_)
-                | Disposition::New => true,
-                Disposition::Link { .. } | Disposition::Duplicate { .. } => false,
-            };
             self.outcome.entities.push(CommittedEntity {
                 graph: entity.graph,
                 local_id: entity.local_id,
                 human_id,
-                created,
             });
         }
         self.outcome.dangling +=

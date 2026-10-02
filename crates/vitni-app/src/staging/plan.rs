@@ -142,7 +142,7 @@ pub(crate) enum Endpoint {
     Stored {
         kind: MatchableKind,
         human_id: String,
-        aggregate_id: Option<String>,
+        aggregate_id: String,
     },
     /// Nothing.
     Dangling,
@@ -548,16 +548,11 @@ impl<'a> Planner<'a> {
                     Some((target, _)) => Endpoint::Stored {
                         kind: *kind,
                         human_id: target.human_id,
-                        aggregate_id: Some(target.id),
+                        aggregate_id: target.id,
                     },
                     None => Endpoint::Dangling,
                 }
             }
-            EntityRef::Existing { kind, human_id } => Endpoint::Stored {
-                kind: *kind,
-                human_id: human_id.clone(),
-                aggregate_id: None,
-            },
         })
     }
 
