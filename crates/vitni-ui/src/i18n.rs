@@ -2931,7 +2931,7 @@ impl Localizer {
         }
     }
 
-    /// The similar-record hint (ADR 0038 §8): "Possibly the same as Guldbrand Olsen (I0042), 87%".
+    /// The similar-record hint (ADR 0038 §8): "Possibly the same as Guldbrand Olsen, I0042 (87%)".
     #[must_use]
     pub fn similar_hint(&self, record: &str, percent: u8) -> String {
         fl!(self.loader, "similar-hint", record = record, score = percent)

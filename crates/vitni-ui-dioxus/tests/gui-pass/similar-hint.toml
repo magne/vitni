@@ -1,0 +1,225 @@
+# #415: typing a stored person's name and birth year into a new person raises the similar-record
+# hint, without blocking: Compare opens the draft beside the stored record, Save still creates the new
+# one, Find similar on it lists the stored record and its Compare opens the pair in the Matches tool,
+# and Use existing on a later draft drops it for the stored record. SSR renders the hint's markup but
+# cannot run the lookup behind it — the resource that reruns as the draft changes.
+#
+# The fixture seeds no persons (and must not), so the scenario creates Guldbrand Olsen, born 1852,
+# first. After a Save the record leaves edit mode, so the next draft comes from the tabstrip's "+".
+#
+# Every assertion is scoped to the region the step should change: the hint's band under the Overview
+# card, the compare below it, the side panel, the Matches view, and the tabstrip.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "Typing a stored person's name and birth year raises the similar-record hint (#415)"
+
+[[step]]
+do = "click"
+at = [85, 175]
+label = "rail: People"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Person draft"
+
+[[step]]
+do = "click"
+at = [1150, 486]
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "Guldbrand"
+label = "type: Guldbrand"
+
+[[step]]
+do = "click"
+at = [1150, 636]
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Olsen"
+label = "type: Olsen"
+
+[[step]]
+do = "click"
+at = [1150, 785]
+label = "field: Born"
+
+[[step]]
+do = "text"
+text = "1852"
+label = "type: 1852"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New person: Save"
+
+[[step]]
+do = "shot"
+name = "saved"
+
+[[step]]
+do = "click"
+at = [794, 101]
+label = "tabstrip: +"
+
+[[step]]
+do = "click"
+at = [863, 148]
+label = "menu: New person"
+
+[[step]]
+do = "shot"
+name = "blank"
+
+[[step]]
+do = "click"
+at = [1150, 486]
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "Gulbrand"
+label = "type: Gulbrand"
+
+[[step]]
+do = "click"
+at = [1150, 636]
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Olsen"
+label = "type: Olsen"
+
+[[step]]
+do = "click"
+at = [1150, 785]
+label = "field: Born"
+
+[[step]]
+do = "text"
+text = "1852"
+label = "type: 1852"
+
+[[step]]
+do = "shot"
+name = "hint"
+
+[[step]]
+do = "click"
+at = [1621, 859]
+label = "hint: Compare"
+
+[[step]]
+do = "shot"
+name = "compare"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New person: Save, past the hint"
+
+[[step]]
+do = "shot"
+name = "saved-anyway"
+
+[[step]]
+do = "click"
+at = [1681, 151]
+label = "header: Find similar"
+
+[[step]]
+do = "shot"
+name = "find-similar"
+
+[[step]]
+do = "click"
+at = [1552, 339]
+label = "Find similar: Compare"
+
+[[step]]
+do = "shot"
+name = "matches"
+
+[[step]]
+do = "click"
+at = [85, 175]
+label = "rail: People"
+
+[[step]]
+do = "click"
+at = [380, 600]
+label = "empty list space"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Person draft"
+
+[[step]]
+do = "click"
+at = [1150, 486]
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "Guldbrand"
+label = "type: Guldbrand"
+
+[[step]]
+do = "click"
+at = [1150, 636]
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Olsen"
+label = "type: Olsen"
+
+[[step]]
+do = "shot"
+name = "hint-two"
+
+[[step]]
+do = "click"
+at = [1716, 859]
+label = "hint: Use existing on Guldbrand Olsen"
+
+[[step]]
+do = "shot"
+name = "used"
+
+[[assert]]
+kind = "differ"
+shots = ["blank", "hint"]
+because = "a stored person's name and birth year must raise the hint under the Overview card"
+region = [552, 826, 1228, 60]
+
+[[assert]]
+kind = "differ"
+shots = ["hint", "compare"]
+because = "Compare must open the draft beside the stored record, inside the hint"
+region = [552, 880, 1228, 290]
+
+[[assert]]
+kind = "differ"
+shots = ["saved-anyway", "find-similar"]
+because = "Find similar must open its panel listing the stored record"
+region = [1420, 120, 380, 1050]
+
+[[assert]]
+kind = "differ"
+shots = ["find-similar", "matches"]
+because = "the panel's Compare must open the pair in the Matches tool's compare view"
+region = [532, 120, 1268, 600]
+
+[[assert]]
+kind = "differ"
+shots = ["hint-two", "used"]
+because = "Use existing must drop the draft's tab for the stored record's"
+region = [532, 80, 1268, 45]

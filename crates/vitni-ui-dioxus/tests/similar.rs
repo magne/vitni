@@ -20,7 +20,7 @@ fn hit(human_id: &str, label: &str, compare: Option<DecidableKind>) -> SimilarHi
         },
         percent: 87,
         band: "probable match".to_owned(),
-        line: format!("Possibly the same as {label} ({human_id}) (87%)"),
+        line: format!("Possibly the same as {label}, {human_id} (87%)"),
         reasons: vec!["Same surname (+4.0)".to_owned(), "Same birth (+2.5)".to_owned()],
         compare,
     }
@@ -56,7 +56,7 @@ fn the_hint_names_the_record_and_offers_compare_and_use_existing() {
     for needle in [
         r#"class="similar-hint""#,
         r#"role="status""#,
-        "Possibly the same as Guldbrand Olsen (I0042) (87%)",
+        "Possibly the same as Guldbrand Olsen, I0042 (87%)",
         "probable match",
         "Compare",
         "Use existing",

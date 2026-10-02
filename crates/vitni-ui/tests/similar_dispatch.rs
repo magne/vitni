@@ -89,7 +89,7 @@ async fn typing_a_stored_persons_name_and_birth_year_raises_the_hint() {
     assert_eq!(hit.record.category, Category::People);
     assert_eq!(hit.record.label, "Guldbrand Olsen");
     assert!(
-        hit.line.contains("Guldbrand Olsen") && hit.line.contains(&guldbrand),
+        hit.line.contains(&format!("Guldbrand Olsen, {guldbrand} (")),
         "{}",
         hit.line
     );

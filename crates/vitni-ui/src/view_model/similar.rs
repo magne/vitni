@@ -18,7 +18,7 @@ pub struct SimilarHitVm {
     pub percent: u8,
     /// The already-localized band the engine put the pair in.
     pub band: String,
-    /// The already-localized one-line hint: "Possibly the same as Guldbrand Olsen (I0042), 87%".
+    /// The already-localized one-line hint: "Possibly the same as Guldbrand Olsen, I0042 (87%)".
     pub line: String,
     /// The already-localized reasons behind the score, the strongest first.
     pub reasons: Vec<String>,
@@ -39,7 +39,7 @@ impl SimilarHitVm {
         let named = if record.label == similar.record.human_id || kind == MatchableKind::Tag {
             record.label.clone()
         } else {
-            format!("{} ({})", record.label, similar.record.human_id)
+            format!("{}, {}", record.label, similar.record.human_id)
         };
         Self {
             line: loc.similar_hint(&named, evidence.percent()),
