@@ -191,7 +191,12 @@
 // `workspace-id`, the workspace's own id, the same across every export of it, which the GEDCOM exporter
 // writes as `HEAD.FILE` so a later export is proposed the dataset an earlier one was imported into
 // (ADR 0037 §3). Additive to `export-sink`.
-package vitni:host-api@0.26.0;
+//
+// Version 0.27.0 submits each Digitalarkivet record as one record graph (ADR 0040 §1, §4). The host
+// withholds the contents of a record resolved onto another dataset's, so the importer no longer looks
+// records up through `query` or gates its claims on the outcome: `entity-ref` loses `existing` (and
+// `existing-ref` goes), and `committed-entity` loses `created`. A breaking change to `staging`.
+package vitni:host-api@0.27.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `vitni_core::name::NameType`.
@@ -898,19 +903,12 @@ interface staging {
         key: origin-key,
     }
 
-    // An existing record, by its human id (a tag's id).
-    record existing-ref {
-        kind: entity-kind,
-        human-id: string,
-    }
-
     // Where a link end, or a citation's source, points: an entity of the same graph by its local id,
-    // another graph's entity by its origin (the host resolves it in this run, or onto the record an
-    // earlier run of the dataset made from it), or an existing record.
+    // or another graph's entity by its origin (the host resolves it in this run, or onto the record an
+    // earlier run of the dataset made from it).
     variant entity-ref {
         local(u32),
         origin(origin-ref),
-        existing(existing-ref),
     }
 
     // A person: every name (the first is primary), sex, facts, external ids and restrictions.
@@ -1091,13 +1089,10 @@ interface staging {
         links: list<staged-link>,
     }
 
-    // An entity the host wrote or resolved: its record's human id (a tag's id), and whether the record
-    // is the dataset's own — created now, or by an earlier run from the same origin — rather than one
-    // another dataset or the user made.
+    // An entity the host wrote or resolved: its record's human id (a tag's id).
     record committed-entity {
         local-id: u32,
         human-id: string,
-        created: bool,
     }
 
     // What `submit` did: a bulk import's graph is held until `run-import` returns; an assisted import's

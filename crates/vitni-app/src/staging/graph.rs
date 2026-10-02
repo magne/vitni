@@ -219,13 +219,6 @@ pub enum EntityRef {
         /// Its key within the record.
         item: Option<String>,
     },
-    /// An existing record, by its human id (a tag's id).
-    Existing {
-        /// The record's kind.
-        kind: MatchableKind,
-        /// Its human id.
-        human_id: String,
-    },
 }
 
 /// One link, and the item of the graph's record it is stamped with.
@@ -515,7 +508,7 @@ impl RecordGraph {
                 record: self.record.clone(),
                 local_id: *local_id,
             })?,
-            EntityRef::Origin { kind, .. } | EntityRef::Existing { kind, .. } => *kind,
+            EntityRef::Origin { kind, .. } => *kind,
         };
         if end.kinds.contains(&found) {
             Ok(())
@@ -558,9 +551,10 @@ mod tests {
 
     #[test]
     fn a_well_formed_graph_is_accepted() {
-        let person = EntityRef::Existing {
+        let person = EntityRef::Origin {
             kind: MatchableKind::Person,
-            human_id: "I0001".to_owned(),
+            record: "I1".to_owned(),
+            item: None,
         };
         let graph = graph(vec![tag(0, None)], vec![tag_of(person, EntityRef::Local(0))]);
         assert_eq!(graph.validate(), Ok(()));

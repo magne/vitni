@@ -187,7 +187,6 @@ fn committed(outcome: &CommitOutcome) -> Vec<staging::CommittedEntity> {
         .map(|entity| staging::CommittedEntity {
             local_id: entity.local_id,
             human_id: entity.human_id.clone(),
-            created: entity.created,
         })
         .collect()
 }
@@ -291,10 +290,6 @@ fn to_ref(reference: staging::EntityRef) -> EntityRef {
             kind: to_kind(origin.kind),
             record: origin.key.record,
             item: origin.key.item,
-        },
-        staging::EntityRef::Existing(existing) => EntityRef::Existing {
-            kind: to_kind(existing.kind),
-            human_id: existing.human_id,
         },
     }
 }
