@@ -754,6 +754,14 @@ distinguishes a pair of any kind. The Merge tool is now *Matches*: the queue und
 filters, any kind's pair decided in the shared compare view. The Dashboard's *Possible matches* card
 counts the pairs per kind, lists the strongest and opens the tool. `vitni match list` (`--run`, `--kind`,
 `--band`, `--json`), `show`, `same` and `distinct` do the same at the command line.
+✅ Similar-record hint on manual entry (ADR 0038 §8, #415): `vitni_app::find_similar_to_draft` and
+`assess_draft` match a record before it exists. A person, place, source or repository being created — in
+its create form, a picker's "+ New …" card or a family's new partner — shows *Possibly the same as
+Guldbrand Olsen, I0042 (87%)* with *Compare*, the draft beside the stored record, and *Use existing*;
+Save is never blocked. A new person takes a *Born* date, saved as their Birth event. Pickers over those
+kinds rank the engine's hits for the typed query first, with their score, and every matchable record has
+*Find similar*, whose *Compare* opens the pair in the Matches tool. The CLI create verbs print the hint on
+stderr with the `vitni match show` that compares the two, and `vitni person create --born` records a birth.
 
 ## Risk register
 

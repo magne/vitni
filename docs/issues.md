@@ -531,11 +531,6 @@ does.
   only an empty single-valued field and adds a list value not already recorded, with the origin.
   *Exit:* deciding *Same* on a stored source without an author adds the incoming author and leaves its
   title unchanged.
-- **Similar-record hint on manual entry** — ADR 0038 §8. Creating a record, or adding a relative
-  through a picker, warns *possibly the same as I0042 (87%)* and offers *Use existing* / *Compare*,
-  never blocking. Pickers rank by similarity, and every record screen gets *Find similar*. The CLI
-  create verbs print the same hint on stderr. The mockups are updated. *Needs:* `find_similar`.
-  *Exit:* typing an existing person's name and birth year raises the hint. — #415
 - **Linked records on a conclusion person** — ADR 0039 §5. A view of each linked persona with its origin,
   source and *Unlink*. *Why we believe* names the origin record, with a link out where the dataset has
   one. The mockups are updated. *Needs:* persona clusters. *Exit:* unlinking from the view restores two

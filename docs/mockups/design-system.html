@@ -126,13 +126,16 @@
   <p class="muted">A disabled button (e.g. Save while a required field is empty) dims and shows a
     <span class="mono">not-allowed</span> cursor — the state is never left to look active.</p>
   <div class="specimen wrap">
-    <button class="btn ghost">⇄ Compare</button>
+    <button class="btn">Find similar</button>
     <button class="btn ghost sm" aria-label="Edit participant: John Smith (groom)" title="Edit">Edit</button>
     <button class="btn danger sm" aria-label="Retract fact: Occupation">Retract</button>
   </div>
-  <p class="muted"><b>⇄ Compare</b> appears on record heads with a duplicate/merge-compare story —
-    Person, Family, Event, Place, Source — and is deliberately omitted on the other aggregates
-    (Citation, Repository, Media, Note, Tag, DnaTest, DnaMatch).</p>
+  <p class="muted"><b>Find similar</b> appears on the head of every record the matching engine compares —
+    Person, Family, Event, Place, Source, Citation, Repository, Media, Note, Tag — and is omitted on
+    DnaTest, DnaMatch and Research note. It opens a side panel listing the stored records the engine
+    judges at least possibly the same, each with its score, band and reasons, an <b>Open</b>, and — every
+    kind but a tag — a <b>Compare</b> that opens the pair in the <a href="matches.html">Matches</a>
+    tool's compare view (<a href="person.html#find-similar">person.html</a> shows the panel).</p>
   <p class="muted">Per-row action buttons (table rows, cards) carry a contextual
     <span class="mono">aria-label</span> — e.g. "Edit participant: John Smith (groom)" — because a
     <span class="mono">title</span> attribute never reaches the accessible name. person.html and
