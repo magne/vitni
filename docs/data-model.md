@@ -725,12 +725,14 @@ around evidence and provenance.
      `ExternalId`, or a tag of the same folded name; references to it point at that entity;
    - **Candidates** — a new person, place, source or repository the matching engine judges at least
      Possible against the workspace; relatives that resolved stand in as the records they resolved
-     onto, and two items of one graph are never matched to each other. An assisted import asks the
-     user about each pair before committing (`ImportReview`, ADR 0040 §4): *Same* merges a person,
-     written as its own persona, into the candidate (`PersonsMerged`) and links any other kind to it;
-     *Not the same* records a `<Kind>sDistinguished` and asks about the next candidate; *Decide later*
-     writes it as new with the pairs left for the review queue. The merges and distinctions are the
-     run's human operator's. A bulk import writes them all as new until its review stage lands;
+     onto, and two items of one graph are never matched to each other. The user is asked about each
+     pair before committing (`ImportReview`, ADR 0040 §4): *Same* merges a person, written as its own
+     persona, into the candidate (`PersonsMerged`) and links any other kind to it; *Not the same*
+     records a `<Kind>sDistinguished` and asks about the next candidate; *Decide later* writes it as new
+     with the pairs left for the review queue. A bulk import adds two bulk answers (§3): *Same* for every
+     open pair of the current kind whose candidate is Probable, each decision carrying its own pair's
+     assessment, and *Decide the rest later*. The merges and distinctions are the run's human
+     operator's;
    - **New** — nothing resolved.
 
    `commit_import` writes the plan in dependency order (places, sources, repositories, tags, media,
@@ -738,7 +740,9 @@ around evidence and provenance.
    or link's origin and the run, each new aggregate created whole by one command. Across aggregates the
    commit is sequenced, not atomic; an interrupted one leaves what it wrote, keyed by origin, so the
    same import planned again resolves all of it as unchanged and finishes the rest. A bulk import is
-   planned and committed once the importer returns, its writes reported as the host's own progress
+   planned once the importer returns; the plan's counts by kind and disposition (`PlanSummary`) are
+   shown to the frontend, which reviews its candidates, commits leaving them all for later, or writes
+   nothing (`vitni import --plan`), and the commit's writes are reported as the host's own progress
    step; an assisted import is planned and committed one record at a time, together with the records
    it references that the importer submits with it — so a record withheld as another dataset's
    withholds the source, repository or scan only it reaches.
