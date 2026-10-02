@@ -559,21 +559,24 @@ impl<'a> Planner<'a> {
     /// The scope pass: a record resolved onto another dataset's keeps only its identity, and what only
     /// withheld writes reach is withheld too.
     fn scope(&mut self) {
-        let mut identity_graphs = vec![false; self.plan.graphs.len()];
+        let mut identity_graphs: Vec<Option<MatchableKind>> = vec![None; self.plan.graphs.len()];
         for entity in &mut self.plan.entities {
             if is_subject(entity, &self.plan.graphs) && is_link(&entity.disposition) {
                 entity.scope = WriteScope::Identity;
-                identity_graphs[entity.graph] = true;
+                identity_graphs[entity.graph] = Some(entity.kind);
             }
         }
         for entity in &mut self.plan.entities {
-            if identity_graphs[entity.graph] && entity.scope == WriteScope::Full {
+            if identity_graphs[entity.graph].is_some() && entity.scope == WriteScope::Full {
                 entity.scope = WriteScope::Withheld;
             }
         }
         for planned in &mut self.plan.links {
+            let Some(subject) = identity_graphs[planned.graph] else {
+                continue;
+            };
             let link = &self.plan.graphs[planned.graph].links[planned.index].link;
-            if identity_graphs[planned.graph] && !is_membership(link) {
+            if subject != MatchableKind::Family || !is_membership(link) {
                 planned.scope = WriteScope::Withheld;
             }
         }
@@ -581,7 +584,8 @@ impl<'a> Planner<'a> {
     }
 
     /// Withholds, until nothing changes, every link whose owner or target is withheld, and every entity
-    /// some reference reaches when all those references are withheld.
+    /// some reference reaches when all those references are withheld. A membership link references
+    /// its family as well as its member.
     fn withhold_unreached(&mut self) {
         loop {
             let mut changed = false;
@@ -604,7 +608,8 @@ impl<'a> Planner<'a> {
                     changed = true;
                 }
                 let live = self.plan.links[li].scope != WriteScope::Withheld;
-                for target in targets.into_iter().flatten() {
+                let family = owner.filter(|_| is_membership(link));
+                for target in targets.into_iter().flatten().chain(family) {
                     let entry = reached.entry(target).or_insert(false);
                     *entry |= live;
                 }
@@ -816,7 +821,8 @@ fn subject_kind(kind: MatchableKind) -> bool {
     kind == MatchableKind::Person || kind == MatchableKind::Family
 }
 
-/// Whether `link` makes a family's membership: written for a family resolved onto another dataset's.
+/// Whether `link` makes a family's membership: written for a family resolved onto another dataset's,
+/// never for a person resolved onto another dataset's.
 fn is_membership(link: &LinkKind) -> bool {
     match link {
         LinkKind::Partner { .. } | LinkKind::Child { .. } => true,
