@@ -21,7 +21,7 @@ use crate::use_case::Provenance;
 use crate::workspace::Workspace;
 
 /// The order kinds are created in, so a citation finds its source.
-const KIND_ORDER: [MatchableKind; 10] = [
+pub(crate) const KIND_ORDER: [MatchableKind; 10] = [
     MatchableKind::Place,
     MatchableKind::Source,
     MatchableKind::Repository,

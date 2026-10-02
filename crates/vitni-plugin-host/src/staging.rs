@@ -8,7 +8,7 @@
 
 use vitni_app::{
     CommitControl, CommitOutcome, EntityFields, EntityRef, ImportPlan, ImportReview, LinkKind, MatchReply, NewFact,
-    PairAnswer, PlanError, RecordGraph, StagedCitation, StagedEntity, StagedEvent, StagedFamily, StagedLink,
+    PairAnswer, PlanError, RecordGraph, RunToEnd, StagedCitation, StagedEntity, StagedEvent, StagedFamily, StagedLink,
     StagedMedia, StagedNote, StagedPerson, StagedPlace, StagedRepository, StagedSource, StagedTag, Timestamp,
     commit_import, plan_import,
 };
@@ -129,7 +129,7 @@ impl HostState {
             .map_or_else(|| self.session.clone(), |run| run.pending().operator().clone());
         let plan = review.plan_so_far().clone();
         match review
-            .commit(&self.workspace, &self.session, &operator, &template)
+            .commit(&self.workspace, &self.session, &operator, &template, &mut RunToEnd)
             .await
         {
             Ok(outcome) => {

@@ -9,15 +9,15 @@ use std::sync::Arc;
 use uuid::Uuid;
 use vitni_app::{
     AppDefaults, CommitControl, CommitOutcome, DatasetId, DateParts, Disposition, EntityFields, EntityRef, ExternalId,
-    IdentityDecision, ImportCounts, ImportPlan, ImportReview, LinkBasis, LinkKind, MutationMeta, NewEvent, NewFact,
-    NewImportRun, NewParticipation, NewPerson, NewPlace, OperatorConfig, PairAnswer, PairDecision, PendingRun,
-    PersonNameParts, PlaceType, Provenance, RecordGraph, ResolutionDecision, RunToEnd, Session, StagedEntity,
-    StagedEvent, StagedFamily, StagedLink, StagedPerson, StagedPlace, StagedTag, Workspace, WorkspaceDefaults,
-    WriteScope, commit_import, gregorian_date, plan_import, record_origin,
+    IdentityDecision, ImportCounts, ImportPlan, ImportReview, LinkBasis, LinkKind, MatchGroup, MutationMeta, NewEvent,
+    NewFact, NewImportRun, NewParticipation, NewPerson, NewPlace, NewSource, OperatorConfig, PairAnswer, PairDecision,
+    PendingRun, PersonNameParts, PlaceType, PlanCounts, Provenance, RecordGraph, ResolutionDecision, RunToEnd, Session,
+    StagedEntity, StagedEvent, StagedFamily, StagedLink, StagedPerson, StagedPlace, StagedSource, StagedTag, Workspace,
+    WorkspaceDefaults, WriteScope, commit_import, gregorian_date, plan_import, record_origin,
 };
 use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Sex};
 use vitni_core::ids::AgentId;
-use vitni_core::matching::MatchableKind;
+use vitni_core::matching::{MatchBand, MatchableKind};
 use vitni_core::provenance::{Agent, AgentKind};
 
 fn operator() -> OperatorConfig {
@@ -746,7 +746,7 @@ async fn review(workspace: &Workspace, session: &Session, graphs: Vec<RecordGrap
 /// Commits `review` as `session`, the identity decisions made as the human operator.
 async fn commit_review(workspace: &Workspace, session: &Session, review: ImportReview) -> CommitOutcome {
     review
-        .commit(workspace, session, &human(), &Provenance::default())
+        .commit(workspace, session, &human(), &Provenance::default(), &mut RunToEnd)
         .await
         .expect("commit")
 }
@@ -970,4 +970,199 @@ async fn decide_later_imports_as_new_and_leaves_the_pair_undecided() {
             .expect("decision"),
         None
     );
+}
+
+/// A census `title` by Statistisk sentralbyrå, its own record.
+fn census(record: &str, title: &str) -> RecordGraph {
+    RecordGraph {
+        record: record.to_owned(),
+        entities: vec![StagedEntity {
+            local_id: 0,
+            item: None,
+            fields: EntityFields::Source(StagedSource {
+                title: Some(title.to_owned()),
+                author: Some("Statistisk sentralbyrå".to_owned()),
+                pub_info: Some("Kristiania".to_owned()),
+                abbrev: None,
+                restrictions: BTreeSet::default(),
+            }),
+        }],
+        links: Vec::new(),
+    }
+}
+
+/// A stored census `title` by Statistisk sentralbyrå, entered at the keyboard.
+async fn stored_census(workspace: &Workspace, title: &str) -> String {
+    let session = human();
+    let new = NewSource {
+        human_id: None,
+        title: Some(title.to_owned()),
+    };
+    let source = vitni_app::create_source(workspace, &session, new, Provenance::default(), &[])
+        .await
+        .expect("source");
+    let author = "Statistisk sentralbyrå".to_owned();
+    vitni_app::set_source_author(workspace, &session, &source, author, MutationMeta::default())
+        .await
+        .expect("author");
+    let pub_info = "Kristiania".to_owned();
+    vitni_app::set_source_pub_info(workspace, &session, &source, pub_info, MutationMeta::default())
+        .await
+        .expect("publication");
+    source
+}
+
+/// A stored place named `name`, entered at the keyboard.
+async fn stored_place(workspace: &Workspace, name: &str) -> String {
+    let new = NewPlace {
+        human_id: None,
+        place_type: PlaceType::City,
+        name: Some(name.to_owned()),
+    };
+    vitni_app::create_place(workspace, &human(), new, Provenance::default(), &[])
+        .await
+        .expect("place")
+}
+
+#[tokio::test]
+async fn the_plan_summary_counts_each_kind_by_disposition() {
+    let (workspace, _dir) = workspace().await;
+    import(&workspace, &importer(dataset(1)), tree()).await;
+
+    let review = review(&workspace, &importer(dataset(1)), tree()).await;
+    let summary = review.summary();
+    let kinds: Vec<(MatchableKind, PlanCounts)> = summary.kinds.iter().map(|row| (row.kind, row.counts)).collect();
+    let unchanged = |n| PlanCounts {
+        unchanged: n,
+        ..PlanCounts::default()
+    };
+    assert_eq!(
+        kinds,
+        vec![
+            (MatchableKind::Place, unchanged(1)),
+            (MatchableKind::Person, unchanged(2)),
+            (MatchableKind::Family, unchanged(1)),
+            (MatchableKind::Event, unchanged(2)),
+        ]
+    );
+    assert_eq!(summary.candidates, 0);
+}
+
+#[tokio::test]
+async fn a_probable_question_counts_the_probable_pairs_of_its_kind() {
+    let (workspace, _dir) = workspace().await;
+    stored_census(&workspace, "Folketelling 1865").await;
+    stored_census(&workspace, "Folketelling 1875").await;
+    let graphs = vec![census("S1", "Folketelling 1865"), census("S2", "Folketelling 1875")];
+    let review = review(&workspace, &importer(dataset(1)), graphs).await;
+    assert_eq!(review.summary().candidates, 2);
+
+    let question = review
+        .next_question(&workspace)
+        .await
+        .expect("question")
+        .expect("a candidate");
+    assert_eq!(
+        question.assessment.band,
+        MatchBand::Probable,
+        "{:?}",
+        question.assessment
+    );
+    assert_eq!(
+        question.group,
+        Some(MatchGroup {
+            band: MatchBand::Probable,
+            remaining: 2
+        })
+    );
+}
+
+#[tokio::test]
+async fn same_for_the_group_reuses_every_probable_source_each_with_its_resolution() {
+    let (workspace, _dir) = workspace().await;
+    let first = stored_census(&workspace, "Folketelling 1865").await;
+    let second = stored_census(&workspace, "Folketelling 1875").await;
+    let session = importer(dataset(1));
+    let graphs = vec![census("S1", "Folketelling 1865"), census("S2", "Folketelling 1875")];
+    let mut review = review(&workspace, &session, graphs).await;
+    review
+        .answer_group(&workspace, &session, decided())
+        .await
+        .expect("answer");
+    assert_eq!(review.next_question(&workspace).await.expect("question"), None);
+
+    let outcome = commit_review(&workspace, &session, review).await;
+    assert_eq!(vitni_app::list_sources(&workspace).await.expect("sources").len(), 2);
+    assert_eq!((committed_id(&outcome, 0), committed_id(&outcome, 1)), (first, second));
+    assert_eq!(
+        outcome.resolved.iter().map(|item| item.decision).collect::<Vec<_>>(),
+        vec![ResolutionDecision::Matched, ResolutionDecision::Matched]
+    );
+}
+
+#[tokio::test]
+async fn same_for_the_group_merges_every_probable_person() {
+    let (workspace, _dir) = workspace().await;
+    let ole = stored_person(&workspace, "Ole", 1850, None).await;
+    let hans = stored_person(&workspace, "Hans", 1850, None).await;
+    let session = importer(dataset(1));
+    let graphs = vec![individual("I1", "Ole"), individual("I2", "Hans")];
+    let mut review = review(&workspace, &session, graphs).await;
+    let question = review
+        .next_question(&workspace)
+        .await
+        .expect("question")
+        .expect("a candidate");
+    assert_eq!(question.group.map(|group| group.remaining), Some(2));
+    review
+        .answer_group(&workspace, &session, decided())
+        .await
+        .expect("answer");
+    assert_eq!(review.next_question(&workspace).await.expect("question"), None);
+
+    let outcome = commit_review(&workspace, &session, review).await;
+    for (graph, stored) in [(0, ole), (1, hans)] {
+        let imported = committed_id(&outcome, graph);
+        assert_eq!(
+            vitni_app::pair_decision(&workspace, &stored, &imported)
+                .await
+                .expect("decision"),
+            Some(PairDecision::SameCluster)
+        );
+    }
+    assert_eq!(outcome.deferred, 0);
+}
+
+#[tokio::test]
+async fn deferring_the_rest_imports_every_candidate_as_new_for_later() {
+    let (workspace, _dir) = workspace().await;
+    stored_place(&workspace, "Mandal").await;
+    stored_person(&workspace, "Ole", 1850, None).await;
+    let session = importer(dataset(1));
+    let graphs = vec![place("plac:Mandal", "Mandal"), individual("I1", "Ole")];
+    let mut review = review(&workspace, &session, graphs).await;
+    review.defer_rest();
+    assert_eq!(review.next_question(&workspace).await.expect("question"), None);
+
+    let outcome = commit_review(&workspace, &session, review).await;
+    assert_eq!(outcome.deferred, 2);
+    assert_eq!(vitni_app::list_places(&workspace).await.expect("places").len(), 2);
+}
+
+#[tokio::test]
+async fn a_reviewed_commit_stops_when_its_control_does() {
+    let (workspace, _dir) = workspace().await;
+    let session = importer(dataset(1));
+    let review = review(&workspace, &session, tree()).await;
+    let outcome = review
+        .commit(
+            &workspace,
+            &session,
+            &human(),
+            &Provenance::default(),
+            &mut StopAt { limit: 1 },
+        )
+        .await
+        .expect("commit");
+    assert!(outcome.interrupted);
 }

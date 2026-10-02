@@ -1841,6 +1841,7 @@ mod tests {
             },
             position: 1,
             total: 1,
+            group: None,
         };
         let reply = presenter.review_match(question).await.expect("the wizard answers");
         assert_eq!(reply, MatchReply::Skip);
