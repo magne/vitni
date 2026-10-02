@@ -7,9 +7,9 @@
 //! `media-store`, and submit the confirmed record as one record graph through `staging` — the host
 //! writes it as low-confidence Software-agent assertions, resolving the person by `ExternalId` so a
 //! re-run imports no duplicates, and writing only the identity of a person another dataset made
-//! (ADR 0040). The source, its repository and the scan are records of their own, each submitted once
-//! per session and referenced from the record's graph by origin, so every record of a page — and of
-//! a later session — shares them.
+//! (ADR 0040). The source, its repository and the scan are records of their own, submitted with each
+//! record and referenced from its graph by origin, so every record of a page — and of a later
+//! session — shares them, and a withheld record withholds them too.
 //!
 //! - **Census residence** (`/census/{rural,urban}-residence/`): fetch the household page, fetch and
 //!   parse each linked person page, present the records list, then review each picked record.
@@ -69,18 +69,12 @@ const CATEGORIES: &[&str] = &[
 
 struct Importer;
 
-/// The running session's cross-record state: the scan filed once per source page, the source,
-/// repository and media submitted once and referenced by origin, and the summary accumulator.
+/// The running session's cross-record state: the scan filed once per source page, and the summary
+/// accumulator.
 #[derive(Default)]
 struct Session {
     /// The scan stored for this source page (filed once, reused by every record on it).
     stored: Option<StoredScan>,
-    /// The source, once submitted.
-    source: Option<EntityRef>,
-    /// The managing repository, once submitted.
-    repository: Option<EntityRef>,
-    /// The media object for the stored scan, once submitted.
-    media: Option<EntityRef>,
     /// The imported records, for the summary (human id + display name).
     imported: Vec<(String, String)>,
     /// How many records the user skipped.
@@ -235,7 +229,8 @@ fn review(record: &PersonRecord, scan_url: Option<&str>, session: &mut Session) 
 /// Records a confirmed record: files the scan first (so cancelling the save dialog aborts before any
 /// write), then submits the record's graph — the person with its occupation, the citation of the
 /// source, and the scan — under the record's origin, so a re-run writes only what changed
-/// (ADR 0037 §4).
+/// (ADR 0037 §4). The source, repository and scan it references go with it, so a record the host
+/// withholds withholds them too.
 fn import(
     record: &PersonRecord,
     scan_url: Option<&str>,
@@ -261,9 +256,15 @@ fn import(
 
     let name = field_value(values, "name").unwrap_or_else(|| record.name.clone());
     let occupation = field_value(values, "occupation").filter(|value| !value.trim().is_empty());
-    let source = ensure_source(record, session)?;
+    let (repository_graph, repository) = repository_graph();
+    let (source_graph, source) = source_graph(record, repository);
+    let mut references = vec![repository_graph, source_graph];
     let media = match &stored {
-        Some(stored) => Some(ensure_media(stored, effective, session)?),
+        Some(stored) => {
+            let (media_graph, media) = media_graph(stored, effective);
+            references.push(media_graph);
+            Some(media)
+        }
         None => None,
     };
     let mut graph = Graph::new(&record.external_id.value);
@@ -295,7 +296,8 @@ fn import(
             }),
         );
     }
-    let human_id = committed(&graph.submit()?, 0)?;
+    let record_id = record.external_id.value.clone();
+    let human_id = committed(&graph.submit_with(references)?, &record_id)?;
     session.imported.push((human_id, name));
     Ok(Outcome::Imported)
 }
@@ -318,16 +320,16 @@ fn person_fields(name: &str, record: &PersonRecord, occupation: Option<String>) 
     })
 }
 
-/// The human id the host gave the submitted entity `local_id`.
-fn committed(outcome: &SubmitOutcome, local_id: u32) -> Result<String, String> {
+/// The human id the host gave the own entity (local id 0) of the submitted record `record`.
+fn committed(outcome: &SubmitOutcome, record: &str) -> Result<String, String> {
     let SubmitOutcome::Committed(entities) = outcome else {
         return Err("the host held an assisted record instead of writing it".to_owned());
     };
     entities
         .iter()
-        .find(|entity| entity.local_id == local_id)
+        .find(|entity| entity.record == record && entity.local_id == 0)
         .map(|entity| entity.human_id.clone())
-        .ok_or_else(|| format!("the host wrote no record for entity {local_id}"))
+        .ok_or_else(|| format!("the host wrote no record for {record}"))
 }
 
 /// Files the scan into the media library, once per source page: presents the save-scan dialog (only
@@ -354,6 +356,7 @@ fn ensure_scan(scan_url: &str, record: &PersonRecord, session: &mut Session) -> 
         checksum: stored.checksum,
         mime: stored.mime,
     };
+    log_info(&format!("stored scan {} ({})", scan.relative_path, scan.checksum));
     session.stored = Some(scan.clone());
     Ok(ScanStep::Stored(scan))
 }
@@ -370,14 +373,10 @@ fn media_root_relative(path: String) -> String {
     }
 }
 
-/// Submits the citing source, once per session, with its managing repository. A listing's source has
-/// no record id on the page, so its title is its record (`source:{title}`).
-fn ensure_source(record: &PersonRecord, session: &mut Session) -> Result<EntityRef, String> {
-    if let Some(source) = &session.source {
-        return Ok(source.clone());
-    }
+/// The citing source's graph, with its managing repository, and a reference to it. A listing's source
+/// has no record id on the page, so its title is its record (`source:{title}`).
+fn source_graph(record: &PersonRecord, repository: EntityRef) -> (Graph, EntityRef) {
     let title = record.source.title.clone().unwrap_or_else(|| record.record_url.clone());
-    let repository = ensure_repository(session)?;
     let key = format!("source:{title}");
     let mut graph = Graph::new(&key);
     let entity = graph.entity(
@@ -400,17 +399,11 @@ fn ensure_source(record: &PersonRecord, session: &mut Session) -> Result<EntityR
             media_type: SourceMediaType::Custom(String::new()),
         }),
     );
-    graph.submit()?;
-    let source = origin_ref(EntityKind::Source, &key, None);
-    session.source = Some(source.clone());
-    Ok(source)
+    (graph, origin_ref(EntityKind::Source, &key, None))
 }
 
-/// Submits the managing repository (`Digitalarkivet (Arkivverket)`), once per session.
-fn ensure_repository(session: &mut Session) -> Result<EntityRef, String> {
-    if let Some(repository) = &session.repository {
-        return Ok(repository.clone());
-    }
+/// The managing repository's graph (`Digitalarkivet (Arkivverket)`), and a reference to it.
+fn repository_graph() -> (Graph, EntityRef) {
     let key = "repository:arkivverket";
     let mut graph = Graph::new(key);
     graph.entity(
@@ -420,18 +413,12 @@ fn ensure_repository(session: &mut Session) -> Result<EntityRef, String> {
             restrictions: Vec::new(),
         }),
     );
-    graph.submit()?;
-    let repository = origin_ref(EntityKind::Repository, key, None);
-    session.repository = Some(repository.clone());
-    Ok(repository)
+    (graph, origin_ref(EntityKind::Repository, key, None))
 }
 
-/// Submits the media object for the stored scan, once per session, with its MIME type. Its record is
-/// the scan's URL, since the filing path is the operator's choice and changes between runs.
-fn ensure_media(stored: &StoredScan, scan_url: Option<&str>, session: &mut Session) -> Result<EntityRef, String> {
-    if let Some(media) = &session.media {
-        return Ok(media.clone());
-    }
+/// The stored scan's media graph, with its MIME type, and a reference to it. Its record is the scan's
+/// URL, since the filing path is the operator's choice and changes between runs.
+fn media_graph(stored: &StoredScan, scan_url: Option<&str>) -> (Graph, EntityRef) {
     let key = match scan_url {
         Some(url) => format!("scan:{url}"),
         None => format!("file:{}", stored.relative_path),
@@ -445,11 +432,7 @@ fn ensure_media(stored: &StoredScan, scan_url: Option<&str>, session: &mut Sessi
             restrictions: Vec::new(),
         }),
     );
-    graph.submit()?;
-    log_info(&format!("stored scan {} ({})", stored.relative_path, stored.checksum));
-    let media = origin_ref(EntityKind::Media, &key, None);
-    session.media = Some(media.clone());
-    Ok(media)
+    (graph, origin_ref(EntityKind::Media, &key, None))
 }
 
 /// Presents the session summary and returns it as the invocation result.

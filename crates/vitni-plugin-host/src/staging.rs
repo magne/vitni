@@ -3,13 +3,13 @@
 //!
 //! A bulk import's graphs are held until the guest returns, then planned as one and committed, with
 //! the commit's progress reported to the frontend — whose cancel stops it between two writes. An
-//! assisted import's graph is planned and committed on each `submit`, and the guest learns what each
-//! entity became.
+//! assisted import's graphs are planned as one and committed on each `submit`, and the guest learns
+//! what each entity became.
 
 use vitni_app::{
-    CommitControl, CommitOutcome, EntityFields, EntityRef, LinkKind, NewFact, PlanError, RecordGraph, RunToEnd,
-    StagedCitation, StagedEntity, StagedEvent, StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson,
-    StagedPlace, StagedRepository, StagedSource, StagedTag, Timestamp, commit_import, plan_import,
+    CommitControl, CommitOutcome, EntityFields, EntityRef, ImportPlan, LinkKind, NewFact, PlanError, RecordGraph,
+    RunToEnd, StagedCitation, StagedEntity, StagedEvent, StagedFamily, StagedLink, StagedMedia, StagedNote,
+    StagedPerson, StagedPlace, StagedRepository, StagedSource, StagedTag, Timestamp, commit_import, plan_import,
 };
 use vitni_core::matching::MatchableKind;
 
@@ -36,20 +36,27 @@ impl staging::Host for HostState {
         std::future::ready(self.declare_run(dataset_hint.as_deref(), source_label.as_deref(), file_asserted_at))
     }
 
-    async fn submit(&mut self, graph: staging::RecordGraph) -> Result<staging::SubmitOutcome, types::CapabilityError> {
+    async fn submit(
+        &mut self,
+        graphs: Vec<staging::RecordGraph>,
+    ) -> Result<staging::SubmitOutcome, types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        let graph = to_graph(graph);
-        graph
-            .validate()
-            .map_err(|error| types::CapabilityError::InvalidInput(error.to_string()))?;
+        let mut submitted = Vec::new();
+        for graph in graphs {
+            let graph = to_graph(graph);
+            graph
+                .validate()
+                .map_err(|error| types::CapabilityError::InvalidInput(error.to_string()))?;
+            submitted.push(graph);
+        }
         match self.staging {
             Staging::Held => {
-                self.staged.push(graph);
+                self.staged.extend(submitted);
                 Ok(staging::SubmitOutcome::Staged)
             }
-            Staging::Immediate => self.commit_one(graph).await,
+            Staging::Immediate => self.commit_now(submitted).await,
         }
     }
 }
@@ -84,17 +91,17 @@ impl HostState {
         Ok(())
     }
 
-    /// Plans and commits one graph at once, returning what each of its entities became.
-    async fn commit_one(&mut self, graph: RecordGraph) -> Result<staging::SubmitOutcome, types::CapabilityError> {
+    /// Plans `graphs` as one and commits them at once, returning what each of their entities became.
+    async fn commit_now(&mut self, graphs: Vec<RecordGraph>) -> Result<staging::SubmitOutcome, types::CapabilityError> {
         let template = self.provenance();
         let (workspace, session) = (&self.workspace, &self.session);
-        let plan = plan_import(workspace, session, vec![graph], self.file_asserted_at)
+        let plan = plan_import(workspace, session, graphs, self.file_asserted_at)
             .await
             .map_err(|error| plan_capability_error(&error))?;
         match commit_import(workspace, session, &plan, &template, &mut RunToEnd).await {
             Ok(outcome) => {
                 self.absorb(&outcome);
-                Ok(staging::SubmitOutcome::Committed(committed(&outcome)))
+                Ok(staging::SubmitOutcome::Committed(committed(&plan, &outcome)))
             }
             Err(failure) => {
                 self.absorb(&failure.outcome);
@@ -179,12 +186,14 @@ fn plan_capability_error(error: &PlanError) -> types::CapabilityError {
     }
 }
 
-/// What a committed graph's entities became.
-fn committed(outcome: &CommitOutcome) -> Vec<staging::CommittedEntity> {
+/// What the entities of a committed plan's graphs became.
+fn committed(plan: &ImportPlan, outcome: &CommitOutcome) -> Vec<staging::CommittedEntity> {
     outcome
         .entities
         .iter()
-        .map(|entity| staging::CommittedEntity {
+        .filter_map(|entity| Some((plan.graphs.get(entity.graph)?, entity)))
+        .map(|(graph, entity)| staging::CommittedEntity {
+            record: graph.record.clone(),
             local_id: entity.local_id,
             human_id: entity.human_id.clone(),
         })

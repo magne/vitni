@@ -743,6 +743,18 @@ async fn a_record_of_a_person_another_dataset_made_writes_only_its_identity() {
         !events_contain(&root, "Gårdbruker").await,
         "no occupation on another dataset's person"
     );
+    assert!(
+        list_sources(&workspace).await.expect("sources").is_empty(),
+        "no source only the record cites"
+    );
+    assert!(
+        list_repositories(&workspace).await.expect("repos").is_empty(),
+        "no repository only its source holds"
+    );
+    assert!(
+        list_media(&workspace).await.expect("media").is_empty(),
+        "no media only the record carries"
+    );
 }
 
 // ----- cancellation -----

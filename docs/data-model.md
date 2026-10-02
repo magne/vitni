@@ -733,7 +733,9 @@ around evidence and provenance.
    commit is sequenced, not atomic; an interrupted one leaves what it wrote, keyed by origin, so the
    same import planned again resolves all of it as unchanged and finishes the rest. A bulk import is
    planned and committed once the importer returns, its writes reported as the host's own progress
-   step; an assisted import is planned and committed one record at a time.
+   step; an assisted import is planned and committed one record at a time, together with the records
+   it references that the importer submits with it — so a record withheld as another dataset's
+   withholds the source, repository or scan only it reaches.
 
 The upshot: external APIs add the `ExternalId` value object and exercise the `Agent` generalisation,
 but the evidence/conclusion architecture absorbs imports and machine matches without new structure.

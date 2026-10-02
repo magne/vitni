@@ -708,9 +708,10 @@ a later export of one workspace is proposed the dataset its first export went in
 ✅ One graph per Digitalarkivet record (ADR 0040 §1, §4, #409): the assisted importer submits each
 confirmed record — the person with its occupation, its citation and its scan — as one graph, and the
 host withholds it when the person resolves onto another dataset's. The source, its repository and the
-scan are records of their own, submitted once per session and referenced by origin, so the records of a
-page, and of a later session, share them. host-api 0.27.0 drops the `existing` link end and the
-`created` flag the two-step submit and its `query` lookups needed.
+scan are records of their own, submitted with each record and referenced by origin, so the records of a
+page, and of a later session, share them, and a withheld record withholds them too. host-api 0.27.0's
+`submit` takes a record with the records it references, planned as one, and drops the `existing` link
+end and the `created` flag the two-step submit and its `query` lookups needed.
 
 ## Risk register
 
