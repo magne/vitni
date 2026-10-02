@@ -11,14 +11,14 @@ pub use vitni_ui::{
     CitationRefVm, CitingRecordVm, ConfidenceLevel, DashboardVm, DataQualityVm, Destination, DetailTab,
     DistinguishPersons, DnaInferenceVm, DnaMatchDetail, DnaMatchEdit, DnaSegmentVm, DnaTestDetail, DnaTestEdit,
     DnaTestMatchVm, DuplicateCandidateVm, DuplicateVm, EventDetail, EventEdit, EventRefVm, FactVm, FamilyDetail,
-    FamilyEdit, FamilyEventVm, FamilyVm, Intent, IntentOutcome, JumpVm, Localizer, MediaDetail, MediaEdit, MediaRefVm,
-    MergeBlockedVm, MergeCompareVm, MergeFailure, MergeFieldRowVm, MergePersons, NameVm, NewCitationFields,
-    NewPlaceFields, NewSourceFields, NoteDetail, NoteEdit, PairJudgment, Panel, PersonDetail, PersonDraft, PersonEdit,
-    PickerSelection, PlaceDetail, PlaceEdit, ProvenanceDraft, RecordDraft, RecordRef, RepositoryDetail, RepositoryEdit,
-    RestrictionKind, RowVm, SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, SubmitResult, TagDetail,
-    TagDraft, TagUsageGroupVm, TimelineRowVm, Tool, TranslationVm, UsingRecordVm, citation_tabs, dna_match_tabs,
-    dna_test_tabs, event_tabs, family_tabs, link_is_savable, media_tabs, note_tabs, person_tabs, place_tabs,
-    repository_tabs, source_tabs, tag_tabs,
+    FamilyEdit, FamilyEventVm, FamilyVm, Intent, IntentOutcome, JumpVm, Localizer, MatchCompareVm, MediaDetail,
+    MediaEdit, MediaRefVm, MergeBlockedVm, MergeFailure, MergePersons, NameVm, NewCitationFields, NewPlaceFields,
+    NewSourceFields, NoteDetail, NoteEdit, PairJudgment, Panel, PersonDetail, PersonDraft, PersonEdit, PickerSelection,
+    PlaceDetail, PlaceEdit, ProvenanceDraft, RecordDraft, RecordRef, RepositoryDetail, RepositoryEdit, RestrictionKind,
+    RowVm, SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, SubmitResult, TagDetail, TagDraft,
+    TagUsageGroupVm, TimelineRowVm, Tool, TranslationVm, UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs,
+    event_tabs, family_tabs, link_is_savable, media_tabs, note_tabs, person_tabs, place_tabs, repository_tabs,
+    source_tabs, tag_tabs,
 };
 
 pub use crate::app::{AppCtx, AppState};

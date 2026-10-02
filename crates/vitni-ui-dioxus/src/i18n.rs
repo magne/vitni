@@ -1584,28 +1584,34 @@ impl Chrome {
         fl!(self.loader, "merge-persona-label")
     }
 
-    /// The per-field radio column's "keep" caption.
+    /// The match-compare view's accessible name.
     #[must_use]
-    pub fn merge_keep_label(&self) -> String {
-        fl!(self.loader, "merge-keep-label")
+    pub fn match_compare_label(&self) -> String {
+        fl!(self.loader, "match-compare-label")
     }
 
-    /// The accessible group name for a field row's read-only "which record holds this value" radios.
+    /// A compare-view cell for a side with no value.
     #[must_use]
-    pub fn merge_radio_group_label(&self) -> String {
-        fl!(self.loader, "merge-radio-group-label")
+    pub fn match_not_recorded(&self) -> String {
+        fl!(self.loader, "match-not-recorded")
     }
 
-    /// The wizard's "Cancel" button label.
+    /// The *Same (reversible)* decision's label.
     #[must_use]
-    pub fn merge_cancel(&self) -> String {
-        fl!(self.loader, "merge-cancel")
+    pub fn match_decide_same(&self) -> String {
+        fl!(self.loader, "match-decide-same")
     }
 
-    /// The wizard's "Merge (reversible)" submit button label.
+    /// The *Not the same* decision's label.
     #[must_use]
-    pub fn merge_submit(&self) -> String {
-        fl!(self.loader, "merge-submit")
+    pub fn match_decide_distinct(&self) -> String {
+        fl!(self.loader, "match-decide-distinct")
+    }
+
+    /// The *Decide later* decision's label.
+    #[must_use]
+    pub fn match_decide_later(&self) -> String {
+        fl!(self.loader, "match-decide-later")
     }
 
     /// The wizard's "Back to duplicates" button label.
@@ -1648,12 +1654,6 @@ impl Chrome {
     #[must_use]
     pub fn merge_undo_distinction(&self) -> String {
         fl!(self.loader, "merge-undo-distinction")
-    }
-
-    /// The wizard's "Not the same person" button label.
-    #[must_use]
-    pub fn merge_distinguish(&self) -> String {
-        fl!(self.loader, "merge-distinguish")
     }
 
     /// The assisted-import wizard heading.

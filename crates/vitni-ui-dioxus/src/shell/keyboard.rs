@@ -180,7 +180,10 @@ fn shell_intent_for_action(action: ShortcutAction) -> Option<ShellIntent> {
         | ShortcutAction::FirstTab
         | ShortcutAction::LastTab
         | ShortcutAction::AddSource
-        | ShortcutAction::Edit => None,
+        | ShortcutAction::Edit
+        | ShortcutAction::DecideSame
+        | ShortcutAction::DecideDistinct
+        | ShortcutAction::DecideLater => None,
     }
 }
 
@@ -213,7 +216,7 @@ fn event_modifier(modifiers: Modifiers, primary: bool) -> vitni_ui::Modifier {
 /// does **not** claim the bare arrows: the lookup below filters on [`ShortcutGroup::Global`], and the
 /// bare-arrow rows are `WithinScreen`, so an unmodified arrow resolves to no action, yields `None`,
 /// and reaches the focused widget's own handler with no `prevent_default` — exactly as before.
-fn shortcut_key(key: &Key) -> Option<vitni_ui::Key> {
+pub(crate) fn shortcut_key(key: &Key) -> Option<vitni_ui::Key> {
     match key {
         Key::ArrowLeft => return Some(vitni_ui::Key::ArrowLeft),
         Key::ArrowRight => return Some(vitni_ui::Key::ArrowRight),

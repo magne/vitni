@@ -719,6 +719,26 @@ impl Store {
         }
     }
 
+    /// The origin of the creating event of the aggregate `aggregate_id` of `kind`, or `None` when no
+    /// import created it (ADR 0037 §4). The origin carries no content digest.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn created_origin(
+        &self,
+        kind: &str,
+        aggregate_id: &str,
+    ) -> Result<Option<vitni_core::origin::RecordOrigin>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.created_origin(kind, aggregate_id).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.created_origin(kind, aggregate_id).await,
+        }
+    }
+
     /// How many of `records` each dataset already holds as an aggregate of `kind`, created or resolved
     /// by its runs, as `(dataset, count)` in dataset order (ADR 0037 §3): the key overlap a file's
     /// dataset is proposed by.

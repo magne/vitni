@@ -1,25 +1,23 @@
 //! The Compare/merge tool (Phase 5 PR 19; `merge.html`): a possible-duplicates table, and — once a
-//! pair is picked — a field-by-field compare/merge wizard. Single-view like
-//! [`super::PedigreeScreen`], not the list/detail pair.
+//! pair is picked — the shared match-compare view ([`MatchCompare`], #411) over the two people.
+//! Single-view like [`super::PedigreeScreen`], not the list/detail pair.
 //!
-//! **The re-point decision (state this plainly, it drives every choice below):** `PersonsMerged`
-//! only records a same-as link on the survivor (`decide.rs`'s fold pushes the merged id onto the
-//! survivor's `merged` list) — data-model §9 explicitly keeps both streams; no core event re-points a
-//! Family partner/child slot or a Person association/participation. So the per-field radios here are
-//! **informational** ("which record currently holds this value" — [`Chrome::merge_radio_group_label`]),
-//! never a granular-apply mechanism: the "Merge" button always performs one atomic
-//! `vitni_app::merge_persons` call, never a field-by-field reconciliation. The footer never claims
-//! "N relationships re-pointed": references to the merged persona read as the survivor (ADR 0039 §5).
+//! `PersonsMerged` only records a same-as link on the survivor (data-model §9 keeps both streams), so
+//! *Same* is one atomic `vitni_app::merge_persons` call, never a field-by-field reconciliation, and the
+//! footer never claims "N relationships re-pointed": references to the merged persona read as the
+//! survivor (ADR 0039 §5).
 //!
-//! *Not the same person* is the other decision (ADR 0039 §1): one `vitni_app::distinguish_persons`
-//! call. Either decision records the reason, confidence and engine assessment the wizard shows, and the
-//! pair then never returns to the duplicates table. A pair an earlier decision holds distinct shows that
-//! decision and offers *Undo "not the same" and merge* (ADR 0039 §4).
+//! *Not the same* is the other decision (ADR 0039 §1): one `vitni_app::distinguish_persons` call. Either
+//! decision records the reason, confidence and engine assessment the view shows, and the pair then
+//! never returns to the duplicates table. *Decide later* writes nothing and goes back to it. A pair an
+//! earlier decision holds distinct shows that decision and offers *Undo "not the same" and merge*
+//! (ADR 0039 §4).
 
+use super::match_compare::{DecisionDraft, MatchCompare, decision_foot};
 use super::prelude::*;
 use super::shared::confidence_choices;
-use crate::components::SelectInput;
 use crate::i18n::Chrome;
+use vitni_ui::CompareDecision;
 
 /// The screen's two modes: the duplicates table, or the compare/merge wizard for a chosen pair.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +38,8 @@ pub fn MergeScreen() -> Element {
     let mut mode = use_signal(|| MergeMode::Duplicates);
     let mut draft = use_signal(DecisionDraft::default);
     let mut blocked = use_signal(|| None::<MergeBlockedVm>);
+    // A decision in flight: a second one (a quick second key or click) waits for it to land.
+    let mut deciding = use_signal(|| false);
     let confidence_options = confidence_choices(state.data_loc());
 
     let duplicates_services = state.services().clone();
@@ -106,15 +106,21 @@ pub fn MergeScreen() -> Element {
         let MergeMode::Compare { surviving, merged } = mode() else {
             return;
         };
+        if deciding() {
+            return;
+        }
         let request = MergePersons {
             surviving_human_id: surviving,
             merged_human_id: merged,
             judgment: judgment(),
         };
         let services = merge_services.clone();
+        deciding.set(true);
         spawn(async move {
             blocked.set(None);
-            match merge_persons(services, request).await {
+            let outcome = merge_persons(services, request).await;
+            deciding.set(false);
+            match outcome {
                 Ok(result) => decided.call(result.summary),
                 Err(failure) => on_failure.call(failure),
             }
@@ -125,15 +131,21 @@ pub fn MergeScreen() -> Element {
         let MergeMode::Compare { surviving, merged } = mode() else {
             return;
         };
+        if deciding() {
+            return;
+        }
         let request = DistinguishPersons {
             person_human_id: surviving,
             other_human_id: merged,
             judgment: judgment(),
         };
         let services = distinguish_services.clone();
+        deciding.set(true);
         spawn(async move {
             blocked.set(None);
-            match distinguish_persons(services, request).await {
+            let outcome = distinguish_persons(services, request).await;
+            deciding.set(false);
+            match outcome {
                 Ok(notice) => decided.call(notice),
                 Err(failure) => on_failure.call(failure),
             }
@@ -144,26 +156,31 @@ pub fn MergeScreen() -> Element {
         let MergeMode::Compare { surviving, merged } = mode() else {
             return;
         };
+        if deciding() {
+            return;
+        }
         let request = MergePersons {
             surviving_human_id: surviving,
             merged_human_id: merged,
             judgment: judgment(),
         };
         let services = undo_merge_services.clone();
+        deciding.set(true);
         spawn(async move {
             blocked.set(None);
-            match undo_distinction_and_merge(services, request).await {
+            let outcome = undo_distinction_and_merge(services, request).await;
+            deciding.set(false);
+            match outcome {
                 Ok(result) => decided.call(result.summary),
                 Err(failure) => on_failure.call(failure),
             }
         });
     });
-    let actions = DecisionActions {
-        cancel: on_cancel,
-        merge: on_merge,
-        distinguish: on_distinguish,
-        undo_and_merge: on_undo_and_merge,
-    };
+    let on_decide = use_callback(move |decision: CompareDecision| match decision {
+        CompareDecision::Same => on_merge.call(()),
+        CompareDecision::Distinct => on_distinguish.call(()),
+        CompareDecision::Later => on_cancel.call(()),
+    });
 
     rsx! {
         div { style: "display:flex;flex-direction:column;gap:var(--sp-4)",
@@ -177,12 +194,12 @@ pub fn MergeScreen() -> Element {
                     rsx! {
                         Button { label: chrome.0.merge_back(), small: true, onclick: move |_| on_cancel.call(()) }
                     },
-                    actions,
+                    CompareCallbacks { decide: on_decide, undo_and_merge: on_undo_and_merge },
                     rsx! {
                         if let Some(vm) = blocked() {
                             {merge_blocked_card(&vm)}
                         }
-                        {merge_wizard_foot(&chrome.0, confidence_options.clone(), draft, actions)}
+                        {decision_foot(&chrome.0, confidence_options.clone(), draft, on_decide)}
                     },
                 ),
             }
@@ -287,15 +304,23 @@ pub fn DuplicatesTable(
     }
 }
 
-/// Renders the compare/merge wizard body: `back`, then the loaded [`MergeCompareVm`]'s heading,
-/// assessment, the earlier distinction (with `actions`' undo-and-merge) when one holds, and field
-/// grid, then `tail` — the blocked-decision card and the decision foot, built by the screen.
+/// The compare view's two decision paths: a decision a key or button makes, and the earlier-decision
+/// notice's *Undo "not the same" and merge*.
+#[derive(Clone, Copy)]
+struct CompareCallbacks {
+    decide: Callback<CompareDecision>,
+    undo_and_merge: Callback<()>,
+}
+
+/// Renders the compare body: `back`, then the loaded [`MatchCompareVm`]'s heading and the shared
+/// compare view, wrapping the earlier distinction (with its undo-and-merge) when one holds and `tail` —
+/// the blocked-decision card and the decision foot, built by the screen — so the view's keys reach them.
 fn compare_body(
     chrome: &Chrome,
     loading: &str,
     data: Option<&Option<ScreenData>>,
     back: Element,
-    actions: DecisionActions,
+    callbacks: CompareCallbacks,
     tail: Element,
 ) -> Element {
     match data {
@@ -304,103 +329,28 @@ fn compare_body(
         Some(Some(ScreenData::Loaded(IntentOutcome::MergeCompare(vm)))) => rsx! {
             {back}
             {merge_compare_heading(chrome, vm)}
-            if vm.earlier_decision == Some(PairDecision::Distinct) {
-                {earlier_distinction_card(chrome, actions.undo_and_merge)}
+            MatchCompare {
+                vm: (**vm).clone(),
+                left_caption: chrome.merge_survivor_label(),
+                right_caption: chrome.merge_persona_label(),
+                ondecide: move |decision| callbacks.decide.call(decision),
+                div { style: "display:flex;flex-direction:column;gap:var(--sp-4);margin-top:var(--sp-4)",
+                    if vm.earlier_decision == Some(PairDecision::Distinct) {
+                        {earlier_distinction_card(chrome, callbacks.undo_and_merge)}
+                    }
+                    {tail}
+                }
             }
-            MergeCompareGrid { vm: (**vm).clone() }
-            {tail}
         },
         Some(Some(ScreenData::Loaded(_))) => rsx! { {back} },
     }
 }
 
-/// The compare wizard's heading (`merge.html`): the pair, then the engine's assessment the decision
-/// will record. Pure over its args, so an SSR test renders it directly.
-pub fn merge_compare_heading(chrome: &Chrome, vm: &MergeCompareVm) -> Element {
+/// The compare view's heading (`merge.html`): the pair. Pure over its args, so an SSR test renders it
+/// directly.
+pub fn merge_compare_heading(chrome: &Chrome, vm: &MatchCompareVm) -> Element {
     rsx! {
-        h2 { style: "margin-bottom:var(--sp-1)", "{chrome.merge_wizard_heading(&vm.survivor.name, &vm.merged.name)}" }
-        p { class: "muted", style: "margin-top:0", "{vm.assessment_line}" }
-    }
-}
-
-/// What the operator records with either decision: their reason and confidence (ADR 0039 §1).
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct DecisionDraft {
-    /// The reason, as typed.
-    pub reason: String,
-    /// The confidence, or `None` when unset.
-    pub confidence: Option<ConfidenceLevel>,
-}
-
-/// The compare wizard foot's actions.
-#[derive(Clone, Copy, PartialEq)]
-pub struct DecisionActions {
-    /// Leave the wizard without deciding.
-    pub cancel: Callback<()>,
-    /// Merge the pair.
-    pub merge: Callback<()>,
-    /// Record that the pair are different people.
-    pub distinguish: Callback<()>,
-    /// Undo the earlier decision that the pair are different people, then merge them.
-    pub undo_and_merge: Callback<()>,
-}
-
-/// The compare/merge wizard's foot (`merge.html`): the reason and confidence recorded with the
-/// decision, bound to `draft`, then Cancel, *Not the same person* and *Merge (reversible)*. Pure over
-/// its args (the confidence options arrive localized), so an SSR test renders it without an `AppCtx`.
-/// A blank reason records no rationale ([`PairJudgment::decision`]).
-pub fn merge_wizard_foot(
-    chrome: &Chrome,
-    confidence_options: Vec<SelectChoice>,
-    draft: Signal<DecisionDraft>,
-    actions: DecisionActions,
-) -> Element {
-    let mut draft = draft;
-    let DecisionDraft { reason, confidence } = draft();
-    let confidence_index = confidence
-        .and_then(|level| ConfidenceLevel::all().iter().position(|l| *l == level))
-        .map(|index| index.to_string())
-        .unwrap_or_default();
-    let confidence_label = chrome.merge_confidence_label();
-    rsx! {
-        div {
-            class: "card",
-            style: "display:flex;align-items:flex-end;gap:var(--sp-4);flex-wrap:wrap",
-            div { class: "field", style: "flex:1;min-width:260px;margin:0",
-                label { r#for: "merge-reason",
-                    "{chrome.merge_reason_label()} "
-                    span { class: "faint", "{chrome.merge_reason_hint()}" }
-                }
-                TextInput {
-                    id: "merge-reason",
-                    name: "merge-reason",
-                    value: "{reason}",
-                    oninput: move |event: FormEvent| draft.write().reason = event.value(),
-                }
-            }
-            div { class: "field", style: "margin:0",
-                label { r#for: "merge-confidence", "{confidence_label}" }
-                SelectInput {
-                    id: "merge-confidence",
-                    style: "width:auto",
-                    aria_label: "{confidence_label}",
-                    selected: confidence_index,
-                    options: confidence_options,
-                    onchange: move |event: FormEvent| {
-                        let index = event.value().parse::<usize>().ok();
-                        draft.write().confidence = index.and_then(|i| ConfidenceLevel::all().get(i).copied());
-                    },
-                }
-            }
-            div { class: "spacer" }
-            Button { label: chrome.merge_cancel(), onclick: move |_| actions.cancel.call(()) }
-            Button { label: chrome.merge_distinguish(), onclick: move |_| actions.distinguish.call(()) }
-            Button {
-                label: chrome.merge_submit(),
-                variant: ButtonVariant::Primary,
-                onclick: move |_| actions.merge.call(()),
-            }
-        }
+        h2 { style: "margin-bottom:var(--sp-1)", "{chrome.merge_wizard_heading(&vm.left.label, &vm.right.label)}" }
     }
 }
 
@@ -430,88 +380,6 @@ pub fn merge_blocked_card(vm: &MergeBlockedVm) -> Element {
             div { class: "muted", style: "font-size:var(--fs-sm)", "{vm.guidance}" }
             if !vm.detail.is_empty() {
                 div { class: "mono", style: "margin-top:var(--sp-2);font-size:var(--fs-sm)", "{vm.detail}" }
-            }
-        }
-    }
-}
-
-/// The field-by-field compare grid (`merge.html`'s `.merge-grid`): a header row naming both people,
-/// then one row per [`MergeFieldRowVm`] with each side's value and a read-only "which side holds
-/// this" radio pair. Pure over `vm` (only needs [`ChromeCtx`] from context, mirroring the pedigree
-/// tree items), so an SSR test can render it directly over a hand-built [`MergeCompareVm`].
-#[component]
-pub fn MergeCompareGrid(vm: MergeCompareVm) -> Element {
-    let chrome = use_context::<ChromeCtx>();
-    rsx! {
-        div { class: "card", style: "padding:0",
-            div { class: "grid-2", style: "gap:0",
-                div { class: "muted", style: "padding:var(--sp-3)", "{vm.survivor.name}" }
-                div { class: "muted", style: "padding:var(--sp-3)", "{chrome.0.merge_persona_label()}" }
-            }
-            for (index , field) in vm.fields.iter().enumerate() {
-                MergeFieldRow {
-                    field: field.clone(),
-                    row_index: index,
-                    differs_label: vm.differs_label.clone(),
-                    differs_title: vm.differs_title.clone(),
-                }
-            }
-        }
-    }
-}
-
-/// One field row: the field's label, each side's value, and a native radio pair (grouped by the
-/// field's own `name`) marking which side currently holds a value — informational only, per the
-/// module doc; nothing here mutates which value the merge keeps.
-#[component]
-fn MergeFieldRow(field: MergeFieldRowVm, row_index: usize, differs_label: String, differs_title: String) -> Element {
-    let chrome = use_context::<ChromeCtx>();
-    let group = format!("merge-field-{row_index}");
-    let survivor_has_value = field.survivor_value.is_some();
-    let merged_has_value = field.merged_value.is_some();
-    rsx! {
-        div {
-            class: "grid-2",
-            style: "gap:0;border-top:1px solid var(--line)",
-            role: "group",
-            "aria-label": "{chrome.0.merge_radio_group_label()}: {field.label}",
-            div { style: "padding:var(--sp-3)",
-                div { class: "field-label", "{field.label}" }
-                label { style: "display:flex;align-items:center;gap:var(--sp-2)",
-                    input {
-                        r#type: "radio",
-                        name: "{group}",
-                        checked: survivor_has_value,
-                        disabled: !survivor_has_value,
-                    }
-                    span { "{field.survivor_value.clone().unwrap_or_default()}" }
-                    if !survivor_has_value {
-                        NoSourceFlag { label: chrome.0.merge_keep_label() }
-                    }
-                }
-            }
-            div { style: "padding:var(--sp-3)",
-                div { class: "field-label", "{field.label}" }
-                label { style: "display:flex;align-items:center;gap:var(--sp-2)",
-                    input {
-                        r#type: "radio",
-                        name: "{group}",
-                        checked: !survivor_has_value && merged_has_value,
-                        disabled: !merged_has_value,
-                    }
-                    if field.differs {
-                        span { class: "diff", "{field.merged_value.clone().unwrap_or_default()}" }
-                        span {
-                            class: "badge",
-                            style: "border-color:var(--warn);color:var(--warn)",
-                            aria_label: "{differs_title}",
-                            title: "{differs_title}",
-                            "{differs_label}"
-                        }
-                    } else {
-                        span { "{field.merged_value.clone().unwrap_or_default()}" }
-                    }
-                }
             }
         }
     }

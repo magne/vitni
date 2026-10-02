@@ -64,6 +64,7 @@ pub mod place_change_set;
 mod place_hierarchy;
 pub mod plugins;
 pub mod profile;
+mod record_origin;
 pub mod repository;
 pub mod repository_change_set;
 pub mod research_note;
@@ -211,6 +212,7 @@ pub use profile::{
     citation_profile, event_profile, family_profile, media_profile, note_profile, person_profile, place_profile,
     repository_profile, source_profile, tag_profile,
 };
+pub use record_origin::record_origin;
 pub use repository::{
     NewRepository, RepositoryAddressRef, RepositoryMergeResult, RepositorySummary, RepositoryUrlRef,
     add_repository_address, add_repository_url, attach_repository_note, create_repository, distinguish_repositories,
@@ -276,12 +278,14 @@ pub use vitni_core::import_run::{
     AbandonReason, ImportCounts, ImportRunError, ImportRunStatus, NewImportRun, ResolutionDecision, ResolvedItem,
 };
 pub use vitni_core::matching::pack::PackError;
+pub use vitni_core::matching::profile::VitalKind;
 pub use vitni_core::matching::{
-    ENGINE_VERSION, EngineVersion, Feature, FeatureComparison, FeatureEvidence, MatchAssessment, MatchBand,
-    MatchEvidence, MatchableKind, Outcome, OutcomeEvidence,
+    ENGINE_VERSION, EngineVersion, Feature, FeatureComparison, FeatureEvidence, FeatureValue, MatchAssessment,
+    MatchBand, MatchEvidence, MatchableKind, Outcome, OutcomeEvidence,
 };
 pub use vitni_core::media::MediaError;
 pub use vitni_core::media_path::MEDIA_DIR;
+pub use vitni_core::media_path::MediaPath;
 pub use vitni_core::media_path::media_root_relative;
 pub use vitni_core::media_path::media_url_decode;
 pub use vitni_core::media_path::media_url_path;

@@ -312,6 +312,39 @@ pub(crate) async fn created(pool: &Pool<Postgres>, kind: &str) -> Result<Vec<(St
     Ok(out)
 }
 
+/// The creating origin of the aggregate `aggregate_id` of `kind`, or `None` when no import created it
+/// (ADR 0037 §4).
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails.
+pub(crate) async fn created_one(
+    pool: &Pool<Postgres>,
+    kind: &str,
+    aggregate_id: &str,
+) -> Result<Option<RecordOrigin>, DbError> {
+    let row = sqlx::query(&format!(
+        "SELECT dataset, record, item, run FROM {RECORD_ORIGINS_TABLE} \
+         WHERE aggregate_kind = $1 AND field_key = $2 AND aggregate_id = $3 ORDER BY id LIMIT 1"
+    ))
+    .bind(kind)
+    .bind(created_key(kind))
+    .bind(aggregate_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("reading the creating origin of {aggregate_id}: {e}")))?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    Ok(Some(RecordOrigin {
+        dataset: DatasetId::new(row.get::<String, _>("dataset")),
+        record: row.get("record"),
+        item: row.get("item"),
+        digest: None,
+        run: decode_run(&row.get::<String, _>("run"))?,
+    }))
+}
+
 /// How many of `records` each dataset already holds as an aggregate of `kind` (ADR 0037 §3): records
 /// its runs created or resolved, as `(dataset, count)` in dataset order. Only the record's own entity
 /// counts, never one of its items.

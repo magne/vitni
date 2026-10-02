@@ -18,6 +18,7 @@ mod geography;
 mod help;
 mod import;
 mod map_shared;
+mod match_compare;
 mod media;
 mod merge;
 mod note;
@@ -79,13 +80,11 @@ pub use import::{
     RecordsStage, SaveStage, SourceLabels, SourceStage, SummaryLabels, SummaryStage, WizardLabels,
 };
 pub use map_shared::{DrawTool, MapControlLabels, MapDraft, MapZoomReadout, MovedCamera, effective_date_choice};
+pub use match_compare::{DecisionDraft, MatchCompare, decision_foot};
 pub use media::{
     MediaEditForm, media_attributes_table, media_overview, media_preview_dialog, media_record_fields, media_used_by,
 };
-pub use merge::{
-    DecisionActions, DecisionDraft, DuplicatesTable, MergeCompareGrid, MergeScreen, earlier_distinction_card,
-    merge_blocked_card, merge_compare_heading, merge_wizard_foot,
-};
+pub use merge::{DuplicatesTable, MergeScreen, earlier_distinction_card, merge_blocked_card, merge_compare_heading};
 pub use note::{NoteEditForm, note_content_tab, note_language_tab, note_record_fields, note_references_table};
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{

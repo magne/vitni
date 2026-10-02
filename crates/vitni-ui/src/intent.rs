@@ -21,13 +21,13 @@ use vitni_app::{
     import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
     link_family_event, link_place, link_source_repository, list_citations, list_event_rows, list_family_rows,
     list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories, list_sources,
-    media_claim_owner, note_claim_owner, pair_decision, place_claim_owner, recent_activity, remove_child,
-    repository_claim_owner, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
-    set_event_restrictions, set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text,
-    set_note_type, set_page, set_place_restrictions, set_repository_restrictions, set_restrictions,
-    set_source_restrictions, show_citation, show_event, show_family, show_media, show_note, show_person, show_place,
-    show_repository, show_source, source_claim_owner, tag_citation, tag_event, tag_family, tag_media, tag_note,
-    tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion,
+    media_claim_owner, note_claim_owner, pair_decision, place_claim_owner, recent_activity, record_origin,
+    remove_child, repository_claim_owner, set_citation_confidence, set_citation_evidence_analysis,
+    set_citation_restrictions, set_event_restrictions, set_family_restrictions, set_media_restrictions,
+    set_note_restrictions, set_note_text, set_note_type, set_page, set_place_restrictions, set_repository_restrictions,
+    set_restrictions, set_source_restrictions, show_citation, show_event, show_family, show_media, show_note,
+    show_person, show_place, show_repository, show_source, source_claim_owner, tag_citation, tag_event, tag_family,
+    tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion,
     undo_distinction_and_merge, undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion,
     undo_place_assertion, undo_repository_assertion, undo_research_note_assertion, undo_source_assertion,
     workspace_counts,
@@ -87,12 +87,12 @@ use crate::navigation::{
     TagChangeSetRequest,
 };
 use crate::view_model::{
-    CitationDetail, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail,
-    FamilyDetail, FamilyVm, GeographyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm,
-    PersonDetail, PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, ResearchNoteDetail, SourceDetail,
-    TagDetail, citation_row, collapse_history, dna_match_row, dna_test_row, event_list_row, event_row, family_list_row,
-    family_row, media_row, note_row, person_list_row, place_row, repository_row, research_note_row, source_row,
-    tag_row,
+    CitationDetail, CompareSide, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm,
+    EventDetail, FamilyDetail, FamilyVm, GeographyVm, MatchCompareVm, MediaDetail, MediaRefVm, MergeResultVm,
+    NoteDetail, PedigreeVm, PersonDetail, PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail,
+    ResearchNoteDetail, SourceDetail, TagDetail, citation_row, collapse_history, dna_match_row, dna_test_row,
+    event_list_row, event_row, family_list_row, family_row, media_row, note_row, person_list_row, place_row,
+    repository_row, research_note_row, source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -145,7 +145,7 @@ pub enum IntentOutcome {
     /// The Merge tool's possible-duplicates table.
     DuplicateCandidates(Vec<DuplicateCandidateVm>),
     /// The Merge tool's compare/merge wizard, loaded for a chosen pair.
-    MergeCompare(Box<MergeCompareVm>),
+    MergeCompare(Box<MatchCompareVm>),
     /// The Geography tool's markers, event pins, and time-slider resolution (ADR 0025 §1). The map's
     /// tile provider is deliberately absent: `dispatch` has no config access by design (workspace +
     /// localizer only), so the renderer reads the client-scope `[map]` section itself, the same way the
@@ -329,9 +329,30 @@ async fn merge_compare(
         .await?
         .ok_or_else(|| AppError::PersonNotFound(merged_human_id.to_owned()))?;
     let assessment = assess(workspace, MatchableKind::Person, surviving_human_id, merged_human_id).await?;
-    let mut vm = MergeCompareVm::build(&survivor, &merged, &assessment, loc);
+    let survivor_origin = record_origin(workspace, MatchableKind::Person, surviving_human_id).await?;
+    let merged_origin = record_origin(workspace, MatchableKind::Person, merged_human_id).await?;
+    let survivor_media: Vec<MediaRefVm> = survivor.media.iter().map(MediaRefVm::from_ref).collect();
+    let merged_media: Vec<MediaRefVm> = merged.media.iter().map(MediaRefVm::from_ref).collect();
+    let left = CompareSide {
+        human_id: &survivor.human_id,
+        label: person_label(&survivor),
+        origin: survivor_origin.as_ref(),
+        media: &survivor_media,
+    };
+    let right = CompareSide {
+        human_id: &merged.human_id,
+        label: person_label(&merged),
+        origin: merged_origin.as_ref(),
+        media: &merged_media,
+    };
+    let mut vm = MatchCompareVm::build(left, right, &assessment, loc);
     vm.earlier_decision = pair_decision(workspace, surviving_human_id, merged_human_id).await?;
     Ok(IntentOutcome::MergeCompare(Box::new(vm)))
+}
+
+/// A person's display name, or their id when they have none.
+fn person_label(summary: &vitni_app::PersonSummary) -> &str {
+    summary.display_name.as_deref().unwrap_or(&summary.human_id)
 }
 
 /// Dispatches a [`MergePersons`] request to `vitni_app::merge_persons`, mutating the workspace.

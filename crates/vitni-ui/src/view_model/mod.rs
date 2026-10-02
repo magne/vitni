@@ -43,6 +43,7 @@ mod family;
 mod geography;
 mod history;
 mod import;
+mod match_compare;
 mod media;
 mod media_save;
 mod merge;
@@ -74,6 +75,7 @@ pub use family::*;
 pub use geography::*;
 pub use history::*;
 pub use import::*;
+pub use match_compare::*;
 pub use media::*;
 pub use media_save::*;
 pub use merge::*;
@@ -91,6 +93,8 @@ pub use shortcuts_vm::*;
 pub use source::*;
 pub use tag::*;
 
+#[cfg(test)]
+mod match_compare_tests;
 #[cfg(test)]
 mod merge_tests;
 #[cfg(test)]

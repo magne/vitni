@@ -285,12 +285,18 @@ pub enum ShortcutAction {
     HistoryBack,
     /// Step forward through the navigation history (`⌘→`).
     HistoryForward,
+    /// Decide that a compared pair is the same record (`y`).
+    DecideSame,
+    /// Decide that a compared pair are different records (`n`).
+    DecideDistinct,
+    /// Leave a compared pair undecided for now (`l`).
+    DecideLater,
 }
 
 impl ShortcutAction {
     /// Every action, used to assert the map is exhaustive.
     #[must_use]
-    pub const fn all() -> [Self; 25] {
+    pub const fn all() -> [Self; 28] {
         [
             Self::CommandPalette,
             Self::NewRecord,
@@ -317,6 +323,9 @@ impl ShortcutAction {
             Self::SaveRecord,
             Self::HistoryBack,
             Self::HistoryForward,
+            Self::DecideSame,
+            Self::DecideDistinct,
+            Self::DecideLater,
         ]
     }
 
@@ -350,6 +359,9 @@ impl ShortcutAction {
             Self::SaveRecord => "save-record",
             Self::HistoryBack => "history-back",
             Self::HistoryForward => "history-forward",
+            Self::DecideSame => "decide-same",
+            Self::DecideDistinct => "decide-distinct",
+            Self::DecideLater => "decide-later",
         }
     }
 
@@ -402,9 +414,9 @@ pub fn shortcuts() -> Vec<Shortcut> {
         Home, Question,
     };
     use ShortcutAction::{
-        AddSource, Close, CloseCurrentTab, CommandPalette, DockRecordTab, Edit, Find, FirstTab, Help, HistoryBack,
-        HistoryForward, LastTab, MoveDown, MoveUp, NewRecord, NextRecord, NextTab, Open, PrevRecord, PrevTab, Quit,
-        Redo, SaveRecord, SwitchRecordTab, Undo,
+        AddSource, Close, CloseCurrentTab, CommandPalette, DecideDistinct, DecideLater, DecideSame, DockRecordTab,
+        Edit, Find, FirstTab, Help, HistoryBack, HistoryForward, LastTab, MoveDown, MoveUp, NewRecord, NextRecord,
+        NextTab, Open, PrevRecord, PrevTab, Quit, Redo, SaveRecord, SwitchRecordTab, Undo,
     };
     use ShortcutGroup::{Global, WithinScreen};
     let no_mod = Modifier::NONE;
@@ -436,7 +448,61 @@ pub fn shortcuts() -> Vec<Shortcut> {
         shortcut(LastTab, no_mod, End, WithinScreen, "sc-last-tab"),
         shortcut(AddSource, no_mod, Char('s'), WithinScreen, "sc-add-source"),
         shortcut(Edit, no_mod, Char('e'), WithinScreen, "sc-edit"),
+        shortcut(DecideSame, no_mod, Char('y'), WithinScreen, "sc-decide-same"),
+        shortcut(DecideDistinct, no_mod, Char('n'), WithinScreen, "sc-decide-distinct"),
+        shortcut(DecideLater, no_mod, Char('l'), WithinScreen, "sc-decide-later"),
     ]
+}
+
+/// A decision on a pair in the match-compare view (ADR 0039 §1, ADR 0040 §3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompareDecision {
+    /// The two records describe one individual.
+    Same,
+    /// The two records describe different individuals.
+    Distinct,
+    /// Leave the pair undecided; it stays in the review queue.
+    Later,
+}
+
+/// The compare-view decision `key` pressed with `modifier` makes, read from the default map so the
+/// `?` overlay and the view share one source; `None` for any other key or a modified one. Within-screen
+/// keys are fixed (ADR 0030 §2), so the default map is the resolved one for these rows.
+#[must_use]
+pub fn compare_decision(key: Key, modifier: Modifier) -> Option<CompareDecision> {
+    let entry = shortcuts()
+        .into_iter()
+        .find(|entry| entry.chord == Chord { modifier, key })?;
+    match entry.action {
+        ShortcutAction::DecideSame => Some(CompareDecision::Same),
+        ShortcutAction::DecideDistinct => Some(CompareDecision::Distinct),
+        ShortcutAction::DecideLater => Some(CompareDecision::Later),
+        ShortcutAction::CommandPalette
+        | ShortcutAction::NewRecord
+        | ShortcutAction::Find
+        | ShortcutAction::Undo
+        | ShortcutAction::Redo
+        | ShortcutAction::SwitchRecordTab
+        | ShortcutAction::DockRecordTab
+        | ShortcutAction::Help
+        | ShortcutAction::Close
+        | ShortcutAction::MoveUp
+        | ShortcutAction::MoveDown
+        | ShortcutAction::Open
+        | ShortcutAction::PrevRecord
+        | ShortcutAction::NextRecord
+        | ShortcutAction::PrevTab
+        | ShortcutAction::NextTab
+        | ShortcutAction::FirstTab
+        | ShortcutAction::LastTab
+        | ShortcutAction::AddSource
+        | ShortcutAction::Edit
+        | ShortcutAction::Quit
+        | ShortcutAction::CloseCurrentTab
+        | ShortcutAction::SaveRecord
+        | ShortcutAction::HistoryBack
+        | ShortcutAction::HistoryForward => None,
+    }
 }
 
 /// A rejected override from [`resolved_shortcuts`] (ADR 0030 §4): the named action keeps its default
@@ -559,8 +625,8 @@ mod tests {
     use std::str::FromStr;
 
     use super::{
-        BindingError, Chord, ChordParseError, Modifier, ShortcutAction, ShortcutGroup, navigation_shortcuts,
-        resolved_shortcuts, shortcuts,
+        BindingError, Chord, ChordParseError, CompareDecision, Key, Modifier, ShortcutAction, ShortcutGroup,
+        compare_decision, navigation_shortcuts, resolved_shortcuts, shortcuts,
     };
     use crate::navigation::Category;
 
@@ -604,7 +670,51 @@ mod tests {
             .filter(|entry| entry.group == ShortcutGroup::WithinScreen)
             .count();
         assert_eq!(global, 14);
-        assert_eq!(within, 11);
+        assert_eq!(within, 14);
+    }
+
+    #[test]
+    fn a_bare_y_n_or_l_decides_a_compared_pair() {
+        let decided: Vec<Option<CompareDecision>> = ['y', 'n', 'l', 's']
+            .into_iter()
+            .map(|letter| compare_decision(Key::Char(letter), Modifier::NONE))
+            .collect();
+        assert_eq!(
+            decided,
+            [
+                Some(CompareDecision::Same),
+                Some(CompareDecision::Distinct),
+                Some(CompareDecision::Later),
+                None,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_modified_letter_never_decides_a_pair() {
+        for modifier in [
+            Modifier::COMMAND,
+            Modifier::COMMAND_SHIFT,
+            Modifier {
+                alt: true,
+                ..Modifier::NONE
+            },
+        ] {
+            assert_eq!(compare_decision(Key::Char('y'), modifier), None, "{modifier:?}");
+        }
+        assert_eq!(compare_decision(Key::Enter, Modifier::NONE), None);
+    }
+
+    #[test]
+    fn the_compare_decisions_are_fixed_within_screen_keys() {
+        let overrides = std::collections::BTreeMap::from([("decide-same".to_owned(), "mod+y".to_owned())]);
+        let (_, errors) = resolved_shortcuts(&overrides);
+        assert_eq!(
+            errors,
+            [BindingError::NotRebindable {
+                id: "decide-same".to_owned()
+            }]
+        );
     }
 
     #[test]
