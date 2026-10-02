@@ -11,6 +11,7 @@ mod candidates;
 mod commit;
 mod graph;
 mod plan;
+mod review;
 mod write;
 
 pub use commit::{CommitControl, CommitFailure, CommitOutcome, CommittedEntity, RunToEnd, commit_import};
@@ -20,5 +21,7 @@ pub use graph::{
     StagedTag,
 };
 pub use plan::{
-    Disposition, ImportPlan, LinkBasis, PlanCounts, PlanError, PlannedEntity, PlannedLink, WriteScope, plan_import,
+    DecidedMatch, Disposition, ImportPlan, LinkBasis, PlanCounts, PlanError, PlannedEntity, PlannedLink, WriteScope,
+    plan_import,
 };
+pub use review::{ImportReview, MatchQuestion, MatchReply, PairAnswer};

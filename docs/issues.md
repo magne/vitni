@@ -526,6 +526,14 @@ does.
   only when the record has candidates. `docs/mockups/import.html` is updated. *Needs:* the compare view.
   *Exit:* a gui-pass scenario covering a record with a candidate, and one
   without, where no stage appears. — #412
+- **A record decided the same as a stored place, source or repository adds nothing to it** — ADR 0040
+  §3. *Same* on a place, source or repository reuses the stored record and records the resolution, but
+  writes none of the incoming fields, so a source's author or a place's type the stored record lacks is
+  lost. The plan's update writes (`Writer::update`) set a source's title and a repository's name rather
+  than adding them, so they cannot be reused as they are. *Shape:* an additive write per kind that fills
+  only an empty single-valued field and adds a list value not already recorded, with the origin.
+  *Exit:* deciding *Same* on a stored source without an author adds the incoming author and leaves its
+  title unchanged.
 - **Bulk import Plan and Review stages, and `vitni import --plan`** — ADR 0040 §3, §4. A plan summary by
   kind and disposition, a review list with bulk actions (*Treat all Probable places as the same*,
   *Decide the rest later*), and commit. CLI: `--plan` (text or `--json`, writes nothing),
