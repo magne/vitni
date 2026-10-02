@@ -1,12 +1,13 @@
 # #408: importing a file again into the workspace it came from, naming no dataset, opens the confirm
 # once the file is read, starting on the proposed tree with the evidence for it, and Import anyway
-# finishes the run. SSR renders the dialog alone; only the live app shows it opening mid-run, which
-# needs the driver loop to wait on the progress stream and the host's question together.
+# plans the file against it: every record already on record, nothing to write (#413). SSR renders the
+# dialog alone; only the live app shows it opening mid-run, which needs the driver loop to wait on the
+# progress stream and the host's question together.
 #
 # The fixture seeds `rerun.ged` beside the workspace's data without importing it, so the workspace is
 # empty and the first import asks nothing. Coordinates are window pixels at 1800x1200, read off the
 # shots this scenario writes.
-description = "Re-importing a file opens the confirm on the proposed tree once the file is read (#408)"
+description = "Re-importing a file opens the confirm on the proposed tree once the file is read (#408, #413)"
 
 [[step]]
 do = "click"
@@ -27,6 +28,16 @@ label = "type: rerun.ged"
 do = "click"
 at = [300, 642]
 label = "Import"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the file be read and planned"
+
+[[step]]
+do = "click"
+at = [1730, 696]
+label = "Import, at the plan"
 
 [[step]]
 do = "wait"
@@ -68,6 +79,20 @@ label = "Import anyway, into the proposed tree"
 [[step]]
 do = "wait"
 seconds = 3
+label = "let the file be planned"
+
+[[step]]
+do = "shot"
+name = "replanned"
+
+[[step]]
+do = "click"
+at = [1730, 737]
+label = "Import, at the plan that writes nothing"
+
+[[step]]
+do = "wait"
+seconds = 3
 label = "let the import finish"
 
 [[step]]
@@ -78,6 +103,11 @@ name = "second-done"
 kind = "differ"
 shots = ["again", "asked"]
 because = "the second import must stop on the dataset confirm once the file is read"
+
+[[assert]]
+kind = "differ"
+shots = ["asked", "replanned"]
+because = "confirming the proposed tree must plan the file against it before writing"
 
 [[assert]]
 kind = "match"

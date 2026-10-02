@@ -1,0 +1,149 @@
+# #413: a bulk import shows its plan once the file is read, and a plan with possible matches is
+# reviewed pair by pair before anything is written. The first import of `rerun.ged` plans every
+# record as new and imports at Import; the second, as a different tree, finds the place and the person
+# without an external id possibly the same as the first import's, and the Review stage puts each pair
+# in the compare view, its Review step showing only while the stage is up. SSR renders each stage
+# alone; only the live app shows the driver loop handing the host's plan and pairs to the wizard and
+# their answers back, and focus landing on the compare view so y / l decide.
+#
+# The fixture seeds `rerun.ged` beside the workspace's data without importing it. Coordinates are
+# window pixels at 1800x1200, read off the shots this scenario writes.
+description = "A bulk import shows its plan, then reviews its possible matches pair by pair (#413)"
+
+[[step]]
+do = "click"
+at = [70, 786]
+label = "rail: Import"
+
+[[step]]
+do = "click"
+at = [1394, 408]
+label = "source file field"
+
+[[step]]
+do = "text"
+text = "rerun.ged"
+label = "type: rerun.ged"
+
+[[step]]
+do = "click"
+at = [300, 642]
+label = "Import"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the file be read and planned"
+
+[[step]]
+do = "shot"
+name = "first-plan"
+
+[[step]]
+do = "click"
+at = [1730, 696]
+label = "Import"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the import finish"
+
+[[step]]
+do = "shot"
+name = "first-done"
+
+[[step]]
+do = "click"
+at = [330, 486]
+label = "Import another"
+
+[[step]]
+do = "click"
+at = [300, 642]
+label = "Import the same file again"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the file be read and the host ask"
+
+[[step]]
+do = "shot"
+name = "asked"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "the select: A different tree"
+
+[[step]]
+do = "shot"
+name = "different"
+
+[[step]]
+do = "click"
+at = [1153, 418]
+label = "Import anyway, as a different tree"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the file be planned against the first tree"
+
+[[step]]
+do = "shot"
+name = "second-plan"
+
+[[step]]
+do = "click"
+at = [1657, 737]
+label = "Review 2 possible matches"
+
+[[step]]
+do = "shot"
+name = "first-pair"
+
+[[step]]
+do = "key"
+chord = "y"
+label = "y: Same"
+
+[[step]]
+do = "shot"
+name = "second-pair"
+
+[[step]]
+do = "key"
+chord = "l"
+label = "l: Decide later"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the import finish"
+
+[[step]]
+do = "shot"
+name = "second-done"
+
+[[assert]]
+kind = "differ"
+shots = ["first-plan", "second-plan"]
+because = "the second tree's plan must show its possible matches and offer to review them"
+
+[[assert]]
+kind = "differ"
+shots = ["second-plan", "first-pair"]
+because = "Review must open the Review stage on the first pair"
+
+[[assert]]
+kind = "differ"
+shots = ["first-pair", "second-pair"]
+because = "answering the first pair must bring up the second"
+
+[[assert]]
+kind = "match"
+shots = ["first-done", "second-done"]
+region = [248, 230, 1536, 300]
+because = "answering the last pair must write the import and end on its summary, as the first did"
