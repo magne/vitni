@@ -13,8 +13,8 @@ use crate::matching::profile::{
     EventProfile, Participant, PersonProfile, PlaceProfile, Relative, VitalEvent, VitalKind,
 };
 use crate::matching::{
-    CultureId, DateBasis, ENGINE_VERSION, Feature, FeatureComparison, MatchAssessment, MatchBand, MatchData,
-    MatchSettings, Outcome, assess_persons,
+    CultureId, DateBasis, ENGINE_VERSION, Feature, FeatureComparison, FeatureValue, MatchAssessment, MatchBand,
+    MatchData, MatchSettings, Outcome, assess_persons,
 };
 use crate::name::{LanguageTag, NameType, PersonName, Surname};
 use crate::origin::{DatasetId, RecordOrigin};
@@ -738,4 +738,21 @@ fn the_rules_of_a_culture_set_are_normalized_once_and_a_clone_starts_empty() {
         !std::sync::Arc::ptr_eq(&first, &fresh),
         "a clone starts with an empty cache"
     );
+}
+
+#[test]
+fn a_mirrored_assessment_reads_as_the_pair_assessed_the_other_way_round() {
+    let a = person("Guldbrand", "Olsen", Sex::Male, born(on(1850, 3, 4), Some("Norge")));
+    let b = person("Gulbrand", "Olsøn", Sex::Male, born(on(1851, 3, 4), None));
+    let mirrored = assess(&a, &b).mirrored();
+    let reversed = assess(&b, &a);
+    let values = |assessment: &MatchAssessment| -> Vec<(Feature, Option<FeatureValue>, Option<FeatureValue>)> {
+        let mut values = Vec::new();
+        for term in &assessment.features {
+            values.push((term.feature, term.left.clone(), term.right.clone()));
+        }
+        values
+    };
+    assert_eq!(values(&mirrored), values(&reversed));
+    assert_eq!((mirrored.score, mirrored.band), (reversed.score, reversed.band));
 }

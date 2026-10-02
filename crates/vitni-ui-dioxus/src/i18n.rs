@@ -1662,16 +1662,53 @@ impl Chrome {
         fl!(self.loader, "import-heading")
     }
 
-    /// The five wizard stage names, in order (Source, Records, Confirm, Save scan, Summary).
+    /// The six wizard stage names, in order (Source, Records, Confirm, Save scan, Match, Summary).
     #[must_use]
-    pub fn import_stages(&self) -> [String; 5] {
+    pub fn import_stages(&self) -> [String; 6] {
         [
             fl!(self.loader, "import-stage-source"),
             fl!(self.loader, "import-stage-records"),
             fl!(self.loader, "import-stage-confirm"),
             fl!(self.loader, "import-stage-save"),
+            fl!(self.loader, "import-stage-match"),
             fl!(self.loader, "import-stage-summary"),
         ]
+    }
+
+    /// Which of a record's possible matches the match stage shows: "Possible match 1 of 2".
+    #[must_use]
+    pub fn import_match_position(&self, position: usize, total: usize) -> String {
+        fl!(self.loader, "import-match-position", position = position, total = total)
+    }
+
+    /// The match stage's question for a record of `kind` (`person`, `place`, `source`, `repository`).
+    #[must_use]
+    pub fn import_match_heading(&self, kind: &str) -> String {
+        fl!(self.loader, "import-match-heading", kind = kind)
+    }
+
+    /// The match stage's caption on the stored record.
+    #[must_use]
+    pub fn import_match_stored_caption(&self) -> String {
+        fl!(self.loader, "import-match-stored-caption")
+    }
+
+    /// The match stage's caption on the incoming record.
+    #[must_use]
+    pub fn import_match_incoming_caption(&self) -> String {
+        fl!(self.loader, "import-match-incoming-caption")
+    }
+
+    /// The match stage's *Skip record*.
+    #[must_use]
+    pub fn import_match_skip(&self) -> String {
+        fl!(self.loader, "import-match-skip")
+    }
+
+    /// The match stage's *Cancel import*.
+    #[must_use]
+    pub fn import_match_cancel(&self) -> String {
+        fl!(self.loader, "import-match-cancel")
     }
 
     /// The Source-stage plugin-selector label.

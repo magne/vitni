@@ -96,6 +96,12 @@ impl Localizer {
         self
     }
 
+    /// The badge an imported record shows in a comparison before it has an id of its own.
+    #[must_use]
+    pub fn match_incoming_badge(&self) -> String {
+        fl!(self.loader, "match-incoming-badge")
+    }
+
     /// The display name, or the localized "no name" placeholder when absent.
     #[must_use]
     pub fn display_name(&self, name: Option<&str>) -> String {

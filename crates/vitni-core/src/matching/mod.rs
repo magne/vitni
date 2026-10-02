@@ -281,6 +281,19 @@ pub struct MatchAssessment {
     pub engine: EngineVersion,
 }
 
+impl MatchAssessment {
+    /// The same assessment with its two records swapped: every term's left value becomes its right,
+    /// the summarised parts' too. Score, band and outcomes do not depend on the order.
+    #[must_use]
+    pub fn mirrored(mut self) -> Self {
+        for feature in &mut self.features {
+            std::mem::swap(&mut feature.left, &mut feature.right);
+        }
+        self.parts = self.parts.into_iter().map(Self::mirrored).collect();
+        self
+    }
+}
+
 /// The thresholds and default cultures a comparison uses — the `[matching]` configuration.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchSettings {

@@ -1122,6 +1122,7 @@ match-feature-checksum = checksum
 match-feature-path = file name
 match-feature-text = text
 match-reason-missing = No { $feature } to compare
+match-incoming-badge = new
 match-outcome-agree = same
 match-outcome-partial = similar
 match-outcome-disagree = different

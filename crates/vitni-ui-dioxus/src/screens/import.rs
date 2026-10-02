@@ -7,8 +7,9 @@
 //! The assisted wizard's stages: Source (pick an installed assisted-import plugin, enter a URL,
 //! fetch) → Records (a picker table) → Confirm (a split view: the scan with the PR6 crop tool on the
 //! left, the editable transcribed fields + a provenance preview on the right) → Save scan (the PR6
-//! media-save dialog, once per source page) → Summary. The plugin drives which stage shows; the
-//! wizard answers each payload over the presenter channel.
+//! media-save dialog, once per source page) → Match (the host's own stage, only when a record may
+//! already be in the tree; `import_match.rs`) → Summary. The plugin drives which of its stages shows;
+//! the wizard answers each payload, and each of the host's match questions, over the presenter channel.
 //!
 //! Each stage is a pure component over already-localized label structs and the parsed payload; it
 //! emits the user's answer as an [`ImportResponse`] through `onrespond`, so it renders in isolation
@@ -23,6 +24,7 @@ use std::collections::HashMap;
 
 use serde_json::json;
 use tokio::sync::oneshot;
+use vitni_app::MatchReply;
 use vitni_plugin_host::PluginRole;
 use vitni_ui::{
     ConfirmRecordPayload, CropRegion, FieldValue, HouseholdPosition, HouseholdPreview, ImportResponse, ImportSession,
@@ -36,7 +38,8 @@ use crate::components::{
     MediaCropLabels, MediaCropTools, MediaSaveDialog, MediaSaveLabels, MediaViewer, MediaViewerLabels,
 };
 use crate::i18n::Chrome;
-use crate::screens::shared::{media_crop_labels, media_viewer_labels};
+use crate::screens::import_match::{MatchStage, match_stage_labels};
+use crate::screens::shared::{confidence_choices, media_crop_labels, media_viewer_labels};
 use crate::services::{PluginRow, PresentRequest, discover_plugins, start_assisted_import};
 
 /// A record's review status, tracked wizard-side and shown as a chip in the records table (the
@@ -51,13 +54,26 @@ pub enum ImportRowStatus {
     Skipped,
 }
 
-/// The wizard chrome shared across stages: the heading and the five step names.
+/// The wizard chrome shared across stages: the heading and the six step names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WizardLabels {
     /// The wizard heading.
     pub heading: String,
-    /// The five stage names (Source, Records, Confirm, Save scan, Summary).
-    pub stages: [String; 5],
+    /// The six stage names (Source, Records, Confirm, Save scan, Match, Summary); Match shows only
+    /// while its stage is up.
+    pub stages: [String; 6],
+}
+
+/// The step index of the host's match stage, shown only while it is up.
+const MATCH_STEP: usize = 4;
+
+/// Where the wizard answers the request it is showing: a plugin payload with an
+/// [`ImportResponse`] JSON string, the host's match stage with a [`MatchReply`].
+enum Responder {
+    /// A plugin payload's channel.
+    Payload(oneshot::Sender<String>),
+    /// The match stage's channel.
+    Match(oneshot::Sender<MatchReply>),
 }
 
 /// The Source-stage labels.
@@ -189,7 +205,7 @@ pub fn ImportScreen() -> Element {
         };
     }
     let session = use_signal(ImportSession::new);
-    let responder = use_signal(|| None::<oneshot::Sender<String>>);
+    let responder = use_signal(|| None::<Responder>);
     let running = use_signal(|| false);
     let outcome = use_signal(|| None::<Result<String, String>>);
     let plugin_id = use_signal(String::new);
@@ -252,6 +268,18 @@ pub fn ImportScreen() -> Element {
                 onback: move |()| reply(responder, &submit("back", ResponseValues::default())),
             }
         },
+        ImportStage::Match(stage) => {
+            let labels = match_stage_labels(&chrome, &stage);
+            rsx! {
+                MatchStage {
+                    key: "{stage.position}-{stage.compare.left.human_id}",
+                    labels,
+                    stage: *stage,
+                    confidence_options: confidence_choices(loc),
+                    onanswer: move |reply: MatchReply| answer_match(reply, responder, statuses, active_row),
+                }
+            }
+        }
         ImportStage::Summary(payload) => rsx! {
             SummaryStage {
                 labels: summary_labels(&chrome, payload.imported.len(), payload.skipped),
@@ -305,7 +333,7 @@ fn source_body(
     chrome: &Chrome,
     plugin_id: Signal<String>,
     session: Signal<ImportSession>,
-    responder: Signal<Option<oneshot::Sender<String>>>,
+    responder: Signal<Option<Responder>>,
     running: Signal<bool>,
     outcome: Signal<Option<Result<String, String>>>,
     statuses: Signal<HashMap<String, ImportRowStatus>>,
@@ -341,6 +369,7 @@ fn source_body(
         })
         .collect();
     let fetch_services = state.services().clone();
+    let match_state = state.clone();
     let onfetch = move |url: String| {
         let id = plugin_id();
         if url.trim().is_empty() || id.is_empty() {
@@ -367,6 +396,7 @@ fn source_body(
             running,
             outcome,
             saw_records,
+            match_state.clone(),
         ));
     };
     // A session that ends before reaching a later stage (an unrecognized URL, a fetch/parse failure)
@@ -773,17 +803,25 @@ pub fn SummaryStage(labels: SummaryLabels, imported: Vec<ImportedRecord>, onrest
     }
 }
 
-/// The wizard step indicator: the five stage names, the current one marked `aria-current`.
-fn step_indicator(labels: &WizardLabels, stage: &ImportStage) -> Element {
+/// The wizard step indicator: the stage names, numbered in order, the current one marked
+/// `aria-current`. The host's Match step shows only while its stage is up — a record with no possible
+/// match never meets it.
+pub fn step_indicator(labels: &WizardLabels, stage: &ImportStage) -> Element {
     let current = stage_index(stage);
+    let mut steps = Vec::with_capacity(labels.stages.len());
+    for (index, name) in labels.stages.iter().enumerate() {
+        if index != MATCH_STEP || current == MATCH_STEP {
+            steps.push((index, name.clone()));
+        }
+    }
     rsx! {
         div { class: "wiz-steps", role: "list", aria_label: "{labels.heading}",
-            for (index , name) in labels.stages.iter().enumerate() {
+            for (number , (index , name)) in steps.into_iter().enumerate() {
                 span {
                     class: if index == current { "wiz-step active" } else if index < current { "wiz-step done" } else { "wiz-step" },
                     role: "listitem",
                     aria_current: if index == current { Some("step") } else { None },
-                    span { class: "num", "{index + 1}" }
+                    span { class: "num", "{number + 1}" }
                     " {name}"
                 }
             }
@@ -798,7 +836,8 @@ fn stage_index(stage: &ImportStage) -> usize {
         ImportStage::Records(_) => 1,
         ImportStage::Confirm(_) => 2,
         ImportStage::SaveScan(_) => 3,
-        ImportStage::Summary(_) | ImportStage::Error(_) => 4,
+        ImportStage::Match(_) => MATCH_STEP,
+        ImportStage::Summary(_) | ImportStage::Error(_) => 5,
     }
 }
 
@@ -818,26 +857,41 @@ async fn drive(
     run: u64,
     generation: Signal<u64>,
     mut session: Signal<ImportSession>,
-    mut responder: Signal<Option<oneshot::Sender<String>>>,
+    mut responder: Signal<Option<Responder>>,
     mut running: Signal<bool>,
     mut outcome: Signal<Option<Result<String, String>>>,
     mut saw_records: Signal<bool>,
+    state: AppState,
 ) {
     let mut requests = handle.requests;
-    while let Some(PresentRequest {
-        payload,
-        responder: reply,
-    }) = requests.recv().await
-    {
+    while let Some(request) = requests.recv().await {
         if generation() != run {
-            drop(reply.send(cancel_json())); // superseded run: unblock the plugin, ignore the payload
+            // A superseded run: unblock the invocation and ignore the request.
+            match request {
+                PresentRequest::Payload { responder: reply, .. } => drop(reply.send(cancel_json())),
+                PresentRequest::Match { responder: reply, .. } => drop(reply.send(MatchReply::Cancel)),
+            }
             continue;
         }
-        session.write().on_payload(&payload);
-        if matches!(session().stage(), ImportStage::Records(_)) {
-            saw_records.set(true);
+        match request {
+            PresentRequest::Payload {
+                payload,
+                responder: reply,
+            } => {
+                session.write().on_payload(&payload);
+                if matches!(session().stage(), ImportStage::Records(_)) {
+                    saw_records.set(true);
+                }
+                responder.set(Some(Responder::Payload(reply)));
+            }
+            PresentRequest::Match {
+                question,
+                responder: reply,
+            } => {
+                session.write().on_match(&question, state.data_loc());
+                responder.set(Some(Responder::Match(reply)));
+            }
         }
-        responder.set(Some(reply));
     }
     if generation() == run {
         let result = handle.outcome.await.unwrap_or_else(|_| Err(String::new()));
@@ -851,7 +905,7 @@ async fn drive(
 fn run_start_over(
     mut generation: Signal<u64>,
     session: Signal<ImportSession>,
-    responder: Signal<Option<oneshot::Sender<String>>>,
+    responder: Signal<Option<Responder>>,
     running: Signal<bool>,
     outcome: Signal<Option<Result<String, String>>>,
     mut saw_records: Signal<bool>,
@@ -871,7 +925,7 @@ fn cancel_json() -> String {
 /// skipped), then the channel reply back to the plugin.
 fn respond_with(
     response: &ImportResponse,
-    responder: Signal<Option<oneshot::Sender<String>>>,
+    responder: Signal<Option<Responder>>,
     mut statuses: Signal<HashMap<String, ImportRowStatus>>,
     mut active_row: Signal<Option<String>>,
 ) {
@@ -894,12 +948,36 @@ fn respond_with(
     reply(responder, response);
 }
 
-/// Sends `response` back to the plugin over the current presenter channel (a no-op if none is live).
-fn reply(mut responder: Signal<Option<oneshot::Sender<String>>>, response: &ImportResponse) {
-    if let Some(reply) = responder.write().take()
-        && let Ok(json) = serde_json::to_string(response)
-    {
-        drop(reply.send(json));
+/// Sends `response` back over the current presenter channel (a no-op if none is live). The match
+/// stage takes only a cancel from here; its decisions go through [`answer_match`].
+fn reply(mut responder: Signal<Option<Responder>>, response: &ImportResponse) {
+    match responder.write().take() {
+        Some(Responder::Payload(reply)) => {
+            if let Ok(json) = serde_json::to_string(response) {
+                drop(reply.send(json));
+            }
+        }
+        Some(Responder::Match(reply)) => {
+            if let ImportResponse::Cancel = response {
+                drop(reply.send(MatchReply::Cancel));
+            }
+        }
+        None => {}
+    }
+}
+
+/// Answers the match stage with `answer`, marking the active record skipped when the user skips it.
+fn answer_match(
+    answer: MatchReply,
+    mut responder: Signal<Option<Responder>>,
+    mut statuses: Signal<HashMap<String, ImportRowStatus>>,
+    active_row: Signal<Option<String>>,
+) {
+    if let (MatchReply::Skip, Some(row)) = (&answer, active_row()) {
+        statuses.write().insert(row, ImportRowStatus::Skipped);
+    }
+    if let Some(Responder::Match(reply)) = responder.write().take() {
+        drop(reply.send(answer));
     }
 }
 

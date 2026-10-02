@@ -453,6 +453,19 @@ import-stage-records = Poster
 import-stage-confirm = Bekreft
 import-stage-save = Lagre skann
 import-stage-summary = Oppsummering
+import-stage-match = Treff
+import-match-position = Mulig treff { $position } av { $total }
+import-match-heading = { $kind ->
+    [person] Er denne personen allerede i treet ditt?
+    [place] Er dette stedet allerede i treet ditt?
+    [source] Er denne kilden allerede i treet ditt?
+    [repository] Er dette arkivet allerede i treet ditt?
+   *[other] Er denne posten allerede i treet ditt?
+}
+import-match-stored-caption = i treet ditt · beholder id-en
+import-match-incoming-caption = fra denne posten
+import-match-skip = Hopp over posten
+import-match-cancel = Avbryt importen
 import-source-label = Kilde
 import-url-label = Post- eller søke-URL
 import-url-placeholder = https://www.digitalarkivet.no/…

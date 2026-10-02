@@ -20,10 +20,10 @@ use unic_langid::LanguageIdentifier;
 use vitni_app::{
     AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetProposal,
     DatasetScope, FileConfigStore, IdFormats, LocaleDefaults, MapConfig, MapProvider, MapSource, MatchQuestion,
-    MatchReply, PairAnswer, PluginTrust, PluginTrustConfig, PreferenceLayers, ResolvedLocale, RestoreReport,
-    RestoreRequest, Session, ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts,
-    WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers, read_resolved_locale,
-    read_resolved_surety_labels, read_surety_label_overrides, workspace_counts,
+    MatchReply, PluginTrust, PluginTrustConfig, PreferenceLayers, ResolvedLocale, RestoreReport, RestoreRequest,
+    Session, ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config,
+    list_tags, list_workspaces, read_preference_layers, read_resolved_locale, read_resolved_surety_labels,
+    read_surety_label_overrides, workspace_counts,
 };
 use vitni_plugin_host::{
     Capability, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PluginHost, PluginInfo,
@@ -849,16 +849,27 @@ pub async fn submit_plugin_panel(services: Services, action: String, values: Str
 /// site. Digitalarkivet is the first entry (`*.digitalarkivet.no`).
 const ASSISTED_NET_ALLOWLIST: &[(&str, &str)] = &[("digitalarkivet-import", "*.digitalarkivet.no")];
 
-/// One request the assisted-import invocation makes of the wizard: the opaque `present` payload plus
-/// the one-shot channel the wizard answers on. The wizard renders `payload` (parsing it with
-/// [`vitni_ui::parse_payload`]) and replies with an
-/// [`ImportResponse`](vitni_ui::ImportResponse) JSON string through `responder`.
-pub struct PresentRequest {
-    /// The opaque payload the plugin sent through `present` (the typed assisted-import contract).
-    pub payload: String,
-    /// The channel the wizard answers on; dropping it cancels the current present (the plugin sees a
-    /// `backend` error, ADR 0017 §5).
-    pub responder: oneshot::Sender<String>,
+/// One request the assisted-import invocation makes of the wizard, each with the one-shot channel the
+/// wizard answers on. Dropping a channel cancels the request (the plugin sees a `backend` error,
+/// ADR 0017 §5).
+pub enum PresentRequest {
+    /// The plugin's opaque `present` payload (the typed assisted-import contract), which the wizard
+    /// renders (parsing it with [`vitni_ui::parse_payload`]) and answers with an
+    /// [`ImportResponse`](vitni_ui::ImportResponse) JSON string.
+    Payload {
+        /// The payload.
+        payload: String,
+        /// The channel the wizard answers on.
+        responder: oneshot::Sender<String>,
+    },
+    /// The host's match stage (ADR 0040 §4): a possible match of the record being imported, which the
+    /// wizard answers with the user's reply.
+    Match {
+        /// The pair.
+        question: Box<MatchQuestion>,
+        /// The channel the wizard answers on.
+        responder: oneshot::Sender<MatchReply>,
+    },
 }
 
 /// The handle the wizard screen (PR8) consumes to drive an assisted-import session: a stream of
@@ -883,17 +894,26 @@ struct ChannelPresenter {
 impl Presenter for ChannelPresenter {
     async fn present(&mut self, payload: String) -> Result<String, PresentError> {
         let (responder, response) = oneshot::channel();
+        self.ask(PresentRequest::Payload { payload, responder }, response).await
+    }
+
+    async fn review_match(&mut self, question: MatchQuestion) -> Result<MatchReply, PresentError> {
+        let (responder, response) = oneshot::channel();
+        let question = Box::new(question);
+        self.ask(PresentRequest::Match { question, responder }, response).await
+    }
+}
+
+impl ChannelPresenter {
+    /// Sends `request` to the wizard and awaits its answer on `response`.
+    async fn ask<T>(&mut self, request: PresentRequest, response: oneshot::Receiver<T>) -> Result<T, PresentError> {
         self.requests
-            .send(PresentRequest { payload, responder })
+            .send(request)
             .await
             .map_err(|_| PresentError::Backend("the import wizard is no longer listening".to_owned()))?;
         response
             .await
             .map_err(|_| PresentError::Backend("the import wizard dropped the response channel".to_owned()))
-    }
-
-    async fn review_match(&mut self, _question: MatchQuestion) -> Result<MatchReply, PresentError> {
-        Ok(MatchReply::Pair(Box::new(PairAnswer::Later)))
     }
 }
 
@@ -1647,7 +1667,7 @@ mod tests {
     use tokio::sync::mpsc;
     use vitni_plugin_host::{PresentError, Presenter, ProgressControl, ProgressStep, ProgressUpdate};
 
-    use super::{ChannelPresenter, PresentRequest, bulk_progress_sink};
+    use super::{ChannelPresenter, MatchQuestion, MatchReply, PresentRequest, bulk_progress_sink};
 
     fn update(step: &str, processed: u32) -> ProgressUpdate {
         ProgressUpdate {
@@ -1725,7 +1745,9 @@ mod tests {
 
         // A stand-in wizard: read the one request and answer it.
         let wizard = tokio::spawn(async move {
-            let PresentRequest { payload, responder } = request_rx.recv().await.expect("a request arrives");
+            let Some(PresentRequest::Payload { payload, responder }) = request_rx.recv().await else {
+                panic!("a payload request arrives");
+            };
             assert_eq!(payload, r#"{"kind":"summary","imported":[],"skipped":0}"#);
             responder
                 .send(r#"{"kind":"submit","action":"done"}"#.to_owned())
@@ -1748,8 +1770,8 @@ mod tests {
         let mut presenter = ChannelPresenter { requests: request_tx };
 
         let wizard = tokio::spawn(async move {
-            let PresentRequest { responder, .. } = request_rx.recv().await.expect("a request arrives");
-            drop(responder); // the wizard closes without answering
+            let request = request_rx.recv().await.expect("a request arrives");
+            drop(request); // the wizard closes without answering
         });
 
         let error = presenter
@@ -1757,6 +1779,48 @@ mod tests {
             .await
             .expect_err("a dropped responder fails the present");
         assert!(matches!(error, PresentError::Backend(_)));
+        wizard.await.expect("wizard task");
+    }
+
+    /// The host's match stage reaches the wizard as its own request, and the wizard's reply comes back.
+    #[tokio::test]
+    async fn channel_presenter_round_trips_a_match_question_and_reply() {
+        let (request_tx, mut request_rx) = mpsc::channel::<PresentRequest>(1);
+        let mut presenter = ChannelPresenter { requests: request_tx };
+
+        let wizard = tokio::spawn(async move {
+            let Some(PresentRequest::Match { question, responder }) = request_rx.recv().await else {
+                panic!("a match request arrives");
+            };
+            assert_eq!(question.candidate.human_id, "I0001");
+            responder
+                .send(MatchReply::Skip)
+                .expect("the presenter is still awaiting");
+        });
+
+        let question = MatchQuestion {
+            kind: vitni_app::MatchableKind::Person,
+            incoming_label: "Ola".to_owned(),
+            incoming_origin: None,
+            candidate: vitni_app::AggRef {
+                human_id: "I0001".to_owned(),
+                id: "00000000-0000-0000-0000-000000000001".to_owned(),
+            },
+            candidate_label: "Ola".to_owned(),
+            candidate_origin: None,
+            assessment: vitni_app::MatchAssessment {
+                score: 0.8,
+                band: vitni_app::MatchBand::Possible,
+                features: Vec::new(),
+                cultures: Vec::new(),
+                parts: Vec::new(),
+                engine: vitni_app::ENGINE_VERSION,
+            },
+            position: 1,
+            total: 1,
+        };
+        let reply = presenter.review_match(question).await.expect("the wizard answers");
+        assert_eq!(reply, MatchReply::Skip);
         wizard.await.expect("wizard task");
     }
 

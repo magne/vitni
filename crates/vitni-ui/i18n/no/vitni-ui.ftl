@@ -1122,6 +1122,7 @@ match-feature-checksum = Sjekksum
 match-feature-path = Filnavn
 match-feature-text = Tekst
 match-reason-missing = { $feature } kan ikke sammenlignes
+match-incoming-badge = ny
 match-outcome-agree = lik
 match-outcome-partial = lignende
 match-outcome-disagree = ulik

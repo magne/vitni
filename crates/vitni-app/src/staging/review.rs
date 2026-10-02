@@ -45,7 +45,8 @@ pub struct MatchQuestion {
     pub candidate_label: String,
     /// The dataset record an import created the stored record from, if any.
     pub candidate_origin: Option<RecordOrigin>,
-    /// The engine's assessment of the staged entity against the stored record.
+    /// The engine's assessment of the pair, the stored record its left side — the side a *Same*
+    /// keeps.
     pub assessment: MatchAssessment,
     /// Which of the plan's entities with candidates this is, from 1.
     pub position: usize,
@@ -171,7 +172,7 @@ impl ImportReview {
             candidate,
             candidate_label,
             candidate_origin,
-            assessment: similar.assessment.clone(),
+            assessment: similar.assessment.clone().mirrored(),
             position,
             total,
         }))
