@@ -1321,3 +1321,7 @@ panel-add-subject = Add subject
 remove-subject-title = Stop naming this record as a subject of the argument — recorded in History
 field-argument = Argument
 field-restrictions = Restrictions
+
+## Similar records (ADR 0038 §8) — the hint a record being created raises, and *Find similar*.
+similar-hint = Possibly the same as { $record } ({ $score }%)
+similar-draft-side = New

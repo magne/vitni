@@ -132,6 +132,7 @@ fn new_chip_view() -> Element {
     draft.add_new_partner(NewPersonFields {
         given: "Grace".to_owned(),
         surname: "Hopper".to_owned(),
+        born: String::new(),
     });
     fields(draft, PickerState::default(), None)
 }

@@ -1321,3 +1321,7 @@ panel-add-subject = Legg til emne
 remove-subject-title = Slutt å navngi denne posten som et emne i argumentet — registrert i Historikk
 field-argument = Argument
 field-restrictions = Restriksjoner
+
+## Similar records (ADR 0038 §8) — the hint a record being created raises, and *Find similar*.
+similar-hint = Kanskje den samme som { $record } ({ $score } %)
+similar-draft-side = Ny

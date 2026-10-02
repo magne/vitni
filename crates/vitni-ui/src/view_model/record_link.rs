@@ -6,9 +6,9 @@
 //! cascade is one nested value the parent draft owns whole — dirtiness, validity, and Save flow
 //! through the existing record-edit machinery unchanged.
 
-use vitni_app::{EventType, NameType, PersonNameParts, PlaceType};
+use vitni_app::{DraftRecord, EventType, NameType, PersonNameParts, PlaceType};
 
-use super::non_blank;
+use super::{non_blank, parse_birth};
 use crate::navigation::{
     Category, CitationChangeSetRequest, CitationSourceRequest, EventChangeSetRequest, EventPlaceRequest,
     MediaChangeSetRequest, NewRecordRequest, NoteChangeSetRequest, PersonChangeSetRequest, PlaceChangeSetRequest,
@@ -56,6 +56,55 @@ pub struct NewPersonFields {
     pub given: String,
     /// The surname (blank ⇒ no surname).
     pub surname: String,
+    /// The typed birth date (blank ⇒ no birth; unreadable ⇒ not savable).
+    pub born: String,
+}
+
+impl NewPersonFields {
+    /// The create request for the person these fields describe, or `None` while no name is typed or
+    /// the typed birth cannot be read.
+    #[must_use]
+    pub fn to_request(&self) -> Option<NewRecordRequest> {
+        let given = non_blank(&self.given);
+        let surname = non_blank(&self.surname);
+        if given.is_none() && surname.is_none() {
+            return None;
+        }
+        let birth = parse_birth(&self.born).ok()?;
+        Some(NewRecordRequest::Person(PersonChangeSetRequest {
+            existing_human_id: None,
+            human_id_override: None,
+            name: Some(PersonNameParts {
+                name_type: NameType::BirthName,
+                given,
+                surname_prefix: None,
+                surname,
+                nickname: None,
+                prefix: None,
+                suffix: None,
+            }),
+            name_citation: None,
+            sex: None,
+            tags: Vec::new(),
+            new_sources: Vec::new(),
+            new_citations: Vec::new(),
+            birth,
+        }))
+    }
+
+    /// The person these fields would create, as the matching engine matches them; `None` while no name
+    /// is typed. An unreadable birth is left out rather than guessed at.
+    #[must_use]
+    pub fn similar_draft(&self) -> Option<DraftRecord> {
+        let name = PersonNameParts::simple(non_blank(&self.given), non_blank(&self.surname));
+        if name.is_empty() {
+            return None;
+        }
+        Some(DraftRecord::Person {
+            name,
+            birth: parse_birth(&self.born).ok().flatten(),
+        })
+    }
 }
 
 /// The inline fields of a new place (an event place created from the picker's "+ New place").
@@ -177,7 +226,11 @@ impl NewRecordDraft {
             Category::Dashboard => None,
             Category::People => {
                 let (given, surname) = split_new_person_name(query);
-                Some(Self::Person(NewPersonFields { given, surname }))
+                Some(Self::Person(NewPersonFields {
+                    given,
+                    surname,
+                    born: String::new(),
+                }))
             }
             // A family needs partners; there is nothing for a bare query to seed.
             Category::Families => None,
@@ -227,31 +280,7 @@ impl NewRecordDraft {
     #[must_use]
     pub fn to_request(&self) -> Option<NewRecordRequest> {
         match self {
-            Self::Person(fields) => {
-                let given = non_blank(&fields.given);
-                let surname = non_blank(&fields.surname);
-                if given.is_none() && surname.is_none() {
-                    return None;
-                }
-                Some(NewRecordRequest::Person(PersonChangeSetRequest {
-                    existing_human_id: None,
-                    human_id_override: None,
-                    name: Some(PersonNameParts {
-                        name_type: NameType::BirthName,
-                        given,
-                        surname_prefix: None,
-                        surname,
-                        nickname: None,
-                        prefix: None,
-                        suffix: None,
-                    }),
-                    name_citation: None,
-                    sex: None,
-                    tags: Vec::new(),
-                    new_sources: Vec::new(),
-                    new_citations: Vec::new(),
-                }))
-            }
+            Self::Person(fields) => fields.to_request(),
             Self::Place(fields) => {
                 let name = non_blank(&fields.name)?;
                 Some(NewRecordRequest::Place(PlaceChangeSetRequest {
@@ -326,6 +355,28 @@ impl NewRecordDraft {
                 }))
             }
         }
+    }
+
+    /// The record this draft would create, as the matching engine matches it — the similar-record hint
+    /// (ADR 0038 §8). `None` for a kind the hint does not cover, or while nothing identifying is typed.
+    #[must_use]
+    pub fn similar_draft(&self) -> Option<DraftRecord> {
+        let draft = match self {
+            Self::Person(fields) => fields.similar_draft()?,
+            Self::Place(fields) => DraftRecord::Place {
+                name: fields.name.trim().to_owned(),
+                place_type: Some(fields.place_type.clone()),
+            },
+            Self::Source(fields) => DraftRecord::Source {
+                title: fields.title.trim().to_owned(),
+                author: None,
+            },
+            Self::Repository(fields) => DraftRecord::Repository {
+                name: fields.name.trim().to_owned(),
+            },
+            Self::Citation(_) | Self::Note(_) | Self::Media(_) | Self::Event(_) => return None,
+        };
+        (!draft.is_empty()).then_some(draft)
     }
 
     /// Whether this draft is valid to save — [`Self::to_request`] returning `Some`, so there is no
@@ -455,6 +506,7 @@ mod tests {
         let link = RecordLink::New(NewPersonFields {
             given: "Ada".to_owned(),
             surname: "Lovelace".to_owned(),
+            born: String::new(),
         });
         assert!(link.is_set());
         assert!(link.existing_id().is_none());
@@ -582,6 +634,7 @@ mod tests {
             NewRecordDraft::Person(NewPersonFields {
                 given: "Ada".to_owned(),
                 surname: "Lovelace".to_owned(),
+                born: String::new(),
             }),
             NewRecordDraft::Place(NewPlaceFields {
                 place_type: PlaceType::City,

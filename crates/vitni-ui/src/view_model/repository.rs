@@ -288,6 +288,16 @@ impl RecordDraft for RepositoryDraft {
     fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
         self.restrictions = restrictions;
     }
+
+    fn similar_draft(&self) -> Option<vitni_app::DraftRecord> {
+        if self.existing_human_id.is_some() {
+            return None;
+        }
+        let draft = vitni_app::DraftRecord::Repository {
+            name: self.name.trim().to_owned(),
+        };
+        (!draft.is_empty()).then_some(draft)
+    }
 }
 
 #[cfg(test)]

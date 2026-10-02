@@ -8,7 +8,8 @@
 //! different month lengths, so a day up to 31 is accepted there unchecked.
 
 use vitni_app::{
-    Calendar, DateInput, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, TimeOfDay,
+    Calendar, DateInput, DateModifier, DateParts, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody,
+    TimeOfDay,
 };
 
 use crate::view_model::common::non_blank;
@@ -63,6 +64,25 @@ pub fn parse_date_point(text: &str, calendar: Calendar) -> Result<DatePoint, Dat
     .ok_or(DateEntryError::Unparseable)?;
     validate(point, calendar)?;
     Ok(point)
+}
+
+/// Reads a typed birth date — any form [`parse_date_point`] reads, on the Gregorian calendar — into the
+/// [`DateParts`] a create records; a blank field is no birth.
+///
+/// # Errors
+///
+/// The [`DateEntryError`] of a non-blank field [`parse_date_point`] cannot read.
+pub fn parse_birth(text: &str) -> Result<Option<DateParts>, DateEntryError> {
+    if text.trim().is_empty() {
+        return Ok(None);
+    }
+    let point = parse_date_point(text, Calendar::Gregorian)?;
+    let year = point.year.ok_or(DateEntryError::Unparseable)?;
+    Ok(Some(DateParts {
+        year,
+        month: point.month,
+        day: point.day,
+    }))
 }
 
 /// Renders a [`DatePoint`] back to the field's `DAY MON YEAR` / `MON YEAR` / `YEAR` text (empty when

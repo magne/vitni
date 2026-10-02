@@ -485,6 +485,7 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::MatchQueue(_)
             | IntentOutcome::MatchCompare(_)
+            | IntentOutcome::Similar(_)
             | IntentOutcome::Geography(_)
             | IntentOutcome::Dashboard(_)
             | IntentOutcome::ResearchNoteDetail(_)

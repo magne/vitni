@@ -733,6 +733,17 @@ impl RecordDraft for PlaceDraft {
     fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
         self.restrictions = restrictions;
     }
+
+    fn similar_draft(&self) -> Option<vitni_app::DraftRecord> {
+        if self.existing_human_id.is_some() {
+            return None;
+        }
+        let draft = vitni_app::DraftRecord::Place {
+            name: self.name.trim().to_owned(),
+            place_type: Some(self.place_type.clone()),
+        };
+        (!draft.is_empty()).then_some(draft)
+    }
 }
 
 #[cfg(test)]

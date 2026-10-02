@@ -526,6 +526,7 @@ pub(crate) fn ResearchNoteDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::MatchQueue(_)
             | IntentOutcome::MatchCompare(_)
+            | IntentOutcome::Similar(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
     }

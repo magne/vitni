@@ -5,8 +5,9 @@ use super::{
     DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactVm,
     FamilyVm, HistoryEntryVm, Localizer, MediaRefVm, NameSummary, NameType, NameVm, NewCitationFields,
     PersonChangeSetRequest, PersonEdit, PersonName, PersonNameParts, PersonRow, PersonSummary, RecordDraft, RecordLink,
-    RestrictionKind, RowVm, Sex, TagRef, citation_ref_from_ref, line_label,
+    RestrictionKind, RowVm, Sex, TagRef, citation_ref_from_ref, line_label, parse_birth,
 };
+use vitni_app::{DateParts, DraftRecord};
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
 ///
@@ -414,6 +415,8 @@ pub struct PersonDraft {
     pub suffix: String,
     /// The person's sex.
     pub sex: Sex,
+    /// The typed birth date (create only: a new person's Birth event); blank is no birth.
+    pub born: String,
     /// The tags applied to the person, by aggregate id (a UUID string; never shown to the user).
     pub tags: Vec<String>,
     /// The citation backing the preferred name: unset, an existing citation, or one created inline
@@ -443,6 +446,7 @@ impl PersonDraft {
             surname: String::new(),
             suffix: String::new(),
             sex: Sex::Unknown,
+            born: String::new(),
             tags: Vec::new(),
             name_citation: RecordLink::Empty,
             restrictions: Vec::new(),
@@ -466,6 +470,7 @@ impl PersonDraft {
             surname: summary.surname.clone().unwrap_or_default(),
             suffix: summary.name_suffix.clone().unwrap_or_default(),
             sex: summary.sex.clone().unwrap_or(Sex::Unknown),
+            born: String::new(),
             tags: summary.tags.clone(),
             name_citation: RecordLink::Empty,
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
@@ -552,7 +557,16 @@ impl PersonDraft {
             tags: self.tags.clone(),
             new_sources,
             new_citations,
+            birth: self.birth(),
         }
+    }
+
+    /// The typed birth date of a new person, or `None` when blank, unreadable, or editing.
+    fn birth(&self) -> Option<DateParts> {
+        if self.existing_human_id.is_some() {
+            return None;
+        }
+        parse_birth(&self.born).ok().flatten()
     }
 }
 
@@ -569,10 +583,10 @@ impl RecordDraft for PersonDraft {
         detail.edit_seed.clone()
     }
 
-    /// A person has no required scalar field (an unnamed persona is a legitimate record), so an edit
-    /// is committable whenever it is dirty; the Save gate reduces to dirtiness for this aggregate.
+    /// A person has no required scalar field (an unnamed persona is a legitimate record), so a draft is
+    /// committable whenever it is dirty — unless a typed birth date cannot be read.
     fn is_valid(&self) -> bool {
-        true
+        parse_birth(&self.born).is_ok()
     }
 
     fn display_label(&self) -> Option<String> {
@@ -586,6 +600,17 @@ impl RecordDraft for PersonDraft {
 
     fn editable_restrictions(&self) -> Option<&[RestrictionKind]> {
         self.existing_human_id.is_some().then_some(self.restrictions.as_slice())
+    }
+
+    fn similar_draft(&self) -> Option<DraftRecord> {
+        if self.existing_human_id.is_some() {
+            return None;
+        }
+        let draft = DraftRecord::Person {
+            name: self.name_parts()?,
+            birth: self.birth(),
+        };
+        (!draft.is_empty()).then_some(draft)
     }
 
     fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {

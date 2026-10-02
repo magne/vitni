@@ -606,6 +606,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::MatchQueue(_)
             | IntentOutcome::MatchCompare(_)
+            | IntentOutcome::Similar(_)
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},

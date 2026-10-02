@@ -40,6 +40,7 @@ fn person_view() -> Element {
     card(&RecordLink::New(NewRecordDraft::Person(NewPersonFields {
         given: "Ada".to_owned(),
         surname: "Lovelace".to_owned(),
+        born: String::new(),
     })))
 }
 

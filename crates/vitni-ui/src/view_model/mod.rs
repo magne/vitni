@@ -59,6 +59,7 @@ mod record_link;
 mod repository;
 mod research_note;
 mod shortcuts_vm;
+mod similar;
 mod source;
 mod tag;
 
@@ -92,6 +93,7 @@ pub use record_link::*;
 pub use repository::*;
 pub use research_note::*;
 pub use shortcuts_vm::*;
+pub use similar::*;
 pub use source::*;
 pub use tag::*;
 
@@ -101,5 +103,7 @@ mod match_compare_tests;
 mod match_queue_tests;
 #[cfg(test)]
 mod pedigree_tests;
+#[cfg(test)]
+mod similar_tests;
 #[cfg(test)]
 mod tests;
