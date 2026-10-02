@@ -235,7 +235,9 @@ pub use research_note::{
 };
 pub use secret_env::require_secret_env;
 pub use session::Session;
-pub use similar::{SimilarPair, SimilarRecord, assess, find_similar, similar_pairs};
+pub use similar::{
+    DraftRecord, SimilarPair, SimilarRecord, assess, assess_draft, find_similar, find_similar_to_draft, similar_pairs,
+};
 pub use source::{
     NewSource, SourceAttributeRef, SourceMergeResult, SourceSummary, add_source_attribute, attach_source_media,
     attach_source_note, create_source, distinguish_sources, import_attach_source_media, import_attach_source_note,

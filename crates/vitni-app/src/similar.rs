@@ -13,17 +13,23 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+use vitni_core::enums::PlaceType;
+use vitni_core::matching::profile::{
+    PersonProfile, PlaceProfile, RepositoryProfile, SourceProfile, VitalEvent, VitalKind,
+};
 use vitni_core::matching::{
-    BlockingKeys, MatchAssessment, MatchBand, MatchableKind, Probe, assess_citations, assess_events, assess_families,
-    assess_media, assess_notes, assess_persons, assess_places, assess_repositories, assess_sources, assess_tags,
-    prefix_end,
+    BlockingKeys, DateBasis, MatchAssessment, MatchBand, MatchableKind, Probe, assess_citations, assess_events,
+    assess_families, assess_media, assess_notes, assess_persons, assess_places, assess_repositories, assess_sources,
+    assess_tags, prefix_end,
 };
 use vitni_db::{DirtyRecord, KeyedRecord};
 
 use crate::dto::AggRef;
 use crate::error::AppError;
+use crate::event::{DateParts, gregorian_date};
 use crate::matching::Matching;
-use crate::profile::{Profile, Profiles};
+use crate::person::{PersonNameParts, build_name};
+use crate::profile::{Profile, Profiles, place_name};
 use crate::workspace::Workspace;
 
 /// A record similar to the target, with the engine's assessment of the pair.
@@ -216,6 +222,142 @@ fn candidates(probe: &Probe, by_key: &BTreeMap<String, Vec<String>>) -> BTreeSet
         }
     }
     found
+}
+
+/// A record being entered by hand, before it exists (ADR 0038 §8): what the similar-record hint matches
+/// against the stored records of its kind.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DraftRecord {
+    /// A person: the preferred name, and the birth date if one was typed.
+    Person {
+        /// The name as typed.
+        name: PersonNameParts,
+        /// The birth date, if typed.
+        birth: Option<DateParts>,
+    },
+    /// A place: its name and type.
+    Place {
+        /// The name as typed.
+        name: String,
+        /// The place's type, if chosen.
+        place_type: Option<PlaceType>,
+    },
+    /// A source: its title and author.
+    Source {
+        /// The title as typed.
+        title: String,
+        /// The author, if typed.
+        author: Option<String>,
+    },
+    /// A repository: its name.
+    Repository {
+        /// The name as typed.
+        name: String,
+    },
+}
+
+impl DraftRecord {
+    /// The kind of record the draft is.
+    #[must_use]
+    pub fn kind(&self) -> MatchableKind {
+        match self {
+            Self::Person { .. } => MatchableKind::Person,
+            Self::Place { .. } => MatchableKind::Place,
+            Self::Source { .. } => MatchableKind::Source,
+            Self::Repository { .. } => MatchableKind::Repository,
+        }
+    }
+
+    /// Whether nothing that identifies a record has been typed yet: such a draft is like no record.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        let blank = |text: &Option<String>| text.as_deref().is_none_or(|text| text.trim().is_empty());
+        match self {
+            Self::Person { name, birth } => blank(&name.given) && blank(&name.surname) && birth.is_none(),
+            Self::Place { name, .. } | Self::Repository { name } => name.trim().is_empty(),
+            Self::Source { title, .. } => title.trim().is_empty(),
+        }
+    }
+
+    fn profile(&self) -> Profile {
+        let text = |text: &str| Some(text.trim().to_owned()).filter(|text| !text.is_empty());
+        match self {
+            Self::Person { name, birth } => Profile::Person(PersonProfile {
+                names: vec![build_name(name.clone())],
+                vitals: birth
+                    .map(|birth| VitalEvent {
+                        kind: VitalKind::Birth,
+                        date: Some(gregorian_date(birth)),
+                        basis: DateBasis::Recorded,
+                        place: None,
+                    })
+                    .into_iter()
+                    .collect(),
+                ..PersonProfile::default()
+            }),
+            Self::Place { name, place_type } => Profile::Place(PlaceProfile {
+                names: vec![place_name(name.trim())],
+                place_type: place_type.clone(),
+                ..PlaceProfile::default()
+            }),
+            Self::Source { title, author } => Profile::Source(SourceProfile {
+                title: text(title),
+                author: author.as_deref().and_then(text),
+                ..SourceProfile::default()
+            }),
+            Self::Repository { name } => Profile::Repository(RepositoryProfile {
+                name: text(name),
+                ..RepositoryProfile::default()
+            }),
+        }
+    }
+}
+
+/// The stored records of the draft's kind the engine judges at least `min_band` similar to `draft`,
+/// most similar first, at most `limit` of them; none for an [empty](DraftRecord::is_empty) draft. A
+/// merged record is never among them — its cluster's root stands for it.
+///
+/// # Errors
+///
+/// [`AppError::MatchData`] or [`AppError::Config`] if the matching data or settings cannot be loaded,
+/// or [`AppError`] on a store failure.
+pub async fn find_similar_to_draft(
+    workspace: &Workspace,
+    draft: &DraftRecord,
+    min_band: MatchBand,
+    limit: usize,
+) -> Result<Vec<SimilarRecord>, AppError> {
+    if draft.is_empty() {
+        return Ok(Vec::new());
+    }
+    let kind = draft.kind();
+    let matcher = Matcher::load(workspace, &[kind]).await?;
+    matcher
+        .similar(workspace, kind, &draft.profile(), &HashSet::new(), min_band, limit)
+        .await
+}
+
+/// The engine's assessment of `draft` against the stored record `human_id` of its kind — the same
+/// score [`find_similar_to_draft`] gives the pair.
+///
+/// # Errors
+///
+/// The kind's `NotFound` error if `human_id` does not exist, [`AppError::MatchData`] or
+/// [`AppError::Config`] if the matching data or settings cannot be loaded, or [`AppError`] on a store
+/// failure.
+pub async fn assess_draft(
+    workspace: &Workspace,
+    draft: &DraftRecord,
+    human_id: &str,
+) -> Result<MatchAssessment, AppError> {
+    let matching = workspace.matching()?;
+    let kind = draft.kind();
+    let profiles = Profiles::load(workspace.store(), &[kind]).await?;
+    let stored = profiles
+        .aggregate_id_of(kind, human_id)
+        .and_then(|id| profiles.profile(kind, &id))
+        .ok_or_else(|| not_found(kind, human_id))?;
+    assess_pair(&draft.profile(), &stored, matching).ok_or_else(|| not_found(kind, human_id))
 }
 
 /// The more similar of two assessments first: by band, then by score.

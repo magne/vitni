@@ -8,10 +8,11 @@ use std::collections::BTreeSet;
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, AppError, CheckFinding, DateParts, IdentityDecision, MatchBand, MatchableKind, MutationMeta, NewEvent,
-    NewParticipation, NewPerson, NewPlace, NewSource, OperatorConfig, PersonNameParts, Provenance, Session, Workspace,
-    WorkspaceDefaults, assert_event_date, assert_participation, assert_sex, assess, change_log_for_person,
-    create_event, create_person, create_place, create_source, create_tag, distinguish_persons, find_similar,
+    AppDefaults, AppError, CheckFinding, DateParts, DraftRecord, IdentityDecision, MatchBand, MatchableKind,
+    MutationMeta, NewEvent, NewParticipation, NewPerson, NewPlace, NewRepository, NewSource, OperatorConfig,
+    PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults, assert_event_date, assert_participation,
+    assert_sex, assess, assess_draft, change_log_for_person, create_event, create_person, create_place,
+    create_repository, create_source, create_tag, distinguish_persons, find_similar, find_similar_to_draft,
     merge_persons, run_checks, similar_pairs, undo_assertion,
 };
 use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
@@ -640,4 +641,159 @@ async fn undoing_a_distinction_proposes_the_pair_again() {
 
     assert!(records.person_pairs().await.contains(&sorted(a.clone(), b.clone())));
     assert!(records.similar(MatchableKind::Person, &a).await.contains(&b));
+}
+
+fn draft_person(given: &str, surname: &str, year: Option<i32>) -> DraftRecord {
+    DraftRecord::Person {
+        name: PersonNameParts::simple(
+            (!given.is_empty()).then(|| given.to_owned()),
+            (!surname.is_empty()).then(|| surname.to_owned()),
+        ),
+        birth: year.map(|year| DateParts {
+            year,
+            month: None,
+            day: None,
+        }),
+    }
+}
+
+async fn similar_to_draft(records: &Records, draft: &DraftRecord) -> Vec<String> {
+    find_similar_to_draft(&records.workspace, draft, MatchBand::Possible, 50)
+        .await
+        .expect("find similar to draft")
+        .into_iter()
+        .map(|similar| similar.record.human_id)
+        .collect()
+}
+
+/// A record being typed in is matched before it exists (ADR 0038 §8): the hint on manual entry.
+#[tokio::test]
+async fn a_typed_name_and_birth_year_find_the_stored_person() {
+    let records = Records::new().await;
+    let (guldbrand, _) = records.born("Guldbrand", "Olsen", 1852).await;
+    records.born("Kari", "Hansen", 1900).await;
+    let draft = draft_person("Gulbrand", "Olsøn", Some(1852));
+    assert_eq!(
+        similar_to_draft(&records, &draft).await,
+        std::slice::from_ref(&guldbrand)
+    );
+
+    let assessment = assess_draft(&records.workspace, &draft, &guldbrand)
+        .await
+        .expect("assess draft");
+    let found = find_similar_to_draft(&records.workspace, &draft, MatchBand::Possible, 1)
+        .await
+        .expect("find similar to draft");
+    assert_eq!(found[0].assessment, assessment, "one pair, one score");
+}
+
+#[tokio::test]
+async fn a_draft_like_no_one_finds_nothing() {
+    let records = Records::new().await;
+    records.born("Guldbrand", "Olsen", 1852).await;
+    for draft in [
+        draft_person("Kari", "Hansen", Some(1900)),
+        draft_person("", "", None),
+        DraftRecord::Place {
+            name: String::new(),
+            place_type: None,
+        },
+    ] {
+        let found = similar_to_draft(&records, &draft).await;
+        assert!(found.is_empty(), "{draft:?}: {found:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_draft_never_meets_a_merged_record() {
+    let records = Records::new().await;
+    let (a, b, _) = three_oles(&records).await;
+    merge_persons(
+        &records.workspace,
+        &records.session,
+        &a,
+        &b,
+        IdentityDecision::default(),
+    )
+    .await
+    .expect("merge");
+    let found = similar_to_draft(&records, &draft_person("Ole", "Olsen", Some(1850))).await;
+    assert!(!found.contains(&b), "{found:?}");
+    assert!(found.contains(&a), "{found:?}");
+}
+
+#[tokio::test]
+async fn assessing_a_draft_against_an_unknown_record_is_not_found() {
+    let records = Records::new().await;
+    let error = assess_draft(&records.workspace, &draft_person("Ole", "Olsen", None), "I9999")
+        .await
+        .expect_err("no such person");
+    assert!(matches!(error, AppError::PersonNotFound(id) if id == "I9999"));
+}
+
+#[tokio::test]
+async fn place_source_and_repository_drafts_find_their_kind() {
+    let records = Records::new().await;
+    let (ws, session) = (&records.workspace, &records.session);
+    let nordaas = create_place(
+        ws,
+        session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::Farm,
+            name: Some("Nordaas".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("place");
+    let fana = create_source(
+        ws,
+        session,
+        NewSource {
+            human_id: None,
+            title: Some("Ministerialbok for Fana".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("source");
+    let archive = create_repository(
+        ws,
+        session,
+        NewRepository {
+            human_id: None,
+            name: Some("Statsarkivet i Bergen".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("repository");
+
+    let place = DraftRecord::Place {
+        name: "Nordås".to_owned(),
+        place_type: Some(PlaceType::Farm),
+    };
+    assert_eq!(similar_to_draft(&records, &place).await, [nordaas]);
+    let source = DraftRecord::Source {
+        title: "Fana ministerialbok".to_owned(),
+        author: None,
+    };
+    assert_eq!(similar_to_draft(&records, &source).await, [fana]);
+    let repository = DraftRecord::Repository {
+        name: "Statsarkivet i Bergen".to_owned(),
+    };
+    assert_eq!(similar_to_draft(&records, &repository).await, [archive]);
+}
+
+#[tokio::test]
+async fn a_typed_birth_year_tells_two_namesakes_apart() {
+    let records = Records::new().await;
+    let (elder, _) = records.born("Ole", "Olsen", 1850).await;
+    let (younger, _) = records.born("Ole", "Olsen", 1920).await;
+    let found = similar_to_draft(&records, &draft_person("Ole", "Olsen", Some(1920))).await;
+    assert_eq!(found, [younger], "never {elder}, born 70 years apart");
 }
