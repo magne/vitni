@@ -55,6 +55,7 @@ const SCREENSHOTS: Fixture = Fixture {
     required_media: &[],
     required_files: &[],
     env: &[("VITNI_LANGUAGE", "en")],
+    serve_archive: false,
 };
 
 /// The scenario that takes the shots.

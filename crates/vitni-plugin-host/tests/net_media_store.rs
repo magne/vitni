@@ -205,6 +205,60 @@ async fn net_follows_redirects_and_reports_the_final_url() {
 }
 
 #[tokio::test]
+async fn a_rerouted_policy_serves_an_allowed_url_from_its_reroute_origin() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/census/person/pf1"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"hello".to_vec()))
+        .mount(&server)
+        .await;
+    let policy = NetPolicy {
+        reroute: Some(base_url(&server)),
+        ..NetPolicy::allow(vec![HostPattern::parse("*.digitalarkivet.no")])
+    };
+
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (summary, _ws) = common::host()
+        .fixture_try_fetch(
+            &common::component("fixture"),
+            workspace,
+            software_session(),
+            Grants::none().with(Capability::Net),
+            ResourceBudget::default(),
+            policy,
+            "https://www.digitalarkivet.no/census/person/pf1",
+        )
+        .await
+        .expect("the fetch is served from the reroute origin");
+
+    assert_eq!(summary, "200 https://www.digitalarkivet.no/census/person/pf1 5");
+}
+
+#[tokio::test]
+async fn a_rerouted_policy_still_refuses_a_host_off_the_allowlist() {
+    let server = MockServer::start().await;
+    let policy = NetPolicy {
+        reroute: Some(base_url(&server)),
+        ..NetPolicy::allow(vec![HostPattern::parse("*.digitalarkivet.no")])
+    };
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let result = common::host()
+        .fixture_try_fetch(
+            &common::component("fixture"),
+            workspace,
+            software_session(),
+            Grants::none().with(Capability::Net),
+            ResourceBudget::default(),
+            policy,
+            "https://example.com/",
+        )
+        .await;
+    assert_policy_rejection(result);
+}
+
+#[tokio::test]
 async fn net_aborts_a_body_over_the_size_cap() {
     let server = MockServer::start().await;
     let base = base_url(&server);

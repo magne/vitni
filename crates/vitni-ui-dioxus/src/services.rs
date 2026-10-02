@@ -928,8 +928,21 @@ fn assisted_net_policy(plugin_id: &str) -> NetPolicy {
     if hosts.is_empty() {
         NetPolicy::deny_all()
     } else {
-        NetPolicy::allow(hosts)
+        NetPolicy {
+            reroute: assisted_reroute(std::env::var(ASSISTED_REROUTE_VAR).ok(), cfg!(debug_assertions)),
+            ..NetPolicy::allow(hosts)
+        }
     }
+}
+
+/// The variable naming a local origin a debug build serves assisted-import fetches from
+/// (`http://localhost:PORT`) — the fixture pages `cargo xtask gui-pass` serves.
+const ASSISTED_REROUTE_VAR: &str = "VITNI_ASSISTED_NET_REROUTE";
+
+/// The reroute origin from `value` of [`ASSISTED_REROUTE_VAR`]: honoured only in a `debug` build, so a
+/// release build always fetches from the archive itself.
+fn assisted_reroute(value: Option<String>, debug: bool) -> Option<String> {
+    value.filter(|origin| debug && !origin.trim().is_empty())
 }
 
 /// Narrows an `effective` grant (the ADR 0014 §5 declared∩approved ceiling) down to only the
@@ -1780,6 +1793,16 @@ mod tests {
             .expect_err("a dropped responder fails the present");
         assert!(matches!(error, PresentError::Backend(_)));
         wizard.await.expect("wizard task");
+    }
+
+    /// Only a debug build reroutes assisted-import fetches, and only to an origin it was given.
+    #[test]
+    fn only_a_debug_build_reroutes_assisted_fetches() {
+        let origin = || Some("http://localhost:8080".to_owned());
+        assert_eq!(super::assisted_reroute(origin(), true), origin());
+        assert_eq!(super::assisted_reroute(origin(), false), None);
+        assert_eq!(super::assisted_reroute(Some(" ".to_owned()), true), None);
+        assert_eq!(super::assisted_reroute(None, true), None);
     }
 
     /// The host's match stage reaches the wizard as its own request, and the wizard's reply comes back.

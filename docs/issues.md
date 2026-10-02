@@ -502,9 +502,10 @@ does.
   kind is: the plan writes its name and sex onto the target and withholds the rest of its record. The ADR
   has the record's evidence kept as a unit instead — a new persona carrying the record's claims, linked
   with `PersonsMerged`. That needs the commit to route links into existing records to the cluster root
-  and links among new records to the persona. *Shape:* the persona on a person *Same*, with that
-  routing, landing with the review stages (#412, #413). *Exit:* re-importing a person from a second
-  dataset leaves two persons in one cluster, each with its own record's facts.
+  and links among new records to the persona. A person decided *Same* in the assisted Match stage already
+  gets one: it is imported as new and merged into the candidate after the commit. *Shape:* the same for a
+  `Link`, with that routing, landing with the bulk review stage (#413). *Exit:* re-importing a person
+  from a second dataset leaves two persons in one cluster, each with its own record's facts.
 - **The origin index is written after the event commit** — ADR 0040 §5. `RecordOriginsQuery`
   (`vitni-db/src/record_origins/sqlite.rs:75`) indexes an aggregate's events in a cqrs-es query run
   after the events commit, logging a failure. A process killed between the two leaves an aggregate no
@@ -522,10 +523,6 @@ does.
   of every record a re-import resolves. *Shape:* the by-id profile loading the `find_similar` bullet
   above describes, and a cached matcher across an assisted session's submits. *Exit:* planning one
   assisted record at 100k persons under 100 ms in a bench.
-- **Assisted wizard match stage** — ADR 0040 §4. A host-owned `present` stage after *Confirm*, shown
-  only when the record has candidates. `docs/mockups/import.html` is updated. *Needs:* the compare view.
-  *Exit:* a gui-pass scenario covering a record with a candidate, and one
-  without, where no stage appears. — #412
 - **A record decided the same as a stored place, source or repository adds nothing to it** — ADR 0040
   §3. *Same* on a place, source or repository reuses the stored record and records the resolution, but
   writes none of the incoming fields, so a source's author or a place's type the stored record lacks is

@@ -729,6 +729,15 @@ created it from, `vitni_app::record_origin`) and the first attached scan with a 
 foot decides *Same*, *Not the same* or *Decide later*, also with the fixed keys `y`, `n` and `l`
 (ADR 0030 §2), which work as soon as the view opens. The Merge screen hosts it for person pairs; *Decide
 later* replaces Cancel and leaves the pair proposed.
+✅ Assisted wizard match stage (ADR 0040 §3, §4, #412): before an assisted record with a possible match
+is written, the host shows its own Match stage in the wizard, one pair at a time, best candidate first,
+in the shared compare view with the record in the tree on the left. *Same* imports a person as its own
+persona and merges it into the candidate, and links a place, source or repository to it, recording the
+resolution so the next run resolves it; *Not the same* records the distinction and shows the next
+candidate; *Decide later* imports it as new. *Skip record* and *Cancel import* write nothing; host-api
+0.28.0's `submit-outcome` reports them to the plugin. A record with no possible match never meets the
+stage. Merges and distinctions are the run's human operator's decisions. `cargo xtask gui-pass` drives
+the stage against a local stand-in for the archive.
 
 ## Risk register
 

@@ -1,0 +1,152 @@
+# #412: an assisted record with a possible match stops at the host's own Match stage before anything of
+# it is written, and Same merges it into the person already in the tree. SSR renders the stage alone;
+# only the live app shows the host pausing the plugin's submit on it, the compare view taking focus so
+# `y` decides, and the merge reaching the store.
+#
+# The fixture seeds no persons, so the scenario creates the census person's namesake itself (no
+# Digitalarkivet id, so only the matching engine can find it). The record comes from the archive
+# stand-in `gui-pass` serves (`xtask/src/archive_server.rs`): a debug build reroutes the plugin's
+# fetches of `https://www.digitalarkivet.no/…` there.
+#
+# The merge is proven on the Compare / merge queue: empty before the namesake exists, empty again after
+# Same — had the record been imported as new (Decide later), the pair would be listed. That assertion
+# is scoped to the duplicates card, y 75-235, as in merge-keyboard.toml.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "A record with a possible match stops at the Match stage, and Same merges it (#412)"
+
+[[step]]
+do = "click"
+at = [108, 749]
+label = "rail: Compare / merge"
+
+[[step]]
+do = "shot"
+name = "queue-before"
+
+[[step]]
+do = "click"
+at = [85, 175]
+label = "rail: People"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Person draft"
+
+[[step]]
+do = "click"
+at = [1150, 486]
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "Ola Eksempelsen"
+label = "type: Ola Eksempelsen"
+
+[[step]]
+do = "click"
+at = [1150, 636]
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Fjellstue"
+label = "type: Fjellstue"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New person: Save"
+
+[[step]]
+do = "click"
+at = [70, 786]
+label = "rail: Import"
+
+[[step]]
+do = "click"
+at = [455, 169]
+label = "mode: Assisted online import"
+
+[[step]]
+do = "click"
+at = [1394, 435]
+label = "field: Record or search URL"
+
+[[step]]
+do = "text"
+text = "https://www.digitalarkivet.no/census/person/pf01099901000101"
+label = "type: the census person's URL"
+
+[[step]]
+do = "click"
+at = [297, 482]
+label = "Fetch"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the plugin fetch the record"
+
+[[step]]
+do = "click"
+at = [1706, 775]
+label = "Confirm: Import & next"
+
+[[step]]
+do = "shot"
+name = "save"
+
+[[step]]
+do = "click"
+at = [1168, 596]
+label = "Save scan"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the host plan the record"
+
+[[step]]
+do = "shot"
+name = "after-save"
+
+[[step]]
+do = "key"
+chord = "y"
+label = "y: Same"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the record commit and merge"
+
+[[step]]
+do = "shot"
+name = "summary"
+
+[[step]]
+do = "click"
+at = [108, 749]
+label = "rail: Compare / merge"
+
+[[step]]
+do = "shot"
+name = "queue-after"
+
+[[assert]]
+kind = "differ"
+shots = ["save", "after-save"]
+because = "saving the scan hands the record to the host, which shows its Match stage"
+
+[[assert]]
+kind = "differ"
+shots = ["after-save", "summary"]
+because = "y answers the Match stage and the session moves on to its summary"
+
+[[assert]]
+kind = "match"
+shots = ["queue-before", "queue-after"]
+region = [232, 75, 1568, 160]
+because = "Same merged the record into its namesake, so no pair is left to review"
