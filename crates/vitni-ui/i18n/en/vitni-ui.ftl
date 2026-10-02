@@ -1105,7 +1105,7 @@ match-kind = { $kind ->
 match-kind-count = { $kind }: { $count }
 match-run-option = { $source } — { $started }
 identity-decided-heading = Already decided
-identity-decided-guidance = These two people already have an identity decision. Undo it in History before deciding again.
+identity-decided-guidance = These two records already have an identity decision. Undo it in History before deciding again.
 
 ## Match reasons (ADR 0038 §3, §8) — one line per term of the engine's score: the feature, how its values
 ## compared, and the term's log₂ weight. A feature name is the noun the outcome sentence takes.

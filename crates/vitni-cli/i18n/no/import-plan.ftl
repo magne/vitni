@@ -39,6 +39,7 @@ import-review-kind = { $kind ->
    *[other] { $kind }
 }
 import-review-band = { $band ->
+    [deterministic] fastslått identitet
     [probable] sannsynlig treff
    *[other] mulig treff
 }

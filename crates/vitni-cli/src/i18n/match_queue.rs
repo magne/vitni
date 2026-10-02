@@ -77,7 +77,8 @@ impl Localizer {
 
     fn match_band(&self, band: MatchBand) -> String {
         let band = match band {
-            MatchBand::Probable | MatchBand::Deterministic => "probable",
+            MatchBand::Deterministic => "deterministic",
+            MatchBand::Probable => "probable",
             MatchBand::Possible | MatchBand::Unlikely => "possible",
         };
         fl!(self.loader, "import-review-band", band = band)

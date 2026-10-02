@@ -1105,7 +1105,7 @@ match-kind = { $kind ->
 match-kind-count = { $kind }: { $count }
 match-run-option = { $source } — { $started }
 identity-decided-heading = Allerede avgjort
-identity-decided-guidance = Disse to personene har allerede en identitetsavgjørelse. Angre den i historikken før du avgjør på nytt.
+identity-decided-guidance = Disse to postene har allerede en identitetsavgjørelse. Angre den i historikken før du avgjør på nytt.
 
 ## Treffgrunner (ADR 0038 §3, §8) — én linje per ledd i motorens poengsum: egenskapen, hvordan verdiene
 ## sammenlignet, og leddets log₂-vekt. Et egenskapsnavn står først i setningen.
