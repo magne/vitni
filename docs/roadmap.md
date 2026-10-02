@@ -705,6 +705,12 @@ operator confirms it — the bulk-import confirm starts on it with the evidence,
 minted at `init` (or on first open of an older workspace) and kept by a restore; host-api 0.26.0's
 `export-sink.workspace-id` hands it to exporters, and the GEDCOM exporter writes it as `HEAD.FILE`, so
 a later export of one workspace is proposed the dataset its first export went into.
+✅ One graph per Digitalarkivet record (ADR 0040 §1, §4, #409): the assisted importer submits each
+confirmed record — the person with its occupation, its citation and its scan — as one graph, and the
+host withholds it when the person resolves onto another dataset's. The source, its repository and the
+scan are records of their own, submitted once per session and referenced by origin, so the records of a
+page, and of a later session, share them. host-api 0.27.0 drops the `existing` link end and the
+`created` flag the two-step submit and its `query` lookups needed.
 
 ## Risk register
 

@@ -497,18 +497,10 @@ does.
   (ADR 0043). Which researcher field carries it is open, because Gramps shows the researcher's name to
   its user. *Exit:* exporting a workspace as Gramps XML, importing it elsewhere, then importing a later
   export proposes the first import's dataset. — #469
-- **Submit each Digitalarkivet record as one record graph** — ADR 0040 §1, §4. The census-person, household
-  and church-book records already submit graphs (#407), but in two steps: the person alone, then — only
-  when the host reports it is this dataset's own — the person with its occupation, citation and scan.
-  The host withholds another dataset's contents itself, so the two steps, the title/path `query` lookups
-  of the source, repository and scan, and the `existing` references `staging` keeps for them are
-  removed, and each record is one graph. *Exit:* the existing assisted tests pass through the one-graph
-  path. — #409
 - **Digitalarkivet imports what it drops today** — ADR 0040. For a census: the residence event with its
   participants, roles and ages; an estimated birth from the age; birthplace and residence places; and
   household relationships. For a church book: the event, with participants by role. Without these a
-  census or marriage record has nothing to match on beyond a name. *Needs:* the one-graph Digitalarkivet import.
-  *Exit:* a household import yields its event, places and family links, each carrying an origin. — #410
+  census or marriage record has nothing to match on beyond a name. *Exit:* a household import yields its event, places and family links, each carrying an origin. — #410
 - **A person linked by identity gets no persona** — ADR 0040 §3. A staged person that resolves onto
   another dataset's person (`Link`, by `ExternalId` or a recorded resolution) is reused, as every other
   kind is: the plan writes its name and sex onto the target and withholds the rest of its record. The ADR
@@ -541,8 +533,8 @@ does.
   matching core and distinct decisions. *Exit:* SSR tests and a gui-pass scenario deciding a pair by
   keyboard. — #411
 - **Assisted wizard match stage** — ADR 0040 §4. A host-owned `present` stage after *Confirm*, shown
-  only when the record has candidates. `docs/mockups/import.html` is updated. *Needs:* the compare view
-  and the one-graph Digitalarkivet import. *Exit:* a gui-pass scenario covering a record with a candidate, and one
+  only when the record has candidates. `docs/mockups/import.html` is updated. *Needs:* the compare view.
+  *Exit:* a gui-pass scenario covering a record with a candidate, and one
   without, where no stage appears. — #412
 - **Bulk import Plan and Review stages, and `vitni import --plan`** — ADR 0040 §3, §4. A plan summary by
   kind and disposition, a review list with bulk actions (*Treat all Probable places as the same*,

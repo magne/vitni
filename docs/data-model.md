@@ -712,7 +712,7 @@ around evidence and provenance.
    the record's entities, each with a local id, an item key and its incoming fields, and the links
    between them (participation, partner, child, family event, event place, enclosure, citation, media,
    note, tag, source repository, association), each stamped with an item. A link end names an entity
-   of the same graph, another graph's entity by its origin, or an existing record. `vitni-app` plans
+   of the same graph or another graph's entity by its origin. `vitni-app` plans
    every entity (`plan_import`) before anything is written:
    - **Unchanged** — this dataset's record from the same origin, whose writes, run through the origin
      gate as a dry run, write nothing;
