@@ -1166,3 +1166,45 @@ async fn a_reviewed_commit_stops_when_its_control_does() {
         .expect("commit");
     assert!(outcome.interrupted);
 }
+
+#[tokio::test]
+async fn same_for_the_group_on_a_pair_outside_any_group_decides_nothing() {
+    let (workspace, _dir) = workspace().await;
+    stored_census(&workspace, "Folketelling 1865").await;
+    stored_census(&workspace, "Folketelling 1875").await;
+    let session = importer(dataset(1));
+    let mut bare = census("S1", "Folketelling 1865");
+    if let EntityFields::Source(source) = &mut bare.entities[0].fields {
+        source.author = None;
+        source.pub_info = None;
+    }
+    let graphs = vec![bare, census("S2", "Folketelling 1875")];
+    let mut review = review(&workspace, &session, graphs).await;
+    let first = review
+        .next_question(&workspace)
+        .await
+        .expect("question")
+        .expect("a candidate");
+    assert_eq!((first.assessment.band, first.group), (MatchBand::Possible, None));
+
+    review
+        .answer_group(&workspace, &session, decided())
+        .await
+        .expect("answer");
+    let again = review
+        .next_question(&workspace)
+        .await
+        .expect("question")
+        .expect("still asked");
+    assert_eq!(again.incoming_origin, first.incoming_origin, "nothing was decided");
+    review
+        .answer(&workspace, &session, PairAnswer::Later)
+        .await
+        .expect("answer");
+    let second = review
+        .next_question(&workspace)
+        .await
+        .expect("question")
+        .expect("S2 is still open");
+    assert_eq!(second.group.map(|group| group.remaining), Some(1));
+}

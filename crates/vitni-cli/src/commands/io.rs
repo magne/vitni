@@ -14,7 +14,7 @@ use vitni_plugin_host::{
     resolve_trust_roots,
 };
 
-use crate::commands::review::{self, ReviewMode, Reviewed, Terminal};
+use crate::commands::review::{self, PlanFormat, ReviewMode, Reviewed, Terminal};
 use crate::i18n::Localizer;
 
 /// A dataset proposal the host asks the operator about, with where to send the answer.
@@ -156,9 +156,13 @@ impl PreparedImport {
         })?;
         match (reviewed, mode) {
             (Reviewed::Printed, _) => {}
-            (Reviewed::NotPlanned, ReviewMode::Print(_)) => {
+            (Reviewed::NotPlanned, ReviewMode::Print(format)) => {
                 let empty = PlanSummary::default();
-                for line in review::plan_lines(localizer, &source, &empty, true) {
+                let lines = match format {
+                    PlanFormat::Text => review::plan_lines(localizer, &source, &empty, true),
+                    PlanFormat::Json => vec![review::plan_json(&source, &empty)],
+                };
+                for line in lines {
                     println!("{line}");
                 }
             }

@@ -65,7 +65,7 @@ pub struct MatchQuestion {
 /// decides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MatchGroup {
-    /// The band every pair's candidate is in.
+    /// The least band every pair's candidate is in.
     pub band: MatchBand,
     /// How many entities have such a pair, the current one included.
     pub remaining: usize,
@@ -216,7 +216,7 @@ impl ImportReview {
         let candidate = similar.record.clone();
         let candidate_label = stored_label(workspace, entity.kind, &candidate.human_id).await?;
         let candidate_origin = crate::record_origin(workspace, entity.kind, &candidate.human_id).await?;
-        let group = (similar.assessment.band == GROUP_BAND).then(|| MatchGroup {
+        let group = (similar.assessment.band >= GROUP_BAND).then(|| MatchGroup {
             band: GROUP_BAND,
             remaining: self.group(entity.kind).len(),
         });
@@ -278,6 +278,7 @@ impl ImportReview {
 
     /// Answers *Same* for every open pair of the current question's kind whose candidate is probable —
     /// the current one included — each with `decision`'s provenance and the assessment of its own pair.
+    /// Nothing is answered when the current question has no group (its candidate is not probable).
     /// A *Same* on a place, source or repository plans the import again once, with every such decision.
     ///
     /// # Errors
@@ -289,9 +290,12 @@ impl ImportReview {
         session: &Session,
         decision: IdentityDecision,
     ) -> Result<(), PlanError> {
-        let Some((index, _)) = self.pending() else {
+        let Some((index, current)) = self.pending() else {
             return Ok(());
         };
+        if current.assessment.band < GROUP_BAND {
+            return Ok(());
+        }
         let kind = self.plan.entities[index].kind;
         let mut replan = false;
         for (index, similar) in self.group(kind) {
@@ -412,7 +416,7 @@ impl ImportReview {
         (0..self.plan.entities.len()).find_map(|index| self.next_candidate(index).map(|next| (index, next)))
     }
 
-    /// Every entity of `kind` whose next candidate to ask about is in the group band, with it.
+    /// Every entity of `kind` whose next candidate to ask about is at least in the group band, with it.
     fn group(&self, kind: MatchableKind) -> Vec<(usize, SimilarRecord)> {
         let mut group = Vec::new();
         for (index, entity) in self.plan.entities.iter().enumerate() {
@@ -420,7 +424,7 @@ impl ImportReview {
                 continue;
             }
             if let Some(next) = self.next_candidate(index)
-                && next.assessment.band == GROUP_BAND
+                && next.assessment.band >= GROUP_BAND
             {
                 group.push((index, next.clone()));
             }

@@ -868,3 +868,13 @@ fn deferring_the_matches_imports_a_second_tree_of_the_same_people_as_new() {
     let persons = stdout(&vitni(dir.path()).args(["person", "list"]).assert().success());
     assert_eq!(persons.matches("Smith").count(), 2, "{persons}");
 }
+
+#[test]
+fn a_json_plan_of_a_file_without_records_is_still_json() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let empty = "0 HEAD\n1 SOUR test\n1 FILE empty.ged\n0 TRLR\n";
+    let json = stdout(&import_text(dir.path(), empty, &["--yes", "--plan", "--json"]).success());
+    let plan: serde_json::Value = serde_json::from_str(json.trim()).unwrap();
+    assert_eq!(plan["kinds"].as_array().map(Vec::len), Some(0), "{json}");
+}
