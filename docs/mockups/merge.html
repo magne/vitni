@@ -46,7 +46,6 @@
 
     <!-- Merge wizard -->
     <h1 style="border:0;margin:8px 0 4px;font-size:21px">Compare &amp; merge — John Smith ⟷ John Smyth</h1>
-    <p class="muted" style="margin:0 0 12px" title="The matching engine's assessment, recorded on whichever decision you take (ADR 0039 §2) — not the 5-level assertion Confidence">Matched at 97% · probable match · engine 4</p>
     <div class="section-note">
       <b>Non-destructive and reversible.</b> Merging does <i>not</i> delete the merged-from record. I0099
       is kept as a <b>persona</b> of the survivor and every assertion it carried stays in the event log with
@@ -58,143 +57,148 @@
       you — here you never lose evidence.
     </div>
 
-    <!-- Field-by-field merge grid -->
+    <!-- The shared match-compare view (#411): one row per term the engine compared, in the engine's
+         order for the kind; the same view serves every kind (a place pair gets Place name / Place type /
+         Location / Coordinates rows). Focus lands on the section when it opens; y / n / l decide. -->
+    <section id="match-compare" class="match-compare" tabindex="-1" aria-label="Compare the two records">
+    <p class="muted" style="margin:0 0 12px" title="The matching engine's assessment, recorded on whichever decision you take (ADR 0039 §2) — not the 5-level assertion Confidence">Matched at 97% · probable match · engine 4</p>
     <div class="card" style="padding:0">
       <div class="merge-grid">
 
-        <!-- Header row -->
+        <!-- Header row: each side's label, id, what Same does to it, its origin chip and evidence snippet -->
         <div class="merge-col survivor">
-          <div class="wrap" style="align-items:center">
-            <div class="avatar-lg" style="width:40px;height:40px;font-size:var(--fs-md)">JS</div>
-            <div>
-              <div style="font-weight:700;font-size:var(--fs-lg)">John Smith</div>
-              <div class="muted" style="font-size:var(--fs-xs)"><span class="badge">I0042</span> survivor · keeps id</div>
-            </div>
-          </div>
+          <div style="font-weight:700;font-size:var(--fs-lg)">John Smith</div>
+          <div class="muted" style="font-size:var(--fs-xs)"><span class="badge">I0042</span> survivor · keeps id</div>
         </div>
-        <div class="merge-pick"><span class="muted" style="font-size:var(--fs-xs)">keep</span></div>
+        <div class="merge-pick" aria-hidden="true">⟷</div>
         <div class="merge-col">
-          <div class="wrap" style="align-items:center">
-            <div class="avatar-lg" style="width:40px;height:40px;font-size:var(--fs-md)">JS</div>
-            <div>
-              <div style="font-weight:700;font-size:var(--fs-lg)">John Smyth</div>
-              <div class="muted" style="font-size:var(--fs-xs)"><span class="badge">I0099</span> becomes a persona</div>
-            </div>
+          <div style="font-weight:700;font-size:var(--fs-lg)">John Smyth</div>
+          <div class="muted" style="font-size:var(--fs-xs)"><span class="badge">I0099</span> becomes a persona</div>
+          <div style="margin-top:var(--sp-2)">
+            <span class="chip origin-chip" title="Imported from record pf01073012345 of dataset digitalarkivet">digitalarkivet · pf01073012345</span>
+          </div>
+          <div class="crop-frame img-frame img-scan evidence-snippet" style="height:180px">
+            <div class="crop-outline" style="left:5%;top:40%;width:90%;height:12%"></div>
+            <span class="img-cap">Evidence: O0003</span>
           </div>
         </div>
 
-        <!-- Name -->
         <div class="merge-col survivor">
-          <div class="field-label" style="margin-bottom:2px">Name</div>
-          <div class="fact-row">
-            <span class="grow">John <b>Smith</b></span>
-            <span class="conf" data-level="very-high"><span class="dot"></span>Very high</span>
-            <span class="src-link">❝ baptism</span>
-          </div>
+          <div class="field-label">Given name</div>
+          <div>John</div>
         </div>
-        <div class="merge-pick" role="radiogroup" aria-label="Keep which Name value" style="display:flex;flex-direction:column;gap:6px">
-          <span class="radio on" role="radio" tabindex="0" aria-checked="true" title="Keep this value — John Smith"></span>
-          <span class="radio" role="radio" tabindex="-1" aria-checked="false" title="Keep this value — John Smyth"></span>
+        <div class="merge-pick">
+          <span class="match-mark" data-outcome="agree" title="same"><span aria-hidden="true">=</span><span class="sr-only">same</span></span>
         </div>
         <div class="merge-col">
-          <div class="field-label" style="margin-bottom:2px">Name</div>
-          <div class="fact-row">
-            <span class="grow"><span class="diff">John Smyth</span> <span class="badge" style="border-color:var(--warn);color:var(--warn)" aria-label="differs from kept value" title="differs from kept value">differs</span></span>
-            <span class="conf" data-level="low"><span class="dot"></span>Low</span>
-            <span class="no-source">⚠ no source</span>
-          </div>
-          <div class="muted" style="font-size:var(--fs-xs);margin-top:2px">kept as "also known as" on the persona</div>
+          <div class="field-label">Given name</div>
+          <div>John</div>
+          <div class="match-reasons muted">Same given name (+3.0)</div>
         </div>
 
-        <!-- Birth -->
         <div class="merge-col survivor">
-          <div class="field-label" style="margin-bottom:2px">Birth</div>
-          <div class="fact-row">
-            <span class="grow">12 Apr 1850 · New York</span>
-            <span class="conf" data-level="high"><span class="dot"></span>High</span>
-            <span class="src-link">❝ 2 sources</span>
-          </div>
+          <div class="field-label">Surname</div>
+          <div>Smith</div>
         </div>
-        <div class="merge-pick" role="radiogroup" aria-label="Keep which Birth value" style="display:flex;flex-direction:column;gap:6px">
-          <span class="radio on" role="radio" tabindex="0" aria-checked="true" title="Keep this value — 12 Apr 1850 · New York"></span>
-          <span class="radio" role="radio" tabindex="-1" aria-checked="false" title="Keep this value — abt 1850 · New York"></span>
+        <div class="merge-pick">
+          <span class="match-mark" data-outcome="partial" title="similar"><span aria-hidden="true">≈</span><span class="sr-only">similar</span></span>
         </div>
         <div class="merge-col">
-          <div class="field-label" style="margin-bottom:2px">Birth</div>
-          <div class="fact-row">
-            <span class="grow"><span class="diff">abt 1850</span> <span class="badge" style="border-color:var(--warn);color:var(--warn)" aria-label="differs from kept value" title="differs from kept value">differs</span> · New York</span>
-            <span class="conf" data-level="low"><span class="dot"></span>Low</span>
-            <span class="src-link">❝ 1880 census</span>
-          </div>
+          <div class="field-label">Surname</div>
+          <div>Smyth</div>
+          <div class="match-reasons muted">Similar surname (+1.5)</div>
         </div>
 
-        <!-- Death -->
         <div class="merge-col survivor">
-          <div class="field-label" style="margin-bottom:2px">Death</div>
-          <div class="fact-row">
-            <span class="grow muted">— not recorded</span>
-          </div>
+          <div class="field-label">Sex</div>
+          <div>Male</div>
         </div>
-        <div class="merge-pick" role="radiogroup" aria-label="Keep which Death value" style="display:flex;flex-direction:column;gap:6px">
-          <span class="radio" role="radio" tabindex="-1" aria-checked="false" title="Not chosen — nothing recorded"></span>
-          <span class="radio on" role="radio" tabindex="0" aria-checked="true" title="Keep this value — 3 Nov 1920 · Brooklyn"></span>
+        <div class="merge-pick">
+          <span class="match-mark" data-outcome="agree" title="same"><span aria-hidden="true">=</span><span class="sr-only">same</span></span>
         </div>
         <div class="merge-col">
-          <div class="field-label" style="margin-bottom:2px">Death</div>
-          <div class="fact-row">
-            <span class="grow"><span class="diff">3 Nov 1920 · Brooklyn</span> <span class="badge" style="border-color:var(--warn);color:var(--warn)" aria-label="differs from kept value" title="differs from kept value">differs</span></span>
-            <span class="conf" data-level="very-high"><span class="dot"></span>Very high</span>
-            <span class="src-link">❝ death cert.</span>
-          </div>
-          <div class="muted" style="font-size:var(--fs-xs);margin-top:2px">survivor has none — take this value</div>
+          <div class="field-label">Sex</div>
+          <div>Male</div>
+          <div class="match-reasons muted">Same sex (+0.6)</div>
         </div>
 
-        <!-- Occupation -->
         <div class="merge-col survivor">
-          <div class="field-label" style="margin-bottom:2px">Occupation</div>
-          <div class="fact-row">
-            <span class="grow"><span class="diff">Carpenter</span> <span class="badge" style="border-color:var(--warn);color:var(--warn)" aria-label="differs from kept value" title="differs from kept value">differs</span></span>
-            <span class="conf" data-level="low"><span class="dot"></span>Low</span>
-            <span class="no-source">⚠ no source</span>
-          </div>
+          <div class="field-label">Birth</div>
+          <div>12.4.1850</div>
         </div>
-        <div class="merge-pick" role="radiogroup" aria-label="Keep which Occupation value" style="display:flex;flex-direction:column;gap:6px">
-          <span class="radio on" role="radio" tabindex="0" aria-checked="true" title="Keep this value — Carpenter"></span>
-          <span class="radio" role="radio" tabindex="-1" aria-checked="false" title="Keep this value — Joiner"></span>
+        <div class="merge-pick">
+          <span class="match-mark" data-outcome="partial" title="similar"><span aria-hidden="true">≈</span><span class="sr-only">similar</span></span>
         </div>
         <div class="merge-col">
-          <div class="field-label" style="margin-bottom:2px">Occupation</div>
-          <div class="fact-row">
-            <span class="grow"><span class="diff">Joiner</span> <span class="badge" style="border-color:var(--warn);color:var(--warn)" aria-label="differs from kept value" title="differs from kept value">differs</span></span>
-            <span class="conf" data-level="normal"><span class="dot"></span>Normal</span>
-            <span class="src-link">❝ 1880 census</span>
-          </div>
+          <div class="field-label">Birth</div>
+          <div>1849 (Baptism)</div>
+          <div class="match-reasons muted">Similar birth (+2.4)</div>
         </div>
 
-        <!-- Spouse -->
         <div class="merge-col survivor">
-          <div class="field-label" style="margin-bottom:2px">Spouse</div>
-          <div class="fact-row">
-            <a class="grow" href="person.html">Mary Doe</a>
-            <span class="muted">m. 1876</span>
-            <span class="src-link">❝ 1</span>
-          </div>
+          <div class="field-label">Birth place</div>
+          <div>New York</div>
         </div>
-        <div class="merge-pick" role="radiogroup" aria-label="Keep which Spouse value" style="display:flex;flex-direction:column;gap:6px">
-          <span class="radio on" role="radio" tabindex="0" aria-checked="true" title="Keep this value — Mary Doe"></span>
-          <span class="radio" role="radio" tabindex="-1" aria-checked="false" title="Keep this value — Mary Doe"></span>
+        <div class="merge-pick">
+          <span class="match-mark" data-outcome="agree" title="same"><span aria-hidden="true">=</span><span class="sr-only">same</span></span>
         </div>
         <div class="merge-col">
-          <div class="field-label" style="margin-bottom:2px">Spouse</div>
-          <div class="fact-row">
-            <a class="grow" href="person.html">Mary Doe</a>
-            <span class="muted">m. 1876</span>
-          </div>
-          <div class="muted" style="font-size:var(--fs-xs);margin-top:2px">same family — after the merge it names the survivor</div>
+          <div class="field-label">Birth place</div>
+          <div>New York</div>
+          <div class="match-reasons muted">Same birth place (+2.0)</div>
+        </div>
+
+        <div class="merge-col survivor">
+          <div class="field-label">Death</div>
+          <div>3.11.1920</div>
+        </div>
+        <div class="merge-pick">
+          <span class="match-mark" data-outcome="missing" title="not compared"><span aria-hidden="true">–</span><span class="sr-only">not compared</span></span>
+        </div>
+        <div class="merge-col">
+          <div class="field-label">Death</div>
+          <div class="muted">— not recorded</div>
+          <div class="match-reasons muted">No death to compare</div>
+        </div>
+
+        <div class="merge-col survivor">
+          <div class="field-label">Father</div>
+          <div>Peter Smith (b. 1821)</div>
+        </div>
+        <div class="merge-pick">
+          <span class="match-mark" data-outcome="partial" title="similar"><span aria-hidden="true">≈</span><span class="sr-only">similar</span></span>
+        </div>
+        <div class="merge-col">
+          <div class="field-label">Father</div>
+          <div>Peter Smyth (b. 1820)</div>
+          <div class="match-reasons muted">Similar father (+3.1)</div>
+        </div>
+
+        <div class="merge-col survivor">
+          <div class="field-label">Occupation</div>
+          <div>Carpenter</div>
+        </div>
+        <div class="merge-pick">
+          <span class="match-mark" data-outcome="disagree" title="different"><span aria-hidden="true">≠</span><span class="sr-only">different</span></span>
+        </div>
+        <div class="merge-col">
+          <div class="field-label">Occupation</div>
+          <div>Joiner</div>
+          <div class="match-reasons muted">Different occupation (−0.8)</div>
         </div>
 
       </div>
     </div>
+    <div class="muted" style="font-size:var(--fs-sm);margin:var(--sp-2) 0 var(--sp-4)">The rows are the matching
+      engine's own terms, so the explanation is the score's evidence (ADR 0038 §3). The mark between the
+      values names the outcome — <span class="match-mark" data-outcome="agree">=</span> same,
+      <span class="match-mark" data-outcome="partial">≈</span> similar,
+      <span class="match-mark" data-outcome="disagree">≠</span> different,
+      <span class="match-mark" data-outcome="conflict">✕</span> conflicting,
+      <span class="match-mark" data-outcome="missing">–</span> nothing to compare — in words for assistive
+      technology, never by colour alone. The origin chip names the dataset record an import created the
+      side from (none for a record typed in); the snippet is the first attached scan with a region,
+      outlined.</div>
 
     <!-- Earlier-decision notice: a live PersonsDistinguished between the two clusters -->
     <div class="card" role="status">
@@ -241,11 +245,14 @@
         </select>
       </div>
       <div class="spacer"></div>
-      <button class="btn">Cancel</button>
-      <button class="btn">Not the same person</button>
-      <button class="btn primary">Merge (reversible)</button>
+      <button class="btn" aria-keyshortcuts="l">Decide later <kbd>L</kbd></button>
+      <button class="btn" aria-keyshortcuts="n">Not the same <kbd>N</kbd></button>
+      <button class="btn primary" aria-keyshortcuts="y">Same (reversible) <kbd>Y</kbd></button>
     </div>
-    <div class="muted" style="font-size:var(--fs-sm)">Either decision records the reason, the confidence and the
+    </section>
+    <div class="muted" style="font-size:var(--fs-sm)"><i>Decide later</i> writes nothing and returns to the
+      duplicates; the pair stays in the list. The keys work anywhere in the view except a text field —
+      Tab out of the reason first. Either other decision records the reason, the confidence and the
       engine's assessment above on its event — <span class="mono">PersonsMerged</span> or
       <span class="mono">PersonsDistinguished</span> — with nothing defaulted. A blank reason or an unset confidence
       records none.</div>

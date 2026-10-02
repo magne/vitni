@@ -926,7 +926,7 @@ pub struct MergePersons {
     pub judgment: PairJudgment,
 }
 
-/// A request to record that two persons are different people ("Not the same person"), dispatched to
+/// A request to record that two persons are different people ("Not the same"), dispatched to
 /// `vitni_app::distinguish_persons` via [`dispatch_distinguish`](crate::intent::dispatch_distinguish).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DistinguishPersons {

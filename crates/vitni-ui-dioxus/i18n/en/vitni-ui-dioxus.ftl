@@ -140,6 +140,9 @@ sc-first-tab = First tab
 sc-last-tab = Last tab
 sc-add-source = Add source
 sc-edit = Edit
+sc-decide-same = Same record
+sc-decide-distinct = Not the same
+sc-decide-later = Decide later
 sc-quit = Quit
 sc-close-tab = Close tab
 sc-history-back = History back
@@ -397,18 +400,18 @@ merge-empty-duplicates = No possible duplicates found.
 merge-wizard-heading = Compare & merge — { $a } ⟷ { $b }
 merge-survivor-label = survivor · keeps id
 merge-persona-label = becomes a persona
-merge-keep-label = keep
-merge-radio-group-label = Which record currently holds this value
-merge-cancel = Cancel
-merge-submit = Merge (reversible)
 merge-back = Back to duplicates
 merge-reason-label = Reason for this decision
 merge-reason-hint = (recorded on the decision)
 merge-confidence-label = Confidence
-merge-distinguish = Not the same person
 merge-earlier-distinct-heading = Marked as different people
 merge-earlier-distinct-guidance = An earlier decision says these two are different people, so they cannot be merged as they are. Undoing it and merging records both steps in History.
 merge-undo-distinction = Undo “not the same” and merge
+match-compare-label = Compare the two records
+match-not-recorded = — not recorded
+match-decide-same = Same (reversible)
+match-decide-distinct = Not the same
+match-decide-later = Decide later
 
 # Plugin manager chrome (PR21). Capability/role/trust labels are read off the component itself by
 # vitni-plugin-host::discover — these are only their display names.

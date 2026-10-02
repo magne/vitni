@@ -1,6 +1,6 @@
 //! SSR assertions for the Compare/merge tool (Phase 5 PR 19): the possible-duplicates table renders
-//! as an accessible `<table>` with a per-row Compare button and a confidence badge, and the
-//! compare/merge wizard's field grid renders native radio pairs with an accessible group label.
+//! as an accessible `<table>` with a per-row Compare button and a confidence badge, and the compare
+//! view's heading and notices render. The compare view itself is `match_compare.rs`.
 //! Pure render-and-inspect over hand-built view-models — no window, no workspace — the same pattern
 //! as `pedigree.rs`.
 
@@ -9,13 +9,9 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 use unic_langid::LanguageIdentifier;
 use vitni_app::{EngineVersion, MatchBand, MatchEvidence};
-use vitni_ui::{DuplicateCandidateVm, MergeBlockedVm, MergeCompareVm, MergeFieldRowVm, PedigreeNodeVm};
-use vitni_ui_dioxus::components::SelectChoice;
+use vitni_ui::{CompareSideVm, DuplicateCandidateVm, MatchCompareVm, MergeBlockedVm, PedigreeNodeVm};
 use vitni_ui_dioxus::i18n::Chrome;
-use vitni_ui_dioxus::screens::{
-    DecisionActions, DecisionDraft, DuplicatesTable, MergeCompareGrid, earlier_distinction_card, merge_blocked_card,
-    merge_compare_heading, merge_wizard_foot,
-};
+use vitni_ui_dioxus::screens::{DuplicatesTable, earlier_distinction_card, merge_blocked_card, merge_compare_heading};
 use vitni_ui_dioxus::shell::ChromeCtx;
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
@@ -101,145 +97,19 @@ fn duplicates_table_renders_an_accessible_table_with_a_compare_button_per_row() 
     );
 }
 
-/// Renders the compare/merge wizard's field grid over a survivor/merged pair with two differing
-/// fields (name and occupation) and one field neither carries (death, which does not differ).
-fn compare_grid() -> Element {
-    use_context_provider(|| ChromeCtx(chrome("en")));
-    let vm = MergeCompareVm {
-        survivor: node("I0042", "John Smith"),
-        merged: node("I0099", "John Smyth"),
-        fields: vec![
-            MergeFieldRowVm::new(
-                "Name".to_owned(),
-                Some("John Smith".to_owned()),
-                Some("John Smyth".to_owned()),
-            ),
-            MergeFieldRowVm::new(
-                "Occupation".to_owned(),
-                Some("Carpenter".to_owned()),
-                Some("Joiner".to_owned()),
-            ),
-            MergeFieldRowVm::new("Death".to_owned(), None, None),
-        ],
-        differs_label: "differs".to_owned(),
-        differs_title: "differs from kept value".to_owned(),
-        assessment: evidence(),
-        assessment_line: String::new(),
-        earlier_decision: None,
-    };
-    rsx! {
-        MergeCompareGrid { vm }
-    }
-}
-
-#[test]
-fn compare_grid_renders_native_radio_pairs_grouped_per_field() {
-    let mut vdom = VirtualDom::new(compare_grid);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
-    assert!(
-        html.contains("John Smith") && html.contains("John Smyth"),
-        "both names render:\n{html}"
-    );
-    assert!(
-        html.matches(r#"type="radio""#).count() == 6,
-        "3 fields × 2 sides = 6 native radio inputs:\n{html}"
-    );
-    assert!(
-        html.matches(r#"name="merge-field-0""#).count() == 2,
-        "the first field's radios share one group name:\n{html}"
-    );
-    assert!(
-        html.matches(r#"name="merge-field-1""#).count() == 2,
-        "the second field's radios share their own group name:\n{html}"
-    );
-    assert!(
-        html.contains("Carpenter"),
-        "the survivor's occupation value renders:\n{html}"
-    );
-    assert!(
-        html.matches(r#"role="group""#).count() == 3,
-        "each field row is an accessible radio group:\n{html}"
-    );
-    // U49: a differing persona value is tinted (.diff) AND carries a non-colour "differs" badge; the
-    // two differing rows (Name, Occupation) each get one, the equal row (Death) gets none.
-    assert!(
-        html.contains(r#"<span class="diff">John Smyth</span>"#),
-        "the differing name value is tinted:\n{html}"
-    );
-    assert_eq!(
-        html.matches(r#"aria-label="differs from kept value""#).count(),
-        2,
-        "each differing row carries a labelled differs badge:\n{html}"
-    );
-    assert!(
-        html.contains(">differs</span>"),
-        "the differs badge renders its visible label:\n{html}"
-    );
-}
-
-/// Renders the compare/merge wizard foot (reason, confidence, and the three decisions).
-fn wizard_foot() -> Element {
-    let chrome = chrome("en");
-    let draft = use_signal(DecisionDraft::default);
-    let actions = DecisionActions {
-        cancel: use_callback(|()| {}),
-        merge: use_callback(|()| {}),
-        distinguish: use_callback(|()| {}),
-        undo_and_merge: use_callback(|()| {}),
-    };
-    let options = vec![
-        SelectChoice {
-            value: String::new(),
-            label: "—".to_owned(),
-        },
-        SelectChoice {
-            value: "0".to_owned(),
-            label: "Very low".to_owned(),
-        },
-    ];
-    merge_wizard_foot(&chrome, options, draft, actions)
-}
-
-#[test]
-fn compare_foot_records_a_reason_and_confidence_with_either_decision() {
-    let mut vdom = VirtualDom::new(wizard_foot);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
-    assert!(
-        html.contains("Reason for this decision"),
-        "the reason field is labeled:\n{html}"
-    );
-    assert!(
-        html.contains(r#"id="merge-reason""#),
-        "a reason text input renders:\n{html}"
-    );
-    assert!(
-        html.contains(r#"aria-label="Confidence""#),
-        "a labeled confidence select renders:\n{html}"
-    );
-    assert!(
-        html.contains("Very low"),
-        "the select offers the given confidence options:\n{html}"
-    );
-    assert!(
-        html.contains("Not the same person"),
-        "the distinguish action renders:\n{html}"
-    );
-    assert!(html.contains("Merge (reversible)"), "the merge action renders:\n{html}");
-}
-
-/// Renders the compare heading over a vm whose assessment line is set.
+/// Renders the compare heading over a pair.
 fn compare_heading() -> Element {
     let chrome = chrome("en");
-    let vm = MergeCompareVm {
-        survivor: node("I0042", "John Smith"),
-        merged: node("I0099", "John Smyth"),
-        fields: Vec::new(),
-        differs_label: "differs".to_owned(),
-        differs_title: "differs from kept value".to_owned(),
+    let side = |human_id: &str, label: &str| CompareSideVm {
+        human_id: human_id.to_owned(),
+        label: label.to_owned(),
+        origin: None,
+        evidence: None,
+    };
+    let vm = MatchCompareVm {
+        left: side("I0042", "John Smith"),
+        right: side("I0099", "John Smyth"),
+        rows: Vec::new(),
         assessment: evidence(),
         assessment_line: "Matched at 97% · probable match · engine 4".to_owned(),
         earlier_decision: None,
@@ -248,16 +118,12 @@ fn compare_heading() -> Element {
 }
 
 #[test]
-fn compare_heading_shows_the_assessment_the_decision_records() {
+fn compare_heading_names_the_pair() {
     let mut vdom = VirtualDom::new(compare_heading);
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
 
     assert!(html.contains("John Smith ⟷ John Smyth"), "the pair is named:\n{html}");
-    assert!(
-        html.contains("Matched at 97% · probable match · engine 4"),
-        "the engine's assessment is shown:\n{html}"
-    );
 }
 
 /// Renders the notice that an earlier decision holds the pair distinct.

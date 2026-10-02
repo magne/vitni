@@ -50,6 +50,10 @@ pub fn Button(
     /// enough on its own (e.g. a bare "Edit" that needs "Edit {row}"), rendered as `aria-label`.
     #[props(default)]
     aria_label: Option<String>,
+    /// An optional single-key shortcut the screen handles (`y`), shown as a `kbd` hint after the label
+    /// and announced as `aria-keyshortcuts`.
+    #[props(default)]
+    shortcut: Option<String>,
     /// Fired on click.
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
@@ -64,8 +68,13 @@ pub fn Button(
             disabled,
             title,
             aria_label,
+            "aria-keyshortcuts": shortcut.clone(),
             onclick: move |event| onclick.call(event),
             "{label}"
+            if let Some(key) = &shortcut {
+                " "
+                kbd { "{key.to_uppercase()}" }
+            }
         }
     }
 }

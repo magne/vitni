@@ -746,6 +746,15 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .merge-pick .radio { width: 18px; height: 18px; border-radius: var(--r-pill); border: 2px solid var(--line-2); }
 .merge-pick .radio.on { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px var(--panel); }
 .diff { background: color-mix(in srgb, var(--warn) 14%, transparent); border-radius: var(--r-sm); padding: 0 4px; }
+.match-mark { font-size: var(--fs-lg); font-weight: 700; color: var(--muted); }
+.match-mark[data-outcome="agree"] { color: var(--ok); }
+.match-mark[data-outcome="partial"] { color: var(--accent); }
+.match-mark[data-outcome="disagree"] { color: var(--warn); }
+.match-mark[data-outcome="conflict"] { color: var(--err); }
+.origin-chip { font-size: var(--fs-xs); }
+.evidence-snippet { margin-top: var(--sp-2); max-width: 320px; }
+.evidence-snippet img { display: block; width: 100%; height: auto; }
+.match-compare:focus { outline: none; }
 
 /* ---- Pedigree ---- */
 .ped { display: flex; gap: var(--sp-6); padding: var(--sp-6); overflow: auto; }

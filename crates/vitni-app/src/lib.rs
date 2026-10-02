@@ -278,12 +278,14 @@ pub use vitni_core::import_run::{
     AbandonReason, ImportCounts, ImportRunError, ImportRunStatus, NewImportRun, ResolutionDecision, ResolvedItem,
 };
 pub use vitni_core::matching::pack::PackError;
+pub use vitni_core::matching::profile::VitalKind;
 pub use vitni_core::matching::{
-    ENGINE_VERSION, EngineVersion, Feature, FeatureComparison, FeatureEvidence, MatchAssessment, MatchBand,
-    MatchEvidence, MatchableKind, Outcome, OutcomeEvidence,
+    ENGINE_VERSION, EngineVersion, Feature, FeatureComparison, FeatureEvidence, FeatureValue, MatchAssessment,
+    MatchBand, MatchEvidence, MatchableKind, Outcome, OutcomeEvidence,
 };
 pub use vitni_core::media::MediaError;
 pub use vitni_core::media_path::MEDIA_DIR;
+pub use vitni_core::media_path::MediaPath;
 pub use vitni_core::media_path::media_root_relative;
 pub use vitni_core::media_path::media_url_decode;
 pub use vitni_core::media_path::media_url_path;

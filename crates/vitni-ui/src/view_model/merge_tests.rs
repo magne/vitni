@@ -1,8 +1,7 @@
-use super::{DuplicateCandidateVm, MergeCompareVm, MergeFailure, MergeResultVm};
+use super::{DuplicateCandidateVm, MergeFailure, MergeResultVm};
 use crate::i18n::Localizer;
 use std::collections::BTreeSet;
-use vitni_app::{AggRef, Confidence, FactSummary, MatchAssessment, MatchBand, MergeResult, PersonSummary, SimilarPair};
-use vitni_app::{Fact, FactType};
+use vitni_app::{AggRef, MatchAssessment, MatchBand, MergeResult, PersonSummary, SimilarPair};
 
 fn agg(human_id: &str) -> AggRef {
     AggRef {
@@ -92,34 +91,6 @@ fn a_duplicate_pair_explains_its_score_by_the_engines_terms() {
 }
 
 #[test]
-fn compare_grid_carries_only_real_fields() {
-    let loc = Localizer::for_test("en");
-    let mut survivor = bare_summary("I0042", Some("John Smith"));
-    survivor.facts.push(FactSummary {
-        fact: Fact {
-            fact_type: FactType::Occupation,
-            date: None,
-            place_id: None,
-            value: Some("Carpenter".to_owned()),
-        },
-        confidence: Some(Confidence::Normal),
-        citations: Vec::new(),
-        assertion_id: "aaaaaaaa-0000-7000-8000-00000000000d".to_owned(),
-    });
-    let merged = bare_summary("I0099", Some("John Smyth"));
-
-    let vm = MergeCompareVm::build(&survivor, &merged, &assessment(0.5, MatchBand::Possible), &loc);
-    assert_eq!(vm.survivor.human_id, "I0042");
-    assert_eq!(vm.merged.human_id, "I0099");
-    let occupation = vm
-        .fields
-        .iter()
-        .find(|row| row.survivor_value.as_deref() == Some("Carpenter"))
-        .expect("occupation row present");
-    assert_eq!(occupation.merged_value, None, "merged has no occupation recorded");
-}
-
-#[test]
 fn merge_result_summary_never_claims_repointing() {
     let loc = Localizer::for_test("en");
     let result = MergeResult {
@@ -145,20 +116,6 @@ fn assessment(score: f64, band: MatchBand) -> MatchAssessment {
         parts: Vec::new(),
         engine: vitni_app::EngineVersion(4),
     }
-}
-
-#[test]
-fn the_compare_view_carries_the_assessment_the_decision_will_record() {
-    let loc = Localizer::for_test("en");
-    let shown = assessment(0.9712, MatchBand::Probable);
-    let vm = MergeCompareVm::build(
-        &bare_summary("I0042", Some("John Smith")),
-        &bare_summary("I0099", Some("John Smyth")),
-        &shown,
-        &loc,
-    );
-    assert_eq!(vm.assessment, shown.evidence());
-    assert_eq!(vm.assessment_line, "Matched at 97% · probable match · engine 4");
 }
 
 #[test]

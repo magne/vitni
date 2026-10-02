@@ -140,6 +140,9 @@ sc-first-tab = Første fane
 sc-last-tab = Siste fane
 sc-add-source = Legg til kilde
 sc-edit = Rediger
+sc-decide-same = Samme post
+sc-decide-distinct = Ikke den samme
+sc-decide-later = Avgjør senere
 sc-quit = Avslutt
 sc-close-tab = Lukk fane
 sc-history-back = Tilbake i historikken
@@ -396,18 +399,18 @@ merge-empty-duplicates = Ingen mulige dubletter funnet.
 merge-wizard-heading = Sammenlign & slå sammen — { $a } ⟷ { $b }
 merge-survivor-label = overlevende · behold id
 merge-persona-label = blir en persona
-merge-keep-label = behold
-merge-radio-group-label = Hvilken post har for øyeblikket denne verdien
-merge-cancel = Avbryt
-merge-submit = Slå sammen (reversibelt)
 merge-back = Tilbake til dubletter
 merge-reason-label = Årsak til avgjørelsen
 merge-reason-hint = (registreres på avgjørelsen)
 merge-confidence-label = Sikkerhet
-merge-distinguish = Ikke samme person
 merge-earlier-distinct-heading = Markert som ulike personer
 merge-earlier-distinct-guidance = En tidligere avgjørelse sier at disse to er ulike personer, så de kan ikke slås sammen slik de er. Å angre den og slå sammen registrerer begge stegene i historikken.
 merge-undo-distinction = Angre «ikke samme» og slå sammen
+match-compare-label = Sammenlign de to postene
+match-not-recorded = — ikke registrert
+match-decide-same = Samme (reversibelt)
+match-decide-distinct = Ikke den samme
+match-decide-later = Avgjør senere
 
 # Tilleggshåndtering – rammestrenger (PR21). Kapabilitets-/rolle-/tillitsetiketter leses fra selve
 # komponenten av vitni-plugin-host::discover — dette er kun visningsnavnene.

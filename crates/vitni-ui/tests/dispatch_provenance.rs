@@ -568,7 +568,7 @@ async fn a_blank_merge_rationale_records_none() {
     assert_eq!(merge_entry(&log).confidence, None);
 }
 
-/// "Not the same person" records the decision with its judgment, and the pair leaves the Merge tool's
+/// "Not the same" records the decision with its judgment, and the pair leaves the Merge tool's
 /// duplicates table for good.
 #[tokio::test]
 async fn distinguishing_a_pair_removes_it_from_the_duplicates_table() {

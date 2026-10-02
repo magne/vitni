@@ -2932,27 +2932,173 @@ impl Localizer {
     /// on either side explains nothing and is left out.
     #[must_use]
     pub fn match_reasons(&self, evidence: &vitni_app::MatchEvidence) -> Vec<String> {
-        use vitni_app::OutcomeEvidence;
         let mut terms: Vec<&vitni_app::FeatureEvidence> = evidence.features.iter().collect();
         terms.sort_by_key(|term| std::cmp::Reverse(term.weight_bp));
         let mut reasons = Vec::with_capacity(terms.len());
         for term in terms {
-            let (feature, weight) = (self.match_feature(term.feature), self.match_weight(term.weight_bp));
-            reasons.push(match term.outcome {
-                OutcomeEvidence::Agree => fl!(self.loader, "match-reason-agree", feature = feature, weight = weight),
-                OutcomeEvidence::Partial(_) => {
-                    fl!(self.loader, "match-reason-partial", feature = feature, weight = weight)
-                }
-                OutcomeEvidence::Disagree => {
-                    fl!(self.loader, "match-reason-disagree", feature = feature, weight = weight)
-                }
-                OutcomeEvidence::Conflict => {
-                    fl!(self.loader, "match-reason-conflict", feature = feature, weight = weight)
-                }
-                OutcomeEvidence::Missing => continue,
-            });
+            if let Some(reason) = self.match_reason(term) {
+                reasons.push(reason);
+            }
         }
         reasons
+    }
+
+    /// One term's reason with its weight — "Same given name (+3.0)" — or `None` for a term with a value
+    /// missing, which explains nothing.
+    fn match_reason(&self, term: &vitni_app::FeatureEvidence) -> Option<String> {
+        use vitni_app::OutcomeEvidence;
+        let (feature, weight) = (self.match_feature(term.feature), self.match_weight(term.weight_bp));
+        Some(match term.outcome {
+            OutcomeEvidence::Agree => fl!(self.loader, "match-reason-agree", feature = feature, weight = weight),
+            OutcomeEvidence::Partial(_) => fl!(self.loader, "match-reason-partial", feature = feature, weight = weight),
+            OutcomeEvidence::Disagree => fl!(self.loader, "match-reason-disagree", feature = feature, weight = weight),
+            OutcomeEvidence::Conflict => fl!(self.loader, "match-reason-conflict", feature = feature, weight = weight),
+            OutcomeEvidence::Missing => return None,
+        })
+    }
+
+    /// A compare-view row's explanation (ADR 0038 §3): the term's reason, or for a term with a value
+    /// missing, that there was nothing to compare.
+    #[must_use]
+    pub fn match_row_explanation(&self, term: &vitni_app::FeatureEvidence) -> String {
+        self.match_reason(term).unwrap_or_else(|| {
+            fl!(
+                self.loader,
+                "match-reason-missing",
+                feature = self.match_feature(term.feature)
+            )
+        })
+    }
+
+    /// The name of a compared outcome, the words behind a compare-view row's outcome mark.
+    #[must_use]
+    pub fn match_outcome_label(&self, outcome: vitni_app::OutcomeEvidence) -> String {
+        use vitni_app::OutcomeEvidence;
+        match outcome {
+            OutcomeEvidence::Agree => fl!(self.loader, "match-outcome-agree"),
+            OutcomeEvidence::Partial(_) => fl!(self.loader, "match-outcome-partial"),
+            OutcomeEvidence::Disagree => fl!(self.loader, "match-outcome-disagree"),
+            OutcomeEvidence::Missing => fl!(self.loader, "match-outcome-missing"),
+            OutcomeEvidence::Conflict => fl!(self.loader, "match-outcome-conflict"),
+        }
+    }
+
+    /// A compared value as the record states it, for a compare-view cell. A date that stands in for
+    /// another (a baptism for a birth, a burial for a death) names its event.
+    #[must_use]
+    pub fn match_value(&self, value: &vitni_app::FeatureValue) -> String {
+        use vitni_app::{FeatureValue, MediaPath, VitalKind};
+        match value {
+            FeatureValue::Name(text) | FeatureValue::Place(text) | FeatureValue::Text(text) => text.clone(),
+            FeatureValue::Date { kind, date } => {
+                let stand_in = match kind {
+                    VitalKind::Birth | VitalKind::Death => None,
+                    VitalKind::Baptism => Some(vitni_app::EventType::Baptism),
+                    VitalKind::Burial => Some(vitni_app::EventType::Burial),
+                };
+                match stand_in {
+                    None => self.date(date),
+                    Some(event) => fl!(
+                        self.loader,
+                        "match-value-stand-in",
+                        date = self.date(date),
+                        event = self.event_type_label(&event)
+                    ),
+                }
+            }
+            FeatureValue::When(date) => self.date(date),
+            FeatureValue::EventType(event_type) => self.event_type_label(event_type),
+            FeatureValue::Sex(sex) => self.sex_label(Some(sex)),
+            FeatureValue::Relative { name, born: None } => name.clone(),
+            FeatureValue::Relative { name, born: Some(born) } => {
+                fl!(
+                    self.loader,
+                    "match-value-relative",
+                    name = name.clone(),
+                    born = self.date(born)
+                )
+            }
+            FeatureValue::Origin(origin) => self.match_origin_label(origin),
+            FeatureValue::PlaceType(place_type) => self.place_type_label(place_type),
+            FeatureValue::Coordinates(point) => format!("{}, {}", point.latitude, point.longitude),
+            FeatureValue::Address(address) => address_line(address),
+            FeatureValue::Path(MediaPath::File(path)) => path.clone(),
+            FeatureValue::Path(MediaPath::Web(url)) => url.href.clone(),
+        }
+    }
+
+    /// An origin chip's text: the dataset's scheme and the record's id in it.
+    #[must_use]
+    pub fn match_origin_label(&self, origin: &vitni_app::RecordOrigin) -> String {
+        fl!(
+            self.loader,
+            "match-origin",
+            scheme = origin.dataset.scheme().to_owned(),
+            record = origin.record.clone()
+        )
+    }
+
+    /// An origin chip's tooltip, naming the full dataset.
+    #[must_use]
+    pub fn match_origin_title(&self, origin: &vitni_app::RecordOrigin) -> String {
+        fl!(
+            self.loader,
+            "match-origin-title",
+            record = origin.record.clone(),
+            dataset = origin.dataset.as_str().to_owned()
+        )
+    }
+
+    /// The caption under a compare-view evidence snippet, naming its media object.
+    #[must_use]
+    pub fn match_evidence_caption(&self, media: &str) -> String {
+        fl!(self.loader, "match-evidence-caption", media = media.to_owned())
+    }
+
+    /// A compared feature's label, as a compare-view row heads it.
+    #[must_use]
+    pub fn match_row_label(&self, feature: vitni_app::Feature) -> String {
+        use vitni_app::Feature;
+        match feature {
+            Feature::GivenName => fl!(self.loader, "match-row-given-name"),
+            Feature::Surname => fl!(self.loader, "match-row-surname"),
+            Feature::Sex => fl!(self.loader, "match-row-sex"),
+            Feature::Birth => fl!(self.loader, "match-row-birth"),
+            Feature::Death => fl!(self.loader, "match-row-death"),
+            Feature::BirthPlace => fl!(self.loader, "match-row-birth-place"),
+            Feature::DeathPlace => fl!(self.loader, "match-row-death-place"),
+            Feature::Lifespan => fl!(self.loader, "match-row-lifespan"),
+            Feature::Father => fl!(self.loader, "match-row-father"),
+            Feature::Mother => fl!(self.loader, "match-row-mother"),
+            Feature::Partners => fl!(self.loader, "match-row-partners"),
+            Feature::Children => fl!(self.loader, "match-row-children"),
+            Feature::Patronymic => fl!(self.loader, "match-row-patronymic"),
+            Feature::Occupation => fl!(self.loader, "match-row-occupation"),
+            Feature::Record => fl!(self.loader, "match-row-record"),
+            Feature::Partner => fl!(self.loader, "match-row-partner"),
+            Feature::Marriage => fl!(self.loader, "match-row-marriage"),
+            Feature::MarriagePlace => fl!(self.loader, "match-row-marriage-place"),
+            Feature::EventType => fl!(self.loader, "match-row-event-type"),
+            Feature::Date => fl!(self.loader, "match-row-date"),
+            Feature::Place => fl!(self.loader, "match-row-place"),
+            Feature::Principal => fl!(self.loader, "match-row-principal"),
+            Feature::Participants => fl!(self.loader, "match-row-participants"),
+            Feature::PlaceName => fl!(self.loader, "match-row-place-name"),
+            Feature::PlaceType => fl!(self.loader, "match-row-place-type"),
+            Feature::Enclosure => fl!(self.loader, "match-row-enclosure"),
+            Feature::Coordinates => fl!(self.loader, "match-row-coordinates"),
+            Feature::Title => fl!(self.loader, "match-row-title"),
+            Feature::Author => fl!(self.loader, "match-row-author"),
+            Feature::Publication => fl!(self.loader, "match-row-publication"),
+            Feature::Repository => fl!(self.loader, "match-row-repository"),
+            Feature::Name => fl!(self.loader, "match-row-name"),
+            Feature::Address => fl!(self.loader, "match-row-address"),
+            Feature::Source => fl!(self.loader, "match-row-source"),
+            Feature::Page => fl!(self.loader, "match-row-page"),
+            Feature::Checksum => fl!(self.loader, "match-row-checksum"),
+            Feature::Path => fl!(self.loader, "match-row-path"),
+            Feature::Text => fl!(self.loader, "match-row-text"),
+        }
     }
 
     /// A term's log₂ weight, signed, to one decimal: "+3.0", "−1.2".
@@ -3013,7 +3159,7 @@ impl Localizer {
         }
     }
 
-    /// The confirmation shown after "Not the same person".
+    /// The confirmation shown after "Not the same".
     #[must_use]
     pub fn distinguish_result_summary(&self, other_human_id: &str, person_human_id: &str) -> String {
         fl!(
@@ -3034,43 +3180,6 @@ impl Localizer {
     #[must_use]
     pub fn identity_decided_guidance(&self) -> String {
         fl!(self.loader, "identity-decided-guidance")
-    }
-
-    /// The merge compare grid's "Name" row label.
-    #[must_use]
-    pub fn merge_field_name(&self) -> String {
-        fl!(self.loader, "merge-field-name")
-    }
-
-    /// The merge compare grid's "Birth" row label.
-    #[must_use]
-    pub fn merge_field_birth(&self) -> String {
-        fl!(self.loader, "merge-field-birth")
-    }
-
-    /// The merge compare grid's "Death" row label.
-    #[must_use]
-    pub fn merge_field_death(&self) -> String {
-        fl!(self.loader, "merge-field-death")
-    }
-
-    /// The merge compare grid's "Occupation" row label.
-    #[must_use]
-    pub fn merge_field_occupation(&self) -> String {
-        fl!(self.loader, "merge-field-occupation")
-    }
-
-    /// The non-colour "differs" badge shown next to a persona value that differs from the kept
-    /// (survivor) value (U49) — the visible label.
-    #[must_use]
-    pub fn merge_differs(&self) -> String {
-        fl!(self.loader, "merge-differs")
-    }
-
-    /// The accessible name / tooltip for the "differs" badge.
-    #[must_use]
-    pub fn merge_differs_title(&self) -> String {
-        fl!(self.loader, "merge-differs-title")
     }
 
     /// The blocked-merge card's heading (a merge rejected for a contradiction).
@@ -3122,6 +3231,24 @@ impl Localizer {
 
 /// Renders a single [`DatePoint`] numerically: `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`, or `?` when the
 /// year is unknown. Locale-independent, so it needs no Fluent catalogue.
+/// A postal address on one line, its street lines then locality, postal code, region and country,
+/// joined by commas.
+fn address_line(address: &vitni_app::Address) -> String {
+    let mut parts: Vec<&str> = address.lines.iter().map(String::as_str).collect();
+    for part in [
+        &address.locality,
+        &address.postal_code,
+        &address.region,
+        &address.country,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        parts.push(part);
+    }
+    parts.join(", ")
+}
+
 fn numeric_point(point: &DatePoint) -> String {
     use std::fmt::Write as _;
 
