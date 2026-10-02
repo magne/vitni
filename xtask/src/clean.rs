@@ -160,7 +160,7 @@ fn plan_profile(profile: &Path, removals: &mut Vec<Removal>) -> Result<()> {
         let entry = entry.with_context(|| format!("reading an entry under {}", deps.display()))?;
         let path = entry.path();
         let metadata = fs::symlink_metadata(&path).with_context(|| format!("reading {}", path.display()))?;
-        if metadata.is_file() && path.extension().is_none() {
+        if metadata.is_file() && path.extension().is_none() && !is_hard_linked(&metadata) {
             bytes += metadata.len();
             paths.push(path);
         }
@@ -174,6 +174,20 @@ fn plan_profile(profile: &Path, removals: &mut Vec<Removal>) -> Result<()> {
         });
     }
     Ok(())
+}
+
+/// Whether another name shares the file's data — cargo uplifts each binary as a hard link to the
+/// profile root (`target/debug/vitni`), so deleting the `deps/` name frees nothing and only forces a
+/// relink.
+#[cfg(unix)]
+fn is_hard_linked(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    metadata.nlink() > 1
+}
+
+#[cfg(not(unix))]
+fn is_hard_linked(_metadata: &fs::Metadata) -> bool {
+    false
 }
 
 /// The bytes held by the files under `path`, not following symlinks.
@@ -391,6 +405,21 @@ mod tests {
 
         assert_eq!(clean(&target, &[], false), 0);
         assert!(dir.path().join("outside/keep").exists());
+    }
+
+    #[test]
+    fn an_executable_uplifted_as_a_hard_link_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("target");
+        write(&target, "debug/deps/vitni-0123456789abcdef", 10);
+        fs::hard_link(
+            target.join("debug/deps/vitni-0123456789abcdef"),
+            target.join("debug/vitni"),
+        )
+        .unwrap();
+
+        assert_eq!(clean(&target, &[], false), 0);
+        assert!(target.join("debug/deps/vitni-0123456789abcdef").exists());
     }
 
     #[test]

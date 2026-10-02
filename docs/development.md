@@ -67,7 +67,7 @@ skips everything else, including `xtask`.
 A full `--workspace --all-features` build can fill the disk: every test target and feature set links
 its own executable into `target/debug/deps`, and `target/debug/incremental` grows alongside.
 `cargo xtask clean` deletes those — each profile's `incremental/` cache and the extensionless linked
-executables in `deps/`, in the workspace `target/` and every `plugins/*/target/` — plus the regenerable
+executables in `deps/` (bar those cargo hard-links to the profile root, which would free nothing), in the workspace `target/` and every `plugins/*/target/` — plus the regenerable
 run output (`target/gui-pass`, `screenshots`, `doc`, `criterion`, `flycheck0`, `tmp`). It keeps every
 `.rlib`/`.rmeta` and build-script output, so the next build recompiles and relinks only the workspace's
 own crates, and it keeps `target/plugins` and `target/external-fixtures`, so tests still run.
