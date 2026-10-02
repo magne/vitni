@@ -305,7 +305,7 @@ pub use vitni_db::DbError;
 pub use workspace::{
     IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers, RECENT_LIMIT,
     RecentItem, ResolvedLocale, ResolvedUiPreferences, SuretyLayers, ThemeLayers, UiPreferences, WindowGeometry,
-    Workspace, WorkspaceManifest, person_id_format_layers, push_recent, read_plugin_preferences,
+    Workspace, WorkspaceId, WorkspaceManifest, person_id_format_layers, push_recent, read_plugin_preferences,
     read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides,
     read_ui_preferences, save_locale_overrides, save_plugin_enabled, save_plugin_grants, save_recent,
     save_surety_label_overrides, save_theme_mode, save_window_geometry, surety_layers, theme_layers,

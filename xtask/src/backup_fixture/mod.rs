@@ -194,6 +194,7 @@ async fn write_current_fixture() -> Result<()> {
     let scratch = tempfile::tempdir().context("creating a scratch directory")?;
     let dir = scratch.path().join("fixture");
     Workspace::init(&dir, &operator(), &AppDefaults::default(), None)?;
+    pin_workspace_id(&dir)?;
     let workspace = Workspace::open(&dir, &operator(), &WorkspaceDefaults::default()).await?;
     let rows = build_log();
     workspace.store().insert_raw_events(rows.into_iter().map(Ok)).await?;
@@ -220,6 +221,18 @@ async fn write_current_fixture() -> Result<()> {
     }
     println!("backup-fixture: wrote {} ({} events)", archive.display(), report.events);
     Ok(())
+}
+
+/// Replaces the id `init` minted (ADR 0043) with a fixed one, so the archived manifest is the same
+/// on every run.
+fn pin_workspace_id(dir: &Path) -> Result<()> {
+    let manifest = dir.join("workspace.toml");
+    let text = fs::read_to_string(&manifest).with_context(|| format!("reading {}", manifest.display()))?;
+    let mut table: toml::Table = toml::from_str(&text).with_context(|| format!("parsing {}", manifest.display()))?;
+    let id = Uuid::from_u128(0x0199_0000_0000_7000_8000_0000_0000_0002);
+    table.insert("id".to_owned(), toml::Value::String(id.to_string()));
+    let text = toml::to_string_pretty(&table).context("serializing the pinned manifest")?;
+    fs::write(&manifest, text).with_context(|| format!("writing {}", manifest.display()))
 }
 
 /// Restores every fixture's archive into a scratch workspace and rewrites its digest.

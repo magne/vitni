@@ -12,6 +12,7 @@ use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 use unic_langid::LanguageIdentifier;
+use uuid::Uuid;
 use vitni_core::id_format::IdFormat;
 use vitni_db::Store;
 
@@ -88,9 +89,33 @@ macro_rules! id_format_overrides {
 
 for_each_human_id_aggregate!(id_format_overrides);
 
+/// A workspace's own identity (ADR 0043): minted once (UUID v7) and kept across renames, moves and
+/// restores, so every export of the workspace names the same tree. An import never adopts another
+/// workspace's id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct WorkspaceId(Uuid);
+
+impl WorkspaceId {
+    /// Mints a new id (UUID v7).
+    fn mint() -> Self {
+        Self(Uuid::now_v7())
+    }
+}
+
+impl std::fmt::Display for WorkspaceId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// The on-disk workspace manifest (`workspace.toml`, ADR 0005).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceManifest {
+    /// The workspace's identity (ADR 0043), minted at `init`. `None` only in a manifest written
+    /// before ids existed; [`Workspace::open`] records one.
+    #[serde(default)]
+    pub id: Option<WorkspaceId>,
     /// The database backing this workspace (SQLite file ref or Postgres URL), frozen at `init`.
     pub database_url: String,
     /// Per-aggregate `HumanId` format overrides; absent fields fall back to the global defaults.
@@ -664,6 +689,7 @@ pub fn save_surety_label_overrides(dir: &Path, surety: SuretyLabelOverrides) -> 
 /// An open workspace: the engine-neutral store plus the effective (override-over-default) settings.
 pub struct Workspace {
     dir: PathBuf,
+    id: WorkspaceId,
     store: Store,
     id_formats: IdFormats,
     surety_labels: SuretyLabelOverrides,
@@ -709,6 +735,7 @@ impl Workspace {
         let mut operators = BTreeMap::new();
         operators.insert(operator.id.to_string(), record_of(operator));
         let manifest = WorkspaceManifest {
+            id: Some(WorkspaceId::mint()),
             database_url,
             id_formats: IdFormatOverrides::default(),
             operators,
@@ -733,18 +760,23 @@ impl Workspace {
         let mut manifest = read_manifest(dir)?;
         let store = Store::open(&resolve_database_url(dir, &manifest.database_url)).await?;
 
-        let mut newly_recorded = false;
+        let mut changed = false;
         manifest.operators.entry(operator.id.to_string()).or_insert_with(|| {
-            newly_recorded = true;
+            changed = true;
             record_of(operator)
         });
-        if newly_recorded {
+        let id = *manifest.id.get_or_insert_with(|| {
+            changed = true;
+            WorkspaceId::mint()
+        });
+        if changed {
             write_manifest(dir, &manifest)?;
         }
         let id_formats = resolve_id_formats(&manifest.id_formats, defaults);
         let surety_labels = resolve_surety_labels(&manifest.surety, defaults);
         Ok(Self {
             dir: dir.to_path_buf(),
+            id,
             store,
             id_formats,
             surety_labels,
@@ -786,6 +818,12 @@ impl Workspace {
         };
         let loaded = Matching::load(&self.dir, shared.as_deref(), &self.matching_config)?;
         Ok(self.matching.get_or_init(|| loaded))
+    }
+
+    /// The workspace's identity (ADR 0043), the same across every export of it.
+    #[must_use]
+    pub fn id(&self) -> WorkspaceId {
+        self.id
     }
 
     /// The workspace directory (ADR 0005): the root that holds the manifest, database, and the
@@ -966,6 +1004,55 @@ mod tests {
             "id formats are not seeded; they fall back live"
         );
         assert!(manifest.operators.contains_key(&Uuid::from_u128(1).to_string()));
+    }
+
+    #[test]
+    fn init_gives_each_workspace_its_own_id() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let first = Workspace::init(&dir.path().join("a"), &operator(), &AppDefaults::default(), None).expect("init");
+        let second = Workspace::init(&dir.path().join("b"), &operator(), &AppDefaults::default(), None).expect("init");
+
+        assert!(first.id.is_some(), "init records an id");
+        assert_eq!(read_manifest(&dir.path().join("a")).expect("manifest").id, first.id);
+        assert_ne!(first.id, second.id, "two workspaces never share an id");
+    }
+
+    #[tokio::test]
+    async fn open_keeps_the_id_init_recorded() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        let manifest = Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+
+        let opened = Workspace::open(&ws, &operator(), &WorkspaceDefaults::default())
+            .await
+            .expect("open");
+
+        assert_eq!(Some(opened.id()), manifest.id);
+    }
+
+    #[tokio::test]
+    async fn open_records_an_id_for_a_workspace_that_has_none() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        let mut manifest = Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+        manifest.id = None;
+        super::write_manifest(&ws, &manifest).expect("write");
+
+        let first = Workspace::open(&ws, &operator(), &WorkspaceDefaults::default())
+            .await
+            .expect("open")
+            .id();
+        let again = Workspace::open(&ws, &operator(), &WorkspaceDefaults::default())
+            .await
+            .expect("open")
+            .id();
+
+        assert_eq!(
+            read_manifest(&ws).expect("manifest").id,
+            Some(first),
+            "the minted id is persisted"
+        );
+        assert_eq!(first, again, "a later open keeps it");
     }
 
     #[test]

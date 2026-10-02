@@ -650,3 +650,46 @@ async fn a_backup_keeps_every_record_origin_and_import_run() {
         list_datasets(&source).await.expect("datasets")
     );
 }
+
+#[tokio::test]
+async fn a_restore_keeps_the_workspace_id() {
+    let fixture = backed_up(false).await;
+    let target = fixture.home.path().join("restored");
+    restore_backup(&restore_request(&fixture.config, &fixture.archive, &target))
+        .await
+        .expect("restore");
+
+    assert_eq!(
+        open(&target).await.id(),
+        fixture.source.id(),
+        "a restore continues the same tree"
+    );
+}
+
+#[tokio::test]
+async fn a_backup_taken_before_workspace_ids_restores_with_an_id_of_its_own() {
+    let home = tempfile::tempdir().expect("tempdir");
+    let source = seeded_workspace(home.path()).await;
+    let manifest = source.dir().join("workspace.toml");
+    let text = fs::read_to_string(&manifest).expect("manifest");
+    let mut without_id = String::new();
+    for line in text.lines().filter(|line| !line.starts_with("id = ")) {
+        without_id.push_str(line);
+        without_id.push('\n');
+    }
+    assert_ne!(without_id, text, "the manifest carried an id");
+    fs::write(&manifest, without_id).expect("write manifest");
+    let archive = home.path().join("old.vitni-backup");
+    create_backup(&source, &backup_request(&archive, false))
+        .await
+        .expect("backup");
+    let target = home.path().join("restored");
+
+    restore_backup(&restore_request(&home.path().join("config.toml"), &archive, &target))
+        .await
+        .expect("restore");
+
+    let restored = fs::read_to_string(target.join("workspace.toml")).expect("restored manifest");
+    let restored_id = open(&target).await.id();
+    assert!(restored.contains(&format!("id = \"{restored_id}\"")), "{restored}");
+}

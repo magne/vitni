@@ -346,7 +346,7 @@ mod tests {
             id: "sample".to_owned(),
             version: "0.1.0".to_owned(),
             role: PluginRole::BulkImport,
-            host_api_version: "0.25.0".to_owned(),
+            host_api_version: "0.26.0".to_owned(),
             capabilities,
             trust,
             bundle_dir: PathBuf::from("/tmp/sample"),

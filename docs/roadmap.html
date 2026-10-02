@@ -629,6 +629,8 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Phase 14 (0.10), 1.0</td><td>ADR 0010, 0018 &sect;3</td></tr>
     <tr><td><b><a href="adr/0042-test-fixture-provenance.md">ADR 0042</a></b> &mdash; accepted</td><td>Test fixture provenance: four committable origins declared in <code>PROVENANCE.toml</code>, an external fetched tier for third-party pages, fail-closed generation from them, no history rewrite for the pre-ADR captures</td>
       <td>0.9.1 &mdash; Fixture provenance</td><td>ADR 0034</td></tr>
+    <tr><td><b><a href="adr/0043-workspace-id-names-its-exports.md">ADR 0043</a></b> &mdash; accepted</td><td>A workspace id in <code>workspace.toml</code>, minted once, never adopted by an import, kept by a restore; exporters read it through <code>export-sink.workspace-id</code> and the GEDCOM exporter writes it as <code>HEAD.FILE</code></td>
+      <td>Phase 14 (0.10)</td><td>ADR 0005, 0013, 0037, 0041</td></tr>
     <tr><td><b>ADR 0031</b></td><td>Place model for real-world administrative geography: reopen the <code>Multi*</code> geometry variant, add a civil/ecclesiastical/judicial <code>relation</code> to <code>PlaceRef</code>, and carry positional accuracy separately from <code>Confidence</code></td>
       <td>Phase 9 residual closure</td><td>ADR 0024, 0026, 0027</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>

@@ -701,6 +701,10 @@ the host proposes the lineage holding the file's people and families under the s
 (never on shared file-local ids alone), and the
 operator confirms it — the bulk-import confirm starts on it with the evidence, the CLI asks, and
 `--yes` accepts. Re-run fixtures per importer prove stable item keys.
+✅ Vitni exports name their workspace (ADR 0043, #463): `workspace.toml` carries a UUID v7 `id`,
+minted at `init` (or on first open of an older workspace) and kept by a restore; host-api 0.26.0's
+`export-sink.workspace-id` hands it to exporters, and the GEDCOM exporter writes it as `HEAD.FILE`, so
+a later export of one workspace is proposed the dataset its first export went into.
 
 ## Risk register
 
@@ -754,6 +758,7 @@ they are confirmed when the ADR is written.
 | [ADR 0040](adr/0040-staged-import-plan-review-commit.md) — **accepted** | Staged import: WIT record graphs, the host `ImportPlan`, per-kind decision semantics, host-owned match stages, resumable commit | Phase 14 (`0.10`) | ADR 0013, 0017 |
 | [ADR 0041](adr/0041-workspace-backup-and-restore.md) — **accepted** | Workspace backup and restore: the event-log archive, restore-time upgraders, the pre-1.0 two-version window, the v1 freeze at 1.0, golden fixtures | Phase 14 (`0.10`), `1.0` | ADR 0010, 0018 §3 |
 | [ADR 0042](adr/0042-test-fixture-provenance.md) — **accepted** | Test fixture provenance: four committable origins declared in `PROVENANCE.toml`, an external fetched tier for third-party pages, fail-closed generation from them, no history rewrite for the pre-ADR captures | `0.9.1 — Fixture provenance` | ADR 0034 |
+| [ADR 0043](adr/0043-workspace-id-names-its-exports.md) — **accepted** | A workspace id in `workspace.toml`, minted once, never adopted by an import, kept by a restore; exporters read it through `export-sink.workspace-id` and the GEDCOM exporter writes it as `HEAD.FILE` | Phase 14 (`0.10`) | ADR 0005, 0013, 0037, 0041 |
 | ADR 0031 | Place model for real-world administrative geography: reopen the `Multi*` geometry variant, add a civil/ecclesiastical/judicial `relation` to `PlaceRef`, and carry positional accuracy separately from `Confidence` | Phase 9 residual closure | ADR 0024, 0026, 0027 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 
