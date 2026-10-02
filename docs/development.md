@@ -53,6 +53,7 @@ cargo xtask fmt                                                      # rustfmt t
 cargo deny --all-features check                                      # advisories, licences, bans
 cargo xtask check                                                    # every static check, in one pass
 cargo xtask build-plugins                                            # plugins/* → target/plugins
+cargo xtask clean                                                    # free disk without a dependency rebuild
 cargo xtask icons                                                    # SVG icon sources → installed PNGs
 cargo xtask backup-fixture                                           # regenerate the golden backup fixture
 cargo xtask match-eval                                               # score the matching evaluation corpus
@@ -62,6 +63,17 @@ prek run                                                             # the git h
 **Always pass `--workspace`** (or `-p`, or `--all` for `fmt`). `default-members` is
 `crates/vitni-cli`, so a bare `cargo test` or `cargo clippy` silently covers that one crate and
 skips everything else, including `xtask`.
+
+A full `--workspace --all-features` build can fill the disk: every test target and feature set links
+its own executable into `target/debug/deps`, and `target/debug/incremental` grows alongside.
+`cargo xtask clean` deletes those — each profile's `incremental/` cache and the extensionless linked
+executables in `deps/` (bar those cargo hard-links to the profile root, which would free nothing), in the workspace `target/` and every `plugins/*/target/` — plus the regenerable
+run output (`target/gui-pass`, `screenshots`, `doc`, `criterion`, `flycheck0`, `tmp`). It keeps every
+`.rlib`/`.rmeta` and build-script output, so the next build recompiles and relinks only the workspace's
+own crates, and it keeps `target/plugins` and `target/external-fixtures`, so tests still run.
+`--full` deletes those two as well; `--dry-run` reports what would go and deletes nothing. It deletes
+outright rather than moving to the trash, which sits on the same full filesystem. `cargo clean` is the
+last resort: it forces every dependency to rebuild.
 
 `--lib --bins --tests` deliberately excludes `benches/`: the `vitni-db` benchmarks take about
 140 s each. Clippy still lints them through `--all-targets`. Run them deliberately:

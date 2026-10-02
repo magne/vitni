@@ -761,25 +761,6 @@ The `area/docs` label already existed with no `###` home; this is it.
   `vitni-digitalarkivet` specifically: the National Archives' service name in a paid product's
   title.
 
-- **`cargo xtask clean`: free disk without a full rebuild** — a full `--workspace --all-features` build
-  fills `/home`: `target/debug` has reached 196G, mostly the linked test executables in
-  `target/debug/deps` (one per target and feature set, ~1 GB each for `vitni-ui-dioxus`, 216G once) and
-  `target/debug/incremental` (46G). `cargo clean` frees all of it but forces a rebuild of every
-  dependency and wipes `target/plugins`, after which tests fail until `cargo xtask build-plugins` runs.
-  `cargo sweep` is the wrong tool: everything written today survives `--time`, and `--maxsize` falls back
-  to "older than a few seconds", which is a full rebuild. Each `plugins/*` crate has its own `target/`
-  (0.6–1.4G apiece) that none of these touch. *Shape:* `cargo xtask clean` deletes, for every profile of
-  the workspace `target/` and each `plugins/*/target/`, the `incremental/` caches and the linked
-  executables under `deps/` (files with no extension), keeping every `.rlib`/`.rmeta` and build-script
-  output, so the next build relinks and recompiles only workspace crates. It also deletes regenerable
-  run output: `target/gui-pass`, `target/screenshots`, `target/doc`, `target/criterion`,
-  `target/flycheck0` and `target/tmp`. It keeps `target/plugins` and the fixtures fetched from external
-  sources (`target/external-fixtures`, written by `cargo xtask fetch-fixtures`); `--full` deletes those as
-  well. It prints what it freed per directory, and `--dry-run` only reports. It deletes through `std::fs`,
-  not by moving to the trash, which is on the same full filesystem. *Exit:* after `cargo xtask clean`,
-  `cargo nextest run --workspace --all-features --lib --bins --tests` passes without recompiling a
-  dependency, and `cargo xtask build-plugins` recompiles no plugin dependency. — #465
-
 ## Decided — no action needed
 
 Deliberate non-tasks, recorded so they are not re-raised or read as unfinished work. Each is a
