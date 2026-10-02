@@ -17,5 +17,6 @@ pub mod place;
 pub mod plugin;
 pub mod repository;
 pub mod research_note;
+pub mod review;
 pub mod source;
 pub mod tag;

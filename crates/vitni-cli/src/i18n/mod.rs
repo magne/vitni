@@ -40,6 +40,7 @@ mod dna_match;
 mod dna_test;
 mod event;
 mod family;
+mod import_plan;
 mod import_run;
 mod matching;
 mod media;
@@ -100,6 +101,12 @@ impl Localizer {
             loader,
             surety_overrides: SuretyLabelOverrides::default(),
         }
+    }
+
+    /// The embedded English catalogue alone, for tests independent of the host locale.
+    #[cfg(test)]
+    pub(crate) fn english() -> Self {
+        Self::with_languages(None, &[])
     }
 
     /// Attaches a workspace's resolved surety-scheme label overrides (ADR 0027), consulted by

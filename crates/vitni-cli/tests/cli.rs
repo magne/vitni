@@ -785,3 +785,86 @@ fn a_new_workspace_is_not_created_for_an_import_naming_a_dataset() {
         .stderr(predicate::str::contains("--dataset"));
     assert!(!target.exists(), "nothing is created when the dataset cannot exist");
 }
+
+/// The stdout of `assert`.
+fn stdout(assert: &assert_cmd::assert::Assert) -> String {
+    String::from_utf8(assert.get_output().stdout.clone()).unwrap()
+}
+
+#[test]
+fn a_plan_of_a_re_import_reports_every_record_unchanged_and_writes_nothing() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    import_tree(dir.path(), &[]).success();
+
+    let plan = import_tree(dir.path(), &["--plan"]).success();
+    let text = stdout(&plan);
+    assert!(text.contains("Plan for tree.ged:"), "{text}");
+    assert!(text.contains("persons: 1 unchanged"), "{text}");
+    assert!(
+        text.contains("Every record is already on record: importing this file writes nothing."),
+        "{text}"
+    );
+    assert!(!text.contains("Imported"), "{text}");
+
+    let json = stdout(&import_tree(dir.path(), &["--plan", "--json"]).success());
+    let plan: serde_json::Value = serde_json::from_str(json.trim()).unwrap();
+    let kinds = plan["kinds"].as_array().unwrap();
+    assert!(!kinds.is_empty(), "{json}");
+    for kind in kinds {
+        for count in ["new", "updated", "linked", "candidates"] {
+            assert_eq!(kind[count], 0, "{count} in {kind}");
+        }
+        assert!(kind["unchanged"].as_u64().unwrap() > 0, "{kind}");
+    }
+
+    let runs = stdout(&vitni(dir.path()).args(["import-run", "list"]).assert().success());
+    assert_eq!(runs.lines().count(), 1, "a plan records no run: {runs}");
+}
+
+#[test]
+fn a_plan_of_a_first_import_shows_its_records_as_new_and_writes_none_of_them() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let text = stdout(&import_tree(dir.path(), &["--plan"]).success());
+    assert!(text.contains("persons: 1 new"), "{text}");
+    vitni(dir.path())
+        .args(["person", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Smith").not());
+}
+
+#[test]
+fn json_needs_plan_and_plan_needs_an_existing_workspace() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    import_tree(dir.path(), &["--json"]).failure();
+    import_tree(dir.path(), &["--plan", "--defer-matches"]).failure();
+
+    let file = dir.path().join("tree.ged");
+    let target = dir.path().join("fresh");
+    vitni(dir.path())
+        .args(["import", "gedcom-import"])
+        .arg(&file)
+        .arg("--new")
+        .arg("fresh")
+        .arg(&target)
+        .arg("--plan")
+        .assert()
+        .failure();
+    assert!(!target.exists(), "a plan creates no workspace");
+}
+
+#[test]
+fn deferring_the_matches_imports_a_second_tree_of_the_same_people_as_new() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    import_tree(dir.path(), &[]).success();
+    let other = TREE.replace("1 FILE tree.ged", "1 FILE other.ged");
+    import_text(dir.path(), &other, &["--yes", "--new-dataset", "--defer-matches"])
+        .success()
+        .stdout(predicate::str::contains("Imported 1 record(s)"));
+    let persons = stdout(&vitni(dir.path()).args(["person", "list"]).assert().success());
+    assert_eq!(persons.matches("Smith").count(), 2, "{persons}");
+}

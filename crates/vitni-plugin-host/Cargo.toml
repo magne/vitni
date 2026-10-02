@@ -15,7 +15,7 @@ wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true }
 # `process`/`fs` back the `ai` command runner and vision-api file read (ADR 0017 §4); `time` backs the
 # net/ai host-side request timeouts.
-tokio = { workspace = true, features = ["process", "fs", "time"] }
+tokio = { workspace = true, features = ["process", "fs", "time", "sync"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }

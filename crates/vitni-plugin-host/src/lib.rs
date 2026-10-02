@@ -51,7 +51,7 @@ pub use crate::discovery::{PluginInfo, PluginRole};
 pub use crate::error::PluginError;
 pub use crate::net::{HostPattern, NetPolicy};
 pub use crate::present::{PresentError, Presenter};
-pub use crate::review::{DeferMatches, PlanReviewer};
+pub use crate::review::{DeferMatches, PlanReviewer, ReviewRequest, channel_reviewer};
 pub use crate::run::{ConfirmDataset, ImportRunSpec, RunDataset};
 pub use crate::trust::{TrustRoots, TrustTier, classify, resolve_trust_roots};
 

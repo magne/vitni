@@ -28,10 +28,13 @@ rust-embed = { workspace = true }
 unic-langid = { workspace = true }
 icu = { workspace = true }
 uuid = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
 predicates = { workspace = true }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 uuid = { workspace = true }
 
