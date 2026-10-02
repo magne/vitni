@@ -7,9 +7,10 @@
 //! what each entity became.
 
 use vitni_app::{
-    CommitControl, CommitOutcome, EntityFields, EntityRef, ImportPlan, LinkKind, NewFact, PlanError, RecordGraph,
-    RunToEnd, StagedCitation, StagedEntity, StagedEvent, StagedFamily, StagedLink, StagedMedia, StagedNote,
-    StagedPerson, StagedPlace, StagedRepository, StagedSource, StagedTag, Timestamp, commit_import, plan_import,
+    CommitControl, CommitOutcome, EntityFields, EntityRef, ImportPlan, ImportReview, LinkKind, MatchReply, NewFact,
+    PairAnswer, PlanError, RecordGraph, StagedCitation, StagedEntity, StagedEvent, StagedFamily, StagedLink,
+    StagedMedia, StagedNote, StagedPerson, StagedPlace, StagedRepository, StagedSource, StagedTag, Timestamp,
+    commit_import, plan_import,
 };
 use vitni_core::matching::MatchableKind;
 
@@ -91,14 +92,46 @@ impl HostState {
         Ok(())
     }
 
-    /// Plans `graphs` as one and commits them at once, returning what each of their entities became.
+    /// Plans `graphs` as one, asks the user about each possible match through the frontend (ADR 0040
+    /// §4), and commits them at once, returning what each of their entities became — or that the user
+    /// skipped the record or cancelled the session there, writing nothing. With no frontend to ask,
+    /// every possible match is left for later.
     async fn commit_now(&mut self, graphs: Vec<RecordGraph>) -> Result<staging::SubmitOutcome, types::CapabilityError> {
         let template = self.provenance();
-        let (workspace, session) = (&self.workspace, &self.session);
-        let plan = plan_import(workspace, session, graphs, self.file_asserted_at)
+        let mut review = ImportReview::plan(&self.workspace, &self.session, graphs, self.file_asserted_at)
             .await
             .map_err(|error| plan_capability_error(&error))?;
-        match commit_import(workspace, session, &plan, &template, &mut RunToEnd).await {
+        while let Some(question) = review
+            .next_question(&self.workspace)
+            .await
+            .map_err(|error| to_capability_error(&error))?
+        {
+            let reply = match self.io.presenter.as_mut() {
+                Some(presenter) => presenter
+                    .review_match(question)
+                    .await
+                    .map_err(|error| types::CapabilityError::Backend(error.to_string()))?,
+                None => MatchReply::Pair(Box::new(PairAnswer::Later)),
+            };
+            let answer = match reply {
+                MatchReply::Pair(answer) => *answer,
+                MatchReply::Skip => return Ok(staging::SubmitOutcome::Skipped),
+                MatchReply::Cancel => return Ok(staging::SubmitOutcome::Cancelled),
+            };
+            review
+                .answer(&self.workspace, &self.session, answer)
+                .await
+                .map_err(|error| plan_capability_error(&error))?;
+        }
+        let operator = self
+            .run
+            .as_ref()
+            .map_or_else(|| self.session.clone(), |run| run.pending().operator().clone());
+        let plan = review.plan_so_far().clone();
+        match review
+            .commit(&self.workspace, &self.session, &operator, &template)
+            .await
+        {
             Ok(outcome) => {
                 self.absorb(&outcome);
                 Ok(staging::SubmitOutcome::Committed(committed(&plan, &outcome)))

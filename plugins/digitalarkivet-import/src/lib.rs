@@ -28,15 +28,15 @@ wit_bindgen::generate!({
     world: "assisted-import",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.27.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.27.0": vitni_plugin_api::log,
-        "vitni:host-api/query@0.27.0": vitni_plugin_api::query,
-        "vitni:host-api/staging@0.27.0": vitni_plugin_api::staging,
-        "vitni:host-api/progress@0.27.0": vitni_plugin_api::progress,
-        "vitni:host-api/net@0.27.0": vitni_plugin_api::net,
-        "vitni:host-api/media-store@0.27.0": vitni_plugin_api::media_store,
-        "vitni:host-api/ai@0.27.0": vitni_plugin_api::ai,
-        "vitni:host-api/present@0.27.0": vitni_plugin_api::present,
+        "vitni:host-api/types@0.28.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.28.0": vitni_plugin_api::log,
+        "vitni:host-api/query@0.28.0": vitni_plugin_api::query,
+        "vitni:host-api/staging@0.28.0": vitni_plugin_api::staging,
+        "vitni:host-api/progress@0.28.0": vitni_plugin_api::progress,
+        "vitni:host-api/net@0.28.0": vitni_plugin_api::net,
+        "vitni:host-api/media-store@0.28.0": vitni_plugin_api::media_store,
+        "vitni:host-api/ai@0.28.0": vitni_plugin_api::ai,
+        "vitni:host-api/present@0.28.0": vitni_plugin_api::present,
     },
 });
 
@@ -236,7 +236,8 @@ fn review(record: &PersonRecord, scan_url: Option<&str>, session: &mut Session) 
 /// source, the scan, the birth, and the census (with the household's family) or the church-book event
 /// — under the record's origin, so a re-run writes only what changed (ADR 0037 §4). The source,
 /// repository, scan, events, places and family it references go with it, so a record the host
-/// withholds withholds them too.
+/// withholds withholds them too. The host may ask the user about the record's possible matches first
+/// (ADR 0040 §4); a record skipped or a session cancelled there writes nothing.
 fn import(
     record: &PersonRecord,
     scan_url: Option<&str>,
@@ -302,7 +303,16 @@ fn import(
         );
     }
     add_record_content(&mut graph, &mut references, &record, &person);
-    let human_id = committed(&graph.submit_with(references.into_graphs())?, &record.external_id.value)?;
+    let human_id = match graph.submit_with(references.into_graphs())? {
+        SubmitOutcome::Skipped => {
+            session.skipped += 1;
+            return Ok(Outcome::Skipped);
+        }
+        SubmitOutcome::Cancelled => return Ok(Outcome::Cancelled),
+        outcome @ (SubmitOutcome::Staged | SubmitOutcome::Committed(_)) => {
+            committed(&outcome, &record.external_id.value)?
+        }
+    };
     session.imported.push((human_id, record.name));
     Ok(Outcome::Imported)
 }

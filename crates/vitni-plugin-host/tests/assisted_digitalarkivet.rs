@@ -22,15 +22,17 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use uuid::Uuid;
 use vitni_app::{
-    AiConfig, AppDefaults, ChosenDataset, Confidence, DatasetId, EventSummary, ExternalId, ImportRunStatus, NewPerson,
-    OperatorConfig, PersonNameParts, Provenance, Rect, Session, Workspace, WorkspaceDefaults, change_log_for_person,
-    create_person, list_citations, list_events, list_families, list_import_runs, list_media, list_persons, list_places,
-    list_repositories, list_sources,
+    AiConfig, AppDefaults, ChosenDataset, Confidence, DatasetId, EventSummary, ExternalId, IdentityDecision,
+    ImportRunStatus, MatchQuestion, MatchReply, NewPerson, OperatorConfig, PairAnswer, PairDecision, PersonNameParts,
+    Provenance, Rect, Session, Workspace, WorkspaceDefaults, change_log_for_person, create_person, list_citations,
+    list_events, list_families, list_import_runs, list_media, list_persons, list_places, list_repositories,
+    list_sources,
 };
 use vitni_core::date::{DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::enums::EvidenceLevel;
 use vitni_core::enums::{EventType, ParticipantRole, PlaceType};
 use vitni_core::ids::AgentId;
+use vitni_core::matching::MatchableKind;
 use vitni_core::provenance::{Agent, AgentKind};
 use vitni_plugin_host::{
     Capability, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PluginError, PresentError, Presenter,
@@ -197,10 +199,16 @@ async fn mount(server: &MockServer, regex: &str, body: String) {
 /// A reply closure: the wizard's answer to a presented payload.
 type Reply = Box<dyn FnMut(&str) -> Result<String, PresentError> + Send>;
 
-/// A presenter scripted by a reply closure over the payload's `kind`, recording every payload it saw.
+/// The wizard's answer to the host's match stage.
+type MatchAnswer = Box<dyn FnMut(&MatchQuestion) -> MatchReply + Send>;
+
+/// A presenter scripted by a reply closure over the payload's `kind`, recording every payload it saw,
+/// and answering every match question *Decide later* unless told otherwise.
 struct ScriptedPresenter {
     seen: Arc<Mutex<Vec<String>>>,
     reply: Reply,
+    questions: Arc<Mutex<Vec<MatchQuestion>>>,
+    answer: MatchAnswer,
 }
 
 impl ScriptedPresenter {
@@ -212,9 +220,21 @@ impl ScriptedPresenter {
             Self {
                 seen: Arc::clone(&seen),
                 reply: Box::new(reply),
+                questions: Arc::new(Mutex::new(Vec::new())),
+                answer: Box::new(|_| MatchReply::Pair(Box::new(PairAnswer::Later))),
             },
             seen,
         )
+    }
+
+    /// This presenter, answering each match question with `answer`; returns the questions it is asked.
+    fn answering(
+        mut self,
+        answer: impl FnMut(&MatchQuestion) -> MatchReply + Send + 'static,
+    ) -> (Self, Arc<Mutex<Vec<MatchQuestion>>>) {
+        self.answer = Box::new(answer);
+        let questions = Arc::clone(&self.questions);
+        (self, questions)
     }
 }
 
@@ -223,6 +243,12 @@ impl Presenter for ScriptedPresenter {
     async fn present(&mut self, payload: String) -> Result<String, PresentError> {
         self.seen.lock().expect("seen lock").push(payload.clone());
         (self.reply)(&payload)
+    }
+
+    async fn review_match(&mut self, question: MatchQuestion) -> Result<MatchReply, PresentError> {
+        let reply = (self.answer)(&question);
+        self.questions.lock().expect("questions lock").push(question);
+        Ok(reply)
     }
 }
 
@@ -326,6 +352,7 @@ async fn imports_a_census_person_with_source_citation_and_cropped_media() {
     let (root, _dir) = init_workspace();
     let server = census_server().await;
     let (presenter, seen) = ScriptedPresenter::new(|payload| Ok(single_person_reply(payload)));
+    let (presenter, questions) = presenter.answering(|_| MatchReply::Cancel);
 
     let summary = run(
         (open_workspace(&root).await, grants(&[])),
@@ -336,6 +363,10 @@ async fn imports_a_census_person_with_source_citation_and_cropped_media() {
     .await
     .expect("assisted import runs");
 
+    assert!(
+        questions.lock().expect("questions").is_empty(),
+        "a record with no possible match asks nothing"
+    );
     // The plugin presented confirm → save-scan → summary.
     let kinds: Vec<String> = seen.lock().expect("seen").iter().map(|p| kind_of(p)).collect();
     assert_eq!(
@@ -1312,4 +1343,138 @@ async fn events_contain(root: &Path, needle: &str) -> bool {
         .expect("read events");
     pool.close().await;
     payloads.iter().any(|payload| payload.contains(needle))
+}
+
+// ----- the host's match stage (ADR 0040 §4) -----
+
+/// The census person's confirm, unedited, then the scan saved and the summary closed.
+fn unedited_reply(payload: &str) -> String {
+    match kind_of(payload).as_str() {
+        "confirm-record" => json!({ "kind": "submit", "action": "import", "values": {} }).to_string(),
+        "save-scan" => save_response(payload),
+        _ => done(),
+    }
+}
+
+/// A person entered by hand with the census person's name, and no external id: a possible match.
+async fn stored_namesake(workspace: &Workspace) -> String {
+    let human = Session::new(Agent {
+        kind: AgentKind::Human,
+        id: AgentId::from_uuid(Uuid::from_u128(1)),
+        display: Some("Tester".to_owned()),
+    });
+    let new = NewPerson {
+        human_id: None,
+        name: Some(PersonNameParts::simple(
+            Some("Ola Eksempelsen".to_owned()),
+            Some("Fjellstue".to_owned()),
+        )),
+        evidence_level: EvidenceLevel::Persona,
+        external_ids: Vec::new(),
+    };
+    create_person(workspace, &human, new, Provenance::default(), &[])
+        .await
+        .expect("person")
+}
+
+/// The census person the import wrote, by its Digitalarkivet id.
+async fn imported_person(workspace: &Workspace) -> Option<String> {
+    let view = workspace
+        .store()
+        .find_person_by_external_id("digitalarkivet", "pf01099901000101")
+        .await
+        .expect("lookup")?;
+    view.human_id().map(|id| id.as_str().to_owned())
+}
+
+#[tokio::test]
+async fn a_possible_match_is_asked_about_and_same_merges_the_record_into_it() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    let workspace = open_workspace(&root).await;
+    let stored = stored_namesake(&workspace).await;
+    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(unedited_reply(payload)));
+    let (presenter, questions) = presenter.answering(|question| {
+        let answer = if question.kind == MatchableKind::Person {
+            PairAnswer::Same(IdentityDecision::default())
+        } else {
+            PairAnswer::Later
+        };
+        MatchReply::Pair(Box::new(answer))
+    });
+
+    run((workspace, grants(&[])), &server, "census-person", presenter)
+        .await
+        .expect("assisted import runs");
+
+    let asked = questions.lock().expect("questions").clone();
+    let person = asked
+        .iter()
+        .find(|question| question.kind == MatchableKind::Person)
+        .expect("asked about the person");
+    assert_eq!(person.candidate.human_id, stored);
+    let workspace = open_workspace(&root).await;
+    let imported = imported_person(&workspace).await.expect("the record was imported");
+    assert_ne!(imported, stored, "the record keeps its own persona");
+    assert_eq!(
+        vitni_app::pair_decision(&workspace, &stored, &imported)
+            .await
+            .expect("decision"),
+        Some(PairDecision::SameCluster)
+    );
+}
+
+#[tokio::test]
+async fn skipping_at_the_match_stage_writes_nothing_of_the_record() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    let workspace = open_workspace(&root).await;
+    stored_namesake(&workspace).await;
+    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(unedited_reply(payload)));
+    let (presenter, questions) = presenter.answering(|_| MatchReply::Skip);
+
+    let summary = run((workspace, grants(&[])), &server, "census-person", presenter)
+        .await
+        .expect("assisted import runs");
+
+    assert_eq!(
+        questions.lock().expect("questions").len(),
+        1,
+        "asked once, then skipped"
+    );
+    assert!(
+        summary.contains("\"skipped\":1"),
+        "the record counts as skipped: {summary}"
+    );
+    let workspace = open_workspace(&root).await;
+    assert_eq!(imported_person(&workspace).await, None);
+    assert_eq!(list_persons(&workspace).await.expect("persons").len(), 1);
+    assert_eq!(
+        list_sources(&workspace).await.expect("sources").len(),
+        0,
+        "no source written"
+    );
+}
+
+#[tokio::test]
+async fn cancelling_at_the_match_stage_ends_the_session_writing_nothing() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    let workspace = open_workspace(&root).await;
+    stored_namesake(&workspace).await;
+    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(unedited_reply(payload)));
+    let (presenter, _questions) = presenter.answering(|_| MatchReply::Cancel);
+
+    let summary = run((workspace, grants(&[])), &server, "census-person", presenter)
+        .await
+        .expect("assisted import runs");
+
+    assert!(summary.contains("\"imported\":[]"), "nothing imported: {summary}");
+    let workspace = open_workspace(&root).await;
+    assert_eq!(list_persons(&workspace).await.expect("persons").len(), 1);
+    assert_eq!(
+        list_sources(&workspace).await.expect("sources").len(),
+        0,
+        "no source written"
+    );
 }

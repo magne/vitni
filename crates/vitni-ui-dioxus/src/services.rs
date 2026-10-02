@@ -19,11 +19,11 @@ use tokio::sync::{mpsc, oneshot};
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
     AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetProposal,
-    DatasetScope, FileConfigStore, IdFormats, LocaleDefaults, MapConfig, MapProvider, MapSource, PluginTrust,
-    PluginTrustConfig, PreferenceLayers, ResolvedLocale, RestoreReport, RestoreRequest, Session, ShortcutConfig,
-    SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
-    read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides,
-    workspace_counts,
+    DatasetScope, FileConfigStore, IdFormats, LocaleDefaults, MapConfig, MapProvider, MapSource, MatchQuestion,
+    MatchReply, PairAnswer, PluginTrust, PluginTrustConfig, PreferenceLayers, ResolvedLocale, RestoreReport,
+    RestoreRequest, Session, ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts,
+    WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers, read_resolved_locale,
+    read_resolved_surety_labels, read_surety_label_overrides, workspace_counts,
 };
 use vitni_plugin_host::{
     Capability, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PluginHost, PluginInfo,
@@ -890,6 +890,10 @@ impl Presenter for ChannelPresenter {
         response
             .await
             .map_err(|_| PresentError::Backend("the import wizard dropped the response channel".to_owned()))
+    }
+
+    async fn review_match(&mut self, _question: MatchQuestion) -> Result<MatchReply, PresentError> {
+        Ok(MatchReply::Pair(Box::new(PairAnswer::Later)))
     }
 }
 
