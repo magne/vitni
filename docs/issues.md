@@ -505,7 +505,7 @@ does.
   and links among new records to the persona. A person decided *Same* in the assisted Match stage already
   gets one: it is imported as new and merged into the candidate after the commit. *Shape:* the same for a
   `Link`, with that routing. *Exit:* re-importing a person
-  from a second dataset leaves two persons in one cluster, each with its own record's facts.
+  from a second dataset leaves two persons in one cluster, each with its own record's facts. — #477
 - **The origin index is written after the event commit** — ADR 0040 §5. `RecordOriginsQuery`
   (`vitni-db/src/record_origins/sqlite.rs:75`) indexes an aggregate's events in a cqrs-es query run
   after the events commit, logging a failure. A process killed between the two leaves an aggregate no
