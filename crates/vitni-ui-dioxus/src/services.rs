@@ -31,12 +31,11 @@ use vitni_plugin_host::{
     ReviewRequest, RunDataset, TrustRoots, TrustTier, channel_reviewer, resolve_trust_roots,
 };
 use vitni_ui::{
-    Category, CitationChangeSetRequest, DataQualityVm, DistinguishPersons, DnaMatchChangeSetRequest,
-    DnaTestChangeSetRequest, EventChangeSetRequest, FamilyChangeSetRequest, ImportTargetChoice, Intent, IntentOutcome,
-    Localizer, MediaChangeSetRequest, MergeFailure, MergePersons, MergeResultVm, NewRecordRequest,
-    NoteChangeSetRequest, Panel, PersonChangeSetRequest, PlaceChangeSetRequest, ProvenanceDraft,
-    RepositoryChangeSetRequest, ResearchNoteChangeSetRequest, RowVm, SourceChangeSetRequest, SubmitResult,
-    TagChangeSetRequest, list_intent,
+    Category, CitationChangeSetRequest, DataQualityVm, DecideMatch, DnaMatchChangeSetRequest, DnaTestChangeSetRequest,
+    EventChangeSetRequest, FamilyChangeSetRequest, ImportTargetChoice, Intent, IntentOutcome, Localizer,
+    MediaChangeSetRequest, MergeFailure, NewRecordRequest, NoteChangeSetRequest, Panel, PersonChangeSetRequest,
+    PlaceChangeSetRequest, ProvenanceDraft, RepositoryChangeSetRequest, ResearchNoteChangeSetRequest, RowVm,
+    SourceChangeSetRequest, SubmitResult, TagChangeSetRequest, list_intent,
 };
 
 use crate::detail_aggregates::for_each_detail_aggregate;
@@ -308,50 +307,19 @@ pub async fn resolve_record_name(services: Services, category: Category, human_i
     }
 }
 
-/// Merges two persons through `vitni_ui::dispatch_merge`, returning the localized outcome or a
-/// [`MergeFailure`] — a resolvable [`Blocked`](MergeFailure::Blocked) conflict (the screen shows a
-/// blocked card) or any [`Other`](MergeFailure::Other) failure (a plain toast). Opens a fresh
-/// workspace and mints a [`Session`] for the operator, matching every other mutating helper here.
-pub async fn merge_persons(services: Services, request: MergePersons) -> Result<MergeResultVm, MergeFailure> {
+/// Decides a pair from the Matches tool through `vitni_ui::dispatch_decide_match`, returning the
+/// localized confirmation or a [`MergeFailure`] — a resolvable [`Blocked`](MergeFailure::Blocked)
+/// refusal (the screen shows a blocked card) or any [`Other`](MergeFailure::Other) failure (a plain
+/// toast). Opens a fresh workspace and mints a [`Session`] for the operator, matching every other
+/// mutating helper here.
+pub async fn decide_match(services: Services, request: DecideMatch) -> Result<String, MergeFailure> {
     let loc = services.localizer();
     let workspace = services
         .open()
         .await
         .map_err(|error| MergeFailure::from_error(&error, &loc))?;
     let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_merge(&workspace, &session, &loc, &request)
-        .await
-        .map_err(|error| MergeFailure::from_error(&error, &loc))
-}
-
-/// Undoes the distinction between two persons and merges them through
-/// `vitni_ui::dispatch_undo_distinction_and_merge`, returning the localized result or a
-/// [`MergeFailure`], like [`merge_persons`].
-pub async fn undo_distinction_and_merge(
-    services: Services,
-    request: MergePersons,
-) -> Result<MergeResultVm, MergeFailure> {
-    let loc = services.localizer();
-    let workspace = services
-        .open()
-        .await
-        .map_err(|error| MergeFailure::from_error(&error, &loc))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_undo_distinction_and_merge(&workspace, &session, &loc, &request)
-        .await
-        .map_err(|error| MergeFailure::from_error(&error, &loc))
-}
-
-/// Records that two persons are different people through `vitni_ui::dispatch_distinguish`, returning
-/// the localized confirmation or a [`MergeFailure`], like [`merge_persons`].
-pub async fn distinguish_persons(services: Services, request: DistinguishPersons) -> Result<String, MergeFailure> {
-    let loc = services.localizer();
-    let workspace = services
-        .open()
-        .await
-        .map_err(|error| MergeFailure::from_error(&error, &loc))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_distinguish(&workspace, &session, &loc, &request)
+    vitni_ui::dispatch_decide_match(&workspace, &session, &loc, &request)
         .await
         .map_err(|error| MergeFailure::from_error(&error, &loc))
 }

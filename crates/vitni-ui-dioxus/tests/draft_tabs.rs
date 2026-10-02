@@ -233,7 +233,7 @@ fn a_seeded_research_note_names_the_draft_it_opened() {
 fn reveal_from_tool_switches_category() -> Element {
     let mut nav = use_context_provider(NavState::new);
     use_hook(move || {
-        nav.go_to(Destination::Tool(Tool::Merge));
+        nav.go_to(Destination::Tool(Tool::Matches));
         nav.reveal_record(record(Category::People, "I0001", "Ada"));
     });
     probe(&nav)

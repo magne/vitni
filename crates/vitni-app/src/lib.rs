@@ -281,6 +281,7 @@ pub use vitni_core::geo::{GeoCoordinates, Microdegrees, PlaceGeometry};
 pub use vitni_core::ids::AgentId;
 pub use vitni_core::ids::ImportRunId;
 pub use vitni_core::ids::PersonId;
+pub use vitni_core::ids::PlaceId;
 pub use vitni_core::import_run::{
     AbandonReason, ImportCounts, ImportRunError, ImportRunStatus, NewImportRun, ResolutionDecision, ResolvedItem,
 };

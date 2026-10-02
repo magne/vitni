@@ -255,7 +255,7 @@ fn rail_lists_every_entity_and_tool() {
         "DNA tests",
         "DNA matches",
         "Pedigree",
-        "Compare / merge",
+        "Matches",
         "Plugins",
         "Preferences",
         "Help",

@@ -311,8 +311,8 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
             | IntentOutcome::DnaMatchDetail(_)
             | IntentOutcome::Pedigree(_)
             | IntentOutcome::Relationship(_)
-            | IntentOutcome::DuplicateCandidates(_)
-            | IntentOutcome::MergeCompare(_)
+            | IntentOutcome::MatchQueue(_)
+            | IntentOutcome::MatchCompare(_)
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},

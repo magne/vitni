@@ -1,7 +1,7 @@
 //! The command palette's framework-neutral model (`docs/mockups/search-palette.html`, ADR 0008).
 //!
 //! The palette blends three kinds of result — records (the loaded entity lists, filtered by the
-//! query), commands (create-a-record, find-duplicates, open-a-tool/help), and the recently-opened
+//! query), commands (create-a-record, review-matches, open-a-tool/help), and the recently-opened
 //! records — into grouped, keyboard-navigable options. All of the decision logic lives here as pure
 //! functions ([`palette_groups`], [`move_active`], [`activate`]) so it is unit-testable without a
 //! renderer; the Dioxus layer only loads the rows, resolves labels, and draws the listbox.
@@ -19,8 +19,8 @@ pub const PALETTE_GROUP_MAX: usize = 5;
 pub enum PaletteCommand {
     /// Create a new record of a category (→ `request_new_for`).
     Create(Category),
-    /// Open the Merge tool's duplicates table (→ `go_to(Tool::Merge)`).
-    FindDuplicates,
+    /// Open the Matches tool's possible-matches queue (→ `go_to(Tool::Matches)`).
+    ReviewMatches,
     /// Open a tool screen (→ `go_to(Tool)`), for the tools without a bespoke command.
     OpenTool(Tool),
     /// Open the in-app help browser (→ `go_to(Destination::Help)`).
@@ -91,9 +91,9 @@ pub enum PaletteAction {
 }
 
 /// The default command list, in palette display order: a Create for every creatable category, then
-/// Find-duplicates, the tool screens (Pedigree/Import/Export/Plugins/Preferences), and Help. The
-/// renderer resolves each command's label. Merge is reached through
-/// [`PaletteCommand::FindDuplicates`], so it is not an [`PaletteCommand::OpenTool`]. Import is the
+/// Review-possible-matches, the tool screens (Pedigree/Import/Export/Plugins/Preferences), and Help. The
+/// renderer resolves each command's label. Matches is reached through
+/// [`PaletteCommand::ReviewMatches`], so it is not an [`PaletteCommand::OpenTool`]. Import is the
 /// assisted-import wizard (ADR 0017); Export is the bulk-export wizard (ADR 0013).
 #[must_use]
 pub fn palette_commands() -> Vec<PaletteCommand> {
@@ -101,7 +101,7 @@ pub fn palette_commands() -> Vec<PaletteCommand> {
     for category in Category::creatable() {
         commands.push(PaletteCommand::Create(category));
     }
-    commands.push(PaletteCommand::FindDuplicates);
+    commands.push(PaletteCommand::ReviewMatches);
     commands.push(PaletteCommand::OpenTool(Tool::Pedigree));
     commands.push(PaletteCommand::OpenTool(Tool::Import));
     commands.push(PaletteCommand::OpenTool(Tool::Export));
@@ -272,7 +272,7 @@ mod tests {
     fn commands() -> Vec<PaletteCommandVm> {
         vec![
             command(PaletteCommand::Create(Category::People), "Create person…"),
-            command(PaletteCommand::FindDuplicates, "Find duplicates"),
+            command(PaletteCommand::ReviewMatches, "Review possible matches"),
             command(PaletteCommand::OpenHelp, "Open help"),
         ]
     }
@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn command_label_matching_is_case_insensitive() {
-        let groups = palette_groups(&[], &commands(), &[], "DUPLICATES");
+        let groups = palette_groups(&[], &commands(), &[], "MATCHES");
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].kind, PaletteGroupKind::Commands);
         assert_eq!(groups[0].entries.len(), 1);
@@ -359,8 +359,8 @@ mod tests {
             PaletteAction::Open(reference) => assert_eq!(reference.human_id, "F0017"),
             PaletteAction::Run(_) => panic!("a recent entry opens a record"),
         }
-        let run = PaletteEntry::Command(command(PaletteCommand::FindDuplicates, "Find duplicates"));
-        assert_eq!(activate(&run), PaletteAction::Run(PaletteCommand::FindDuplicates));
+        let run = PaletteEntry::Command(command(PaletteCommand::ReviewMatches, "Review possible matches"));
+        assert_eq!(activate(&run), PaletteAction::Run(PaletteCommand::ReviewMatches));
     }
 
     #[test]
@@ -372,13 +372,13 @@ mod tests {
                 "missing Create command for {category:?}"
             );
         }
-        assert!(commands.contains(&PaletteCommand::FindDuplicates));
+        assert!(commands.contains(&PaletteCommand::ReviewMatches));
         assert!(commands.contains(&PaletteCommand::OpenTool(Tool::Export)));
         assert!(commands.contains(&PaletteCommand::OpenTool(Tool::Preferences)));
         assert!(commands.contains(&PaletteCommand::OpenHelp));
         assert!(
-            !commands.contains(&PaletteCommand::OpenTool(Tool::Merge)),
-            "Merge is reached via Find duplicates, not an OpenTool command"
+            !commands.contains(&PaletteCommand::OpenTool(Tool::Matches)),
+            "Matches is reached via Review possible matches, not an OpenTool command"
         );
     }
 }

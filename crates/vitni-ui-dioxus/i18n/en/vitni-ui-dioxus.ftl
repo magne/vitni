@@ -54,7 +54,7 @@ nav-tags = Tags
 nav-dna-tests = DNA tests
 nav-dna-matches = DNA matches
 nav-pedigree = Pedigree
-nav-merge = Compare / merge
+nav-matches = Matches
 nav-import = Import
 nav-export = Export
 nav-geography = Geography
@@ -100,7 +100,7 @@ palette-group-recent = Recent
 palette-kind-command = Command
 palette-kind-recent = Recent
 palette-cmd-create = Create { $entity }…
-palette-cmd-find-duplicates = Find duplicates
+palette-cmd-review-matches = Review possible matches
 palette-cmd-open = Open { $target }
 palette-hint-navigate = navigate
 palette-hint-open = open
@@ -385,27 +385,37 @@ prefs-save = Save preferences
 prefs-saved = Preferences saved.
 prefs-save-error = Could not save: { $detail }
 
-# Compare / merge tool chrome (PR 19). The duplicate-match reasons, field labels, and the outcome
+# Matches tool chrome (PR 19, ADR 0039 §3). The duplicate-match reasons, field labels, and the outcome
 # summary live in the vitni-ui catalogue (data, resolved via Localizer) — these are the
 # renderer's table/wizard chrome only.
-merge-duplicates-heading = Possible duplicates
-merge-duplicates-count = { $count } candidate pairs
+merge-duplicates-heading = Possible matches
+merge-duplicates-count = { $count ->
+    [one] 1 undecided pair
+   *[other] { $count } undecided pairs
+}
+merge-col-kind = Kind
+matches-filter-run = Import run
+matches-filter-all-runs = Every run
+matches-filter-kind = Kind
+matches-filter-all-kinds = Every kind
+matches-filter-band = At least
 merge-col-record-a = Record A
 merge-col-record-b = Record B
 merge-col-why = Why
 merge-col-score = Match score
 merge-score-tooltip = Matching-engine score — not the 5-level assertion Confidence
 merge-compare = Compare
-merge-empty-duplicates = No possible duplicates found.
+merge-empty-duplicates = No possible matches: every pair the engine proposes here is decided.
 merge-wizard-heading = Compare & merge — { $a } ⟷ { $b }
 merge-survivor-label = survivor · keeps id
 merge-persona-label = becomes a persona
-merge-back = Back to duplicates
+merge-merged-label = merges into the survivor
+merge-back = Back to matches
 merge-reason-label = Reason for this decision
 merge-reason-hint = (recorded on the decision)
 merge-confidence-label = Confidence
-merge-earlier-distinct-heading = Marked as different people
-merge-earlier-distinct-guidance = An earlier decision says these two are different people, so they cannot be merged as they are. Undoing it and merging records both steps in History.
+merge-earlier-distinct-heading = Marked as not the same
+merge-earlier-distinct-guidance = An earlier decision says these two are not the same, so they cannot be merged as they are. Undoing it and merging records both steps in History.
 merge-undo-distinction = Undo “not the same” and merge
 match-compare-label = Compare the two records
 match-not-recorded = — not recorded

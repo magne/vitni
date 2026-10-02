@@ -21,24 +21,23 @@ use vitni_app::{
     import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
     link_family_event, link_place, link_source_repository, list_citations, list_event_rows, list_family_rows,
     list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories, list_sources,
-    media_claim_owner, note_claim_owner, pair_decision, place_claim_owner, recent_activity, record_origin,
-    remove_child, repository_claim_owner, set_citation_confidence, set_citation_evidence_analysis,
-    set_citation_restrictions, set_event_restrictions, set_family_restrictions, set_media_restrictions,
-    set_note_restrictions, set_note_text, set_note_type, set_page, set_place_restrictions, set_repository_restrictions,
-    set_restrictions, set_source_restrictions, show_citation, show_event, show_family, show_media, show_note,
-    show_person, show_place, show_repository, show_source, source_claim_owner, tag_citation, tag_event, tag_family,
-    tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion,
-    undo_distinction_and_merge, undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion,
-    undo_place_assertion, undo_repository_assertion, undo_research_note_assertion, undo_source_assertion,
-    workspace_counts,
+    media_claim_owner, note_claim_owner, place_claim_owner, recent_activity, record_origin, remove_child,
+    repository_claim_owner, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
+    set_event_restrictions, set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text,
+    set_note_type, set_page, set_place_restrictions, set_repository_restrictions, set_restrictions,
+    set_source_restrictions, show_citation, show_event, show_family, show_media, show_note, show_person, show_place,
+    show_repository, show_source, source_claim_owner, tag_citation, tag_event, tag_family, tag_media, tag_note,
+    tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion, undo_event_assertion,
+    undo_family_assertion, undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion,
+    undo_research_note_assertion, undo_source_assertion, workspace_counts,
 };
 use vitni_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
     commit_person_change_set, set_person_human_id,
 };
 use vitni_app::{
-    MatchBand, MatchableKind, ancestors, assess, check_records, descendants, distinguish_persons, merge_persons,
-    relationship, similar_pairs,
+    DecidableKind, MatchQueueFilter, MatchVerdict, ancestors, assess, check_records, decide_match, descendants,
+    list_import_runs, match_pair_decision, match_queue, relationship, undo_match_distinction_and_merge,
 };
 use vitni_app::{
     NewResearchNote, NewResearchNoteSubject, add_subject_to_research_note, create_research_note, list_research_notes,
@@ -78,21 +77,20 @@ use vitni_app::{
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DistinguishPersons,
-    DnaMatchChangeSetRequest, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftSourceRef,
-    EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent,
-    MediaChangeSetRequest, MediaEdit, MergePersons, NewRecordRequest, NoteChangeSetRequest, NoteEdit, PartnerRequest,
-    PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit,
-    ResearchNoteChangeSetRequest, ResearchNoteEdit, SourceChangeSetRequest, SourceEdit, SubjectRequest,
-    TagChangeSetRequest,
+    Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DecideMatch, DnaMatchChangeSetRequest,
+    DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventChangeSetRequest,
+    EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent, MatchDecision, MediaChangeSetRequest,
+    MediaEdit, NewRecordRequest, NoteChangeSetRequest, NoteEdit, PartnerRequest, PersonChangeSetRequest, PersonEdit,
+    PlaceChangeSetRequest, PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, ResearchNoteChangeSetRequest,
+    ResearchNoteEdit, SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest,
 };
 use crate::view_model::{
-    CitationDetail, CompareSide, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm,
-    EventDetail, FamilyDetail, FamilyVm, GeographyVm, MatchCompareVm, MediaDetail, MediaRefVm, MergeResultVm,
-    NoteDetail, PedigreeVm, PersonDetail, PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail,
-    ResearchNoteDetail, SourceDetail, TagDetail, citation_row, collapse_history, dna_match_row, dna_test_row,
-    event_list_row, event_row, family_list_row, family_row, media_row, note_row, person_list_row, place_row,
-    repository_row, research_note_row, source_row, tag_row,
+    CitationDetail, CompareSide, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, EventDetail, FamilyDetail,
+    FamilyVm, GeographyVm, MatchCompareVm, MatchQueueVm, MediaDetail, MediaRefVm, NoteDetail, PedigreeVm, PersonDetail,
+    PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, ResearchNoteDetail, SourceDetail, TagDetail,
+    citation_row, collapse_history, dna_match_row, dna_test_row, event_list_row, event_row, family_list_row,
+    family_row, media_row, note_row, person_list_row, place_row, repository_row, research_note_row, source_row,
+    tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -142,10 +140,10 @@ pub enum IntentOutcome {
     Pedigree(Box<PedigreeVm>),
     /// The kinship calculator's result for two people.
     Relationship(Box<RelationshipVm>),
-    /// The Merge tool's possible-duplicates table.
-    DuplicateCandidates(Vec<DuplicateCandidateVm>),
-    /// The Merge tool's compare/merge wizard, loaded for a chosen pair.
-    MergeCompare(Box<MatchCompareVm>),
+    /// The Matches tool's possible-matches table (ADR 0039 §3).
+    MatchQueue(Box<MatchQueueVm>),
+    /// The shared compare view, loaded for a chosen pair.
+    MatchCompare(Box<MatchCompareVm>),
     /// The Geography tool's markers, event pins, and time-slider resolution (ADR 0025 §1). The map's
     /// tile provider is deliberately absent: `dispatch` has no config access by design (workspace +
     /// localizer only), so the renderer reads the client-scope `[map]` section itself, the same way the
@@ -258,11 +256,8 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
         Intent::ComputeRelationship { human_id_a, human_id_b } => {
             compute_relationship(workspace, loc, human_id_a, human_id_b).await
         }
-        Intent::ListDuplicateCandidates => list_duplicate_candidates(workspace, loc).await,
-        Intent::MergeCompare {
-            surviving_human_id,
-            merged_human_id,
-        } => merge_compare(workspace, loc, surviving_human_id, merged_human_id).await,
+        Intent::ListMatches { filter } => list_matches(workspace, loc, filter).await,
+        Intent::MatchCompare { kind, left, right } => match_compare(workspace, loc, *kind, left, right).await,
         Intent::ShowGeography { year } => show_geography_view(workspace, loc, *year).await,
     }
 }
@@ -302,133 +297,108 @@ async fn show_data_quality(workspace: &Workspace, loc: &Localizer) -> Result<Int
     Ok(IntentOutcome::DataQuality(Box::new(data_quality)))
 }
 
-/// The matching engine's possible-duplicate person pairs (the Merge tool's landing table).
-async fn list_duplicate_candidates(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
-    let pairs = similar_pairs(workspace, MatchableKind::Person, MatchBand::Possible).await?;
-    let vms = pairs
-        .iter()
-        .map(|pair| DuplicateCandidateVm::build(pair, loc))
-        .collect();
-    Ok(IntentOutcome::DuplicateCandidates(vms))
-}
-
-/// Loads both people's summaries for the Merge tool's compare/merge wizard, with the decision already
-/// taken between their clusters (ADR 0039 §4). Like [`show_pedigree`],
-/// an unknown `human_id` propagates as an [`AppError`] rather than [`IntentOutcome::NotFound`] — the
-/// Merge tool has no per-record detail pane to degrade gracefully into.
-async fn merge_compare(
+/// The possible-matches queue under `filter`, and the import runs it can be narrowed to (the Matches
+/// tool's table).
+async fn list_matches(
     workspace: &Workspace,
     loc: &Localizer,
-    surviving_human_id: &str,
-    merged_human_id: &str,
+    filter: &MatchQueueFilter,
 ) -> Result<IntentOutcome, AppError> {
-    let survivor = show_person(workspace, surviving_human_id)
-        .await?
-        .ok_or_else(|| AppError::PersonNotFound(surviving_human_id.to_owned()))?;
-    let merged = show_person(workspace, merged_human_id)
-        .await?
-        .ok_or_else(|| AppError::PersonNotFound(merged_human_id.to_owned()))?;
-    let assessment = assess(workspace, MatchableKind::Person, surviving_human_id, merged_human_id).await?;
-    let survivor_origin = record_origin(workspace, MatchableKind::Person, surviving_human_id).await?;
-    let merged_origin = record_origin(workspace, MatchableKind::Person, merged_human_id).await?;
-    let survivor_media: Vec<MediaRefVm> = survivor.media.iter().map(MediaRefVm::from_ref).collect();
-    let merged_media: Vec<MediaRefVm> = merged.media.iter().map(MediaRefVm::from_ref).collect();
-    let left = CompareSide {
-        human_id: &survivor.human_id,
-        label: person_label(&survivor),
-        origin: survivor_origin.as_ref(),
-        media: &survivor_media,
+    let queue = match_queue(workspace, filter).await?;
+    let runs = list_import_runs(workspace).await?;
+    Ok(IntentOutcome::MatchQueue(Box::new(MatchQueueVm::build(
+        &queue, &runs, loc,
+    ))))
+}
+
+/// Loads the pair `left`, `right` of `kind` into the shared compare view, with the decision already
+/// taken between their clusters (ADR 0039 §4). Like [`show_pedigree`], an unknown `human_id`
+/// propagates as an [`AppError`] rather than [`IntentOutcome::NotFound`] — the Matches tool has no
+/// per-record detail pane to degrade gracefully into.
+async fn match_compare(
+    workspace: &Workspace,
+    loc: &Localizer,
+    kind: DecidableKind,
+    left: &str,
+    right: &str,
+) -> Result<IntentOutcome, AppError> {
+    let assessment = assess(workspace, kind.matchable(), left, right).await?;
+    let category = Category::from_matchable_kind(kind.matchable());
+    let left_label = resolve_record_name(workspace, loc, category, left).await?;
+    let right_label = resolve_record_name(workspace, loc, category, right).await?;
+    let left_origin = record_origin(workspace, kind.matchable(), left).await?;
+    let right_origin = record_origin(workspace, kind.matchable(), right).await?;
+    let left_media = record_media(workspace, kind, left).await?;
+    let right_media = record_media(workspace, kind, right).await?;
+    let left_side = CompareSide {
+        human_id: left,
+        label: left_label.as_deref().unwrap_or(left),
+        origin: left_origin.as_ref(),
+        media: &left_media,
     };
-    let right = CompareSide {
-        human_id: &merged.human_id,
-        label: person_label(&merged),
-        origin: merged_origin.as_ref(),
-        media: &merged_media,
+    let right_side = CompareSide {
+        human_id: right,
+        label: right_label.as_deref().unwrap_or(right),
+        origin: right_origin.as_ref(),
+        media: &right_media,
     };
-    let mut vm = MatchCompareVm::build(left, right, &assessment, loc);
-    vm.earlier_decision = pair_decision(workspace, surviving_human_id, merged_human_id).await?;
-    Ok(IntentOutcome::MergeCompare(Box::new(vm)))
+    let mut vm = MatchCompareVm::build(left_side, right_side, &assessment, loc);
+    vm.earlier_decision = match_pair_decision(workspace, kind, left, right).await?;
+    Ok(IntentOutcome::MatchCompare(Box::new(vm)))
 }
 
-/// A person's display name, or their id when they have none.
-fn person_label(summary: &vitni_app::PersonSummary) -> &str {
-    summary.display_name.as_deref().unwrap_or(&summary.human_id)
+/// The media attached to the record `human_id` of `kind`, for its side's evidence snippet; none for a
+/// kind that carries no media references.
+async fn record_media(workspace: &Workspace, kind: DecidableKind, human_id: &str) -> Result<Vec<MediaRefVm>, AppError> {
+    let media = match kind {
+        DecidableKind::Person => show_person(workspace, human_id).await?.map(|summary| summary.media),
+        DecidableKind::Family => show_family(workspace, human_id).await?.map(|summary| summary.media),
+        DecidableKind::Event => show_event(workspace, human_id).await?.map(|summary| summary.media),
+        DecidableKind::Place => show_place(workspace, human_id).await?.map(|summary| summary.media),
+        DecidableKind::Source => show_source(workspace, human_id).await?.map(|summary| summary.media),
+        DecidableKind::Citation => show_citation(workspace, human_id).await?.map(|summary| summary.media),
+        DecidableKind::Repository | DecidableKind::Media | DecidableKind::Note => None,
+    };
+    Ok(media.unwrap_or_default().iter().map(MediaRefVm::from_ref).collect())
 }
 
-/// Dispatches a [`MergePersons`] request to `vitni_app::merge_persons`, mutating the workspace.
-///
-/// Unlike [`dispatch`] (a read), this emits an event; the renderer bumps its data version to refresh
-/// the duplicates list afterwards. Returns the localized [`MergeResultVm`] the screen shows as
-/// confirmation.
+/// Dispatches a [`DecideMatch`] request to `vitni_app::decide_match` (or, for
+/// [`MatchDecision::UndoDistinctionAndSame`], `vitni_app::undo_match_distinction_and_merge`), mutating
+/// the workspace. Unlike [`dispatch`] (a read), this emits an event; the renderer bumps its data
+/// version to refresh the queue afterwards. Returns the localized confirmation the screen shows.
 ///
 /// # Errors
 ///
-/// Propagates the [`AppError`] from `merge_persons` (either `human_id` not found, a self-merge or
-/// already-decided domain rejection, or a database failure).
-pub async fn dispatch_merge(
+/// Propagates the [`AppError`] from the use-case (either `human_id` not found, a domain refusal —
+/// see [`AppError::identity_refusal`] — or a database failure).
+pub async fn dispatch_decide_match(
     workspace: &Workspace,
     session: &Session,
     loc: &Localizer,
-    request: &MergePersons,
-) -> Result<MergeResultVm, AppError> {
-    let result = merge_persons(
-        workspace,
-        session,
-        &request.surviving_human_id,
-        &request.merged_human_id,
-        request.judgment.decision(),
-    )
-    .await?;
-    Ok(MergeResultVm::build(&result, loc))
-}
-
-/// Dispatches a [`MergePersons`] request to `vitni_app::undo_distinction_and_merge`: the compare
-/// view's *Undo "not the same" and merge* for a pair an earlier decision held distinct (ADR 0039 §4).
-/// Returns the localized [`MergeResultVm`], like [`dispatch_merge`].
-///
-/// # Errors
-///
-/// Propagates the [`AppError`] from `undo_distinction_and_merge` (either `human_id` not found, a
-/// self-merge or same-cluster domain rejection, or a database failure).
-pub async fn dispatch_undo_distinction_and_merge(
-    workspace: &Workspace,
-    session: &Session,
-    loc: &Localizer,
-    request: &MergePersons,
-) -> Result<MergeResultVm, AppError> {
-    let result = undo_distinction_and_merge(
-        workspace,
-        session,
-        &request.surviving_human_id,
-        &request.merged_human_id,
-        request.judgment.decision(),
-    )
-    .await?;
-    Ok(MergeResultVm::build(&result, loc))
-}
-
-/// Dispatches a [`DistinguishPersons`] request to `vitni_app::distinguish_persons`, mutating the
-/// workspace. Returns the localized confirmation the screen shows as a notice.
-///
-/// # Errors
-///
-/// Propagates the [`AppError`] from `distinguish_persons` (either `human_id` not found, a
-/// self-distinction or already-decided domain rejection, or a database failure).
-pub async fn dispatch_distinguish(
-    workspace: &Workspace,
-    session: &Session,
-    loc: &Localizer,
-    request: &DistinguishPersons,
+    request: &DecideMatch,
 ) -> Result<String, AppError> {
-    distinguish_persons(
-        workspace,
-        session,
-        &request.person_human_id,
-        &request.other_human_id,
-        request.judgment.decision(),
-    )
-    .await?;
-    Ok(loc.distinguish_result_summary(&request.other_human_id, &request.person_human_id))
+    let DecideMatch {
+        kind,
+        left,
+        right,
+        decision,
+        judgment,
+    } = request;
+    let (kind, decided) = (*kind, judgment.decision());
+    match decision {
+        MatchDecision::Same => {
+            decide_match(workspace, session, kind, left, right, MatchVerdict::Same, decided).await?;
+            Ok(loc.match_merged_summary(kind, right, left))
+        }
+        MatchDecision::UndoDistinctionAndSame => {
+            undo_match_distinction_and_merge(workspace, session, kind, left, right, decided).await?;
+            Ok(loc.match_merged_summary(kind, right, left))
+        }
+        MatchDecision::Distinct => {
+            decide_match(workspace, session, kind, left, right, MatchVerdict::Distinct, decided).await?;
+            Ok(loc.match_distinguished_summary(kind, right, left))
+        }
+    }
 }
 
 /// Resolves the current primary display name of the record `(category, human_id)`, or `None` when

@@ -57,8 +57,8 @@ pub fn DashboardScreen() -> Element {
             | IntentOutcome::DnaMatchDetail(_)
             | IntentOutcome::Pedigree(_)
             | IntentOutcome::Relationship(_)
-            | IntentOutcome::DuplicateCandidates(_)
-            | IntentOutcome::MergeCompare(_)
+            | IntentOutcome::MatchQueue(_)
+            | IntentOutcome::MatchCompare(_)
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
@@ -78,7 +78,7 @@ pub fn dashboard_view(
 ) -> Element {
     let stats = &dashboard.stats;
     let (deaths, duplicates) = data_quality.map_or((0, 0), |quality| {
-        (quality.death_before_birth.len(), quality.duplicates.len())
+        (quality.death_before_birth.len(), quality.matches.len())
     });
     rsx! {
         div { style: "padding:var(--sp-6);overflow:auto;height:100%",
@@ -106,6 +106,9 @@ pub fn dashboard_view(
                 div { class: "stack",
                     Card { title: loc.dashboard_label("jump-back"),
                         {jump_back(recent, &dashboard.jump_back)}
+                    }
+                    Card { title: loc.dashboard_label("possible-matches"),
+                        {possible_matches_card(loc, data_quality)}
                     }
                     Card { title: loc.dashboard_label("data-quality"),
                         {data_quality_card(loc, stats.facts_without_source, data_quality)}
@@ -177,8 +180,7 @@ const MAX_FLAGGED_LINKS: usize = 5;
 
 /// The data-quality card: one row per check with its real count and an action. Death-before-birth
 /// lists the flagged persons as navigable links (no list-filter screen exists); facts-without-source
-/// keeps its computed count; possible-duplicates offers a Compare button into the merge wizard, and
-/// under the table the strongest pairs of every kind, each with its probability and reasons.
+/// keeps its computed count.
 ///
 /// `data_quality` is `None` while the whole-workspace check pass is still loading — the card then
 /// shows a localized loading line in place of the check rows (`facts_without_source` comes from the
@@ -210,28 +212,41 @@ fn data_quality_card(loc: &Localizer, facts_without_source: usize, data_quality:
                     td { class: "muted", "{facts_without_source}" }
                     td {}
                 }
-                tr {
-                    td { "⇄ {loc.dashboard_label(\"possible-duplicates\")}" }
-                    td { class: "muted", "{data_quality.duplicates.len()}" }
-                    td { class: "row-actions",
-                        CompareButton {
-                            label: loc.dashboard_label("compare"),
-                            aria_label: loc.dashboard_label("compare-label"),
-                        }
-                    }
-                }
             }
         }
-        {duplicate_pairs(loc, &data_quality.duplicates)}
     }
 }
 
-/// The strongest possible-duplicate pairs, capped at [`MAX_FLAGGED_LINKS`] with a muted `+N more`
-/// for the rest: both records as links, the engine's probability and band, and its reasons.
-fn duplicate_pairs(loc: &Localizer, pairs: &[DuplicateVm]) -> Element {
-    if pairs.is_empty() {
-        return rsx! {};
+/// The *Possible matches* card (ADR 0039 §3): how many undecided pairs each kind has, the strongest of
+/// them, and *Review*, which opens the Matches tool. Loads with the data-quality check pass, which
+/// computes the same pairs.
+fn possible_matches_card(loc: &Localizer, data_quality: Option<&DataQualityVm>) -> Element {
+    let Some(data_quality) = data_quality else {
+        return rsx! {
+            p { class: "loading", style: "margin-top:4px", "{loc.dashboard_label(\"data-quality-loading\")}" }
+        };
+    };
+    if data_quality.matches.is_empty() {
+        return rsx! {
+            p { class: "muted", "{loc.dashboard_label(\"no-matches\")}" }
+        };
     }
+    rsx! {
+        div { class: "wrap",
+            span { "{loc.dashboard_matches_count(data_quality.matches.len())}" }
+            span { class: "muted", "{data_quality.match_counts.join(\" · \")}" }
+            ReviewButton {
+                label: loc.dashboard_label("review"),
+                aria_label: loc.dashboard_label("review-label"),
+            }
+        }
+        {match_pairs(loc, &data_quality.matches)}
+    }
+}
+
+/// The strongest possible matches, capped at [`MAX_FLAGGED_LINKS`] with a muted `+N more` for the
+/// rest: both records as links, the engine's probability and band, and its reasons.
+fn match_pairs(loc: &Localizer, pairs: &[QueuedMatchVm]) -> Element {
     let overflow = pairs.len().saturating_sub(MAX_FLAGGED_LINKS);
     let tooltip = loc.dashboard_label("score-tooltip");
     rsx! {
@@ -287,18 +302,18 @@ fn flagged_person_links(loc: &Localizer, records: &[RecordRef]) -> Element {
     }
 }
 
-/// The possible-duplicates row's Compare action: navigates to the merge wizard (the merge tool loads
-/// the same candidate pairs). A component so it can resolve `NavState` from context — like
-/// [`RecordLink`]/[`JumpButton`] — keeping `data_quality` a plain render helper.
+/// The *Possible matches* card's Review action: navigates to the Matches tool (which computes the same
+/// pairs). A component so it can resolve `NavState` from context — like [`RecordLink`]/[`JumpButton`] —
+/// keeping the card a plain render helper.
 #[component]
-fn CompareButton(label: String, aria_label: String) -> Element {
+fn ReviewButton(label: String, aria_label: String) -> Element {
     let mut nav = use_context::<NavState>();
     rsx! {
         button {
             class: "btn sm ghost",
             r#type: "button",
             aria_label: "{aria_label}",
-            onclick: move |_| nav.go_to(Destination::Tool(Tool::Merge)),
+            onclick: move |_| nav.go_to(Destination::Tool(Tool::Matches)),
             "{label}"
         }
     }

@@ -751,8 +751,8 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
             | IntentOutcome::DnaMatchDetail(_)
             | IntentOutcome::Pedigree(_)
             | IntentOutcome::Relationship(_)
-            | IntentOutcome::DuplicateCandidates(_)
-            | IntentOutcome::MergeCompare(_)
+            | IntentOutcome::MatchQueue(_)
+            | IntentOutcome::MatchCompare(_)
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
@@ -838,7 +838,7 @@ fn person_detail(
     // Compare is the view-mode extra action, alongside the record Edit; Save/Cancel replace both in
     // edit mode (`record_head_actions`).
     let extra_actions = rsx! {
-        Button { label: compare_label, variant: ButtonVariant::Default, small: true, onclick: move |_| compare_nav.go_to(Destination::Tool(Tool::Merge)) }
+        Button { label: compare_label, variant: ButtonVariant::Default, small: true, onclick: move |_| compare_nav.go_to(Destination::Tool(Tool::Matches)) }
     };
     rsx! {
         DetailContainer {

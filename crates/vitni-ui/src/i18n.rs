@@ -19,6 +19,7 @@ use i18n_embed_fl::fl;
 use rust_embed::RustEmbed;
 use tracing::warn;
 use unic_langid::LanguageIdentifier;
+use vitni_app::DecidableKind;
 use vitni_app::{
     ActivityDetail, Age, AgeBound, AppError, AssociationRole, BackupError, Calendar, ChangeLogEntry,
     ChildParentRelationship, ChromosomeSide, CitingContext, DatasetError, DateModifier, DatePoint, DateQuality,
@@ -1969,9 +1970,10 @@ impl Localizer {
             "data-quality-loading" => fl!(self.loader, "dashboard-data-quality-loading"),
             "no-source-facts" => fl!(self.loader, "dashboard-no-source-facts"),
             "death-before-birth" => fl!(self.loader, "dashboard-death-before-birth"),
-            "possible-duplicates" => fl!(self.loader, "dashboard-possible-duplicates"),
-            "compare" => fl!(self.loader, "dashboard-compare"),
-            "compare-label" => fl!(self.loader, "dashboard-compare-label"),
+            "possible-matches" => fl!(self.loader, "dashboard-possible-matches"),
+            "no-matches" => fl!(self.loader, "dashboard-no-matches"),
+            "review" => fl!(self.loader, "dashboard-review"),
+            "review-label" => fl!(self.loader, "dashboard-review-label"),
             "score-tooltip" => fl!(self.loader, "dashboard-score-tooltip"),
             "activity-empty" => fl!(self.loader, "dashboard-activity-empty"),
             _ => fl!(self.loader, "dashboard-title"),
@@ -1999,6 +2001,12 @@ impl Localizer {
             deaths = deaths,
             duplicates = duplicates
         )
+    }
+
+    /// The "{n} undecided pairs" count on the Possible matches card.
+    #[must_use]
+    pub fn dashboard_matches_count(&self, count: usize) -> String {
+        fl!(self.loader, "dashboard-matches-count", count = count)
     }
 
     /// The muted `+N more` suffix after a capped list of flagged records.
@@ -3165,15 +3173,39 @@ impl Localizer {
         }
     }
 
-    /// The confirmation shown after "Not the same".
+    /// The confirmation shown after *Not the same*: `other` is held apart from `record`.
     #[must_use]
-    pub fn distinguish_result_summary(&self, other_human_id: &str, person_human_id: &str) -> String {
+    pub fn match_distinguished_summary(&self, kind: DecidableKind, other: &str, record: &str) -> String {
         fl!(
             self.loader,
             "distinguish-result-summary",
-            other = other_human_id,
-            person = person_human_id
+            kind = kind.as_str(),
+            other = other,
+            record = record
         )
+    }
+
+    /// A decidable kind's label ("Place").
+    #[must_use]
+    pub fn match_kind(&self, kind: DecidableKind) -> String {
+        fl!(self.loader, "match-kind", kind = kind.as_str())
+    }
+
+    /// How many possible matches one kind has ("Place: 2").
+    #[must_use]
+    pub fn match_kind_count(&self, kind: DecidableKind, count: usize) -> String {
+        fl!(
+            self.loader,
+            "match-kind-count",
+            kind = self.match_kind(kind),
+            count = count
+        )
+    }
+
+    /// A run filter choice: the run's source and the day it started.
+    #[must_use]
+    pub fn match_run_option(&self, source: &str, started: &str) -> String {
+        fl!(self.loader, "match-run-option", source = source, started = started)
     }
 
     /// The blocked-decision card's heading when the pair already holds a live identity decision.
@@ -3207,15 +3239,16 @@ impl Localizer {
         fl!(self.loader, "claim-merged-from", record = record)
     }
 
-    /// The completed-merge outcome summary: the merged person becomes a persona of the survivor.
-    /// Deliberately never says "re-pointed" — see [`crate::view_model::MergeResultVm`] doc.
+    /// The confirmation shown after *Same*: `merged` reads as `survivor` from now on (a person becomes
+    /// a persona of it). Deliberately never says "re-pointed": a merge only links the two records.
     #[must_use]
-    pub fn merge_result_summary(&self, merged_human_id: &str, survivor_human_id: &str) -> String {
+    pub fn match_merged_summary(&self, kind: DecidableKind, merged: &str, survivor: &str) -> String {
         fl!(
             self.loader,
             "merge-result-summary",
-            merged = merged_human_id,
-            survivor = survivor_human_id
+            kind = kind.as_str(),
+            merged = merged,
+            survivor = survivor
         )
     }
 

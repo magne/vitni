@@ -8,9 +8,9 @@
 # stand-in `gui-pass` serves (`xtask/src/archive_server.rs`): a debug build reroutes the plugin's
 # fetches of `https://www.digitalarkivet.no/…` there.
 #
-# The merge is proven on the Compare / merge queue: empty before the namesake exists, empty again after
-# Same — had the record been imported as new (Decide later), the pair would be listed. That assertion
-# is scoped to the duplicates card, y 75-235, as in merge-keyboard.toml.
+# The merge is proven on the Matches queue: without a person pair before the namesake exists, and again
+# after Same — had the record been imported as new (Decide later), the pair would be listed. That
+# assertion is scoped to the matches table card, y 211-451, as in matches-keyboard.toml.
 #
 # Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "A record with a possible match stops at the Match stage, and Same merges it (#412)"
@@ -18,7 +18,7 @@ description = "A record with a possible match stops at the Match stage, and Same
 [[step]]
 do = "click"
 at = [108, 749]
-label = "rail: Compare / merge"
+label = "rail: Matches"
 
 [[step]]
 do = "shot"
@@ -129,7 +129,7 @@ name = "summary"
 [[step]]
 do = "click"
 at = [108, 749]
-label = "rail: Compare / merge"
+label = "rail: Matches"
 
 [[step]]
 do = "shot"
@@ -148,5 +148,5 @@ because = "y answers the Match stage and the session moves on to its summary"
 [[assert]]
 kind = "match"
 shots = ["queue-before", "queue-after"]
-region = [232, 75, 1568, 160]
+region = [232, 211, 1568, 240]
 because = "Same merged the record into its namesake, so no pair is left to review"

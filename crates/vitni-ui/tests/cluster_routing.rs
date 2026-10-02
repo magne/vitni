@@ -5,14 +5,15 @@
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use uuid::Uuid;
+use vitni_app::DecidableKind;
 use vitni_app::{
     Agent, AgentId, AgentKind, AppDefaults, EvidenceLevel, FactType, IdentityDecision, MutationMeta, NewFact,
     NewPerson, OperatorConfig, PairDecision, PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults,
     assert_fact, create_person, distinguish_persons, merge_persons, show_person,
 };
 use vitni_ui::{
-    Intent, IntentOutcome, Localizer, MergePersons, PairJudgment, PersonEdit, ProvenanceDraft, dispatch,
-    dispatch_person_edit, dispatch_undo_distinction_and_merge,
+    DecideMatch, Intent, IntentOutcome, Localizer, MatchDecision, PairJudgment, PersonEdit, ProvenanceDraft, dispatch,
+    dispatch_decide_match, dispatch_person_edit,
 };
 
 fn operator() -> OperatorConfig {
@@ -149,21 +150,24 @@ async fn the_compare_view_shows_an_earlier_distinction_and_undoing_it_merges() {
         .expect("distinguish");
     let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
 
-    let compare = Intent::MergeCompare {
-        surviving_human_id: root.clone(),
-        merged_human_id: other.clone(),
+    let compare = Intent::MatchCompare {
+        kind: DecidableKind::Person,
+        left: root.clone(),
+        right: other.clone(),
     };
-    let IntentOutcome::MergeCompare(vm) = dispatch(&ws, &loc, &compare).await.expect("compare") else {
+    let IntentOutcome::MatchCompare(vm) = dispatch(&ws, &loc, &compare).await.expect("compare") else {
         panic!("the compare intent loads the compare view");
     };
     assert_eq!(vm.earlier_decision, Some(PairDecision::Distinct));
 
-    let request = MergePersons {
-        surviving_human_id: root.clone(),
-        merged_human_id: other.clone(),
+    let request = DecideMatch {
+        kind: DecidableKind::Person,
+        left: root.clone(),
+        right: other.clone(),
+        decision: MatchDecision::UndoDistinctionAndSame,
         judgment: PairJudgment::default(),
     };
-    dispatch_undo_distinction_and_merge(&ws, &session(), &loc, &request)
+    dispatch_decide_match(&ws, &session(), &loc, &request)
         .await
         .expect("undo and merge");
     let merged_into: Vec<_> = show_person(&ws, &root)

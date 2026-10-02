@@ -7,7 +7,7 @@ use vitni_ui::{Category, Destination, Tool};
 use crate::app::{AppCtx, StartupPrefs};
 use crate::master_detail::MasterDetail;
 use crate::screens::{
-    DashboardScreen, ExportScreen, GeographyScreen, HelpScreen, ImportScreen, MergeScreen, PedigreeScreen,
+    DashboardScreen, ExportScreen, GeographyScreen, HelpScreen, ImportScreen, MatchesScreen, PedigreeScreen,
     PluginPanelScreen, PreferencesScreen, RecordDetail,
 };
 use crate::services::load_counts;
@@ -171,7 +171,7 @@ fn Workarea() -> Element {
         Destination::Category(Category::Dashboard) => rsx! { DashboardScreen {} },
         Destination::Category(_) => rsx! { MasterDetail { detail: rsx! { RecordDetail {} } } },
         Destination::Tool(Tool::Pedigree) => rsx! { PedigreeScreen {} },
-        Destination::Tool(Tool::Merge) => rsx! { MergeScreen {} },
+        Destination::Tool(Tool::Matches) => rsx! { MatchesScreen {} },
         Destination::Tool(Tool::Import) => rsx! { ImportScreen {} },
         Destination::Tool(Tool::Export) => rsx! { ExportScreen {} },
         Destination::Tool(Tool::Geography) => rsx! { GeographyScreen {} },

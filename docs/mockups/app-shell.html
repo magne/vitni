@@ -23,7 +23,7 @@
     <div class="grid-3" style="margin-bottom:8px">
       <div class="card"><h3>People</h3><div style="font-size:28px;font-weight:700">1,284</div><div class="muted">642 families · 3,910 events</div></div>
       <div class="card"><h3>Evidence health</h3><div style="font-size:28px;font-weight:700">86%</div><div class="muted">facts with at least one source</div></div>
-      <div class="card"><h3>Needs attention</h3><div style="font-size:28px;font-weight:700;color:var(--warn)">31</div><div class="muted">31 facts without a source · 2 death-before-birth · 6 duplicates</div></div>
+      <div class="card"><h3>Needs attention</h3><div style="font-size:28px;font-weight:700;color:var(--warn)">31</div><div class="muted">31 facts without a source · 2 death-before-birth · 6 possible matches</div></div>
     </div>
 
     <div class="grid-2">
@@ -62,16 +62,14 @@
           </div>
         </div>
         <div class="card">
-          <h3>Data quality</h3>
-          <table class="tbl" style="margin-top:4px">
-            <tbody>
-              <tr><td><span class="no-source">⚠</span> Death before birth</td><td class="muted">2</td><td class="row-actions"><div class="wrap"><a href="person.html">Jane Reversed</a><a href="person.html">Per Berg</a></div></td></tr>
-              <tr><td><span class="no-source">⚠</span> Facts without a source</td><td class="muted">31</td><td></td></tr>
-              <tr><td>⇄ Possible duplicates</td><td class="muted">6</td><td class="row-actions"><a class="btn sm ghost" href="merge.html" aria-label="Compare possible duplicates">Compare</a></td></tr>
-            </tbody>
-          </table>
-          <!-- The duplicate check covers every matchable kind (ADR 0038 §8), the most similar pair first, whatever
-               its kind; a pair the user already decided never appears. Five are listed, the rest counted. -->
+          <h3>Possible matches</h3>
+          <div class="wrap">
+            <span>6 undecided pairs</span>
+            <span class="muted">Person: 4 · Place: 1 · Source: 1</span>
+            <a class="btn sm ghost" href="matches.html" aria-label="Review the possible matches">Review</a>
+          </div>
+          <!-- The undecided pairs of every kind but tags (ADR 0039 §3), the most similar first, whatever its kind;
+               a pair the user already decided never appears. Five are listed, the rest counted. -->
           <div class="stack" style="margin-top:var(--sp-2)">
             <div>
               <div class="wrap"><a href="person.html">👤 John Smith</a><span class="muted">⇄</span><a href="person.html">👤 John Smyth</a><span class="badge" title="Matching-engine probability — not the 5-level assertion Confidence">97%</span><span class="muted">probable match</span></div>
@@ -87,6 +85,17 @@
             </div>
             <span class="muted">+3 more</span>
           </div>
+          <!-- With none undecided the card reads "No possible matches: every pair the engine proposes is
+               decided." -->
+        </div>
+        <div class="card">
+          <h3>Data quality</h3>
+          <table class="tbl" style="margin-top:4px">
+            <tbody>
+              <tr><td><span class="no-source">⚠</span> Death before birth</td><td class="muted">2</td><td class="row-actions"><div class="wrap"><a href="person.html">Jane Reversed</a><a href="person.html">Per Berg</a></div></td></tr>
+              <tr><td><span class="no-source">⚠</span> Facts without a source</td><td class="muted">31</td><td></td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

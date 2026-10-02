@@ -1,0 +1,145 @@
+# #414: the Matches tool's kind filter narrows the queue. SSR renders the three selects and their chosen
+# values but cannot prove a change in the webview reaches the queue: this picks *Person* in the kind
+# filter by keyboard and the fixture's media pair leaves the table, then *Every kind* brings it back.
+#
+# The fixture seeds two media of one checksum, which the engine proposes as a probable match, and no
+# persons, so the scenario creates John Smith and John Smyth, as matches-distinguish.toml does.
+#
+# Every assertion is scoped to the matches table card, y 211-451, below the filters.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "The kind filter narrows the possible-matches queue (#414)"
+
+[[step]]
+do = "click"
+at = [85, 175]
+label = "rail: People"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Person draft"
+
+[[step]]
+do = "click"
+at = [1150, 486]
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "John"
+label = "type: John"
+
+[[step]]
+do = "click"
+at = [1150, 636]
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Smith"
+label = "type: Smith"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New person: Save"
+
+[[step]]
+do = "click"
+at = [756, 101]
+label = "tabstrip: +"
+
+[[step]]
+do = "click"
+at = [825, 148]
+label = "menu: New person"
+
+[[step]]
+do = "click"
+at = [1150, 486]
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "John"
+label = "type: John"
+
+[[step]]
+do = "click"
+at = [1150, 636]
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Smyth"
+label = "type: Smyth"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New person: Save"
+
+[[step]]
+do = "wait"
+seconds = 7
+label = "let the Created notice expire"
+
+[[step]]
+do = "click"
+at = [108, 749]
+label = "rail: Matches"
+
+[[step]]
+do = "shot"
+name = "every-kind"
+
+[[step]]
+do = "click"
+at = [1015, 131]
+label = "filter: Kind"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "Down: Person"
+
+[[step]]
+do = "key"
+chord = "Return"
+label = "Return: choose it"
+
+[[step]]
+do = "shot"
+name = "persons"
+
+[[step]]
+do = "click"
+at = [1015, 131]
+label = "filter: Kind — again"
+
+[[step]]
+do = "key"
+chord = "Up"
+label = "Up: Every kind"
+
+[[step]]
+do = "key"
+chord = "Return"
+label = "Return: choose it"
+
+[[step]]
+do = "shot"
+name = "every-kind-again"
+
+[[assert]]
+kind = "differ"
+shots = ["every-kind", "persons"]
+because = "the Person filter drops the media pair from the table"
+region = [232, 211, 1568, 240]
+
+[[assert]]
+kind = "match"
+shots = ["every-kind", "every-kind-again"]
+because = "Every kind lists both pairs again"
+region = [232, 211, 1568, 240]

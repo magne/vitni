@@ -445,10 +445,10 @@ impl Chrome {
         fl!(self.loader, "palette-cmd-create", entity = entity)
     }
 
-    /// The "Find duplicates" command label.
+    /// The "Review possible matches" command label.
     #[must_use]
-    pub fn palette_cmd_find_duplicates(&self) -> String {
-        fl!(self.loader, "palette-cmd-find-duplicates")
+    pub fn palette_cmd_review_matches(&self) -> String {
+        fl!(self.loader, "palette-cmd-review-matches")
     }
 
     /// The "Open {target}" command label (a tool or the help browser).
@@ -1508,13 +1508,13 @@ impl Chrome {
         fl!(self.loader, "prefs-save-error", detail = detail)
     }
 
-    /// The Merge tool's duplicates table heading.
+    /// The Matches tool's table heading.
     #[must_use]
     pub fn merge_duplicates_heading(&self) -> String {
         fl!(self.loader, "merge-duplicates-heading")
     }
 
-    /// The "{n} candidate pairs" count shown beside the duplicates heading.
+    /// The "{n} undecided pairs" count shown beside the table heading.
     #[must_use]
     pub fn merge_duplicates_count(&self, count: usize) -> String {
         fl!(
@@ -1524,7 +1524,43 @@ impl Chrome {
         )
     }
 
-    /// The duplicates table's "Record A" column header.
+    /// The matches table's "Kind" column header.
+    #[must_use]
+    pub fn merge_col_kind(&self) -> String {
+        fl!(self.loader, "merge-col-kind")
+    }
+
+    /// The run filter's label.
+    #[must_use]
+    pub fn matches_filter_run(&self) -> String {
+        fl!(self.loader, "matches-filter-run")
+    }
+
+    /// The run filter's "Every run" choice.
+    #[must_use]
+    pub fn matches_filter_all_runs(&self) -> String {
+        fl!(self.loader, "matches-filter-all-runs")
+    }
+
+    /// The kind filter's label.
+    #[must_use]
+    pub fn matches_filter_kind(&self) -> String {
+        fl!(self.loader, "matches-filter-kind")
+    }
+
+    /// The kind filter's "Every kind" choice.
+    #[must_use]
+    pub fn matches_filter_all_kinds(&self) -> String {
+        fl!(self.loader, "matches-filter-all-kinds")
+    }
+
+    /// The band filter's label.
+    #[must_use]
+    pub fn matches_filter_band(&self) -> String {
+        fl!(self.loader, "matches-filter-band")
+    }
+
+    /// The matches table's "Record A" column header.
     #[must_use]
     pub fn merge_col_record_a(&self) -> String {
         fl!(self.loader, "merge-col-record-a")
@@ -1582,6 +1618,12 @@ impl Chrome {
     #[must_use]
     pub fn merge_persona_label(&self) -> String {
         fl!(self.loader, "merge-persona-label")
+    }
+
+    /// The merged column's "merges into the survivor" caption, for a record that is not a person.
+    #[must_use]
+    pub fn merge_merged_label(&self) -> String {
+        fl!(self.loader, "merge-merged-label")
     }
 
     /// The match-compare view's accessible name.
@@ -2457,7 +2499,7 @@ impl Chrome {
             "nav-dna-tests" => fl!(self.loader, "nav-dna-tests"),
             "nav-dna-matches" => fl!(self.loader, "nav-dna-matches"),
             "nav-pedigree" => fl!(self.loader, "nav-pedigree"),
-            "nav-merge" => fl!(self.loader, "nav-merge"),
+            "nav-matches" => fl!(self.loader, "nav-matches"),
             "nav-import" => fl!(self.loader, "nav-import"),
             "nav-export" => fl!(self.loader, "nav-export"),
             "nav-geography" => fl!(self.loader, "nav-geography"),

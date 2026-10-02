@@ -456,11 +456,16 @@ dashboard-data-quality = Data quality
 dashboard-data-quality-loading = Checking data quality…
 dashboard-no-source-facts = Facts without a source
 dashboard-death-before-birth = Death before birth
-dashboard-possible-duplicates = Possible duplicates
-dashboard-compare = Compare
-dashboard-compare-label = Compare possible duplicates
+dashboard-possible-matches = Possible matches
+dashboard-matches-count = { $count ->
+    [one] 1 undecided pair
+   *[other] { $count } undecided pairs
+}
+dashboard-no-matches = No possible matches: every pair the engine proposes is decided.
+dashboard-review = Review
+dashboard-review-label = Review the possible matches
 dashboard-score-tooltip = Matching-engine probability — not the 5-level assertion Confidence
-dashboard-attention-caption = { $unsourced } facts without a source · { $deaths } death-before-birth · { $duplicates } duplicates
+dashboard-attention-caption = { $unsourced } facts without a source · { $deaths } death-before-birth · { $duplicates } possible matches
 dashboard-more = +{ $count } more
 dashboard-activity-empty = No activity yet.
 
@@ -1067,12 +1072,38 @@ match-band-deterministic = established identity
 match-band-probable = probable match
 match-band-possible = possible match
 match-band-unlikely = unlikely match
-merge-result-summary = { $merged } becomes a persona of { $survivor }; one event added to History.
+merge-result-summary = { $kind ->
+    [person] { $merged } becomes a persona of { $survivor }
+   *[other] { $merged } is merged into { $survivor }
+}; one event added to History.
 claim-merged-from = from { $record }
 merge-blocked-heading = Merge blocked — conflicting facts
 merge-blocked-guidance = Resolve the contradiction first (retract or supersede one claim), then merge.
 identity-assessment = Matched at { $score }% · { $band } · engine { $engine }
-distinguish-result-summary = { $other } is marked as a different person from { $person }; one event added to History.
+distinguish-result-summary = { $other } is marked as a different { $kind ->
+    [person] person
+    [family] family
+    [event] event
+    [place] place
+    [source] source
+    [repository] repository
+    [citation] citation
+    [media] media object
+   *[note] note
+} from { $record }; one event added to History.
+match-kind = { $kind ->
+    [person] Person
+    [family] Family
+    [event] Event
+    [place] Place
+    [source] Source
+    [repository] Repository
+    [citation] Citation
+    [media] Media object
+   *[note] Note
+}
+match-kind-count = { $kind }: { $count }
+match-run-option = { $source } — { $started }
 identity-decided-heading = Already decided
 identity-decided-guidance = These two people already have an identity decision. Undo it in History before deciding again.
 
