@@ -172,6 +172,17 @@ fn a_picker_query_is_matched_as_the_record_it_would_create() {
     assert_eq!(query_draft(Category::People, " "), None);
 }
 
+#[test]
+fn a_place_query_names_no_place_type() {
+    assert_eq!(
+        query_draft(Category::Places, "Oslo"),
+        Some(DraftRecord::Place {
+            name: "Oslo".to_owned(),
+            place_type: None,
+        })
+    );
+}
+
 fn similar(human_id: &str, band: MatchBand, score: f64) -> SimilarRecord {
     SimilarRecord {
         record: AggRef {

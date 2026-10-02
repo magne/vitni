@@ -60,10 +60,16 @@ pub struct SimilarVm {
 }
 
 /// The record a picker's typed `query` would create through its "+ New …" row, as the engine matches
-/// it — `None` for a category the engine does not match a typed record of, or a blank query.
+/// it — `None` for a category the engine does not match a typed record of, or a blank query. A typed
+/// query names no place type, so the seed's default type is left out rather than scored against.
 #[must_use]
 pub fn query_draft(category: Category, query: &str) -> Option<DraftRecord> {
-    NewRecordDraft::seed(category, query)?.similar_draft()
+    match NewRecordDraft::seed(category, query)?.similar_draft()? {
+        DraftRecord::Place { name, .. } => Some(DraftRecord::Place { name, place_type: None }),
+        draft @ (DraftRecord::Person { .. } | DraftRecord::Source { .. } | DraftRecord::Repository { .. }) => {
+            Some(draft)
+        }
+    }
 }
 
 /// Whether a picker over `category` ranks its records by similarity to the typed query — the kinds a

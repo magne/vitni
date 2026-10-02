@@ -336,11 +336,15 @@ fn family_new_partner_body(
         SimilarHint {
             draft: fields.similar_draft(),
             onuse: move |record: RecordRef| {
+                let before = draft.peek().partners.len();
                 draft.write().add_partner(PickerSelection {
                     human_id: record.human_id,
                     title: record.label,
                 });
-                pending_new.set(None);
+                // A hit already a partner adds nothing: keep the typed new partner rather than drop it.
+                if draft.peek().partners.len() > before {
+                    pending_new.set(None);
+                }
             },
         }
         Button {
