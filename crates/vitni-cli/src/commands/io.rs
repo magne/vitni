@@ -78,6 +78,7 @@ impl PreparedImport {
             source_label,
             plugin: info.id,
             plugin_version: info.version,
+            reviewer: Box::new(vitni_plugin_host::DeferMatches),
         };
         Ok(Self {
             host,

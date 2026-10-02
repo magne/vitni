@@ -1,22 +1,25 @@
 //! The `staging` capability (ADR 0040 §1, §4): an importer submits one record graph per source record,
 //! and the host plans and writes them through `vitni-app`.
 //!
-//! A bulk import's graphs are held until the guest returns, then planned as one and committed, with
+//! A bulk import's graphs are held until the guest returns, then planned as one; the frontend's
+//! [`PlanReviewer`] is shown the plan and answers its possible matches, and the plan is committed with
 //! the commit's progress reported to the frontend — whose cancel stops it between two writes. An
 //! assisted import's graphs are planned as one and committed on each `submit`, and the guest learns
 //! what each entity became.
 
 use vitni_app::{
     CommitControl, CommitOutcome, EntityFields, EntityRef, ImportPlan, ImportReview, LinkKind, MatchReply, NewFact,
-    PairAnswer, PlanError, RecordGraph, RunToEnd, StagedCitation, StagedEntity, StagedEvent, StagedFamily, StagedLink,
-    StagedMedia, StagedNote, StagedPerson, StagedPlace, StagedRepository, StagedSource, StagedTag, Timestamp,
-    commit_import, plan_import,
+    PairAnswer, PlanError, PlanStep, RecordGraph, ReviewReply, RunToEnd, StagedCitation, StagedEntity, StagedEvent,
+    StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson, StagedPlace, StagedRepository, StagedSource,
+    StagedTag, Timestamp,
 };
 use vitni_core::matching::MatchableKind;
 
 use crate::bindings::imports::vitni::host_api::{staging, types};
 use crate::capability::Capability;
 use crate::error::PluginError;
+use crate::present::PresentError;
+use crate::review::{DeferMatches, PlanReviewer};
 use crate::state::{
     HostState, Staging, media_ref_input, to_address, to_age, to_association_role, to_attribute, to_capability_error,
     to_child_relationship, to_confidence, to_event_type, to_external_id, to_fact_type, to_genealogical_date,
@@ -143,32 +146,41 @@ impl HostState {
         }
     }
 
-    /// Plans every graph the guest submitted and commits the plan, reporting progress and stopping
-    /// when the frontend cancels. Nothing is written when the guest was cancelled while parsing.
+    /// Plans every graph the guest submitted, shows the plan to the frontend's reviewer and reviews its
+    /// possible matches as the reviewer answers (ADR 0040 §4), then commits it, reporting progress and
+    /// stopping when the frontend cancels. Nothing is written when the guest was cancelled while
+    /// parsing, or the reviewer discards the plan or cancels the review. With no reviewer, every
+    /// possible match is left for later.
     ///
     /// # Errors
     ///
-    /// [`PluginError::Guest`] when the graphs cannot be planned together (two stage one origin), or
-    /// [`PluginError::Commit`] when the workspace cannot be read or a write fails.
+    /// [`PluginError::Guest`] when the graphs cannot be planned together (two stage one origin),
+    /// [`PluginError::Runtime`] when the reviewer cannot be reached, or [`PluginError::Commit`] when the
+    /// workspace cannot be read or a write fails.
     pub(crate) async fn commit_staged(&mut self) -> Result<(), PluginError> {
         let graphs = std::mem::take(&mut self.staged);
         if graphs.is_empty() || self.cancelled {
             return Ok(());
         }
         let template = self.provenance();
-        let (workspace, session, progress) = (&self.workspace, &self.session, &mut self.io.progress);
-        let file_asserted_at = self.file_asserted_at;
-        let plan = plan_import(workspace, session, graphs, file_asserted_at)
+        let mut review = ImportReview::plan(&self.workspace, &self.session, graphs, self.file_asserted_at)
             .await
-            .map_err(|error| match error {
-                PlanError::Graph(error) => PluginError::Guest(error.to_string()),
-                PlanError::App(error) => PluginError::Commit(error.to_string()),
-            })?;
+            .map_err(plan_plugin_error)?;
+        let mut reviewer = self.reviewer.take().unwrap_or_else(|| Box::new(DeferMatches));
+        if !self.settle(&mut review, reviewer.as_mut()).await? {
+            return Ok(());
+        }
+        let operator = self
+            .run
+            .as_ref()
+            .map_or_else(|| self.session.clone(), |run| run.pending().operator().clone());
         let mut control = Reporter {
-            progress,
+            progress: &mut self.io.progress,
             cancelled: false,
         };
-        let result = commit_import(workspace, session, &plan, &template, &mut control).await;
+        let result = review
+            .commit(&self.workspace, &self.session, &operator, &template, &mut control)
+            .await;
         if control.cancelled
             && let Some(run) = self.run.as_mut()
         {
@@ -184,6 +196,40 @@ impl HostState {
                 Err(PluginError::Commit(failure.error.to_string()))
             }
         }
+    }
+
+    /// Shows `review`'s plan to `reviewer` and answers its possible matches as the reviewer does.
+    /// Returns `false` when the reviewer discarded the plan or cancelled the review, so nothing is
+    /// written.
+    async fn settle(&self, review: &mut ImportReview, reviewer: &mut dyn PlanReviewer) -> Result<bool, PluginError> {
+        let unreachable = |error: PresentError| PluginError::Runtime(error.to_string());
+        match reviewer.plan(review.summary()).await.map_err(unreachable)? {
+            PlanStep::Discard => return Ok(false),
+            PlanStep::DeferMatches => {
+                review.defer_rest();
+                return Ok(true);
+            }
+            PlanStep::Review => {}
+        }
+        while let Some(question) = review
+            .next_question(&self.workspace)
+            .await
+            .map_err(|error| PluginError::Commit(error.to_string()))?
+        {
+            let answered = match reviewer.review_match(question).await.map_err(unreachable)? {
+                ReviewReply::Pair(answer) => review.answer(&self.workspace, &self.session, *answer).await,
+                ReviewReply::SameForGroup(decision) => {
+                    review.answer_group(&self.workspace, &self.session, *decision).await
+                }
+                ReviewReply::DeferRest => {
+                    review.defer_rest();
+                    Ok(())
+                }
+                ReviewReply::Cancel => return Ok(false),
+            };
+            answered.map_err(plan_plugin_error)?;
+        }
+        Ok(true)
     }
 }
 
@@ -208,6 +254,14 @@ impl CommitControl for Reporter<'_> {
             return false;
         }
         true
+    }
+}
+
+/// The plugin error of an import whose graphs cannot be planned.
+fn plan_plugin_error(error: PlanError) -> PluginError {
+    match error {
+        PlanError::Graph(error) => PluginError::Guest(error.to_string()),
+        PlanError::App(error) => PluginError::Commit(error.to_string()),
     }
 }
 

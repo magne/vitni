@@ -97,6 +97,31 @@ pub enum MatchReply {
     Cancel,
 }
 
+/// What the user does with a bulk import's plan once it is shown (ADR 0040 §4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanStep {
+    /// Commit it, asking about each possible match first.
+    Review,
+    /// Commit it, leaving every possible match for later.
+    DeferMatches,
+    /// Write nothing.
+    Discard,
+}
+
+/// What the user answers to a [`MatchQuestion`] in a bulk import: the pair's answer, a bulk answer
+/// (ADR 0040 §3), or ending the import.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReviewReply {
+    /// An answer about the pair.
+    Pair(Box<PairAnswer>),
+    /// *Same* for every open pair of the question's [`MatchGroup`], with this decision's provenance.
+    SameForGroup(Box<IdentityDecision>),
+    /// *Decide later* for this and every remaining pair.
+    DeferRest,
+    /// Write nothing.
+    Cancel,
+}
+
 /// An import plan under review.
 #[derive(Debug, Clone)]
 pub struct ImportReview {

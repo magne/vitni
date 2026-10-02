@@ -13,14 +13,16 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use vitni_app::{
     AbandonReason, AgentKind, AiConfig, AppDefaults, ChosenDataset, DatasetChoice, DatasetError, DatasetId,
-    DatasetProposal, DatasetScope, DatasetSpec, ImportRunStatus, ImportRunSummary, OperatorConfig, Session, Workspace,
-    WorkspaceDefaults, list_import_runs, undo_assertion, workspace_counts,
+    DatasetProposal, DatasetScope, DatasetSpec, IdentityDecision, ImportRunStatus, ImportRunSummary, MatchQuestion,
+    OperatorConfig, PairAnswer, PlanCounts, PlanStep, PlanSummary, ReviewReply, Session, Workspace, WorkspaceDefaults,
+    list_import_runs, undo_assertion, workspace_counts,
 };
 use vitni_core::ids::AgentId;
+use vitni_core::matching::MatchableKind;
 use vitni_core::provenance::{Agent, EventContext};
 use vitni_plugin_host::{
-    Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, ProgressControl, ProgressStep,
-    ProgressUpdate, ResourceBudget, RunDataset,
+    Capability, DeferMatches, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PlanReviewer, PluginError,
+    PresentError, ProgressControl, ProgressStep, ProgressUpdate, ResourceBudget, RunDataset,
 };
 
 mod common;
@@ -104,6 +106,7 @@ fn spec(plugin: &str, dataset: DatasetId, source_label: &str) -> ImportRunSpec {
         source_label: source_label.to_owned(),
         plugin: plugin.to_owned(),
         plugin_version: "0.1.0".to_owned(),
+        reviewer: Box::new(DeferMatches),
     }
 }
 
@@ -1068,4 +1071,186 @@ async fn each_rerun_fixture_keys_every_item_alike_and_its_re_run_is_proposed_bac
             "{plugin}: the re-run wrote events"
         );
     }
+}
+
+/// What a [`Scripted`] reviewer was shown.
+#[derive(Default)]
+struct Seen {
+    plans: Vec<PlanSummary>,
+    questions: Vec<MatchQuestion>,
+}
+
+/// A reviewer that answers the plan with `step` and every pair with `reply`, noting what it was shown.
+struct Scripted {
+    step: PlanStep,
+    reply: fn(&MatchQuestion) -> ReviewReply,
+    seen: Arc<Mutex<Seen>>,
+}
+
+#[async_trait::async_trait]
+impl PlanReviewer for Scripted {
+    async fn plan(&mut self, summary: PlanSummary) -> Result<PlanStep, PresentError> {
+        self.seen.lock().expect("lock").plans.push(summary);
+        Ok(self.step)
+    }
+
+    async fn review_match(&mut self, question: MatchQuestion) -> Result<ReviewReply, PresentError> {
+        let reply = (self.reply)(&question);
+        self.seen.lock().expect("lock").questions.push(question);
+        Ok(reply)
+    }
+}
+
+fn same(_: &MatchQuestion) -> ReviewReply {
+    ReviewReply::Pair(Box::new(PairAnswer::Same(IdentityDecision::default())))
+}
+
+fn cancel(_: &MatchQuestion) -> ReviewReply {
+    ReviewReply::Cancel
+}
+
+/// Imports the GEDCOM test file as `gedcom:<n>`, its plan and pairs answered as `step` and `reply`
+/// say; returns the workspace and what the reviewer was shown.
+async fn import_reviewed(
+    workspace: Workspace,
+    dir: &Path,
+    n: u128,
+    (step, reply): (PlanStep, fn(&MatchQuestion) -> ReviewReply),
+) -> (Workspace, Seen) {
+    let seen = Arc::new(Mutex::new(Seen::default()));
+    let mut run = spec(
+        "gedcom-import",
+        DatasetId::lineage("gedcom", Uuid::from_u128(n)),
+        "tree.ged",
+    );
+    run.reviewer = Box::new(Scripted {
+        step,
+        reply,
+        seen: Arc::clone(&seen),
+    });
+    let (_, workspace) = common::host()
+        .run_bulk_import(
+            &common::component("gedcom-import"),
+            invocation(workspace, Some(run)),
+            write_file(dir, "tree.ged", GEDCOM),
+            proceed,
+        )
+        .await
+        .expect("import");
+    let seen = std::mem::take(&mut *seen.lock().expect("lock"));
+    (workspace, seen)
+}
+
+#[tokio::test]
+async fn a_re_import_plans_every_record_unchanged() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let workspace = import_as(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        5,
+        dir.path(),
+        "tree.ged",
+        GEDCOM,
+    )
+    .await;
+    let (_, seen) = import_reviewed(workspace, dir.path(), 5, (PlanStep::Discard, cancel)).await;
+    let plan = &seen.plans[0];
+    assert!(!plan.kinds.is_empty(), "the plan lists the file's kinds");
+    for row in &plan.kinds {
+        let unchanged = PlanCounts {
+            unchanged: row.counts.unchanged,
+            ..PlanCounts::default()
+        };
+        assert_eq!(row.counts, unchanged, "{:?} is not all unchanged", row.kind);
+    }
+}
+
+#[tokio::test]
+async fn a_discarded_plan_writes_nothing_and_leaves_no_run() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (workspace, seen) =
+        import_reviewed(workspace(dir.path()).await, dir.path(), 5, (PlanStep::Discard, cancel)).await;
+    let persons = seen.plans[0]
+        .kinds
+        .iter()
+        .find(|row| row.kind == MatchableKind::Person)
+        .map(|row| row.counts.new);
+    assert_eq!(persons, Some(2), "the plan shows the file's people as new");
+    assert_eq!(event_count(&workspace).await, 0);
+    assert!(
+        list_import_runs(&workspace).await.expect("runs").is_empty(),
+        "a discarded plan records no run"
+    );
+}
+
+#[tokio::test]
+async fn a_reviewed_import_asks_about_each_match_and_merges_a_person_decided_same() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let workspace = import_as(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        5,
+        dir.path(),
+        "tree.ged",
+        GEDCOM,
+    )
+    .await;
+    let (workspace, seen) = import_reviewed(workspace, dir.path(), 6, (PlanStep::Review, same)).await;
+    assert_eq!(seen.plans.len(), 1);
+    assert!(
+        seen.plans[0].candidates > 0,
+        "a second tree of the same people has matches"
+    );
+    let persons = seen
+        .questions
+        .iter()
+        .filter(|question| question.kind == MatchableKind::Person)
+        .count();
+    assert_eq!(persons, 2, "John and Jane are each asked about");
+    let merges = log(&workspace)
+        .await
+        .into_iter()
+        .filter(|(_, event_type, _)| event_type == "PersonsMerged")
+        .count();
+    assert_eq!(merges, persons);
+}
+
+#[tokio::test]
+async fn cancelling_the_review_writes_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let workspace = import_as(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        5,
+        dir.path(),
+        "tree.ged",
+        GEDCOM,
+    )
+    .await;
+    let events = event_count(&workspace).await;
+    let (workspace, seen) = import_reviewed(workspace, dir.path(), 6, (PlanStep::Review, cancel)).await;
+    assert_eq!(seen.questions.len(), 1, "the review ends at the first pair");
+    assert_eq!(event_count(&workspace).await, events);
+    assert_eq!(
+        list_import_runs(&workspace).await.expect("runs").len(),
+        1,
+        "no second run"
+    );
+}
+
+#[tokio::test]
+async fn deferring_the_matches_commits_every_candidate_as_new_without_asking() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let workspace = import_as(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        5,
+        dir.path(),
+        "tree.ged",
+        GEDCOM,
+    )
+    .await;
+    let (workspace, seen) = import_reviewed(workspace, dir.path(), 6, (PlanStep::DeferMatches, same)).await;
+    assert!(seen.questions.is_empty(), "deferred matches are never asked about");
+    assert_eq!(workspace_counts(&workspace).await.expect("counts").person, 4);
 }

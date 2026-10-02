@@ -24,4 +24,4 @@ pub use plan::{
     DecidedMatch, Disposition, ImportPlan, KindCounts, LinkBasis, PlanCounts, PlanError, PlanSummary, PlannedEntity,
     PlannedLink, WriteScope, plan_import,
 };
-pub use review::{ImportReview, MatchGroup, MatchQuestion, MatchReply, PairAnswer};
+pub use review::{ImportReview, MatchGroup, MatchQuestion, MatchReply, PairAnswer, PlanStep, ReviewReply};

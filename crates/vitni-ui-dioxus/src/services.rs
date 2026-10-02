@@ -240,6 +240,7 @@ impl Services {
             source_label,
             plugin: info.id.clone(),
             plugin_version: info.version.clone(),
+            reviewer: Box::new(vitni_plugin_host::DeferMatches),
         })
     }
 }
