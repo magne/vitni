@@ -820,7 +820,7 @@ fn point(year: i32, month: Option<u8>, day: Option<u8>) -> DatePoint {
 async fn a_census_person_imports_its_census_its_birth_their_places_and_its_household() {
     let (root, _dir) = init_workspace();
     let server = census_server().await;
-    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(single_person_reply(payload)));
+    let (presenter, seen) = ScriptedPresenter::new(|payload| Ok(single_person_reply(payload)));
 
     run(
         (open_workspace(&root).await, grants(&[])),
@@ -830,6 +830,21 @@ async fn a_census_person_imports_its_census_its_birth_their_places_and_its_house
     )
     .await
     .expect("assisted import runs");
+
+    let confirm = seen
+        .lock()
+        .expect("seen")
+        .iter()
+        .find(|payload| kind_of(payload) == "confirm-record")
+        .and_then(|payload| serde_json::from_str::<Value>(payload).ok())
+        .expect("a confirm payload");
+    let preview = &confirm["record"]["provenance"];
+    assert_eq!(preview["event"], "Folketelling 1920 for 9901 Eksempelvik herred");
+    assert_eq!(preview["places"], json!(["Fjellstue", "Eksempelvik"]));
+    assert_eq!(
+        preview["household"],
+        json!({ "position": "partner", "residence": "Fjellstue" })
+    );
 
     let workspace = open_workspace(&root).await;
     let events = list_events(&workspace).await.expect("events");
@@ -1050,7 +1065,7 @@ fn churchbook_reply(payload: &str) -> String {
 async fn a_church_book_record_imports_its_event_with_the_participant_by_role() {
     let (root, _dir) = init_workspace();
     let server = churchbook_server("far").await;
-    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(churchbook_reply(payload)));
+    let (presenter, seen) = ScriptedPresenter::new(|payload| Ok(churchbook_reply(payload)));
 
     run(
         (open_workspace(&root).await, grants(&[])),
@@ -1060,6 +1075,20 @@ async fn a_church_book_record_imports_its_event_with_the_participant_by_role() {
     )
     .await
     .expect("assisted import runs");
+
+    let confirm = seen
+        .lock()
+        .expect("seen")
+        .iter()
+        .find(|payload| kind_of(payload) == "confirm-record")
+        .and_then(|payload| serde_json::from_str::<Value>(payload).ok())
+        .expect("a confirm payload");
+    assert_eq!(confirm["record"]["provenance"]["event"], "Fødte og døpte: 1925-02-15");
+    assert_eq!(
+        confirm["record"]["provenance"].get("household"),
+        None,
+        "no household in a church book"
+    );
 
     let workspace = open_workspace(&root).await;
     let events = list_events(&workspace).await.expect("events");

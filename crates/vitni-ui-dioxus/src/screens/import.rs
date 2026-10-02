@@ -25,9 +25,9 @@ use serde_json::json;
 use tokio::sync::oneshot;
 use vitni_plugin_host::PluginRole;
 use vitni_ui::{
-    ConfirmRecordPayload, CropRegion, FieldValue, ImportResponse, ImportSession, ImportStage, ImportedRecord,
-    PayloadConfidence, ProvenancePreview, RecordsPayload, ResponseValues, SaveScanPayload, SaveSuggestion,
-    resolve_confirm_record,
+    ConfirmRecordPayload, CropRegion, FieldValue, HouseholdPosition, HouseholdPreview, ImportResponse, ImportSession,
+    ImportStage, ImportedRecord, PayloadConfidence, ProvenancePreview, RecordsPayload, ResponseValues, SaveScanPayload,
+    SaveSuggestion, resolve_confirm_record,
 };
 
 use super::bulk_import::BulkImportBody;
@@ -99,8 +99,11 @@ pub struct ConfirmChrome {
     pub heading: String,
     /// The provenance-preview card heading.
     pub provenance_heading: String,
-    /// The provenance row labels (operator, source, repository, citation, external id, confidence).
-    pub prov: [String; 6],
+    /// The provenance row labels (operator, source, repository, citation, external id, confidence,
+    /// event, places, household).
+    pub prov: [String; 9],
+    /// A household position's label, indexed partner/child.
+    pub household: [String; 2],
     /// The "software agent" badge label.
     pub software_agent: String,
     /// The scan-URL field label.
@@ -637,7 +640,8 @@ pub fn ConfirmStage(
     }
 }
 
-/// The provenance-preview card: the recorded source/repository/citation/external-id, and an editable
+/// The provenance-preview card: the recorded source/repository/citation/external-id, the event, places
+/// and household the record names (each only when it names one), and an editable
 /// confidence select (defaulting to the plugin's proposed value — `low` for the assisted flow).
 fn provenance_card(
     chrome: &ConfirmChrome,
@@ -660,6 +664,15 @@ fn provenance_card(
             {prov_row(&chrome.prov[2], &provenance.repository)}
             {prov_row(&chrome.prov[3], &provenance.citation)}
             {prov_row(&chrome.prov[4], &provenance.external_id_url)}
+            if let Some(event) = &provenance.event {
+                {prov_row(&chrome.prov[6], event)}
+            }
+            if !provenance.places.is_empty() {
+                {prov_row(&chrome.prov[7], &provenance.places.join(" · "))}
+            }
+            if let Some(household) = &provenance.household {
+                {prov_row(&chrome.prov[8], &household_line(chrome, household))}
+            }
             div { class: "prov-claim", style: "align-items:center",
                 span { class: "muted", style: "width:96px", "{chrome.prov[5]}" }
                 Select {
@@ -672,6 +685,15 @@ fn provenance_card(
             }
         }
     }
+}
+
+/// A household preview's value: the position's label and the residence (record content).
+fn household_line(chrome: &ConfirmChrome, household: &HouseholdPreview) -> String {
+    let position = match household.position {
+        HouseholdPosition::Partner => &chrome.household[0],
+        HouseholdPosition::Child => &chrome.household[1],
+    };
+    format!("{position} · {}", household.residence)
 }
 
 /// One provenance-preview row: a fixed-width muted label and the (record-content) value.
@@ -964,6 +986,7 @@ fn confirm_chrome(chrome: &Chrome) -> ConfirmChrome {
         heading: chrome.import_confirm_heading(),
         provenance_heading: chrome.import_provenance_heading(),
         prov: chrome.import_prov_labels(),
+        household: chrome.import_household_positions(),
         software_agent: chrome.import_software_agent(),
         scan_url_label: chrome.import_scan_url_label(),
         scan_url_placeholder: chrome.import_scan_url_placeholder(),

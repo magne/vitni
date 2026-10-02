@@ -148,8 +148,9 @@ pub struct ScanRef {
     pub region: Option<CropRegion>,
 }
 
-/// A preview of what provenance the import will record. `source_title`/`repository`/`citation`/
-/// `external_id_url` are **record content**; `confidence` is the default surety the user may change.
+/// A preview of what the import will record. `source_title`/`repository`/`citation`/
+/// `external_id_url`, the event and the places are **record content**; `confidence` is the default
+/// surety the user may change.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProvenancePreview {
     /// The citing source's title. **Record content.**
@@ -163,6 +164,36 @@ pub struct ProvenancePreview {
     /// The default confidence for imported claims (the assisted flow proposes
     /// [`Low`](PayloadConfidence::Low)).
     pub confidence: PayloadConfidence,
+    /// The event the record is part of, as the source names it (a census title, a church-book
+    /// event heading). **Record content.**
+    #[serde(default)]
+    pub event: Option<String>,
+    /// The places the import records, by name: the residence, its municipality, the birthplace.
+    /// **Record content.**
+    #[serde(default)]
+    pub places: Vec<String>,
+    /// Where the person joins the household's family, when they do.
+    #[serde(default)]
+    pub household: Option<HouseholdPreview>,
+}
+
+/// Where a census person joins their household's family.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HouseholdPreview {
+    /// As a partner or a child.
+    pub position: HouseholdPosition,
+    /// The residence the household lives at. **Record content.**
+    pub residence: String,
+}
+
+/// A person's place in a household's family: serialized kebab-case (`partner`, `child`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum HouseholdPosition {
+    /// The head or the head's spouse.
+    Partner,
+    /// A child of the household.
+    Child,
 }
 
 /// One action button. `id` is a machine handle echoed in the response; `label` is **plugin chrome**.
@@ -303,9 +334,10 @@ pub fn parse_response(json: &str) -> Result<ImportResponse, ImportPayloadError> 
 #[cfg(test)]
 mod tests {
     use super::{
-        ConfirmRecord, ConfirmRecordPayload, CropRegion, FieldValue, ImportPayload, ImportResponse, ImportedRecord,
-        PayloadAction, PayloadConfidence, PayloadField, ProvenancePreview, RecordRow, RecordsPayload, ResponseValues,
-        SaveScanPayload, SaveSuggestion, ScanRef, SourceRef, SummaryPayload, parse_payload, parse_response,
+        ConfirmRecord, ConfirmRecordPayload, CropRegion, FieldValue, HouseholdPosition, HouseholdPreview,
+        ImportPayload, ImportResponse, ImportedRecord, PayloadAction, PayloadConfidence, PayloadField,
+        ProvenancePreview, RecordRow, RecordsPayload, ResponseValues, SaveScanPayload, SaveSuggestion, ScanRef,
+        SourceRef, SummaryPayload, parse_payload, parse_response,
     };
 
     fn records_payload() -> ImportPayload {
@@ -352,6 +384,12 @@ mod tests {
                     citation: "URN:NBN:no-a1450-fs10771822220997 · retrieved 2026-07-19".to_owned(),
                     external_id_url: "https://www.digitalarkivet.no/census/person/pf01052209001842".to_owned(),
                     confidence: PayloadConfidence::Low,
+                    event: Some("Folketelling 1920 for 1017 Greipstad herred".to_owned()),
+                    places: vec!["Bergstøl".to_owned(), "Greipstad".to_owned()],
+                    household: Some(HouseholdPreview {
+                        position: HouseholdPosition::Partner,
+                        residence: "Bergstøl".to_owned(),
+                    }),
                 },
             },
             actions: vec![
@@ -426,6 +464,27 @@ mod tests {
         };
         assert_eq!(records.records[0].label, "Ola");
         assert_eq!(records.records[0].detail, None);
+    }
+
+    #[test]
+    fn a_preview_naming_no_event_places_or_household_parses() {
+        let json = r#"{"kind":"confirm-record","record":{"fields":[],"provenance":{"source_title":"S",
+            "repository":"R","citation":"C","external_id_url":"https://x/1","confidence":"low"}},"actions":[]}"#;
+        let ImportPayload::ConfirmRecord(confirm) = parse_payload(json).expect("parse") else {
+            panic!("expected confirm-record");
+        };
+        let provenance = confirm.record.provenance;
+        assert_eq!(provenance.event, None);
+        assert!(provenance.places.is_empty(), "{:?}", provenance.places);
+        assert_eq!(provenance.household, None);
+    }
+
+    #[test]
+    fn a_household_position_is_kebab_case() {
+        let json = serde_json::to_value(confirm_payload()).expect("to value");
+        assert_eq!(json["record"]["provenance"]["household"]["position"], "partner");
+        let child = serde_json::to_value(HouseholdPosition::Child).expect("to value");
+        assert_eq!(child, "child");
     }
 
     #[test]

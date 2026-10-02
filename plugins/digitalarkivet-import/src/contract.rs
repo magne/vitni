@@ -8,7 +8,9 @@
 //! plugin's catalogue (ADR 0012 §5); record content (names, dates, places) is sent verbatim.
 
 use serde::{Deserialize, Serialize};
-use vitni_digitalarkivet::PersonRecord;
+use vitni_digitalarkivet::{
+    HouseholdPosition, PersonRecord, churchbook_event, family_position, municipality, residence,
+};
 
 /// The `run-assisted` request: `{"kind":"url","url":…}` (additive kinds later).
 #[derive(Debug, Deserialize)]
@@ -203,7 +205,8 @@ pub struct ScanRef {
     pub region: Option<Region>,
 }
 
-/// A preview of what provenance the import will record (all record content except `confidence`).
+/// A preview of what the import will record (all record content except `confidence` and the
+/// household position).
 #[derive(Debug, Serialize)]
 pub struct ProvenancePreview {
     /// The citing source's title.
@@ -216,6 +219,24 @@ pub struct ProvenancePreview {
     pub external_id_url: String,
     /// The default confidence for imported claims (kebab-case; the assisted flow proposes `low`).
     pub confidence: &'static str,
+    /// The event the record is part of, as the source names it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// The places the import records, by name.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub places: Vec<String>,
+    /// Where the person joins the household's family, when they do.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub household: Option<HouseholdPreview>,
+}
+
+/// Where a census person joins their household's family.
+#[derive(Debug, Serialize)]
+pub struct HouseholdPreview {
+    /// `partner` or `child`.
+    pub position: &'static str,
+    /// The residence's name.
+    pub residence: String,
 }
 
 /// One action button: `id` is echoed in the response, `label` is a Fluent id (plugin chrome).
@@ -407,5 +428,56 @@ fn provenance(record: &PersonRecord, scan_url: Option<&str>) -> ProvenancePrevie
         citation,
         external_id_url: record.record_url.clone(),
         confidence: "low",
+        event: event_label(record),
+        places: place_names(record),
+        household: household(record),
     }
+}
+
+/// The event a record is part of, as its source names it: the census title, or the church-book event
+/// heading.
+fn event_label(record: &PersonRecord) -> Option<String> {
+    if residence(record).is_some() {
+        return record.source.title.clone();
+    }
+    let event = churchbook_event(record)?;
+    record
+        .source
+        .headings
+        .iter()
+        .find(|heading| heading.url.as_deref().is_some_and(|url| url.ends_with(&event.id)))
+        .map(|heading| format!("{}: {}", heading.key, heading.value))
+}
+
+/// The places a record's import records: the residence, the census municipality, the birthplace.
+fn place_names(record: &PersonRecord) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    let residence = residence(record);
+    let municipality = residence
+        .as_ref()
+        .and_then(|_| record.source.title.as_deref().and_then(municipality));
+    let candidates = [
+        residence.map(|residence| residence.name),
+        municipality.map(|municipality| municipality.name),
+        record.birthplace.clone(),
+    ];
+    for name in candidates.into_iter().flatten() {
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+}
+
+/// Where a census person joins the household's family.
+fn household(record: &PersonRecord) -> Option<HouseholdPreview> {
+    let residence = residence(record)?;
+    let position = match family_position(record)? {
+        HouseholdPosition::Head | HouseholdPosition::Spouse => "partner",
+        HouseholdPosition::Child => "child",
+    };
+    Some(HouseholdPreview {
+        position,
+        residence: residence.name,
+    })
 }
