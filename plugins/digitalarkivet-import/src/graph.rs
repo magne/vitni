@@ -9,7 +9,7 @@
 
 use vitni_digitalarkivet::{
     BirthValue, ChurchbookEventKind, ChurchbookRole, HouseholdPosition, PersonRecord, birth_value, churchbook_event,
-    churchbook_role, family_position, municipality, residence,
+    churchbook_role, family_position, household_number, municipality, residence,
 };
 use vitni_plugin_api::staging::{
     ChildLink, EntityFields, EntityKind, EntityRef, LinkKind, MemberLink, PairLink, ParticipationLink, StagedEvent,
@@ -57,14 +57,14 @@ pub fn add_record_content(graph: &mut Graph, references: &mut References, record
     }
 }
 
-/// The person's birth: dated by the birth value (estimated from an age at the census), at the
+/// The person's birth: dated by the birth value (estimated from an age at the record's date), at the
 /// birthplace.
 fn add_birth(graph: &mut Graph, references: &mut References, record: &PersonRecord, person: &EntityRef) {
     let date = record
         .birth
         .as_deref()
         .and_then(birth_value)
-        .and_then(|value| birth_date(&value, record.source.year.as_deref()));
+        .and_then(|value| birth_date(&value, record_year(record)));
     let place = record
         .birthplace
         .as_deref()
@@ -89,14 +89,20 @@ fn add_birth(graph: &mut Graph, references: &mut References, record: &PersonReco
 }
 
 /// The birthplace: the census municipality when it bears the birthplace's name, else a place of that
-/// name.
+/// name. A name is one place only within its census municipality, or its church book: Norway has many
+/// a Nes and a Vik, which the matching engine, not the key, may later find to be the same.
 fn birthplace(references: &mut References, record: &PersonRecord, name: &str) -> EntityRef {
-    if let Some(municipality) = record.source.title.as_deref().and_then(municipality)
-        && municipality.name == name
-    {
-        return add_municipality(references, &municipality.code, &municipality.name);
-    }
-    let key = format!("place:{name}");
+    let municipality = record.source.title.as_deref().and_then(municipality);
+    let key = match municipality {
+        Some(municipality) if municipality.name == name => {
+            return add_municipality(references, &municipality.code, &municipality.name);
+        }
+        Some(municipality) => format!("birthplace:municipality:{}:{name}", municipality.code),
+        None => format!(
+            "birthplace:source:{}:{name}",
+            record.source.title.as_deref().unwrap_or(&record.record_url)
+        ),
+    };
     references.add(&key, |key| place_graph(key, name, None));
     origin_ref(EntityKind::Place, &key, None)
 }
@@ -169,7 +175,11 @@ fn add_census(
         participation(person, &census, ParticipantRole::Primary, age, attributes),
     );
     if let Some(position) = family_position(record) {
-        add_household(graph, references, &residence.id, person, position);
+        let household = match household_number(record) {
+            Some(number) => format!("household:{}:{number}", residence.id),
+            None => format!("household:{}", residence.id),
+        };
+        add_household(graph, references, &household, person, position);
     }
 }
 
@@ -177,12 +187,11 @@ fn add_census(
 fn add_household(
     graph: &mut Graph,
     references: &mut References,
-    residence: &str,
+    key: &str,
     person: &EntityRef,
     position: HouseholdPosition,
 ) {
-    let key = format!("household:{residence}");
-    references.add(&key, |key| {
+    references.add(key, |key| {
         let mut graph = Graph::new(key);
         graph.entity(
             Some("family"),
@@ -193,7 +202,7 @@ fn add_household(
         );
         graph
     });
-    let family = origin_ref(EntityKind::Family, &key, Some("family"));
+    let family = origin_ref(EntityKind::Family, key, Some("family"));
     let link = match position {
         HouseholdPosition::Head | HouseholdPosition::Spouse => LinkKind::Partner(MemberLink {
             family,
@@ -284,9 +293,21 @@ fn participation(
     })
 }
 
-/// The birth date a birth value gives: the date or year itself, or the census year less the age
+/// The year an age on `record` is given at: the census year, or the church-book event's year — never
+/// a church book's title year, which is the first year the book covers.
+fn record_year(record: &PersonRecord) -> Option<i32> {
+    if residence(record).is_some() {
+        return record.source.year.as_deref()?.parse().ok();
+    }
+    match birth_value(&churchbook_event(record)?.date)? {
+        BirthValue::Date { year, .. } | BirthValue::Year(year) => Some(year),
+        BirthValue::Age { .. } | BirthValue::Text(_) => None,
+    }
+}
+
+/// The birth date a birth value gives: the date or year itself, or `record_year` less the age
 /// (calculated, about), or the text verbatim.
-fn birth_date(value: &BirthValue, census_year: Option<&str>) -> Option<GenealogicalDate> {
+fn birth_date(value: &BirthValue, record_year: Option<i32>) -> Option<GenealogicalDate> {
     match value {
         BirthValue::Date { year, month, day } => Some(date(
             DateQuality::Normal,
@@ -298,8 +319,7 @@ fn birth_date(value: &BirthValue, census_year: Option<&str>) -> Option<Genealogi
         )),
         BirthValue::Year(year) => Some(year_date(*year)),
         BirthValue::Age { years, .. } => {
-            let census_year: i32 = census_year?.parse().ok()?;
-            let year = census_year - i32::from(years.unwrap_or(0));
+            let year = record_year? - i32::from(years.unwrap_or(0));
             Some(date(
                 DateQuality::Calculated,
                 DateModifier::About(DatePoint {

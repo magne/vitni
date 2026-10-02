@@ -716,7 +716,8 @@ end and the `created` flag the two-step submit and its `query` lookups needed.
 birth — dated from the transcribed date or year, or calculated from an age — and either its part in
 the census of its residence or its part in a church-book event by its role. The census is at the
 residence (a farm when rural), inside the census municipality; the head, spouse and children of a
-household join its family, a head only when someone else lives there. The census, the residence, the
+household (by its household number) join its family, a head only when someone else lives there; a
+birthplace name is one place only within its census municipality or church book. The census, the residence, the
 municipality, the household and the church-book event are records of their own, keyed by the archive's
 ids, so a household's members share them; the confirm stage previews them. A record resolved onto
 another dataset's person no longer adds that person to the household's family.

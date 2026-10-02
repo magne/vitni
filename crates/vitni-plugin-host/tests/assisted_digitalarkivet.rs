@@ -915,7 +915,7 @@ async fn a_census_person_imports_its_census_its_birth_their_places_and_its_house
         r#""record":"census:bf01099901000100""#,
         r#""record":"residence:bf01099901000100""#,
         r#""record":"municipality:9901""#,
-        r#""record":"household:bf01099901000100""#,
+        r#""record":"household:bf01099901000100:01""#,
         r#""item":"event:BIRT","record":"pf01099901000101""#,
     ] {
         assert!(events_contain(&root, origin).await, "an assertion carries {origin}");
@@ -924,26 +924,12 @@ async fn a_census_person_imports_its_census_its_birth_their_places_and_its_house
 
 /// Serves the household's second member as a `role` (`Familiestilling`), under its own record id.
 async fn mount_member_as(server: &MockServer, role: &str) {
-    let base = format!("http://localhost:{}", server.address().port());
-    let html = fixture("census", "person.html", &base)
-        .replace(
-            &format!(r#"content="{base}/census/person/pf01099901000101""#),
-            &format!(r#"content="{base}/census/person/pf01099901000102""#),
-        )
-        .replace(
-            r#"<div class="ssp-semibold">hp</div>"#,
-            &format!(r#"<div class="ssp-semibold">{role}</div>"#),
-        );
-    Mock::given(method("GET"))
-        .and(path_regex(r"^/census/person/pf01099901000102$"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/html")
-                .set_body_string(html),
-        )
-        .with_priority(1)
-        .mount(server)
-        .await;
+    mount_member_with(
+        server,
+        r#"<div class="ssp-semibold">hp</div>"#,
+        &format!(r#"<div class="ssp-semibold">{role}</div>"#),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -980,6 +966,86 @@ async fn two_members_of_a_household_share_its_census_and_its_family() {
     assert_eq!(families[0].partners.len(), 1, "the head is the partner");
     assert_eq!(families[0].children.len(), 1, "the son is the child");
     assert_ne!(families[0].partners[0].id, families[0].children[0].id);
+}
+
+/// Serves the household's second member with `from` replaced by `to` in its page.
+async fn mount_member_with(server: &MockServer, from: &str, to: &str) {
+    let base = format!("http://localhost:{}", server.address().port());
+    let html = fixture("census", "person.html", &base)
+        .replace(
+            &format!(r#"content="{base}/census/person/pf01099901000101""#),
+            &format!(r#"content="{base}/census/person/pf01099901000102""#),
+        )
+        .replace(from, to);
+    Mock::given(method("GET"))
+        .and(path_regex(r"^/census/person/pf01099901000102$"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/html")
+                .set_body_string(html),
+        )
+        .with_priority(1)
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn two_households_of_one_residence_found_two_families() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    mount_member_with(
+        &server,
+        r#"<div class="ssp-semibold">01</div>"#,
+        r#"<div class="ssp-semibold">02</div>"#,
+    )
+    .await;
+    let (presenter, _seen) = ScriptedPresenter::new(household_reply(&["pf01099901000101", "pf01099901000102"]));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "census-residence",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    let workspace = open_workspace(&root).await;
+    let families = list_families(&workspace).await.expect("families");
+    assert_eq!(families.len(), 2, "a family per household number: {families:#?}");
+    let events = list_events(&workspace).await.expect("events");
+    assert_eq!(
+        event_of(&events, &EventType::Census).participants.len(),
+        2,
+        "both households took part in the residence's one census"
+    );
+}
+
+#[tokio::test]
+async fn a_birthplace_is_one_place_only_within_its_census_municipality() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    mount_member_with(
+        &server,
+        r#"<div class="ssp-semibold">Eksempelvik</div>"#,
+        r#"<div class="ssp-semibold">Nes</div>"#,
+    )
+    .await;
+    let (presenter, _seen) = ScriptedPresenter::new(household_reply(&["pf01099901000102"]));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "census-residence",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    assert!(
+        events_contain(&root, r#""record":"birthplace:municipality:9901:Nes""#).await,
+        "the birthplace is keyed within the census municipality"
+    );
 }
 
 #[tokio::test]
@@ -1117,6 +1183,35 @@ async fn a_church_book_record_imports_its_event_with_the_participant_by_role() {
     assert!(
         events_contain(&root, r#""record":"churchbook-event:hd00000099901000""#).await,
         "the event carries its record's origin"
+    );
+}
+
+#[tokio::test]
+async fn a_church_book_age_dates_the_birth_from_the_event_not_the_book() {
+    let (root, _dir) = init_workspace();
+    let server = MockServer::start().await;
+    let base = format!("http://localhost:{}", server.address().port());
+    let html = fixture("churchbook", "person.html", &base).replace(
+        r#"<div class="ssp-semibold">1887</div>"#,
+        r#"<div class="ssp-semibold">38</div>"#,
+    );
+    mount(&server, r"^/view/999/pd.*", html).await;
+    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(churchbook_reply(payload)));
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "churchbook-record",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    let events = list_events(&open_workspace(&root).await).await.expect("events");
+    assert_eq!(
+        modifier(event_of(&events, &EventType::Birth).date.as_ref()),
+        Some((&DateModifier::About(point(1887, None, None)), DateQuality::Calculated)),
+        "the 1925 baptism less 38 years, not the book's 1904"
     );
 }
 

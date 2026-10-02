@@ -3,7 +3,8 @@
 
 use vitni_digitalarkivet::{
     Field, HouseholdPosition, Municipality, PageContext, PageKind, ParseError, Residence, classify_url, extract_urn,
-    family_position, municipality, parse_person_page, parse_residence_page, parse_viewer_page, residence,
+    family_position, household_number, municipality, parse_person_page, parse_residence_page, parse_viewer_page,
+    residence,
 };
 
 const PERSON_HTML: &str = include_str!("fixtures/census/person.html");
@@ -108,6 +109,14 @@ fn a_head_joins_the_family_of_a_household_with_others_in_it() {
     assert_eq!(family_position(&record), None, "a servant joins no family");
     record.role = None;
     assert_eq!(family_position(&record), None);
+}
+
+#[test]
+fn person_page_names_its_household_number() {
+    let mut record = parse_person_page(PERSON_HTML, PERSON_URL).expect("parse census person");
+    assert_eq!(household_number(&record).as_deref(), Some("01"));
+    record.fields.retain(|field| field.key != "H.nr");
+    assert_eq!(household_number(&record), None);
 }
 
 #[test]

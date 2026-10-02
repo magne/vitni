@@ -34,8 +34,8 @@ pub use error::{PageContext, ParseError};
 pub use html::{parse_person_page, parse_residence_page, parse_viewer_page};
 pub use interpret::{
     BirthValue, ChurchbookEvent, ChurchbookEventKind, ChurchbookRole, HouseholdPosition, Municipality, Residence,
-    birth_value, churchbook_event, churchbook_event_kind, churchbook_role, family_position, household_position,
-    municipality, residence,
+    birth_value, churchbook_event, churchbook_event_kind, churchbook_role, family_position, household_number,
+    household_position, municipality, residence,
 };
 pub use model::{ExternalId, Field, Heading, PageKind, PersonRecord, ResidenceRecord, SourceMetadata};
 pub use text::{

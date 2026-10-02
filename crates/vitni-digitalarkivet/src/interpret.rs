@@ -302,6 +302,18 @@ pub fn household_position(code: &str) -> Option<HouseholdPosition> {
     }
 }
 
+/// The household number (`H.nr`) a census person record carries: one residence may hold several
+/// households, each its own family.
+#[must_use]
+pub fn household_number(record: &PersonRecord) -> Option<String> {
+    let field = record
+        .fields
+        .iter()
+        .find(|field| field.key.eq_ignore_ascii_case("H.nr"))?;
+    let number = field.value.trim();
+    (!number.is_empty() && number != "-").then(|| number.to_owned())
+}
+
 /// Where `record`'s person joins its household's family: its family position, a head only when the
 /// household lists someone besides them (a head living alone founds no family).
 #[must_use]
