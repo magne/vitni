@@ -2,8 +2,8 @@
 //! the DOM the parser reads and carrying only invented values (ADR 0042 §4).
 
 use vitni_digitalarkivet::{
-    Field, PageContext, PageKind, ParseError, classify_url, extract_urn, parse_person_page, parse_residence_page,
-    parse_viewer_page,
+    Field, HouseholdPosition, Municipality, PageContext, PageKind, ParseError, Residence, classify_url, extract_urn,
+    family_position, municipality, parse_person_page, parse_residence_page, parse_viewer_page, residence,
 };
 
 const PERSON_HTML: &str = include_str!("fixtures/census/person.html");
@@ -77,6 +77,49 @@ fn person_page_source_metadata() {
     assert_eq!(record.source.repository, "Digitalarkivet (Arkivverket)");
     let heading = record.source.headings.iter().find(|f| f.key == "Tellingskrets");
     assert_eq!(heading.map(|f| f.value.as_str()), Some("001 Nordbygda"));
+    assert_eq!(
+        heading.and_then(|f| f.url.as_deref()),
+        Some("https://www.digitalarkivet.no/census/district/tf01099901000001")
+    );
+}
+
+#[test]
+fn person_page_names_its_residence() {
+    let record = parse_person_page(PERSON_HTML, PERSON_URL).expect("parse census person");
+    assert_eq!(
+        residence(&record),
+        Some(Residence {
+            id: "bf01099901000100".to_owned(),
+            name: "Fjellstue".to_owned(),
+            rural: true,
+        })
+    );
+}
+
+#[test]
+fn a_head_joins_the_family_of_a_household_with_others_in_it() {
+    let mut record = parse_person_page(PERSON_HTML, PERSON_URL).expect("parse census person");
+    assert_eq!(family_position(&record), Some(HouseholdPosition::Head));
+    record.household.truncate(1);
+    assert_eq!(family_position(&record), None, "a head living alone founds no family");
+    record.role = Some("s".to_owned());
+    assert_eq!(family_position(&record), Some(HouseholdPosition::Child));
+    record.role = Some("tj".to_owned());
+    assert_eq!(family_position(&record), None, "a servant joins no family");
+    record.role = None;
+    assert_eq!(family_position(&record), None);
+}
+
+#[test]
+fn person_page_names_its_municipality() {
+    let record = parse_person_page(PERSON_HTML, PERSON_URL).expect("parse census person");
+    assert_eq!(
+        record.source.title.as_deref().and_then(municipality),
+        Some(Municipality {
+            code: "9901".to_owned(),
+            name: "Eksempelvik".to_owned(),
+        })
+    );
 }
 
 #[test]

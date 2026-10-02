@@ -51,6 +51,17 @@ pub struct Field {
     pub value: String,
 }
 
+/// A `Label: value` heading above a record, with the record its value links to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Heading {
+    /// The label before the colon, e.g. `"Bosted land"` or `"Fødte og døpte"`.
+    pub key: String,
+    /// The value after the colon, whitespace-normalized, e.g. `"0012 Fjellstue"`.
+    pub value: String,
+    /// The absolute URL the value links to, e.g. the residence or church-book event page.
+    pub url: Option<String>,
+}
+
 /// Source/citation metadata suggested for a record, for Source/Citation/Repository.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceMetadata {
@@ -62,8 +73,8 @@ pub struct SourceMetadata {
     /// The managing repository name for the citation (free-reuse attribution).
     pub repository: &'static str,
     /// Context headings from the page (census `Tellingskrets`/`Bosted land`,
-    /// church-book event heading) as generic label/value pairs.
-    pub headings: Vec<Field>,
+    /// church-book event heading), with the record each links to.
+    pub headings: Vec<Heading>,
 }
 
 /// A person/record page: the focal person's transcribed fields plus household

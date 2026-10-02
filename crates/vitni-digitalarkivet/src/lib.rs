@@ -14,6 +14,8 @@
 //!    focal fields, household links, and the scan-viewer URL.
 //! 3. [`html::parse_residence_page`] a residence page → its household person links.
 //! 4. [`html::parse_viewer_page`] a scan-viewer page → the permanent image URL.
+//! 5. [`interpret`] a record → its residence or church-book event, the census municipality, its
+//!    birth value, family position or church-book role.
 //!
 //! Church-book scans are served through the new `nye.digitalarkivet.no` IIIF viewer,
 //! which carries no legacy permanent image; [`html::parse_viewer_page`] reports
@@ -23,13 +25,19 @@ pub mod api;
 pub mod classify;
 pub mod error;
 pub mod html;
+pub mod interpret;
 pub mod model;
 pub mod text;
 
 pub use classify::{classify_url, record_id};
 pub use error::{PageContext, ParseError};
 pub use html::{parse_person_page, parse_residence_page, parse_viewer_page};
-pub use model::{ExternalId, Field, PageKind, PersonRecord, ResidenceRecord, SourceMetadata};
+pub use interpret::{
+    BirthValue, ChurchbookEvent, ChurchbookEventKind, ChurchbookRole, HouseholdPosition, Municipality, Residence,
+    birth_value, churchbook_event, churchbook_event_kind, churchbook_role, family_position, household_position,
+    municipality, residence,
+};
+pub use model::{ExternalId, Field, Heading, PageKind, PersonRecord, ResidenceRecord, SourceMetadata};
 pub use text::{
     AUTHORITY, COMMON_EVENTS, REPOSITORY, census_year, extract_urn, normalize_ws, slugify, suggest_filename,
 };

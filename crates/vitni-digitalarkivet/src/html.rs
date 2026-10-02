@@ -9,7 +9,7 @@ use scraper::{ElementRef, Html, Selector};
 
 use crate::classify::{classify_url, record_id, resolve, resolve_and_dedup};
 use crate::error::{PageContext, ParseError};
-use crate::model::{ExternalId, Field, PageKind, PersonRecord, ResidenceRecord, SourceMetadata};
+use crate::model::{ExternalId, Field, Heading, PageKind, PersonRecord, ResidenceRecord, SourceMetadata};
 use crate::text::{REPOSITORY, normalize_ws};
 
 /// The page title, whose ` - `-delimited segments carry the source title.
@@ -20,6 +20,8 @@ pub const OG_URL: &str = r#"meta[property="og:url"]"#;
 pub const OG_IMAGE: &str = r#"meta[property="og:image"]"#;
 /// A `Label: value` source heading above the record.
 pub const SOURCE_HEADING: &str = "div.parent-post h4";
+/// A source heading's link, inside a [`SOURCE_HEADING`] match.
+pub const HEADING_LINK: &str = "a[href]";
 /// The focal person's block, whose rows are the transcribed fields.
 pub const FOCAL: &str = "div.data-item.current";
 /// A field's value column; the label is its preceding element sibling.
@@ -42,8 +44,9 @@ pub const SCAN_IMAGE: &str = r#"img[src*="urn.digitalarkivet.no"], img[src*="med
 /// A scan anchor on a viewer page, before the [`is_scan_image`] check.
 pub const SCAN_IMAGE_LINK: &str = r#"a[href*="urn.digitalarkivet.no"], a[href*="media.digitalarkivet.no/image/"]"#;
 
-/// The selectors the parsers apply only inside a [`FOCAL`] match, which [`PAGE_ELEMENTS`] keeps whole.
-pub const NESTED_ELEMENTS: &[&str] = &[FIELD_VALUE, FOCAL_HEADING, ORDINAL];
+/// The selectors the parsers apply only inside a [`FOCAL`] or [`SOURCE_HEADING`] match, which
+/// [`PAGE_ELEMENTS`] keeps whole.
+pub const NESTED_ELEMENTS: &[&str] = &[FIELD_VALUE, FOCAL_HEADING, ORDINAL, HEADING_LINK];
 
 /// Every element the parsers read on a page's first rung: a page pruned to the matches of these
 /// selectors, with their subtrees and ancestors, parses the same as the whole page. The scan-link
@@ -210,24 +213,33 @@ fn source_title(title: &str) -> Option<String> {
     None
 }
 
-/// Source/citation metadata from the page title and `.parent-post` headings.
-fn source_metadata(doc: &Html) -> Result<SourceMetadata, ParseError> {
+/// Source/citation metadata from the page title and `.parent-post` headings, each heading's link
+/// resolved against `base`.
+fn source_metadata(doc: &Html, base: &str) -> Result<SourceMetadata, ParseError> {
     let title_sel = sel(TITLE)?;
     let title = doc.select(&title_sel).next().map(text_of).unwrap_or_default();
     let heading_title = source_title(&title);
     let year = heading_title.as_deref().and_then(year_in);
 
     let heading_sel = sel(SOURCE_HEADING)?;
+    let link_sel = sel(HEADING_LINK)?;
     let mut headings = Vec::new();
     for heading in doc.select(&heading_sel) {
         let text = text_of(heading);
-        if let Some((label, value)) = text.split_once(':') {
-            let key = label.trim().to_owned();
-            let value = normalize_ws(value);
-            if !key.is_empty() && !value.is_empty() {
-                headings.push(Field { key, value });
-            }
+        let Some((label, value)) = text.split_once(':') else {
+            continue;
+        };
+        let key = label.trim().to_owned();
+        let value = normalize_ws(value);
+        if key.is_empty() || value.is_empty() {
+            continue;
         }
+        let url = heading
+            .select(&link_sel)
+            .next()
+            .and_then(|link| link.value().attr("href"))
+            .and_then(|href| resolve(base, href));
+        headings.push(Heading { key, value, url });
     }
     Ok(SourceMetadata {
         title: heading_title,
@@ -275,7 +287,7 @@ pub fn parse_person_page(html: &str, url: &str) -> Result<PersonRecord, ParseErr
         occupation: field_value(&fields, &["Yrke", "Stilling/stand"]),
         scan_viewer_url: scan_viewer_url(&doc, &record_url)?,
         household: household_links(&doc, &record_url)?,
-        source: source_metadata(&doc)?,
+        source: source_metadata(&doc, &record_url)?,
         fields,
         record_url,
     })
@@ -299,7 +311,7 @@ pub fn parse_residence_page(html: &str, url: &str) -> Result<ResidenceRecord, Pa
     Ok(ResidenceRecord {
         external_id: ExternalId::digitalarkivet(rid),
         person_links,
-        source: source_metadata(&doc)?,
+        source: source_metadata(&doc, &record_url)?,
         record_url,
     })
 }
