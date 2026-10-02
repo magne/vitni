@@ -23,7 +23,14 @@ const MONTHS: [&str; 12] = [
 #[must_use]
 pub fn emit(tree: &Tree) -> String {
     let mut out = String::new();
-    out.push_str("0 HEAD\n1 SOUR vitni\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n");
+    out.push_str("0 HEAD\n");
+    if let Some(source) = &tree.header.source {
+        let _ = writeln!(out, "1 SOUR {source}");
+    }
+    if let Some(file) = &tree.header.file {
+        let _ = writeln!(out, "1 FILE {file}");
+    }
+    out.push_str("1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n");
     if let Some(date) = &tree.header.date {
         let _ = writeln!(out, "1 DATE {}", date_value(date));
     }

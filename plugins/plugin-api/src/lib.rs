@@ -79,13 +79,14 @@ pub fn origin_ref(kind: staging::EntityKind, record: &str, item: Option<&str>) -
     })
 }
 
-/// Declares the import to the host before the first graph: the document's own export date (RFC 3339,
-/// ADR 0029 §2), when it has one.
+/// Declares the import to the host before the first graph: the document header's fingerprint, which
+/// the host compares with earlier imports' to propose the file's dataset (ADR 0037 §3), and the
+/// document's own export date (RFC 3339, ADR 0029 §2), each when it has one.
 ///
 /// # Errors
 /// Returns a message if the host refuses the declaration.
-pub fn begin_run(file_asserted_at: Option<&str>) -> Result<(), String> {
-    staging::begin_run(None, None, file_asserted_at).map_err(|error| format!("begin-run failed: {error:?}"))
+pub fn begin_run(dataset_hint: Option<&str>, file_asserted_at: Option<&str>) -> Result<(), String> {
+    staging::begin_run(dataset_hint, None, file_asserted_at).map_err(|error| format!("begin-run failed: {error:?}"))
 }
 
 /// The chunk size used when draining the import source.

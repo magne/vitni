@@ -73,6 +73,7 @@ impl HostState {
             return Err(types::CapabilityError::Denied);
         }
         tracing::debug!(?dataset_hint, ?source_label, "import declared");
+        self.dataset_hint = dataset_hint.map(str::to_owned);
         // A missing or unparseable date degrades to `None` — the conservative, additive-only default
         // (ADR 0029 §3): a malformed date is the guest's format-parsing problem, not a capability
         // violation.

@@ -581,6 +581,7 @@ mod tests {
                 dataset_label: "tree.ged".to_owned(),
                 source_label: "tree.ged".to_owned(),
                 file_asserted_at: None,
+                dataset_hint: None,
             },
         ));
         run.set_file_asserted_at(file_asserted_at);

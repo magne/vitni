@@ -145,6 +145,7 @@ mod tests {
         Tree {
             header: Header {
                 date: Some(exact(2006, Some(3), Some(27), "27 MAR 2006")),
+                ..Header::default()
             },
             individuals: sample_individuals(),
             families: vec![Family {
@@ -332,6 +333,34 @@ mod tests {
     }
 
     #[test]
+    fn parses_the_head_source_and_file_name() {
+        let text = "0 HEAD\n1 SOUR GRAMPS\n2 VERS 5.2\n1 FILE hansen.ged\n0 TRLR\n";
+        let tree = parse(text).expect("parse");
+        assert_eq!(tree.header.source.as_deref(), Some("GRAMPS"));
+        assert_eq!(tree.header.file.as_deref(), Some("hansen.ged"));
+    }
+
+    #[test]
+    fn a_head_without_source_or_file_has_neither() {
+        let tree = parse("0 HEAD\n1 DATE 27 MAR 2006\n0 TRLR\n").expect("parse");
+        assert_eq!((tree.header.source, tree.header.file), (None, None));
+    }
+
+    #[test]
+    fn head_source_and_file_round_trip_through_emit_and_parse() {
+        let tree = Tree {
+            header: Header {
+                source: Some("vitni".to_owned()),
+                file: Some("hansen.ged".to_owned()),
+                ..Header::default()
+            },
+            ..Tree::default()
+        };
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree);
+    }
+
+    #[test]
     fn an_unparseable_head_date_degrades_to_text_without_breaking_the_rest_of_the_parse() {
         let text = "\
 0 HEAD
@@ -354,11 +383,18 @@ mod tests {
         let tree = Tree {
             header: Header {
                 date: Some(exact(2006, Some(3), Some(27), "27 MAR 2006")),
+                ..Header::default()
             },
             ..Tree::default()
         };
         let reparsed = parse(&emit(&tree)).expect("reparse");
         assert_eq!(reparsed, tree, "the HEAD export date round-trips (ADR 0029 §2)");
+    }
+
+    #[test]
+    fn a_header_without_source_or_file_emits_neither_line() {
+        let document = emit(&Tree::default());
+        assert!(!document.contains("SOUR") && !document.contains("FILE"), "{document}");
     }
 
     #[test]

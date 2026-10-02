@@ -15,7 +15,7 @@ use std::io::{Read, Write};
 
 use std::sync::Arc;
 
-use crate::run::{ActiveRun, ImportRunSpec};
+use crate::run::{ActiveRun, ImportRunSpec, RunDataset, RunTemplate};
 use vitni_app::{
     Address, Age, AgeBound, AiConfig, AssociationRole, Attribute, Calendar, Confidence, DateInput, DateModifier,
     DatePoint, DateQuality, ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MediaRefInput,
@@ -23,6 +23,7 @@ use vitni_app::{
     NewPlace, NewSource, PersonName, PersonNameParts, Provenance, RecordGraph, Rect, RepositoryLinkRef, Session,
     Timestamp, Workspace, build_genealogical_date,
 };
+use vitni_app::{AppError, ChosenDataset, DatasetChoice, choose_dataset, dataset_required, propose_dataset};
 use vitni_core::enums::{
     ChildParentRelationship, EventType, EvidenceLevel, NoteType, ParticipantRole, PlaceType, Restriction, Sex,
     SourceMediaType,
@@ -35,6 +36,7 @@ use crate::bindings::imports::vitni::host_api::{
     ai, commands, export_sink, import_source, log, media_store, net, present, progress, query, types,
 };
 use crate::capability::{Capability, Grants};
+use crate::error::PluginError;
 use crate::net::{self as net_impl, NetError, NetPolicy};
 use crate::{BulkIo, ProgressControl, ProgressStep, ProgressUpdate, ai as ai_impl, media};
 
@@ -64,6 +66,8 @@ pub struct HostState {
     /// The document's own export date (ADR 0029 §2), declared by `staging.begin-run`. `None` until
     /// then, or if the guest never declares one (today's additive-only behavior, §3).
     pub(crate) file_asserted_at: Option<Timestamp>,
+    /// The document header's fingerprint (ADR 0037 §3), declared by `staging.begin-run`.
+    pub(crate) dataset_hint: Option<String>,
     /// The import run this invocation writes (ADR 0037 §5); `None` outside an import, where writes
     /// carry no origin.
     pub(crate) run: Option<ActiveRun>,
@@ -117,6 +121,7 @@ impl HostState {
             source: None,
             sink: None,
             file_asserted_at: None,
+            dataset_hint: None,
             run: None,
             staging: Staging::Held,
             staged: Vec::new(),
@@ -124,11 +129,54 @@ impl HostState {
         }
     }
 
-    /// Makes this invocation an import that writes the run `spec` describes (ADR 0037 §5).
-    pub(crate) fn open_run(&mut self, spec: ImportRunSpec) {
-        let run = ActiveRun::new(spec);
+    /// Makes this invocation an import that writes the run `template` describes into `dataset` (ADR
+    /// 0037 §5), carrying what the document declared so far.
+    pub(crate) fn open_run(&mut self, template: RunTemplate, dataset: ChosenDataset) {
+        let declared = (self.dataset_hint.clone(), self.file_asserted_at);
+        let run = ActiveRun::new(template, dataset, declared);
         self.session = self.session.clone().with_import_run(Arc::clone(run.pending()));
         self.run = Some(run);
+    }
+
+    /// Opens the run `spec` describes once the guest has submitted its graphs, deciding its dataset
+    /// first when the operator named none (ADR 0037 §3). Returns `false` when the operator cancelled
+    /// at the proposal, so nothing is written.
+    ///
+    /// # Errors
+    ///
+    /// [`PluginError::Dataset`] when the decision names no dataset, or an unknown or ambiguous one;
+    /// [`PluginError::Commit`] when the workspace cannot be read.
+    pub(crate) async fn open_proposed_run(&mut self, spec: ImportRunSpec) -> Result<bool, PluginError> {
+        let (dataset, template) = spec.into_parts();
+        let chosen = match dataset {
+            RunDataset::Chosen(chosen) => chosen,
+            RunDataset::Propose { spec: dataset, confirm } => {
+                let proposal = propose_dataset(&self.workspace, &dataset, self.dataset_hint.as_deref(), &self.staged)
+                    .await
+                    .map_err(dataset_error)?;
+                let required = dataset_required(&dataset, &proposal);
+                let choice = if proposal.candidates.is_empty() {
+                    DatasetChoice::Unspecified
+                } else {
+                    let Some(choice) = confirm(proposal).await else {
+                        return Ok(false);
+                    };
+                    choice
+                };
+                choose_dataset(
+                    &self.workspace,
+                    template.operator(),
+                    &dataset,
+                    choice,
+                    template.source_label(),
+                )
+                .await
+                .map_err(dataset_error)?
+                .ok_or(PluginError::Dataset(required))?
+            }
+        };
+        self.open_run(template, chosen);
+        Ok(true)
     }
 
     /// Recovers the workspace once the instance has run (the store is consumed afterwards).
@@ -2302,6 +2350,15 @@ impl present::Host for HostState {
             .present(payload)
             .await
             .map_err(|error| types::CapabilityError::Backend(error.to_string()))
+    }
+}
+
+/// A dataset decision's failure as a plugin error: the operator's own choice failing is
+/// [`PluginError::Dataset`], anything else a failure to read the workspace.
+fn dataset_error(error: AppError) -> PluginError {
+    match error {
+        AppError::Dataset(error) => PluginError::Dataset(error),
+        other => PluginError::Commit(other.to_string()),
     }
 }
 

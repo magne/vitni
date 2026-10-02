@@ -20,6 +20,9 @@ pub struct NewImportRun {
     pub source_label: String,
     /// The document's own export date, when its header carries one (ADR 0029 §2).
     pub file_asserted_at: Option<Timestamp>,
+    /// The document header's fingerprint, when the importer declared one: compared with later
+    /// imports' to propose their dataset (ADR 0037 §3).
+    pub dataset_hint: Option<String>,
 }
 
 /// Operator intent against an `ImportRun` aggregate.

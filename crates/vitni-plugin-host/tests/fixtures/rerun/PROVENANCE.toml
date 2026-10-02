@@ -1,0 +1,4 @@
+# Fixture provenance (ADR 0042), checked by `cargo xtask fixture-guard`. Two exports of one invented
+# family tree, one per lineage importer, that `tests/import_runs.rs` imports twice to prove a re-run
+# keys every item the same way (#408).
+origin = "invented"

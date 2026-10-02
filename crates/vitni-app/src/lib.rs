@@ -162,8 +162,9 @@ pub use import::{
     ImportedChild, import_add_child, import_add_partner, import_assert_sex, import_family, import_person,
 };
 pub use import_run::{
-    ChosenDataset, DatasetChoice, DatasetError, DatasetSummary, ImportRunSummary, abandon_import_run, choose_dataset,
-    find_import_run, finish_import_run, list_datasets, list_import_runs, start_import_run,
+    ChosenDataset, DatasetCandidate, DatasetChoice, DatasetError, DatasetProposal, DatasetSummary, Fingerprint,
+    ImportRunSummary, abandon_import_run, choose_dataset, dataset_required, find_import_run, finish_import_run,
+    list_datasets, list_import_runs, propose_dataset, start_import_run,
 };
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
 pub use matching::{MatchDataError, load_match_data};

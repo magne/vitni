@@ -10070,6 +10070,7 @@ dependencies = [
  "criterion",
  "directories",
  "dotenvy",
+ "proptest",
  "reqwest",
  "serde",
  "serde_json",

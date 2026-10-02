@@ -86,6 +86,12 @@ impl ImportRunView {
         self.state.file_asserted_at
     }
 
+    /// The document header's fingerprint, if the importer declared one (ADR 0037 §3).
+    #[must_use]
+    pub fn dataset_hint(&self) -> Option<&str> {
+        self.state.dataset_hint.as_deref()
+    }
+
     /// What the run wrote (zero until it has ended).
     #[must_use]
     pub fn counts(&self) -> &ImportCounts {

@@ -1,0 +1,85 @@
+# #408: importing a file again into the workspace it came from, naming no dataset, opens the confirm
+# once the file is read, starting on the proposed tree with the evidence for it, and Import anyway
+# finishes the run. SSR renders the dialog alone; only the live app shows it opening mid-run, which
+# needs the driver loop to wait on the progress stream and the host's question together.
+#
+# The fixture seeds `rerun.ged` beside the workspace's data without importing it, so the workspace is
+# empty and the first import asks nothing. Coordinates are window pixels at 1800x1200, read off the
+# shots this scenario writes.
+description = "Re-importing a file opens the confirm on the proposed tree once the file is read (#408)"
+
+[[step]]
+do = "click"
+at = [70, 786]
+label = "rail: Import"
+
+[[step]]
+do = "click"
+at = [1394, 408]
+label = "source file field"
+
+[[step]]
+do = "text"
+text = "rerun.ged"
+label = "type: rerun.ged"
+
+[[step]]
+do = "click"
+at = [300, 642]
+label = "Import"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the import finish"
+
+[[step]]
+do = "shot"
+name = "first-done"
+
+[[step]]
+do = "click"
+at = [330, 486]
+label = "Import another"
+
+[[step]]
+do = "shot"
+name = "again"
+
+[[step]]
+do = "click"
+at = [300, 642]
+label = "Import the same file again"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the file be read and the host ask"
+
+[[step]]
+do = "shot"
+name = "asked"
+
+[[step]]
+do = "click"
+at = [1153, 543]
+label = "Import anyway, into the proposed tree"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the import finish"
+
+[[step]]
+do = "shot"
+name = "second-done"
+
+[[assert]]
+kind = "differ"
+shots = ["again", "asked"]
+because = "the second import must stop on the dataset confirm once the file is read"
+
+[[assert]]
+kind = "match"
+shots = ["first-done", "second-done"]
+because = "confirming the proposed tree must finish the import, as the first one did"

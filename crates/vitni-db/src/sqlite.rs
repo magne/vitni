@@ -445,6 +445,15 @@ impl SqliteStore {
         crate::record_origins::sqlite::created(&self.pool, kind).await
     }
 
+    /// How many of `records` each dataset holds as an aggregate of `kind` (ADR 0037 §3).
+    pub(crate) async fn origin_overlap(
+        &self,
+        kind: &str,
+        records: &[String],
+    ) -> Result<Vec<(vitni_core::origin::DatasetId, usize)>, DbError> {
+        crate::record_origins::sqlite::overlap(&self.pool, kind, records).await
+    }
+
     /// The fingerprint the match keys were built under, if any (ADR 0038 §7).
     pub(crate) async fn match_keys_fingerprint(&self) -> Result<Option<String>, DbError> {
         crate::match_keys::sqlite::fingerprint(&self.pool).await

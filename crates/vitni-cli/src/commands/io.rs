@@ -4,13 +4,17 @@
 
 use std::path::{Path, PathBuf};
 
-use vitni_app::{AiConfig, AppError, ConfigStore, DatasetChoice, FileConfigStore, Session, Workspace};
+use tokio::sync::oneshot;
+use vitni_app::{AiConfig, AppError, ConfigStore, DatasetChoice, DatasetProposal, FileConfigStore, Session, Workspace};
 use vitni_plugin_host::{
-    ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginHost, PluginInfo, ProgressControl, ProgressStep,
-    ProgressUpdate, ResourceBudget, TrustRoots, resolve_trust_roots,
+    ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, PluginHost, PluginInfo, ProgressControl,
+    ProgressStep, ProgressUpdate, ResourceBudget, RunDataset, TrustRoots, resolve_trust_roots,
 };
 
 use crate::i18n::Localizer;
+
+/// A dataset proposal the host asks the operator about, with where to send the answer.
+type DatasetQuestion = (DatasetProposal, oneshot::Sender<Option<DatasetChoice>>);
 
 /// A bulk import resolved up to the point of running: the plugin, its grants, and the import run it
 /// will write (ADR 0037 §3, §5). Resolving it first lets a dataset choice be refused before anything
@@ -20,6 +24,9 @@ pub struct PreparedImport {
     bundle: PathBuf,
     grants: Grants,
     run: ImportRunSpec,
+    /// Where the host asks which dataset the file belongs to, when the operator named none while
+    /// datasets of its scheme exist.
+    question: Option<oneshot::Receiver<DatasetQuestion>>,
 }
 
 impl PreparedImport {
@@ -49,11 +56,25 @@ impl PreparedImport {
             || file.display().to_string(),
             |name| name.to_string_lossy().into_owned(),
         );
-        let dataset = vitni_app::choose_dataset(workspace, &operator, &spec, choice, &source_label).await?;
+        let chosen = vitni_app::choose_dataset(workspace, &operator, &spec, choice, &source_label).await?;
+        let (dataset, question) = if let Some(chosen) = chosen {
+            (RunDataset::Chosen(chosen), None)
+        } else {
+            let (asked, question) = oneshot::channel::<DatasetQuestion>();
+            let confirm = RunDataset::Propose {
+                spec,
+                confirm: Box::new(move |proposal| {
+                    let (reply, answer) = oneshot::channel();
+                    // A dropped receiver means the import is over; the answer then never comes.
+                    drop(asked.send((proposal, reply)));
+                    Box::pin(async move { answer.await.ok().flatten() })
+                }),
+            };
+            (confirm, Some(question))
+        };
         let run = ImportRunSpec {
             operator,
-            dataset: dataset.id,
-            dataset_label: dataset.label,
+            dataset,
             source_label,
             plugin: info.id,
             plugin_version: info.version,
@@ -63,20 +84,30 @@ impl PreparedImport {
             bundle,
             grants,
             run,
+            question,
         })
     }
 
     /// Runs the import, streaming `file` in and reporting progress to stderr (ADR 0013). The plugin's
-    /// claims are attributed to a Software operator; the run to the invoking human.
+    /// claims are attributed to a Software operator; the run to the invoking human. When the host
+    /// proposes a dataset, the operator confirms it, or `yes` accepts it (ADR 0037 §3).
     ///
     /// # Errors
-    /// [`AppError::Plugin`] if the component cannot be loaded or the import fails.
-    pub async fn run(self, workspace: Workspace, localizer: &Localizer, file: PathBuf) -> Result<(), AppError> {
+    /// [`AppError::Plugin`] if the component cannot be loaded or the import fails; [`AppError::Dataset`]
+    /// if the file's dataset is left unresolved.
+    pub async fn run(
+        self,
+        workspace: Workspace,
+        localizer: &Localizer,
+        file: PathBuf,
+        yes: bool,
+    ) -> Result<(), AppError> {
         let Self {
             host,
             bundle,
             grants,
             run,
+            question,
         } = self;
         let component = host
             .load_bundle(&bundle)
@@ -92,12 +123,45 @@ impl PreparedImport {
             provenance_confidence: None,
             import: Some(run),
         };
-        let (count, _workspace) = host
-            .run_bulk_import(&component, invocation, file, progress_renderer(localizer))
-            .await
-            .map_err(|error| AppError::Plugin(error.to_string()))?;
+        let import = Box::pin(host.run_bulk_import(&component, invocation, file, progress_renderer(localizer)));
+        let answer = async {
+            let Some(question) = question else {
+                return;
+            };
+            if let Ok((proposal, reply)) = question.await {
+                drop(reply.send(Some(answer_proposal(localizer, &proposal, yes))));
+            }
+        };
+        let (imported, ()) = tokio::join!(import, answer);
+        let (count, _workspace) = imported.map_err(|error| match error {
+            PluginError::Dataset(error) => AppError::Dataset(error),
+            other => AppError::Plugin(other.to_string()),
+        })?;
         println!("{}", localizer.import_success(count, &plugin));
         Ok(())
+    }
+}
+
+/// The operator's answer to the host's dataset proposal: the proposed dataset once confirmed, or
+/// accepted by `yes`. A declined proposal, or none, is no choice, which the host refuses with the
+/// datasets to choose from.
+fn answer_proposal(localizer: &Localizer, proposal: &DatasetProposal, yes: bool) -> DatasetChoice {
+    let Some(candidate) = proposal.proposed_candidate() else {
+        return DatasetChoice::Unspecified;
+    };
+    let accepted = if yes {
+        eprintln!(
+            "{}",
+            localizer.import_dataset_proposed_accepted(&candidate.label, candidate.shared, proposal.keys)
+        );
+        true
+    } else {
+        crate::confirm(&localizer.import_dataset_proposed(&candidate.label, candidate.shared, proposal.keys))
+    };
+    if accepted {
+        DatasetChoice::Existing(candidate.id.to_string())
+    } else {
+        DatasetChoice::Unspecified
     }
 }
 

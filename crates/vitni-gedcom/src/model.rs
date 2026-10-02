@@ -26,13 +26,18 @@ pub struct Tree {
     pub repositories: Vec<Repository>,
 }
 
-/// The GEDCOM `HEAD` record's fields this crate models — today, just its export date.
+/// The GEDCOM `HEAD` record's fields this crate models: its export date and the fields that
+/// fingerprint the file's lineage (ADR 0037 §3).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Header {
     /// The file's own asserted-as-of date (`HEAD.1 DATE`), when present and parseable — the input a
     /// re-import reconciliation rule gates on (ADR 0029 §2). A missing or unparseable date is `None`
     /// (the conservative, additive-only default — ADR 0029 §3), never a synthesized fallback.
     pub date: Option<Date>,
+    /// The product that wrote the file (`HEAD.1 SOUR`).
+    pub source: Option<String>,
+    /// The file name the writer recorded (`HEAD.1 FILE`).
+    pub file: Option<String>,
 }
 
 /// A top-level `SOUR` record (a work / document).

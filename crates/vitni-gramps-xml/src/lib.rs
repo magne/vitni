@@ -103,6 +103,7 @@ mod tests {
                     month: Some(5),
                     day: Some(4),
                 }),
+                ..Header::default()
             },
             people: sample_people(),
             families: vec![Family {
@@ -519,6 +520,49 @@ mod tests {
     }
 
     #[test]
+    fn parses_the_header_researcher_name() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header>
+<created date="2019-05-04" version="5.2.0"/>
+<researcher>
+<resname>Kari Hansen</resname>
+</researcher>
+</header>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(db.header.researcher.as_deref(), Some("Kari Hansen"));
+    }
+
+    #[test]
+    fn a_header_without_a_researcher_name_has_none() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header>
+<researcher>
+</researcher>
+</header>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(db.header.researcher, None);
+    }
+
+    #[test]
+    fn header_researcher_round_trips_through_emit_and_parse() {
+        let db = Database {
+            header: Header {
+                researcher: Some("Kari & Ola".to_owned()),
+                ..Header::default()
+            },
+            ..Database::default()
+        };
+        let reparsed = parse(&emit(&db)).expect("reparse");
+        assert_eq!(reparsed, db);
+    }
+
+    #[test]
     fn a_header_with_no_created_date_has_no_export_date() {
         let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
 <database xmlns="http://gramps-project.org/xml/1.7.1/">
@@ -559,6 +603,7 @@ mod tests {
                     month: Some(5),
                     day: Some(4),
                 }),
+                ..Header::default()
             },
             ..Database::default()
         };

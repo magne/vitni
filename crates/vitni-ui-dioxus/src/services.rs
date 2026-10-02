@@ -18,17 +18,17 @@ use i18n_embed::DesktopLanguageRequester;
 use tokio::sync::{mpsc, oneshot};
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
-    AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetScope,
-    FileConfigStore, IdFormats, LocaleDefaults, MapConfig, MapProvider, MapSource, PluginTrust, PluginTrustConfig,
-    PreferenceLayers, ResolvedLocale, RestoreReport, RestoreRequest, Session, ShortcutConfig, SuretyLabelOverrides,
-    TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
+    AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetProposal,
+    DatasetScope, FileConfigStore, IdFormats, LocaleDefaults, MapConfig, MapProvider, MapSource, PluginTrust,
+    PluginTrustConfig, PreferenceLayers, ResolvedLocale, RestoreReport, RestoreRequest, Session, ShortcutConfig,
+    SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
     read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides,
     workspace_counts,
 };
 use vitni_plugin_host::{
     Capability, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PluginHost, PluginInfo,
-    PluginRole, PresentError, Presenter, ProgressControl, ProgressUpdate, ResourceBudget, TrustRoots, TrustTier,
-    resolve_trust_roots,
+    PluginRole, PresentError, Presenter, ProgressControl, ProgressUpdate, ResourceBudget, RunDataset, TrustRoots,
+    TrustTier, resolve_trust_roots,
 };
 use vitni_ui::{
     Category, CitationChangeSetRequest, DataQualityVm, DistinguishPersons, DnaMatchChangeSetRequest,
@@ -197,13 +197,15 @@ impl Services {
     }
 
     /// The import run `info`'s import into `workspace` writes (ADR 0037 §3, §5), its dataset resolved
-    /// from `choice`, with the configured human operator as the run's operator.
+    /// from `choice`, with the configured human operator as the run's operator. When `choice` leaves
+    /// the dataset open while the workspace holds datasets of the plugin's scheme, the host proposes one
+    /// once the file is read and asks the operator through `question`.
     async fn import_run_spec(
         &self,
         workspace: &Workspace,
         info: &PluginInfo,
-        choice: DatasetChoice,
-        source_label: String,
+        (choice, source_label): (DatasetChoice, String),
+        question: Option<oneshot::Sender<DatasetQuestion>>,
     ) -> Result<ImportRunSpec, String> {
         let Some(spec) = &info.dataset else {
             return Err(self
@@ -211,13 +213,30 @@ impl Services {
                 .plugin_error(&format!("plugin {:?} declares no dataset", info.id)));
         };
         let operator = Session::new(self.config.operator_agent());
-        let dataset = vitni_app::choose_dataset(workspace, &operator, spec, choice, &source_label)
+        let chosen = vitni_app::choose_dataset(workspace, &operator, spec, choice, &source_label)
             .await
             .map_err(|error| self.localizer().error(&error))?;
+        let dataset = match (chosen, question) {
+            (Some(chosen), _) => RunDataset::Chosen(chosen),
+            (None, Some(question)) => RunDataset::Propose {
+                spec: spec.clone(),
+                confirm: Box::new(move |proposal| {
+                    let (reply, answer) = oneshot::channel();
+                    // A dropped receiver means the wizard closed; the answer then never comes, which
+                    // cancels the import.
+                    drop(question.send((proposal, reply)));
+                    Box::pin(async move { answer.await.ok().flatten() })
+                }),
+            },
+            (None, None) => {
+                return Err(self
+                    .chrome()
+                    .plugin_error(&format!("plugin {:?} needs its dataset chosen before it runs", info.id)));
+            }
+        };
         Ok(ImportRunSpec {
             operator,
-            dataset: dataset.id,
-            dataset_label: dataset.label,
+            dataset,
             source_label,
             plugin: info.id.clone(),
             plugin_version: info.version.clone(),
@@ -956,8 +975,8 @@ async fn run_assisted_session(
         .import_run_spec(
             &workspace,
             &info,
-            DatasetChoice::Unspecified,
-            assisted_source_label(&request),
+            (DatasetChoice::Unspecified, assisted_source_label(&request)),
+            None,
         )
         .await?;
     let invocation = Invocation {
@@ -1194,6 +1213,10 @@ async fn run_export_session(
 pub struct BulkImportHandle {
     /// Each progress report the plugin makes, in order. Dropping the receiver does not stop the run.
     pub progress: mpsc::Receiver<ProgressUpdate>,
+    /// The host's question which dataset the file belongs to, asked once the file is read when the
+    /// operator named none while the target holds datasets of the plugin's scheme (ADR 0037 §3). The
+    /// run waits for the answer; a dropped answer cancels it.
+    pub question: oneshot::Receiver<DatasetQuestion>,
     /// Set to `true` to cancel: the next progress report answers [`ProgressControl::Cancel`].
     pub cancel: Arc<AtomicBool>,
     /// Resolves with the number of records imported, or a localized error.
@@ -1217,6 +1240,7 @@ pub fn start_bulk_import(
 ) -> (BulkImportHandle, impl Future<Output = ()>) {
     let (progress_tx, progress_rx) = mpsc::channel::<ProgressUpdate>(BULK_PROGRESS_BUFFER);
     let (outcome_tx, outcome_rx) = oneshot::channel();
+    let (question_tx, question_rx) = oneshot::channel();
     let cancel = Arc::new(AtomicBool::new(false));
     let sink = bulk_progress_sink(progress_tx, Arc::clone(&cancel));
     let future = async move {
@@ -1225,6 +1249,7 @@ pub fn start_bulk_import(
             source,
             target,
             dataset,
+            question: question_tx,
         };
         let outcome = run_bulk_import_session(services, request, sink).await;
         // A dropped receiver just means the wizard closed first; nothing else needs the outcome.
@@ -1233,6 +1258,7 @@ pub fn start_bulk_import(
     (
         BulkImportHandle {
             progress: progress_rx,
+            question: question_rx,
             cancel,
             outcome: outcome_rx,
         },
@@ -1342,12 +1368,17 @@ async fn open_import_target(services: &Services, target: &ImportTargetChoice) ->
     }
 }
 
+/// A dataset proposal the host asks the operator about (ADR 0037 §3), with where to send the answer:
+/// the dataset the file belongs to, or `None` to cancel the import.
+pub type DatasetQuestion = (DatasetProposal, oneshot::Sender<Option<DatasetChoice>>);
+
 /// What the bulk-import wizard asked to run.
 struct BulkImportRequest {
     plugin_id: String,
     source: PathBuf,
     target: ImportTargetChoice,
     dataset: DatasetChoice,
+    question: oneshot::Sender<DatasetQuestion>,
 }
 
 /// Runs the bulk-import invocation to completion, returning the number of records imported or a
@@ -1365,6 +1396,7 @@ async fn run_bulk_import_session(
         source,
         target,
         dataset,
+        question,
     } = request;
     let chrome = services.chrome();
     let (bundle, info) = services.resolve_plugin(&plugin_id)?;
@@ -1379,7 +1411,7 @@ async fn run_bulk_import_session(
         |name| name.to_string_lossy().into_owned(),
     );
     let run = services
-        .import_run_spec(&workspace, &info, dataset, source_label)
+        .import_run_spec(&workspace, &info, (dataset, source_label), Some(question))
         .await?;
     let invocation = Invocation {
         session: Session::software(plugin_id, info.version.clone()),
@@ -1395,7 +1427,12 @@ async fn run_bulk_import_session(
         .host
         .run_bulk_import(&component, invocation, source, progress)
         .await
-        .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+        .map_err(|error| match error {
+            vitni_plugin_host::PluginError::Dataset(error) => {
+                services.localizer().error(&vitni_app::AppError::Dataset(error))
+            }
+            other => chrome.plugin_error(&other.to_string()),
+        })?;
     Ok(records)
 }
 

@@ -74,8 +74,16 @@ const GUI_PASS: Fixture = Fixture {
     workspace_dir: "workspace",
     seed: seed_gui_pass,
     required_media: &[SEED_MEDIA_REL, SEED_MEDIA_NORDIC_REL],
+    required_files: &[SEED_IMPORT_FILE],
     env: &[],
 };
+
+/// A GEDCOM file placed beside the fixture workspace's data — never imported by the seed, so no
+/// person appears in the lists the scenarios measure — for `bulk-import-dataset-proposal` to import
+/// twice by its bare name, which the bulk-import wizard resolves against the workspace directory.
+const SEED_IMPORT_FILE: &str = "rerun.ged";
+/// Where [`SEED_IMPORT_FILE`] is copied from: the invented re-run fixture the importers are tested on.
+const SEED_IMPORT_SOURCE: &str = "crates/vitni-plugin-host/tests/fixtures/rerun/tree.ged";
 
 /// The `vitni` launcher (ADR 0035), which both halves of a run drive: spawned with no arguments it is
 /// the GUI under test, and invoked with arguments it is the CLI that seeds the fixture — so one build
@@ -172,6 +180,8 @@ pub struct Fixture {
     /// A fixture directory left over from before one of them was added is stale, and saying so beats
     /// failing a scenario in a way that reads like the defect it is meant to catch.
     pub required_media: &'static [&'static str],
+    /// Files (below the workspace directory) a *reused* seed must already contain, for the same reason.
+    pub required_files: &'static [&'static str],
     /// Extra environment applied to both the seeding CLI and the GUI. `screenshots` pins
     /// `VITNI_LANGUAGE` with it, so the committed images are English whatever the machine's locale is.
     pub env: &'static [(&'static str, &'static str)],
@@ -794,6 +804,16 @@ fn seed_fixture(fixture: &Fixture, out: &Path, home: &Path) -> Result<()> {
 /// workspace seeded before one was added would fail `media-preview` with a missing Media row rather
 /// than a blank preview, which reads like the defect the scenario is meant to catch.
 fn verify_seed(fixture: &Fixture, out: &Path) -> Result<()> {
+    for rel in fixture.required_files {
+        let seeded = out.join(SEED_DIR).join(rel);
+        if !seeded.is_file() {
+            bail!(
+                "{}: the fixture predates a seeded file ({} is missing) — re-run with `--reset`",
+                fixture.name,
+                seeded.display()
+            );
+        }
+    }
     for rel in fixture.required_media {
         let seeded = out.join(SEED_DIR).join(MEDIA_DIR).join(rel);
         if !seeded.is_file() {
@@ -835,6 +855,8 @@ fn seed_gui_pass(fixture: &Fixture, home: &Path, workspace: &Path) -> Result<()>
         ],
     )?;
     seed_media(fixture, home, workspace)?;
+    let import = workspace.join(SEED_IMPORT_FILE);
+    fs::copy(SEED_IMPORT_SOURCE, &import).with_context(|| format!("seeding {}", import.display()))?;
     let config = config_file(home);
     let mut text = fs::read_to_string(&config).with_context(|| format!("reading {}", config.display()))?;
     text.push_str(DEMO_MAP_PROVIDER);

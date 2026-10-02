@@ -25,8 +25,8 @@ wit_bindgen::generate!({
 use std::collections::{HashMap, HashSet};
 
 use vitni_gedcom::{
-    Age, Calendar, Citation, Date, DateModifier, Event, EventAssociation, Family, Individual, MediaObject, Repository,
-    Source, Tree,
+    Age, Calendar, Citation, Date, DateModifier, Event, EventAssociation, Family, Header, Individual, MediaObject,
+    Repository, Source, Tree,
 };
 use vitni_plugin_api::staging::{
     AssociationLink, ChildLink, EntityFields, EntityKind, EntityRef, LinkKind, MediaLink, MemberLink, PairLink,
@@ -46,10 +46,11 @@ impl Guest for Importer {
         let families = tree.families.len() as u32;
         vitni_plugin_api::log_info(&format!("importing {individuals} individuals and {families} families"));
 
-        // Declare the file's own export date once, before any record, so the host reconciles
-        // single-valued fields by it (ADR 0029 §2).
+        // Declare the header's fingerprint and the file's own export date once, before any record:
+        // the host proposes the file's dataset by the one (ADR 0037 §3) and reconciles single-valued
+        // fields by the other (ADR 0029 §2).
         let file_asserted_at = tree.header.date.as_ref().and_then(file_asserted_at_string);
-        vitni_plugin_api::begin_run(file_asserted_at.as_deref())?;
+        vitni_plugin_api::begin_run(dataset_hint(&tree.header).as_deref(), file_asserted_at.as_deref())?;
 
         let mut shared = Shared::new(&tree);
         let mut imported: u32 = 0;
@@ -536,6 +537,16 @@ impl EventKeys {
         *n += 1;
         key
     }
+}
+
+/// The header's fingerprint: the writing product (`HEAD.SOUR`) and the file name it recorded
+/// (`HEAD.FILE`), which stay the same across re-exports of one tree. `None` without a file name: a
+/// product alone is shared by unrelated files, and so are their xrefs (`I1`), so such a file is
+/// proposed no dataset (ADR 0037 §3).
+fn dataset_hint(header: &Header) -> Option<String> {
+    let file = header.file.as_deref()?;
+    let source = header.source.as_deref().unwrap_or_default();
+    Some(format!("{source}|{file}"))
 }
 
 /// Renders the `HEAD.1 DATE` value as an RFC 3339 timestamp for `staging::begin-run` (ADR 0029 §2), or

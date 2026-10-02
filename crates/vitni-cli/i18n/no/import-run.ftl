@@ -11,6 +11,10 @@ dataset-summary = { $id }  { $label }  { $runs ->
    *[other] { $runs } kjøringer
 }
 
+## Dataset proposal (ADR 0037 §3)
+import-dataset-proposed = Denne fila ser ut som en senere eksport av "{ $label }": { $shared } av de { $keys } personene og familiene i den ble importert derfra. Importere inn i den? [j/N]
+import-dataset-proposed-accepted = Importerer inn i "{ $label }", som denne fila ser ut som en senere eksport av: { $shared } av de { $keys } personene og familiene i den ble importert derfra.
+
 ## AppError
 err-import-run-not-found = ingen importkjøring med id "{ $id }"
 

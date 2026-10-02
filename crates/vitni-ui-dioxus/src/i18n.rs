@@ -2231,6 +2231,21 @@ impl Chrome {
         fl!(self.loader, "bulk-import-dataset-existing", label = label)
     }
 
+    /// The evidence for the tree the host proposed for a file (ADR 0037 §3): how many of its people and
+    /// families were imported from it.
+    #[must_use]
+    pub fn bulk_import_dataset_proposed(&self, label: &str, shared: usize, keys: usize) -> String {
+        let shared = u32::try_from(shared).unwrap_or(u32::MAX);
+        let keys = u32::try_from(keys).unwrap_or(u32::MAX);
+        fl!(
+            self.loader,
+            "bulk-import-dataset-proposed",
+            label = label,
+            shared = shared,
+            keys = keys
+        )
+    }
+
     /// The dataset choice for a file that is none of the earlier trees.
     #[must_use]
     pub fn bulk_import_dataset_new(&self) -> String {

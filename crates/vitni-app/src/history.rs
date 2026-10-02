@@ -1926,6 +1926,7 @@ mod tests {
             dataset_label: "tree.ged".to_owned(),
             source_label: "tree.ged".to_owned(),
             file_asserted_at: None,
+            dataset_hint: None,
         };
         let run = start_import_run(&workspace, &human, new_run).await.expect("start");
         let importer = software_session();
