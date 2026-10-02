@@ -672,7 +672,8 @@ around evidence and provenance.
    proposed only when it holds some of them under the same fingerprint; the larger overlap wins and a
    tie proposes nothing. Record ids are file-local (a GEDCOM `I1` recurs in unrelated files), so shared
    ids without a matching fingerprint propose nothing, and a GEDCOM header without `HEAD.FILE`
-   declares no fingerprint. Datasets are a projection
+   declares no fingerprint. Vitni's own GEDCOM export writes the workspace's id (`workspace.toml`
+   `id`, ADR 0043) as `HEAD.FILE`, so a later export of the same workspace is proposed its dataset. Datasets are a projection
    over runs, labelled by the earliest. File-local keys (a GEDCOM xref, a Gramps handle) are origin
    records only, and neither they nor a Gramps id (`I0001`) become `ExternalId`s, so two unrelated
    files that both hold an `@I1@` import two people. `ExternalId` is for identifiers that mean something outside the file: a GEDCOM `_UID`,

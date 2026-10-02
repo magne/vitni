@@ -24,7 +24,8 @@
       confirm comes <b>once the file is read</b>: it asks <b>which tree the file belongs to</b> — a later
       export of one of them, or a different tree. Vitni proposes the tree whose earlier imports hold the
       file's people and families under the same header fingerprint, starts the select on it and says
-      why; with no clear match nothing is chosen and the import waits for the answer (ADR 0037 §3; the
+      why. A later Vitni GEDCOM export of one workspace always shares that fingerprint, because the
+      exporter writes the workspace's id as <span class="mono">HEAD.FILE</span> (ADR 0043). With no clear match nothing is chosen and the import waits for the answer (ADR 0037 §3; the
       CLI's <span class="mono">--dataset</span> / <span class="mono">--new-dataset</span>, or its prompt,
       which <span class="mono">--yes</span> accepts). Cancel there writes nothing. Every import is
       recorded as an import run. The plugin

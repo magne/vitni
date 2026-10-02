@@ -20,7 +20,9 @@
       is an <span class="mono">ExportTarget::Directory</span> and the plugin names the file; a path with
       a file name is an <span class="mono">ExportTarget::File</span> and pins it. The run streams real
       progress and can be cancelled — cancellation is cooperative, so it takes effect at the plugin's
-      next progress report.
+      next progress report. The GEDCOM export names the workspace in its header
+      (<span class="mono">1 FILE &lt;workspace id&gt;</span>, ADR 0043), so importing a later export
+      elsewhere is proposed the tree an earlier one went into.
     </div>
 
     <!-- Step indicator -->
