@@ -142,6 +142,14 @@ pub fn write_export(suggested_name: &str, bytes: &[u8]) -> Result<(), String> {
     export_sink::finish().map_err(|error| format!("finishing export failed: {error:?}"))
 }
 
+/// The exported workspace's id (ADR 0043), the same across every export of it.
+///
+/// # Errors
+/// Returns a message if the host denies the export sink.
+pub fn workspace_id() -> Result<String, String> {
+    export_sink::workspace_id().map_err(|error| format!("reading the workspace id failed: {error:?}"))
+}
+
 /// GETs `url` through the host `net` capability (ADR 0017 §2) and returns the response body,
 /// discarding the status and headers. A convenience for the common "fetch a page, hand the bytes to
 /// a parser" flow; use [`net::fetch`] directly when the status or headers matter.

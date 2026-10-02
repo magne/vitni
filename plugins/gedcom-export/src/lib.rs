@@ -13,11 +13,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.25.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.25.0": vitni_plugin_api::log,
-        "vitni:host-api/query@0.25.0": vitni_plugin_api::query,
-        "vitni:host-api/progress@0.25.0": vitni_plugin_api::progress,
-        "vitni:host-api/export-sink@0.25.0": vitni_plugin_api::export_sink,
+        "vitni:host-api/types@0.26.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.26.0": vitni_plugin_api::log,
+        "vitni:host-api/query@0.26.0": vitni_plugin_api::query,
+        "vitni:host-api/progress@0.26.0": vitni_plugin_api::progress,
+        "vitni:host-api/export-sink@0.26.0": vitni_plugin_api::export_sink,
     },
 });
 
@@ -164,8 +164,11 @@ impl Guest for Exporter {
         );
 
         let tree = vitni_gedcom::Tree {
+            // The workspace id names the file, so every export of this workspace carries the same
+            // fingerprint and a re-import is proposed its dataset (ADR 0037 §3, ADR 0043).
             header: vitni_gedcom::Header {
                 source: Some("vitni".to_owned()),
+                file: Some(vitni_plugin_api::workspace_id()?),
                 ..vitni_gedcom::Header::default()
             },
             individuals,

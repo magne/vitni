@@ -19,7 +19,8 @@ use vitni_app::{
 };
 use vitni_core::ids::AgentId;
 use vitni_plugin_host::{
-    Capability, ExportTarget, Grants, Invocation, NetPolicy, ProgressControl, ProgressUpdate, ResourceBudget,
+    Capability, ExportTarget, Grants, Invocation, NetPolicy, PluginError, ProgressControl, ProgressUpdate,
+    ResourceBudget,
 };
 
 mod common;
@@ -1477,6 +1478,55 @@ async fn export_gedcom(workspace: Workspace, path: &Path) -> (u32, String, Works
         .expect("export");
     let document = std::fs::read_to_string(path).expect("read exported document");
     (count, document, workspace)
+}
+
+/// The header names the workspace as the file (ADR 0043), so every export of one workspace carries the
+/// same `HEAD.SOUR`/`HEAD.FILE` fingerprint and a re-import is proposed its dataset (ADR 0037 §3).
+#[tokio::test]
+async fn every_export_of_a_workspace_names_the_workspace_as_its_file() {
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let id = workspace.id();
+
+    let (_, first, workspace) = export_gedcom(workspace, &io_dir.path().join("first.ged")).await;
+    let (_, second, _) = export_gedcom(workspace, &io_dir.path().join("second.ged")).await;
+
+    let header = format!("0 HEAD\n1 SOUR vitni\n1 FILE {id}\n");
+    assert!(first.starts_with(&header), "{first}");
+    assert!(second.starts_with(&header), "{second}");
+}
+
+/// The workspace id is the export sink's (ADR 0043): without that grant the exporter is refused it and
+/// writes nothing.
+#[tokio::test]
+async fn an_export_without_the_sink_grant_is_refused_the_workspace_id() {
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let target = io_dir.path().join("out.ged");
+    let grants = Grants::none()
+        .with(Capability::Query)
+        .with(Capability::Log)
+        .with(Capability::Progress);
+
+    let result = common::host()
+        .run_bulk_export(
+            &common::component("gedcom-export"),
+            invocation(workspace, grants),
+            ExportTarget::File(target.clone()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await;
+
+    let Err(PluginError::Guest(message)) = result else {
+        panic!("the export ran without the sink grant");
+    };
+    assert!(
+        message.contains("workspace id") && message.contains("Denied"),
+        "{message}"
+    );
+    assert!(!target.exists(), "nothing was written");
 }
 
 /// A merged cluster exports as one person (ADR 0039 §5): the root carries the member's claims under its

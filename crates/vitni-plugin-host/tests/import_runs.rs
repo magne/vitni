@@ -710,6 +710,28 @@ async fn an_import_without_a_run_stamps_no_origin() {
     assert!(origin_keys(&workspace).await.is_empty());
 }
 
+/// Exports `workspace` with `exporter` to `target`, handing the workspace back.
+async fn export(workspace: Workspace, exporter: &str, target: &Path) -> Workspace {
+    let export = Invocation {
+        grants: Grants::none()
+            .with(Capability::Query)
+            .with(Capability::Log)
+            .with(Capability::Progress)
+            .with(Capability::ExportSink),
+        ..invocation(workspace, None)
+    };
+    let (_, workspace) = common::host()
+        .run_bulk_export(
+            &common::component(exporter),
+            export,
+            ExportTarget::File(target.to_path_buf()),
+            proceed,
+        )
+        .await
+        .expect("export");
+    workspace
+}
+
 #[tokio::test]
 async fn exports_carry_no_record_origin() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -730,24 +752,7 @@ async fn exports_carry_no_record_origin() {
 
     for exporter in ["gedcom-export", "gramps-export"] {
         let target = dir.path().join(format!("{exporter}.out"));
-        let export = Invocation {
-            grants: Grants::none()
-                .with(Capability::Query)
-                .with(Capability::Log)
-                .with(Capability::Progress)
-                .with(Capability::ExportSink),
-            ..invocation(workspace, None)
-        };
-        let (_, reopened) = common::host()
-            .run_bulk_export(
-                &common::component(exporter),
-                export,
-                ExportTarget::File(target.clone()),
-                proceed,
-            )
-            .await
-            .expect("export");
-        workspace = reopened;
+        workspace = export(workspace, exporter, &target).await;
         let written = std::fs::read(&target).expect("read export");
         let written = String::from_utf8_lossy(&written);
         assert!(written.contains("John"), "{exporter} exported the person");
@@ -850,6 +855,65 @@ async fn a_re_export_naming_no_dataset_is_proposed_the_one_it_came_from() {
             "{plugin}: the confirmed re-import wrote events"
         );
     }
+}
+
+/// The issue #463 exit: a vitni export names its workspace as the file (ADR 0043), so a later export
+/// of the same workspace is proposed the dataset the first one was imported into.
+#[tokio::test]
+async fn a_later_vitni_export_is_proposed_the_dataset_its_first_export_was_imported_into() {
+    let (exporting, importing) = (
+        tempfile::tempdir().expect("tempdir"),
+        tempfile::tempdir().expect("tempdir"),
+    );
+    let a = common::host()
+        .run_bulk_import(
+            &common::component("gedcom-import"),
+            invocation(workspace(exporting.path()).await, None),
+            write_file(exporting.path(), "tree.ged", GEDCOM),
+            proceed,
+        )
+        .await
+        .expect("import into A")
+        .1;
+    let a = export(a, "gedcom-export", &importing.path().join("first.ged")).await;
+    let first = std::fs::read_to_string(importing.path().join("first.ged")).expect("first export");
+    let shown = Shown::default();
+    let run = proposing("gedcom-import", "first.ged", &shown, |_| {
+        panic!("an empty workspace proposes nothing")
+    });
+    let b = import_proposing(
+        workspace(importing.path()).await,
+        "gedcom-import",
+        importing.path(),
+        ("first.ged", &first),
+        run,
+    )
+    .await
+    .expect("first import into B");
+    let dataset = only_run(&b).await.dataset;
+
+    let more = "0 HEAD\n1 SOUR test\n0 @I1@ INDI\n1 NAME Kari /Nordmann/\n0 TRLR\n";
+    let (_, a) = common::host()
+        .run_bulk_import(
+            &common::component("gedcom-import"),
+            invocation(a, None),
+            write_file(exporting.path(), "more.ged", more),
+            proceed,
+        )
+        .await
+        .expect("change A");
+    let a = export(a, "gedcom-export", &importing.path().join("second.ged")).await;
+    let second = std::fs::read_to_string(importing.path().join("second.ged")).expect("second export");
+    assert!(second.contains("Kari"), "the later export carries the change");
+    let run = proposing("gedcom-import", "second.ged", &shown, accept_the_proposal);
+    let b = import_proposing(b, "gedcom-import", importing.path(), ("second.ged", &second), run)
+        .await
+        .expect("second import into B");
+
+    let proposals = shown.lock().expect("lock").clone();
+    assert_eq!(proposals.len(), 1, "{proposals:?}");
+    assert_eq!(proposals[0].proposed.as_ref(), Some(&dataset), "{proposals:?}");
+    assert_ne!(b.id(), a.id(), "an import never adopts the exporting workspace's id");
 }
 
 #[tokio::test]

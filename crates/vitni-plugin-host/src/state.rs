@@ -2169,6 +2169,14 @@ impl HostState {
             .map_err(|error| types::CapabilityError::Backend(format!("writing export: {error}")))
     }
 
+    /// The exported workspace's id (see [`export_sink::Host`]).
+    fn sink_workspace_id(&self) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::ExportSink) {
+            return Err(types::CapabilityError::Denied);
+        }
+        Ok(self.workspace.id().to_string())
+    }
+
     /// Flushes the open export sink (see [`export_sink::Host`]).
     fn finish_sink(&mut self) -> Result<(), types::CapabilityError> {
         if !self.grants.allows(Capability::ExportSink) {
@@ -2194,6 +2202,10 @@ impl export_sink::Host for HostState {
 
     fn finish(&mut self) -> impl Future<Output = Result<(), types::CapabilityError>> {
         std::future::ready(self.finish_sink())
+    }
+
+    fn workspace_id(&mut self) -> impl Future<Output = Result<String, types::CapabilityError>> {
+        std::future::ready(self.sink_workspace_id())
     }
 }
 
