@@ -78,8 +78,12 @@ pub fn MatchCompare(
     }
 }
 
-/// The decision a key event makes: a bare `y`, `n` or `l` ([`vitni_ui::compare_decision`]).
+/// The decision a key event makes: a bare `y`, `n` or `l` ([`vitni_ui::compare_decision`]). A held key's
+/// auto-repeat makes none, so holding `y` records one decision, not one per repeat.
 fn decision_for(event: &KeyboardEvent) -> Option<CompareDecision> {
+    if event.is_auto_repeating() {
+        return None;
+    }
     let modifiers = event.modifiers();
     let modifier = vitni_ui::Modifier {
         command: modifiers.ctrl() || modifiers.meta(),

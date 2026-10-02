@@ -3229,8 +3229,6 @@ impl Localizer {
     }
 }
 
-/// Renders a single [`DatePoint`] numerically: `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`, or `?` when the
-/// year is unknown. Locale-independent, so it needs no Fluent catalogue.
 /// A postal address on one line, its street lines then locality, postal code, region and country,
 /// joined by commas.
 fn address_line(address: &vitni_app::Address) -> String {
@@ -3249,6 +3247,8 @@ fn address_line(address: &vitni_app::Address) -> String {
     parts.join(", ")
 }
 
+/// Renders a single [`DatePoint`] numerically: `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`, or `?` when the
+/// year is unknown. Locale-independent, so it needs no Fluent catalogue.
 fn numeric_point(point: &DatePoint) -> String {
     use std::fmt::Write as _;
 

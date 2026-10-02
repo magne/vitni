@@ -38,6 +38,8 @@ pub fn MergeScreen() -> Element {
     let mut mode = use_signal(|| MergeMode::Duplicates);
     let mut draft = use_signal(DecisionDraft::default);
     let mut blocked = use_signal(|| None::<MergeBlockedVm>);
+    // A decision in flight: a second one (a quick second key or click) waits for it to land.
+    let mut deciding = use_signal(|| false);
     let confidence_options = confidence_choices(state.data_loc());
 
     let duplicates_services = state.services().clone();
@@ -104,15 +106,21 @@ pub fn MergeScreen() -> Element {
         let MergeMode::Compare { surviving, merged } = mode() else {
             return;
         };
+        if deciding() {
+            return;
+        }
         let request = MergePersons {
             surviving_human_id: surviving,
             merged_human_id: merged,
             judgment: judgment(),
         };
         let services = merge_services.clone();
+        deciding.set(true);
         spawn(async move {
             blocked.set(None);
-            match merge_persons(services, request).await {
+            let outcome = merge_persons(services, request).await;
+            deciding.set(false);
+            match outcome {
                 Ok(result) => decided.call(result.summary),
                 Err(failure) => on_failure.call(failure),
             }
@@ -123,15 +131,21 @@ pub fn MergeScreen() -> Element {
         let MergeMode::Compare { surviving, merged } = mode() else {
             return;
         };
+        if deciding() {
+            return;
+        }
         let request = DistinguishPersons {
             person_human_id: surviving,
             other_human_id: merged,
             judgment: judgment(),
         };
         let services = distinguish_services.clone();
+        deciding.set(true);
         spawn(async move {
             blocked.set(None);
-            match distinguish_persons(services, request).await {
+            let outcome = distinguish_persons(services, request).await;
+            deciding.set(false);
+            match outcome {
                 Ok(notice) => decided.call(notice),
                 Err(failure) => on_failure.call(failure),
             }
@@ -142,15 +156,21 @@ pub fn MergeScreen() -> Element {
         let MergeMode::Compare { surviving, merged } = mode() else {
             return;
         };
+        if deciding() {
+            return;
+        }
         let request = MergePersons {
             surviving_human_id: surviving,
             merged_human_id: merged,
             judgment: judgment(),
         };
         let services = undo_merge_services.clone();
+        deciding.set(true);
         spawn(async move {
             blocked.set(None);
-            match undo_distinction_and_merge(services, request).await {
+            let outcome = undo_distinction_and_merge(services, request).await;
+            deciding.set(false);
+            match outcome {
                 Ok(result) => decided.call(result.summary),
                 Err(failure) => on_failure.call(failure),
             }
