@@ -3,13 +3,14 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, MediaRefInput, MutationMeta, NewSource, Provenance, Session, Workspace, add_source_attribute,
-    attach_source_media, attach_source_note, create_source, link_source_repository, list_sources, set_source_abbrev,
-    set_source_author, set_source_pub_info, set_title, show_source, tag_source,
+    AppError, MatchableKind, MediaRefInput, MutationMeta, NewSource, Provenance, Session, Workspace,
+    add_source_attribute, attach_source_media, attach_source_note, create_source, link_source_repository, list_sources,
+    set_source_abbrev, set_source_author, set_source_pub_info, set_title, show_source, tag_source,
 };
 use vitni_core::ids::{MediaId, NoteId};
 
 use crate::args::SourceMediaTypeArg;
+use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
 /// Source subcommands.
@@ -140,6 +141,7 @@ pub async fn run(
             )
             .await?;
             println!("{}", localizer.created(&human_id));
+            hint_similar(workspace, MatchableKind::Source, &human_id, localizer).await;
             Ok(())
         }
         SourceCmd::SetTitle { human_id, title } => {

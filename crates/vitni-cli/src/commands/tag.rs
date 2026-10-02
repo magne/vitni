@@ -5,10 +5,11 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    AppError, Provenance, Session, Workspace, create_tag, list_tags, rename_tag, set_tag_color, set_tag_priority,
-    show_tag,
+    AppError, MatchableKind, Provenance, Session, Workspace, create_tag, list_tags, rename_tag, set_tag_color,
+    set_tag_priority, show_tag,
 };
 
+use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
 /// Tag subcommands.
@@ -64,6 +65,7 @@ pub async fn run(
         TagCmd::Create { name } => {
             let id = create_tag(workspace, session, name, Provenance::default(), &[]).await?;
             println!("{}", localizer.created(&id));
+            hint_similar(workspace, MatchableKind::Tag, &id, localizer).await;
             Ok(())
         }
         TagCmd::Rename { id, name } => {

@@ -2,11 +2,12 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    AppError, ChildParentRelationship, MutationMeta, Provenance, Session, Workspace, add_child, add_partner,
-    create_family, list_families, remove_child, remove_partner, show_family,
+    AppError, ChildParentRelationship, MatchableKind, MutationMeta, Provenance, Session, Workspace, add_child,
+    add_partner, create_family, list_families, remove_child, remove_partner, show_family,
 };
 
 use crate::args::RelationshipArg;
+use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
 /// Family subcommands.
@@ -65,6 +66,7 @@ pub async fn run(
         FamilyCmd::Create => {
             let human_id = create_family(workspace, session, Provenance::default(), &[]).await?;
             println!("{}", localizer.created(&human_id));
+            hint_similar(workspace, MatchableKind::Family, &human_id, localizer).await;
             Ok(())
         }
         FamilyCmd::AddPartner { family_id, person_id } => {

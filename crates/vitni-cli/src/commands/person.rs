@@ -2,11 +2,13 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    Age, AppError, Attribute, DateParts, MutationMeta, NewParticipation, NewPerson, PersonNameParts, Provenance,
-    Session, Workspace, add_name, assert_participation, create_person, list_persons, record_birth, show_person,
+    Age, AppError, Attribute, DateParts, MatchableKind, MutationMeta, NewParticipation, NewPerson, PersonNameParts,
+    Provenance, Session, Workspace, add_name, assert_participation, create_person, list_persons, record_birth,
+    show_person,
 };
 
 use crate::args::{ConfidenceArg, EvidenceArg, ParticipantRoleArg};
+use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
 /// Parses an `--attribute TYPE=VALUE` argument, splitting on the first `=` (so the value may contain
@@ -176,6 +178,7 @@ pub async fn run(
                 record_birth(workspace, session, &human_id, born, MutationMeta::default()).await?;
             }
             println!("{}", localizer.created(&human_id));
+            hint_similar(workspace, MatchableKind::Person, &human_id, localizer).await;
             Ok(())
         }
         PersonCmd::AddName {
