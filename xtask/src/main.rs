@@ -36,6 +36,10 @@
 //! - `match-eval` — score the labelled pairs of the matching evaluation corpus
 //!   (`crates/vitni-core/matching/corpus/`), report precision and recall per band, and fail when a
 //!   hard true match no longer surfaces (ADR 0038 §9).
+//! - `clean` — free the disk a workspace build fills without forcing a dependency rebuild: deletes
+//!   each profile's `incremental/` cache and the linked executables in `deps/`, in the workspace
+//!   `target/` and every `plugins/*/target/`, plus the regenerable run output; `--full` also deletes
+//!   `target/plugins` and the fetched external fixtures, `--dry-run` only reports.
 //! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`,
 //!   `licence-check`, `icons --check`, `issue-sync`, `backup-guard`, `fixture-guard`, `match-eval`) in one
 //!   pass, reporting all failures rather than stopping at the first.
@@ -62,6 +66,7 @@
 mod backup_fixture;
 mod backup_guard;
 mod build_plugins;
+mod clean;
 mod css_check;
 mod fetch_fixtures;
 mod fixture_guard;
@@ -106,6 +111,7 @@ fn main() -> Result<()> {
         Some("fetch-fixtures") => fetch_fixtures::run(),
         Some("fixture-guard") => fixture_guard::run(),
         Some("regen-fixtures") => regen_fixtures::run(),
+        Some("clean") => clean::run(&env::args().skip(2).collect::<Vec<String>>()),
         Some("check") => check(),
         Some(other) => {
             print_usage();
@@ -169,6 +175,10 @@ fn print_usage() {
     println!(
         "  check          run every static check (i18n-check, css-check, input-guard, licence-check, icons, issue-sync,\n                 backup-guard, fixture-guard, match-eval)"
     );
+    println!("  clean          free disk: drop incremental caches, linked test binaries and run output,");
+    println!("                 keeping every compiled dependency and target/plugins");
+    println!("                 [--full]       also delete target/plugins and target/external-fixtures");
+    println!("                 [--dry-run]    report what would be freed, delete nothing");
     println!("  package        assemble a Linux release tarball (binaries + signed plugins) in target/dist");
     println!("  gui-pass       run GUI scenarios on a headless Xvfb display, asserting over screenshots");
     println!("                 [SCENARIO...]  a name or path under crates/vitni-ui-dioxus/tests/gui-pass");

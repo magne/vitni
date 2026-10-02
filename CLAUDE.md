@@ -110,6 +110,7 @@ cargo xtask fmt                                                      # format ev
 cargo deny --all-features check                                      # advisories, licenses, bans
 cargo xtask check                                                    # every static check, in one pass
 cargo xtask build-plugins                                            # lint + build plugins/* → target/plugins
+cargo xtask clean                                                    # free disk, no dependency rebuild (--full, --dry-run)
 cargo xtask icons                                                    # assets/icon/*.svg → the installed PNGs
 cargo xtask backup-fixture                                           # regenerate the golden backup fixture (ADR 0041)
 cargo xtask match-eval                                               # score the matching evaluation corpus (ADR 0038 §9)
