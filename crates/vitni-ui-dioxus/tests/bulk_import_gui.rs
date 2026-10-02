@@ -7,13 +7,14 @@
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
+use vitni_app::{DatasetCandidate, DatasetId, DatasetProposal, Fingerprint};
 use vitni_ui::{BulkImportProgress, BulkImportStep};
 use vitni_ui_dioxus::components::SelectChoice;
 use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::screens::{
     BulkConfirmDialog, BulkConfirmLabels, BulkRunningLabels, BulkRunningStage, BulkSourceLabels, BulkSourceStage,
-    BulkSummaryLabels, BulkSummaryStage, ImportModeLabels, ImportModeSwitch, NoticeStage, RegisterFields,
-    WizardNoticeTone, register_fields_form,
+    BulkSummaryLabels, BulkSummaryStage, ImportModeLabels, ImportModeSwitch, NoticeStage, ProposedDataset,
+    RegisterFields, WizardNoticeTone, dataset_question, register_fields_form,
 };
 
 fn render(view: fn() -> Element) -> String {
@@ -590,4 +591,100 @@ fn a_target_without_earlier_imports_asks_nothing_about_trees() {
     assert!(!html.contains("This file is"), "{html}");
     assert!(run_button(&html).starts_with("<button"), "{html}");
     assert!(!run_button(&html).contains("disabled"), "{html}");
+}
+
+// ----- The dataset proposed from the file (ADR 0037 §3) -----
+
+const PROPOSED_NOTE: &str = "3 of the 4 people and families in this file were imported from tree.ged.";
+
+fn proposed(chrome: &Chrome) -> ProposedDataset {
+    ProposedDataset {
+        id: "gedcom:0199".to_owned(),
+        note: chrome.bulk_import_dataset_proposed("tree.ged", 3, 4),
+    }
+}
+
+fn proposed_view() -> Element {
+    let chrome = Chrome::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let dataset = use_signal(|| "gedcom:0199".to_owned());
+    rsx! {
+        BulkConfirmDialog {
+            labels: confirm_labels(&chrome),
+            datasets: dataset_choices(&chrome),
+            dataset,
+            proposed: proposed(&chrome),
+            oncancel: |()| {},
+            onrun: |_: String| {},
+        }
+    }
+}
+
+fn proposal_overruled_view() -> Element {
+    let chrome = Chrome::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let dataset = use_signal(|| "new".to_owned());
+    rsx! {
+        BulkConfirmDialog {
+            labels: confirm_labels(&chrome),
+            datasets: dataset_choices(&chrome),
+            dataset,
+            proposed: proposed(&chrome),
+            oncancel: |()| {},
+            onrun: |_: String| {},
+        }
+    }
+}
+
+#[test]
+fn a_proposed_tree_is_chosen_with_the_evidence_for_it_and_the_import_can_run() {
+    let html = render(proposed_view);
+    assert!(html.contains(PROPOSED_NOTE), "the evidence: {html}");
+    assert!(html.contains(LATER_EXPORT_NOTE), "{html}");
+    assert!(!run_button(&html).contains("disabled"), "{html}");
+}
+
+#[test]
+fn choosing_another_tree_than_the_proposed_one_drops_its_evidence() {
+    let html = render(proposal_overruled_view);
+    assert!(!html.contains(PROPOSED_NOTE), "{html}");
+}
+
+fn proposal(proposed: Option<u128>) -> DatasetProposal {
+    let candidate = |n: u128, label: &str, shared| DatasetCandidate {
+        id: DatasetId::lineage("gedcom", uuid::Uuid::from_u128(n)),
+        label: label.to_owned(),
+        shared,
+        fingerprint: Fingerprint::Same,
+    };
+    DatasetProposal {
+        keys: 4,
+        candidates: vec![candidate(1, "tree.ged", 3), candidate(2, "other.ged", 0)],
+        proposed: proposed.map(|n| DatasetId::lineage("gedcom", uuid::Uuid::from_u128(n))),
+    }
+}
+
+#[test]
+fn the_question_starts_on_the_proposed_tree_and_offers_every_tree_and_a_new_one() {
+    let chrome = Chrome::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let question = dataset_question(&chrome, &proposal(Some(1)));
+    let labels: Vec<&str> = question.options.iter().map(|option| option.label.as_str()).collect();
+    assert_eq!(
+        labels,
+        [
+            "A later export of tree.ged",
+            "A later export of other.ged",
+            "A different tree"
+        ]
+    );
+    let tree = DatasetId::lineage("gedcom", uuid::Uuid::from_u128(1)).to_string();
+    assert_eq!(question.value, tree);
+    let proposed = question.proposed.expect("a proposal");
+    assert_eq!((proposed.id, proposed.note.as_str()), (tree, PROPOSED_NOTE));
+}
+
+#[test]
+fn without_a_proposal_the_question_starts_unanswered() {
+    let chrome = Chrome::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let question = dataset_question(&chrome, &proposal(None));
+    assert_eq!(question.value, "");
+    assert_eq!(question.proposed, None);
 }

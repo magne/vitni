@@ -8,17 +8,19 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use uuid::Uuid;
 use vitni_app::{
-    AbandonReason, AgentKind, AiConfig, AppDefaults, DatasetId, ImportRunStatus, ImportRunSummary, OperatorConfig,
-    Session, Workspace, WorkspaceDefaults, list_import_runs, undo_assertion, workspace_counts,
+    AbandonReason, AgentKind, AiConfig, AppDefaults, ChosenDataset, DatasetChoice, DatasetError, DatasetId,
+    DatasetProposal, DatasetScope, DatasetSpec, ImportRunStatus, ImportRunSummary, OperatorConfig, Session, Workspace,
+    WorkspaceDefaults, list_import_runs, undo_assertion, workspace_counts,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, EventContext};
 use vitni_plugin_host::{
     Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, ProgressControl, ProgressStep,
-    ProgressUpdate, ResourceBudget,
+    ProgressUpdate, ResourceBudget, RunDataset,
 };
 
 mod common;
@@ -26,6 +28,7 @@ mod common;
 const GEDCOM: &str = "\
 0 HEAD
 1 SOUR test
+1 FILE tree.ged
 0 @I1@ INDI
 1 NAME John /Smith/
 1 SEX M
@@ -94,8 +97,10 @@ fn human() -> Session {
 fn spec(plugin: &str, dataset: DatasetId, source_label: &str) -> ImportRunSpec {
     ImportRunSpec {
         operator: human(),
-        dataset,
-        dataset_label: source_label.to_owned(),
+        dataset: RunDataset::Chosen(ChosenDataset {
+            id: dataset,
+            label: source_label.to_owned(),
+        }),
         source_label: source_label.to_owned(),
         plugin: plugin.to_owned(),
         plugin_version: "0.1.0".to_owned(),
@@ -749,5 +754,254 @@ async fn exports_carry_no_record_origin() {
         for leaked in [lineage.to_string(), run.to_string(), "plac:Mandal".to_owned()] {
             assert!(!written.contains(&leaked), "{exporter} leaked {leaked:?} (ADR 0037 §2)");
         }
+    }
+}
+
+/// The proposals an import showed its operator.
+type Shown = Arc<Mutex<Vec<DatasetProposal>>>;
+
+/// A run that names no dataset: the host proposes one once the file is read, records the proposal in
+/// `shown`, and takes `answer`'s reply as the operator's.
+fn proposing(
+    plugin: &str,
+    source_label: &str,
+    shown: &Shown,
+    answer: impl FnOnce(&DatasetProposal) -> Option<DatasetChoice> + Send + 'static,
+) -> ImportRunSpec {
+    let scheme = plugin.trim_end_matches("-import").to_owned();
+    let shown = Arc::clone(shown);
+    ImportRunSpec {
+        dataset: RunDataset::Propose {
+            spec: DatasetSpec {
+                scheme,
+                scope: DatasetScope::Lineage,
+            },
+            confirm: Box::new(move |proposal: DatasetProposal| {
+                let reply = answer(&proposal);
+                shown.lock().expect("lock").push(proposal);
+                Box::pin(std::future::ready(reply))
+            }),
+        },
+        ..spec(plugin, DatasetId::new("unused"), source_label)
+    }
+}
+
+/// Imports `text` with `plugin` under a [`proposing`] run.
+async fn import_proposing(
+    workspace: Workspace,
+    plugin: &str,
+    dir: &Path,
+    (name, text): (&str, &str),
+    run: ImportRunSpec,
+) -> Result<Workspace, PluginError> {
+    let source = write_file(dir, name, text);
+    let (_, workspace) = common::host()
+        .run_bulk_import(
+            &common::component(plugin),
+            invocation(workspace, Some(run)),
+            source,
+            proceed,
+        )
+        .await?;
+    Ok(workspace)
+}
+
+fn accept_the_proposal(proposal: &DatasetProposal) -> Option<DatasetChoice> {
+    proposal
+        .proposed
+        .as_ref()
+        .map(|id| DatasetChoice::Existing(id.to_string()))
+}
+
+#[tokio::test]
+async fn a_re_export_naming_no_dataset_is_proposed_the_one_it_came_from() {
+    for (plugin, name, text, hint) in [
+        ("gedcom-import", "tree.ged", GEDCOM, "test|tree.ged"),
+        ("gramps-import", "tree.gramps", RERUN[1].2, "Ingrid Strand"),
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let shown = Shown::default();
+        let first = proposing(plugin, name, &shown, |_| panic!("nothing to propose between"));
+        let workspace = import_proposing(workspace(dir.path()).await, plugin, dir.path(), (name, text), first)
+            .await
+            .expect("first import");
+        let run = only_run(&workspace).await;
+        assert_eq!(
+            run.dataset_hint.as_deref(),
+            Some(hint),
+            "{plugin} declared its fingerprint"
+        );
+        let events = event_count(&workspace).await;
+
+        let again = proposing(plugin, name, &shown, accept_the_proposal);
+        let workspace = import_proposing(workspace, plugin, dir.path(), (name, text), again)
+            .await
+            .expect("re-import");
+        let proposals = shown.lock().expect("lock").clone();
+        assert_eq!(proposals.len(), 1, "{plugin}");
+        assert_eq!(
+            proposals[0].proposed.as_ref(),
+            Some(&run.dataset),
+            "{plugin}: {proposals:?}"
+        );
+        assert_eq!(
+            event_count(&workspace).await,
+            events,
+            "{plugin}: the confirmed re-import wrote events"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_file_sharing_xrefs_under_another_fingerprint_is_proposed_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let workspace = import_as(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        5,
+        dir.path(),
+        "tree.ged",
+        GEDCOM,
+    )
+    .await;
+    let other = "0 HEAD\n1 SOUR test\n1 FILE other.ged\n0 @I1@ INDI\n1 NAME Kari /Nordmann/\n0 TRLR\n";
+    let shown = Shown::default();
+    let run = proposing("gedcom-import", "other.ged", &shown, |_| Some(DatasetChoice::New));
+    let workspace = import_proposing(workspace, "gedcom-import", dir.path(), ("other.ged", other), run)
+        .await
+        .expect("import");
+    let proposals = shown.lock().expect("lock").clone();
+    assert_eq!(proposals[0].candidates[0].shared, 1, "@I1@ collides");
+    assert_eq!(proposals[0].proposed, None);
+    assert_eq!(
+        list_import_runs(&workspace).await.expect("runs").len(),
+        2,
+        "a new dataset"
+    );
+}
+
+#[tokio::test]
+async fn a_gedcom_file_naming_no_file_in_its_header_is_proposed_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let anonymous = GEDCOM.replace("1 FILE tree.ged\n", "");
+    let workspace = import_as(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        5,
+        dir.path(),
+        "a.ged",
+        &anonymous,
+    )
+    .await;
+    let shown = Shown::default();
+    let run = proposing("gedcom-import", "a.ged", &shown, |_| Some(DatasetChoice::New));
+    import_proposing(workspace, "gedcom-import", dir.path(), ("a.ged", &anonymous), run)
+        .await
+        .expect("import");
+    let proposals = shown.lock().expect("lock").clone();
+    assert_eq!(proposals[0].candidates[0].shared, 3, "every xref collides");
+    assert_eq!(
+        proposals[0].proposed, None,
+        "a writer's name alone fingerprints no tree"
+    );
+}
+
+#[tokio::test]
+async fn declining_the_proposal_writes_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let workspace = import_as(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        5,
+        dir.path(),
+        "tree.ged",
+        GEDCOM,
+    )
+    .await;
+    let events = event_count(&workspace).await;
+    let changed = GEDCOM.replace("Jane /Doe/", "Jane /Berg/");
+    let run = proposing("gedcom-import", "tree.ged", &Shown::default(), |_| None);
+    let workspace = import_proposing(workspace, "gedcom-import", dir.path(), ("tree.ged", &changed), run)
+        .await
+        .expect("a declined import is no failure");
+    assert_eq!(event_count(&workspace).await, events);
+    assert_eq!(
+        list_import_runs(&workspace).await.expect("runs").len(),
+        1,
+        "no second run"
+    );
+}
+
+#[tokio::test]
+async fn naming_no_dataset_when_asked_is_refused_with_the_candidates() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let workspace = import_as(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        5,
+        dir.path(),
+        "tree.ged",
+        GEDCOM,
+    )
+    .await;
+    let run = proposing("gedcom-import", "tree.ged", &Shown::default(), |_| {
+        Some(DatasetChoice::Unspecified)
+    });
+    let refused = import_proposing(workspace, "gedcom-import", dir.path(), ("tree.ged", GEDCOM), run).await;
+    let Err(PluginError::Dataset(DatasetError::Required { candidates, .. })) = refused else {
+        panic!("expected a refusal, got {:?}", refused.map(|_| ()));
+    };
+    assert_eq!(candidates.len(), 1, "{candidates:?}");
+}
+
+/// The re-run fixtures (#408): one invented tree exported once per lineage importer.
+const RERUN: [(&str, &str, &str); 2] = [
+    ("gedcom-import", "tree.ged", include_str!("fixtures/rerun/tree.ged")),
+    (
+        "gramps-import",
+        "tree.gramps",
+        include_str!("fixtures/rerun/tree.gramps"),
+    ),
+];
+
+#[tokio::test]
+async fn each_rerun_fixture_keys_every_item_alike_and_its_re_run_is_proposed_back_and_writes_nothing() {
+    for (plugin, name, text) in RERUN {
+        let mut keys = Vec::new();
+        let mut last = None;
+        for _ in 0..2 {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let run = proposing(plugin, name, &Shown::default(), |_| {
+                panic!("a fresh workspace has no dataset")
+            });
+            let workspace = import_proposing(workspace(dir.path()).await, plugin, dir.path(), (name, text), run)
+                .await
+                .expect("import");
+            keys.push(origin_keys(&workspace).await);
+            last = Some((workspace, dir));
+        }
+        let kinds: BTreeSet<&str> = keys[0].iter().map(|(kind, ..)| kind.as_str()).collect();
+        assert!(kinds.len() >= 6, "{plugin} keyed too few kinds: {kinds:?}");
+        assert_eq!(keys[0], keys[1], "{plugin} keyed the same file differently");
+
+        let (workspace, dir) = last.expect("imported");
+        let events = event_count(&workspace).await;
+        let shown = Shown::default();
+        let run = proposing(plugin, name, &shown, accept_the_proposal);
+        let workspace = import_proposing(workspace, plugin, dir.path(), (name, text), run)
+            .await
+            .expect("re-run");
+        let dataset = only_run(&workspace).await.dataset;
+        let proposals = shown.lock().expect("lock").clone();
+        assert_eq!(
+            proposals[0].proposed.as_ref(),
+            Some(&dataset),
+            "{plugin}: {proposals:?}"
+        );
+        assert_eq!(
+            event_count(&workspace).await,
+            events,
+            "{plugin}: the re-run wrote events"
+        );
     }
 }

@@ -243,12 +243,14 @@ fn parse_resn(value: &str) -> Vec<Restriction> {
     restrictions
 }
 
-/// Interprets a `HEAD` record node — today, just its export date (`1 DATE`), reusing the same
-/// [`parse_date`] every event/fact date goes through (ADR 0029 §2): a missing or unparseable date
+/// Interprets a `HEAD` record node: its writer (`1 SOUR`), file name (`1 FILE`) and export date
+/// (`1 DATE`), the date through the same [`parse_date`] every event/fact date goes through (ADR 0029 §2): a missing or unparseable date
 /// yields `None`/[`DateModifier::TextOnly`] rather than a synthesized fallback (ADR 0029 §3).
 fn header(node: &Node) -> Header {
     Header {
         date: node.child("DATE").and_then(|date| parse_date(&date.value)),
+        source: node.child_value("SOUR"),
+        file: node.child_value("FILE"),
     }
 }
 

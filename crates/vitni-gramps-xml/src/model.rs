@@ -34,7 +34,8 @@ pub struct Database {
     pub tags: Vec<Tag>,
 }
 
-/// The `<header>` element's fields this crate models — today, just the file's own export date.
+/// The `<header>` element's fields this crate models: the file's own export date and its
+/// researcher's name, which fingerprints the file's lineage (ADR 0037 §3).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Header {
     /// The file's own asserted-as-of date (`<header><created date="…">`, a plain `YYYY`/`YYYY-MM`/
@@ -43,6 +44,8 @@ pub struct Header {
     /// §2). A missing or unparseable date is `None` (the conservative, additive-only default — ADR
     /// 0029 §3), never a synthesized fallback.
     pub date: Option<DatePoint>,
+    /// The researcher's name (`<header><researcher><resname>`).
+    pub researcher: Option<String>,
 }
 
 /// Biological sex as Gramps records it (`<gender>` — `M`/`F`/`U`, plus `X` for GEDCOM 7 intersex).

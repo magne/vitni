@@ -595,6 +595,7 @@ async fn a_backup_keeps_every_record_origin_and_import_run() {
         dataset_label: "tree.ged".to_owned(),
         source_label: "tree.ged".to_owned(),
         file_asserted_at: None,
+        dataset_hint: None,
     };
     let run = start_import_run(&source, &session(), run).await.expect("start");
     let importer = Session::software("gedcom-import", "0.1.0");

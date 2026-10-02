@@ -12,15 +12,15 @@ use std::sync::{Arc, Mutex};
 
 use uuid::Uuid;
 use vitni_app::{
-    AgentKind, AiConfig, AppDefaults, DatasetId, NoteType, OperatorConfig, ParticipantRole, PersonSummary, Session,
-    Workspace, WorkspaceDefaults, list_citations, list_events, list_families, list_media, list_notes, list_persons,
-    list_places, list_sources, list_tags,
+    AgentKind, AiConfig, AppDefaults, ChosenDataset, DatasetId, NoteType, OperatorConfig, ParticipantRole,
+    PersonSummary, Session, Workspace, WorkspaceDefaults, list_citations, list_events, list_families, list_media,
+    list_notes, list_persons, list_places, list_sources, list_tags,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::Agent;
 use vitni_plugin_host::{
     Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, ProgressControl, ProgressUpdate,
-    ResourceBudget,
+    ResourceBudget, RunDataset,
 };
 
 mod common;
@@ -158,8 +158,10 @@ fn run_invocation(workspace: Workspace) -> Invocation {
     Invocation {
         import: Some(ImportRunSpec {
             operator,
-            dataset: DatasetId::lineage("gramps", Uuid::from_u128(5)),
-            dataset_label: "in.gramps".to_owned(),
+            dataset: RunDataset::Chosen(ChosenDataset {
+                id: DatasetId::lineage("gramps", Uuid::from_u128(5)),
+                label: "in.gramps".to_owned(),
+            }),
             source_label: "in.gramps".to_owned(),
             plugin: "gramps-import".to_owned(),
             plugin_version: "0.1.0".to_owned(),

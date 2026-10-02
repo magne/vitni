@@ -22,7 +22,7 @@ wit_bindgen::generate!({
 use std::collections::{HashMap, HashSet};
 
 use vitni_gramps_xml::{Citation, Database, Event, EventRef, Family, Gender, Note, Person, Place, Region, Source};
-use vitni_interchange::parse_age;
+use vitni_interchange::{DatePoint, parse_age};
 use vitni_plugin_api::staging::{
     AssociationLink, ChildLink, EntityFields, EntityKind, EntityRef, LinkKind, MediaLink, MemberLink, PairLink,
     ParticipationLink, RepositoryLink, StagedChildRel, StagedCitation, StagedEvent, StagedFamily, StagedMedia,
@@ -69,6 +69,12 @@ impl Guest for Importer {
         let families = db.families.len() as u32;
         vitni_plugin_api::log_info(&format!("importing {people} people and {families} families"));
 
+        // Declare the researcher (the header's fingerprint) and the file's own export date once,
+        // before any record: the host proposes the file's dataset by the one (ADR 0037 §3) and
+        // reconciles single-valued fields by the other (ADR 0029 §2).
+        let file_asserted_at = db.header.date.as_ref().and_then(file_asserted_at_string);
+        vitni_plugin_api::begin_run(db.header.researcher.as_deref(), file_asserted_at.as_deref())?;
+
         let mut resolver = Resolver::new(&db);
         // (person, event) handle pairs already given a participation, so a partner whose person-side
         // eventref carries a payload is not given a second, bare one by the family.
@@ -90,6 +96,14 @@ impl Guest for Importer {
         }
         Ok(imported)
     }
+}
+
+/// Renders `<created date="…">` as an RFC 3339 timestamp for `staging::begin-run` (ADR 0029 §2), or
+/// `None` unless it names a full day: a bare year or year and month carries no instant to reconcile
+/// by (ADR 0029 §3).
+fn file_asserted_at_string(date: &DatePoint) -> Option<String> {
+    let (year, month, day) = (date.year?, date.month?, date.day?);
+    Some(format!("{year:04}-{month:02}-{day:02}T00:00:00Z"))
 }
 
 /// The graph of one `<person>`.

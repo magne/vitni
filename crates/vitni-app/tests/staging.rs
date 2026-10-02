@@ -60,6 +60,7 @@ fn importer(dataset: DatasetId) -> Session {
             dataset_label: "tree.ged".to_owned(),
             source_label: "tree.ged".to_owned(),
             file_asserted_at: None,
+            dataset_hint: None,
         },
     ));
     Session::software("gedcom-import", "0.1.0").with_import_run(run)

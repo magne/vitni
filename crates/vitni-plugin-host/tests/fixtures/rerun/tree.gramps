@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header>
+<created date="2024-03-14" version="5.2.3"/>
+<researcher>
+<resname>Ingrid Strand</resname>
+</researcher>
+</header>
+<people>
+<person handle="_f1c2a9e7b3d54a0c8e21" id="I0001">
+<gender>M</gender>
+<name><first>Anders</first><surname>Strand</surname></name>
+<eventref hlink="_e7d1b2c3a4f5e6d7c8b9"/>
+<eventref hlink="_e8a2c3d4b5e6f7a8b9c0"/>
+<citationref hlink="_c3b4a5d6e7f8a9b0c1d2"/>
+<noteref hlink="_n4c5b6a7d8e9f0a1b2c3"/>
+<objref hlink="_o5d6c7b8a9e0f1a2b3c4"/>
+</person>
+<person handle="_a2d3b0f8c4e65b1d9f32" id="I0002">
+<gender>F</gender>
+<name><first>Berit</first><surname>Lunde</surname></name>
+<eventref hlink="_e9b3d4e5c6f7a8b9c0d1"/>
+</person>
+<person handle="_b3e4c1a9d5f76c2e0a43" id="I0003">
+<gender>M</gender>
+<name><first>Carl</first><surname>Strand</surname></name>
+<eventref hlink="_e0c4e5f6d7a8b9c0d1e2"/>
+</person>
+</people>
+<families>
+<family handle="_d4f5e2b0a6c87d3f1b54" id="F0001">
+<father hlink="_f1c2a9e7b3d54a0c8e21"/>
+<mother hlink="_a2d3b0f8c4e65b1d9f32"/>
+<childref hlink="_b3e4c1a9d5f76c2e0a43"/>
+<eventref hlink="_e1d5f6a7e8b9c0d1e2f3"/>
+</family>
+</families>
+<events>
+<event handle="_e7d1b2c3a4f5e6d7c8b9" id="E0001"><type>Birth</type><dateval val="1841-02-02"/><place hlink="_p6e7d8c9b0a1f2e3d4c5"/></event>
+<event handle="_e8a2c3d4b5e6f7a8b9c0" id="E0002"><type>Death</type><dateval val="1903"/><place hlink="_p6e7d8c9b0a1f2e3d4c5"/></event>
+<event handle="_e9b3d4e5c6f7a8b9c0d1" id="E0003"><type>Birth</type><dateval val="1845" quality="estimated"/><place hlink="_p7f8e9d0c1b2a3f4e5d6"/></event>
+<event handle="_e0c4e5f6d7a8b9c0d1e2" id="E0004"><type>Birth</type><dateval val="1870-06-09"/><place hlink="_p6e7d8c9b0a1f2e3d4c5"/></event>
+<event handle="_e1d5f6a7e8b9c0d1e2f3" id="E0005"><type>Marriage</type><dateval val="1868-05-04"/><place hlink="_p7f8e9d0c1b2a3f4e5d6"/></event>
+</events>
+<places>
+<placeobj handle="_p6e7d8c9b0a1f2e3d4c5" id="P0001" type="Farm"><pname value="Lindvik"/></placeobj>
+<placeobj handle="_p7f8e9d0c1b2a3f4e5d6" id="P0002" type="Parish"><pname value="Haugset"/></placeobj>
+</places>
+<sources>
+<source handle="_s8a9f0e1d2c3b4a5f6e7" id="S0001"><stitle>Strandsund parish register 1835-1860</stitle></source>
+</sources>
+<citations>
+<citation handle="_c3b4a5d6e7f8a9b0c1d2" id="C0001"><page>folio 12</page><confidence>3</confidence><sourceref hlink="_s8a9f0e1d2c3b4a5f6e7"/></citation>
+</citations>
+<notes>
+<note handle="_n4c5b6a7d8e9f0a1b2c3" id="N0001"><text>Moved to the coast after the flood.</text></note>
+</notes>
+<objects>
+<object handle="_o5d6c7b8a9e0f1a2b3c4" id="O0001"><file src="photos/anders.jpg" mime="image/jpeg"/></object>
+</objects>
+</database>

@@ -664,7 +664,15 @@ around evidence and provenance.
    then `ImportRunFinished` or `ImportRunAbandoned`), and each assertion it derives carries an
    `EventContext.origin` (§8) naming the run. A **dataset** scopes record ids: `digitalarkivet` is
    global, while `gedcom:<uuid>` and `gramps:<uuid>` each name one file lineage — the same tree
-   re-exported over time — which the operator picks or declares on import. Datasets are a projection
+   re-exported over time — which the operator picks or declares on import. When the operator names
+   none and lineages of the format exist, the file is read first and a lineage is **proposed** for
+   the operator to confirm: the importer declares its header's fingerprint (GEDCOM `HEAD.SOUR` and
+   `HEAD.FILE`, the Gramps researcher), which `ImportRunStarted.dataset_hint` records, and the host
+   counts how many of the file's person and family records each lineage already holds. A lineage is
+   proposed only when it holds some of them under the same fingerprint; the larger overlap wins and a
+   tie proposes nothing. Record ids are file-local (a GEDCOM `I1` recurs in unrelated files), so shared
+   ids without a matching fingerprint propose nothing, and a GEDCOM header without `HEAD.FILE`
+   declares no fingerprint. Datasets are a projection
    over runs, labelled by the earliest. File-local keys (a GEDCOM xref, a Gramps handle) are origin
    records only, and neither they nor a Gramps id (`I0001`) become `ExternalId`s, so two unrelated
    files that both hold an `@I1@` import two people. `ExternalId` is for identifiers that mean something outside the file: a GEDCOM `_UID`,

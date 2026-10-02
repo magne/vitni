@@ -111,6 +111,10 @@ pub enum ImportRunEventBody {
         source_label: String,
         /// The document's own export date, if it carries one.
         file_asserted_at: Option<Timestamp>,
+        /// The document header's fingerprint, if the importer declared one (ADR 0037 §3). Absent
+        /// from runs recorded before importers declared one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dataset_hint: Option<String>,
     },
     /// An incoming item was resolved onto an existing aggregate, creating nothing.
     ItemResolved {

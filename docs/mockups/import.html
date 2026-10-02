@@ -20,10 +20,14 @@
       import's target radio reuses the Preferences "Register workspace…" fields for a brand-new
       workspace, and confirms first (a <span class="mono">Modal</span>, no <span class="mono">--yes</span>
       equivalent) before writing into an existing workspace that already holds persons. When that
-      workspace already holds earlier imports in the same format, the confirm also asks <b>which tree
-      the file belongs to</b> — a later export of one of them, or a different tree — and waits for the
-      answer (ADR 0037 §3; the CLI's <span class="mono">--dataset</span> /
-      <span class="mono">--new-dataset</span>). Every import is recorded as an import run. The plugin
+      workspace already holds earlier imports in the same format, the import starts at once and the
+      confirm comes <b>once the file is read</b>: it asks <b>which tree the file belongs to</b> — a later
+      export of one of them, or a different tree. Vitni proposes the tree whose earlier imports hold the
+      file's people and families under the same header fingerprint, starts the select on it and says
+      why; with no clear match nothing is chosen and the import waits for the answer (ADR 0037 §3; the
+      CLI's <span class="mono">--dataset</span> / <span class="mono">--new-dataset</span>, or its prompt,
+      which <span class="mono">--yes</span> accepts). Cancel there writes nothing. Every import is
+      recorded as an import run. The plugin
       reads the whole file first, naming its own steps; Vitni then writes the records, and a cancel
       before then writes nothing.
     </div>
@@ -189,7 +193,7 @@
       </div>
     </div>
 
-    <h3 style="margin-top:var(--sp-6)">Which tree is this file? <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, the same confirm when the target already holds imports in this format; Import anyway stays disabled until a tree is chosen</span></h3>
+    <h3 style="margin-top:var(--sp-6)">Which tree is this file? <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, the confirm once the file is read when the target already holds imports in this format and nothing points to one of them; Import anyway stays disabled until a tree is chosen</span></h3>
     <div class="overlay" style="position:relative;inset:auto;display:block;background:transparent;padding:0;margin-top:var(--sp-2)">
       <div class="modal" style="width:min(480px,96vw)">
         <div class="m-head">Import into slekt?</div>
@@ -208,6 +212,31 @@
         <div class="m-foot">
           <button class="btn">Cancel</button>
           <button class="btn primary" disabled>Import anyway</button>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:var(--sp-6)">A later export proposed <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, the same confirm when the file's fingerprint and records point to an earlier tree: the select starts on it, with the evidence, and Import anyway is enabled; choosing another tree drops the evidence line</span></h3>
+    <div class="overlay" style="position:relative;inset:auto;display:block;background:transparent;padding:0;margin-top:var(--sp-2)">
+      <div class="modal" style="width:min(480px,96vw)">
+        <div class="m-head">Import into slekt?</div>
+        <div class="m-body">
+          <p>slekt already has 3 902 persons recorded. Importing may add duplicates.</p>
+          <div class="field">
+            <label for="bi-dataset-proposed">This file is</label>
+            <select class="in" id="bi-dataset-proposed">
+              <option>Choose…</option>
+              <option selected>A later export of hansen-tree.ged</option>
+              <option>A later export of berg-slekt.ged</option>
+              <option>A different tree</option>
+            </select>
+          </div>
+          <p class="muted">1 268 of the 1 302 people and families in this file were imported from hansen-tree.ged.</p>
+          <p class="muted">Records already imported from this tree are updated, not duplicated.</p>
+        </div>
+        <div class="m-foot">
+          <button class="btn">Cancel</button>
+          <button class="btn primary">Import anyway</button>
         </div>
       </div>
     </div>

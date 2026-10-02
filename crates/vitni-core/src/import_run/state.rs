@@ -50,6 +50,8 @@ pub struct ImportRunState {
     pub source_label: String,
     /// The document's own export date, if it carries one.
     pub file_asserted_at: Option<Timestamp>,
+    /// The document header's fingerprint, if the importer declared one.
+    pub dataset_hint: Option<String>,
     /// What the run wrote, once it has ended.
     pub counts: ImportCounts,
 }

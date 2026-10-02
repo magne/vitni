@@ -566,6 +566,7 @@ bulk-import-dataset-label = Denne filen er
 bulk-import-dataset-placeholder = Velg …
 bulk-import-dataset-later-export = Poster som allerede er importert fra dette treet, blir oppdatert, ikke duplisert.
 bulk-import-dataset-existing = En senere eksport av { $label }
+bulk-import-dataset-proposed = { $shared } av de { $keys } personene og familiene i denne filen ble importert fra { $label }.
 bulk-import-dataset-new = Et annet tre
 bulk-import-target-name-required = Skriv inn et navn for det nye arbeidsområdet.
 bulk-import-target-name-taken = Et arbeidsområde med det navnet er allerede registrert.

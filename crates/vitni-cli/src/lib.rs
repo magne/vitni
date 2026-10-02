@@ -454,8 +454,9 @@ async fn import(request: ImportRequest) -> ExitCode {
         operator,
     } = target;
 
-    // The dataset is resolved before any prompt, so an import that must name its dataset is refused
-    // before the operator is asked to confirm it.
+    // A dataset the operator named is resolved before any prompt, so a choice that cannot be resolved
+    // is refused before the operator is asked to confirm the import. One left open is proposed once the
+    // file is read.
     let prepared = match commands::io::PreparedImport::prepare(&workspace, &plugin, &file, choice, operator).await {
         Ok(prepared) => prepared,
         Err(error) => return report(&localizer, Err(error)),
@@ -475,7 +476,10 @@ async fn import(request: ImportRequest) -> ExitCode {
     }
 
     // The plugin-host future is large (Wasmtime store + workspace); box it.
-    report(&localizer, Box::pin(prepared.run(workspace, &localizer, file)).await)
+    report(
+        &localizer,
+        Box::pin(prepared.run(workspace, &localizer, file, yes)).await,
+    )
 }
 
 /// Resolves the import target: `--new NAME PATH` creates and registers a fresh workspace; `--into
@@ -525,7 +529,7 @@ async fn prepare_import_target(new: Option<Vec<String>>, into: Option<String>) -
 
 /// Prompts on stderr and reads a yes/no answer from stdin. Returns `true` only on an affirmative
 /// (`y`/`yes`, or `j`/`ja` for Norwegian); EOF or anything else is a no.
-fn confirm(prompt: &str) -> bool {
+pub(crate) fn confirm(prompt: &str) -> bool {
     eprint!("{prompt} ");
     let _ = std::io::stderr().flush();
     let mut answer = String::new();

@@ -164,7 +164,10 @@ impl Guest for Exporter {
         );
 
         let tree = vitni_gedcom::Tree {
-            header: vitni_gedcom::Header::default(),
+            header: vitni_gedcom::Header {
+                source: Some("vitni".to_owned()),
+                ..vitni_gedcom::Header::default()
+            },
             individuals,
             families,
             sources: sources

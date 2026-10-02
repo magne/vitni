@@ -103,6 +103,7 @@ mod tests {
                     month: Some(5),
                     day: Some(4),
                 }),
+                ..Header::default()
             },
             people: sample_people(),
             families: vec![Family {
@@ -484,6 +485,21 @@ mod tests {
     }
 
     #[test]
+    fn text_keeps_its_entity_references_and_the_spaces_around_them() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<notes>
+<note handle="_n1" id="N0001" type="General">
+<text>  Hansen &amp; S&#248;nn &lt;1890&gt;  </text>
+</note>
+</notes>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(db.notes[0].text.as_deref(), Some("Hansen & Sønn <1890>"));
+    }
+
+    #[test]
     fn parses_the_header_export_date() {
         let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
 <database xmlns="http://gramps-project.org/xml/1.7.1/">
@@ -501,6 +517,49 @@ mod tests {
                 day: Some(4),
             })
         );
+    }
+
+    #[test]
+    fn parses_the_header_researcher_name() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header>
+<created date="2019-05-04" version="5.2.0"/>
+<researcher>
+<resname>Kari Hansen</resname>
+</researcher>
+</header>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(db.header.researcher.as_deref(), Some("Kari Hansen"));
+    }
+
+    #[test]
+    fn a_header_without_a_researcher_name_has_none() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header>
+<researcher>
+</researcher>
+</header>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(db.header.researcher, None);
+    }
+
+    #[test]
+    fn header_researcher_round_trips_through_emit_and_parse() {
+        let db = Database {
+            header: Header {
+                researcher: Some("Kari & Ola".to_owned()),
+                ..Header::default()
+            },
+            ..Database::default()
+        };
+        let reparsed = parse(&emit(&db)).expect("reparse");
+        assert_eq!(reparsed, db);
     }
 
     #[test]
@@ -544,6 +603,7 @@ mod tests {
                     month: Some(5),
                     day: Some(4),
                 }),
+                ..Header::default()
             },
             ..Database::default()
         };

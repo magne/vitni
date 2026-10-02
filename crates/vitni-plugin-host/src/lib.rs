@@ -50,7 +50,7 @@ pub use crate::discovery::{PluginInfo, PluginRole};
 pub use crate::error::PluginError;
 pub use crate::net::{HostPattern, NetPolicy};
 pub use crate::present::{PresentError, Presenter};
-pub use crate::run::ImportRunSpec;
+pub use crate::run::{ConfirmDataset, ImportRunSpec, RunDataset};
 pub use crate::trust::{TrustRoots, TrustTier, classify, resolve_trust_roots};
 
 /// A progress update a bulk plugin reports as it advances (ADR 0013). `total` is absent when the
@@ -352,15 +352,25 @@ impl PluginHost {
             provenance_confidence,
             io,
         )?;
-        if let Some(spec) = import {
-            store.data_mut().open_run(spec);
-        }
         let bindings = import_world::BulkImport::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
         let outcome = bindings.call_run_import(&mut store).await;
         let mut state = store.into_data();
         let mut result = interpret_result(outcome);
+        // The run opens once the file is read, so a dataset the operator left open is proposed from
+        // the file itself (ADR 0037 §3). A file that staged nothing, or a cancelled read, asks nothing.
+        if let Some(spec) = import
+            && result.is_ok()
+            && !state.cancelled
+            && !state.staged.is_empty()
+        {
+            match Box::pin(state.open_proposed_run(spec)).await {
+                Ok(true) => {}
+                Ok(false) => state.cancelled = true,
+                Err(error) => result = Err(error),
+            }
+        }
         // The plan and its commit are large futures of their own; boxed, they leave the import's small.
         if result.is_ok()
             && let Err(error) = Box::pin(state.commit_staged()).await
@@ -453,7 +463,12 @@ impl PluginHost {
             io,
         )?;
         if let Some(spec) = import {
-            store.data_mut().open_run(spec);
+            let (RunDataset::Chosen(dataset), template) = spec.into_parts() else {
+                return Err(PluginError::Runtime(
+                    "an assisted import's dataset is chosen before it starts".to_owned(),
+                ));
+            };
+            store.data_mut().open_run(template, dataset);
         }
         store.data_mut().staging = state::Staging::Immediate;
         let bindings = assisted_import_world::AssistedImport::instantiate_async(&mut store, component, &self.linker)

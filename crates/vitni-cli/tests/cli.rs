@@ -675,6 +675,7 @@ fn plugin_grant_then_revoke_round_trips_through_the_manifest() {
 const TREE: &str = "\
 0 HEAD
 1 SOUR test
+1 FILE tree.ged
 0 @I1@ INDI
 1 NAME John /Smith/
 0 TRLR
@@ -692,32 +693,68 @@ fn import_tree(dir: &Path, extra: &[&str]) -> assert_cmd::assert::Assert {
         .assert()
 }
 
+/// Runs `vitni import gedcom-import <file> --into gen` with `text` as the file, plus `extra`.
+fn import_text(dir: &Path, text: &str, extra: &[&str]) -> assert_cmd::assert::Assert {
+    let file = dir.join("tree.ged");
+    std::fs::write(&file, text).unwrap();
+    vitni(dir)
+        .args(["import", "gedcom-import"])
+        .arg(&file)
+        .args(["--into", "gen"])
+        .args(extra)
+        .assert()
+}
+
 #[test]
-fn a_second_import_of_a_lineage_format_must_name_its_dataset() {
+fn a_re_export_naming_no_dataset_is_imported_into_the_one_proposed_when_confirmed() {
     let dir = TempDir::new().unwrap();
     init(dir.path());
     import_tree(dir.path(), &[]).success();
 
-    import_tree(dir.path(), &[]).failure().stderr(
+    // `y` confirms the import into a non-empty workspace; the closed stdin then declines the proposal.
+    let mut command = vitni(dir.path());
+    command
+        .args(["import", "gedcom-import"])
+        .arg(dir.path().join("tree.ged"))
+        .args(["--into", "gen"]);
+    assert_cmd::Command::from_std(command)
+        .write_stdin("y\n")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("looks like a later export of \"tree.ged\": 1 of its 1")
+                .and(predicate::str::contains("--dataset"))
+                .and(predicate::str::contains("--new-dataset")),
+        );
+
+    import_tree(dir.path(), &[])
+        .success()
+        .stderr(predicate::str::contains("Importing into \"tree.ged\""));
+    let datasets = vitni(dir.path()).args(["import-run", "datasets"]).assert().success();
+    let stdout = String::from_utf8(datasets.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout.lines().count(), 1, "{stdout}");
+}
+
+#[test]
+fn a_file_proposed_no_dataset_must_name_one_even_with_yes() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    import_tree(dir.path(), &[]).success();
+    let unrelated = TREE.replace("1 FILE tree.ged", "1 FILE other.ged");
+
+    import_text(dir.path(), &unrelated, &["--yes"]).failure().stderr(
         predicate::str::contains("--dataset")
             .and(predicate::str::contains("--new-dataset"))
             .and(predicate::str::contains("tree.ged")),
     );
     // The same file into its own dataset is already on record: it writes nothing, not even a run.
     import_tree(dir.path(), &["--dataset", "tree.ged"]).success();
-    import_tree(dir.path(), &["--new-dataset"]).success();
+    import_text(dir.path(), &unrelated, &["--yes", "--new-dataset"]).success();
 
     let datasets = vitni(dir.path()).args(["import-run", "datasets"]).assert().success();
     let stdout = String::from_utf8(datasets.get_output().stdout.clone()).unwrap();
     assert_eq!(
         stdout.lines().filter(|line| line.contains("tree.ged  1 run")).count(),
-        2,
-        "{stdout}"
-    );
-    let listed = vitni(dir.path()).args(["import-run", "list"]).assert().success();
-    let stdout = String::from_utf8(listed.get_output().stdout.clone()).unwrap();
-    assert_eq!(
-        stdout.lines().filter(|line| line.contains("finished")).count(),
         2,
         "{stdout}"
     );

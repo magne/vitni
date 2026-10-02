@@ -20,15 +20,15 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use uuid::Uuid;
 use vitni_app::{
-    AiConfig, AppDefaults, Confidence, DatasetId, ImportRunStatus, OperatorConfig, Rect, Session, Workspace,
-    WorkspaceDefaults, change_log_for_person, list_citations, list_import_runs, list_media, list_persons,
+    AiConfig, AppDefaults, ChosenDataset, Confidence, DatasetId, ImportRunStatus, OperatorConfig, Rect, Session,
+    Workspace, WorkspaceDefaults, change_log_for_person, list_citations, list_import_runs, list_media, list_persons,
     list_repositories, list_sources,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 use vitni_plugin_host::{
     Capability, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PluginError, PresentError, Presenter,
-    ProgressControl, ResourceBudget,
+    ProgressControl, ResourceBudget, RunDataset,
 };
 use wiremock::matchers::{method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -114,8 +114,10 @@ fn invocation(workspace: Workspace, grants: Grants) -> Invocation {
                 id: AgentId::from_uuid(Uuid::from_u128(1)),
                 display: Some("Tester".to_owned()),
             }),
-            dataset: DatasetId::global("digitalarkivet"),
-            dataset_label: "digitalarkivet".to_owned(),
+            dataset: RunDataset::Chosen(ChosenDataset {
+                id: DatasetId::global("digitalarkivet"),
+                label: "digitalarkivet".to_owned(),
+            }),
             source_label: "census person".to_owned(),
             plugin: PLUGIN.to_owned(),
             plugin_version: "0.1.0".to_owned(),

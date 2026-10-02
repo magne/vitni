@@ -53,6 +53,7 @@ const SCREENSHOTS: Fixture = Fixture {
     workspace_dir: "demo",
     seed: seed_demo,
     required_media: &[],
+    required_files: &[],
     env: &[("VITNI_LANGUAGE", "en")],
 };
 

@@ -188,6 +188,7 @@ async fn a_recorded_resolution_resolves_the_item_in_later_runs(store: &Store) {
             dataset_label: "tree.ged".to_owned(),
             source_label: "tree.ged".to_owned(),
             file_asserted_at: None,
+            dataset_hint: None,
         },
     };
     run(store, 20, start).await;
@@ -212,6 +213,48 @@ async fn a_recorded_resolution_resolves_the_item_in_later_runs(store: &Store) {
         .unwrap();
     assert_eq!(resolved.aggregate_id, person_id().to_string());
     assert!(!resolved.created, "the dataset only resolved onto it");
+}
+
+async fn the_records_each_dataset_already_holds_are_counted(store: &Store) {
+    create_person(store).await;
+    a_recorded_resolution_resolves_the_item_in_later_runs(store).await;
+    let other = RecordOrigin {
+        dataset: DatasetId::lineage("gedcom", Uuid::from_u128(0xE)),
+        ..origin("I1", None)
+    };
+    let command = PersonCommand::CreatePerson {
+        person_id: PersonId::from_uuid(Uuid::from_u128(2)),
+        human_id: HumanId::new("I0002"),
+        evidence_level: EvidenceLevel::Persona,
+        external_ids: Vec::new(),
+    };
+    store
+        .execute_person(
+            &PersonId::from_uuid(Uuid::from_u128(2)).to_string(),
+            PersonCommandEnvelope {
+                meta: meta(30, Some(other.clone())),
+                command,
+            },
+        )
+        .await
+        .unwrap();
+    person(
+        store,
+        31,
+        Some(origin("I8", Some("event:BIRT:0"))),
+        assert_sex(Sex::Female),
+    )
+    .await;
+
+    let records = ["I1", "I7", "I8", "I9"].map(str::to_owned);
+    let overlap = store.origin_overlap("person", &records).await.unwrap();
+    assert_eq!(
+        overlap,
+        [(dataset(), 2), (other.dataset, 1)],
+        "a created and a resolved record count, an item's assertion does not"
+    );
+    assert_eq!(store.origin_overlap("family", &records).await.unwrap(), []);
+    assert_eq!(store.origin_overlap("person", &[]).await.unwrap(), []);
 }
 
 async fn a_rebuild_reproduces_the_index(store: &Store) {
@@ -284,6 +327,7 @@ mod sqlite {
         a_recorded_resolution_resolves_the_item_in_later_runs,
         a_rebuild_reproduces_the_index,
         a_preview_returns_the_events_and_writes_nothing,
+        the_records_each_dataset_already_holds_are_counted,
     );
 
     #[tokio::test]
@@ -340,5 +384,6 @@ mod postgres {
         a_recorded_resolution_resolves_the_item_in_later_runs,
         a_rebuild_reproduces_the_index,
         a_preview_returns_the_events_and_writes_nothing,
+        the_records_each_dataset_already_holds_are_counted,
     );
 }

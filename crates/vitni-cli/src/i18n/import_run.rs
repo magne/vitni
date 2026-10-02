@@ -66,6 +66,30 @@ impl Localizer {
         )
     }
 
+    /// The question whether a file goes into the dataset the host proposed for it (ADR 0037 §3).
+    #[must_use]
+    pub fn import_dataset_proposed(&self, label: &str, shared: usize, keys: usize) -> String {
+        fl!(
+            self.loader,
+            "import-dataset-proposed",
+            label = label,
+            shared = shared,
+            keys = keys
+        )
+    }
+
+    /// The notice that `--yes` accepted the dataset the host proposed for a file.
+    #[must_use]
+    pub fn import_dataset_proposed_accepted(&self, label: &str, shared: usize, keys: usize) -> String {
+        fl!(
+            self.loader,
+            "import-dataset-proposed-accepted",
+            label = label,
+            shared = shared,
+            keys = keys
+        )
+    }
+
     pub(super) fn import_run_error(&self, error: &ImportRunError) -> String {
         match error {
             ImportRunError::NotFound(id) => fl!(self.loader, "err-import-run-not-exist", id = id.to_string()),

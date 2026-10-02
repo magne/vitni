@@ -12,7 +12,7 @@ use vitni_core::origin::{ContentDigest, DatasetId, RecordOrigin};
 
 use super::{
     IndexRow, OriginResolution, OriginRow, RECORD_ORIGINS_TABLE, created_key, decode_assertion_id, decode_run,
-    decode_timestamp, index_rows,
+    decode_timestamp, index_rows, resolved_key,
 };
 use crate::store::DbError;
 
@@ -304,6 +304,39 @@ pub(crate) async fn created(pool: &Pool<Sqlite>, kind: &str) -> Result<Vec<(Stri
             run: decode_run(&row.get::<String, _>("run"))?,
         };
         out.push((row.get("aggregate_id"), origin));
+    }
+    Ok(out)
+}
+
+/// How many of `records` each dataset already holds as an aggregate of `kind` (ADR 0037 §3): records
+/// its runs created or resolved, as `(dataset, count)` in dataset order. Only the record's own entity
+/// counts, never one of its items.
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails.
+pub(crate) async fn overlap(
+    pool: &Pool<Sqlite>,
+    kind: &str,
+    records: &[String],
+) -> Result<Vec<(DatasetId, usize)>, DbError> {
+    let records = serde_json::to_string(records).map_err(|e| DbError::Backend(format!("encoding record ids: {e}")))?;
+    let rows = sqlx::query(&format!(
+        "SELECT dataset, COUNT(DISTINCT record) AS shared FROM {RECORD_ORIGINS_TABLE} \
+         WHERE aggregate_kind = ? AND field_key IN (?, ?) AND item IS NULL \
+         AND record IN (SELECT value FROM json_each(?)) GROUP BY dataset ORDER BY dataset"
+    ))
+    .bind(kind)
+    .bind(created_key(kind))
+    .bind(resolved_key(kind))
+    .bind(records)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("counting a file's records per dataset: {e}")))?;
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let shared = usize::try_from(row.get::<i64, _>("shared")).unwrap_or(usize::MAX);
+        out.push((DatasetId::new(row.get::<String, _>("dataset")), shared));
     }
     Ok(out)
 }

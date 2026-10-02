@@ -1,0 +1,55 @@
+0 HEAD
+1 SOUR Slektsprogram
+2 VERS 3.1
+1 FILE strand-tree.ged
+1 DATE 14 MAR 2024
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+0 @I1@ INDI
+1 _UID 0B5E3C6A-1D2F-4A8B-9C7E-2F4D6A8B0C1E
+1 NAME Anders /Strand/
+1 SEX M
+1 BIRT
+2 DATE 2 FEB 1841
+2 PLAC Lindvik, Strandsund
+2 SOUR @S1@
+3 PAGE folio 12
+1 OCCU Fisherman
+1 DEAT
+2 DATE 1903
+2 PLAC Lindvik, Strandsund
+1 OBJE
+2 FILE photos/anders.jpg
+2 FORM image/jpeg
+1 NOTE Moved to the coast after the flood.
+0 @I2@ INDI
+1 _UID 7A1C9E3B-5D4F-4B2A-8E6C-1A3B5C7D9E0F
+1 NAME Berit /Lunde/
+1 SEX F
+1 BIRT
+2 DATE ABT 1845
+2 PLAC Haugset
+0 @I3@ INDI
+1 NAME Carl /Strand/
+1 SEX M
+1 BIRT
+2 DATE 9 JUN 1870
+2 PLAC Lindvik, Strandsund
+1 BAPM
+2 DATE 30 JUN 1870
+0 @F1@ FAM
+1 _UID 3E5A7C9B-1F2D-4C6E-8A0B-5D7F9A1C3E5B
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+1 MARR
+2 DATE 4 MAY 1868
+2 PLAC Haugset
+0 @S1@ SOUR
+1 TITL Strandsund parish register 1835-1860
+1 AUTH Strandsund parish
+1 REPO @R1@
+0 @R1@ REPO
+1 NAME Invented Regional Archive
+0 TRLR

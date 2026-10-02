@@ -27,4 +27,9 @@ pub enum PluginError {
     /// signature (unsigned, untrusted-but-loadable).
     #[error("plugin signature error: {0}")]
     Signature(String),
+
+    /// The import's dataset could not be resolved (ADR 0037 §3): the operator named an unknown or
+    /// ambiguous one, or none while the file's proposal had candidates.
+    #[error("the import's dataset: {0}")]
+    Dataset(vitni_app::DatasetError),
 }

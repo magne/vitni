@@ -1,5 +1,5 @@
-//! Import-run use-cases (ADR 0037 §3, §5): start, finish and abandon a run, list runs, and the
-//! datasets projection over them.
+//! Import-run use-cases (ADR 0037 §3, §5): start, finish and abandon a run, list runs, the
+//! datasets projection over them, and the dataset a file is proposed to belong to.
 //!
 //! A run's operator is the invoking human, so these take that human's [`Session`], never the
 //! importer's `Software` one. Datasets are not stored on their own: a dataset is the set of runs that
@@ -10,11 +10,13 @@ use vitni_core::import_run::{
     AbandonReason, ImportCounts, ImportRunCommand, ImportRunCommandEnvelope, ImportRunStatus, ImportRunView,
     NewImportRun, ResolvedItem,
 };
+use vitni_core::matching::MatchableKind;
 use vitni_core::origin::{DatasetId, DatasetScope, DatasetSpec};
 use vitni_core::provenance::Timestamp;
 
 use crate::error::AppError;
 use crate::session::Session;
+use crate::staging::{EntityFields, RecordGraph};
 use crate::use_case::{self, Provenance};
 use crate::workspace::Workspace;
 
@@ -33,6 +35,8 @@ pub struct ImportRunSummary {
     pub dataset_label: String,
     /// What was imported.
     pub source_label: String,
+    /// The document header's fingerprint, if the importer declared one.
+    pub dataset_hint: Option<String>,
     /// Who started the run, if the operator has a display name.
     pub operator_display: Option<String>,
     /// When the run started.
@@ -52,6 +56,53 @@ pub struct DatasetSummary {
     pub label: String,
     /// How many runs have imported into it.
     pub runs: usize,
+    /// Every distinct header fingerprint its runs declared, in the order first seen.
+    pub hints: Vec<String>,
+}
+
+/// How a file's header fingerprint compares with the ones a dataset's runs declared (ADR 0037 §3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fingerprint {
+    /// One of the dataset's runs declared the file's fingerprint.
+    Same,
+    /// The dataset's runs declared fingerprints, none of them the file's.
+    Different,
+    /// The file or the dataset has no fingerprint to compare.
+    Unknown,
+}
+
+/// An earlier dataset a file may belong to, with the evidence for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DatasetCandidate {
+    /// The dataset id.
+    pub id: DatasetId,
+    /// The label its first run recorded.
+    pub label: String,
+    /// How many of the file's person and family records the dataset already holds.
+    pub shared: usize,
+    /// How the file's fingerprint compares with the dataset's.
+    pub fingerprint: Fingerprint,
+}
+
+/// Which earlier dataset a lineage file is proposed to belong to (ADR 0037 §3): the tool proposes,
+/// the operator decides.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DatasetProposal {
+    /// How many person and family records the file holds.
+    pub keys: usize,
+    /// Every dataset of the importer's scheme, in the order its first run started.
+    pub candidates: Vec<DatasetCandidate>,
+    /// The candidate the evidence points to, if it points to one.
+    pub proposed: Option<DatasetId>,
+}
+
+impl DatasetProposal {
+    /// The proposed candidate, if there is one.
+    #[must_use]
+    pub fn proposed_candidate(&self) -> Option<&DatasetCandidate> {
+        let proposed = self.proposed.as_ref()?;
+        self.candidates.iter().find(|candidate| candidate.id == *proposed)
+    }
 }
 
 /// Which dataset an import should write into, as the operator expressed it.
@@ -208,36 +259,157 @@ pub async fn list_datasets(workspace: &Workspace) -> Result<Vec<DatasetSummary>,
     let runs = list_import_runs(workspace).await?;
     let mut datasets: Vec<DatasetSummary> = Vec::new();
     for run in runs {
-        if let Some(dataset) = datasets.iter_mut().find(|dataset| dataset.id == run.dataset) {
-            dataset.runs += 1;
+        let index = if let Some(index) = datasets.iter().position(|dataset| dataset.id == run.dataset) {
+            index
         } else {
             datasets.push(DatasetSummary {
                 id: run.dataset,
                 label: run.dataset_label,
-                runs: 1,
+                runs: 0,
+                hints: Vec::new(),
             });
+            datasets.len() - 1
+        };
+        let dataset = &mut datasets[index];
+        dataset.runs += 1;
+        if let Some(hint) = run.dataset_hint
+            && !dataset.hints.contains(&hint)
+        {
+            dataset.hints.push(hint);
         }
     }
     Ok(datasets)
 }
 
-/// Resolves the operator's dataset `choice` for an importer writing into `spec`.
-///
-/// A global dataset is never chosen. For a lineage importer, no choice means a new dataset when none
-/// of its scheme exists yet, and is refused when one does: guessing would silently merge two files'
-/// records (ADR 0037 §3). A new lineage is labelled `source_label`.
+/// Proposes which earlier dataset of `spec`'s scheme a lineage file belongs to (ADR 0037 §3), from
+/// the file's header fingerprint `hint` and how many of its person and family records (`graphs`) each
+/// dataset already holds. A global importer has no lineages, so it is proposed nothing.
 ///
 /// # Errors
 ///
-/// [`AppError::Dataset`] when the choice names no dataset, names more than one, is missing while
-/// datasets exist, or asks for a lineage of a global importer; or a store error.
+/// A store error.
+pub async fn propose_dataset(
+    workspace: &Workspace,
+    spec: &DatasetSpec,
+    hint: Option<&str>,
+    graphs: &[RecordGraph],
+) -> Result<DatasetProposal, AppError> {
+    let mut persons = Vec::new();
+    let mut families = Vec::new();
+    for graph in graphs {
+        for entity in &graph.entities {
+            if entity.item.is_some() {
+                continue;
+            }
+            match &entity.fields {
+                EntityFields::Person(_) => persons.push(graph.record.clone()),
+                EntityFields::Family(_) => families.push(graph.record.clone()),
+                EntityFields::Event(_)
+                | EntityFields::Place(_)
+                | EntityFields::Source(_)
+                | EntityFields::Citation(_)
+                | EntityFields::Media(_)
+                | EntityFields::Note(_)
+                | EntityFields::Repository(_)
+                | EntityFields::Tag(_) => {}
+            }
+        }
+    }
+    let keys = persons.len() + families.len();
+    if spec.scope == DatasetScope::Global {
+        return Ok(DatasetProposal {
+            keys,
+            candidates: Vec::new(),
+            proposed: None,
+        });
+    }
+    let store = workspace.store();
+    let mut overlap = store.origin_overlap(MatchableKind::Person.as_str(), &persons).await?;
+    overlap.extend(store.origin_overlap(MatchableKind::Family.as_str(), &families).await?);
+    let mut candidates = Vec::new();
+    for dataset in list_datasets(workspace).await? {
+        if dataset.id.scheme() != spec.scheme {
+            continue;
+        }
+        let mut shared = 0;
+        for (id, count) in &overlap {
+            if *id == dataset.id {
+                shared += count;
+            }
+        }
+        candidates.push(DatasetCandidate {
+            fingerprint: fingerprint(hint, &dataset.hints),
+            id: dataset.id,
+            label: dataset.label,
+            shared,
+        });
+    }
+    let proposed = propose(&candidates);
+    Ok(DatasetProposal {
+        keys,
+        candidates,
+        proposed,
+    })
+}
+
+fn fingerprint(hint: Option<&str>, hints: &[String]) -> Fingerprint {
+    match hint {
+        None => Fingerprint::Unknown,
+        Some(_) if hints.is_empty() => Fingerprint::Unknown,
+        Some(hint) if hints.iter().any(|known| known == hint) => Fingerprint::Same,
+        Some(_) => Fingerprint::Different,
+    }
+}
+
+/// The candidate the file belongs to, if the evidence is clear: one that holds some of the file's
+/// records under the file's own fingerprint. Record ids are file-local (a GEDCOM `I1` recurs in
+/// unrelated files), so shared ids without a matching fingerprint propose nothing. Of the qualifying
+/// candidates the larger overlap wins; a tie proposes nothing.
+fn propose(candidates: &[DatasetCandidate]) -> Option<DatasetId> {
+    let mut best: Option<&DatasetCandidate> = None;
+    let mut tied = false;
+    for candidate in candidates {
+        let qualifies = candidate.shared > 0
+            && match candidate.fingerprint {
+                Fingerprint::Same => true,
+                Fingerprint::Unknown | Fingerprint::Different => false,
+            };
+        if !qualifies {
+            continue;
+        }
+        match best {
+            Some(current) if current.shared > candidate.shared => {}
+            Some(current) if current.shared == candidate.shared => tied = true,
+            _ => {
+                best = Some(candidate);
+                tied = false;
+            }
+        }
+    }
+    if tied {
+        return None;
+    }
+    best.map(|candidate| candidate.id.clone())
+}
+
+/// Resolves the operator's dataset `choice` for an importer writing into `spec`.
+///
+/// A global dataset is never chosen. For a lineage importer, no choice means a new dataset when none
+/// of its scheme exists yet, and `None` when one does: guessing would silently merge two files'
+/// records, so the file's own evidence proposes one ([`propose_dataset`]) for the operator to
+/// confirm (ADR 0037 §3). A new lineage is labelled `source_label`.
+///
+/// # Errors
+///
+/// [`AppError::Dataset`] when the choice names no dataset, names more than one, or asks for a lineage
+/// of a global importer; or a store error.
 pub async fn choose_dataset(
     workspace: &Workspace,
     session: &Session,
     spec: &DatasetSpec,
     choice: DatasetChoice,
     source_label: &str,
-) -> Result<ChosenDataset, AppError> {
+) -> Result<Option<ChosenDataset>, AppError> {
     let scheme = spec.scheme.as_str();
     let existing: Vec<DatasetSummary> = list_datasets(workspace)
         .await?
@@ -256,20 +428,23 @@ pub async fn choose_dataset(
                 id: DatasetId::lineage(scheme, session.new_dataset_lineage()),
                 label: source_label.to_owned(),
             },
-            DatasetChoice::Unspecified => {
-                let candidates = existing
-                    .iter()
-                    .map(|dataset| format!("{} ({})", dataset.label, dataset.id))
-                    .collect();
-                return Err(DatasetError::Required {
-                    scheme: scheme.to_owned(),
-                    candidates,
-                }
-                .into());
-            }
+            DatasetChoice::Unspecified => return Ok(None),
         },
     };
-    Ok(chosen)
+    Ok(Some(chosen))
+}
+
+/// The refusal of an import that names no dataset while `proposal`'s candidates exist.
+#[must_use]
+pub fn dataset_required(spec: &DatasetSpec, proposal: &DatasetProposal) -> DatasetError {
+    let mut candidates = Vec::with_capacity(proposal.candidates.len());
+    for candidate in &proposal.candidates {
+        candidates.push(format!("{} ({})", candidate.label, candidate.id));
+    }
+    DatasetError::Required {
+        scheme: spec.scheme.clone(),
+        candidates,
+    }
 }
 
 fn choose_global(
@@ -330,6 +505,7 @@ fn summarize(view: &ImportRunView) -> Option<ImportRunSummary> {
         dataset: dataset.clone(),
         dataset_label: view.dataset_label().to_owned(),
         source_label: view.source_label().to_owned(),
+        dataset_hint: view.dataset_hint().map(str::to_owned),
         operator_display: view.operator().and_then(|agent| agent.display.clone()),
         started_at,
         status: view.status().clone(),
@@ -352,4 +528,64 @@ async fn execute(
         .execute_import_run(&run_id.to_string(), envelope)
         .await
         .map_err(use_case::map_command_error)
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+    use uuid::Uuid;
+    use vitni_core::origin::DatasetId;
+
+    use super::{DatasetCandidate, Fingerprint, propose};
+
+    fn candidate(index: u128, shared: usize, fingerprint: Fingerprint) -> DatasetCandidate {
+        DatasetCandidate {
+            id: DatasetId::lineage("gedcom", Uuid::from_u128(index)),
+            label: format!("tree-{index}.ged"),
+            shared,
+            fingerprint,
+        }
+    }
+
+    fn qualifies(candidate: &DatasetCandidate) -> bool {
+        candidate.shared > 0 && candidate.fingerprint == Fingerprint::Same
+    }
+
+    #[test]
+    fn two_equally_strong_candidates_propose_neither() {
+        let candidates = [candidate(1, 3, Fingerprint::Same), candidate(2, 3, Fingerprint::Same)];
+        assert_eq!(propose(&candidates), None);
+    }
+
+    proptest! {
+        #[test]
+        fn a_proposal_qualifies_and_nothing_qualifying_outranks_or_ties_it(
+            specs in prop::collection::vec((0usize..40, 0u8..3), 0..6),
+        ) {
+            let mut candidates = Vec::new();
+            for (index, (shared, fingerprint)) in specs.into_iter().enumerate() {
+                let fingerprint = match fingerprint {
+                    0 => Fingerprint::Same,
+                    1 => Fingerprint::Different,
+                    _ => Fingerprint::Unknown,
+                };
+                let index = u128::try_from(index).unwrap_or(u128::MAX);
+                candidates.push(candidate(index, shared, fingerprint));
+            }
+            let qualifying: Vec<&DatasetCandidate> = candidates.iter().filter(|candidate| qualifies(candidate)).collect();
+            if let Some(id) = propose(&candidates) {
+                let chosen = candidates.iter().find(|candidate| candidate.id == id);
+                prop_assert!(chosen.is_some_and(qualifies));
+                for other in &qualifying {
+                    if other.id != id {
+                        prop_assert!(chosen.is_some_and(|chosen| chosen.shared > other.shared));
+                    }
+                }
+            } else {
+                let best = qualifying.iter().map(|candidate| candidate.shared).max();
+                let at_best = qualifying.iter().filter(|candidate| Some(candidate.shared) == best).count();
+                prop_assert!(qualifying.is_empty() || at_best > 1, "{candidates:?}");
+            }
+        }
+    }
 }

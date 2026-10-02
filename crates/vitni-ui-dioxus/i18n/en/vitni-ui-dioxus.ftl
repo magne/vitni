@@ -567,6 +567,7 @@ bulk-import-dataset-label = This file is
 bulk-import-dataset-placeholder = Choose…
 bulk-import-dataset-later-export = Records already imported from this tree are updated, not duplicated.
 bulk-import-dataset-existing = A later export of { $label }
+bulk-import-dataset-proposed = { $shared } of the { $keys } people and families in this file were imported from { $label }.
 bulk-import-dataset-new = A different tree
 bulk-import-target-name-required = Enter a name for the new workspace.
 bulk-import-target-name-taken = A workspace with that name is already registered.

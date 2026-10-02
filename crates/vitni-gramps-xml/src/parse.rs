@@ -399,8 +399,8 @@ fn date_point(value: &str) -> DatePoint {
     }
 }
 
-/// Interprets a `<header>` element's `<created date="…">` — the file's own export date (ADR 0029
-/// §2). A missing or unparseable date yields `None` rather than a synthesized fallback (ADR 0029
+/// Interprets a `<header>` element: its researcher's name, and its `<created date="…">` — the file's
+/// own export date (ADR 0029 §2). A missing or unparseable date yields `None` rather than a synthesized fallback (ADR 0029
 /// §3): [`date_point`] never fails outright, so "unparseable" here means no year could be read.
 fn header(element: &Element) -> Header {
     let date = element
@@ -408,7 +408,10 @@ fn header(element: &Element) -> Header {
         .and_then(|created| created.attr("date"))
         .map(date_point)
         .filter(|point| point.year.is_some());
-    Header { date }
+    let researcher = element
+        .child("researcher")
+        .and_then(|researcher| child_text(researcher, "resname"));
+    Header { date, researcher }
 }
 
 /// Maps a Gramps event-type label onto an [`EventKind`]; an unrecognized label falls back to `Birth`

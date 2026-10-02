@@ -719,6 +719,30 @@ impl Store {
         }
     }
 
+    /// How many of `records` each dataset already holds as an aggregate of `kind`, created or resolved
+    /// by its runs, as `(dataset, count)` in dataset order (ADR 0037 §3): the key overlap a file's
+    /// dataset is proposed by.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn origin_overlap(
+        &self,
+        kind: &str,
+        records: &[String],
+    ) -> Result<Vec<(vitni_core::origin::DatasetId, usize)>, DbError> {
+        if records.is_empty() {
+            return Ok(Vec::new());
+        }
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.origin_overlap(kind, records).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.origin_overlap(kind, records).await,
+        }
+    }
+
     /// The fingerprint of the keying rules and packs the match keys index was built under (ADR 0038
     /// §7), or `None` when it must be built: a new workspace, or rebuilt projections.
     ///

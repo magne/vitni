@@ -11,6 +11,10 @@ dataset-summary = { $id }  { $label }  { $runs ->
    *[other] { $runs } runs
 }
 
+## Dataset proposal (ADR 0037 §3)
+import-dataset-proposed = This file looks like a later export of "{ $label }": { $shared } of its { $keys } people and families were imported from it. Import into it? [y/N]
+import-dataset-proposed-accepted = Importing into "{ $label }", which this file looks like a later export of: { $shared } of its { $keys } people and families were imported from it.
+
 ## AppError
 err-import-run-not-found = no import run with id "{ $id }"
 
