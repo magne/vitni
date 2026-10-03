@@ -15,7 +15,7 @@ use vitni_app::{
     AbandonReason, AgentKind, AiConfig, AppDefaults, ChosenDataset, DatasetChoice, DatasetError, DatasetId,
     DatasetProposal, DatasetScope, DatasetSpec, IdentityDecision, ImportRunStatus, ImportRunSummary, MatchQuestion,
     OperatorConfig, PairAnswer, PlanCounts, PlanStep, PlanSummary, ReviewReply, Session, Workspace, WorkspaceDefaults,
-    list_import_runs, undo_assertion, workspace_counts,
+    list_import_runs, list_persons, undo_assertion, workspace_counts,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::matching::MatchableKind;
@@ -366,7 +366,7 @@ async fn import_as(workspace: Workspace, plugin: &str, n: u128, dir: &Path, name
 }
 
 #[tokio::test]
-async fn a_reimport_into_another_dataset_records_what_it_resolved_and_then_resolves_by_it() {
+async fn a_reimport_into_another_dataset_merges_its_persons_records_what_it_resolved_and_then_resolves_by_it() {
     let dir = tempfile::tempdir().expect("tempdir");
     let first = DatasetId::lineage("gedcom", Uuid::from_u128(5));
     let second = DatasetId::lineage("gedcom", Uuid::from_u128(6));
@@ -387,23 +387,33 @@ async fn a_reimport_into_another_dataset_records_what_it_resolved_and_then_resol
     let runs = list_import_runs(&workspace).await.expect("runs");
     assert_eq!(runs.len(), 2);
     assert_eq!(
-        runs[1].counts.resolved, 3,
-        "two persons and a family resolved by external id"
+        runs[1].counts.resolved, 1,
+        "the family resolved by external id; each person is a persona of its own"
     );
     let resolutions = log(&workspace)
         .await
         .into_iter()
         .filter(|(_, event_type, _)| event_type == "ItemResolved")
         .count();
-    assert_eq!(resolutions, 3);
-    assert_eq!(workspace_counts(&workspace).await.expect("counts").person, 2);
+    assert_eq!(resolutions, 1);
+    let merges = log(&workspace)
+        .await
+        .into_iter()
+        .filter(|(_, event_type, _)| event_type == "PersonsMerged")
+        .count();
+    assert_eq!(merges, 2, "each persona is merged into the person it resolved onto");
+    assert_eq!(
+        list_persons(&workspace).await.expect("persons").len(),
+        2,
+        "two persons, four records"
+    );
 
     let events = event_count(&workspace).await;
     let workspace = import(workspace, "gedcom-import", &second, dir.path(), "tree.ged", &text).await;
     assert_eq!(
         event_count(&workspace).await,
         events,
-        "the recorded resolutions resolve the re-run"
+        "the personas and the recorded resolution resolve the re-run"
     );
 }
 

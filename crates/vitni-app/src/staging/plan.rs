@@ -6,9 +6,11 @@
 //! 1. **Deterministic.** An entity resolves by its origin (ADR 0037 §4) — onto the record an earlier run
 //!    of this dataset created from it, or onto the record a run recorded resolving it to — then a
 //!    person or family by an external id, and a tag by its case-folded name (ADR 0038 §6).
-//! 2. **Scope.** A record whose own person or family resolved onto a record another dataset made keeps
-//!    that dataset's contents: only its identity is written — the name and sex, the family's members —
-//!    and the rest of its graph is withheld, as is any entity only withheld links reach.
+//! 2. **Scope.** A record whose own family resolved onto a record another dataset made keeps that
+//!    dataset's contents: only its identity is written — the family's members — and the rest of its
+//!    graph is withheld, as is any entity only withheld links reach. A person resolved so is written
+//!    whole, as a persona of its own merged into the person (ADR 0040 §3); outside an import run it
+//!    keeps only its name and sex, as a record's own family does its members.
 //! 3. **Dry run.** A record this dataset made is unchanged when its writes, run through the origin
 //!    gate's dry run, write nothing; otherwise it is an update naming the fields they assert.
 //! 4. **Candidates.** A person, place, source or repository nothing resolved is matched against the
@@ -20,6 +22,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use uuid::Uuid;
+use vitni_core::ids::PersonId;
 use vitni_core::import_run::ResolvedItem;
 use vitni_core::matching::{MatchBand, MatchableKind};
 use vitni_core::provenance::Timestamp;
@@ -27,6 +30,7 @@ use vitni_core::provenance::Timestamp;
 use crate::ResolutionDecision;
 use crate::dto::AggRef;
 use crate::error::AppError;
+use crate::identity::PersonClusters;
 use crate::origin_gate::DryRun;
 use crate::session::Session;
 use crate::similar::SimilarRecord;
@@ -159,6 +163,8 @@ pub(crate) enum Endpoint {
         kind: MatchableKind,
         human_id: String,
         aggregate_id: String,
+        /// Whether this dataset made the record, rather than resolved onto it.
+        created: bool,
     },
     /// Nothing.
     Dangling,
@@ -179,6 +185,10 @@ pub struct ImportPlan {
     pub(crate) resolved: Vec<ResolvedItem>,
     /// The document's own export date, which single-valued fields are reconciled by (ADR 0029 §2).
     pub(crate) file_asserted_at: Option<Timestamp>,
+    /// The cluster root's human id of each merged person the plan names, by the person's human id.
+    pub(crate) person_roots: HashMap<String, String>,
+    /// Whether the plan writes an import run, whose origins let a persona resolve on the next run.
+    pub(crate) in_run: bool,
 }
 
 /// Why an import could not be planned.
@@ -241,6 +251,48 @@ impl ImportPlan {
             .iter()
             .find(|entity| entity.local_id == planned.local_id)?;
         Some((graph, entity))
+    }
+
+    /// Whether the commit writes `entity` as a persona of its own, merged into the person it resolved
+    /// onto (ADR 0040 §3): a person linked to a record its dataset did not make. Outside an import run
+    /// there is no dataset, and such a person keeps only its identity.
+    #[must_use]
+    pub fn persona(&self, entity: &PlannedEntity) -> bool {
+        self.in_run && entity.scope != WriteScope::Withheld && is_person_link(entity)
+    }
+
+    /// Each entity's record before the commit writes anything: the record it resolved onto, but none
+    /// for a persona, which the commit creates.
+    pub(crate) fn initial_ids(&self) -> Vec<Option<String>> {
+        self.entities
+            .iter()
+            .map(|entity| match entity.disposition.target() {
+                Some(target) if !self.persona(entity) => Some(target.human_id.clone()),
+                Some(_) | None => None,
+            })
+            .collect()
+    }
+
+    /// Whether an end of `link`, made in graph `graph`, is a record another dataset made: a person
+    /// end of such a link names its cluster's root rather than this dataset's persona.
+    pub(crate) fn foreign(&self, graph: usize, link: &LinkKind) -> bool {
+        let ends = std::iter::once(link.owner()).chain(link.targets());
+        ends.into_iter().any(|end| match self.endpoint(graph, end.reference) {
+            Endpoint::Planned(index) => self
+                .entities
+                .get(*index)
+                .is_some_and(|entity| entity.kind != MatchableKind::Person && is_resolved_link(&entity.disposition)),
+            Endpoint::Stored { created, .. } => !created,
+            Endpoint::Dangling => false,
+        })
+    }
+
+    /// The human id of the root of the person cluster `human_id` is in.
+    fn person_root(&self, human_id: &str) -> String {
+        self.person_roots
+            .get(human_id)
+            .cloned()
+            .unwrap_or_else(|| human_id.to_owned())
     }
 
     /// Where `reference`, made in graph `graph`, points.
@@ -309,12 +361,26 @@ pub(crate) struct Resolver<'a> {
     pub plan: &'a ImportPlan,
     pub graph: usize,
     pub ids: &'a [Option<String>],
+    /// Whether the references are the ends of a link to another dataset's record
+    /// ([`ImportPlan::foreign`]): a person that is a record then resolves to its cluster's root.
+    pub foreign: bool,
 }
 
 impl Resolve for Resolver<'_> {
     fn human_id(&self, reference: &EntityRef) -> Option<String> {
         match self.plan.endpoint(self.graph, reference) {
-            Endpoint::Planned(index) => self.ids.get(*index).cloned().flatten(),
+            Endpoint::Planned(index) => {
+                let entity = self.plan.entities.get(*index)?;
+                match entity.disposition.target() {
+                    Some(target) if self.foreign && entity.kind == MatchableKind::Person => {
+                        Some(self.plan.person_root(&target.human_id))
+                    }
+                    Some(_) | None => self.ids.get(*index).cloned().flatten(),
+                }
+            }
+            Endpoint::Stored { kind, human_id, .. } if self.foreign && *kind == MatchableKind::Person => {
+                Some(self.plan.person_root(human_id))
+            }
             Endpoint::Stored { human_id, .. } => Some(human_id.clone()),
             Endpoint::Dangling => None,
         }
@@ -358,6 +424,7 @@ pub(crate) async fn plan_decided(
     planner.plan.file_asserted_at = file_asserted_at;
     planner.resolve(decided).await?;
     planner.resolve_endpoints().await?;
+    planner.person_roots().await?;
     planner.scope();
     planner.dry_run().await?;
     planner.match_candidates().await?;
@@ -420,6 +487,8 @@ impl<'a> Planner<'a> {
             endpoints: HashMap::new(),
             resolved: Vec::new(),
             file_asserted_at: None,
+            person_roots: HashMap::new(),
+            in_run: session.import_run().is_some(),
         };
         Ok(Self {
             workspace,
@@ -499,7 +568,9 @@ impl<'a> Planner<'a> {
                 }
                 continue;
             };
-            if let Ok(aggregate_id) = Uuid::parse_str(&target.id) {
+            // In a run a person is written as a persona of its own, whose creation resolves the next run.
+            let persona = kind == MatchableKind::Person && self.plan.in_run;
+            if !persona && let Ok(aggregate_id) = Uuid::parse_str(&target.id) {
                 let decision = match basis {
                     LinkBasis::TagName => ResolutionDecision::TagName,
                     LinkBasis::Decided => ResolutionDecision::Matched,
@@ -626,10 +697,11 @@ impl<'a> Planner<'a> {
                     return Ok(Endpoint::Planned(*index));
                 }
                 match self.by_origin(*kind, record, item.as_deref()).await? {
-                    Some((target, _)) => Endpoint::Stored {
+                    Some((target, created)) => Endpoint::Stored {
                         kind: *kind,
                         human_id: target.human_id,
                         aggregate_id: target.id,
+                        created,
                     },
                     None => Endpoint::Dangling,
                 }
@@ -637,12 +709,52 @@ impl<'a> Planner<'a> {
         })
     }
 
+    /// Every person the plan resolves onto, or a link names, that is merged into another, with its
+    /// cluster's root.
+    async fn person_roots(&mut self) -> Result<(), AppError> {
+        let store = self.workspace.store();
+        let clusters = PersonClusters::load(store).await?;
+        let mut named = Vec::new();
+        for entity in &self.plan.entities {
+            if let (MatchableKind::Person, Some(target)) = (entity.kind, entity.disposition.target()) {
+                named.push((target.human_id.clone(), target.id.clone()));
+            }
+        }
+        for endpoint in self.plan.endpoints.values() {
+            if let Endpoint::Stored {
+                kind: MatchableKind::Person,
+                human_id,
+                aggregate_id,
+                ..
+            } = endpoint
+            {
+                named.push((human_id.clone(), aggregate_id.clone()));
+            }
+        }
+        for (human_id, aggregate_id) in named {
+            let Ok(uuid) = Uuid::parse_str(&aggregate_id) else {
+                continue;
+            };
+            let id = PersonId::from_uuid(uuid);
+            if !clusters.is_member(id) || self.plan.person_roots.contains_key(&human_id) {
+                continue;
+            }
+            let root = clusters.root(id).to_string();
+            if let Some(root) = store.human_id_of(MatchableKind::Person.as_str(), &root).await? {
+                self.plan.person_roots.insert(human_id, root);
+            }
+        }
+        Ok(())
+    }
+
     /// The scope pass: a record resolved onto another dataset's keeps only its identity, and what only
-    /// withheld writes reach is withheld too.
+    /// withheld writes reach is withheld too. In an import run a person is the exception: it keeps its
+    /// whole record, as a persona of its own.
     fn scope(&mut self) {
         let mut identity_graphs: Vec<Option<MatchableKind>> = vec![None; self.plan.graphs.len()];
         for entity in &mut self.plan.entities {
-            if is_subject(entity, &self.plan.graphs) && is_link(&entity.disposition) {
+            let persona = self.plan.in_run && is_person_link(entity);
+            if is_subject(entity, &self.plan.graphs) && is_link(&entity.disposition) && !persona {
                 entity.scope = WriteScope::Identity;
                 identity_graphs[entity.graph] = Some(entity.kind);
             }
@@ -754,12 +866,7 @@ impl<'a> Planner<'a> {
             run: dataset.as_ref().zip(run),
             file_asserted_at,
         };
-        let ids: Vec<Option<String>> = self
-            .plan
-            .entities
-            .iter()
-            .map(|entity| entity.disposition.target().map(|target| target.human_id.clone()))
-            .collect();
+        let ids = self.plan.initial_ids();
         let mut fields: BTreeMap<usize, Vec<String>> = BTreeMap::new();
         self.dry_run_entities(&writer, &dry_run, &mut fields).await;
         self.dry_run_links(&writer, &dry_run, &ids, &mut fields).await;
@@ -823,22 +930,23 @@ impl<'a> Planner<'a> {
                 plan: &self.plan,
                 graph,
                 ids,
+                foreign: self.plan.foreign(graph, &staged.link),
             };
-            let ends = std::iter::once(staged.link.owner().reference)
+            let references: Vec<&EntityRef> = std::iter::once(staged.link.owner().reference)
                 .chain(staged.link.targets().into_iter().map(|end| end.reference))
-                .map(|reference| self.plan.endpoint(graph, reference).clone())
-                .collect::<Vec<_>>();
-            if ends.contains(&Endpoint::Dangling) {
+                .collect();
+            let dangling = references
+                .iter()
+                .any(|reference| *self.plan.endpoint(graph, reference) == Endpoint::Dangling);
+            if dangling {
                 self.plan.links[li].dangling = true;
                 self.plan.links[li].writes = false;
                 continue;
             }
-            let all_exist = ends.iter().all(|end| match end {
-                Endpoint::Planned(i) => ids[*i].is_some(),
-                Endpoint::Stored { .. } => true,
-                Endpoint::Dangling => false,
-            });
-            if !all_exist {
+            if !references
+                .iter()
+                .all(|reference| resolver.human_id(reference).is_some())
+            {
                 continue;
             }
             let record = self.plan.graphs[graph].record.clone();
@@ -918,6 +1026,23 @@ fn is_membership(link: &LinkKind) -> bool {
         | LinkKind::SourceRepository { .. }
         | LinkKind::Association { .. } => false,
     }
+}
+
+/// Whether `disposition` resolved onto a record deterministically.
+fn is_resolved_link(disposition: &Disposition) -> bool {
+    match disposition {
+        Disposition::Link { .. } => true,
+        Disposition::Unchanged { .. }
+        | Disposition::Update { .. }
+        | Disposition::Duplicate { .. }
+        | Disposition::Candidates(_)
+        | Disposition::New => false,
+    }
+}
+
+/// Whether `entity` is a person resolved onto a record this dataset did not make.
+fn is_person_link(entity: &PlannedEntity) -> bool {
+    entity.kind == MatchableKind::Person && is_resolved_link(&entity.disposition)
 }
 
 /// Whether `disposition` resolved onto a record this dataset did not make.

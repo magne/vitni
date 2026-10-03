@@ -497,15 +497,6 @@ does.
   (ADR 0043). Which researcher field carries it is open, because Gramps shows the researcher's name to
   its user. *Exit:* exporting a workspace as Gramps XML, importing it elsewhere, then importing a later
   export proposes the first import's dataset. — #469
-- **A person linked by identity gets no persona** — ADR 0040 §3. A staged person that resolves onto
-  another dataset's person (`Link`, by `ExternalId` or a recorded resolution) is reused, as every other
-  kind is: the plan writes its name and sex onto the target and withholds the rest of its record. The ADR
-  has the record's evidence kept as a unit instead — a new persona carrying the record's claims, linked
-  with `PersonsMerged`. That needs the commit to route links into existing records to the cluster root
-  and links among new records to the persona. A person decided *Same* in the assisted Match stage already
-  gets one: it is imported as new and merged into the candidate after the commit. *Shape:* the same for a
-  `Link`, with that routing. *Exit:* re-importing a person
-  from a second dataset leaves two persons in one cluster, each with its own record's facts. — #477
 - **The origin index is written after the event commit** — ADR 0040 §5. `RecordOriginsQuery`
   (`vitni-db/src/record_origins/sqlite.rs:75`) indexes an aggregate's events in a cqrs-es query run
   after the events commit, logging a failure. A process killed between the two leaves an aggregate no

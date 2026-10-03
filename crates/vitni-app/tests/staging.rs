@@ -18,6 +18,7 @@ use vitni_app::{
 use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Sex};
 use vitni_core::ids::AgentId;
 use vitni_core::matching::{MatchBand, MatchableKind};
+use vitni_core::person::PersonView;
 use vitni_core::provenance::{Agent, AgentKind};
 
 fn operator() -> OperatorConfig {
@@ -358,7 +359,7 @@ async fn a_new_fact_plans_an_update_naming_its_field() {
 }
 
 #[tokio::test]
-async fn a_known_external_id_links_and_records_the_resolution() {
+async fn a_known_external_id_links_a_person_through_a_persona_of_its_own() {
     let (workspace, _dir) = workspace().await;
     let stored = stored_person(&workspace, "Ole", 1850, Some("UID-1")).await;
 
@@ -379,9 +380,166 @@ async fn a_known_external_id_links_and_records_the_resolution() {
     let outcome = commit_import(&workspace, &session, &plan, &Provenance::default(), &mut RunToEnd)
         .await
         .expect("commit");
-    assert_eq!(outcome.resolved.len(), 1);
-    assert!(outcome.created.is_empty(), "nothing created: {:?}", outcome.created);
-    assert_eq!(vitni_app::list_persons(&workspace).await.expect("persons").len(), 1);
+    assert!(
+        outcome.resolved.is_empty(),
+        "the persona's own origin resolves the next run: {:?}",
+        outcome.resolved
+    );
+    assert_eq!(outcome.created.get("person"), Some(&1));
+    let persona = committed_id(&outcome, 0);
+    assert_ne!(persona, stored);
+    assert_eq!(
+        vitni_app::pair_decision(&workspace, &stored, &persona)
+            .await
+            .expect("decision"),
+        Some(PairDecision::SameCluster)
+    );
+    assert_eq!(
+        vitni_app::list_persons(&workspace).await.expect("persons").len(),
+        1,
+        "one person, two records"
+    );
+}
+
+#[tokio::test]
+async fn a_family_known_by_external_id_records_the_resolution() {
+    let (workspace, _dir) = workspace().await;
+    import(&workspace, &importer(dataset(1)), linked_family_tree()).await;
+
+    let session = importer(dataset(2));
+    let plan = plan(&workspace, &session, linked_family_tree()).await;
+    assert!(matches!(
+        disposition(&plan, 1, 0),
+        Disposition::Link {
+            basis: LinkBasis::ExternalId,
+            ..
+        }
+    ));
+    let outcome = commit_import(&workspace, &session, &plan, &Provenance::default(), &mut RunToEnd)
+        .await
+        .expect("commit");
+    let kinds: Vec<&str> = outcome.resolved.iter().map(|item| item.kind.as_str()).collect();
+    assert_eq!(kinds, ["family"]);
+}
+
+/// Every person record of the workspace, merged ones included.
+async fn person_views(workspace: &Workspace) -> Vec<PersonView> {
+    workspace.store().list_persons().await.expect("persons")
+}
+
+/// The occupations the person `human_id` holds.
+async fn occupations(workspace: &Workspace, human_id: &str) -> Vec<String> {
+    let view = workspace
+        .store()
+        .find_person(human_id)
+        .await
+        .expect("find")
+        .expect("person");
+    view.facts()
+        .into_iter()
+        .filter_map(|fact| fact.value.value.clone())
+        .collect()
+}
+
+/// The human ids of the partners of every family of the workspace.
+async fn family_partners(workspace: &Workspace) -> Vec<Vec<String>> {
+    let persons = person_views(workspace).await;
+    let human_id_of = |id| {
+        persons
+            .iter()
+            .find(|view| view.person_id() == Some(id))
+            .and_then(|view| view.human_id())
+            .map(|human_id| human_id.as_str().to_owned())
+            .expect("partner")
+    };
+    let families = workspace.store().list_families().await.expect("families");
+    families
+        .iter()
+        .map(|family| family.partners().into_iter().map(human_id_of).collect())
+        .collect()
+}
+
+/// `I1` with `UID-1` and the `occupation`, and its family `F1` carrying `UID-F`.
+fn linked_family_tree() -> Vec<RecordGraph> {
+    let mut graphs = vec![individual("I1", "Ole"), family("F1", "I1", "I1")];
+    graphs[0].entities[0] = with_uid(graphs[0].entities[0].clone(), "UID-1");
+    graphs[1].links.truncate(1);
+    if let EntityFields::Family(family) = &mut graphs[1].entities[0].fields {
+        family.external_ids.push(ExternalId {
+            authority: "gedcom-uid".to_owned(),
+            value: "UID-F".to_owned(),
+            kind: None,
+            url: None,
+        });
+    }
+    graphs
+}
+
+#[tokio::test]
+async fn a_person_reimported_from_a_second_dataset_joins_its_cluster_with_its_own_facts() {
+    let (workspace, _dir) = workspace().await;
+    let record = |occupation: &str| {
+        let mut graphs = vec![individual("I1", "Ole"), place("plac:Mandal", "Mandal")];
+        graphs[0].entities[0] = with_occupation(with_uid(graphs[0].entities[0].clone(), "UID-1"), occupation);
+        graphs
+    };
+    import(&workspace, &importer(dataset(1)), record("Farmer")).await;
+    let first = person_views(&workspace).await[0]
+        .human_id()
+        .expect("human id")
+        .as_str()
+        .to_owned();
+
+    let session = importer(dataset(2));
+    let plan = plan(&workspace, &session, record("Fisher")).await;
+    let outcome = commit_import(&workspace, &session, &plan, &Provenance::default(), &mut RunToEnd)
+        .await
+        .expect("commit");
+    let second = committed_id(&outcome, 0);
+
+    assert_eq!(person_views(&workspace).await.len(), 2, "two records");
+    assert_eq!(
+        vitni_app::pair_decision(&workspace, &first, &second)
+            .await
+            .expect("decision"),
+        Some(PairDecision::SameCluster),
+        "in one cluster"
+    );
+    assert_eq!(occupations(&workspace, &first).await, ["Farmer"]);
+    assert_eq!(occupations(&workspace, &second).await, ["Fisher"]);
+    let persona = workspace
+        .store()
+        .find_person(&second)
+        .await
+        .expect("find")
+        .expect("persona");
+    assert_eq!(persona.participations().len(), 1, "the record's own birth");
+
+    let before = events(&workspace).await;
+    let again = import(&workspace, &importer(dataset(2)), record("Fisher")).await;
+    let counts = again.counts();
+    assert_eq!(counts.unchanged, 3, "{counts:?}");
+    assert!(again.links.iter().all(|link| !link.writes), "every link is on record");
+    assert_eq!(events(&workspace).await, before, "a re-import writes nothing");
+}
+
+#[tokio::test]
+async fn a_family_linked_elsewhere_keeps_its_partner_and_gains_no_persona() {
+    let (workspace, _dir) = workspace().await;
+    import(&workspace, &importer(dataset(1)), linked_family_tree()).await;
+    let partners = family_partners(&workspace).await;
+
+    let plan = import(&workspace, &importer(dataset(2)), linked_family_tree()).await;
+    assert_eq!(plan.entity(1, 0).expect("family").scope, WriteScope::Identity);
+    assert!(
+        !plan.links.iter().any(|link| link.graph == 1 && link.writes),
+        "the partner is the cluster's root, already on record"
+    );
+    assert_eq!(family_partners(&workspace).await, partners);
+
+    let before = events(&workspace).await;
+    import(&workspace, &importer(dataset(2)), linked_family_tree()).await;
+    assert_eq!(events(&workspace).await, before, "a re-import writes nothing");
 }
 
 #[tokio::test]
@@ -503,32 +661,63 @@ async fn linked_elsewhere(workspace: &Workspace) -> ImportPlan {
 }
 
 #[tokio::test]
-async fn a_person_linked_elsewhere_withholds_the_rest_of_its_graph() {
+async fn a_person_linked_elsewhere_writes_its_graph_onto_its_persona() {
     let (workspace, _dir) = workspace().await;
     let plan = linked_elsewhere(&workspace).await;
 
-    assert_eq!(plan.entity(0, 0).expect("person").scope, WriteScope::Identity);
-    assert_eq!(plan.entity(0, 1).expect("birth").scope, WriteScope::Withheld);
-    assert_eq!(records(&workspace).await, [1, 1, 0, 0], "only the stored birth");
-    let persons = vitni_app::list_persons(&workspace).await.expect("persons");
-    let view = workspace
-        .store()
-        .find_person(&persons[0].human_id)
-        .await
-        .expect("find")
-        .expect("person");
-    assert!(view.facts().is_empty(), "the other dataset's person keeps its contents");
+    assert_eq!(plan.entity(0, 0).expect("person").scope, WriteScope::Full);
+    assert_eq!(plan.entity(0, 1).expect("birth").scope, WriteScope::Full);
+    assert_eq!(
+        records(&workspace).await,
+        [1, 2, 1, 0],
+        "one person, the stored birth and the record's"
+    );
+    let views = person_views(&workspace).await;
+    let stored = views
+        .iter()
+        .find(|view| view.facts().is_empty())
+        .expect("the other dataset's person keeps its contents");
+    assert_eq!(stored.participations().len(), 1, "only its own birth");
 }
 
 #[tokio::test]
 async fn a_place_only_withheld_events_reach_is_withheld() {
     let (workspace, _dir) = workspace().await;
-    let plan = linked_elsewhere(&workspace).await;
-    assert_eq!(plan.entity(1, 0).expect("place").scope, WriteScope::Withheld);
+    import(&workspace, &importer(dataset(1)), linked_family_tree()).await;
+
+    let mut graphs = linked_family_tree();
+    graphs[1].entities.push(StagedEntity {
+        local_id: 1,
+        item: Some("event:MARR:0".to_owned()),
+        fields: EntityFields::Event(StagedEvent {
+            event_type: EventType::Marriage,
+            date: None,
+            addresses: Vec::new(),
+            restrictions: BTreeSet::default(),
+        }),
+    });
+    graphs[1].links.push(StagedLink {
+        item: Some("event:MARR:0".to_owned()),
+        link: LinkKind::FamilyEvent {
+            family: EntityRef::Local(0),
+            event: EntityRef::Local(1),
+        },
+    });
+    graphs[1].links.push(StagedLink {
+        item: Some("event:MARR:0".to_owned()),
+        link: LinkKind::EventPlace {
+            event: EntityRef::Local(1),
+            place: place_ref("plac:Oslo"),
+        },
+    });
+    graphs.push(place("plac:Oslo", "Oslo"));
+    let plan = plan(&workspace, &importer(dataset(2)), graphs).await;
+    assert_eq!(plan.entity(1, 1).expect("marriage").scope, WriteScope::Withheld);
+    assert_eq!(plan.entity(2, 0).expect("place").scope, WriteScope::Withheld);
 }
 
 #[tokio::test]
-async fn a_person_linked_elsewhere_joins_no_family_its_record_names() {
+async fn a_person_linked_elsewhere_joins_the_family_its_record_names_as_its_persona() {
     let (workspace, _dir) = workspace().await;
     stored_person(&workspace, "Ole", 1850, Some("UID-1")).await;
     let mut household = family("F1", "I2", "I3");
@@ -548,14 +737,17 @@ async fn a_person_linked_elsewhere_joins_no_family_its_record_names() {
         },
     });
 
-    let plan = import(&workspace, &importer(dataset(2)), graphs).await;
+    let session = importer(dataset(2));
+    let plan = plan(&workspace, &session, graphs).await;
+    let outcome = commit_import(&workspace, &session, &plan, &Provenance::default(), &mut RunToEnd)
+        .await
+        .expect("commit");
 
-    assert_eq!(plan.entity(0, 0).expect("person").scope, WriteScope::Identity);
-    assert_eq!(plan.entity(1, 0).expect("family").scope, WriteScope::Withheld);
+    assert_eq!(plan.entity(1, 0).expect("family").scope, WriteScope::Full);
     assert_eq!(
-        records(&workspace).await,
-        [1, 1, 0, 0],
-        "no family for the other dataset's person"
+        family_partners(&workspace).await,
+        [[committed_id(&outcome, 0)]],
+        "the record's family is its persona's"
     );
 }
 
