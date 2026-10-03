@@ -7,6 +7,9 @@
 //! belong under the way the importer placed them — a family-event kind whose participant set matches
 //! a family's partners is referenced by that family, every other event by each participant person —
 //! mirroring `gramps-import`, so an import → export → import cycle is stable.
+//!
+//! The header's researcher names the workspace (ADR 0043, ADR 0045), so every export of one workspace
+//! carries the same fingerprint and a re-import is proposed the dataset an earlier export went into.
 
 wit_bindgen::generate!({
     world: "bulk-export",
@@ -137,7 +140,10 @@ impl Guest for Exporter {
         );
 
         let db = Database {
-            header: Header::default(),
+            header: Header {
+                researcher: Some(format!("Vitni workspace {}", vitni_plugin_api::workspace_id()?)),
+                ..Header::default()
+            },
             people,
             families: family_records,
             events: events.into_iter().map(event).collect(),
