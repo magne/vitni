@@ -524,6 +524,67 @@ async fn a_person_reimported_from_a_second_dataset_joins_its_cluster_with_its_ow
 }
 
 #[tokio::test]
+async fn a_persona_keeps_its_tag_when_the_tag_is_shared() {
+    let (workspace, _dir) = workspace().await;
+    let stored = stored_person(&workspace, "Ole", 1850, Some("UID-1")).await;
+    vitni_app::create_tag(&workspace, &human(), "Emigrant".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("tag");
+    let mut graphs = vec![
+        individual("I1", "Ole"),
+        place("plac:Mandal", "Mandal"),
+        RecordGraph {
+            record: "T1".to_owned(),
+            entities: vec![StagedEntity {
+                local_id: 0,
+                item: None,
+                fields: EntityFields::Tag(StagedTag {
+                    name: "Emigrant".to_owned(),
+                }),
+            }],
+            links: Vec::new(),
+        },
+    ];
+    graphs[0].entities[0] = with_uid(graphs[0].entities[0].clone(), "UID-1");
+    graphs[0].links.push(StagedLink {
+        item: None,
+        link: LinkKind::TagOf {
+            owner: EntityRef::Local(0),
+            tag: EntityRef::Origin {
+                kind: MatchableKind::Tag,
+                record: "T1".to_owned(),
+                item: None,
+            },
+        },
+    });
+
+    let session = importer(dataset(2));
+    let plan = plan(&workspace, &session, graphs).await;
+    let outcome = commit_import(&workspace, &session, &plan, &Provenance::default(), &mut RunToEnd)
+        .await
+        .expect("commit");
+    let tags = |human_id: String| {
+        let workspace = &workspace;
+        async move {
+            workspace
+                .store()
+                .find_person(&human_id)
+                .await
+                .expect("find")
+                .expect("person")
+                .tags()
+                .len()
+        }
+    };
+    assert_eq!(
+        tags(committed_id(&outcome, 0)).await,
+        1,
+        "the persona carries its record's tag"
+    );
+    assert_eq!(tags(stored).await, 0, "the other dataset's person is untouched");
+}
+
+#[tokio::test]
 async fn a_family_linked_elsewhere_keeps_its_partner_and_gains_no_persona() {
     let (workspace, _dir) = workspace().await;
     import(&workspace, &importer(dataset(1)), linked_family_tree()).await;

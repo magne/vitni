@@ -273,16 +273,17 @@ impl ImportPlan {
             .collect()
     }
 
-    /// Whether an end of `link`, made in graph `graph`, is a record another dataset made: a person
-    /// end of such a link names its cluster's root rather than this dataset's persona.
+    /// Whether an end of `link`, made in graph `graph`, is a family or person another dataset made: a
+    /// person end of such a link names its cluster's root rather than this dataset's persona. A shared
+    /// record — a tag, place, source, note — is not one, so the persona keeps its own links to them.
     pub(crate) fn foreign(&self, graph: usize, link: &LinkKind) -> bool {
         let ends = std::iter::once(link.owner()).chain(link.targets());
         ends.into_iter().any(|end| match self.endpoint(graph, end.reference) {
             Endpoint::Planned(index) => self
                 .entities
                 .get(*index)
-                .is_some_and(|entity| entity.kind != MatchableKind::Person && is_resolved_link(&entity.disposition)),
-            Endpoint::Stored { created, .. } => !created,
+                .is_some_and(|entity| entity.kind == MatchableKind::Family && is_resolved_link(&entity.disposition)),
+            Endpoint::Stored { kind, created, .. } => !created && is_identity_kind(*kind),
             Endpoint::Dangling => false,
         })
     }
@@ -1037,6 +1038,21 @@ fn is_resolved_link(disposition: &Disposition) -> bool {
         | Disposition::Duplicate { .. }
         | Disposition::Candidates(_)
         | Disposition::New => false,
+    }
+}
+
+/// Whether a record of `kind` is a person or family, whose cluster a persona's links are routed by.
+fn is_identity_kind(kind: MatchableKind) -> bool {
+    match kind {
+        MatchableKind::Person | MatchableKind::Family => true,
+        MatchableKind::Event
+        | MatchableKind::Place
+        | MatchableKind::Source
+        | MatchableKind::Citation
+        | MatchableKind::Repository
+        | MatchableKind::Media
+        | MatchableKind::Note
+        | MatchableKind::Tag => false,
     }
 }
 

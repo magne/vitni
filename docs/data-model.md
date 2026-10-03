@@ -716,9 +716,10 @@ around evidence and provenance.
    (`PersonsMerged`, ADR 0040 §3); the persona's creating origin resolves the next run. Any other
    record keeps only its identity — a family's partners and children — and the plan withholds the rest
    of the record, and whatever only withheld writes reach (item 6). A link with an end in another
-   dataset's record names each person end by its cluster's root, so the persona never joins a family
-   its person already belongs to; every other link of the record names the persona. Outside an import
-   run there is no dataset, and a person resolved by `ExternalId` keeps only its name and sex.
+   dataset's person or family names each person end by its cluster's root, so the persona never joins
+   a family its person already belongs to; every other link of the record names the persona, shared
+   records such as a tag or a place included. Outside an import run there is no dataset, and a person
+   resolved by `ExternalId` keeps only its name and sex.
 
 6. **Importers submit record graphs; the host plans before it writes (ADR 0040).** An importer is a
    parser: it submits one **record graph** per source record through the `staging` host interface —
