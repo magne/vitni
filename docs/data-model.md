@@ -681,7 +681,8 @@ around evidence and provenance.
    tie proposes nothing. Record ids are file-local (a GEDCOM `I1` recurs in unrelated files), so shared
    ids without a matching fingerprint propose nothing, and a GEDCOM header without `HEAD.FILE`
    declares no fingerprint. Vitni's own GEDCOM export writes the workspace's id (`workspace.toml`
-   `id`, ADR 0043) as `HEAD.FILE`, so a later export of the same workspace is proposed its dataset. Datasets are a projection
+   `id`, ADR 0043) as `HEAD.FILE`, and its Gramps export as the researcher's name (`Vitni workspace
+   <id>`, ADR 0045), so a later export of the same workspace is proposed its dataset. Datasets are a projection
    over runs, labelled by the earliest. File-local keys (a GEDCOM xref, a Gramps handle) are origin
    records only, and neither they nor a Gramps id (`I0001`) become `ExternalId`s, so two unrelated
    files that both hold an `@I1@` import two people. `ExternalId` is for identifiers that mean something outside the file: a GEDCOM `_UID`,
