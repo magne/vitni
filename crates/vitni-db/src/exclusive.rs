@@ -7,10 +7,29 @@
 //! transaction on that connection, so it survives the connection going back to the pool between
 //! statements, and every `pool.begin()` inside the work becomes a savepoint, not a second `BEGIN`.
 
+use std::time::Duration;
+
 use sqlx::pool::PoolOptions;
 use sqlx::{Database, Pool, TransactionManager};
 
 use crate::store::DbError;
+
+/// How many events a replay over a shared pool reads ahead of the projection writes (the
+/// `sqlite-es`/`postgres-es` default).
+pub(crate) const SHARED_REPLAY_BUFFER: usize = 200;
+
+/// How many events a replay over an [`ExclusivePool`] reads ahead: all of them. The replay's reader
+/// holds the pool's only connection until it has read its last row, while each projection write
+/// waits for that same connection, so a bounded read-ahead would stall both once it filled. The
+/// value is tokio's largest channel capacity (`Semaphore::MAX_PERMITS`); the channel allocates only
+/// for the events actually buffered.
+pub(crate) const EXCLUSIVE_REPLAY_BUFFER: usize = usize::MAX >> 3;
+
+/// How long work on an [`ExclusivePool`] waits for its connection. A replay's reader holds it while
+/// it reads an aggregate's whole log, which on a large workspace outlasts `sqlx`'s 30-second default;
+/// a projection write timing out then is swallowed by `cqrs-es`, leaving that record out of the
+/// rebuilt projection.
+const EXCLUSIVE_ACQUIRE_TIMEOUT: Duration = Duration::from_hours(24);
 
 /// A one-connection pool to the same database as `pool`, holding one open transaction.
 pub(crate) struct ExclusivePool<DB: Database> {
@@ -29,6 +48,7 @@ impl<DB: Database> ExclusivePool<DB> {
             .min_connections(1)
             .idle_timeout(None)
             .max_lifetime(None)
+            .acquire_timeout(EXCLUSIVE_ACQUIRE_TIMEOUT)
             .connect_with(options)
             .await
             .map_err(backend("connecting for an exclusive transaction"))?;

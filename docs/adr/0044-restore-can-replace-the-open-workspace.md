@@ -39,6 +39,9 @@ a way back.
    - The rebuild goes through repositories bound to a connection pool, not to a transaction. The
      replace therefore runs on a dedicated pool of a single connection that holds the open
      transaction. Nested transactions inside the rebuild become savepoints on it.
+   - With one connection, a replay cannot stream: its reader would hold the connection while the
+     projection writes wait for it. Each replay therefore reads its aggregate type's whole log before
+     writing, and only during a replace.
    - The caller ensures no command runs during the replace, as for a rebuild (ADR 0010 §5).
 
 3. **The safety net is a pre-restore backup, configured per workspace.**
@@ -83,6 +86,8 @@ a way back.
 - The event log can now lose history, by an explicit, confirmed, and by default backed-up operator
   action. That is the only such path.
 - Each replace with the default setting leaves one archive in `backups/`. Nothing rotates them.
+- A replace holds one aggregate type's events in memory at a time while it rebuilds. A backup, a
+  restore into a new workspace, and an ordinary rebuild still stream.
 - A replace holds one write transaction for the whole rebuild. On a large workspace, other
   connections' writes wait for it. The GUI runs the replace as a modal operation and reloads the
   workspace afterwards.

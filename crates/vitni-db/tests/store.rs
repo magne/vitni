@@ -437,3 +437,27 @@ async fn a_replace_that_fails_keeps_the_previous_log_and_projections() {
     assert_eq!(target.projection_rows().await.unwrap(), before_projections);
     assert!(target.find_person("I0003").await.unwrap().is_some());
 }
+
+#[tokio::test]
+async fn a_replace_rebuilds_a_log_longer_than_the_replay_read_ahead() {
+    let (source, _source_dir) = store().await;
+    for n in 1..=250_u128 {
+        create(&source, n, &format!("I{n:04}")).await;
+    }
+    let rows = read_all_raw(&source, 1000).await;
+
+    let (target, _target_dir) = store().await;
+    let replaced = tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        target.replace_all_events(rows.iter().cloned().map(Ok)),
+    )
+    .await
+    .expect("the replace finishes")
+    .unwrap();
+
+    assert_eq!(replaced, 250);
+    assert_eq!(
+        target.projection_rows().await.unwrap(),
+        source.projection_rows().await.unwrap()
+    );
+}
