@@ -4,8 +4,8 @@
 #
 # The fixture seeds no persons, so the scenario creates John Smith and John Smyth (as
 # matches-distinguish does) and decides them the same in the Matches compare view. The person tab then
-# shows the cluster, whose Linked records tab sits past the visible tabs: clicking Timeline and pressing
-# → selects it.
+# shows the cluster, whose Linked records tab sits last, past the visible tabs: clicking Timeline and
+# pressing End selects it.
 #
 # The asserts are scoped to the People list (x 232-531) and the rail's People count, away from the
 # notices at the bottom of the window.
@@ -122,8 +122,8 @@ label = "tab: Timeline"
 
 [[step]]
 do = "key"
-chord = "Right"
-label = "→: the Linked records tab"
+chord = "End"
+label = "End: the Linked records tab, the last"
 
 [[step]]
 do = "shot"
@@ -160,7 +160,7 @@ name = "unlinked"
 [[assert]]
 kind = "differ"
 shots = ["merged", "linked"]
-because = "→ from Timeline must select the Linked records tab"
+because = "End from Timeline must select the Linked records tab"
 region = [552, 300, 1228, 240]
 
 [[assert]]

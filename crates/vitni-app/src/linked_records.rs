@@ -61,11 +61,13 @@ pub struct LinkedRecords {
     pub claim_origins: BTreeMap<String, OriginRef>,
 }
 
-/// The record's page on its dataset's website, or `None` for a dataset with no URL form: a file's
-/// lineage has none, and Digitalarkivet serves every record id at the site's root (ADR 0037 §2).
+/// The record's page on its dataset's website, or `None` for a dataset with no URL form (ADR 0037 §2).
+/// A file's lineage has none. Digitalarkivet redirects a record id at the site's root to the record's
+/// page, census (`pf…`) and church book (`pd…`) alike.
 #[must_use]
 pub fn record_url(origin: &RecordOrigin) -> Option<String> {
-    (origin.dataset.as_str() == DIGITALARKIVET).then(|| format!("https://www.digitalarkivet.no/{}", origin.record))
+    (origin.dataset.as_str() == DIGITALARKIVET && !origin.record.is_empty())
+        .then(|| format!("https://www.digitalarkivet.no/{}", origin.record))
 }
 
 /// Every record of `human_id`'s cluster, its root first, with the origin of each record and claim.

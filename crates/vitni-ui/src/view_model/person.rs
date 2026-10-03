@@ -725,11 +725,13 @@ pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
         ),
         tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
         tab("timeline", Some(detail.timeline.len()), None),
+        tab("history", None, None),
     ];
+    // Last, so its coming and going never moves another tab: the pane remembers the open tab by
+    // position.
     if detail.linked_count() > 0 {
         tabs.push(tab("linked", Some(detail.linked_count()), None));
     }
-    tabs.push(tab("history", None, None));
     tabs
 }
 

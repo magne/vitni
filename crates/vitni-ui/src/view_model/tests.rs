@@ -852,6 +852,11 @@ fn the_linked_records_tab_shows_only_for_a_cluster() {
     let tab = tabs.iter().find(|tab| tab.id == "linked").expect("linked tab");
     assert_eq!(tab.label, "Linked records");
     assert_eq!(tab.count, Some(2), "the members, not the person itself");
+    assert_eq!(
+        tabs.last().map(|tab| tab.id),
+        Some("linked"),
+        "after History, so no other tab moves"
+    );
 }
 
 #[test]

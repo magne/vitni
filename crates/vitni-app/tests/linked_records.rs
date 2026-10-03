@@ -293,4 +293,5 @@ fn only_a_dataset_with_a_url_form_links_out() {
         ..origin("I1", run)
     };
     assert_eq!(record_url(&gedcom), None);
+    assert_eq!(record_url(&origin("", run)), None, "no record id, no page");
 }
