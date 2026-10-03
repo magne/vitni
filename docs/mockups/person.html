@@ -459,27 +459,28 @@
 
         <!-- LINKED RECORDS (ADR 0039 §5) — present only when records are linked to this person -->
         <div class="tab-pane" data-pane="linked">
+          <!-- Each record by its own name, not a link: opening a member opens the cluster this tab is on. -->
           <div class="section-note">The records this person was concluded from. Each keeps its own record and history; unlinking one retracts the merge, so it becomes its own person again, with every record linked through it.</div>
           <table class="tbl">
             <caption class="sr-only">Linked records</caption>
             <thead><tr><th>Record</th><th>Evidence level</th><th>Imported from</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr>
-                <td><a href="person.html">John Smith</a><span class="muted"> I0042</span> <span class="chip" title="The record the others are linked to">Linked to</span></td>
+                <td>John Smith<span class="muted"> I0042</span> <span class="chip" title="The record the others are linked to">Linked to</span></td>
                 <td><span class="badge">Conclusion</span></td>
                 <td><span class="muted">—</span></td>
                 <td class="muted">—</td>
                 <td class="row-actions"></td>
               </tr>
               <tr>
-                <td><a href="person.html">Johan Smed</a><span class="muted"> I0107</span></td>
+                <td>Johan Smed<span class="muted"> I0107</span></td>
                 <td><span class="badge">Persona</span></td>
                 <td><a href="https://www.digitalarkivet.no/pf01099901000101">record pf01099901000101 in Digitalarkivet</a></td>
                 <td class="muted">1910 census, Kristiania</td>
                 <td class="row-actions"><button class="btn sm ghost" aria-label="Unlink Johan Smed">Unlink</button></td>
               </tr>
               <tr>
-                <td><a href="person.html">John Smith</a><span class="muted"> I0388</span><div class="muted" style="font-size:var(--fs-xs)">via I0107</div></td>
+                <td>John Smith<span class="muted"> I0388</span><div class="muted" style="font-size:var(--fs-xs)">via I0107</div></td>
                 <td><span class="badge">Persona</span></td>
                 <td>record @I12@ in smith-tree.ged</td>
                 <td class="muted">smith-tree.ged</td>

@@ -1083,7 +1083,8 @@ fn linked_panel(
 }
 
 /// The *Linked records* table: each record of the person's cluster — the person itself first, marked
-/// as the record the others are linked to — with its evidence level, the import record it came from
+/// as the record the others are linked to — by its own name, not a link: opening a member opens the
+/// cluster this table is already on. Then its evidence level, the import record it came from
 /// (linking out when the dataset has a page for it), what that import read, and the member it was
 /// linked through. Every other record has an *Unlink*, which arms the unlink panel via `onunlink`
 /// with `(human_id, label)`.
@@ -1101,7 +1102,7 @@ pub fn linked_tab(loc: &Localizer, records: &[LinkedRecordVm], onunlink: Callbac
             for record in records.iter() {
                 tr {
                     td {
-                        RecordLink { category: Category::People, human_id: record.human_id.clone(), label: record.name.clone() }
+                        "{record.name}"
                         span { class: "muted", " {record.human_id}" }
                         if record.root {
                             " "
