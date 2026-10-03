@@ -504,7 +504,13 @@ Boundary notes:
     record of a cluster are listed under the root, and an export writes one record per cluster;
   - a merged event's participants are the union of every copy's (the person-side
     `ParticipationAsserted` rows that name any record of the cluster), and a merged family's
-    partners and children are every copy's, each person once in the pedigree.
+    partners and children are every copy's, each person once in the pedigree;
+  - a person's *Linked records* lists every record of its cluster — the root, then each member with
+    the import record that created it (ADR 0037) and the member it was linked through — and
+    *Unlink* retracts the merge that linked a member, on whichever record's stream holds it, so the
+    member and every record linked through it become their own person again. *Why we believe*
+    names the import record each claim was read from, linking out where the dataset has a page per
+    record.
 - **`DnaMatch` is owned by neither person.** It is a pairwise observation between two `DnaTest`s
   (referenced by id, self-contained) that genealogists research over time — so it is its own
   aggregate, not a value on a Person. `DnaTest` is anchored to one Person. See §12.

@@ -762,6 +762,13 @@ Save is never blocked. A new person takes a *Born* date, saved as their Birth ev
 kinds rank the engine's hits for the typed query first, with their score, and every matchable record has
 *Find similar*, whose *Compare* opens the pair in the Matches tool. The CLI create verbs print the hint on
 stderr with the `vitni match show` that compares the two, and `vitni person create --born` records a birth.
+✅ Linked records on a conclusion person (ADR 0039 §5, #416): `vitni_app::linked_records` lists every
+record of a person's cluster — the root, then each member with the import record that created it, what
+that import read and the member it was linked through — and the origin of every imported claim, read
+per assertion from the `record_origins` index (`Store::assertion_origins`). `unlink_person` retracts the
+merge that linked a member on whichever record holds it, so the member and every record linked through
+it are listed again. The person screen gains a *Linked records* tab with *Unlink* behind a reason panel,
+and *Why we believe* names the record a claim was read from, linking out to Digitalarkivet's page for it.
 
 ## Risk register
 
