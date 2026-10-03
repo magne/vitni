@@ -20,10 +20,10 @@ use unic_langid::LanguageIdentifier;
 use vitni_app::{
     AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetProposal,
     DatasetScope, FileConfigStore, IdFormats, LocaleDefaults, MapConfig, MapProvider, MapSource, MatchQuestion,
-    MatchReply, PluginTrust, PluginTrustConfig, PreferenceLayers, ResolvedLocale, RestoreReport, RestoreRequest,
-    Session, ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config,
-    list_tags, list_workspaces, read_preference_layers, read_resolved_locale, read_resolved_surety_labels,
-    read_surety_label_overrides, workspace_counts,
+    MatchReply, PluginTrust, PluginTrustConfig, PreferenceLayers, ReplaceReport, ReplaceRequest, ResolvedLocale,
+    RestoreReport, RestoreRequest, Session, ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace,
+    WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers,
+    read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides, workspace_counts,
 };
 use vitni_plugin_host::{
     Capability, DeferMatches, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PlanReviewer,
@@ -1672,6 +1672,49 @@ pub async fn restore_backup(
         database_url: database_url.as_deref(),
     };
     vitni_app::restore_backup(&request)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Whether a restore that replaces the open workspace backs it up first (ADR 0044 §3). An unreadable
+/// manifest reads as on, the safe answer: the replace itself reports the manifest error.
+#[must_use]
+pub fn pre_restore_backup(services: &Services) -> bool {
+    vitni_app::read_pre_restore_backup(&services.dir).unwrap_or_else(|error| {
+        tracing::warn!(%error, "could not read the pre-restore backup setting");
+        true
+    })
+}
+
+/// Records whether a restore that replaces the open workspace backs it up first, returning a
+/// localized error on failure. Acts at once, outside the batched Save, like the rest of the Backup card.
+pub fn save_pre_restore_backup(services: &Services, pre_restore: bool) -> Result<(), String> {
+    vitni_app::save_pre_restore_backup(&services.dir, pre_restore).map_err(|error| services.localizer().error(&error))
+}
+
+/// How many events the open workspace holds — what a replace would discard — or a localized error.
+pub async fn workspace_event_count(services: Services) -> Result<u64, String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    workspace
+        .store()
+        .event_count()
+        .await
+        .map_err(|error| loc.error(&error.into()))
+}
+
+/// Restores the backup at `archive` over the open workspace (ADR 0044), returning the replace's
+/// report or a localized error. The Preferences Backup card's counterpart to `vitni backup restore
+/// --replace --yes`.
+pub async fn replace_backup(services: Services, archive: PathBuf) -> Result<ReplaceReport, String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let request = ReplaceRequest {
+        archive: &archive,
+        workspace_name: &services.open_workspace,
+        now: Session::new(services.config.operator_agent()).now(),
+    };
+    vitni_app::replace_backup(&workspace, &request)
         .await
         .map_err(|error| loc.error(&error))
 }

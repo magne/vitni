@@ -1,5 +1,6 @@
 //! The ADR 0041 exit test: a backup restores into the other engine, and the projections equal the
-//! original's row for row — SQLite into Postgres, and Postgres back into SQLite.
+//! original's row for row — SQLite into Postgres, and Postgres back into SQLite. The ADR 0044 exit
+//! test too: a replace over a Postgres workspace leaves the archive's projections, row for row.
 //!
 //! Needs a Docker daemon (`test-containers-util` reuses one `vitni-pg` container and gives each
 //! test its own database), so it compiles only under `--features postgres` and CI runs it in the
@@ -15,8 +16,9 @@ use test_containers_util::sqlx_pg::PostgresTestDb;
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, BackupRequest, NewNote, NewPerson, OperatorConfig, PersonNameParts, Provenance, RestoreRequest,
-    Session, Workspace, WorkspaceDefaults, create_backup, create_note, create_person, restore_backup,
+    AppDefaults, BackupRequest, NewNote, NewPerson, OperatorConfig, PersonNameParts, Provenance, ReplaceRequest,
+    RestoreRequest, Session, Workspace, WorkspaceDefaults, create_backup, create_note, create_person, replace_backup,
+    restore_backup,
 };
 use vitni_core::enums::EvidenceLevel;
 use vitni_core::ids::AgentId;
@@ -254,4 +256,35 @@ async fn a_restore_that_fails_after_inserting_leaves_the_database_empty() {
 
     let restored = restore(home.path(), &archive, "pg", Some(db.dsn())).await;
     assert_same_workspace(&source, &restored).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_sqlite_backup_replaces_a_postgres_workspace_and_its_pre_restore_backup_brings_it_back() {
+    let home = tempfile::tempdir().expect("tempdir");
+    let source = workspace(&home.path().join("source"), None).await;
+    seed(&source).await;
+    let archive = home.path().join("gen.vitni-backup");
+    back_up(&source, &archive).await;
+    let db = PostgresTestDb::create(CONTAINER, &MIGRATIONS, None, None).await;
+    let target = workspace(&home.path().join("pg"), Some(db.dsn())).await;
+    let note = NewNote {
+        human_id: None,
+        text: Some("Replaced by the restore.".to_owned()),
+    };
+    create_note(&target, &session(), note, Provenance::default(), &[])
+        .await
+        .expect("note");
+    let before = target.store().projection_rows().await.expect("projections");
+
+    let request = ReplaceRequest {
+        archive: &archive,
+        workspace_name: "pg",
+        now: datetime!(2026-10-03 09:30:00 UTC),
+    };
+    let report = replace_backup(&target, &request).await.expect("replace");
+    assert_same_workspace(&source, &target).await;
+
+    let pre_restore = report.pre_restore_backup.expect("a pre-restore backup");
+    let back = restore(home.path(), &pre_restore, "back", None).await;
+    assert_eq!(back.store().projection_rows().await.expect("projections"), before);
 }

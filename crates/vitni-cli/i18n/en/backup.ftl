@@ -8,6 +8,12 @@ restore-success = Restored { $events } events into workspace "{ $name }" at { $p
 restore-media-restored = Restored { $count } media file(s).
 restore-media-missing = Media file missing after the restore: { $path }
 restore-media-mismatched = Media file differs from the one backed up: { $path }
+replace-success = Replaced workspace "{ $name }" with { $events } events from the backup (backup format { $format }).
+replace-pre-restore = The previous state was backed up first to { $path }.
+replace-no-pre-restore = No backup of the previous state was taken: this workspace has the pre-restore backup switched off.
+replace-needs-yes = Replacing workspace "{ $name }" discards its { $events } events and every record built from them. Run again with --yes to replace it.
+replace-needs-yes-backup = Its current state is backed up into its backups folder first.
+replace-needs-yes-no-backup = Its current state is not backed up first: this workspace has the pre-restore backup switched off.
 
 ## Errors
 err-backup-destination-exists = { $path } already exists; choose a new file name
@@ -23,3 +29,4 @@ err-backup-invalid-event = the event on line { $line } of the backup is invalid:
 err-backup-event-count = the backup's manifest records { $expected } events, but it holds { $found }
 err-backup-target-not-empty = { $path } is not empty; restore into a new or empty folder
 err-backup-database-not-empty = the target database already holds events; restore into an empty database
+err-backup-pre-restore = the backup of this workspace to { $path } failed, so nothing was replaced: { $detail }

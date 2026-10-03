@@ -14,8 +14,9 @@
 //! prompts. When the target holds earlier imports of the plugin's scheme, the import starts at once
 //! and the confirm comes once the file is read: the host proposes which earlier tree the file is a
 //! later export of (ADR 0037 §3), the dialog starts on that tree, and the operator confirms or
-//! overrules it. After a successful import into the workspace already open this session, the app
-//! state is restarted ([`request_restart`]) so the projections shown elsewhere are not stale.
+//! overrules it. After a successful import into the workspace already open this session, the shell's
+//! data version is bumped ([`NavState::mark_changed`]) so the views shown elsewhere refetch, while the
+//! wizard keeps its summary on screen.
 //!
 //! Each stage is a pure component over already-localized label structs, so it renders in isolation
 //! (the SSR tests do exactly that). [`BulkImportBody`] owns the session, probes/confirms, starts the
@@ -33,7 +34,6 @@ use vitni_ui::{
 
 use super::export::{NoticeStage, WizardNoticeTone};
 use super::prelude::*;
-use crate::app::request_restart;
 use crate::components::Modal;
 use crate::i18n::Chrome;
 use crate::screens::shared::confidence_choices;
@@ -1030,8 +1030,8 @@ fn bulk_restart(mut session: Signal<BulkImportSession>) {
 }
 
 /// Starts the invocation and spawns the driver loop, mirroring the export wizard's `onrun`. `target`
-/// decides whether a success should [`request_restart`] (only when it names the workspace already
-/// open this session — a different or freshly created target is not what is currently displayed).
+/// decides whether a success should [`NavState::mark_changed`] (only when it names the workspace
+/// already open this session — a different or freshly created target is not what is displayed).
 fn launch_bulk_import(
     run: BulkRun,
     mut session: Signal<BulkImportSession>,
@@ -1047,7 +1047,9 @@ fn launch_bulk_import(
         unknown_failure,
     } = run;
     let refresh =
-        matches!(&target, ImportTargetChoice::Existing { workspace } if *workspace == services.open_workspace);
+        matches!(&target, ImportTargetChoice::Existing { workspace } if *workspace == services.open_workspace)
+            .then(try_consume_context::<NavState>)
+            .flatten();
     let workspace = match &target {
         ImportTargetChoice::Existing { workspace } => workspace.clone(),
         ImportTargetChoice::New { name, .. } => name.clone(),
@@ -1078,7 +1080,8 @@ struct BulkDrive {
     /// The target workspace's name and person count, for the dataset question's dialog.
     workspace: String,
     persons: usize,
-    refresh: bool,
+    /// The shell to tell about the new data, when the import went into the workspace on screen.
+    refresh: Option<NavState>,
     unknown_failure: String,
     asking: Asking,
 }
@@ -1182,8 +1185,8 @@ async fn bulk_drive(handle: BulkImportHandle, mut session: Signal<BulkImportSess
                 records,
                 source: source_display,
             });
-            if refresh {
-                request_restart();
+            if let Some(mut nav) = refresh {
+                nav.mark_changed();
             }
         }
         Ok(Err(message)) => session.write().on_failure(message),

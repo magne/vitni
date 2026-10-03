@@ -589,7 +589,11 @@ is fixed by a superseding ADR, not by an edit. The work items are in
 **Progress.** ✅ Workspace backup and restore (ADR 0041, #391): `vitni backup create|restore` and the
 Preferences *Backup & restore* card, the `0.1` format with its restore-time upgrader chain and window,
 the golden fixture of every event variant, and the cross-engine restore test. Every later event change
-in the milestone now passes through that fixture. ✅ Record origins and import runs (ADR 0037 §1, §3,
+in the milestone now passes through that fixture. ✅ Restore over the open workspace (ADR 0044, #426):
+`vitni backup restore --replace --yes` and the card's *Replace workspace…* danger confirm, which wants
+the workspace's name typed. The log is swapped and the projections rebuilt in one transaction on both
+engines, behind an automatic pre-restore backup into `backups/` that a disposable workspace can switch
+off (`[backup] pre_restore`). ✅ Record origins and import runs (ADR 0037 §1, §3,
 §5, §6, #393): `EventContext.origin`, the fourteenth aggregate `ImportRun`, host-api 0.24.0's
 `set-origin` with every importer stamping stable record and item keys, the explicit dataset choice
 (`vitni import --dataset` / `--new-dataset`, the bulk-import confirm), `vitni import-run list|datasets`,
@@ -829,6 +833,7 @@ they are confirmed when the ADR is written.
 | [ADR 0041](adr/0041-workspace-backup-and-restore.md) — **accepted** | Workspace backup and restore: the event-log archive, restore-time upgraders, the pre-1.0 two-version window, the v1 freeze at 1.0, golden fixtures | Phase 14 (`0.10`), `1.0` | ADR 0010, 0018 §3 |
 | [ADR 0042](adr/0042-test-fixture-provenance.md) — **accepted** | Test fixture provenance: four committable origins declared in `PROVENANCE.toml`, an external fetched tier for third-party pages, fail-closed generation from them, no history rewrite for the pre-ADR captures | `0.9.1 — Fixture provenance` | ADR 0034 |
 | [ADR 0043](adr/0043-workspace-id-names-its-exports.md) — **accepted** | A workspace id in `workspace.toml`, minted once, never adopted by an import, kept by a restore; exporters read it through `export-sink.workspace-id` and the GEDCOM exporter writes it as `HEAD.FILE` | Phase 14 (`0.10`) | ADR 0005, 0013, 0037, 0041 |
+| [ADR 0044](adr/0044-restore-can-replace-the-open-workspace.md) — **accepted** | A restore can replace the open workspace: `--replace --yes` / a typed-name danger modal, one transaction on both engines, an automatic pre-restore backup into `backups/` that aborts the replace when it fails, switchable off per workspace | Phase 14 (`0.10`) | ADR 0041, 0043 |
 | ADR 0031 | Place model for real-world administrative geography: reopen the `Multi*` geometry variant, add a civil/ecclesiastical/judicial `relation` to `PlaceRef`, and carry positional accuracy separately from `Confidence` | Phase 9 residual closure | ADR 0024, 0026, 0027 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 

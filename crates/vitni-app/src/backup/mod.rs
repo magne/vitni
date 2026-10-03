@@ -10,6 +10,11 @@
 //! registers a new workspace, inserts the rows as stored (no command is re-decided), and rebuilds the
 //! projections. It is engine-neutral: a SQLite backup restores into Postgres and back. A restore that
 //! fails after registering rolls the registration and the new directory back.
+//!
+//! A restore can instead replace the open workspace (ADR 0044). After the same checks it backs the
+//! workspace up into `backups/` unless the workspace switched that off, then swaps the log and
+//! rebuilds the projections in one transaction, so a failure at any step leaves the workspace as it
+//! was.
 
 mod archive;
 mod error;
@@ -21,7 +26,7 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use time::OffsetDateTime;
+use time::{OffsetDateTime, UtcOffset};
 use vitni_core::provenance::Timestamp;
 use vitni_db::{DbError, RawEvent};
 
@@ -32,7 +37,7 @@ use crate::backup::upgrade::Chain;
 use crate::config::default_workspace_dir;
 use crate::config_store::{ConfigStore, FileConfigStore};
 use crate::error::AppError;
-use crate::workspace::{Workspace, read_manifest, write_manifest};
+use crate::workspace::{BACKUPS_DIR, Workspace, read_manifest, write_manifest};
 use crate::workspace_registry::{Registration, WorkspaceSummary, register_new_workspace, unregister_workspace};
 
 /// How many rows one page of the log read holds while a backup streams it.
@@ -91,6 +96,34 @@ pub struct RestoreReport {
     /// The media library files put back from the archive.
     pub media_restored: usize,
     /// Listed media files not found after the restore, by stored path.
+    pub media_missing: Vec<String>,
+    /// Listed media files found with a different checksum, by stored path.
+    pub media_mismatched: Vec<String>,
+}
+
+/// Which archive to restore over the open workspace (ADR 0044).
+#[derive(Debug, Clone)]
+pub struct ReplaceRequest<'a> {
+    /// The archive to restore.
+    pub archive: &'a Path,
+    /// The open workspace's registry name, which names the pre-restore backup.
+    pub workspace_name: &'a str,
+    /// When the replace runs (from the session clock), which dates the pre-restore backup.
+    pub now: OffsetDateTime,
+}
+
+/// What a replace produced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplaceReport {
+    /// The backup of the previous state, or `None` when the workspace switched it off.
+    pub pre_restore_backup: Option<PathBuf>,
+    /// The archive's format version, as written.
+    pub format_version: String,
+    /// The events the workspace now holds.
+    pub events: u64,
+    /// The media library files added from the archive.
+    pub media_restored: usize,
+    /// Listed media files not found after the replace, by stored path.
     pub media_missing: Vec<String>,
     /// Listed media files found with a different checksum, by stored path.
     pub media_mismatched: Vec<String>,
@@ -245,6 +278,78 @@ pub async fn restore_backup(request: &RestoreRequest<'_>) -> Result<RestoreRepor
             roll_back(request.config_path, &registration);
             Err(error)
         }
+    }
+}
+
+/// Restores an archive over the open `workspace` (ADR 0044): its log and projections are replaced by
+/// the archive's.
+///
+/// The archive is checked first. Then, unless the workspace switched it off, the workspace is backed
+/// up into its `backups/` directory, and a failure there aborts the replace. The log is swapped and
+/// the projections rebuilt in one transaction. The archived settings are adopted afterwards, keeping
+/// this copy's database, window and backup setting, and archived media is added where no file exists.
+/// The caller ensures no command runs against the workspace meanwhile.
+///
+/// # Errors
+///
+/// A [`BackupError`] refusing the archive, [`BackupError::PreRestoreBackup`], or [`AppError`] if the
+/// swap fails; in each case the log and projections are unchanged. An error after the swap (the
+/// manifest or the media) leaves the archive's log in place.
+pub async fn replace_backup(workspace: &Workspace, request: &ReplaceRequest<'_>) -> Result<ReplaceReport, AppError> {
+    let mut archive = ArchiveReader::open(request.archive)?;
+    let checked = check_archive(&mut archive)?;
+    let dir = workspace.dir();
+    let pre_restore_backup = if read_manifest(dir)?.backup.pre_restore {
+        Some(write_pre_restore_backup(workspace, request).await?)
+    } else {
+        None
+    };
+    let reader = BufReader::new(archive.open_member(EVENTS)?);
+    let events = workspace
+        .store()
+        .replace_all_events(decoded_rows(reader, &checked.chain))
+        .await?;
+    replace_workspace_manifest(dir, &checked.workspace)?;
+    let media_restored = media::extract(&mut archive, &checked.media_members, dir)?;
+    let verification = media::verify(&checked.media, dir)?;
+    Ok(ReplaceReport {
+        pre_restore_backup,
+        format_version: checked.format_version,
+        events,
+        media_restored,
+        media_missing: verification.missing,
+        media_mismatched: verification.mismatched,
+    })
+}
+
+/// Backs `workspace` up to `backups/<name>-pre-restore-<UTC timestamp>.vitni-backup`, returning
+/// the path, or [`BackupError::PreRestoreBackup`].
+async fn write_pre_restore_backup(workspace: &Workspace, request: &ReplaceRequest<'_>) -> Result<PathBuf, AppError> {
+    let now = request.now.to_offset(UtcOffset::UTC);
+    let file_name = format!(
+        "{}-pre-restore-{:04}{:02}{:02}T{:02}{:02}{:02}Z.vitni-backup",
+        request.workspace_name.replace(['/', '\\'], "-"),
+        now.year(),
+        u8::from(now.month()),
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second(),
+    );
+    let path = workspace.dir().join(BACKUPS_DIR).join(file_name);
+    let backup = BackupRequest {
+        workspace_name: request.workspace_name,
+        destination: &path,
+        with_media: false,
+        created_at: request.now,
+    };
+    match create_backup(workspace, &backup).await {
+        Ok(_) => Ok(path),
+        Err(error) => Err(BackupError::PreRestoreBackup {
+            path,
+            source: Box::new(error),
+        }
+        .into()),
     }
 }
 
@@ -422,11 +527,18 @@ async fn finish_restore(
 /// Streams `events.jsonl` into the store in one transaction.
 async fn insert_events(workspace: &Workspace, archive: &mut ArchiveReader, chain: &Chain) -> Result<u64, AppError> {
     let reader = BufReader::new(archive.open_member(EVENTS)?);
-    let rows = reader.lines().map(|line| {
+    Ok(workspace.store().insert_raw_events(decoded_rows(reader, chain)).await?)
+}
+
+/// The rows of `events.jsonl`, read a line at a time and upgraded through `chain`.
+fn decoded_rows<'a>(
+    reader: impl BufRead + 'a,
+    chain: &'a Chain,
+) -> impl Iterator<Item = Result<RawEvent, DbError>> + 'a {
+    reader.lines().map(move |line| {
         let line = line.map_err(|e| DbError::Backend(format!("reading {EVENTS}: {e}")))?;
         decode_line(chain, &line).map_err(DbError::Malformed)
-    });
-    Ok(workspace.store().insert_raw_events(rows).await?)
+    })
 }
 
 /// Writes the archived settings over the new workspace's manifest, keeping this machine's database
@@ -444,6 +556,18 @@ fn restore_workspace_manifest(dir: &Path, archived: &toml::Table) -> Result<(), 
     for (id, record) in fresh.operators {
         manifest.operators.entry(id).or_insert(record);
     }
+    write_manifest(dir, &manifest)
+}
+
+/// Writes the archived settings over the replaced workspace's manifest, keeping what belongs to this
+/// copy — its database location, window geometry and backup setting — and every operator either side
+/// knows (ADR 0044 §4).
+fn replace_workspace_manifest(dir: &Path, archived: &toml::Table) -> Result<(), AppError> {
+    let current = read_manifest(dir)?;
+    restore_workspace_manifest(dir, archived)?;
+    let mut manifest = read_manifest(dir)?;
+    manifest.ui.window = current.ui.window;
+    manifest.backup = current.backup;
     write_manifest(dir, &manifest)
 }
 

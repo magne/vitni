@@ -300,16 +300,18 @@
         </div>
       </div>
 
-      <!-- Backup & restore (ADR 0041, #391) — no sub-nav entry, same as Maintenance above. Acts
-           immediately, outside the batched Save; a restore registers a new workspace and never touches
-           the open one, so neither direction has a confirm step. -->
+      <!-- Backup & restore (ADR 0041, #391; ADR 0044, #426) — no sub-nav entry, same as Maintenance
+           above. Acts immediately, outside the batched Save. A restore into a new workspace never
+           touches the open one, so it has no confirm step; a restore over the open workspace discards
+           its records, so it asks through the danger confirm below, which wants the workspace's name
+           typed. The pre-restore switch is written to workspace.toml ([backup] pre_restore) at once. -->
       <h2 id="backup" style="border:0;margin:24px 0 12px">Backup &amp; restore</h2>
       <div class="card">
         <h3>Backup &amp; restore</h3>
         <div class="muted" style="font-size:var(--fs-sm);margin-bottom:12px">
           A backup is the whole event log in one <span class="mono">.vitni-backup</span> file, with where
-          every record came from. Restore it into a new workspace, on either database engine. An export
-          cannot do this: it leaves that provenance out.
+          every record came from. Restore it into a new workspace, on either database engine, or over
+          this one. An export cannot do this: it leaves that provenance out.
         </div>
         <h3>Back up this workspace</h3>
         <div class="stack">
@@ -329,11 +331,46 @@
           </div>
           <div class="row-actions"><button class="btn sm primary">Restore into a new workspace</button></div>
         </div>
-        <div class="muted" style="font-size:var(--fs-sm);margin-top:6px">While either runs, its button reads
-          <b>Backing up…</b> / <b>Restoring…</b> and is disabled. A finished backup raises the shell notice
-          <i>Backed up 1 204 events to …</i>, adding how many media files were not found; a failure raises an
-          error notice naming why (the file exists, the archive is damaged, its format is too old or too new).</div>
+        <h3 style="margin-top:16px">Replace this workspace</h3>
+        <div class="stack">
+          <div class="muted" style="font-size:var(--fs-sm)">Restore a backup over this workspace. Its records are
+            discarded and replaced by the backup's; the workspace keeps its name, folder and database.</div>
+          <div class="field"><label>Backup file to restore over this workspace</label><input class="in" placeholder="~/genealogy/gen/backups/gen-2026-09-28.vitni-backup"></div>
+          <div class="field"><label class="inline"><input type="checkbox" checked> <span>Back up this workspace before a restore replaces it</span></label></div>
+          <div class="muted" style="font-size:var(--fs-sm)">The backup goes into the workspace's backups folder, and
+            if it fails nothing is replaced. Switch it off only for a disposable workspace.</div>
+          <div class="row-actions"><button class="btn sm danger">Replace workspace…</button></div>
+        </div>
+        <div class="muted" style="font-size:var(--fs-sm);margin-top:6px">While one runs, its button reads
+          <b>Backing up…</b> / <b>Restoring…</b> / <b>Replacing…</b> and is disabled. A finished backup raises
+          the shell notice <i>Backed up 1 204 events to …</i>, adding how many media files were not found; a
+          failure raises an error notice naming why (the file exists, the archive is damaged, its format is too
+          old or too new, the pre-restore backup failed). <b>Replace workspace…</b> with no file raises
+          <i>Enter the backup file to restore.</i>; otherwise it counts the workspace's events and opens the
+          confirm. A finished replace restarts the app over the replaced workspace, which then raises
+          <i>Replaced this workspace with 1 204 events from the backup. The previous state is in …</i></div>
       </div>
+
+      <h3 style="margin-top:var(--sp-6)">Replace confirm <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, a danger dialog (<span class="mono">alertdialog</span>); Replace stays disabled until the name is typed exactly</span></h3>
+      <div class="overlay" style="position:relative;inset:auto;display:block;background:transparent;padding:0;margin-top:var(--sp-2)">
+        <div class="modal modal-danger" role="alertdialog" style="width:min(480px,96vw)">
+          <div class="m-head">Replace workspace "gen"?</div>
+          <div class="m-body">
+            <div class="stack">
+              <p>Its 1 204 events and every record built from them are discarded and replaced by the backup's.</p>
+              <p>Its current state is backed up into its backups folder first, so restoring that backup brings it back.</p>
+              <div class="field"><label>Type gen to confirm</label><input class="in" value="ge"></div>
+            </div>
+          </div>
+          <div class="m-foot">
+            <button class="btn ghost">Cancel</button>
+            <button class="btn danger" disabled>Replace workspace</button>
+          </div>
+        </div>
+      </div>
+      <div class="muted" style="font-size:var(--fs-sm);margin-top:6px">With the pre-restore backup switched
+        off, the second line reads <i>Its current state is not backed up first: this workspace has the
+        pre-restore backup switched off. This cannot be undone.</i></div>
 
       <h3 style="margin-top:var(--sp-6)">Restore summary <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, the card's live region after a restore</span></h3>
       <div class="card">

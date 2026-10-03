@@ -296,13 +296,16 @@ async fn run_command(cli: Cli) -> ExitCode {
         return Box::pin(import(request)).await;
     }
 
-    // Restore creates its own target workspace, so like import it runs before the generic open.
+    // Restore into a new workspace creates its own target, so like import it runs before the generic
+    // open; `--replace` restores over the open workspace, below.
     if let Command::Backup {
-        command: BackupCmd::Restore {
-            archive,
-            new,
-            database_url,
-        },
+        command:
+            BackupCmd::Restore {
+                archive,
+                new: Some(new),
+                database_url,
+                ..
+            },
     } = &cli.command
     {
         let localizer = Localizer::baseline();
@@ -338,9 +341,9 @@ async fn run_command(cli: Cli) -> ExitCode {
     } = context;
     let result = match cli.command {
         Command::Rebuild => rebuild(&workspace, &localizer).await,
-        Command::Backup {
-            command: BackupCmd::Create { path, with_media },
-        } => commands::backup::create(&workspace, &session, &name, &path, with_media, &localizer).await,
+        Command::Backup { command } => {
+            return commands::backup::run_on_open(command, &workspace, &session, &name, &localizer).await;
+        }
         // The plugin-host future is large (Wasmtime store + workspace); box it so the top-level
         // command future stays small.
         Command::Export { plugin, output } => {
@@ -390,7 +393,7 @@ async fn open_workspace(workspace: Option<String>) -> Result<Context, Box<(Local
 }
 
 /// Renders an error to stderr through `localizer` and maps the outcome to an exit code.
-fn report(localizer: &Localizer, result: Result<(), AppError>) -> ExitCode {
+pub(crate) fn report(localizer: &Localizer, result: Result<(), AppError>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

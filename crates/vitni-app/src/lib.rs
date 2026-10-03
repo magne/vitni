@@ -84,8 +84,8 @@ pub mod workspace;
 pub mod workspace_registry;
 
 pub use backup::{
-    BackupError, BackupReport, BackupRequest, RestoreReport, RestoreRequest, create_backup, projection_digest,
-    restore_backup,
+    BackupError, BackupReport, BackupRequest, ReplaceReport, ReplaceRequest, RestoreReport, RestoreRequest,
+    create_backup, projection_digest, replace_backup, restore_backup,
 };
 pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
 pub use checks::{CheckFinding, check_records, run_checks};
@@ -320,11 +320,12 @@ pub use vitni_core::temporal::resolve_as_of;
 pub use vitni_core::text::{Attribute, ExternalId, Rect, Url};
 pub use vitni_db::DbError;
 pub use workspace::{
-    IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers, RECENT_LIMIT,
-    RecentItem, ResolvedLocale, ResolvedUiPreferences, SuretyLayers, ThemeLayers, UiPreferences, WindowGeometry,
-    Workspace, WorkspaceId, WorkspaceManifest, person_id_format_layers, push_recent, read_plugin_preferences,
-    read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides,
-    read_ui_preferences, save_locale_overrides, save_plugin_enabled, save_plugin_grants, save_recent,
-    save_surety_label_overrides, save_theme_mode, save_window_geometry, surety_layers, theme_layers,
+    BackupSettings, IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers,
+    RECENT_LIMIT, RecentItem, ResolvedLocale, ResolvedUiPreferences, SuretyLayers, ThemeLayers, UiPreferences,
+    WindowGeometry, Workspace, WorkspaceId, WorkspaceManifest, person_id_format_layers, push_recent,
+    read_plugin_preferences, read_pre_restore_backup, read_preference_layers, read_resolved_locale,
+    read_resolved_surety_labels, read_surety_label_overrides, read_ui_preferences, save_locale_overrides,
+    save_plugin_enabled, save_plugin_grants, save_pre_restore_backup, save_recent, save_surety_label_overrides,
+    save_theme_mode, save_window_geometry, surety_layers, theme_layers,
 };
 pub use workspace_registry::{WorkspaceSummary, list_workspaces, register_workspace};

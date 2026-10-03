@@ -609,6 +609,7 @@ err-match-data-read = could not read the matching data at { $path }: { $detail }
 err-match-data-parse = the matching file { $name } is invalid: { $detail }
 err-match-data-id = the name-culture pack { $name } declares the id "{ $id }", which is not its file name
 err-backup-database-not-empty = the target database already holds events; restore into an empty database
+err-backup-pre-restore = the backup of this workspace to { $path } failed, so nothing was replaced: { $detail }
 
 # Source · Repository slices (Phase 5 PR9)
 source-list-empty = No sources yet.

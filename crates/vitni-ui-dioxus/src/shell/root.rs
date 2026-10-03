@@ -42,6 +42,13 @@ pub fn Shell() -> Element {
             NavState::with_prefs(prefs.theme_mode, prefs.resolved_theme, prefs.recent)
         })
     });
+    // A notice left by the restart that mounted this shell (e.g. a restore replaced the workspace).
+    use_hook(move || {
+        if let Some(message) = crate::app::take_pending_notice() {
+            let mut nav = nav;
+            nav.notify(message);
+        }
+    });
     // The shared record-name cache backing every `RecordLink` (resolved once per data version).
     use_context_provider(|| NameCache(Signal::new(std::collections::HashMap::new())));
     // The live client-scope shortcut overrides (ADR 0030 §3): seeded from `StartupPrefs`, held as a

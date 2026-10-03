@@ -81,7 +81,9 @@ pub(crate) async fn collect(workspace: &Workspace) -> Result<Vec<FoundMedia>, Ap
     Ok(found.into_values().collect())
 }
 
-/// Extracts every archived library file into `workspace_dir`'s media library.
+/// Extracts every archived library file into `workspace_dir`'s media library, except where a file already
+/// exists at its path: a restore adds media, it never overwrites (ADR 0044 §5). Returns how many were
+/// written.
 ///
 /// # Errors
 ///
@@ -99,7 +101,11 @@ pub(crate) fn extract(
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(|e| io_error(&parent.display().to_string(), &e))?;
         }
-        let mut out = fs::File::create_new(&target).map_err(|e| io_error(&target.display().to_string(), &e))?;
+        let mut out = match fs::File::create_new(&target) {
+            Ok(out) => out,
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(io_error(&target.display().to_string(), &error)),
+        };
         io::copy(&mut archive.open_member(name)?, &mut out).map_err(|e| io_error(name, &e))?;
         extracted += 1;
     }

@@ -379,6 +379,42 @@ impl Store {
         }
     }
 
+    /// Replaces the whole log with `rows`, inserted exactly as given, and rebuilds every projection
+    /// from them, returning how many were written — a restore over an existing workspace (ADR 0044
+    /// §2). Deleting the old log, inserting, and rebuilding run in one transaction, on a connection
+    /// of their own: on any failure the store keeps its previous log and projections, and other
+    /// connections see either the old store or the new one, never a mix. Like a rebuild, the caller
+    /// must ensure no commands run concurrently.
+    ///
+    /// # Errors
+    ///
+    /// The first `Err` the iterator yields, or [`DbError::Backend`] if a row cannot be written (a
+    /// duplicate key) or the rebuild fails; either way the store is unchanged.
+    /// [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn replace_all_events(
+        &self,
+        rows: impl IntoIterator<Item = Result<RawEvent, DbError>>,
+    ) -> Result<u64, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.replace_all_events(rows).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.replace_all_events(rows).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = rows;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
     /// Counts every event in the log.
     ///
     /// # Errors

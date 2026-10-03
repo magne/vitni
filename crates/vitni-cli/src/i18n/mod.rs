@@ -194,6 +194,46 @@ impl Localizer {
         fl!(self.loader, "restore-media-mismatched", path = path)
     }
 
+    /// `Replaced workspace "<name>" with N events from the backup (backup format <format>).`
+    #[must_use]
+    pub fn replace_success(&self, name: &str, events: u64, format: &str) -> String {
+        fl!(
+            self.loader,
+            "replace-success",
+            name = name,
+            events = events,
+            format = format
+        )
+    }
+
+    /// `The previous state was backed up first to <path>.`
+    #[must_use]
+    pub fn replace_pre_restore(&self, path: &str) -> String {
+        fl!(self.loader, "replace-pre-restore", path = path)
+    }
+
+    /// The note that a replace took no pre-restore backup, the workspace having switched it off.
+    #[must_use]
+    pub fn replace_no_pre_restore(&self) -> String {
+        fl!(self.loader, "replace-no-pre-restore")
+    }
+
+    /// The refusal of a `--replace` without `--yes`, naming what it would discard.
+    #[must_use]
+    pub fn replace_needs_yes(&self, name: &str, events: u64) -> String {
+        fl!(self.loader, "replace-needs-yes", name = name, events = events)
+    }
+
+    /// Whether the refused replace would have backed the workspace up first.
+    #[must_use]
+    pub fn replace_needs_yes_backup(&self, pre_restore: bool) -> String {
+        if pre_restore {
+            fl!(self.loader, "replace-needs-yes-backup")
+        } else {
+            fl!(self.loader, "replace-needs-yes-no-backup")
+        }
+    }
+
     /// `Rebuilt all projections from the event log.`
     #[must_use]
     pub fn rebuild_success(&self) -> String {
@@ -502,6 +542,12 @@ impl Localizer {
                 )
             }
             BackupError::DatabaseNotEmpty => fl!(self.loader, "err-backup-database-not-empty"),
+            BackupError::PreRestoreBackup { path, source } => fl!(
+                self.loader,
+                "err-backup-pre-restore",
+                path = path.display().to_string(),
+                detail = self.error(source)
+            ),
         }
     }
 

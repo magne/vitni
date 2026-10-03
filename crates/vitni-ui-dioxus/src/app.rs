@@ -181,11 +181,10 @@ pub enum AppCtx {
 
 /// A "restart the application state" trigger, provided as context above [`AppInner`].
 ///
-/// Preferences' workspace switcher is the only writer: bumping it changes [`AppInner`]'s `key`,
-/// which makes Dioxus unmount and remount it — re-running startup (`build_state`) from scratch so
-/// every downstream `use_context_provider` (services, localizers, [`crate::shell::NavState`], …)
-/// rebuilds against the newly-selected workspace. This is the same remount-by-key technique already
-/// used for the record detail panes (`crate::screens::record_detail`), scaled up one level.
+/// Preferences writes it: the workspace switcher, and a restore that replaced the open workspace.
+/// Bumping it changes [`AppInner`]'s `key`, which makes Dioxus unmount and remount it — re-running
+/// startup (`build_state`) from scratch so every downstream `use_context_provider` (services,
+/// localizers, [`crate::shell::NavState`], …) rebuilds against the selected workspace.
 #[derive(Clone, Copy)]
 pub struct RestartEpoch(pub Signal<u32>);
 
@@ -195,6 +194,22 @@ pub fn request_restart() {
     if let Some(mut epoch) = try_consume_context::<RestartEpoch>() {
         *epoch.0.write() += 1;
     }
+}
+
+/// A notice for the shell to raise once a restart has remounted it: the restart drops the old shell's
+/// notice together with the rest of its state.
+static PENDING_NOTICE: GlobalSignal<Option<String>> = Signal::global(|| None);
+
+/// Restarts the application state, like [`request_restart`], and raises `message` in the new shell —
+/// e.g. after a restore replaced the open workspace's records under every screen.
+pub fn restart_with_notice(message: String) {
+    *PENDING_NOTICE.write() = Some(message);
+    request_restart();
+}
+
+/// Takes the notice [`restart_with_notice`] left for the shell now mounting, if any.
+pub(crate) fn take_pending_notice() -> Option<String> {
+    PENDING_NOTICE.write().take()
 }
 
 /// A session-only override of the workspace to open, set by the Preferences "Open" action. Never
@@ -211,12 +226,16 @@ pub fn open_workspace(name: String) {
 }
 
 /// The root component: provides the [`RestartEpoch`] trigger and renders [`AppInner`], keyed so a
-/// restart request remounts it.
+/// restart request remounts it. The key sits on a one-item list because Dioxus honours keys only
+/// between list items: a keyed component outside a list is diffed in place, and `AppInner`'s empty
+/// props memoize, so it would never remount.
 #[component]
 pub fn App() -> Element {
     let epoch = use_context_provider(|| RestartEpoch(Signal::new(0)));
     rsx! {
-        AppInner { key: "{epoch.0}" }
+        for epoch in [(epoch.0)()] {
+            AppInner { key: "{epoch}" }
+        }
         DevStyles {}
     }
 }

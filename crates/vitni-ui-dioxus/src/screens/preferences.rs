@@ -11,7 +11,8 @@
 //! section's pending edits in one pass. Two controls are exceptions that act immediately: the theme
 //! control (through the same `save_theme_mode` the top-bar toggle uses, so the two stay in sync),
 //! and the Workspaces card's Open / Make default / Register actions (each a distinct config
-//! operation, not part of the batched Save).
+//! operation, not part of the batched Save). The Backup card acts immediately too, its restore over
+//! the open workspace behind a typed-name danger confirm (ADR 0044).
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -28,13 +29,14 @@ use vitni_i18n::fallback_chain;
 use vitni_ui::{ShortcutBindingVm, ShortcutGroup, ShortcutsVm, resolved_shortcuts, shortcuts, shortcuts_vm};
 
 use super::prelude::*;
-use crate::app::{open_workspace, request_restart};
+use crate::app::{open_workspace, request_restart, restart_with_notice};
 use crate::components::{Badge, Checkbox, LabeledValue, Modal, TextField};
 use crate::i18n::Chrome;
 use crate::services::{
     PreferencesData, Services, create_backup, default_backup_path, load_preferences, make_default_workspace,
-    rebuild_projections, register_workspace, restore_backup, save_id_format_defaults, save_locale_defaults,
-    save_operator_identity, save_shortcuts, save_surety_defaults, save_surety_workspace_overrides,
+    pre_restore_backup, rebuild_projections, register_workspace, replace_backup, restore_backup,
+    save_id_format_defaults, save_locale_defaults, save_operator_identity, save_pre_restore_backup, save_shortcuts,
+    save_surety_defaults, save_surety_workspace_overrides, workspace_event_count,
 };
 use crate::shell::ShortcutsCtx;
 
@@ -205,6 +207,13 @@ pub fn PreferencesScreen() -> Element {
         },
         restoring: use_signal(|| false),
         restored: use_signal(|| None),
+        replace: ReplaceFields {
+            archive: use_signal(String::new),
+            pre_restore: use_signal(|| pre_restore_backup(&services)),
+            confirm: use_signal(|| None),
+            typed: use_signal(String::new),
+            running: use_signal(|| false),
+        },
     };
     let backup_actions = backup_actions(&services, &chrome, &backup, data, nav);
 
@@ -325,10 +334,88 @@ fn backup_actions(
             }
         });
     });
+    let replace = replace_actions(services, chrome, backup.replace, nav);
     BackupActions {
         onbackup,
         onrestore,
         onopen: EventHandler::new(open_workspace),
+        onreplaceask: replace.onreplaceask,
+        onreplace: replace.onreplace,
+        onprerestore: replace.onprerestore,
+    }
+}
+
+/// The replace section's handlers, before [`backup_actions`] folds them into [`BackupActions`].
+struct ReplaceActions {
+    onreplaceask: EventHandler<MouseEvent>,
+    onreplace: EventHandler<MouseEvent>,
+    onprerestore: EventHandler<bool>,
+}
+
+/// Wires the replace section (ADR 0044): *Replace workspace…* counts what would be lost and opens the
+/// danger confirm; its confirm replaces and restarts the app over the replaced workspace; the
+/// pre-restore switch is written to the manifest at once.
+fn replace_actions(
+    services: &Services,
+    chrome: &Rc<Chrome>,
+    replace: ReplaceFields,
+    mut nav: NavState,
+) -> ReplaceActions {
+    let ReplaceFields {
+        archive,
+        mut pre_restore,
+        mut confirm,
+        mut typed,
+        mut running,
+    } = replace;
+    let ask_services = services.clone();
+    let ask_chrome = Rc::clone(chrome);
+    let onreplaceask = EventHandler::new(move |_: MouseEvent| {
+        if archive.peek().trim().is_empty() {
+            nav.notify_error(ask_chrome.prefs_restore_archive_required());
+            return;
+        }
+        let services = ask_services.clone();
+        spawn(async move {
+            match workspace_event_count(services.clone()).await {
+                Ok(events) => {
+                    typed.set(String::new());
+                    confirm.set(Some(ReplaceConfirm {
+                        workspace: services.open_workspace.clone(),
+                        events,
+                        pre_restore: *pre_restore.peek(),
+                    }));
+                }
+                Err(message) => nav.notify_error(message),
+            }
+        });
+    });
+    let run_services = services.clone();
+    let run_chrome = Rc::clone(chrome);
+    let onreplace = EventHandler::new(move |_: MouseEvent| {
+        let archive = PathBuf::from(archive.peek().trim());
+        running.set(true);
+        let services = run_services.clone();
+        let chrome = Rc::clone(&run_chrome);
+        spawn(async move {
+            let outcome = Box::pin(replace_backup(services, archive)).await;
+            running.set(false);
+            confirm.set(None);
+            match outcome {
+                Ok(report) => restart_with_notice(replace_notice(&chrome, &report)),
+                Err(message) => nav.notify_error(message),
+            }
+        });
+    });
+    let switch_services = services.clone();
+    let onprerestore = EventHandler::new(move |on: bool| match save_pre_restore_backup(&switch_services, on) {
+        Ok(()) => pre_restore.set(on),
+        Err(message) => nav.notify_error(message),
+    });
+    ReplaceActions {
+        onreplaceask,
+        onreplace,
+        onprerestore,
     }
 }
 
@@ -551,6 +638,35 @@ pub struct BackupFields {
     pub restoring: Signal<bool>,
     /// The last successful restore, reported in the card until the workspace is opened.
     pub restored: Signal<Option<RestoredSummary>>,
+    /// The restore over the open workspace (ADR 0044).
+    pub replace: ReplaceFields,
+}
+
+/// The Backup card's replace section (ADR 0044): the archive, the workspace's pre-restore backup
+/// switch, the open danger confirm with what has been typed into it, and whether a replace is running.
+#[derive(Debug, Clone, Copy)]
+pub struct ReplaceFields {
+    /// The archive to restore over the open workspace.
+    pub archive: Signal<String>,
+    /// Whether this workspace is backed up before a replace (its `[backup] pre_restore`).
+    pub pre_restore: Signal<bool>,
+    /// The open danger confirm, or `None` while it is closed.
+    pub confirm: Signal<Option<ReplaceConfirm>>,
+    /// What the operator has typed into the confirm; Replace enables when it is the workspace's name.
+    pub typed: Signal<String>,
+    /// Whether a replace is running.
+    pub running: Signal<bool>,
+}
+
+/// What the danger confirm states, read when *Replace workspace…* is pressed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplaceConfirm {
+    /// The open workspace's registry name, which the operator must type.
+    pub workspace: String,
+    /// How many events the replace discards.
+    pub events: u64,
+    /// Whether the workspace is backed up first.
+    pub pre_restore: bool,
 }
 
 /// What the last restore produced, already localized: the new workspace's name and one line per fact.
@@ -571,6 +687,12 @@ pub struct BackupActions {
     pub onrestore: EventHandler<MouseEvent>,
     /// Opens the named restored workspace.
     pub onopen: EventHandler<String>,
+    /// Asks to replace the open workspace: opens the danger confirm.
+    pub onreplaceask: EventHandler<MouseEvent>,
+    /// Replaces the open workspace, from the confirmed danger confirm.
+    pub onreplace: EventHandler<MouseEvent>,
+    /// Switches the workspace's pre-restore backup on or off.
+    pub onprerestore: EventHandler<bool>,
 }
 
 /// Renders the settings sub-nav + every card. A pure function of its inputs (data, the current
@@ -1341,9 +1463,10 @@ fn maintenance_card(
     }
 }
 
-/// The "Backup & restore" card (ADR 0041): the GUI counterpart of `vitni backup create` and `vitni
-/// backup restore`. Like Maintenance it acts immediately, outside the batched Save. A restore never
-/// touches the open workspace — it registers a new one — so neither direction needs a confirm step.
+/// The "Backup & restore" card (ADR 0041, 0044): the GUI counterpart of `vitni backup create` and
+/// `vitni backup restore`. Like Maintenance it acts immediately, outside the batched Save. A restore
+/// into a new workspace never touches the open one, so it needs no confirm step; a restore over the
+/// open workspace discards its records, so it asks through a danger confirm that wants its name typed.
 pub fn backup_card(chrome: &Chrome, backup: BackupFields, actions: BackupActions) -> Element {
     let BackupFields {
         mut path,
@@ -1353,6 +1476,7 @@ pub fn backup_card(chrome: &Chrome, backup: BackupFields, actions: BackupActions
         restore,
         restoring,
         restored,
+        replace,
     } = backup;
     let backup_label = if running() {
         chrome.prefs_backup_busy()
@@ -1428,6 +1552,100 @@ pub fn backup_card(chrome: &Chrome, backup: BackupFields, actions: BackupActions
                     }
                 }
             }
+            {replace_section(chrome, replace, actions)}
+        }
+        {replace_confirm_modal(chrome, replace, actions)}
+    }
+}
+
+/// The Backup card's *Replace this workspace* section (ADR 0044): the archive, the pre-restore backup
+/// switch, and the danger button that opens the confirm.
+fn replace_section(chrome: &Chrome, replace: ReplaceFields, actions: BackupActions) -> Element {
+    let mut archive = replace.archive;
+    let busy = (replace.running)();
+    let label = if busy {
+        chrome.prefs_replace_busy()
+    } else {
+        chrome.prefs_replace_run()
+    };
+    rsx! {
+        h3 { style: "margin-top:16px", "{chrome.prefs_replace_heading()}" }
+        div { class: "stack",
+            div { class: "muted", style: "font-size:var(--fs-sm)", "{chrome.prefs_replace_intro()}" }
+            Input {
+                label: chrome.prefs_replace_archive_label(),
+                name: "replace-archive".to_owned(),
+                value: Some(archive()),
+                oninput: move |event: FormEvent| archive.set(event.value()),
+            }
+            Checkbox {
+                label: chrome.prefs_replace_pre_restore(),
+                name: "backup-pre-restore".to_owned(),
+                checked: (replace.pre_restore)(),
+                onchange: move |event: FormEvent| actions.onprerestore.call(event.checked()),
+            }
+            div { class: "muted", style: "font-size:var(--fs-sm)", "{chrome.prefs_replace_pre_restore_hint()}" }
+            div { class: "row-actions",
+                Button {
+                    label,
+                    variant: ButtonVariant::Danger,
+                    small: true,
+                    disabled: busy,
+                    onclick: move |event| actions.onreplaceask.call(event),
+                }
+            }
+        }
+    }
+}
+
+/// The danger confirm for a replace: names the workspace, what is discarded and whether it is backed
+/// up first, and keeps Replace disabled until the workspace's name is typed exactly.
+fn replace_confirm_modal(chrome: &Chrome, replace: ReplaceFields, actions: BackupActions) -> Element {
+    let ReplaceFields {
+        mut confirm,
+        mut typed,
+        running,
+        ..
+    } = replace;
+    let Some(asking) = confirm() else {
+        return rsx! {};
+    };
+    let matches = typed() == asking.workspace;
+    let safety = if asking.pre_restore {
+        chrome.prefs_replace_confirm_backup()
+    } else {
+        chrome.prefs_replace_confirm_no_backup()
+    };
+    rsx! {
+        Modal {
+            title: chrome.prefs_replace_confirm_title(&asking.workspace),
+            open: true,
+            danger: true,
+            close_label: chrome.dismiss(),
+            onclose: move |()| confirm.set(None),
+            footer: rsx! {
+                Button {
+                    label: chrome.prefs_replace_confirm_cancel(),
+                    variant: ButtonVariant::Ghost,
+                    onclick: move |_| confirm.set(None),
+                }
+                Button {
+                    label: chrome.prefs_replace_confirm_confirm(),
+                    variant: ButtonVariant::Danger,
+                    disabled: !matches || running(),
+                    onclick: move |event| actions.onreplace.call(event),
+                }
+            },
+            div { class: "stack",
+                p { "{chrome.prefs_replace_confirm_lost(asking.events)}" }
+                p { "{safety}" }
+                Input {
+                    label: chrome.prefs_replace_confirm_type(&asking.workspace),
+                    name: "replace-confirm".to_owned(),
+                    value: Some(typed()),
+                    oninput: move |event: FormEvent| typed.set(event.value()),
+                }
+            }
         }
     }
 }
@@ -1447,6 +1665,19 @@ fn restored_summary(chrome: &Chrome, report: &vitni_app::RestoreReport) -> Resto
     RestoredSummary {
         name: report.workspace.name.clone(),
         lines,
+    }
+}
+
+/// The notice a finished replace leaves for the restarted shell: what was restored, and where the
+/// previous state went.
+fn replace_notice(chrome: &Chrome, report: &vitni_app::ReplaceReport) -> String {
+    let done = chrome.prefs_replace_done(report.events);
+    match &report.pre_restore_backup {
+        Some(path) => format!(
+            "{done} {}",
+            chrome.prefs_replace_done_backup(&path.display().to_string())
+        ),
+        None => done,
     }
 }
 

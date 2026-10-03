@@ -216,10 +216,10 @@ macro_rules! postgres_store {
                             table = $table_const,
                             "projection table predated the human_id column; rebuilding from the event log"
                         );
-                        rebuild_view::<$State, $View>(&pool, $table_const, $upcasters).await?;
+                        rebuild_view::<$State, $View>(&pool, $table_const, $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
                     }
                     if origins_are_new {
-                        replay_record_origins::<$State>(&pool, $table_const, $upcasters).await?;
+                        replay_record_origins::<$State>(&pool, $table_const, $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
                     }
                 )+
                 if identity_is_new {
@@ -271,23 +271,29 @@ macro_rules! postgres_store {
             /// `GenericQuery` the live store uses, with the Event aggregate's upcasters applied. A
             /// maintenance operation — the caller must ensure no commands run concurrently.
             pub(crate) async fn rebuild_projections(&self) -> Result<(), DbError> {
+                Self::rebuild_projections_on(&self.pool, crate::exclusive::SHARED_REPLAY_BUFFER).await
+            }
+
+            /// [`Self::rebuild_projections`] over `pool`, which [`Self::replace_all_events`] points at
+            /// its exclusive transaction.
+            async fn rebuild_projections_on(pool: &Pool<Postgres>, replay_buffer: usize) -> Result<(), DbError> {
                 $(
-                    rebuild_view::<$State, $View>(&self.pool, $table_const, $upcasters).await?;
+                    rebuild_view::<$State, $View>(pool, $table_const, $upcasters, replay_buffer).await?;
                 )+
                 // Place's succession cross-reference index (ADR 0026 §4) is derived from the (now
                 // freshly rebuilt) Place projection above, not replayed from raw events itself.
-                place_succession_index::postgres::rebuild_index(&self.pool).await?;
+                place_succession_index::postgres::rebuild_index(pool).await?;
                 // The identity clusters (ADR 0039 §4) are derived from the rebuilt projections of every
                 // matchable kind.
-                crate::identity_links::postgres::rebuild_index(&self.pool).await?;
+                crate::identity_links::postgres::rebuild_index(pool).await?;
                 // The record origins index is replayed from the raw events, after the projections
                 // its `live` flags are read from.
-                crate::record_origins::postgres::clear_table(&self.pool).await?;
+                crate::record_origins::postgres::clear_table(pool).await?;
                 // The match keys need the name-culture packs, which only the app layer has: forgetting
                 // what the index was built under makes it rebuild on next use.
-                crate::match_keys::postgres::clear_state(&self.pool).await?;
+                crate::match_keys::postgres::clear_state(pool).await?;
                 $(
-                    replay_record_origins::<$State>(&self.pool, $table_const, $upcasters).await?;
+                    replay_record_origins::<$State>(pool, $table_const, $upcasters, replay_buffer).await?;
                 )+
                 Ok(())
             }
@@ -356,6 +362,23 @@ impl PostgresStore {
         rows: impl IntoIterator<Item = Result<crate::raw::RawEvent, DbError>>,
     ) -> Result<u64, DbError> {
         postgres_query::insert_raw_events(&self.pool, rows).await
+    }
+
+    /// Swaps the log for `rows` and rebuilds every projection from them, all in one transaction
+    /// (ADR 0044 §2): on any failure the store is left exactly as it was.
+    pub(crate) async fn replace_all_events(
+        &self,
+        rows: impl IntoIterator<Item = Result<crate::raw::RawEvent, DbError>>,
+    ) -> Result<u64, DbError> {
+        let exclusive = crate::exclusive::ExclusivePool::begin(&self.pool).await?;
+        let outcome = async {
+            postgres_query::discard_all_events(exclusive.pool()).await?;
+            let inserted = postgres_query::insert_raw_events(exclusive.pool(), rows).await?;
+            Self::rebuild_projections_on(exclusive.pool(), crate::exclusive::EXCLUSIVE_REPLAY_BUFFER).await?;
+            Ok(inserted)
+        }
+        .await;
+        exclusive.finish(outcome).await
     }
 
     pub(crate) async fn discard_all_events(&self) -> Result<(), DbError> {
@@ -571,17 +594,21 @@ async fn replay_record_origins<A>(
     pool: &Pool<Postgres>,
     view_table: &'static str,
     upcasters: Vec<Box<dyn EventUpcaster>>,
+    replay_buffer: usize,
 ) -> Result<(), DbError>
 where
     A: Aggregate,
     crate::record_origins::postgres::RecordOriginsQuery: cqrs_es::Query<A>,
 {
     let query = crate::record_origins::postgres::RecordOriginsQuery::new(pool.clone(), view_table);
-    QueryReplay::new(PostgresEventRepository::new(pool.clone()), query)
-        .with_upcasters(upcasters)
-        .replay_all()
-        .await
-        .map_err(|e| DbError::Backend(format!("rebuilding record origins from {view_table}: {e}")))
+    QueryReplay::new(
+        PostgresEventRepository::new(pool.clone()).with_streaming_channel_size(replay_buffer),
+        query,
+    )
+    .with_upcasters(upcasters)
+    .replay_all()
+    .await
+    .map_err(|e| DbError::Backend(format!("rebuilding record origins from {view_table}: {e}")))
 }
 
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).
@@ -593,6 +620,7 @@ async fn rebuild_view<A, V>(
     pool: &Pool<Postgres>,
     table: &str,
     upcasters: Vec<Box<dyn EventUpcaster>>,
+    replay_buffer: usize,
 ) -> Result<(), DbError>
 where
     A: Aggregate,
@@ -602,8 +630,11 @@ where
         .await
         .map_err(|e| DbError::Backend(format!("clearing projection {table}: {e}")))?;
     let repo = Arc::new(PostgresViewRepository::<V, A>::new(table, pool.clone()));
-    let replay =
-        QueryReplay::new(PostgresEventRepository::new(pool.clone()), GenericQuery::new(repo)).with_upcasters(upcasters);
+    let replay = QueryReplay::new(
+        PostgresEventRepository::new(pool.clone()).with_streaming_channel_size(replay_buffer),
+        GenericQuery::new(repo),
+    )
+    .with_upcasters(upcasters);
     replay
         .replay_all()
         .await
