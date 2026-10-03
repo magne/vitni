@@ -531,9 +531,6 @@ does.
   only an empty single-valued field and adds a list value not already recorded, with the origin.
   *Exit:* deciding *Same* on a stored source without an author adds the incoming author and leaves its
   title unchanged.
-- **`find-similar` query for plugins** — ADR 0038 §8. A read-only WIT query returning candidates with
-  their band and features, deny-by-default like every capability. *Needs:* `find_similar`. Low
-  priority. — #417
 - **More name-culture packs** — ADR 0038 §5. `pl` and `pl-en`, `sv`, `de`, `fi` …, each one a TOML file
   plus corpus cases, with no code change. File one when a user's data needs it. Unfiled by design.
 
