@@ -705,10 +705,10 @@ the host proposes the lineage holding the file's people and families under the s
 (never on shared file-local ids alone), and the
 operator confirms it — the bulk-import confirm starts on it with the evidence, the CLI asks, and
 `--yes` accepts. Re-run fixtures per importer prove stable item keys.
-✅ Vitni exports name their workspace (ADR 0043, #463): `workspace.toml` carries a UUID v7 `id`,
+✅ Vitni exports name their workspace (ADR 0043, ADR 0045, #463, #469): `workspace.toml` carries a UUID v7 `id`,
 minted at `init` (or on first open of an older workspace) and kept by a restore; host-api 0.26.0's
-`export-sink.workspace-id` hands it to exporters, and the GEDCOM exporter writes it as `HEAD.FILE`, so
-a later export of one workspace is proposed the dataset its first export went into.
+`export-sink.workspace-id` hands it to exporters, the GEDCOM exporter writes it as `HEAD.FILE` and the
+Gramps exporter as the researcher's name (`Vitni workspace <id>`), so a later export of one workspace is proposed the dataset its first export went into.
 ✅ One graph per Digitalarkivet record (ADR 0040 §1, §4, #409): the assisted importer submits each
 confirmed record — the person with its occupation, its citation and its scan — as one graph, and the
 host withholds it when the person resolves onto another dataset's. The source, its repository and the
@@ -834,6 +834,7 @@ they are confirmed when the ADR is written.
 | [ADR 0042](adr/0042-test-fixture-provenance.md) — **accepted** | Test fixture provenance: four committable origins declared in `PROVENANCE.toml`, an external fetched tier for third-party pages, fail-closed generation from them, no history rewrite for the pre-ADR captures | `0.9.1 — Fixture provenance` | ADR 0034 |
 | [ADR 0043](adr/0043-workspace-id-names-its-exports.md) — **accepted** | A workspace id in `workspace.toml`, minted once, never adopted by an import, kept by a restore; exporters read it through `export-sink.workspace-id` and the GEDCOM exporter writes it as `HEAD.FILE` | Phase 14 (`0.10`) | ADR 0005, 0013, 0037, 0041 |
 | [ADR 0044](adr/0044-restore-can-replace-the-open-workspace.md) — **accepted** | A restore can replace the open workspace: `--replace --yes` / a typed-name danger modal, one transaction on both engines, an automatic pre-restore backup into `backups/` that aborts the replace when it fails, switchable off per workspace | Phase 14 (`0.10`) | ADR 0041, 0043 |
+| [ADR 0045](adr/0045-gramps-export-names-its-workspace-as-researcher.md) — **accepted** | The Gramps exporter writes the workspace id as the researcher's name, `Vitni workspace <id>`, fixed English, so the importer's researcher fingerprint needs no change | Phase 14 (`0.10`) | ADR 0037, 0043 |
 | ADR 0031 | Place model for real-world administrative geography: reopen the `Multi*` geometry variant, add a civil/ecclesiastical/judicial `relation` to `PlaceRef`, and carry positional accuracy separately from `Confidence` | Phase 9 residual closure | ADR 0024, 0026, 0027 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 

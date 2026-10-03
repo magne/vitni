@@ -870,14 +870,26 @@ async fn a_re_export_naming_no_dataset_is_proposed_the_one_it_came_from() {
     }
 }
 
-/// The issue #463 exit: a vitni export names its workspace as the file (ADR 0043), so a later export
-/// of the same workspace is proposed the dataset the first one was imported into.
+/// The issue #463 and #469 exit: a vitni export names its workspace (ADR 0043, ADR 0045), so a later
+/// export of the same workspace is proposed the dataset the first one was imported into.
 #[tokio::test]
 async fn a_later_vitni_export_is_proposed_the_dataset_its_first_export_was_imported_into() {
+    for (importer, exporter, extension) in [
+        ("gedcom-import", "gedcom-export", "ged"),
+        ("gramps-import", "gramps-export", "gramps"),
+    ] {
+        later_export_is_proposed_its_dataset(importer, exporter, extension).await;
+    }
+}
+
+/// Imports a workspace A's `exporter` export into B with `importer`, changes A, and imports A's later
+/// export into B: the second import is proposed the dataset the first went into.
+async fn later_export_is_proposed_its_dataset(importer: &str, exporter: &str, extension: &str) {
     let (exporting, importing) = (
         tempfile::tempdir().expect("tempdir"),
         tempfile::tempdir().expect("tempdir"),
     );
+    let (first_name, second_name) = (format!("first.{extension}"), format!("second.{extension}"));
     let a = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
@@ -888,17 +900,16 @@ async fn a_later_vitni_export_is_proposed_the_dataset_its_first_export_was_impor
         .await
         .expect("import into A")
         .1;
-    let a = export(a, "gedcom-export", &importing.path().join("first.ged")).await;
-    let first = std::fs::read_to_string(importing.path().join("first.ged")).expect("first export");
+    let a = export(a, exporter, &importing.path().join(&first_name)).await;
+    let first = std::fs::read_to_string(importing.path().join(&first_name)).expect("first export");
     let shown = Shown::default();
-    let run = proposing("gedcom-import", "first.ged", &shown, |_| {
-        panic!("an empty workspace proposes nothing")
-    });
+    // An empty workspace proposes nothing: `shown` holds only the second import's proposal below.
+    let run = proposing(importer, &first_name, &shown, |_| None);
     let b = import_proposing(
         workspace(importing.path()).await,
-        "gedcom-import",
+        importer,
         importing.path(),
-        ("first.ged", &first),
+        (&first_name, &first),
         run,
     )
     .await
@@ -915,18 +926,29 @@ async fn a_later_vitni_export_is_proposed_the_dataset_its_first_export_was_impor
         )
         .await
         .expect("change A");
-    let a = export(a, "gedcom-export", &importing.path().join("second.ged")).await;
-    let second = std::fs::read_to_string(importing.path().join("second.ged")).expect("second export");
-    assert!(second.contains("Kari"), "the later export carries the change");
-    let run = proposing("gedcom-import", "second.ged", &shown, accept_the_proposal);
-    let b = import_proposing(b, "gedcom-import", importing.path(), ("second.ged", &second), run)
+    let a = export(a, exporter, &importing.path().join(&second_name)).await;
+    let second = std::fs::read_to_string(importing.path().join(&second_name)).expect("second export");
+    assert!(
+        second.contains("Kari"),
+        "{exporter}: the later export carries the change"
+    );
+    let run = proposing(importer, &second_name, &shown, accept_the_proposal);
+    let b = import_proposing(b, importer, importing.path(), (&second_name, &second), run)
         .await
         .expect("second import into B");
 
     let proposals = shown.lock().expect("lock").clone();
-    assert_eq!(proposals.len(), 1, "{proposals:?}");
-    assert_eq!(proposals[0].proposed.as_ref(), Some(&dataset), "{proposals:?}");
-    assert_ne!(b.id(), a.id(), "an import never adopts the exporting workspace's id");
+    assert_eq!(proposals.len(), 1, "{exporter}: {proposals:?}");
+    assert_eq!(
+        proposals[0].proposed.as_ref(),
+        Some(&dataset),
+        "{exporter}: {proposals:?}"
+    );
+    assert_ne!(
+        b.id(),
+        a.id(),
+        "{exporter}: an import never adopts the exporting workspace's id"
+    );
 }
 
 #[tokio::test]

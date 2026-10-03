@@ -498,15 +498,6 @@ does.
   surnames differ. The default 256 cases rarely reach it. *Shape:* a key the Jaro–Winkler floor
   implies (a short prefix of the normalized given name), or *Katherine* in the same class as *Kari*.
   *Exit:* the proptest passes at 10 000 cases.
-- **A vitni Gramps export is never proposed its dataset on re-import** — ADR 0037 §3, ADR 0043. A Gramps
-  XML file declares its fingerprint through its header's researcher (`<header><researcher><resname>`).
-  The Gramps exporter writes `Header::default()`, which has no researcher, so re-importing a vitni Gramps
-  export into a workspace with Gramps datasets proposes no tree and the operator picks one by hand. The
-  GEDCOM exporter writes the workspace id as `HEAD.FILE` (#463). *Shape:* the Gramps exporter writes a
-  researcher that stays the same across exports of one workspace, from `export-sink.workspace-id`
-  (ADR 0043). Which researcher field carries it is open, because Gramps shows the researcher's name to
-  its user. *Exit:* exporting a workspace as Gramps XML, importing it elsewhere, then importing a later
-  export proposes the first import's dataset. — #469
 - **The origin index is written after the event commit** — ADR 0040 §5. `RecordOriginsQuery`
   (`vitni-db/src/record_origins/sqlite.rs:75`) indexes an aggregate's events in a cqrs-es query run
   after the events commit, logging a failure. A process killed between the two leaves an aggregate no

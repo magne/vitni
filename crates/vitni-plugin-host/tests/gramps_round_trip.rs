@@ -19,8 +19,8 @@ use vitni_app::{
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::Agent;
 use vitni_plugin_host::{
-    Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, ProgressControl, ProgressUpdate,
-    ResourceBudget, RunDataset,
+    Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, ProgressControl,
+    ProgressUpdate, ResourceBudget, RunDataset,
 };
 
 mod common;
@@ -954,4 +954,67 @@ async fn import_is_denied_without_the_commands_capability() {
         list_persons(&workspace).await.expect("list").is_empty(),
         "a denied import must not have created any person"
     );
+}
+
+/// Exports `workspace` as Gramps XML to `path`, handing back the document and the workspace.
+async fn export_gramps(workspace: Workspace, path: &Path) -> (String, Workspace) {
+    let (_, workspace) = common::host()
+        .run_bulk_export(
+            &common::component("gramps-export"),
+            invocation(workspace, export_grants()),
+            ExportTarget::File(path.to_path_buf()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("export");
+    (std::fs::read_to_string(path).expect("read export"), workspace)
+}
+
+/// The header names the workspace as the researcher (ADR 0043, ADR 0045), so every export of one
+/// workspace carries the same fingerprint and a re-import is proposed its dataset (ADR 0037 §3).
+#[tokio::test]
+async fn every_export_of_a_workspace_names_the_workspace_as_its_researcher() {
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let id = workspace.id();
+
+    let (first, workspace) = export_gramps(workspace, &io_dir.path().join("first.gramps")).await;
+    let (second, _) = export_gramps(workspace, &io_dir.path().join("second.gramps")).await;
+
+    let researcher = format!("<researcher>\n<resname>Vitni workspace {id}</resname>\n</researcher>\n");
+    assert!(first.contains(&researcher), "{first}");
+    assert!(second.contains(&researcher), "{second}");
+}
+
+/// The workspace id is the export sink's (ADR 0043): without that grant the exporter is refused it and
+/// writes nothing.
+#[tokio::test]
+async fn an_export_without_the_sink_grant_is_refused_the_workspace_id() {
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let target = io_dir.path().join("out.gramps");
+    let grants = Grants::none()
+        .with(Capability::Query)
+        .with(Capability::Log)
+        .with(Capability::Progress);
+
+    let result = common::host()
+        .run_bulk_export(
+            &common::component("gramps-export"),
+            invocation(workspace, grants),
+            ExportTarget::File(target.clone()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await;
+
+    let Err(PluginError::Guest(message)) = result else {
+        panic!("the export ran without the sink grant");
+    };
+    assert!(
+        message.contains("workspace id") && message.contains("Denied"),
+        "{message}"
+    );
+    assert!(!target.exists(), "nothing was written");
 }
