@@ -271,23 +271,29 @@ macro_rules! postgres_store {
             /// `GenericQuery` the live store uses, with the Event aggregate's upcasters applied. A
             /// maintenance operation — the caller must ensure no commands run concurrently.
             pub(crate) async fn rebuild_projections(&self) -> Result<(), DbError> {
+                Self::rebuild_projections_on(&self.pool).await
+            }
+
+            /// [`Self::rebuild_projections`] over `pool`, which [`Self::replace_all_events`] points at
+            /// its exclusive transaction.
+            async fn rebuild_projections_on(pool: &Pool<Postgres>) -> Result<(), DbError> {
                 $(
-                    rebuild_view::<$State, $View>(&self.pool, $table_const, $upcasters).await?;
+                    rebuild_view::<$State, $View>(pool, $table_const, $upcasters).await?;
                 )+
                 // Place's succession cross-reference index (ADR 0026 §4) is derived from the (now
                 // freshly rebuilt) Place projection above, not replayed from raw events itself.
-                place_succession_index::postgres::rebuild_index(&self.pool).await?;
+                place_succession_index::postgres::rebuild_index(pool).await?;
                 // The identity clusters (ADR 0039 §4) are derived from the rebuilt projections of every
                 // matchable kind.
-                crate::identity_links::postgres::rebuild_index(&self.pool).await?;
+                crate::identity_links::postgres::rebuild_index(pool).await?;
                 // The record origins index is replayed from the raw events, after the projections
                 // its `live` flags are read from.
-                crate::record_origins::postgres::clear_table(&self.pool).await?;
+                crate::record_origins::postgres::clear_table(pool).await?;
                 // The match keys need the name-culture packs, which only the app layer has: forgetting
                 // what the index was built under makes it rebuild on next use.
-                crate::match_keys::postgres::clear_state(&self.pool).await?;
+                crate::match_keys::postgres::clear_state(pool).await?;
                 $(
-                    replay_record_origins::<$State>(&self.pool, $table_const, $upcasters).await?;
+                    replay_record_origins::<$State>(pool, $table_const, $upcasters).await?;
                 )+
                 Ok(())
             }
@@ -356,6 +362,23 @@ impl PostgresStore {
         rows: impl IntoIterator<Item = Result<crate::raw::RawEvent, DbError>>,
     ) -> Result<u64, DbError> {
         postgres_query::insert_raw_events(&self.pool, rows).await
+    }
+
+    /// Swaps the log for `rows` and rebuilds every projection from them, all in one transaction
+    /// (ADR 0044 §2): on any failure the store is left exactly as it was.
+    pub(crate) async fn replace_all_events(
+        &self,
+        rows: impl IntoIterator<Item = Result<crate::raw::RawEvent, DbError>>,
+    ) -> Result<u64, DbError> {
+        let exclusive = crate::exclusive::ExclusivePool::begin(&self.pool).await?;
+        let outcome = async {
+            postgres_query::discard_all_events(exclusive.pool()).await?;
+            let inserted = postgres_query::insert_raw_events(exclusive.pool(), rows).await?;
+            Self::rebuild_projections_on(exclusive.pool()).await?;
+            Ok(inserted)
+        }
+        .await;
+        exclusive.finish(outcome).await
     }
 
     pub(crate) async fn discard_all_events(&self) -> Result<(), DbError> {

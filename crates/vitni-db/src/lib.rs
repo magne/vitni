@@ -16,6 +16,8 @@
 //! version of that world), the licensor grants you additional permission to convey the resulting
 //! work. Such a component is not required to be licensed under the GNU AGPL.
 
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+mod exclusive;
 #[cfg(feature = "sqlite")]
 mod geo_index;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]

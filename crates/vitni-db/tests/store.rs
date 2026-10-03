@@ -375,3 +375,65 @@ async fn discarding_every_event_empties_the_log_and_the_projections() {
     assert!(checked.is_empty(), "{checked:?}");
     assert!(store.find_person("I0001").await.unwrap().is_none());
 }
+
+#[tokio::test]
+async fn replacing_the_log_keeps_only_the_given_rows_and_rebuilds_from_them() {
+    let (source, _source_dir) = store().await;
+    create(&source, 1, "I0001").await;
+    name(&source, 1, "Ada", "Lovelace").await;
+    create(&source, 2, "I0002").await;
+    let rows = read_all_raw(&source, 10).await;
+
+    let (target, _target_dir) = store().await;
+    create(&target, 3, "I0003").await;
+    name(&target, 3, "Charles", "Babbage").await;
+    assert_eq!(
+        target.replace_all_events(rows.iter().cloned().map(Ok)).await.unwrap(),
+        3
+    );
+
+    assert_eq!(read_all_raw(&target, 10).await, rows, "only the given rows remain");
+    assert_eq!(
+        target.projection_rows().await.unwrap(),
+        source.projection_rows().await.unwrap(),
+        "the projections are the given log's"
+    );
+    assert!(target.find_person("I0003").await.unwrap().is_none());
+    create(&target, 4, "I0004").await;
+    assert_eq!(
+        target.event_count().await.unwrap(),
+        4,
+        "the store takes commands afterwards"
+    );
+}
+
+#[tokio::test]
+async fn a_replace_that_fails_keeps_the_previous_log_and_projections() {
+    let (source, _source_dir) = store().await;
+    create(&source, 1, "I0001").await;
+    create(&source, 2, "I0002").await;
+    let rows = read_all_raw(&source, 10).await;
+
+    let (target, _target_dir) = store().await;
+    create(&target, 3, "I0003").await;
+    name(&target, 3, "Charles", "Babbage").await;
+    let before_rows = read_all_raw(&target, 10).await;
+    let before_projections = target.projection_rows().await.unwrap();
+
+    let failing = vec![
+        Ok(rows[0].clone()),
+        Err(DbError::Malformed("line 2".to_owned())),
+        Ok(rows[1].clone()),
+    ];
+    let error = target.replace_all_events(failing).await.unwrap_err();
+    assert!(error.to_string().contains("line 2"), "{error}");
+    let duplicate = vec![Ok(rows[0].clone()), Ok(rows[0].clone())];
+    assert!(matches!(
+        target.replace_all_events(duplicate).await,
+        Err(DbError::Backend(_))
+    ));
+
+    assert_eq!(read_all_raw(&target, 10).await, before_rows, "the log is untouched");
+    assert_eq!(target.projection_rows().await.unwrap(), before_projections);
+    assert!(target.find_person("I0003").await.unwrap().is_some());
+}

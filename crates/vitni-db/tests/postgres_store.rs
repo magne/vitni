@@ -982,3 +982,52 @@ async fn raw_rows_round_trip_between_engines() {
     );
     assert_eq!(restored.event_count().await.unwrap(), 3);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn replacing_the_log_rebuilds_from_the_given_rows_on_postgres() {
+    let (source, _source_db) = store().await;
+    create(&source, 1, "I0001").await;
+    name(&source, 1, "Ada", "Lovelace").await;
+    let rows = read_all_raw(&source, 10).await;
+
+    let (target, _target_db) = store().await;
+    create(&target, 3, "I0003").await;
+    assert_eq!(
+        target.replace_all_events(rows.iter().cloned().map(Ok)).await.unwrap(),
+        2
+    );
+
+    assert_eq!(read_all_raw(&target, 10).await, rows);
+    assert_eq!(
+        target.projection_rows().await.unwrap(),
+        source.projection_rows().await.unwrap()
+    );
+    create(&target, 4, "I0004").await;
+    assert_eq!(
+        target.event_count().await.unwrap(),
+        3,
+        "the store takes commands afterwards"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_replace_rolls_the_whole_swap_back_on_postgres() {
+    let (source, _source_db) = store().await;
+    create(&source, 1, "I0001").await;
+    let rows = read_all_raw(&source, 10).await;
+
+    let (target, _target_db) = store().await;
+    create(&target, 3, "I0003").await;
+    name(&target, 3, "Charles", "Babbage").await;
+    let before_rows = read_all_raw(&target, 10).await;
+    let before_projections = target.projection_rows().await.unwrap();
+
+    let duplicate = vec![Ok(rows[0].clone()), Ok(rows[0].clone())];
+    assert!(matches!(
+        target.replace_all_events(duplicate).await,
+        Err(vitni_db::DbError::Backend(_))
+    ));
+
+    assert_eq!(read_all_raw(&target, 10).await, before_rows);
+    assert_eq!(target.projection_rows().await.unwrap(), before_projections);
+}
