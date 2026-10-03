@@ -19,9 +19,9 @@ use vitni_app::{
     citation_claim_owner, claim_owner, event_claim_owner, families_for_person, family_claim_owner,
     import_attach_event_media, import_attach_event_note, import_attach_media_note, import_attach_place_media,
     import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
-    link_family_event, link_place, link_source_repository, list_citations, list_event_rows, list_family_rows,
-    list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories, list_sources,
-    media_claim_owner, note_claim_owner, place_claim_owner, recent_activity, record_origin, remove_child,
+    link_family_event, link_place, link_source_repository, linked_records, list_citations, list_event_rows,
+    list_family_rows, list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories,
+    list_sources, media_claim_owner, note_claim_owner, place_claim_owner, recent_activity, record_origin, remove_child,
     repository_claim_owner, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
     set_event_restrictions, set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text,
     set_note_type, set_page, set_place_restrictions, set_repository_restrictions, set_restrictions,
@@ -29,7 +29,7 @@ use vitni_app::{
     show_repository, show_source, source_claim_owner, tag_citation, tag_event, tag_family, tag_media, tag_note,
     tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion, undo_event_assertion,
     undo_family_assertion, undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion,
-    undo_research_note_assertion, undo_source_assertion, workspace_counts,
+    undo_research_note_assertion, undo_source_assertion, unlink_person, workspace_counts,
 };
 use vitni_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
@@ -824,6 +824,7 @@ async fn show_person_detail(workspace: &Workspace, loc: &Localizer, human_id: &s
                 .collect();
             detail.research_notes =
                 research_notes_about(workspace, loc, NewResearchNoteSubject::Person(human_id.to_owned())).await?;
+            detail.link(&linked_records(workspace, human_id).await?, loc);
             let change_log = change_log_for_person(workspace, human_id).await?;
             detail.history = collapse_history(&change_log, loc);
             Ok(IntentOutcome::Detail(Box::new(detail)))
@@ -1109,6 +1110,9 @@ pub async fn dispatch_person_edit(
         PersonEdit::UndoAssertion { assertion_id, .. } => {
             undo_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale).await
         }
+        PersonEdit::Unlink { member, .. } => {
+            unlink_person(workspace, session, human_id, member, prov.provenance().rationale).await
+        }
     };
     outcome.map(|()| edit.target().to_owned())
 }
@@ -1135,6 +1139,7 @@ async fn person_edit_owner(
         | PersonEdit::AssertAssociation { .. }
         | PersonEdit::AssertParticipation { .. }
         | PersonEdit::Tag { .. } => prov.supersedes.as_deref(),
+        PersonEdit::Unlink { .. } => None,
     };
     match corrected {
         Some(assertion_id) => claim_owner(workspace, edit.target(), assertion_id).await,

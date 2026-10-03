@@ -1,7 +1,8 @@
 use vitni_app::Rect;
 use vitni_ui::{
     AttachSaveAction, CropCorner, EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, MediaRefVm, NewRecordDraft,
-    PickerState, ProvenanceDraft, SOURCE_QUALITIES, link_is_savable, rect_css, resolve_attach_save, tab_label,
+    OriginVm, PickerState, ProvenanceDraft, SOURCE_QUALITIES, link_is_savable, rect_css, resolve_attach_save,
+    tab_label,
 };
 
 use super::prelude::*;
@@ -645,27 +646,41 @@ pub fn source_cue(loc: &Localizer, source_count: usize) -> Element {
 
 /// The evidence-first source cue with a "Why we believe" popover: a source-count link that, on
 /// activation, floats the claim's citations beside it; or a no-source flag when the claim is
-/// unsourced. The Overview-pane counterpart of [`source_cue`] (which stays plain for the tabs).
-pub fn provenance_cue(loc: &Localizer, title: String, citations: &[CitationRefVm]) -> Element {
-    if citations.is_empty() {
-        rsx! { NoSourceFlag { label: loc.no_source() } }
-    } else {
-        rsx! {
-            ProvenanceTrigger {
-                label: loc.source_count(citations.len()),
-                title,
-                dismiss_label: loc.action_label(ActionLabel::Dismiss),
-                citations: citations.to_vec(),
-            }
+/// unsourced. A claim read from an import record (`origin`) opens the popover too — beside the
+/// no-source flag when it has no citation — so the record it came from is always named (ADR 0037 §2).
+/// The Overview-pane counterpart of [`source_cue`] (which stays plain for the tabs).
+pub fn provenance_cue(
+    loc: &Localizer,
+    title: String,
+    citations: &[CitationRefVm],
+    origin: Option<&OriginVm>,
+) -> Element {
+    let label = match (citations.is_empty(), origin) {
+        (false, _) => loc.source_count(citations.len()),
+        (true, Some(_)) => loc.provenance_imported(),
+        (true, None) => return rsx! { NoSourceFlag { label: loc.no_source() } },
+    };
+    rsx! {
+        if citations.is_empty() {
+            NoSourceFlag { label: loc.no_source() }
+        }
+        ProvenanceTrigger {
+            label,
+            title,
+            dismiss_label: loc.action_label(ActionLabel::Dismiss),
+            citations: citations.to_vec(),
+            origin: origin.cloned(),
+            from_label: loc.provenance_origin_prefix(),
         }
     }
 }
 
 /// A source-count link that toggles an anchored "Why we believe" popover listing the claim's
-/// citations. Self-contained: owns its open state, dismissed by Esc or by clicking the backdrop.
+/// citations and the import record it was read from. Self-contained: owns its open state, dismissed
+/// by Esc or by clicking the backdrop.
 #[component]
 pub fn ProvenanceTrigger(
-    /// The already-localized source-count text (e.g. "2 sources").
+    /// The already-localized trigger text (e.g. "2 sources").
     label: String,
     /// The already-localized popover heading (e.g. "Why we believe: Birth").
     title: String,
@@ -673,6 +688,10 @@ pub fn ProvenanceTrigger(
     dismiss_label: String,
     /// The claim's citations, rendered as provenance rows.
     citations: Vec<CitationRefVm>,
+    /// The import record the claim was read from, if any.
+    origin: Option<OriginVm>,
+    /// The already-localized lead-in of the origin row ("from").
+    from_label: String,
 ) -> Element {
     let mut open = use_signal(|| false);
     rsx! {
@@ -705,6 +724,36 @@ pub fn ProvenanceTrigger(
                     for citation in citations.iter() {
                         {provenance_claim_row(citation)}
                     }
+                    if let Some(origin) = &origin {
+                        {origin_row(&from_label, origin)}
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The popover row naming the import record a claim was read from — "from record *X* in *dataset*",
+/// linking out to the record's page when the dataset has one — and what the run imported.
+pub fn provenance_origin_row(loc: &Localizer, origin: &OriginVm) -> Element {
+    origin_row(&loc.provenance_origin_prefix(), origin)
+}
+
+/// [`provenance_origin_row`] with its lead-in already localized.
+fn origin_row(from_label: &str, origin: &OriginVm) -> Element {
+    let record = rsx! {
+        if let Some(url) = &origin.url {
+            a { href: "{url}", "{origin.label}" }
+        } else {
+            "{origin.label}"
+        }
+    };
+    rsx! {
+        div { class: "prov-claim",
+            div {
+                div { "{from_label} " {record} }
+                if let Some(source) = &origin.source {
+                    div { class: "tl-who", "{source}" }
                 }
             }
         }

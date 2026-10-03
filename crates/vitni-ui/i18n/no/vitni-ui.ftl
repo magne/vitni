@@ -52,6 +52,7 @@ tab-tags = Etiketter
 tab-attributes = Attributter
 tab-timeline = Tidslinje
 tab-history = Historikk
+tab-linked = Koblede poster
 tab-empty = Ingenting her ennå.
 
 # Forklaringer til fellesfanene — de seks fanene hver aggregat viser på samme måte, forklart av den
@@ -61,6 +62,7 @@ tab-note-media = Bildene, skanningene og opptakene som er knyttet til denne post
 tab-note-notes = Fritekstforskning knyttet til denne posten. Et notat er en egen post og kan være knyttet til flere poster, så endrer du teksten, endres den overalt notatet er knyttet til.
 tab-note-tags = Etiketter er din egen klassifisering av denne posten, ikke bevis om den — ingenting her fastslås om personen, stedet eller hendelsen. En etikett vises ved navn, og å fjerne den registreres i Historikk som enhver annen endring.
 tab-note-addresses = Postadressene som er registrert for denne posten. Hver av dem er en påstand med sin egen opphavsinformasjon: en endring erstatter den forrige, og en tilbaketrekking lar den stå i Historikk i stedet for å slette den.
+tab-note-linked = Postene denne personen er sluttet fra. Hver beholder sin egen post og historikk; å koble fra en trekker tilbake sammenslåingen, så den blir sin egen person igjen, med alle poster som er koblet gjennom den.
 
 timeline-note = Den genealogiske livshistorien, satt sammen av personens fakta og hendelsesdeltakelser i datorekkefølge. Dette er den avledede fortellingen — ikke Historikk-fanen, som er revisjonssporet over hvem, når og hvorfor for hver endring.
 timeline-kind-fact = Faktum
@@ -316,6 +318,15 @@ provenance-title = Hvorfor vi tror dette
 provenance-title-claim = Hvorfor vi tror: { $claim }
 provenance-asserted-by = hevdet av { $who } · { $when }
 provenance-asserted-by-undated = hevdet av { $who }
+provenance-origin = fra
+provenance-imported = importert
+origin-record = post { $record } i { $dataset }
+linked-via = via { $id }
+linked-root = Koblet til
+linked-column-record = Post
+linked-column-origin = Importert fra
+linked-column-source = Kilde
+linked-column-level = Bevisnivå
 
 # Bevisnivå — persona-merket (datamodell §7)
 evidence-level-persona = Persona
@@ -1251,8 +1262,10 @@ retract-panel-title = Trekk tilbake påstand
 detach-panel-title = Koble fra
 remove-child-panel-title = Fjern fra familien
 untag-panel-title = Fjern etikett
+unlink-panel-title = Koble fra post
 retract-note = Tilbaketrekkingen registreres i historikken; ingenting slettes.
 untag-note = Fjerningen av etiketten registreres i historikken; ingenting slettes.
+unlink-note = Sammenslåingen trekkes tilbake og registreres i historikken; posten, og alle poster koblet gjennom den, blir sin egen person igjen. Ingenting slettes.
 remove-child-note = Fjerningen registreres i historikken; den opprinnelige påstanden og dokumentasjonen blir værende.
 detach-citation-title = Koble fra denne kilden — frakoblingen registreres i historikken
 action-remove-row = Fjern { $row }

@@ -180,3 +180,49 @@ async fn the_compare_view_shows_an_earlier_distinction_and_undoing_it_merges() {
         .collect();
     assert!(merged_into.contains(&other), "{merged_into:?}");
 }
+
+#[tokio::test]
+async fn a_roots_detail_lists_its_linked_records() {
+    let (ws, dir, root, member) = merged().await;
+    let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
+    let show = Intent::ShowPerson {
+        human_id: member.clone(),
+    };
+    let IntentOutcome::Detail(detail) = dispatch(&ws, &loc, &show).await.expect("show") else {
+        panic!("expected a person detail");
+    };
+    let ids: Vec<&str> = detail.linked.iter().map(|row| row.human_id.as_str()).collect();
+    assert_eq!(
+        ids,
+        [root.as_str(), member.as_str()],
+        "a member reads its root's cluster"
+    );
+}
+
+#[tokio::test]
+async fn unlinking_from_the_roots_detail_restores_two_people() {
+    let (ws, _dir, root, member) = merged().await;
+    let prov = ProvenanceDraft {
+        rationale: "different parishes".to_owned(),
+        ..ProvenanceDraft::default()
+    };
+    let target = dispatch_person_edit(
+        &ws,
+        &session(),
+        &PersonEdit::Unlink {
+            human_id: root.clone(),
+            member: member.clone(),
+        },
+        &prov,
+    )
+    .await
+    .expect("unlink");
+    assert_eq!(target, root, "the pane reloads the root");
+    let listed: Vec<String> = vitni_app::list_persons(&ws)
+        .await
+        .expect("list")
+        .into_iter()
+        .map(|person| person.human_id)
+        .collect();
+    assert_eq!(listed, [root, member]);
+}

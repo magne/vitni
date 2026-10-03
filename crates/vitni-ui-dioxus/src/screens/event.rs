@@ -903,7 +903,7 @@ pub fn event_overview(loc: &Localizer, detail: &EventDetail, ctx: &EventEditCtx)
                 if !detail.date_citations.is_empty() {
                     div { class: "fact-row", style: "margin-top:8px",
                         span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"date\")}" }
-                        {provenance_cue(loc, loc.provenance_title_claim(&loc.field_label("date")), &detail.date_citations)}
+                        {provenance_cue(loc, loc.provenance_title_claim(&loc.field_label("date")), &detail.date_citations, None)}
                     }
                 }
             }

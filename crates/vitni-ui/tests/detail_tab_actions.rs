@@ -58,6 +58,7 @@ fn person_detail() -> PersonDetail {
         tags: Vec::new(),
         research_notes: Vec::new(),
         history: Vec::new(),
+        linked: Vec::new(),
         edit_seed: PersonDraft::new(),
     }
 }

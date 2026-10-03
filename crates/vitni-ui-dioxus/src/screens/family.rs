@@ -870,7 +870,7 @@ pub fn family_overview(
                         if let Some(vitals) = partner.vitals.clone() {
                             span { class: "muted", "{vitals}" }
                         }
-                        {provenance_cue(loc, loc.provenance_title_claim(&partner.name), &partner.citations)}
+                        {provenance_cue(loc, loc.provenance_title_claim(&partner.name), &partner.citations, None)}
                         {
                             let assertion_id = partner.assertion_id.clone();
                             let name = partner.name.clone();
@@ -916,7 +916,7 @@ pub fn family_overview(
                         FactRow { label: loc.field_label("date"), label_width: 64,
                             span { class: "grow", {or_dash(marriage.date.clone())} }
                             ConfidenceBadge { level: marriage.confidence, label: marriage.confidence_label.clone() }
-                            {provenance_cue(loc, loc.provenance_title_claim(&marriage.type_label), &marriage.citations)}
+                            {provenance_cue(loc, loc.provenance_title_claim(&marriage.type_label), &marriage.citations, None)}
                         }
                         FactRow { label: loc.field_label("place"), label_width: 64,
                             span { class: "grow", {or_dash(marriage.place.clone())} }
