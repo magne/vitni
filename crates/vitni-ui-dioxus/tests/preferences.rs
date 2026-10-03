@@ -20,8 +20,8 @@ use vitni_app::{
 use vitni_core::ids::AgentId;
 use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::screens::{
-    BackupActions, BackupFields, LocaleFields, MaintenanceFields, RegisterFields, RestoredSummary, ShortcutFields,
-    SuretyFields, SuretyScope, preferences_view,
+    BackupActions, BackupFields, LocaleFields, MaintenanceFields, RegisterFields, ReplaceConfirm, ReplaceFields,
+    RestoredSummary, ShortcutFields, SuretyFields, SuretyScope, preferences_view,
 };
 use vitni_ui_dioxus::services::PreferencesData;
 
@@ -274,6 +274,9 @@ fn render_prefs(
         onbackup: EventHandler::new(|_| {}),
         onrestore: EventHandler::new(|_| {}),
         onopen: EventHandler::new(|_| {}),
+        onreplaceask: EventHandler::new(|_| {}),
+        onreplace: EventHandler::new(|_| {}),
+        onprerestore: EventHandler::new(|_| {}),
     };
     let loc = vitni_ui::Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let shortcuts_vm_value = vitni_ui::shortcuts_vm(&data.shortcuts, &loc);
@@ -622,6 +625,44 @@ fn backup_fields(seed: BackupSeed) -> BackupFields {
         },
         restoring: use_signal(move || restoring),
         restored: use_signal(move || restored),
+        replace: replace_fields(ReplaceSeed::default()),
+    }
+}
+
+/// What the Backup card's replace signals start at in a render.
+#[derive(Debug, Clone)]
+struct ReplaceSeed {
+    pre_restore: bool,
+    confirm: Option<ReplaceConfirm>,
+    typed: &'static str,
+    running: bool,
+}
+
+impl Default for ReplaceSeed {
+    fn default() -> Self {
+        Self {
+            pre_restore: true,
+            confirm: None,
+            typed: "",
+            running: false,
+        }
+    }
+}
+
+/// The replace signals, seeded from `seed` (called during a component render).
+fn replace_fields(seed: ReplaceSeed) -> ReplaceFields {
+    let ReplaceSeed {
+        pre_restore,
+        confirm,
+        typed,
+        running,
+    } = seed;
+    ReplaceFields {
+        archive: use_signal(|| "/data/gen/backups/gen-2026-09-28.vitni-backup".to_owned()),
+        pre_restore: use_signal(move || pre_restore),
+        confirm: use_signal(move || confirm),
+        typed: use_signal(move || typed.to_owned()),
+        running: use_signal(move || running),
     }
 }
 
@@ -1271,11 +1312,18 @@ fn backup_card_in_norwegian() -> Element {
         },
         restoring: use_signal(|| false),
         restored: use_signal(|| None),
+        replace: replace_fields(ReplaceSeed {
+            confirm: Some(asking(true)),
+            ..ReplaceSeed::default()
+        }),
     };
     let actions = BackupActions {
         onbackup: EventHandler::new(|_| {}),
         onrestore: EventHandler::new(|_| {}),
         onopen: EventHandler::new(|_| {}),
+        onreplaceask: EventHandler::new(|_| {}),
+        onreplace: EventHandler::new(|_| {}),
+        onprerestore: EventHandler::new(|_| {}),
     };
     vitni_ui_dioxus::screens::backup_card(&chrome("no"), signals, actions)
 }
@@ -1285,8 +1333,154 @@ fn the_backup_card_is_localized() {
     let html = render(backup_card_in_norwegian);
     assert!(html.contains("Sikkerhetskopi og gjenoppretting"), "{html}");
     assert!(html.contains("Ta med mediefiler"), "{html}");
+    assert!(html.contains("Erstatt dette arbeidsområdet"), "{html}");
+    assert!(html.contains("Skriv gen for å bekrefte"), "{html}");
     assert!(
         html.contains(r#"id="backup-with-media" name="backup-with-media" checked=true"#),
         "the media toggle renders checked:\n{html}"
+    );
+}
+
+/// The confirm a *Replace workspace…* opens for the workspace `gen` holding 42 events.
+fn asking(pre_restore: bool) -> ReplaceConfirm {
+    ReplaceConfirm {
+        workspace: "gen".to_owned(),
+        events: 42,
+        pre_restore,
+    }
+}
+
+/// The Backup card alone, in English, with the replace section seeded to `seed`.
+fn replace_card(seed: ReplaceSeed) -> Element {
+    let signals = BackupFields {
+        path: use_signal(String::new),
+        with_media: use_signal(|| false),
+        running: use_signal(|| false),
+        archive: use_signal(String::new),
+        restore: RegisterFields {
+            open: use_signal(|| true),
+            name: use_signal(String::new),
+            directory: use_signal(String::new),
+            database_url: use_signal(String::new),
+        },
+        restoring: use_signal(|| false),
+        restored: use_signal(|| None),
+        replace: replace_fields(seed),
+    };
+    let actions = BackupActions {
+        onbackup: EventHandler::new(|_| {}),
+        onrestore: EventHandler::new(|_| {}),
+        onopen: EventHandler::new(|_| {}),
+        onreplaceask: EventHandler::new(|_| {}),
+        onreplace: EventHandler::new(|_| {}),
+        onprerestore: EventHandler::new(|_| {}),
+    };
+    vitni_ui_dioxus::screens::backup_card(&chrome("en"), signals, actions)
+}
+
+fn replace_idle() -> Element {
+    replace_card(ReplaceSeed::default())
+}
+
+fn replace_asking() -> Element {
+    replace_card(ReplaceSeed {
+        confirm: Some(asking(true)),
+        ..ReplaceSeed::default()
+    })
+}
+
+fn replace_asking_typed() -> Element {
+    replace_card(ReplaceSeed {
+        confirm: Some(asking(true)),
+        typed: "gen",
+        ..ReplaceSeed::default()
+    })
+}
+
+fn replace_asking_mistyped() -> Element {
+    replace_card(ReplaceSeed {
+        confirm: Some(asking(true)),
+        typed: "Gen",
+        ..ReplaceSeed::default()
+    })
+}
+
+fn replace_asking_without_backup() -> Element {
+    replace_card(ReplaceSeed {
+        pre_restore: false,
+        confirm: Some(asking(false)),
+        ..ReplaceSeed::default()
+    })
+}
+
+/// The confirm modal's Replace button, from its `<button` to its label (empty when absent, which
+/// fails every assertion on it).
+fn replace_button(html: &str) -> &str {
+    let Some(end) = html.rfind(">Replace workspace<") else {
+        return "";
+    };
+    let start = html[..end].rfind("<button").unwrap_or(0);
+    &html[start..end]
+}
+
+/// The Backup card offers replacing the open workspace (ADR 0044): the archive, the per-workspace
+/// pre-restore backup switch, and a danger button that only asks — no modal until it is pressed.
+#[test]
+fn backup_card_offers_to_replace_this_workspace() {
+    let html = render(replace_idle);
+    for needle in [
+        "Replace this workspace",
+        r#"name="replace-archive""#,
+        "Back up this workspace before a restore replaces it",
+        r#"id="backup-pre-restore" name="backup-pre-restore" checked=true"#,
+        "btn danger",
+        ">Replace workspace…<",
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
+    assert!(!html.contains("alertdialog"), "no confirm before asking:\n{html}");
+}
+
+/// The danger modal names the workspace, what is lost and the safety net, and keeps Replace disabled
+/// until the workspace's name is typed.
+#[test]
+fn the_replace_confirm_names_what_is_lost_and_waits_for_the_name() {
+    let html = render(replace_asking);
+    for needle in [
+        "modal modal-danger",
+        r#"role="alertdialog""#,
+        "Replace workspace &#34;gen&#34;?",
+        "Its 42 events and every record built from them are discarded",
+        "backed up into its backups folder first",
+        "Type gen to confirm",
+        r#"name="replace-confirm""#,
+        ">Cancel<",
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
+    assert!(replace_button(&html).contains("disabled"), "{html}");
+}
+
+#[test]
+fn typing_the_workspace_name_enables_replace() {
+    let html = render(replace_asking_typed);
+    let button = replace_button(&html);
+    assert!(button.contains("btn danger") && !button.contains("disabled"), "{html}");
+}
+
+#[test]
+fn a_name_that_differs_in_case_does_not_enable_replace() {
+    let html = render(replace_asking_mistyped);
+    assert!(replace_button(&html).contains("disabled"), "{html}");
+}
+
+#[test]
+fn the_replace_confirm_warns_when_no_backup_is_taken_first() {
+    let html = render(replace_asking_without_backup);
+    assert!(html.contains("is not backed up first"), "{html}");
+    assert!(html.contains("cannot be undone"), "{html}");
+    assert!(
+        html.contains(r#"id="backup-pre-restore" name="backup-pre-restore"/>"#),
+        "{html}"
     );
 }

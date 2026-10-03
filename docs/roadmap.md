@@ -589,7 +589,11 @@ is fixed by a superseding ADR, not by an edit. The work items are in
 **Progress.** ✅ Workspace backup and restore (ADR 0041, #391): `vitni backup create|restore` and the
 Preferences *Backup & restore* card, the `0.1` format with its restore-time upgrader chain and window,
 the golden fixture of every event variant, and the cross-engine restore test. Every later event change
-in the milestone now passes through that fixture. ✅ Record origins and import runs (ADR 0037 §1, §3,
+in the milestone now passes through that fixture. ✅ Restore over the open workspace (ADR 0044, #426):
+`vitni backup restore --replace --yes` and the card's *Replace workspace…* danger confirm, which wants
+the workspace's name typed. The log is swapped and the projections rebuilt in one transaction on both
+engines, behind an automatic pre-restore backup into `backups/` that a disposable workspace can switch
+off (`[backup] pre_restore`). ✅ Record origins and import runs (ADR 0037 §1, §3,
 §5, §6, #393): `EventContext.origin`, the fourteenth aggregate `ImportRun`, host-api 0.24.0's
 `set-origin` with every importer stamping stable record and item keys, the explicit dataset choice
 (`vitni import --dataset` / `--new-dataset`, the bulk-import confirm), `vitni import-run list|datasets`,

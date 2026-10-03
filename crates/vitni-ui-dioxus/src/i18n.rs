@@ -1484,6 +1484,102 @@ impl Chrome {
         fl!(self.loader, "prefs-restore-open")
     }
 
+    /// The Backup card's replace-section heading.
+    #[must_use]
+    pub fn prefs_replace_heading(&self) -> String {
+        fl!(self.loader, "prefs-replace-heading")
+    }
+
+    /// The replace section's explanation.
+    #[must_use]
+    pub fn prefs_replace_intro(&self) -> String {
+        fl!(self.loader, "prefs-replace-intro")
+    }
+
+    /// The replace section's archive field label.
+    #[must_use]
+    pub fn prefs_replace_archive_label(&self) -> String {
+        fl!(self.loader, "prefs-replace-archive-label")
+    }
+
+    /// The pre-restore backup switch's label (ADR 0044 §3).
+    #[must_use]
+    pub fn prefs_replace_pre_restore(&self) -> String {
+        fl!(self.loader, "prefs-replace-pre-restore")
+    }
+
+    /// The pre-restore backup switch's hint.
+    #[must_use]
+    pub fn prefs_replace_pre_restore_hint(&self) -> String {
+        fl!(self.loader, "prefs-replace-pre-restore-hint")
+    }
+
+    /// The *Replace workspace…* button label.
+    #[must_use]
+    pub fn prefs_replace_run(&self) -> String {
+        fl!(self.loader, "prefs-replace-run")
+    }
+
+    /// The replace button's busy label.
+    #[must_use]
+    pub fn prefs_replace_busy(&self) -> String {
+        fl!(self.loader, "prefs-replace-busy")
+    }
+
+    /// The replace confirm's title, naming the workspace.
+    #[must_use]
+    pub fn prefs_replace_confirm_title(&self, name: &str) -> String {
+        fl!(self.loader, "prefs-replace-confirm-title", name = name)
+    }
+
+    /// The replace confirm's line naming what is discarded.
+    #[must_use]
+    pub fn prefs_replace_confirm_lost(&self, events: u64) -> String {
+        fl!(self.loader, "prefs-replace-confirm-lost", events = events)
+    }
+
+    /// The replace confirm's line on the pre-restore backup it takes.
+    #[must_use]
+    pub fn prefs_replace_confirm_backup(&self) -> String {
+        fl!(self.loader, "prefs-replace-confirm-backup")
+    }
+
+    /// The replace confirm's warning that no pre-restore backup is taken.
+    #[must_use]
+    pub fn prefs_replace_confirm_no_backup(&self) -> String {
+        fl!(self.loader, "prefs-replace-confirm-no-backup")
+    }
+
+    /// The replace confirm's field label, asking for the workspace's name.
+    #[must_use]
+    pub fn prefs_replace_confirm_type(&self, name: &str) -> String {
+        fl!(self.loader, "prefs-replace-confirm-type", name = name)
+    }
+
+    /// The replace confirm's destructive action.
+    #[must_use]
+    pub fn prefs_replace_confirm_confirm(&self) -> String {
+        fl!(self.loader, "prefs-replace-confirm-confirm")
+    }
+
+    /// The replace confirm's cancel action.
+    #[must_use]
+    pub fn prefs_replace_confirm_cancel(&self) -> String {
+        fl!(self.loader, "prefs-replace-confirm-cancel")
+    }
+
+    /// The notice after a replace, with the events it restored.
+    #[must_use]
+    pub fn prefs_replace_done(&self, events: u64) -> String {
+        fl!(self.loader, "prefs-replace-done", events = events)
+    }
+
+    /// The notice's line naming the pre-restore backup.
+    #[must_use]
+    pub fn prefs_replace_done_backup(&self, path: &str) -> String {
+        fl!(self.loader, "prefs-replace-done-backup", path = path)
+    }
+
     /// The "Reset to defaults" button label.
     #[must_use]
     pub fn prefs_reset(&self) -> String {

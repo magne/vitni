@@ -1,0 +1,175 @@
+# Restoring a backup over the open workspace (ADR 0044, #426) through the Preferences Backup card. SSR
+# (`tests/preferences.rs`) proves the markup: the danger modal, its wording, and that Replace is
+# disabled until the name is typed. This proves what only the webview has: focus lands in the name
+# field so typing reaches it, typing enables Replace, the pre-restore switch reaches workspace.toml, a
+# failed replace closes the confirm, and a real replace restarts the app over the replaced workspace.
+#
+# The archive for the real replace is the card's own Back up: its path field is prefilled with a dated
+# file under the workspace's `backups/`, so the scenario copies it (ctrl+a, ctrl+c) into the replace
+# field rather than typing a path that differs per worker and per day. The pre-restore switch is left
+# off, so the `manifest` assertion also proves the replace kept this copy's own `[backup]` setting.
+#
+# Coordinates are at the default 1800x1200 window, with the Preferences screen scrolled to its end.
+description = "A restore over the open workspace asks for its name, then replaces it and restarts (ADR 0044)"
+
+[[step]]
+do = "click"
+at = [85, 935]
+label = "rail: Preferences"
+
+[[step]]
+do = "wheel"
+at = [1100, 700]
+clicks = -60
+label = "scroll to the Backup card at the end"
+
+[[step]]
+do = "shot"
+name = "card"
+
+[[step]]
+do = "click"
+at = [1118, 986]
+label = "switch the pre-restore backup off"
+
+[[step]]
+do = "shot"
+name = "switched-off"
+
+[[step]]
+do = "click"
+at = [1115, 945]
+label = "the replace archive field"
+
+[[step]]
+do = "text"
+text = "missing.vitni-backup"
+label = "an archive that does not exist"
+
+[[step]]
+do = "click"
+at = [551, 1071]
+label = "Replace workspace…"
+
+[[step]]
+do = "shot"
+name = "asking"
+
+[[step]]
+do = "text"
+text = "gui-pass"
+label = "type the workspace name into the focused field"
+
+[[step]]
+do = "shot"
+name = "typed"
+
+[[step]]
+do = "click"
+at = [1135, 502]
+label = "Replace: the archive is missing, so it fails"
+
+[[step]]
+do = "shot"
+name = "failed"
+
+[[step]]
+do = "click"
+at = [1115, 274]
+label = "the Back up file field"
+
+[[step]]
+do = "key"
+chord = "ctrl+a"
+label = "select its prefilled path"
+
+[[step]]
+do = "key"
+chord = "ctrl+c"
+label = "copy it"
+
+[[step]]
+do = "click"
+at = [508, 399]
+label = "Back up"
+
+[[step]]
+do = "wait"
+seconds = 7
+label = "outlast the Backed-up notice"
+
+[[step]]
+do = "click"
+at = [1115, 945]
+label = "the replace archive field"
+
+[[step]]
+do = "key"
+chord = "ctrl+a"
+label = "select the missing archive's path"
+
+[[step]]
+do = "key"
+chord = "ctrl+v"
+label = "paste the new backup's path over it"
+
+[[step]]
+do = "click"
+at = [551, 1071]
+label = "Replace workspace…"
+
+[[step]]
+do = "text"
+text = "gui-pass"
+label = "type the workspace name"
+
+[[step]]
+do = "click"
+at = [1135, 502]
+label = "Replace"
+
+# The screen stays quiet while the replace runs off the render, so the settle alone can shoot before
+# the restart lands. Short, so the 6s notice the restarted shell raises is still up for the shot.
+[[step]]
+do = "wait"
+seconds = 1
+label = "let the replace finish and the app restart"
+
+[[step]]
+do = "shot"
+name = "replaced"
+
+[[assert]]
+kind = "manifest"
+contains = "pre_restore = false"
+because = "the switch writes [backup] pre_restore at once, and a replace keeps this copy's setting"
+
+[[assert]]
+kind = "differ"
+shots = ["card", "switched-off"]
+region = [1108, 976, 20, 20]
+because = "the pre-restore switch must uncheck"
+
+[[assert]]
+kind = "differ"
+shots = ["asking", "typed"]
+region = [1050, 485, 172, 36]
+because = "typing the workspace's name into the focused field must enable Replace"
+
+[[assert]]
+kind = "differ"
+shots = ["typed", "failed"]
+region = [796, 146, 440, 392]
+because = "a failed replace must close the confirm"
+
+[[assert]]
+kind = "differ"
+shots = ["card", "replaced"]
+region = [8, 920, 216, 32]
+because = "a replace must restart the app, which lands on the Dashboard: Preferences is no longer the active rail item"
+
+[[assert]]
+kind = "differ"
+shots = ["failed", "replaced"]
+region = [760, 1096, 520, 66]
+because = "the restarted shell must raise the replace's notice, left for it across the restart"

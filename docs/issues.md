@@ -627,16 +627,8 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 ### Backup & restore
 
-- **Restore a backup into the current workspace** — needs a new ADR: ADR 0041 §2 restores only into a
-  new workspace, and replacing the open one discards its event log. `vitni backup restore <archive>
-  --replace` and a Preferences *Backup & restore* option replace the open workspace: its events and
-  projections are removed, the archive's rows inserted as stored, the projections rebuilt — on Postgres
-  in one transaction. A red danger modal names what is lost and makes the operator type the workspace
-  name (CLI: `--replace` needs `--yes`). The safety net is per-workspace configuration: by default an
-  automatic pre-restore backup into `backups/`, and the replace aborts if it fails; a disposable
-  development workspace can switch that off and keep only the typed confirmation. *Exit:* a replace
-  leaves projections row for row equal to the archive's, and the pre-restore backup restores the
-  previous state. — #426
+No open items. The area keeps its heading so `area/platform/backup` stays a live label and the issues
+already filed against it keep resolving their [`#backup--restore`](#backup--restore) anchor.
 
 ### Dependencies blocked upstream
 

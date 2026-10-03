@@ -668,6 +668,10 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 /* The wide dialog shape: a prompt's 440px cannot hold an image, so the media preview dialog
    (`screens/media.rs`) takes this one instead. */
 .modal-wide { width: min(1100px, 92vw); }
+/* The danger dialog shape (ADR 0044): a confirm for a destructive, irreversible action — replacing
+   a workspace with a backup. The red frame and heading set it apart from an ordinary confirm. */
+.modal-danger { border-color: var(--err); }
+.modal-danger .m-head { color: var(--err); background: var(--err-soft); border-bottom-color: var(--err); }
 
 /* ---- Menu item (the tabstrip "+" dropdown, and the new-record picker's grid) ---- */
 .menu-item {

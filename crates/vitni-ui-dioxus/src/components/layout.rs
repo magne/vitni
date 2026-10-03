@@ -162,6 +162,10 @@ pub fn Modal(
     /// hold, e.g. an image.
     #[props(default)]
     wide: bool,
+    /// Whether the dialog confirms a destructive, irreversible action (`.modal-danger`, an
+    /// `alertdialog`) — e.g. replacing a workspace with a backup.
+    #[props(default)]
+    danger: bool,
     /// The accessible name for the click-away scrim (already localized).
     close_label: String,
     /// Fired when the dialog is dismissed without deciding — the scrim is clicked, or `Esc` is pressed.
@@ -174,6 +178,13 @@ pub fn Modal(
     if !open {
         return rsx! {};
     }
+    let class = match (wide, danger) {
+        (false, false) => "modal",
+        (true, false) => "modal modal-wide",
+        (false, true) => "modal modal-danger",
+        (true, true) => "modal modal-wide modal-danger",
+    };
+    let role = if danger { "alertdialog" } else { "dialog" };
     rsx! {
         div {
             class: "overlay",
@@ -186,8 +197,8 @@ pub fn Modal(
                 onclick: move |_| onclose.call(()),
             }
             div {
-                class: if wide { "modal modal-wide" } else { "modal" },
-                role: "dialog",
+                class: "{class}",
+                role: "{role}",
                 aria_modal: "true",
                 aria_label: "{title}",
                 tabindex: "-1",

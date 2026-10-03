@@ -209,7 +209,11 @@ isolated (`target/screenshots/`, a throwaway `XDG_CONFIG_HOME`) so a run cannot 
 The backup archive is the project's one compatibility surface (ADR 0041). `vitni backup create
 [--with-media] <file>` writes the event log, a portable `workspace.toml` and the media manifest into a
 `.vitni-backup` zip; `vitni backup restore <file> --new NAME PATH [--database-url URL]` restores it
-into a new workspace on either engine. The GUI has the same pair in Preferences → *Backup & restore*.
+into a new workspace on either engine, and `vitni backup restore <file> --replace --yes` restores it over
+the open workspace (ADR 0044): one transaction swaps the log and rebuilds, after a pre-restore backup
+into `backups/` that `[backup] pre_restore = false` in `workspace.toml` switches off. The GUI has the
+same in Preferences → *Backup & restore*, the replace behind a danger confirm that wants the workspace's
+name typed.
 
 - **The format** is `0.N` before 1.0 (`crates/vitni-app/src/backup/format.rs`). Bump it whenever an
   event would no longer decode from an older archive, or the archive layout changes: append a record
