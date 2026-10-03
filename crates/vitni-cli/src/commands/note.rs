@@ -3,11 +3,12 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, MutationMeta, NewNote, Provenance, Session, Workspace, create_note, list_notes, set_note_text,
-    set_note_type, show_note, tag_note,
+    AppError, MatchableKind, MutationMeta, NewNote, Provenance, Session, Workspace, create_note, list_notes,
+    set_note_text, set_note_type, show_note, tag_note,
 };
 
 use crate::args::NoteTypeArg;
+use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
 /// Note subcommands.
@@ -80,6 +81,7 @@ pub async fn run(
             )
             .await?;
             println!("{}", localizer.created(&human_id));
+            hint_similar(workspace, MatchableKind::Note, &human_id, localizer).await;
             Ok(())
         }
         NoteCmd::SetType { human_id, r#type } => {

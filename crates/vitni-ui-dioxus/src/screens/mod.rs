@@ -35,6 +35,7 @@ mod record_form;
 mod repository;
 mod research_note;
 mod shared;
+mod similar;
 mod source;
 mod tabs;
 mod tag;
@@ -132,6 +133,10 @@ pub use shared::{
     register_fields_form, restriction_display, retract_panel, retract_side_panel, row_actions_cell, source_cue,
     source_media_type_choices, tag_chips, use_attach_picker, use_attach_save, use_detail_tab, use_existing_picker,
     use_record_step, use_record_undo,
+};
+pub use similar::{
+    FindSimilarButton, FindSimilarPanel, SimilarCallbacks, SimilarHint, create_form_hint, find_similar_action,
+    similar_hint_view, similar_list_view,
 };
 pub use source::{
     SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_record_fields,

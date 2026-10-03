@@ -103,6 +103,111 @@ fn init_create_show_list_round_trip() {
 }
 
 #[test]
+fn person_create_born_records_a_dated_birth_the_person_is_primary_in() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    vitni(dir.path())
+        .args(["person", "create", "--given", "Ada", "--born", "1852-03"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created I0001"));
+
+    vitni(dir.path())
+        .args(["event", "show", "E0001"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("type: birth")
+                .and(predicate::str::contains("date: March 1852"))
+                .and(predicate::str::contains("participants: 1")),
+        );
+}
+
+#[test]
+fn person_create_rejects_a_birth_date_it_cannot_read() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    vitni(dir.path())
+        .args(["person", "create", "--given", "Ada", "--born", "spring"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--born"));
+    vitni(dir.path())
+        .args(["person", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Ada").not());
+}
+
+/// A create that looks like a stored record says so on stderr, and still creates it (ADR 0038 §8).
+#[test]
+fn creating_a_likely_duplicate_hints_at_the_stored_record_on_stderr() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    vitni(dir.path())
+        .args([
+            "person",
+            "create",
+            "--given",
+            "Guldbrand",
+            "--surname",
+            "Olsen",
+            "--born",
+            "1852",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+    vitni(dir.path())
+        .args([
+            "person",
+            "create",
+            "--given",
+            "Kari",
+            "--surname",
+            "Hansen",
+            "--born",
+            "1900",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+    vitni(dir.path())
+        .args([
+            "person",
+            "create",
+            "--given",
+            "Gulbrand",
+            "--surname",
+            "Olsøn",
+            "--born",
+            "1852",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::eq("Created I0003\n"))
+        .stderr(
+            predicate::str::contains("Possibly the same as I0001 (")
+                .and(predicate::str::contains("vitni match show person I0003 I0001"))
+                .and(predicate::str::contains("I0002").not()),
+        );
+
+    vitni(dir.path())
+        .args(["place", "create", "--type", "farm", "--name", "Nordaas"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+    vitni(dir.path())
+        .args(["place", "create", "--type", "farm", "--name", "Nordås"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("vitni match show place P0002 P0001"));
+}
+
+#[test]
 fn second_create_gets_the_next_id() {
     let dir = TempDir::new().unwrap();
     init(dir.path());

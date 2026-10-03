@@ -23,6 +23,7 @@ use super::person::{PersonCreateRecord, PersonDetailPane};
 use super::place::{PlaceCreateRecord, PlaceDetailPane};
 use super::repository::{RepositoryCreateRecord, RepositoryDetailPane};
 use super::research_note::{ResearchNoteCreateRecord, ResearchNoteDetailPane};
+use super::similar::FindSimilarPanel;
 use super::source::{SourceCreateRecord, SourceDetailPane};
 use super::tag::{TagCreateRecord, TagDetailPane};
 
@@ -121,6 +122,7 @@ pub fn DockedRecordDetail() -> Element {
 /// remounts it. See the plan/root-cause notes.
 fn detail_pane(category: Category, human_id: String) -> Element {
     let chrome = use_context::<ChromeCtx>();
+    let similar_id = human_id.clone();
     rsx! {
         div { class: "detail-slot",
             {
@@ -140,6 +142,9 @@ fn detail_pane(category: Category, human_id: String) -> Element {
                     Category::DnaMatches => rsx! { DnaMatchDetailPane { key: "{human_id}", human_id } },
                     Category::Dashboard => rsx! { p { class: "empty", "{chrome.0.record_select_prompt()}" } },
                 }
+            }
+            if category.matchable_kind().is_some() {
+                FindSimilarPanel { key: "{similar_id}-similar", category, human_id: similar_id.clone() }
             }
         }
     }

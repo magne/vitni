@@ -40,6 +40,9 @@ use vitni_app::{
     list_import_runs, match_pair_decision, match_queue, relationship, undo_match_distinction_and_merge,
 };
 use vitni_app::{
+    DraftRecord, MatchBand, MatchableKind, SimilarRecord, assess_draft, find_similar, find_similar_to_draft,
+};
+use vitni_app::{
     NewResearchNote, NewResearchNoteSubject, add_subject_to_research_note, create_research_note, list_research_notes,
     list_research_notes_about, remove_subject_from_research_note, set_research_note_body,
     set_research_note_restrictions, show_research_note, tag_research_note,
@@ -87,10 +90,10 @@ use crate::navigation::{
 use crate::view_model::{
     CitationDetail, CompareSide, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, EventDetail, FamilyDetail,
     FamilyVm, GeographyVm, MatchCompareVm, MatchQueueVm, MediaDetail, MediaRefVm, NoteDetail, PedigreeVm, PersonDetail,
-    PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, ResearchNoteDetail, SourceDetail, TagDetail,
-    citation_row, collapse_history, dna_match_row, dna_test_row, event_list_row, event_row, family_list_row,
-    family_row, media_row, note_row, person_list_row, place_row, repository_row, research_note_row, source_row,
-    tag_row,
+    PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, ResearchNoteDetail, SimilarHitVm, SimilarVm,
+    SourceDetail, TagDetail, citation_row, collapse_history, dna_match_row, dna_test_row, event_list_row, event_row,
+    family_list_row, family_row, media_row, note_row, person_list_row, place_row, repository_row, research_note_row,
+    source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -144,6 +147,8 @@ pub enum IntentOutcome {
     MatchQueue(Box<MatchQueueVm>),
     /// The shared compare view, loaded for a chosen pair.
     MatchCompare(Box<MatchCompareVm>),
+    /// The stored records similar to a record or a record being created (ADR 0038 §8).
+    Similar(Box<SimilarVm>),
     /// The Geography tool's markers, event pins, and time-slider resolution (ADR 0025 §1). The map's
     /// tile provider is deliberately absent: `dispatch` has no config access by design (workspace +
     /// localizer only), so the renderer reads the client-scope `[map]` section itself, the same way the
@@ -258,6 +263,9 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
         }
         Intent::ListMatches { filter } => list_matches(workspace, loc, filter).await,
         Intent::MatchCompare { kind, left, right } => match_compare(workspace, loc, *kind, left, right).await,
+        Intent::FindSimilar { kind, human_id } => find_similar_view(workspace, loc, *kind, human_id).await,
+        Intent::SimilarToDraft { draft } => similar_to_draft_view(workspace, loc, draft).await,
+        Intent::DraftCompare { draft, right } => draft_compare(workspace, loc, draft, right).await,
         Intent::ShowGeography { year } => show_geography_view(workspace, loc, *year).await,
     }
 }
@@ -345,6 +353,110 @@ async fn match_compare(
     let mut vm = MatchCompareVm::build(left_side, right_side, &assessment, loc);
     vm.earlier_decision = match_pair_decision(workspace, kind, left, right).await?;
     Ok(IntentOutcome::MatchCompare(Box::new(vm)))
+}
+
+/// The most records *Find similar* lists.
+const FIND_SIMILAR_LIMIT: usize = 10;
+
+/// The most records the similar-record hint names.
+const DRAFT_HINT_LIMIT: usize = 3;
+
+/// The records like the record `human_id` of `kind` (*Find similar*).
+async fn find_similar_view(
+    workspace: &Workspace,
+    loc: &Localizer,
+    kind: MatchableKind,
+    human_id: &str,
+) -> Result<IntentOutcome, AppError> {
+    let similar = find_similar(workspace, kind, human_id, MatchBand::Possible, FIND_SIMILAR_LIMIT).await?;
+    similar_view(workspace, loc, kind, similar).await
+}
+
+/// The records like `draft`, a record being created (the similar-record hint).
+async fn similar_to_draft_view(
+    workspace: &Workspace,
+    loc: &Localizer,
+    draft: &DraftRecord,
+) -> Result<IntentOutcome, AppError> {
+    let similar = find_similar_to_draft(workspace, draft, MatchBand::Possible, DRAFT_HINT_LIMIT).await?;
+    similar_view(workspace, loc, draft.kind(), similar).await
+}
+
+/// The records of `kind` in `similar`, each labelled by its live name.
+async fn similar_view(
+    workspace: &Workspace,
+    loc: &Localizer,
+    kind: MatchableKind,
+    similar: Vec<SimilarRecord>,
+) -> Result<IntentOutcome, AppError> {
+    let category = Category::from_matchable_kind(kind);
+    let mut hits = Vec::with_capacity(similar.len());
+    for record in &similar {
+        let label = match kind {
+            MatchableKind::Tag => None,
+            MatchableKind::Person
+            | MatchableKind::Family
+            | MatchableKind::Event
+            | MatchableKind::Place
+            | MatchableKind::Source
+            | MatchableKind::Repository
+            | MatchableKind::Citation
+            | MatchableKind::Media
+            | MatchableKind::Note => resolve_record_name(workspace, loc, category, &record.record.human_id).await?,
+        };
+        hits.push(SimilarHitVm::build(kind, record, label, loc));
+    }
+    Ok(IntentOutcome::Similar(Box::new(SimilarVm { hits })))
+}
+
+/// Loads the record being created, `draft`, and the stored record `right` of its kind into the shared
+/// compare view. The draft side has no id yet, so it shows the localized "New" in its place.
+async fn draft_compare(
+    workspace: &Workspace,
+    loc: &Localizer,
+    draft: &DraftRecord,
+    right: &str,
+) -> Result<IntentOutcome, AppError> {
+    let kind = draft.kind();
+    let assessment = assess_draft(workspace, draft, right).await?;
+    let right_label = resolve_record_name(workspace, loc, Category::from_matchable_kind(kind), right).await?;
+    let right_origin = record_origin(workspace, kind, right).await?;
+    let right_media = match DecidableKind::from_matchable(kind) {
+        Some(decidable) => record_media(workspace, decidable, right).await?,
+        None => Vec::new(),
+    };
+    let new_id = loc.similar_draft_side();
+    let left = CompareSide {
+        human_id: &new_id,
+        label: &draft_label(draft),
+        origin: None,
+        media: &[],
+    };
+    let right = CompareSide {
+        human_id: right,
+        label: right_label.as_deref().unwrap_or(right),
+        origin: right_origin.as_ref(),
+        media: &right_media,
+    };
+    Ok(IntentOutcome::MatchCompare(Box::new(MatchCompareVm::build(
+        left,
+        right,
+        &assessment,
+        loc,
+    ))))
+}
+
+/// How a record being created names itself: a person's name, a place's name, a source's title.
+fn draft_label(draft: &DraftRecord) -> String {
+    match draft {
+        DraftRecord::Person { name, .. } => [name.given.as_deref(), name.surname.as_deref()]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" "),
+        DraftRecord::Place { name, .. } | DraftRecord::Repository { name } => name.clone(),
+        DraftRecord::Source { title, .. } => title.clone(),
+    }
 }
 
 /// The media attached to the record `human_id` of `kind`, for its side's evidence snippet; none for a
@@ -835,6 +947,7 @@ pub async fn dispatch_person_change_set(
         },
         None => PersonTarget::New {
             human_id: request.human_id_override.clone().filter(|id| !id.is_empty()),
+            birth: request.birth,
         },
     };
     let change_set = PersonChangeSet {
@@ -2714,9 +2827,10 @@ pub async fn dispatch_family_change_set(
 fn partner_input(request: &PartnerRequest) -> PartnerInput {
     match request {
         PartnerRequest::Existing(human_id) => PartnerInput::Existing(human_id.clone()),
-        PartnerRequest::New { given, surname } => PartnerInput::New {
+        PartnerRequest::New { given, surname, birth } => PartnerInput::New {
             given: given.clone(),
             surname: surname.clone(),
+            birth: *birth,
         },
     }
 }

@@ -333,8 +333,14 @@
       <div class="stack">
         <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Given name</span><input class="in" style="flex:1;min-width:120px" value="Anna"></div>
         <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Surname</span><input class="in" style="flex:1;min-width:120px" value="Berg"></div>
+        <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Born</span><input class="in" style="flex:1;min-width:120px" value="" placeholder="1852, Mar 1852 or 14 Mar 1852"></div>
       </div>
     </div>
+    <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">A new person's <b>Born</b> is
+      saved as a Birth event the person is the primary participant in, under the same provenance block; an
+      unreadable date is flagged inline and blocks Save. It is offered on create only — once the person
+      exists, a birth is an event like any other. The picker's “+ New person” card (§6b) and a family's new
+      partner carry the same field.</div>
   </div>
 
   <!-- 6b · Nested drafts -->
@@ -411,6 +417,61 @@
       </div>
       <div class="sp-foot"><button class="btn">Cancel</button><button class="btn primary">Save</button></div>
     </div>
+  </div>
+
+  <!-- 6c · Similar records -->
+  <h2 id="similar">6c · Similar records — a hint, never a block</h2>
+  <p class="muted">While a person, place, source or repository is being created, the matching engine
+    (ADR 0038 §8) compares what has been typed with the stored records of its kind. When one is at least
+    a <i>possible</i> match, a dashed, warn-tinted <b><span class="mono">.similar-hint</span></b> appears
+    under the record's fields: <i>Possibly the same as Guldbrand Olsen, I0042 (87%)</i>, its band, and two
+    actions. <b>Compare</b> opens the draft beside the stored record in the shared compare grid
+    (<a href="matches.html">matches</a>) — read-only, since there is nothing to decide about a record that
+    does not exist yet. <b>Use existing</b> drops the draft and opens the stored record in its place; in a
+    “+ New …” card (§6b) or a family's new-partner card it links the stored record instead. The hint never
+    disables Save: two people can share a name and a birth year, and the operator decides. It updates as
+    the draft changes and names at most three records, the most similar first.</p>
+  <div class="specimen">
+    <div class="label">New person — typed name and birth year match a stored person</div>
+    <div class="card" style="margin-bottom:0">
+      <div class="stack">
+        <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Given name</span><input class="in" style="flex:1;min-width:120px" value="Gulbrand"></div>
+        <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Surname</span><input class="in" style="flex:1;min-width:120px" value="Olsøn"></div>
+        <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Born</span><input class="in" style="flex:1;min-width:120px" value="1852"></div>
+      </div>
+    </div>
+    <div class="similar-hint" role="status">
+      <div class="similar-hint-row">
+        <span class="similar-hint-line">Possibly the same as Guldbrand Olsen, I0042 (87%)</span>
+        <span class="badge">probable match</span>
+        <span class="similar-hint-actions"><button class="btn sm">Compare</button><button class="btn sm">Use existing</button></span>
+      </div>
+      <div class="similar-hint-compare">
+        <p class="muted" style="margin:0 0 var(--sp-3)">Matched at 87% · probable match · engine 4</p>
+        <div class="card" style="padding:0">
+          <div class="merge-grid">
+            <div class="merge-col survivor">
+              <div style="font-weight:700;font-size:var(--fs-lg)">Gulbrand Olsøn</div>
+              <div class="muted" style="font-size:var(--fs-xs)"><span class="badge">New</span> draft · not saved</div>
+            </div>
+            <div class="merge-pick" aria-hidden="true">⟷</div>
+            <div class="merge-col">
+              <div style="font-weight:700;font-size:var(--fs-lg)">Guldbrand Olsen</div>
+              <div class="muted" style="font-size:var(--fs-xs)"><span class="badge">I0042</span></div>
+            </div>
+            <div class="merge-col survivor"><div class="field-label">Given name</div><div>Gulbrand</div></div>
+            <div class="merge-pick"><span class="match-mark" data-outcome="partial" title="Similar">≈</span></div>
+            <div class="merge-col"><div class="field-label">Given name</div><div>Guldbrand</div><div class="match-reasons muted">Similar given name (+4.9)</div></div>
+            <div class="merge-col survivor"><div class="field-label">Birth</div><div>1852</div></div>
+            <div class="merge-pick"><span class="match-mark" data-outcome="agree" title="Same">=</span></div>
+            <div class="merge-col"><div class="field-label">Birth</div><div>1852</div><div class="match-reasons muted">Same birth (+5.0)</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">The hint is a
+      <span class="mono">role="status"</span> region, so a screen reader announces it without moving focus
+      out of the field being typed in. A failed lookup shows nothing — the form works without it.</div>
   </div>
 
   <!-- 7 · Validation -->

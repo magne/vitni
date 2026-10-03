@@ -55,6 +55,7 @@ fn picker(state: Signal<PickerState>, options: PickerOptions, allow_new: bool) -
             name: "partner".to_owned(),
             entity_label: "person".to_owned(),
             allow_new,
+            similar: None,
         },
         state,
         options,

@@ -34,8 +34,8 @@ use vitni_ui::{
     Category, CitationChangeSetRequest, DataQualityVm, DecideMatch, DnaMatchChangeSetRequest, DnaTestChangeSetRequest,
     EventChangeSetRequest, FamilyChangeSetRequest, ImportTargetChoice, Intent, IntentOutcome, Localizer,
     MediaChangeSetRequest, MergeFailure, NewRecordRequest, NoteChangeSetRequest, Panel, PersonChangeSetRequest,
-    PlaceChangeSetRequest, ProvenanceDraft, RepositoryChangeSetRequest, ResearchNoteChangeSetRequest, RowVm,
-    SourceChangeSetRequest, SubmitResult, TagChangeSetRequest, list_intent,
+    PickerHit, PlaceChangeSetRequest, ProvenanceDraft, RepositoryChangeSetRequest, ResearchNoteChangeSetRequest, RowVm,
+    SimilarHitVm, SourceChangeSetRequest, SubmitResult, TagChangeSetRequest, list_intent, query_draft,
 };
 
 use crate::detail_aggregates::for_each_detail_aggregate;
@@ -578,6 +578,41 @@ pub async fn load_picker_rows(services: Services, category: Category) -> Result<
         ScreenData::Loaded(IntentOutcome::List(rows)) => Ok(rows),
         ScreenData::Loaded(_) => Ok(Vec::new()),
         ScreenData::Error(message) => Err(message),
+    }
+}
+
+/// The similar records `intent` (an [`Intent::FindSimilar`] or [`Intent::SimilarToDraft`]) lists, or the
+/// localized error.
+pub async fn load_similar(services: Services, intent: Intent) -> Result<Vec<SimilarHitVm>, String> {
+    match load_screen(services, intent).await {
+        ScreenData::Loaded(IntentOutcome::Similar(similar)) => Ok(similar.hits),
+        ScreenData::Loaded(_) => Ok(Vec::new()),
+        ScreenData::Error(message) => Err(message),
+    }
+}
+
+/// The stored records of `category` the matching engine ranks for a picker's typed `query`, the most
+/// similar first — none when the query names no record of `category` ([`query_draft`]). Best-effort: a
+/// failure is logged and ranks nothing, leaving the picker's text filter.
+pub async fn load_picker_hits(services: Services, category: Category, query: &str) -> Vec<PickerHit> {
+    let Some(draft) = query_draft(category, query) else {
+        return Vec::new();
+    };
+    match load_screen(services, Intent::SimilarToDraft { draft }).await {
+        ScreenData::Loaded(IntentOutcome::Similar(similar)) => similar
+            .hits
+            .into_iter()
+            .map(|hit| PickerHit {
+                human_id: hit.record.human_id,
+                title: hit.record.label,
+                percent: hit.percent,
+            })
+            .collect(),
+        ScreenData::Loaded(_) => Vec::new(),
+        ScreenData::Error(error) => {
+            tracing::warn!(%error, ?category, "could not rank a picker's records by similarity");
+            Vec::new()
+        }
     }
 }
 

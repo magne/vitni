@@ -1,6 +1,7 @@
 use vitni_ui::{DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY};
 
 use super::prelude::*;
+use super::similar::find_similar_action;
 use crate::components::{ColorPicker, IconButton};
 
 /// The label column width of every tag record row (`docs/mockups/tag.html:93-95`, `:133-143`) — one
@@ -186,6 +187,7 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::MatchQueue(_)
             | IntentOutcome::MatchCompare(_)
+            | IntentOutcome::Similar(_)
             | IntentOutcome::Geography(_)
             | IntentOutcome::Dashboard(_)
             | IntentOutcome::ResearchNoteDetail(_)
@@ -223,7 +225,7 @@ fn tag_detail(
                 BadgeSpec::text(loc.tag_priority_badge(priority)),
             ],
             extras: rsx! {},
-            actions: record_head_actions(&labels, edit, rsx! {}, on_save),
+            actions: record_head_actions(&labels, edit, find_similar_action(loc, Category::Tags, &detail.id, &detail.title), on_save),
             tabs: tab_items,
             active,
             {tag_tab_content(loc, detail, &active_tab, edit, name_touched, picker_open)}

@@ -127,6 +127,36 @@
     and collapses the card to a picked chip, so a retried Save only re-attaches — it never creates the
     record twice. A picker reloads its options after every create, edit or undo, so a record created
     elsewhere while the panel stays open is pickable in it — no reopen (<a href="record-editing.html">record-editing</a> §6).</p>
+  <p class="muted"><b>Pickers rank by similarity.</b> A picker over people, places, sources or repositories
+    reads the typed query as the record it would create and asks the matching engine (ADR 0038 §8) which
+    stored records it resembles. Those come first, the most similar on top, each with its score
+    (<span class="mono">.row-score</span>) — including a spelling variant the text filter alone would miss —
+    then the plain text matches. Choosing “+ New …” anyway is still allowed: the new card carries the same
+    <a href="record-editing.html#similar">similar-record hint</a> as a create form, whose
+    <b>Use existing</b> links the stored record instead of creating one.</p>
+  <div class="specimen">
+    <div class="label">Partner picker — “Gulbrand Olsøn” ranks the stored Guldbrand Olsen first</div>
+    <div class="field" style="max-width:520px;min-height:200px"><label>Partner</label>
+      <div class="picker-anchor">
+      <input class="in" value="Gulbrand Olsøn">
+      <div class="picker-results" role="listbox">
+        <button class="row sel" role="option" aria-selected="true">
+          <div class="avatar" aria-hidden="true">GO</div>
+          <div class="row-main"><div class="row-title">Guldbrand Olsen</div><div class="row-sub">b. 1852 · male</div></div>
+          <div class="row-score">87%</div>
+          <div class="row-id">I0042</div>
+        </button>
+        <button class="row" role="option" aria-selected="false">
+          <div class="avatar" aria-hidden="true">GO</div>
+          <div class="row-main"><div class="row-title">Gulbrand Olsen</div><div class="row-sub">b. 1879 · male</div></div>
+          <div class="row-score">58%</div>
+          <div class="row-id">I0311</div>
+        </button>
+        <button class="picker-new" type="button">+ New person “Gulbrand Olsøn”</button>
+      </div>
+      </div>
+    </div>
+  </div>
   <p class="muted"><b>Links that carry a role pick it in the same dialog.</b> When the attachment is a
     typed relationship — a person joining an event (<span class="mono">ParticipantRole</span>), a child
     joining a family (<span class="mono">ChildParentRelationship</span> per parent) — the dialog adds the

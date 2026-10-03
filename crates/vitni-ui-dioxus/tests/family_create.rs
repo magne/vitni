@@ -47,6 +47,7 @@ fn partner_picker(state: Signal<PickerState>) -> RecordPicker {
             name: "family-partner".to_owned(),
             entity_label: "person".to_owned(),
             allow_new: true,
+            similar: None,
         },
         state,
         options: people(),
@@ -132,6 +133,7 @@ fn new_chip_view() -> Element {
     draft.add_new_partner(NewPersonFields {
         given: "Grace".to_owned(),
         surname: "Hopper".to_owned(),
+        born: String::new(),
     });
     fields(draft, PickerState::default(), None)
 }

@@ -3,15 +3,16 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, DateParts, MediaRefInput, MutationMeta, NewPlace, PlaceSuccessionInput, Provenance, Session, Workspace,
-    add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by, assert_place_succession,
-    attach_place_media, attach_place_note, create_place, gregorian_date, list_places, set_place_code, set_place_type,
-    show_place, tag_place,
+    AppError, DateParts, MatchableKind, MediaRefInput, MutationMeta, NewPlace, PlaceSuccessionInput, Provenance,
+    Session, Workspace, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
+    assert_place_succession, attach_place_media, attach_place_note, create_place, gregorian_date, list_places,
+    set_place_code, set_place_type, show_place, tag_place,
 };
 use vitni_core::geo::{GeoCoordinates, Microdegrees};
 use vitni_core::ids::{MediaId, NoteId};
 
 use crate::args::{PlaceTypeArg, SuccessionKindArg};
+use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
 /// Place subcommands.
@@ -173,6 +174,7 @@ pub async fn run(
             )
             .await?;
             println!("{}", localizer.created(&human_id));
+            hint_similar(workspace, MatchableKind::Place, &human_id, localizer).await;
             Ok(())
         }
         PlaceCmd::SetType { human_id, r#type } => {

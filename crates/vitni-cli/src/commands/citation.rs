@@ -2,12 +2,14 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    AppError, DateParts, EvidenceAnalysis, MediaRefInput, MutationMeta, NewCitation, Provenance, Session, Workspace,
-    add_citation_attribute, assert_citation_date, attach_citation_media, attach_citation_note, create_citation,
-    list_citations, set_citation_confidence, set_citation_evidence_analysis, set_page, show_citation, tag_citation,
+    AppError, DateParts, EvidenceAnalysis, MatchableKind, MediaRefInput, MutationMeta, NewCitation, Provenance,
+    Session, Workspace, add_citation_attribute, assert_citation_date, attach_citation_media, attach_citation_note,
+    create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis, set_page, show_citation,
+    tag_citation,
 };
 
 use crate::args::{ConfidenceArg, EvidenceKindArg, InformationKindArg, SourceQualityArg};
+use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
 /// Citation subcommands.
@@ -144,6 +146,7 @@ pub async fn run(
             )
             .await?;
             println!("{}", localizer.created(&human_id));
+            hint_similar(workspace, MatchableKind::Citation, &human_id, localizer).await;
             Ok(())
         }
         CitationCmd::SetPage { human_id, page } => {

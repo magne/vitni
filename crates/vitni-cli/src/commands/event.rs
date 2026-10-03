@@ -3,13 +3,14 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, DateParts, MediaRefInput, MutationMeta, NewEvent, Provenance, Session, Workspace, add_event_citation,
-    assert_event_date, attach_event_media, attach_event_note, create_event, link_place, list_events,
-    set_event_description, set_event_type, show_event, tag_event,
+    AppError, DateParts, MatchableKind, MediaRefInput, MutationMeta, NewEvent, Provenance, Session, Workspace,
+    add_event_citation, assert_event_date, attach_event_media, attach_event_note, create_event, link_place,
+    list_events, set_event_description, set_event_type, show_event, tag_event,
 };
 use vitni_core::ids::{MediaId, NoteId};
 
 use crate::args::EventTypeArg;
+use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
 /// Event subcommands.
@@ -134,6 +135,7 @@ pub async fn run(
             )
             .await?;
             println!("{}", localizer.created(&human_id));
+            hint_similar(workspace, MatchableKind::Event, &human_id, localizer).await;
             Ok(())
         }
         EventCmd::SetType { human_id, r#type } => {

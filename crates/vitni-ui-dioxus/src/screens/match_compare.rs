@@ -29,7 +29,8 @@ const FOCUS_COMPARE: &str = "document.getElementById('match-compare')?.focus({ p
 
 /// The match-compare view over `vm`, wrapping the host's `children` (notices and the decision foot).
 /// Takes focus when it mounts, so its keys work without a click; `ondecide` fires with the decision
-/// a key makes.
+/// a key makes. Without `ondecide` the view is read-only — a record being created has nothing to decide
+/// about yet — and the keys pass through.
 #[component]
 pub fn MatchCompare(
     /// The pair, its rows and the assessment.
@@ -38,8 +39,8 @@ pub fn MatchCompare(
     left_caption: String,
     /// What a *Same* decision does to the right record (e.g. "becomes a persona").
     right_caption: String,
-    /// Fired with the decision a key makes.
-    ondecide: EventHandler<CompareDecision>,
+    /// Fired with the decision a key makes; `None` for a read-only compare.
+    ondecide: Option<EventHandler<CompareDecision>>,
     /// The host's notices and decision foot.
     children: Element,
 ) -> Element {
@@ -56,7 +57,9 @@ pub fn MatchCompare(
                 });
             },
             onkeydown: move |event| {
-                if let Some(decision) = decision_for(&event) {
+                if let Some(ondecide) = ondecide
+                    && let Some(decision) = decision_for(&event)
+                {
                     event.prevent_default();
                     event.stop_propagation();
                     ondecide.call(decision);

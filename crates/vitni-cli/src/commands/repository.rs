@@ -3,13 +3,14 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    Address, AppError, MutationMeta, NewRepository, Provenance, Session, Url, Workspace, add_repository_address,
-    add_repository_url, attach_repository_note, create_repository, list_repositories, set_repository_name,
-    set_repository_type, show_repository, tag_repository,
+    Address, AppError, MatchableKind, MutationMeta, NewRepository, Provenance, Session, Url, Workspace,
+    add_repository_address, add_repository_url, attach_repository_note, create_repository, list_repositories,
+    set_repository_name, set_repository_type, show_repository, tag_repository,
 };
 use vitni_core::ids::NoteId;
 
 use crate::args::RepositoryTypeArg;
+use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
 /// Repository subcommands.
@@ -124,6 +125,7 @@ pub async fn run(
             )
             .await?;
             println!("{}", localizer.created(&human_id));
+            hint_similar(workspace, MatchableKind::Repository, &human_id, localizer).await;
             Ok(())
         }
         RepositoryCmd::SetType { human_id, r#type } => {

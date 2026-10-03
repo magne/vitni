@@ -11,7 +11,7 @@ use std::fmt;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use vitni_app::{RecentItem, ThemeMode, push_recent};
+use vitni_app::{DecidableKind, RecentItem, ThemeMode, push_recent};
 use vitni_ui::{
     Category, Destination, NavHistory, NavLocation, NavRecord, ProvenanceDraft, RecordDraft, RecordRef, Tool,
 };
@@ -462,6 +462,13 @@ pub struct NavState {
     /// Map tab's "Open in Geography ↗"), or `None`. Set by [`Self::open_geography_focused`];
     /// `GeographyScreen` consumes and clears it once, on mount.
     pub geography_focus: Signal<Option<(String, String)>>,
+    /// The pair the Matches tool should open in its compare view (a *Find similar* hit's *Compare*), or
+    /// `None`. Set by [`Self::open_match_compare`]; `MatchesScreen` consumes and clears it — the same
+    /// one-shot handoff as [`Self::geography_focus`].
+    pub match_focus: Signal<Option<(DecidableKind, String, String)>>,
+    /// The record whose *Find similar* panel is open, or `None`. Set by [`Self::show_similar`]; the
+    /// record's detail slot renders the panel while it names that record.
+    pub similar_panel: Signal<Option<RecordRef>>,
     /// The `(category, human_id)` a fresh research-note draft should be pre-seeded with as its subject
     /// (the "Research notes" reverse tab's Add on a Person / Family / Event / Place), addressed at the
     /// [`DraftId`] it was opened for — or `None`. Set by [`Self::open_research_note_about`];
@@ -565,6 +572,8 @@ impl NavState {
             notice: Signal::new(None),
             notice_seq: Signal::new(0),
             geography_focus: Signal::new(None),
+            match_focus: Signal::new(None),
+            similar_panel: Signal::new(None),
             research_note_subject: Signal::new(None),
             pending_close: Signal::new(None),
             edit_drafts: Signal::new(BTreeMap::new()),
@@ -806,6 +815,24 @@ impl NavState {
     pub fn open_geography_focused(&mut self, human_id: String, name: String) {
         self.geography_focus.set(Some((human_id, name)));
         self.go_to(Destination::Tool(Tool::Geography));
+    }
+
+    /// Navigates to the Matches tool with the pair `left`, `right` of `kind` open in its compare view:
+    /// stashes the pair in [`Self::match_focus`], which `MatchesScreen` takes, then navigates there.
+    pub fn open_match_compare(&mut self, kind: DecidableKind, left: String, right: String) {
+        self.similar_panel.set(None);
+        self.match_focus.set(Some((kind, left, right)));
+        self.go_to(Destination::Tool(Tool::Matches));
+    }
+
+    /// Opens the *Find similar* panel over `record`.
+    pub fn show_similar(&mut self, record: RecordRef) {
+        self.similar_panel.set(Some(record));
+    }
+
+    /// Closes the *Find similar* panel.
+    pub fn close_similar(&mut self) {
+        self.similar_panel.set(None);
     }
 
     /// Opens `record` as a tab — focusing the existing tab with the same `(category, human_id)` or

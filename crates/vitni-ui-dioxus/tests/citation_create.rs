@@ -31,6 +31,7 @@ fn view(seed: CitationDraft) -> Element {
             name: "citation-source".to_owned(),
             entity_label: "source".to_owned(),
             allow_new: true,
+            similar: None,
         },
         state: use_signal(PickerState::default),
         options: PickerOptions::Ready(Vec::new()),

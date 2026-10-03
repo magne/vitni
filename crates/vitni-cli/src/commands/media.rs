@@ -3,12 +3,13 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, DateParts, MutationMeta, NewMedia, Provenance, Session, Workspace, add_media_attribute,
+    AppError, DateParts, MatchableKind, MutationMeta, NewMedia, Provenance, Session, Workspace, add_media_attribute,
     add_media_citation, assert_media_date, attach_media_note, create_media, list_media, set_media_checksum,
     set_media_file_path, set_media_web_path, show_media, tag_media,
 };
 use vitni_core::ids::NoteId;
 
+use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
 /// Media subcommands.
@@ -127,6 +128,7 @@ pub async fn run(
             )
             .await?;
             println!("{}", localizer.created(&human_id));
+            hint_similar(workspace, MatchableKind::Media, &human_id, localizer).await;
             Ok(())
         }
         MediaCmd::SetPath { human_id, path } => {

@@ -16,9 +16,9 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use vitni_app::{
-    Address, Age, AssociationRole, Attribute, Centimorgans, ChildParentRelationship, DateInput, DnaGenomeBuild,
-    DnaProvider, DnaSegment, DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType,
-    ParticipantRole, PercentShared, PersonNameParts, PlaceGeometry, PlaceType, Rect, RepositoryType, Sex,
+    Address, Age, AssociationRole, Attribute, Centimorgans, ChildParentRelationship, DateInput, DateParts,
+    DnaGenomeBuild, DnaProvider, DnaSegment, DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates,
+    NoteType, ParticipantRole, PercentShared, PersonNameParts, PlaceGeometry, PlaceType, Rect, RepositoryType, Sex,
     SourceMediaType, SuccessionKind, Url,
 };
 use vitni_app::{DecidableKind, IdentityDecision, MatchEvidence, MatchQueueFilter, Provenance};
@@ -262,6 +262,26 @@ impl Category {
             MatchableKind::Media => Self::Media,
             MatchableKind::Note => Self::Notes,
             MatchableKind::Tag => Self::Tags,
+        }
+    }
+
+    /// The kind the matching engine matches records of this category as, or `None` for a category it
+    /// does not match (the inverse of [`Self::from_matchable_kind`]).
+    #[must_use]
+    pub fn matchable_kind(self) -> Option<vitni_app::MatchableKind> {
+        use vitni_app::MatchableKind;
+        match self {
+            Self::People => Some(MatchableKind::Person),
+            Self::Families => Some(MatchableKind::Family),
+            Self::Events => Some(MatchableKind::Event),
+            Self::Places => Some(MatchableKind::Place),
+            Self::Sources => Some(MatchableKind::Source),
+            Self::Repositories => Some(MatchableKind::Repository),
+            Self::Citations => Some(MatchableKind::Citation),
+            Self::Media => Some(MatchableKind::Media),
+            Self::Notes => Some(MatchableKind::Note),
+            Self::Tags => Some(MatchableKind::Tag),
+            Self::Dashboard | Self::ResearchNotes | Self::DnaTests | Self::DnaMatches => None,
         }
     }
 
@@ -877,6 +897,27 @@ pub enum Intent {
         /// The right record's `human_id`.
         right: String,
     },
+    /// List the stored records the engine judges similar to the record `human_id` of `kind` (*Find
+    /// similar*, ADR 0038 §8).
+    FindSimilar {
+        /// The record's kind.
+        kind: vitni_app::MatchableKind,
+        /// The record's user-facing id (a tag's aggregate id).
+        human_id: String,
+    },
+    /// List the stored records the engine judges similar to a record being created — the similar-record
+    /// hint (ADR 0038 §8).
+    SimilarToDraft {
+        /// The record being created.
+        draft: vitni_app::DraftRecord,
+    },
+    /// Load a record being created and a stored record of its kind into the shared compare view.
+    DraftCompare {
+        /// The record being created: the left side.
+        draft: vitni_app::DraftRecord,
+        /// The stored record's `human_id`: the right side.
+        right: String,
+    },
     /// Load the Geography tool's markers and event pins (ADR 0025 §1), resolved **as of** `year`
     /// (ADR 0026 §1) — the current/primary resolution when `None`, the time slider's selected year
     /// otherwise.
@@ -1149,6 +1190,8 @@ pub struct PersonChangeSetRequest {
     pub new_sources: Vec<DraftNewSource>,
     /// New citations created inside the dialog (referenced by the name citation).
     pub new_citations: Vec<DraftNewCitation>,
+    /// The birth date a new person is created with; ignored on edit.
+    pub birth: Option<DateParts>,
 }
 
 /// A request to mutate a citation, dispatched to a `vitni-app` command use-case via
@@ -2551,6 +2594,8 @@ pub enum PartnerRequest {
         given: Option<String>,
         /// The surname, if any.
         surname: Option<String>,
+        /// The birth date, if any.
+        birth: Option<DateParts>,
     },
 }
 

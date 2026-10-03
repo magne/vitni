@@ -69,6 +69,7 @@ pub fn DnaTestCreateRecord(draft_id: DraftId) -> Element {
             name: "dna-test-person".to_owned(),
             entity_label: loc.picker_entity(Category::People),
             allow_new: false,
+            similar: None,
         },
         state: person_state,
         options: picker_options(person_rows.read_unchecked().as_ref()),
@@ -485,6 +486,7 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::MatchQueue(_)
             | IntentOutcome::MatchCompare(_)
+            | IntentOutcome::Similar(_)
             | IntentOutcome::Geography(_)
             | IntentOutcome::Dashboard(_)
             | IntentOutcome::ResearchNoteDetail(_)

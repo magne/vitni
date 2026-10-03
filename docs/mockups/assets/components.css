@@ -1205,3 +1205,26 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 .media-full { display: block; width: 100%; height: 100%; object-fit: contain; }
 .media-caption { margin-top: 6px; font-size: var(--fs-xs); }
 .media-preview { height: 320px; }
+
+/* Similar records (ADR 0038 §8): the hint under a record being created, the engine score on a ranked
+   picker row, and the Find similar list. Advice, never a block: warn-tinted, beside the form. */
+.similar-hint {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  border: 1px dashed var(--warn); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  margin-block: var(--sp-3);
+}
+.similar-hint-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); font-size: var(--fs-sm); }
+.similar-hint-line { flex: 1; min-width: 200px; }
+.similar-hint-actions { display: inline-flex; gap: var(--sp-2); }
+.similar-hint-compare { margin-top: var(--sp-2); }
+.row .row-score {
+  font-size: var(--fs-xs); font-weight: 600; color: var(--warn); white-space: nowrap; flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.similar-list { display: flex; flex-direction: column; gap: var(--sp-3); }
+.similar-item { display: flex; flex-direction: column; gap: var(--sp-2); }
+.similar-item-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
+.similar-item-title { font-weight: 600; }
+.similar-item .row-id { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+.similar-item .row-score { font-size: var(--fs-xs); font-weight: 600; color: var(--warn); font-variant-numeric: tabular-nums; }

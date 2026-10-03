@@ -49,6 +49,7 @@ use vitni_core::note::NoteView;
 use vitni_core::origin::RecordOrigin;
 use vitni_core::person::PersonView;
 use vitni_core::place::PlaceView;
+use vitni_core::place_name::PlaceName;
 use vitni_core::repository::RepositoryView;
 use vitni_core::source::SourceView;
 use vitni_core::tag::TagView;
@@ -969,6 +970,15 @@ impl PlaceLookup {
             }
         }
         found
+    }
+}
+
+/// A place name as a record gives it: no language, no date.
+pub(crate) fn place_name(text: &str) -> PlaceName {
+    PlaceName {
+        text: text.to_owned(),
+        language: None,
+        date: None,
     }
 }
 

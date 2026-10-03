@@ -1,4 +1,5 @@
 use super::prelude::*;
+use super::similar::{create_form_hint, find_similar_action};
 
 /// The create-mode person record (`record-editing.html` §6): an empty draft rendered in edit mode in
 /// the detail pane, with Cancel/Save in the sticky header. The scalar identity fields (editable human
@@ -117,6 +118,7 @@ pub fn PersonCreateRecord(draft_id: DraftId) -> Element {
             name: "name-citation".to_owned(),
             entity_label: loc.picker_entity(Category::Citations),
             allow_new: true,
+            similar: None,
         },
         state: citation_state,
         options: picker_options(citation_rows.read_unchecked().as_ref()),
@@ -133,6 +135,7 @@ pub fn PersonCreateRecord(draft_id: DraftId) -> Element {
             name: "citation-source".to_owned(),
             entity_label: loc.picker_entity(Category::Sources),
             allow_new: true,
+            similar: Some(Category::Sources),
         },
         state: source_state,
         options: picker_options(source_rows.read_unchecked().as_ref()),
@@ -150,6 +153,7 @@ pub fn PersonCreateRecord(draft_id: DraftId) -> Element {
         actions,
         rsx! {
             {person_record_fields(loc, record)}
+            {create_form_hint(draft, draft_id, nav)}
             {person_name_citation_field(loc, draft, &citation_picker, &source_picker)}
             h4 { class: "field-label", "{loc.section_tags()}" }
             {tag_multiselect(loc, tags_resource, selected_tags)}
@@ -275,8 +279,36 @@ pub fn person_record_fields(loc: &Localizer, record: RecordEditState<PersonDraft
                 {person_name_type_field(loc, editing, record)}
                 {person_name_text_fields(loc, editing, record)}
                 {person_sex_field(loc, editing, record)}
+                {person_born_field(loc, editing, record)}
                 {record_restrictions_field(loc, record, PERSON_LABEL_WIDTH)}
             }
+        }
+    }
+}
+
+/// The birth date of a person being created, recorded as their Birth event on Save; flagged when it
+/// cannot be read. Absent once the person exists — a birth is then an event of its own.
+fn person_born_field(loc: &Localizer, editing: bool, record: RecordEditState<PersonDraft>) -> Element {
+    let mut draft = record.draft;
+    let current = draft();
+    if current.existing_human_id.is_some() {
+        return rsx! {};
+    }
+    let error = vitni_ui::parse_birth(&current.born)
+        .is_err()
+        .then(|| loc.date_invalid_error());
+    rsx! {
+        DraftText {
+            label: loc.field_label("born"),
+            name: "born".to_owned(),
+            label_width: PERSON_LABEL_WIDTH,
+            editing,
+            value: current.born.clone(),
+            original: String::new(),
+            reset_label: loc.action_reset_field(&loc.field_label("born")),
+            error,
+            oninput: move |value: String| draft.write().born = value,
+            onreset: move |()| draft.write().born = String::new(),
         }
     }
 }
@@ -732,7 +764,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
                 on_tag_remove,
                 media_state,
             };
-            person_detail(&state, &nav, detail, pane, &callbacks, &human_id)
+            person_detail(&state, detail, pane, &callbacks, &human_id)
         }
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
@@ -753,6 +785,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::MatchQueue(_)
             | IntentOutcome::MatchCompare(_)
+            | IntentOutcome::Similar(_)
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
@@ -799,11 +832,10 @@ struct PersonCallbacks {
 }
 
 /// Renders a loaded person's detail container: header (avatar, vital subtitle, the restrictions in
-/// force, Compare + the sticky-header record Edit/Cancel/Save), the tab strip, the active tab's
+/// force, *Find similar* + the sticky-header record Edit/Cancel/Save), the tab strip, the active tab's
 /// content, and the collection-row side panel.
 fn person_detail(
     state: &AppState,
-    nav: &NavState,
     detail: &PersonDetail,
     pane: PersonPane,
     callbacks: &PersonCallbacks,
@@ -832,14 +864,10 @@ fn person_detail(
         Some(vitals) => format!("{vitals} · {}", detail.sex),
         None => detail.sex.clone(),
     };
-    let compare_label = loc.action_button(ActionLabel::Compare);
-    let mut compare_nav = *nav;
     let labels = RecordActionLabels::resolve(loc);
-    // Compare is the view-mode extra action, alongside the record Edit; Save/Cancel replace both in
-    // edit mode (`record_head_actions`).
-    let extra_actions = rsx! {
-        Button { label: compare_label, variant: ButtonVariant::Default, small: true, onclick: move |_| compare_nav.go_to(Destination::Tool(Tool::Matches)) }
-    };
+    // *Find similar* is the view-mode extra action, alongside the record Edit; Save/Cancel replace both
+    // in edit mode (`record_head_actions`).
+    let extra_actions = find_similar_action(loc, Category::People, &detail.human_id, &detail.name);
     rsx! {
         DetailContainer {
             title: detail.name.clone(),

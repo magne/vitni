@@ -126,6 +126,7 @@ fn event_ctx(record: RecordEditState<EventDraft>) -> EventEditCtx {
                 name: "event-place".to_owned(),
                 entity_label: "place".to_owned(),
                 allow_new: false,
+                similar: None,
             },
             state: use_signal(PickerState::default),
             options: PickerOptions::Ready(Vec::new()),

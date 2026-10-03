@@ -2,7 +2,7 @@ use super::{
     ActionLabel, AttachedRefVm, ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType,
     FamilyChangeSetRequest, FamilyEdit, FamilyForPerson, FamilyRow, FamilySummary, GenealogicalDate, HistoryEntryVm,
     Localizer, MediaRefVm, NewPersonFields, PartnerRequest, PersonFamilyRole, RecordDraft, RestrictionKind, RowVm,
-    TagRef, citation_ref_from_ref, line_label, non_blank,
+    TagRef, citation_ref_from_ref, line_label, non_blank, parse_birth,
 };
 use crate::picker::PickerSelection;
 
@@ -531,6 +531,7 @@ fn partner_request(partner: &PartnerInput) -> PartnerRequest {
         PartnerInput::New(fields) => PartnerRequest::New {
             given: non_blank(&fields.given),
             surname: non_blank(&fields.surname),
+            birth: parse_birth(&fields.born).ok().flatten(),
         },
     }
 }
@@ -593,6 +594,7 @@ mod family_draft_tests {
         NewPersonFields {
             given: given.to_owned(),
             surname: surname.to_owned(),
+            born: String::new(),
         }
     }
 
@@ -674,6 +676,7 @@ mod family_draft_tests {
             PartnerRequest::New {
                 given: Some("Grace".to_owned()),
                 surname: None,
+                birth: None,
             },
             "a blank surname collapses to None",
         );
@@ -805,6 +808,7 @@ mod family_display_label_tests {
         draft.add_new_partner(NewPersonFields {
             given: "Bob".to_owned(),
             surname: "Byron".to_owned(),
+            born: String::new(),
         });
         assert_eq!(draft.display_label(), Some("Ada Lovelace & Bob Byron".to_owned()));
     }
@@ -815,6 +819,7 @@ mod family_display_label_tests {
             partners: vec![PartnerInput::New(NewPersonFields {
                 given: String::new(),
                 surname: "Byron".to_owned(),
+                born: String::new(),
             })],
             ..FamilyDraft::new()
         };

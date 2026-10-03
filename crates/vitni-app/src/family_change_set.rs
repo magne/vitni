@@ -16,6 +16,7 @@ use vitni_core::provenance::EvidenceRef;
 use vitni_db::Store;
 
 use crate::error::AppError;
+use crate::event::DateParts;
 use crate::person::PersonNameParts;
 use crate::person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
 use crate::session::Session;
@@ -34,6 +35,8 @@ pub enum PartnerInput {
         given: Option<String>,
         /// The surname, if any.
         surname: Option<String>,
+        /// The birth date, if any: a Birth event the new person is primary in.
+        birth: Option<DateParts>,
     },
 }
 
@@ -61,6 +64,8 @@ enum ResolvedPartner {
         given: Option<String>,
         /// The surname, if any.
         surname: Option<String>,
+        /// The birth date, if any: a Birth event the new person is primary in.
+        birth: Option<DateParts>,
     },
 }
 
@@ -97,8 +102,9 @@ pub async fn commit_family_change_set(
     for partner in partners {
         partner_ids.push(match partner {
             ResolvedPartner::Existing(person_id) => person_id,
-            ResolvedPartner::New { given, surname } => {
-                create_partner_person(workspace, session, given, surname, &change_set.provenance).await?
+            ResolvedPartner::New { given, surname, birth } => {
+                let name = PersonNameParts::simple(given, surname);
+                create_partner_person(workspace, session, name, birth, &change_set.provenance).await?
             }
         });
     }
@@ -147,30 +153,31 @@ async fn resolve_partners(store: &Store, partners: &[PartnerInput]) -> Result<Ve
                 let person_id = crate::person::resolve_person_id_public(store, human_id).await?;
                 resolved.push(ResolvedPartner::Existing(person_id));
             }
-            PartnerInput::New { given, surname } => resolved.push(ResolvedPartner::New {
+            PartnerInput::New { given, surname, birth } => resolved.push(ResolvedPartner::New {
                 given: given.clone(),
                 surname: surname.clone(),
+                birth: *birth,
             }),
         }
     }
     Ok(resolved)
 }
 
-/// Creates an inline partner via a minimal name-only person change-set carrying the family's
-/// provenance, returning the new person's aggregate id.
+/// Creates an inline partner via a minimal person change-set — a name and an optional birth — carrying
+/// the family's provenance, returning the new person's aggregate id.
 async fn create_partner_person(
     workspace: &Workspace,
     session: &Session,
-    given: Option<String>,
-    surname: Option<String>,
+    name: PersonNameParts,
+    birth: Option<DateParts>,
     provenance: &Provenance,
 ) -> Result<PersonId, AppError> {
     let human_id = commit_person_change_set(
         workspace,
         session,
         PersonChangeSet {
-            target: PersonTarget::New { human_id: None },
-            name: Some(PersonNameParts::simple(given, surname)),
+            target: PersonTarget::New { human_id: None, birth },
+            name: Some(name),
             name_citation: None,
             sex: None,
             tags: Vec::new(),
@@ -208,6 +215,7 @@ async fn execute(
 mod tests {
     use super::{FamilyChangeSet, PartnerInput, commit_family_change_set};
     use crate::config::{AppDefaults, OperatorConfig, WorkspaceDefaults};
+    use crate::event::{DateParts, gregorian_date};
     use crate::family::{list_families, show_family};
     use crate::person::{NewPerson, create_person, list_persons, show_person};
     use crate::session::Session;
@@ -334,6 +342,7 @@ mod tests {
                     PartnerInput::New {
                         given: Some("Ada".to_owned()),
                         surname: Some("Lovelace".to_owned()),
+                        birth: None,
                     },
                     PartnerInput::Existing("I9999".to_owned()),
                 ],
@@ -366,6 +375,11 @@ mod tests {
                     PartnerInput::New {
                         given: Some("Grace".to_owned()),
                         surname: Some("Hopper".to_owned()),
+                        birth: Some(DateParts {
+                            year: 1906,
+                            month: None,
+                            day: None,
+                        }),
                     },
                 ],
                 provenance: Provenance::default(),
@@ -392,6 +406,15 @@ mod tests {
             .expect("show")
             .expect("person");
         assert_eq!(created.given.as_deref(), Some("Grace"));
+        assert_eq!(
+            created.birth_date,
+            Some(gregorian_date(DateParts {
+                year: 1906,
+                month: None,
+                day: None,
+            })),
+            "the inline partner is born when typed"
+        );
         assert_eq!(created.surname.as_deref(), Some("Hopper"));
     }
 
@@ -406,6 +429,7 @@ mod tests {
                 partners: vec![PartnerInput::New {
                     given: Some("Ada".to_owned()),
                     surname: Some("Lovelace".to_owned()),
+                    birth: None,
                 }],
                 provenance: Provenance {
                     confidence: Some(Confidence::High),

@@ -395,6 +395,17 @@ impl RecordDraft for SourceDraft {
     fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>) {
         self.restrictions = restrictions;
     }
+
+    fn similar_draft(&self) -> Option<vitni_app::DraftRecord> {
+        if self.existing_human_id.is_some() {
+            return None;
+        }
+        let draft = vitni_app::DraftRecord::Source {
+            title: self.title.trim().to_owned(),
+            author: non_blank(&self.author),
+        };
+        (!draft.is_empty()).then_some(draft)
+    }
 }
 
 #[cfg(test)]

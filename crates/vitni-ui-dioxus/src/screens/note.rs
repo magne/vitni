@@ -1,4 +1,5 @@
 use super::prelude::*;
+use super::similar::find_similar_action;
 
 /// The label column width of every note record row (`docs/mockups/note.html:105`, `:126`, `:137`).
 /// The shared record floor: the page's own labels are short, but `RESTRIKSJONER` renders 102px, so the
@@ -339,6 +340,7 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::MatchQueue(_)
             | IntentOutcome::MatchCompare(_)
+            | IntentOutcome::Similar(_)
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
@@ -417,7 +419,7 @@ fn note_detail(
             id_label: Some(detail.human_id.clone()),
             avatar: "🗒".to_owned(),
             extras: restriction_display(loc, &detail.restrictions),
-            actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
+            actions: record_head_actions(&labels, record, find_similar_action(loc, Category::Notes, &detail.human_id, &detail.title), callbacks.on_record_save),
             tabs: tab_items,
             active,
             {note_tab_content(state, detail, &active_tab, editing, record, NoteTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove })}

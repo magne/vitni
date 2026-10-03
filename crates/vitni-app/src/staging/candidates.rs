@@ -16,11 +16,10 @@ use vitni_core::matching::profile::{
 };
 use vitni_core::matching::{DateBasis, MatchableKind};
 use vitni_core::origin::{DatasetId, RecordOrigin};
-use vitni_core::place_name::PlaceName;
 
 use crate::error::AppError;
 use crate::person::build_name;
-use crate::profile::{Profile, vital_kind};
+use crate::profile::{Profile, place_name, vital_kind};
 use crate::similar::{Matcher, SimilarRecord};
 use crate::staging::graph::{EntityFields, LinkKind, StagedPerson};
 use crate::staging::plan::{CANDIDATE_BAND, Disposition, Endpoint, ImportPlan, PlannedEntity, WriteScope};
@@ -369,13 +368,4 @@ fn occupations(person: &StagedPerson) -> Vec<String> {
         .filter(|fact| fact.fact_type == FactType::Occupation)
         .filter_map(|fact| fact.value.clone())
         .collect()
-}
-
-/// A place name as the record gives it: no language, no date.
-fn place_name(text: &str) -> PlaceName {
-    PlaceName {
-        text: text.to_owned(),
-        language: None,
-        date: None,
-    }
 }

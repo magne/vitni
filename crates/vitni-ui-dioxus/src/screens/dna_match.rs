@@ -90,6 +90,7 @@ pub fn DnaMatchCreateRecord(draft_id: DraftId) -> Element {
             name: "dna-match-test-a".to_owned(),
             entity_label: loc.picker_entity(Category::DnaTests),
             allow_new: false,
+            similar: None,
         },
         state: test_a_state,
         options: picker_options(test_a_rows.read_unchecked().as_ref()),
@@ -106,6 +107,7 @@ pub fn DnaMatchCreateRecord(draft_id: DraftId) -> Element {
             name: "dna-match-test-b".to_owned(),
             entity_label: loc.picker_entity(Category::DnaTests),
             allow_new: false,
+            similar: None,
         },
         state: test_b_state,
         options: picker_options(test_b_rows.read_unchecked().as_ref()),
@@ -460,6 +462,7 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::MatchQueue(_)
             | IntentOutcome::MatchCompare(_)
+            | IntentOutcome::Similar(_)
             | IntentOutcome::Geography(_)
             | IntentOutcome::Dashboard(_)
             | IntentOutcome::ResearchNoteDetail(_)

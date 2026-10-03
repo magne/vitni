@@ -16,6 +16,7 @@ fn person_picker() -> RecordPicker {
             name: "dna-test-person".to_owned(),
             entity_label: "person".to_owned(),
             allow_new: false,
+            similar: None,
         },
         state: use_signal(PickerState::default),
         options: PickerOptions::Ready(Vec::new()),

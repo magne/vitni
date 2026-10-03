@@ -50,6 +50,7 @@ mod person;
 mod place;
 mod repository;
 mod research_note;
+mod similar;
 mod source;
 mod tag;
 

@@ -1,4 +1,5 @@
 use super::prelude::*;
+use super::similar::{create_form_hint, find_similar_action};
 use vitni_app::RepositoryType;
 // The collection view-model the prelude doesn't re-export; it seeds the per-row URL edit. `AddressVm`
 // (the address card/form seed) is a shared prelude re-export.
@@ -55,6 +56,7 @@ pub fn RepositoryCreateRecord(draft_id: DraftId) -> Element {
         actions,
         rsx! {
             {repository_record_fields(loc, record)}
+            {create_form_hint(record.draft, draft_id, nav)}
             {record_edit_provenance(loc, record)}
         },
     )
@@ -313,6 +315,7 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::MatchQueue(_)
             | IntentOutcome::MatchCompare(_)
+            | IntentOutcome::Similar(_)
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
@@ -392,7 +395,7 @@ fn repository_detail(
             id_label: Some(detail.human_id.clone()),
             avatar: "🏛".to_owned(),
             extras: restriction_display(loc, &detail.restrictions),
-            actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
+            actions: record_head_actions(&labels, record, find_similar_action(loc, Category::Repositories, &detail.human_id, &detail.title), callbacks.on_record_save),
             tabs: tab_items,
             active,
             {repository_tab_content(state, detail, &active_tab, editing, record, RepositoryTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove })}

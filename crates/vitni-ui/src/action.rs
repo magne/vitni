@@ -51,6 +51,12 @@ pub enum ActionLabel {
     LinkEvent,
     /// Opens the DNA match comparison tool.
     Compare,
+    /// Lists the stored records the engine judges similar to this one (ADR 0038 §8).
+    FindSimilar,
+    /// Takes a similar stored record instead of creating a new one.
+    UseExisting,
+    /// Opens a listed record.
+    OpenRecord,
     /// Detaches a citation from its DNA evidence.
     DetachCitation,
     /// Detaches a DNA match from its evidence.
@@ -125,6 +131,9 @@ pub const ALL: &[ActionLabel] = &[
     ActionLabel::AddChild,
     ActionLabel::LinkEvent,
     ActionLabel::Compare,
+    ActionLabel::FindSimilar,
+    ActionLabel::UseExisting,
+    ActionLabel::OpenRecord,
     ActionLabel::DetachCitation,
     ActionLabel::DetachDnaMatch,
     ActionLabel::Retract,
@@ -204,6 +213,9 @@ impl ActionLabel {
             Self::LinkEvent | Self::LinkSource | Self::LinkRepository | Self::AddSharedAncestor => Affordance::Link,
             Self::Cite => Affordance::Cite,
             Self::Compare
+            | Self::FindSimilar
+            | Self::UseExisting
+            | Self::OpenRecord
             | Self::DetachCitation
             | Self::DetachDnaMatch
             | Self::Retract
@@ -254,6 +266,9 @@ mod tests {
             ActionLabel::AddChild => "action-add-child",
             ActionLabel::LinkEvent => "action-link-event",
             ActionLabel::Compare => "action-compare",
+            ActionLabel::FindSimilar => "action-find-similar",
+            ActionLabel::UseExisting => "action-use-existing",
+            ActionLabel::OpenRecord => "action-open-record",
             ActionLabel::DetachCitation => "action-detach-citation",
             ActionLabel::DetachDnaMatch => "action-detach-dna-match",
             ActionLabel::Retract => "action-retract",
@@ -324,6 +339,9 @@ mod tests {
                 | ActionLabel::AddChild
                 | ActionLabel::LinkEvent
                 | ActionLabel::Compare
+                | ActionLabel::FindSimilar
+                | ActionLabel::UseExisting
+                | ActionLabel::OpenRecord
                 | ActionLabel::DetachCitation
                 | ActionLabel::DetachDnaMatch
                 | ActionLabel::Retract
@@ -355,7 +373,7 @@ mod tests {
         for action in ALL {
             assert_covered(*action);
         }
-        let variant_count = 44;
+        let variant_count = 47;
         assert_eq!(ALL.len(), variant_count, "ALL is missing a variant");
     }
 

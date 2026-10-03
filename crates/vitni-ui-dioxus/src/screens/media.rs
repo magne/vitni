@@ -1,5 +1,6 @@
 use super::prelude::*;
 use super::shared::media_viewer_labels;
+use super::similar::find_similar_action;
 // The preview dialog: the shared viewer at its look-only shape, inside the shared modal.
 use crate::components::{MediaViewer, Modal};
 // The media attribute row view-model (seeds the per-row attribute edit).
@@ -350,6 +351,7 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::MatchQueue(_)
             | IntentOutcome::MatchCompare(_)
+            | IntentOutcome::Similar(_)
             | IntentOutcome::ResearchNoteDetail(_)
             | IntentOutcome::Geography(_),
         )) => rsx! {},
@@ -431,7 +433,7 @@ fn media_detail(
             id_label: Some(detail.human_id.clone()),
             avatar: "📷".to_owned(),
             extras: restriction_display(loc, &detail.restrictions),
-            actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
+            actions: record_head_actions(&labels, record, find_similar_action(loc, Category::Media, &detail.human_id, &detail.title), callbacks.on_record_save),
             tabs: tab_items,
             active,
             {media_tab_content(state, detail, &active_tab, editing, record, MediaTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove })}

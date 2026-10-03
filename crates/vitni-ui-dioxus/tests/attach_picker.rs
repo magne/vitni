@@ -63,6 +63,7 @@ fn attach(name: &str, entity: &str, link_value: RecordLink<NewRecordDraft>, open
             name: name.to_owned(),
             entity_label: entity.to_owned(),
             allow_new: true,
+            similar: None,
         },
         state,
         options: PickerOptions::Ready(rows()),

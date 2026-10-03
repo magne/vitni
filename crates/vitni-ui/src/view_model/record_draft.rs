@@ -5,6 +5,8 @@
 //! [`Default::default`]. The renderer's `RecordEditState` is generic over this trait so one component
 //! drives create, view, and edit for every aggregate (`record-editing.html` §1–§7).
 
+use vitni_app::DraftRecord;
+
 use crate::presentation::RestrictionKind;
 
 /// A buffered, editable draft of one record's scalar fields.
@@ -49,6 +51,13 @@ pub trait RecordDraft: Clone + PartialEq + Default + 'static {
     /// Replaces the draft's restriction set (what the shared restriction field writes on a toggle).
     /// The set rides the record's own Save, so nothing is committed until then.
     fn set_restrictions(&mut self, restrictions: Vec<RestrictionKind>);
+
+    /// The record being created, as the matching engine matches it against the stored records — the
+    /// similar-record hint (ADR 0038 §8). `None` for a record being edited, one with nothing typed that
+    /// identifies it yet, and every kind the hint does not cover.
+    fn similar_draft(&self) -> Option<DraftRecord> {
+        None
+    }
 
     /// Whether the draft differs from its committed `seed` (an unsaved change).
     fn is_dirty_against(&self, seed: &Self) -> bool {
