@@ -756,6 +756,109 @@ fn rows_from_a_merged_member_name_their_record() {
     assert_eq!(detail.associations[0].merged_from, None);
 }
 
+/// A two-record cluster: the conclusion `I0001` and the persona `I0007` imported from Digitalarkivet,
+/// whose record also backs the fact `…0002`.
+fn linked() -> vitni_app::LinkedRecords {
+    let origin = vitni_app::OriginRef {
+        origin: vitni_app::RecordOrigin {
+            dataset: vitni_app::DatasetId::global("digitalarkivet"),
+            record: "pf01".to_owned(),
+            item: None,
+            digest: None,
+            run: ImportRunId::from_uuid(uuid::Uuid::from_u128(9)),
+        },
+        dataset_label: Some("Digitalarkivet".to_owned()),
+        source_label: Some("1910 census".to_owned()),
+        url: Some("https://www.digitalarkivet.no/pf01".to_owned()),
+    };
+    let record = |human_id: &str, evidence_level, origin, via: Option<&str>, root| vitni_app::LinkedRecord {
+        record: vitni_app::AggRef {
+            human_id: human_id.to_owned(),
+            id: String::new(),
+        },
+        display_name: Some("Ada Lovelace".to_owned()),
+        evidence_level,
+        origin,
+        via: via.map(str::to_owned),
+        root,
+    };
+    vitni_app::LinkedRecords {
+        records: vec![
+            record("I0001", EvidenceLevel::Conclusion, None, None, true),
+            record("I0007", EvidenceLevel::Persona, Some(origin.clone()), None, false),
+            record("I0008", EvidenceLevel::Persona, None, Some("I0007"), false),
+        ],
+        claim_origins: [("aaaaaaaa-0000-7000-8000-000000000002".to_owned(), origin)].into(),
+    }
+}
+
+/// The *Linked records* rows: the root first, then each member with its origin, source and the
+/// member it was linked through (ADR 0039 §5).
+#[test]
+fn linked_records_list_each_record_with_its_origin() {
+    let loc = Localizer::for_test("en");
+    let mut detail = PersonDetail::from_summary(&summary(), &loc);
+    detail.link(&linked(), &loc);
+
+    let ids: Vec<&str> = detail.linked.iter().map(|row| row.human_id.as_str()).collect();
+    assert_eq!(ids, ["I0001", "I0007", "I0008"]);
+    assert!(detail.linked[0].root);
+    assert_eq!(detail.linked[0].origin, None);
+    let persona = &detail.linked[1];
+    assert!(!persona.root);
+    assert_eq!(persona.name, "Ada Lovelace");
+    assert_eq!(persona.evidence_level_label, "Persona");
+    let origin = persona.origin.as_ref().expect("imported");
+    assert_eq!(origin.label, "record pf01 in Digitalarkivet");
+    assert_eq!(origin.url.as_deref(), Some("https://www.digitalarkivet.no/pf01"));
+    assert_eq!(origin.source.as_deref(), Some("1910 census"));
+    assert_eq!(persona.via, None);
+    assert_eq!(detail.linked[2].via.as_deref(), Some("via I0007"));
+}
+
+/// A claim read from an import record names it in *Why we believe* (ADR 0037 §2).
+#[test]
+fn an_imported_fact_names_its_origin_record() {
+    let loc = Localizer::for_test("en");
+    let mut detail = PersonDetail::from_summary(&summary(), &loc);
+    assert_eq!(detail.facts[0].origin, None, "until the cluster is read");
+    detail.link(&linked(), &loc);
+    let origin = detail.facts[0].origin.as_ref().expect("the fact's record");
+    assert_eq!(origin.label, "record pf01 in Digitalarkivet");
+}
+
+/// A dataset whose run is not in the log is named by its scheme.
+#[test]
+fn an_origin_without_its_run_is_named_by_the_dataset_scheme() {
+    let loc = Localizer::for_test("en");
+    let mut linked = linked();
+    for origin in linked.claim_origins.values_mut() {
+        origin.dataset_label = None;
+    }
+    let mut detail = PersonDetail::from_summary(&summary(), &loc);
+    detail.link(&linked, &loc);
+    let origin = detail.facts[0].origin.as_ref().expect("the fact's record");
+    assert_eq!(origin.label, "record pf01 in digitalarkivet");
+}
+
+/// The tab appears only for a person with records linked to it.
+#[test]
+fn the_linked_records_tab_shows_only_for_a_cluster() {
+    let loc = Localizer::for_test("en");
+    let mut detail = PersonDetail::from_summary(&summary(), &loc);
+    assert!(!person_tabs(&detail, &loc).iter().any(|tab| tab.id == "linked"));
+    detail.link(&linked(), &loc);
+    let tabs = person_tabs(&detail, &loc);
+    let tab = tabs.iter().find(|tab| tab.id == "linked").expect("linked tab");
+    assert_eq!(tab.label, "Linked records");
+    assert_eq!(tab.count, Some(2), "the members, not the person itself");
+    assert_eq!(
+        tabs.last().map(|tab| tab.id),
+        Some("linked"),
+        "after History, so no other tab moves"
+    );
+}
+
 #[test]
 fn persona_evidence_level_surfaces_on_the_badge() {
     let loc = Localizer::for_test("en");

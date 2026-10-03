@@ -345,6 +345,43 @@ pub(crate) async fn created_one(
     }))
 }
 
+/// The origin of every live assertion on the aggregate `aggregate_id` of `kind`, as `(assertion,
+/// origin)` in the order they were asserted (ADR 0037 §2): what a claim's *Why we believe* names. A
+/// recorded resolution is not an assertion on the aggregate and is left out. The origins carry no
+/// content digest.
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails or a row does not decode.
+pub(crate) async fn assertion_origins(
+    pool: &Pool<Postgres>,
+    kind: &str,
+    aggregate_id: &str,
+) -> Result<Vec<(AssertionId, RecordOrigin)>, DbError> {
+    let rows = sqlx::query(&format!(
+        "SELECT assertion_id, dataset, record, item, run FROM {RECORD_ORIGINS_TABLE} \
+         WHERE aggregate_kind = $1 AND aggregate_id = $2 AND field_key <> $3 AND live ORDER BY id"
+    ))
+    .bind(kind)
+    .bind(aggregate_id)
+    .bind(resolved_key(kind))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("reading the assertion origins of {aggregate_id}: {e}")))?;
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let origin = RecordOrigin {
+            dataset: DatasetId::new(row.get::<String, _>("dataset")),
+            record: row.get("record"),
+            item: row.get("item"),
+            digest: None,
+            run: decode_run(&row.get::<String, _>("run"))?,
+        };
+        out.push((decode_assertion_id(&row.get::<String, _>("assertion_id"))?, origin));
+    }
+    Ok(out)
+}
+
 /// How many of `records` each dataset already holds as an aggregate of `kind` (ADR 0037 §3): records
 /// its runs created or resolved, as `(dataset, count)` in dataset order. Only the record's own entity
 /// counts, never one of its items.

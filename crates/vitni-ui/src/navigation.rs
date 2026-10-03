@@ -1101,6 +1101,13 @@ pub enum PersonEdit {
         /// The assertion to retract (its `AssertionId`, a UUID string).
         assertion_id: String,
     },
+    /// Unlink a record from the person's cluster by retracting the merge that linked it (ADR 0039 §5).
+    Unlink {
+        /// The person whose *Linked records* the unlink was asked from.
+        human_id: String,
+        /// The linked record to split back out.
+        member: String,
+    },
 }
 
 impl PersonEdit {
@@ -1119,7 +1126,8 @@ impl PersonEdit {
             | Self::AssertAssociation { human_id, .. }
             | Self::AssertParticipation { human_id, .. }
             | Self::Tag { human_id, .. }
-            | Self::UndoAssertion { human_id, .. } => human_id,
+            | Self::UndoAssertion { human_id, .. }
+            | Self::Unlink { human_id, .. } => human_id,
         }
     }
 }

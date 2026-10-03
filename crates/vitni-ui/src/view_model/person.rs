@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use super::{
     ActionLabel, AssociationSummary, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab,
     DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactVm,
-    FamilyVm, HistoryEntryVm, Localizer, MediaRefVm, NameSummary, NameType, NameVm, NewCitationFields,
+    FamilyVm, HistoryEntryVm, Localizer, MediaRefVm, NameSummary, NameType, NameVm, NewCitationFields, OriginVm,
     PersonChangeSetRequest, PersonEdit, PersonName, PersonNameParts, PersonRow, PersonSummary, RecordDraft, RecordLink,
     RestrictionKind, RowVm, Sex, TagRef, citation_ref_from_ref, line_label, parse_birth,
 };
@@ -165,6 +165,7 @@ fn fact_vm(summary: &FactSummary, owners: &BTreeMap<String, String>, loc: &Local
         fact_type: summary.fact.fact_type.clone(),
         assertion_id: summary.assertion_id.clone(),
         merged_from: owners.get(&summary.assertion_id).cloned(),
+        origin: None,
     }
 }
 
@@ -332,6 +333,9 @@ pub struct PersonDetail {
     pub research_notes: Vec<RowVm>,
     /// The person's change log, newest first (History tab); filled by the dispatcher.
     pub history: Vec<HistoryEntryVm>,
+    /// Every record of the person's cluster, the person itself first (*Linked records* tab, ADR 0039
+    /// §5); filled by [`link`](Self::link).
+    pub linked: Vec<LinkedRecordVm>,
     /// A draft pre-populated from this person, for the deferred edit dialog (structured name parts,
     /// gender, tags — the parts the localized display fields above do not carry structurally).
     pub edit_seed: PersonDraft,
@@ -379,7 +383,63 @@ impl PersonDetail {
             tags: summary.tag_refs.clone(),
             research_notes: Vec::new(),
             history: Vec::new(),
+            linked: Vec::new(),
             edit_seed: PersonDraft::from_summary(summary),
+        }
+    }
+
+    /// Fills the *Linked records* rows from the person's cluster and names the import record each
+    /// imported fact was read from.
+    pub fn link(&mut self, linked: &vitni_app::LinkedRecords, loc: &Localizer) {
+        self.linked = linked
+            .records
+            .iter()
+            .map(|record| LinkedRecordVm::build(record, loc))
+            .collect();
+        for fact in &mut self.facts {
+            fact.origin = linked
+                .claim_origins
+                .get(&fact.assertion_id)
+                .map(|origin| OriginVm::from_ref(origin, loc));
+        }
+    }
+
+    /// The records linked to this person, not counting the person itself.
+    #[must_use]
+    pub fn linked_count(&self) -> usize {
+        self.linked.iter().filter(|record| !record.root).count()
+    }
+}
+
+/// One record of a person's cluster, for the *Linked records* tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkedRecordVm {
+    /// The record's user-facing id.
+    pub human_id: String,
+    /// Its own localized display name, or the "no name" placeholder.
+    pub name: String,
+    /// Whether it is an imported persona.
+    pub is_persona: bool,
+    /// The localized evidence-level label.
+    pub evidence_level_label: String,
+    /// The import record that created it; `None` for a record entered by hand.
+    pub origin: Option<OriginVm>,
+    /// "via I0007" when it was linked through another member, which takes it along when unlinked.
+    pub via: Option<String>,
+    /// Whether this is the person the others are linked to — the row with no *Unlink*.
+    pub root: bool,
+}
+
+impl LinkedRecordVm {
+    fn build(record: &vitni_app::LinkedRecord, loc: &Localizer) -> Self {
+        Self {
+            human_id: record.record.human_id.clone(),
+            name: loc.display_name(record.display_name.as_deref()),
+            is_persona: record.evidence_level == EvidenceLevel::Persona,
+            evidence_level_label: loc.evidence_level_label(record.evidence_level),
+            origin: record.origin.as_ref().map(|origin| OriginVm::from_ref(origin, loc)),
+            via: record.via.as_deref().map(|id| loc.linked_via(id)),
+            root: record.root,
         }
     }
 }
@@ -637,7 +697,7 @@ pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
         count,
         action,
     };
-    vec![
+    let mut tabs = vec![
         tab("overview", None, None),
         tab("names", Some(detail.names.len()), Some(ActionLabel::AddName)),
         tab("facts", Some(detail.facts.len()), Some(ActionLabel::AddFact)),
@@ -666,7 +726,13 @@ pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("tags", Some(detail.tags.len()), Some(ActionLabel::AddTag)),
         tab("timeline", Some(detail.timeline.len()), None),
         tab("history", None, None),
-    ]
+    ];
+    // Last, so its coming and going never moves another tab: the pane remembers the open tab by
+    // position.
+    if detail.linked_count() > 0 {
+        tabs.push(tab("linked", Some(detail.linked_count()), None));
+    }
+    tabs
 }
 
 #[cfg(test)]

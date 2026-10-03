@@ -99,8 +99,8 @@ pub use media::{
 pub use note::{NoteEditForm, note_content_tab, note_language_tab, note_record_fields, note_references_table};
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{
-    EditForm, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
-    person_name_citation_field, person_record_fields, timeline_panel,
+    EditForm, associations_table, events_table, facts_table, families_panel, linked_tab, names_table, overview_tab,
+    person_name_citation_field, person_record_fields, timeline_panel, unlink_side_panel,
 };
 pub use place::{
     PlaceEditForm, SuccessionFormState, place_geometry_table, place_hierarchy_table, place_map, place_map_as_of_note,
@@ -130,9 +130,9 @@ pub use shared::{
     RowRetract, RowVerb, attach_link_field, attach_link_form, create_record_frame, create_record_header,
     finish_attach_create, media_crop_labels, media_gallery, media_tab, media_viewer_labels, non_empty,
     picker_selection_id, provenance_block, provenance_block_dna, provenance_claim_row, provenance_cue,
-    register_fields_form, restriction_display, retract_panel, retract_side_panel, row_actions_cell, source_cue,
-    source_media_type_choices, tag_chips, use_attach_picker, use_attach_save, use_detail_tab, use_existing_picker,
-    use_record_step, use_record_undo,
+    provenance_origin_row, register_fields_form, restriction_display, retract_panel, retract_side_panel,
+    row_actions_cell, source_cue, source_media_type_choices, tag_chips, use_attach_picker, use_attach_save,
+    use_detail_tab, use_existing_picker, use_record_step, use_record_undo,
 };
 pub use similar::{
     FindSimilarButton, FindSimilarPanel, SimilarCallbacks, SimilarHint, create_form_hint, find_similar_action,

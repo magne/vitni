@@ -6,7 +6,7 @@
 use dioxus::prelude::*;
 use vitni_ui::{CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer};
 use vitni_ui_dioxus::components::ProvenancePopover;
-use vitni_ui_dioxus::screens::{provenance_claim_row, provenance_cue};
+use vitni_ui_dioxus::screens::{provenance_claim_row, provenance_cue, provenance_origin_row};
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
 fn loc() -> Localizer {
@@ -42,7 +42,7 @@ fn render(view: fn() -> Element) -> String {
 fn sourced_cue() -> Element {
     let loc = loc();
     rsx! {
-        {provenance_cue(&loc, loc.provenance_title_claim("Birth"), &[citation()])}
+        {provenance_cue(&loc, loc.provenance_title_claim("Birth"), &[citation()], None)}
     }
 }
 
@@ -71,7 +71,7 @@ fn a_sourced_claim_shows_a_popover_trigger() {
 fn unsourced_cue() -> Element {
     let loc = loc();
     rsx! {
-        {provenance_cue(&loc, loc.provenance_title_claim("Birth"), &[])}
+        {provenance_cue(&loc, loc.provenance_title_claim("Birth"), &[], None)}
     }
 }
 
@@ -113,6 +113,58 @@ fn the_popover_body_lists_the_claims_evidence() {
         ">High",                 // the surety badge label (colour is never the only signal)
         "Derivative",            // the evidence axis value
         "asserted by magne",     // the provenance "asserted by" line
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
+}
+
+fn origin() -> vitni_ui::OriginVm {
+    vitni_ui::OriginVm {
+        label: "record pf01 in Digitalarkivet".to_owned(),
+        url: Some("https://www.digitalarkivet.no/pf01".to_owned()),
+        source: Some("1910 census".to_owned()),
+    }
+}
+
+/// A claim read from an import record with no citation still opens *Why we believe*, beside the
+/// no-source flag, since the record it came from is evidence of where it was read (ADR 0037 §2).
+fn imported_unsourced_cue() -> Element {
+    let loc = loc();
+    let origin = origin();
+    rsx! {
+        {provenance_cue(&loc, loc.provenance_title_claim("Birth"), &[], Some(&origin))}
+    }
+}
+
+#[test]
+fn an_imported_claim_without_a_citation_still_opens_the_popover() {
+    let html = render(imported_unsourced_cue);
+    assert!(
+        html.contains(r#"class="no-source""#),
+        "still flagged unsourced:\n{html}"
+    );
+    assert!(html.contains(r#"aria-haspopup="dialog""#), "and a trigger:\n{html}");
+}
+
+/// The origin row names the record and links out to its page.
+fn origin_row() -> Element {
+    let loc = loc();
+    let origin = origin();
+    rsx! {
+        ProvenancePopover { title: loc.provenance_title_claim("Birth"),
+            {provenance_origin_row(&loc, &origin)}
+        }
+    }
+}
+
+#[test]
+fn the_popover_names_the_origin_record_and_links_out() {
+    let html = render(origin_row);
+    for needle in [
+        "from ",
+        r#"href="https://www.digitalarkivet.no/pf01""#,
+        "record pf01 in Digitalarkivet",
+        "1910 census",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }

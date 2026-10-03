@@ -261,7 +261,7 @@ fn scalar_provenance_row(
             if let (Some(level), Some(confidence_label)) = (confidence, confidence_label) {
                 ConfidenceBadge { level, label: confidence_label }
             }
-            {provenance_cue(loc, loc.provenance_title_claim(label), citations)}
+            {provenance_cue(loc, loc.provenance_title_claim(label), citations, None)}
         }
     }
 }

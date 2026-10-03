@@ -23,3 +23,4 @@ err-merge-conflict = personer { $surviving } og { $merged } kan ikke slås samme
 err-self-association = person { $id } kan ikke knyttes til seg selv
 err-distinct-from-itself = person { $id } kan ikke skilles fra seg selv
 err-identity-decided = personene { $person } og { $other } har allerede en gjeldende identitetsavgjørelse; angre den først
+err-not-linked = person { $other } er ikke koblet til person { $person }

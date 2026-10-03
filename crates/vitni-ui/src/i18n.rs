@@ -205,6 +205,7 @@ impl Localizer {
             "translations" => fl!(self.loader, "tab-translations"),
             "subjects" => fl!(self.loader, "tab-subjects"),
             "research-notes" => fl!(self.loader, "tab-research-notes"),
+            "linked" => fl!(self.loader, "tab-linked"),
             "usage" => fl!(self.loader, "tab-usage"),
             "haplogroups" => fl!(self.loader, "tab-haplogroups"),
             "matches" => fl!(self.loader, "tab-matches"),
@@ -1545,6 +1546,7 @@ impl Localizer {
             "cite-fact" => fl!(self.loader, "panel-cite-fact"),
             "detach" => fl!(self.loader, "detach-panel-title"),
             "untag" => fl!(self.loader, "untag-panel-title"),
+            "unlink" => fl!(self.loader, "unlink-panel-title"),
             "remove-child" => fl!(self.loader, "remove-child-panel-title"),
             _ => fl!(self.loader, "retract-panel-title"),
         }
@@ -1555,6 +1557,13 @@ impl Localizer {
     #[must_use]
     pub fn retract_note(&self) -> String {
         fl!(self.loader, "retract-note")
+    }
+
+    /// The note shown in the *Linked records* unlink panel: the merge is retracted, so the record and
+    /// every record linked through it read as their own person again, and History keeps both.
+    #[must_use]
+    pub fn unlink_note(&self) -> String {
+        fl!(self.loader, "unlink-note")
     }
 
     /// The note shown in the Tags tab's untag panel: removing a tag is recorded in History and nothing
@@ -1750,6 +1759,7 @@ impl Localizer {
             "notes" => fl!(self.loader, "tab-note-notes"),
             "tags" => fl!(self.loader, "tab-note-tags"),
             "addresses" => fl!(self.loader, "tab-note-addresses"),
+            "linked" => fl!(self.loader, "tab-note-linked"),
             "history" => fl!(self.loader, "history-note"),
             _ => return None,
         };
@@ -3077,6 +3087,57 @@ impl Localizer {
             scheme = origin.dataset.scheme().to_owned(),
             record = origin.record.clone()
         )
+    }
+
+    /// An import record named for a reader: its id in the dataset, labelled as its run recorded it
+    /// or, when the run is not in the log, by the dataset's scheme (ADR 0037 §2).
+    #[must_use]
+    pub fn origin_record(&self, origin: &vitni_app::OriginRef) -> String {
+        let dataset = origin
+            .dataset_label
+            .clone()
+            .unwrap_or_else(|| origin.origin.dataset.scheme().to_owned());
+        fl!(
+            self.loader,
+            "origin-record",
+            record = origin.origin.record.clone(),
+            dataset = dataset
+        )
+    }
+
+    /// The lead-in of the *Why we believe* row naming the import record a claim was read from.
+    #[must_use]
+    pub fn provenance_origin_prefix(&self) -> String {
+        fl!(self.loader, "provenance-origin")
+    }
+
+    /// The *Why we believe* trigger of an imported claim with no citation.
+    #[must_use]
+    pub fn provenance_imported(&self) -> String {
+        fl!(self.loader, "provenance-imported")
+    }
+
+    /// A *Linked records* row's note naming the member it was linked through.
+    #[must_use]
+    pub fn linked_via(&self, human_id: &str) -> String {
+        fl!(self.loader, "linked-via", id = human_id)
+    }
+
+    /// The chip on the *Linked records* row of the record the others are linked to.
+    #[must_use]
+    pub fn linked_root(&self) -> String {
+        fl!(self.loader, "linked-root")
+    }
+
+    /// A *Linked records* column header.
+    #[must_use]
+    pub fn linked_column(&self, id: &str) -> String {
+        match id {
+            "origin" => fl!(self.loader, "linked-column-origin"),
+            "source" => fl!(self.loader, "linked-column-source"),
+            "level" => fl!(self.loader, "linked-column-level"),
+            _ => fl!(self.loader, "linked-column-record"),
+        }
     }
 
     /// An origin chip's tooltip, naming the full dataset.

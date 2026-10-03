@@ -105,6 +105,9 @@ pub struct FactVm {
     /// The `human_id` of the merged record this row came from (ADR 0039 §5), shown as an attribution
     /// chip; `None` for the person's own row.
     pub merged_from: Option<String>,
+    /// The import record the fact was read from, for *Why we believe* (ADR 0037 §2); `None` for a
+    /// fact entered by hand.
+    pub origin: Option<OriginVm>,
 }
 
 impl FactVm {
@@ -112,6 +115,29 @@ impl FactVm {
     #[must_use]
     pub fn has_source(&self) -> bool {
         self.source_count > 0
+    }
+}
+
+/// The import record a record or claim came from (ADR 0037 §2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OriginVm {
+    /// The localized record name: its id in the dataset, e.g. "record pf01 in Digitalarkivet".
+    pub label: String,
+    /// The record's page on the dataset's website, when it has one — the link out.
+    pub url: Option<String>,
+    /// What the importing run imported (a file name, an assisted session's request), if known.
+    pub source: Option<String>,
+}
+
+impl OriginVm {
+    /// Builds the view-model of an app [`OriginRef`](vitni_app::OriginRef).
+    #[must_use]
+    pub fn from_ref(origin: &vitni_app::OriginRef, loc: &Localizer) -> Self {
+        Self {
+            label: loc.origin_record(origin),
+            url: origin.url.clone(),
+            source: origin.source_label.clone(),
+        }
     }
 }
 

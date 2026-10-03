@@ -57,6 +57,7 @@ fn person_tables() -> Element {
             citations: Vec::new(),
             assertion_id: "0190a2b3-0000-7000-8000-000000000002".to_owned(),
             merged_from: None,
+            origin: None,
         },
         FactVm {
             type_label: "Residence".to_owned(),
@@ -69,6 +70,7 @@ fn person_tables() -> Element {
             citations: Vec::new(),
             assertion_id: "0190a2b3-0000-7000-8000-000000000003".to_owned(),
             merged_from: Some("I0007".to_owned()),
+            origin: None,
         },
     ];
     let onretract = use_callback(|_| {});
@@ -112,6 +114,7 @@ fn unjudged_fact_table() -> Element {
         citations: Vec::new(),
         assertion_id: "0190a2b3-0000-7000-8000-00000000000f".to_owned(),
         merged_from: None,
+        origin: None,
     }];
     let onretract = use_callback(|_| {});
     let onedit = use_callback(|_| {});

@@ -531,10 +531,6 @@ does.
   only an empty single-valued field and adds a list value not already recorded, with the origin.
   *Exit:* deciding *Same* on a stored source without an author adds the incoming author and leaves its
   title unchanged.
-- **Linked records on a conclusion person** — ADR 0039 §5. A view of each linked persona with its origin,
-  source and *Unlink*. *Why we believe* names the origin record, with a link out where the dataset has
-  one. The mockups are updated. *Needs:* persona clusters. *Exit:* unlinking from the view restores two
-  people. — #416
 - **`find-similar` query for plugins** — ADR 0038 §8. A read-only WIT query returning candidates with
   their band and features, deny-by-default like every capability. *Needs:* `find_similar`. Low
   priority. — #417

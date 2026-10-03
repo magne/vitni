@@ -52,6 +52,7 @@ tab-tags = Tags
 tab-attributes = Attributes
 tab-timeline = Timeline
 tab-history = History
+tab-linked = Linked records
 tab-empty = Nothing here yet.
 
 # Shared-tab explanations — the six tabs every aggregate renders the same way, explained by the
@@ -61,6 +62,7 @@ tab-note-media = The images, scans and recordings attached to this record. Each 
 tab-note-notes = Free-text research attached to this record. A note is a record of its own and can be attached to several records, so editing its text changes it everywhere it is attached.
 tab-note-tags = Tags are your own classification of this record, not evidence about it — nothing here is asserted about the person, place or event. A tag is referenced by name, and untagging is recorded in History like any other change.
 tab-note-addresses = The postal addresses recorded for this record. Each is an assertion with its own provenance: an edit supersedes the previous one, and a retraction leaves it in History rather than deleting it.
+tab-note-linked = The records this person was concluded from. Each keeps its own record and history; unlinking one retracts the merge, so it becomes its own person again, with every record linked through it.
 
 timeline-note = The genealogical life story, built from this person's facts and event participations in date order. This is the derived narrative — not the History tab, which is the who/when/why audit trail of every change.
 timeline-kind-fact = Fact
@@ -316,6 +318,15 @@ provenance-title = Why we believe this
 provenance-title-claim = Why we believe: { $claim }
 provenance-asserted-by = asserted by { $who } · { $when }
 provenance-asserted-by-undated = asserted by { $who }
+provenance-origin = from
+provenance-imported = imported
+origin-record = record { $record } in { $dataset }
+linked-via = via { $id }
+linked-root = Linked to
+linked-column-record = Record
+linked-column-origin = Imported from
+linked-column-source = Source
+linked-column-level = Evidence level
 
 # Citations
 citation-list-empty = No citations yet.
@@ -1251,8 +1262,10 @@ retract-panel-title = Retract assertion
 detach-panel-title = Detach
 remove-child-panel-title = Remove from family
 untag-panel-title = Remove tag
+unlink-panel-title = Unlink record
 retract-note = The retraction is recorded in History; nothing is deleted.
 untag-note = The tag removal is recorded in History; nothing is deleted.
+unlink-note = The merge is retracted and recorded in History; the record, and any record linked through it, becomes its own person again. Nothing is deleted.
 remove-child-note = The removal is recorded in History; the original claim and its evidence stay.
 detach-citation-title = Detach this citation — the detachment is recorded in History
 action-remove-row = Remove { $row }

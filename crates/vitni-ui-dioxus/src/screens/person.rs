@@ -1,5 +1,7 @@
 use super::prelude::*;
+use super::shared::retract_panel;
 use super::similar::{create_form_hint, find_similar_action};
+use vitni_ui::LinkedRecordVm;
 
 /// The create-mode person record (`record-editing.html` §6): an empty draft rendered in edit mode in
 /// the detail pane, with Cancel/Save in the sticky header. The scalar identity fields (editable human
@@ -691,12 +693,54 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
 
     let on_edit_open = use_callback(move |form: EditForm| editing.set(Some(form)));
 
+    // *Linked records*' Unlink arms its own panel rather than the shared retract one: it retracts the
+    // merge that linked the record, wherever in the cluster that merge is held, and the person list
+    // changes with it — the record is listed again (ADR 0039 §5).
+    let mut unlinking = use_signal(|| None::<(String, String)>);
+    let mut unlink_reason = use_signal(String::new);
+    let on_unlink = use_callback(move |row: (String, String)| {
+        unlink_reason.set(String::new());
+        unlinking.set(Some(row));
+    });
+    let unlink_services = services.clone();
+    let unlink_human = human_id.clone();
+    let unlink_saved = state.data_loc().action_label(ActionLabel::Saved);
+    let mut unlink_nav = nav;
+    let on_unlink_confirm = use_callback(move |()| {
+        let Some((member, _)) = unlinking() else {
+            return;
+        };
+        let services = unlink_services.clone();
+        let edit = PersonEdit::Unlink {
+            human_id: unlink_human.clone(),
+            member,
+        };
+        let prov = ProvenanceDraft {
+            rationale: unlink_reason(),
+            ..ProvenanceDraft::default()
+        };
+        let saved = unlink_saved.clone();
+        spawn(async move {
+            match save_person_edit(services, edit, prov).await {
+                Ok(_) => {
+                    unlinking.set(None);
+                    reload += 1;
+                    unlink_nav.mark_changed();
+                    unlink_nav.notify(saved);
+                }
+                Err(message) => unlink_nav.notify_error(message),
+            }
+        });
+    });
+
     // ⌘Z retracts the newest undoable assertion of this person's loaded change log (WP5).
     let undo_history = use_memo(move || match &*data.read() {
         Some(ScreenData::Loaded(IntentOutcome::Detail(detail))) => detail.history.clone(),
         _ => Vec::new(),
     });
-    let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read() || retract.read().is_some());
+    let undo_busy = use_memo(move || {
+        editing.read().is_some() || *record.editing.read() || retract.read().is_some() || unlinking.read().is_some()
+    });
     let undo_notice = chrome.kbd_nothing_to_undo();
     use_record_undo(
         nav,
@@ -753,6 +797,8 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
                 record,
                 retract,
                 retract_reason,
+                unlinking,
+                unlink_reason,
             };
             let callbacks = PersonCallbacks {
                 on_submit,
@@ -763,8 +809,10 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
                 on_undo,
                 on_tag_remove,
                 media_state,
+                on_unlink,
+                on_unlink_confirm,
             };
-            person_detail(&state, detail, pane, &callbacks, &human_id)
+            person_detail(&state, detail, &pane, &callbacks, &human_id)
         }
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
@@ -806,6 +854,10 @@ struct PersonPane {
     retract: Signal<Option<RetractTarget>>,
     /// The rationale typed into the open retract panel.
     retract_reason: Signal<String>,
+    /// The linked record being unlinked, `(human_id, label)`, if the unlink panel is open.
+    unlinking: Signal<Option<(String, String)>>,
+    /// The rationale typed into the open unlink panel.
+    unlink_reason: Signal<String>,
 }
 
 /// The two commit callbacks a person's detail wires in: one-command collection edits (attach / assert
@@ -829,6 +881,10 @@ struct PersonCallbacks {
     on_tag_remove: Callback<(String, String)>,
     /// The Media tab's viewer state + crop-supersede wiring.
     media_state: MediaTabState,
+    /// Arms the unlink panel for a *Linked records* row.
+    on_unlink: Callback<(String, String)>,
+    /// Confirms the open unlink panel — dispatches `Unlink` with the typed rationale.
+    on_unlink_confirm: Callback<()>,
 }
 
 /// Renders a loaded person's detail container: header (avatar, vital subtitle, the restrictions in
@@ -837,7 +893,7 @@ struct PersonCallbacks {
 fn person_detail(
     state: &AppState,
     detail: &PersonDetail,
-    pane: PersonPane,
+    pane: &PersonPane,
     callbacks: &PersonCallbacks,
     human_id: &str,
 ) -> Element {
@@ -848,7 +904,9 @@ fn person_detail(
         record,
         retract,
         retract_reason,
-    } = pane;
+        unlinking,
+        unlink_reason,
+    } = *pane;
     let on_submit = callbacks.on_submit;
     let on_record_save = callbacks.on_record_save;
     let on_retract = callbacks.on_retract;
@@ -857,6 +915,7 @@ fn person_detail(
     let on_undo = callbacks.on_undo;
     let on_tag_remove = callbacks.on_tag_remove;
     let media_state = callbacks.media_state;
+    let on_unlink = callbacks.on_unlink;
     let tabs = person_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs.iter().map(TabItem::from).collect();
     let active_tab = tabs.get(active()).cloned().unwrap_or_else(|| fallback_tab("overview"));
@@ -879,10 +938,11 @@ fn person_detail(
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
-            {person_tab_content(state, detail, &active_tab, editing, record, PersonTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove, media_state })}
+            {person_tab_content(state, detail, &active_tab, editing, record, PersonTabCallbacks { on_retract, on_edit_open, on_undo, on_tag_remove, media_state, on_unlink })}
         }
         {edit_panel(state, detail, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
+        {unlink_side_panel(loc, unlinking, unlink_reason, callbacks.on_unlink_confirm)}
     }
 }
 
@@ -914,6 +974,8 @@ struct PersonTabCallbacks {
     on_tag_remove: Callback<(String, String)>,
     /// The Media tab's viewer state + crop-supersede wiring.
     media_state: MediaTabState,
+    /// Arms the unlink panel for a *Linked records* row: `(member human_id, label)`.
+    on_unlink: Callback<(String, String)>,
 }
 
 /// The content of one person detail tab, with its contextual add/edit affordances.
@@ -932,6 +994,7 @@ fn person_tab_content(
         on_undo,
         on_tag_remove,
         media_state,
+        on_unlink,
     } = callbacks;
     let shared = SharedTabCtx {
         forms: Some(FormTabs {
@@ -999,7 +1062,114 @@ fn person_tab_content(
         ),
         "families" => families_panel(loc, &detail.families),
         "timeline" => timeline_panel(loc, &detail.timeline),
+        "linked" => linked_panel(loc, tab, &detail.linked, on_unlink),
         _ => shared_tab(loc, tab, &shared).unwrap_or_else(|| person_overview(loc, detail, record)),
+    }
+}
+
+/// The *Linked records* tab (ADR 0039 §5) under its explanatory note.
+fn linked_panel(
+    loc: &Localizer,
+    tab: &DetailTab,
+    records: &[LinkedRecordVm],
+    onunlink: Callback<(String, String)>,
+) -> Element {
+    rsx! {
+        if let Some(note) = loc.tab_note(tab.id) {
+            div { class: "section-note", "{note}" }
+        }
+        {linked_tab(loc, records, onunlink)}
+    }
+}
+
+/// The *Linked records* table: each record of the person's cluster — the person itself first, marked
+/// as the record the others are linked to — by its own name, not a link: opening a member opens the
+/// cluster this table is already on. Then its evidence level, the import record it came from
+/// (linking out when the dataset has a page for it), what that import read, and the member it was
+/// linked through. Every other record has an *Unlink*, which arms the unlink panel via `onunlink`
+/// with `(human_id, label)`.
+pub fn linked_tab(loc: &Localizer, records: &[LinkedRecordVm], onunlink: Callback<(String, String)>) -> Element {
+    rsx! {
+        Table {
+            caption: loc.tab_label("linked"),
+            headers: vec![
+                loc.linked_column("record"),
+                loc.linked_column("level"),
+                loc.linked_column("origin"),
+                loc.linked_column("source"),
+                String::new(),
+            ],
+            for record in records.iter() {
+                tr {
+                    td {
+                        "{record.name}"
+                        span { class: "muted", " {record.human_id}" }
+                        if record.root {
+                            " "
+                            Chip { label: loc.linked_root() }
+                        }
+                        if let Some(via) = &record.via {
+                            div { class: "muted", style: "font-size:var(--fs-xs)", "{via}" }
+                        }
+                    }
+                    td {
+                        span { class: "badge", "{record.evidence_level_label}" }
+                    }
+                    td {
+                        match &record.origin {
+                            Some(origin) => match &origin.url {
+                                Some(url) => rsx! { a { href: "{url}", "{origin.label}" } },
+                                None => rsx! { "{origin.label}" },
+                            },
+                            None => rsx! { span { class: "muted", "—" } },
+                        }
+                    }
+                    td { class: "muted",
+                        {record.origin.as_ref().and_then(|origin| origin.source.clone()).unwrap_or_else(|| "—".to_owned())}
+                    }
+                    td { class: "row-actions",
+                        if !record.root {
+                            {
+                                let row = (record.human_id.clone(), record.name.clone());
+                                rsx! {
+                                    Button {
+                                        label: loc.action_button(ActionLabel::Unlink),
+                                        variant: ButtonVariant::Ghost,
+                                        small: true,
+                                        aria_label: loc.action_unlink_row(&record.name),
+                                        onclick: move |_| onunlink.call(row.clone()),
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The unlink side panel: when a *Linked records* row is armed (`unlinking` is `Some((human_id,
+/// label))`), asks for the reason the merge is being retracted and confirms through `on_confirm`.
+pub fn unlink_side_panel(
+    loc: &Localizer,
+    mut unlinking: Signal<Option<(String, String)>>,
+    reason: Signal<String>,
+    on_confirm: Callback<()>,
+) -> Element {
+    let Some((_, label)) = unlinking() else {
+        return rsx! {};
+    };
+    let title = loc.panel_title("unlink");
+    rsx! {
+        SidePanel {
+            title: title.clone(),
+            open: true,
+            close_label: loc.action_label(ActionLabel::Cancel),
+            onclose: move |()| unlinking.set(None),
+            footer: rsx! {},
+            {retract_panel(loc, &title, &label, loc.action_unlink_row(&label), &loc.unlink_note(), loc.action_button(ActionLabel::Unlink), reason, on_confirm)}
+        }
     }
 }
 
@@ -1036,7 +1206,7 @@ pub fn overview_tab(loc: &Localizer, detail: &PersonDetail) -> Element {
                             FactRow { label: fact.type_label.clone(),
                                 span { class: "grow", {fact_value_date(fact)} }
                                 ConfidenceBadge { level: fact.confidence, label: fact.confidence_label.clone() }
-                                {provenance_cue(loc, loc.provenance_title_claim(&fact.type_label), &fact.citations)}
+                                {provenance_cue(loc, loc.provenance_title_claim(&fact.type_label), &fact.citations, fact.origin.as_ref())}
                             }
                         }
                     }
