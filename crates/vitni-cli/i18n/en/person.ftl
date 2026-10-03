@@ -23,3 +23,4 @@ err-merge-conflict = persons { $surviving } and { $merged } cannot be merged: { 
 err-self-association = person { $id } cannot be associated with itself
 err-distinct-from-itself = person { $id } cannot be distinguished from itself
 err-identity-decided = persons { $person } and { $other } already have a live identity decision; undo it first
+err-not-linked = person { $other } is not linked to person { $person }

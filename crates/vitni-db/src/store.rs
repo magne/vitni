@@ -739,6 +739,27 @@ impl Store {
         }
     }
 
+    /// The origin of every live assertion on the aggregate `aggregate_id` of `kind`, as `(assertion,
+    /// origin)` in the order they were asserted (ADR 0037 §2) — what a claim's *Why we believe* names.
+    /// The origins carry no content digest.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn assertion_origins(
+        &self,
+        kind: &str,
+        aggregate_id: &str,
+    ) -> Result<Vec<(vitni_core::ids::AssertionId, vitni_core::origin::RecordOrigin)>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.assertion_origins(kind, aggregate_id).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.assertion_origins(kind, aggregate_id).await,
+        }
+    }
+
     /// How many of `records` each dataset already holds as an aggregate of `kind`, created or resolved
     /// by its runs, as `(dataset, count)` in dataset order (ADR 0037 §3): the key overlap a file's
     /// dataset is proposed by.

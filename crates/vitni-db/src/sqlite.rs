@@ -454,6 +454,15 @@ impl SqliteStore {
         crate::record_origins::sqlite::created_one(&self.pool, kind, aggregate_id).await
     }
 
+    /// The origin of every live assertion on one aggregate of `kind` (ADR 0037 §2).
+    pub(crate) async fn assertion_origins(
+        &self,
+        kind: &str,
+        aggregate_id: &str,
+    ) -> Result<Vec<(vitni_core::ids::AssertionId, vitni_core::origin::RecordOrigin)>, DbError> {
+        crate::record_origins::sqlite::assertion_origins(&self.pool, kind, aggregate_id).await
+    }
+
     /// How many of `records` each dataset holds as an aggregate of `kind` (ADR 0037 §3).
     pub(crate) async fn origin_overlap(
         &self,

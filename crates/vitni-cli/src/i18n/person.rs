@@ -92,6 +92,12 @@ impl Localizer {
                 person = person.to_string(),
                 other = other.to_string()
             ),
+            PersonError::NotLinked { person, other } => fl!(
+                self.loader,
+                "err-not-linked",
+                person = person.to_string(),
+                other = other.to_string()
+            ),
         }
     }
 }

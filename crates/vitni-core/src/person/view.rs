@@ -155,6 +155,13 @@ impl PersonView {
         self.state.merged.iter().map(|m| m.value).collect()
     }
 
+    /// The live merges, each paired with the `AssertionId` of its `PersonsMerged` — the target an
+    /// unlink retracts (ADR 0039 §5).
+    #[must_use]
+    pub fn merged_with_assertions(&self) -> &[Attributed<PersonId>] {
+        &self.state.merged
+    }
+
     /// The ids of persons concluded to be different individuals from this one (ADR 0039 §1) — whose
     /// `PersonsDistinguished` assertion has not been undone.
     #[must_use]

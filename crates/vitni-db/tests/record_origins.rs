@@ -161,6 +161,35 @@ async fn one_aggregates_creating_origin_is_read_alone(store: &Store) {
     );
 }
 
+async fn the_live_origin_of_each_assertion_on_an_aggregate_is_read(store: &Store) {
+    create_person(store).await;
+    person(store, 11, Some(origin("I1", Some("x"))), assert_sex(Sex::Female)).await;
+    person(store, 12, None, assert_sex(Sex::Male)).await;
+    person(store, 13, Some(origin("I2", None)), assert_sex(Sex::Unknown)).await;
+    let retract = PersonCommand::RetractAssertion {
+        person_id: person_id(),
+        target: AssertionId::from_uuid(Uuid::from_u128(13)),
+    };
+    person(store, 14, None, retract).await;
+
+    let origins = store
+        .assertion_origins("person", &person_id().to_string())
+        .await
+        .unwrap();
+    let assertion = |n: u128| AssertionId::from_uuid(Uuid::from_u128(n));
+    assert_eq!(
+        origins,
+        [
+            (assertion(10), origin("I1", None)),
+            (assertion(11), origin("I1", Some("x")))
+        ],
+        "the keyboard write has no origin and the retracted one is not live"
+    );
+    let other = PersonId::from_uuid(Uuid::from_u128(0x99)).to_string();
+    let none = store.assertion_origins("person", &other).await.unwrap();
+    assert!(none.is_empty(), "{none:?}");
+}
+
 async fn a_retraction_clears_the_rows_live_flag(store: &Store) {
     create_person(store).await;
     person(store, 11, Some(origin("I1", None)), assert_sex(Sex::Female)).await;
@@ -339,6 +368,7 @@ mod sqlite {
         a_retraction_clears_the_rows_live_flag,
         the_creating_origins_of_a_kind_are_read_at_once,
         one_aggregates_creating_origin_is_read_alone,
+        the_live_origin_of_each_assertion_on_an_aggregate_is_read,
         a_recorded_resolution_resolves_the_item_in_later_runs,
         a_rebuild_reproduces_the_index,
         a_preview_returns_the_events_and_writes_nothing,
@@ -397,6 +427,7 @@ mod postgres {
         a_retraction_clears_the_rows_live_flag,
         the_creating_origins_of_a_kind_are_read_at_once,
         one_aggregates_creating_origin_is_read_alone,
+        the_live_origin_of_each_assertion_on_an_aggregate_is_read,
         a_recorded_resolution_resolves_the_item_in_later_runs,
         a_rebuild_reproduces_the_index,
         a_preview_returns_the_events_and_writes_nothing,

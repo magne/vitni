@@ -53,4 +53,12 @@ pub enum PersonError {
         /// The other person of the pair.
         other: PersonId,
     },
+    /// The record to unlink is not merged into the person's cluster (ADR 0039 §5).
+    #[error("person {other} is not linked to person {person}")]
+    NotLinked {
+        /// The cluster's person the unlink was asked on.
+        person: PersonId,
+        /// The record that is not one of its members.
+        other: PersonId,
+    },
 }

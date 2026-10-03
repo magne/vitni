@@ -47,6 +47,7 @@ pub mod history;
 mod identity;
 pub mod import;
 pub mod import_run;
+mod linked_records;
 pub mod map_source;
 pub mod match_queue;
 pub mod matching;
@@ -168,6 +169,7 @@ pub use import_run::{
     ImportRunSummary, abandon_import_run, choose_dataset, dataset_required, find_import_run, finish_import_run,
     list_datasets, list_import_runs, propose_dataset, start_import_run,
 };
+pub use linked_records::{LinkedRecord, LinkedRecords, OriginRef, linked_records, record_url, unlink_person};
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
 pub use match_queue::{
     DecidableKind, IdentityRefusal, MatchQueueFilter, MatchVerdict, QueuedMatch, decide_match, match_pair_decision,
