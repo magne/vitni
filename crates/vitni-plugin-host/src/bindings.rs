@@ -106,6 +106,7 @@ pub mod fixture_world {
         with: {
             "vitni:host-api/types": crate::bindings::imports::vitni::host_api::types,
             "vitni:host-api/log": crate::bindings::imports::vitni::host_api::log,
+            "vitni:host-api/query": crate::bindings::imports::vitni::host_api::query,
             "vitni:host-api/commands": crate::bindings::imports::vitni::host_api::commands,
             "vitni:host-api/net": crate::bindings::imports::vitni::host_api::net,
             "vitni:host-api/media-store": crate::bindings::imports::vitni::host_api::media_store,

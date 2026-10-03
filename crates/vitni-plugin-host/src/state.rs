@@ -39,6 +39,8 @@ use crate::capability::{Capability, Grants};
 use crate::error::PluginError;
 use crate::net::{self as net_impl, NetError, NetPolicy};
 use crate::review::PlanReviewer;
+use crate::similar::{from_similar, to_band};
+use crate::staging::to_kind;
 use crate::{BulkIo, ProgressControl, ProgressStep, ProgressUpdate, ai as ai_impl, media};
 
 /// The data owned by one plugin instance's Wasmtime store.
@@ -209,7 +211,7 @@ impl WasiView for HostState {
 pub(crate) fn to_capability_error(error: &vitni_app::AppError) -> types::CapabilityError {
     use vitni_app::AppError;
     match error {
-        AppError::Db(_) | AppError::Config(_) | AppError::Workspace(_) => {
+        AppError::Db(_) | AppError::Config(_) | AppError::Workspace(_) | AppError::MatchData(_) => {
             types::CapabilityError::Backend(error.to_string())
         }
         _ => types::CapabilityError::InvalidInput(error.to_string()),
@@ -1096,7 +1098,7 @@ pub(crate) fn to_sex(sex: types::Sex) -> Sex {
 
 /// Maps the domain [`Sex`] back onto the WIT `sex` enum (for the read DTO an exporter uses). A
 /// `Sex::Other` custom value has no enum slot and is reported as `unknown`.
-fn from_sex(sex: &Sex) -> types::Sex {
+pub(crate) fn from_sex(sex: &Sex) -> types::Sex {
     match sex {
         Sex::Male => types::Sex::Male,
         Sex::Female => types::Sex::Female,
@@ -1474,7 +1476,7 @@ pub(crate) fn to_external_id(external_id: types::ExternalId) -> ExternalId {
 
 /// Maps the domain [`EventType`] back onto the WIT `event-type` enum. A [`EventType::Custom`] value
 /// has no enum slot and is reported as `None`.
-fn from_event_type(event_type: &EventType) -> Option<types::EventType> {
+pub(crate) fn from_event_type(event_type: &EventType) -> Option<types::EventType> {
     let mapped = match event_type {
         EventType::Birth => types::EventType::Birth,
         EventType::Death => types::EventType::Death,
@@ -1606,7 +1608,7 @@ fn from_child_relationship(relationship: &ChildParentRelationship) -> types::Chi
 }
 
 /// Maps the domain [`Address`] back onto the WIT `address` record (for the read DTO an exporter uses).
-fn from_address(address: &Address) -> types::Address {
+pub(crate) fn from_address(address: &Address) -> types::Address {
     types::Address {
         lines: address.lines.clone(),
         locality: address.locality.clone(),
@@ -1632,7 +1634,7 @@ fn from_date_point(point: &DatePoint) -> types::DatePoint {
 
 /// Maps a domain [`GenealogicalDate`] back onto the WIT `genealogical-date` record — the inverse of
 /// [`to_genealogical_date`] (the host-computed sort key is not part of the wire shape).
-fn from_genealogical_date(date: &GenealogicalDate) -> types::GenealogicalDate {
+pub(crate) fn from_genealogical_date(date: &GenealogicalDate) -> types::GenealogicalDate {
     let calendar = match date.calendar {
         Calendar::Gregorian => types::DateCalendar::Gregorian,
         Calendar::Julian => types::DateCalendar::Julian,
@@ -1956,6 +1958,23 @@ impl query::Host for HostState {
             })
             .collect())
     }
+
+    async fn find_similar(
+        &mut self,
+        kind: types::EntityKind,
+        target: String,
+        min_band: types::MatchBand,
+        limit: u32,
+    ) -> Result<Vec<types::SimilarRecord>, types::CapabilityError> {
+        if !self.grants.allows(Capability::Query) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+        let similar = vitni_app::find_similar(&self.workspace, to_kind(kind), &target, to_band(min_band), limit)
+            .await
+            .map_err(|error| to_capability_error(&error))?;
+        Ok(similar.iter().map(from_similar).collect())
+    }
 }
 
 /// `ids` in order, each once: two claims on a merged record can name records of one cluster, which
@@ -2031,7 +2050,7 @@ pub(crate) fn to_place_type(place_type: types::PlaceType) -> PlaceType {
 }
 
 /// Maps the domain [`PlaceType`] back onto the WIT `place-type` variant.
-fn from_place_type(place_type: PlaceType) -> types::PlaceType {
+pub(crate) fn from_place_type(place_type: PlaceType) -> types::PlaceType {
     match place_type {
         PlaceType::Country => types::PlaceType::Country,
         PlaceType::County => types::PlaceType::County,

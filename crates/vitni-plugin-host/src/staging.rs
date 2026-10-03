@@ -364,7 +364,7 @@ fn to_fact(fact: types::Fact) -> NewFact {
     }
 }
 
-fn to_kind(kind: staging::EntityKind) -> MatchableKind {
+pub(crate) fn to_kind(kind: staging::EntityKind) -> MatchableKind {
     match kind {
         staging::EntityKind::Person => MatchableKind::Person,
         staging::EntityKind::Family => MatchableKind::Family,
