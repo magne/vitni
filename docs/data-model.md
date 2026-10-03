@@ -711,9 +711,15 @@ around evidence and provenance.
 
    An import run is started by its first write that goes ahead, so re-importing an unchanged file
    writes no events at all, not even a run. A record resolved onto an aggregate another dataset made
-   (by `ExternalId`, or by a recorded resolution) is not that dataset's to fill: the plan writes only
-   its identity — a person's name when it is not already recorded, and its sex; a family's partners and
-   children — and withholds the rest of the record, and whatever only withheld writes reach (item 6).
+   (by `ExternalId`, or by a recorded resolution) is not that dataset's to fill. A person is written as
+   a persona of its own, carrying the whole record, and merged into the person it resolved onto
+   (`PersonsMerged`, ADR 0040 §3); the persona's creating origin resolves the next run. Any other
+   record keeps only its identity — a family's partners and children — and the plan withholds the rest
+   of the record, and whatever only withheld writes reach (item 6). A link with an end in another
+   dataset's person or family names each person end by its cluster's root, so the persona never joins
+   a family its person already belongs to; every other link of the record names the persona, shared
+   records such as a tag or a place included. Outside an import run there is no dataset, and a person
+   resolved by `ExternalId` keeps only its name and sex.
 
 6. **Importers submit record graphs; the host plans before it writes (ADR 0040).** An importer is a
    parser: it submits one **record graph** per source record through the `staging` host interface —
@@ -728,7 +734,9 @@ around evidence and provenance.
    - **Link** — a record identity is established for deterministically: by a recorded resolution, by
      `ExternalId`, or a tag by its case-folded name (ADR 0038 §6), recorded as `ItemResolved`; or by
      the user deciding a place, source or repository is a candidate (`ItemResolved` with the decision
-     `Matched`), so the next run resolves it by the recorded resolution;
+     `Matched`), so the next run resolves it by the recorded resolution. A linked person records no
+     `ItemResolved`: it is written as a persona merged into its target (item 5), and the next run
+     resolves it by the persona's origin;
    - **Duplicate** — the same record as an earlier entity of the import: one with the same
      `ExternalId`, or a tag of the same folded name; references to it point at that entity;
    - **Candidates** — a new person, place, source or repository the matching engine judges at least

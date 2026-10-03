@@ -732,7 +732,7 @@ async fn a_later_session_reuses_the_source_repository_and_scan_an_earlier_one_ma
 }
 
 #[tokio::test]
-async fn a_record_of_a_person_another_dataset_made_writes_only_its_identity() {
+async fn a_record_of_a_person_another_dataset_made_is_a_persona_merged_into_it() {
     let (root, _dir) = init_workspace();
     let server = census_server().await;
     let workspace = open_workspace(&root).await;
@@ -782,42 +782,46 @@ async fn a_record_of_a_person_another_dataset_made_writes_only_its_identity() {
         .await
         .expect("assisted import runs");
 
-    assert!(summary.contains(&existing), "the summary names the person: {summary}");
     let workspace = open_workspace(&root).await;
+    let records = workspace.store().list_persons().await.expect("person records");
+    let persona = records
+        .iter()
+        .filter_map(|view| view.human_id())
+        .map(|human_id| human_id.as_str().to_owned())
+        .find(|human_id| *human_id != existing)
+        .expect("the record's own persona");
+    assert!(summary.contains(&persona), "the summary names the persona: {summary}");
+    assert_eq!(
+        vitni_app::pair_decision(&workspace, &existing, &persona)
+            .await
+            .expect("decision"),
+        Some(PairDecision::SameCluster),
+        "merged into the person the id names"
+    );
     let persons = list_persons(&workspace).await.expect("persons");
-    assert_eq!(persons.len(), 1, "the record resolved onto the existing person");
+    assert_eq!(persons.len(), 1, "one person, two records");
     assert!(
-        persons[0].citations.is_empty(),
-        "no citation on another dataset's person"
-    );
-    assert!(persons[0].media.is_empty(), "no scan on another dataset's person");
-    assert!(
-        !events_contain(&root, "Gårdbruker").await,
-        "no occupation on another dataset's person"
+        !persons[0].citations.is_empty(),
+        "the record's citation reaches the person"
     );
     assert!(
-        list_sources(&workspace).await.expect("sources").is_empty(),
-        "no source only the record cites"
+        events_contain(&root, "Gårdbruker").await,
+        "the record's occupation is kept"
     );
     assert!(
-        list_repositories(&workspace).await.expect("repos").is_empty(),
-        "no repository only its source holds"
+        !list_events(&workspace).await.expect("events").is_empty(),
+        "the record's events are kept"
     );
+    assert_eq!(list_sources(&workspace).await.expect("sources").len(), 1);
+    let stored = workspace
+        .store()
+        .find_person(&existing)
+        .await
+        .expect("find")
+        .expect("existing person");
     assert!(
-        list_media(&workspace).await.expect("media").is_empty(),
-        "no media only the record carries"
-    );
-    assert!(
-        list_events(&workspace).await.expect("events").is_empty(),
-        "no census or birth on another dataset's person"
-    );
-    assert!(
-        list_places(&workspace).await.expect("places").is_empty(),
-        "no place only withheld events reach"
-    );
-    assert!(
-        list_families(&workspace).await.expect("families").is_empty(),
-        "no household family for another dataset's person"
+        stored.facts().is_empty(),
+        "the other dataset's record keeps its own contents"
     );
 }
 

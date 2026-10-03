@@ -3,7 +3,8 @@
 //!
 //! Places, sources, repositories, tags, media and notes are written first, then citations, persons,
 //! families and events, then the links between them. Each new aggregate is created by one command with
-//! its external ids and origin, so it commits whole. Across aggregates the commit is sequenced, not
+//! its external ids and origin, so it commits whole; a person linked to another dataset's is created as
+//! a persona and merged into it in the same step. Across aggregates the commit is sequenced, not
 //! atomic: an interrupted commit leaves what it wrote, every write keyed by its origin, so planning the
 //! same import again resolves all of it as unchanged and the commit finishes the rest.
 
@@ -11,8 +12,10 @@ use std::collections::BTreeMap;
 
 use vitni_core::import_run::ResolvedItem;
 use vitni_core::matching::MatchableKind;
+use vitni_core::person::PersonView;
 
 use crate::error::AppError;
+use crate::identity::IdentityDecision;
 use crate::session::Session;
 use crate::staging::graph::LocalId;
 use crate::staging::plan::{Disposition, ImportPlan, Resolver, WriteScope};
@@ -115,11 +118,7 @@ pub async fn commit_import(
     let mut commit = Commit {
         plan,
         writer,
-        ids: plan
-            .entities
-            .iter()
-            .map(|entity| entity.disposition.target().map(|target| target.human_id.clone()))
-            .collect(),
+        ids: plan.initial_ids(),
         outcome: CommitOutcome {
             resolved: plan.resolved.clone(),
             ..CommitOutcome::default()
@@ -157,8 +156,8 @@ impl Commit<'_> {
         for kind in KIND_ORDER {
             for (index, entity) in self.plan.entities.iter().enumerate() {
                 let writes = match (&entity.disposition, entity.scope) {
-                    (_, WriteScope::Withheld)
-                    | (Disposition::Unchanged { .. } | Disposition::Link { .. }, WriteScope::Full) => false,
+                    (_, WriteScope::Withheld) | (Disposition::Unchanged { .. }, WriteScope::Full) => false,
+                    (Disposition::Link { .. }, WriteScope::Full) => self.plan.persona(entity),
                     (
                         Disposition::New
                         | Disposition::Candidates(_)
@@ -238,23 +237,21 @@ impl Commit<'_> {
                 self.writer.update(record, entity, &target.human_id).await?;
             }
             (Disposition::New | Disposition::Candidates(_), WriteScope::Full) => {
-                let resolver = Resolver {
-                    plan: self.plan,
-                    graph: planned.graph,
-                    ids: &self.ids,
-                };
-                let Some(human_id) = self.writer.create(record, entity, &resolver).await? else {
-                    self.outcome.dangling += 1;
-                    return Ok(());
-                };
-                self.ids[index] = Some(human_id);
-                *self
-                    .outcome
-                    .created
-                    .entry(planned.kind.as_str().to_owned())
-                    .or_insert(0) += 1;
-                if let Disposition::Candidates(_) = planned.disposition {
+                if self.create(index).await?.is_some()
+                    && let Disposition::Candidates(_) = planned.disposition
+                {
                     self.outcome.deferred += 1;
+                }
+            }
+            (Disposition::Link { target, .. }, WriteScope::Full) if self.plan.persona(planned) => {
+                if let Some(persona) = self.create(index).await? {
+                    let decision = IdentityDecision {
+                        provenance: self.writer.template.clone(),
+                        assessment: None,
+                    };
+                    let (workspace, session) = (self.writer.workspace, self.writer.session);
+                    crate::identity::merge::<PersonView>(workspace, session, &target.human_id, &persona, decision)
+                        .await?;
                 }
             }
             (disposition, WriteScope::Identity) => {
@@ -268,6 +265,32 @@ impl Commit<'_> {
         Ok(())
     }
 
+    /// Creates the entity `index` and counts it, returning its human id, or `None` for a citation
+    /// whose source names nothing written.
+    async fn create(&mut self, index: usize) -> Result<Option<String>, AppError> {
+        let planned = &self.plan.entities[index];
+        let Some((graph, entity)) = self.plan.staged(index) else {
+            return Ok(None);
+        };
+        let resolver = Resolver {
+            plan: self.plan,
+            graph: planned.graph,
+            ids: &self.ids,
+            foreign: false,
+        };
+        let Some(human_id) = self.writer.create(&graph.record, entity, &resolver).await? else {
+            self.outcome.dangling += 1;
+            return Ok(None);
+        };
+        self.ids[index] = Some(human_id.clone());
+        *self
+            .outcome
+            .created
+            .entry(planned.kind.as_str().to_owned())
+            .or_insert(0) += 1;
+        Ok(Some(human_id))
+    }
+
     async fn link(&mut self, index: usize) -> Result<(), AppError> {
         let planned = &self.plan.links[index];
         let graph = &self.plan.graphs[planned.graph];
@@ -276,6 +299,7 @@ impl Commit<'_> {
             plan: self.plan,
             graph: planned.graph,
             ids: &self.ids,
+            foreign: self.plan.foreign(planned.graph, &staged.link),
         };
         match self
             .writer
