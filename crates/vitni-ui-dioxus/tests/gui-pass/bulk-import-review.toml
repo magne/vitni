@@ -1,7 +1,8 @@
 # #413: a bulk import shows its plan once the file is read, and a plan with possible matches is
 # reviewed pair by pair before anything is written. The first import of `rerun.ged` plans every
-# record as new and imports at Import; the second, as a different tree, finds the place and the person
-# without an external id possibly the same as the first import's, and the Review stage puts each pair
+# record as new and imports at Import; the second, as a different tree, finds two places and the person
+# without an external id possibly the same as the first import's (Anders, linked by his `_UID`, comes in
+# as a persona carrying his own birthplace — #477), and the Review stage puts each pair
 # in the compare view, its Review step showing only while the stage is up. SSR renders each stage
 # alone; only the live app shows the driver loop handing the host's plan and pairs to the wizard and
 # their answers back, and focus landing on the compare view so y / l decide.
@@ -98,7 +99,7 @@ name = "second-plan"
 [[step]]
 do = "click"
 at = [1657, 737]
-label = "Review 2 possible matches"
+label = "Review 3 possible matches"
 
 [[step]]
 do = "shot"
@@ -112,6 +113,15 @@ label = "y: Same"
 [[step]]
 do = "shot"
 name = "second-pair"
+
+[[step]]
+do = "key"
+chord = "y"
+label = "y: Same"
+
+[[step]]
+do = "shot"
+name = "third-pair"
 
 [[step]]
 do = "key"
@@ -141,6 +151,11 @@ because = "Review must open the Review stage on the first pair"
 kind = "differ"
 shots = ["first-pair", "second-pair"]
 because = "answering the first pair must bring up the second"
+
+[[assert]]
+kind = "differ"
+shots = ["second-pair", "third-pair"]
+because = "answering the second pair must bring up the third"
 
 [[assert]]
 kind = "match"
