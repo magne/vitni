@@ -47,7 +47,7 @@ a way back.
      aborted and nothing has changed.
    - The backup carries the media manifest but not the media files, because a replace never deletes
      or overwrites a media file (§5).
-   - `workspace.toml` gains `[backup] pre-restore = false` to switch this off. It is for disposable
+   - `workspace.toml` gains `[backup] pre_restore = false` to switch this off. It is for disposable
      development workspaces, which then keep only the typed confirmation. The default is on, and an
      absent key means on.
    - Restoring the pre-restore backup, by either mode, brings the previous state back.

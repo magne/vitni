@@ -28,7 +28,10 @@ use crate::matching::Matching;
 const MANIFEST_FILE: &str = "workspace.toml";
 
 /// The subdirectories created inside a workspace.
-const SUBDIRS: [&str; 3] = ["exports", "backups", "media"];
+const SUBDIRS: [&str; 3] = ["exports", BACKUPS_DIR, "media"];
+
+/// The workspace subdirectory backups are suggested into, and the pre-restore backup is written to.
+pub(crate) const BACKUPS_DIR: &str = "backups";
 
 /// The default SQLite database url, relative to the workspace directory.
 const DEFAULT_DATABASE_URL: &str = "sqlite://vitni.sqlite3";
@@ -143,6 +146,57 @@ pub struct WorkspaceManifest {
     /// global default, else the engine's built-in settings.
     #[serde(default)]
     pub matching: MatchingConfig,
+    /// Per-workspace backup settings (ADR 0044 §3).
+    #[serde(default, skip_serializing_if = "BackupSettings::is_default")]
+    pub backup: BackupSettings,
+}
+
+/// Per-workspace backup settings (`workspace.toml` `[backup]`, ADR 0044 §3).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackupSettings {
+    /// Whether a restore that replaces this workspace first backs it up into `backups/`. On unless a
+    /// disposable workspace switches it off.
+    #[serde(default = "pre_restore_default")]
+    pub pre_restore: bool,
+}
+
+impl Default for BackupSettings {
+    fn default() -> Self {
+        Self {
+            pre_restore: pre_restore_default(),
+        }
+    }
+}
+
+impl BackupSettings {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+const fn pre_restore_default() -> bool {
+    true
+}
+
+/// Whether a restore that replaces the workspace in `dir` backs it up first (ADR 0044 §3).
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read.
+pub fn read_pre_restore_backup(dir: &Path) -> Result<bool, AppError> {
+    Ok(read_manifest(dir)?.backup.pre_restore)
+}
+
+/// Persists whether a restore that replaces the workspace in `dir` backs it up first, into the
+/// manifest's `[backup]` block (read-modify-write, preserving the rest). No store is opened.
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read/written.
+pub fn save_pre_restore_backup(dir: &Path, pre_restore: bool) -> Result<(), AppError> {
+    let mut manifest = read_manifest(dir)?;
+    manifest.backup.pre_restore = pre_restore;
+    write_manifest(dir, &manifest)
 }
 
 /// Per-workspace plugin enable/disable overrides (ADR 0007 §6; PR21).
@@ -744,6 +798,7 @@ impl Workspace {
             plugins: PluginPreferences::default(),
             surety: SuretyLabelOverrides::default(),
             matching: MatchingConfig::default(),
+            backup: BackupSettings::default(),
         };
         write_manifest(dir, &manifest)?;
         Ok(manifest)

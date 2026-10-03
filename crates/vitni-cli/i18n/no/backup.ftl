@@ -8,6 +8,12 @@ restore-success = Gjenopprettet { $events } hendelser i arbeidsområdet "{ $name
 restore-media-restored = Gjenopprettet { $count } mediefil(er).
 restore-media-missing = Mediefilen mangler etter gjenopprettingen: { $path }
 restore-media-mismatched = Mediefilen er ulik den som ble sikkerhetskopiert: { $path }
+replace-success = Erstattet arbeidsområdet "{ $name }" med { $events } hendelser fra sikkerhetskopien (sikkerhetskopiformat { $format }).
+replace-pre-restore = Tilstanden før ble sikkerhetskopiert først til { $path }.
+replace-no-pre-restore = Tilstanden før ble ikke sikkerhetskopiert: dette arbeidsområdet har slått av sikkerhetskopien før gjenoppretting.
+replace-needs-yes = Å erstatte arbeidsområdet "{ $name }" forkaster de { $events } hendelsene i det og alle oppføringer bygd på dem. Kjør igjen med --yes for å erstatte det.
+replace-needs-yes-backup = Tilstanden nå sikkerhetskopieres først til mappen backups i arbeidsområdet.
+replace-needs-yes-no-backup = Tilstanden nå sikkerhetskopieres ikke først: dette arbeidsområdet har slått av sikkerhetskopien før gjenoppretting.
 
 ## Feil
 err-backup-destination-exists = { $path } finnes allerede; velg et nytt filnavn
@@ -23,3 +29,4 @@ err-backup-invalid-event = hendelsen på linje { $line } i sikkerhetskopien er u
 err-backup-event-count = manifestet i sikkerhetskopien oppgir { $expected } hendelser, men den inneholder { $found }
 err-backup-target-not-empty = { $path } er ikke tom; gjenopprett til en ny eller tom mappe
 err-backup-database-not-empty = måldatabasen har allerede hendelser; gjenopprett til en tom database
+err-backup-pre-restore = sikkerhetskopien av dette arbeidsområdet til { $path } feilet, så ingenting ble erstattet: { $detail }

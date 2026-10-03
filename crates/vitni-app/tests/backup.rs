@@ -1,6 +1,7 @@
 //! Workspace backup and restore (ADR 0041): an archive of the event log restores into a new
 //! workspace whose projections equal the original's row for row, and a damaged, foreign or
-//! out-of-window archive is refused before anything is created.
+//! out-of-window archive is refused before anything is created. A restore can also replace the open
+//! workspace (ADR 0044), behind an automatic pre-restore backup.
 
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 #![expect(clippy::panic, reason = "an unexpected outcome aborts the test")]
@@ -13,11 +14,14 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 use time::macros::datetime;
 use uuid::Uuid;
-use vitni_app::backup::{BackupError, BackupRequest, RestoreRequest, create_backup, restore_backup};
+use vitni_app::backup::{
+    BackupError, BackupRequest, ReplaceRequest, RestoreRequest, create_backup, replace_backup, restore_backup,
+};
 use vitni_app::{
     AppDefaults, AppError, DatasetId, ImportCounts, NewImportRun, NewMedia, NewNote, NewPerson, OperatorConfig,
     PersonNameParts, Provenance, RecordOrigin, Session, Workspace, WorkspaceDefaults, create_media, create_note,
-    create_person, finish_import_run, list_datasets, list_import_runs, start_import_run,
+    create_person, finish_import_run, list_datasets, list_import_runs, read_pre_restore_backup,
+    save_pre_restore_backup, start_import_run,
 };
 use vitni_core::enums::EvidenceLevel;
 use vitni_core::ids::AgentId;
@@ -692,4 +696,184 @@ async fn a_backup_taken_before_workspace_ids_restores_with_an_id_of_its_own() {
     let restored = fs::read_to_string(target.join("workspace.toml")).expect("restored manifest");
     let restored_id = open(&target).await.id();
     assert!(restored.contains(&format!("id = \"{restored_id}\"")), "{restored}");
+}
+
+/// A second workspace under `home/target` holding one person of its own, to be replaced.
+async fn replace_target(home: &Path) -> Workspace {
+    let dir = home.join("target");
+    Workspace::init(&dir, &operator(), &AppDefaults::default(), None).expect("init");
+    let ws = open(&dir).await;
+    let person = NewPerson {
+        human_id: None,
+        name: Some(PersonNameParts::simple(
+            Some("Charles".to_owned()),
+            Some("Babbage".to_owned()),
+        )),
+        evidence_level: EvidenceLevel::Conclusion,
+        external_ids: Vec::new(),
+    };
+    create_person(&ws, &session(), person, Provenance::default(), &[])
+        .await
+        .expect("person");
+    ws
+}
+
+fn replace_request(archive: &Path) -> ReplaceRequest<'_> {
+    ReplaceRequest {
+        archive,
+        workspace_name: "target",
+        now: datetime!(2026-10-03 09:30:15 UTC),
+    }
+}
+
+/// The pre-restore backup `replace_request` names in `ws`'s `backups/`.
+fn pre_restore_path(ws: &Workspace) -> PathBuf {
+    ws.dir()
+        .join("backups")
+        .join("target-pre-restore-20261003T093015Z.vitni-backup")
+}
+
+/// Every stored row and projection row of `ws`, the state a replace must leave or keep.
+async fn state(ws: &Workspace) -> (Vec<vitni_db::RawEvent>, Vec<vitni_db::ProjectionRow>) {
+    (
+        ws.store().read_raw_events(None, 1000).await.expect("rows"),
+        ws.store().projection_rows().await.expect("projections"),
+    )
+}
+
+#[tokio::test]
+async fn a_replace_leaves_the_archives_rows_and_projections() {
+    let fixture = backed_up(false).await;
+    let target = replace_target(fixture.home.path()).await;
+
+    let report = replace_backup(&target, &replace_request(&fixture.archive))
+        .await
+        .expect("replace");
+
+    assert_eq!(report.events, 7);
+    assert_eq!(report.format_version, "0.1");
+    assert_eq!(
+        state(&target).await,
+        state(&fixture.source).await,
+        "row for row the archive's"
+    );
+    assert_eq!(
+        report.pre_restore_backup.as_deref(),
+        Some(pre_restore_path(&target).as_path())
+    );
+    assert_eq!(report.media_missing, ["media/portraits/ada.jpg"]);
+}
+
+#[tokio::test]
+async fn the_pre_restore_backup_restores_the_previous_state() {
+    let fixture = backed_up(false).await;
+    let target = replace_target(fixture.home.path()).await;
+    let before = state(&target).await;
+
+    replace_backup(&target, &replace_request(&fixture.archive))
+        .await
+        .expect("replace");
+    let back = fixture.home.path().join("back");
+    restore_backup(&restore_request(&fixture.config, &pre_restore_path(&target), &back))
+        .await
+        .expect("restore the pre-restore backup");
+
+    assert_eq!(state(&open(&back).await).await, before);
+}
+
+#[tokio::test]
+async fn a_failed_pre_restore_backup_aborts_the_replace() {
+    let fixture = backed_up(false).await;
+    let target = replace_target(fixture.home.path()).await;
+    let before = state(&target).await;
+    fs::write(pre_restore_path(&target), b"in the way").expect("block the backup");
+
+    let error = backup_error(replace_backup(&target, &replace_request(&fixture.archive)).await);
+
+    match error {
+        BackupError::PreRestoreBackup { path, .. } => assert_eq!(path, pre_restore_path(&target)),
+        other => panic!("expected the pre-restore backup to fail, got {other:?}"),
+    }
+    assert_eq!(state(&target).await, before, "nothing was replaced");
+}
+
+#[tokio::test]
+async fn a_workspace_can_switch_the_pre_restore_backup_off() {
+    let fixture = backed_up(false).await;
+    let target = replace_target(fixture.home.path()).await;
+    assert!(read_pre_restore_backup(target.dir()).expect("read"), "on by default");
+    save_pre_restore_backup(target.dir(), false).expect("switch off");
+
+    let report = replace_backup(&target, &replace_request(&fixture.archive))
+        .await
+        .expect("replace");
+
+    assert_eq!(report.pre_restore_backup, None);
+    assert_eq!(fs::read_dir(target.dir().join("backups")).expect("backups").count(), 0);
+    assert!(
+        !read_pre_restore_backup(target.dir()).expect("read"),
+        "the replace keeps this copy's setting, not the archive's"
+    );
+    assert_eq!(state(&target).await, state(&fixture.source).await);
+}
+
+#[tokio::test]
+async fn a_damaged_archive_replaces_nothing_and_backs_nothing_up() {
+    let fixture = backed_up(false).await;
+    let target = replace_target(fixture.home.path()).await;
+    let before = state(&target).await;
+    let damaged = fixture.home.path().join("damaged.vitni-backup");
+    rewrite(&fixture.archive, &damaged, |name, mut bytes| {
+        if name == "events.jsonl" {
+            bytes.push(b' ');
+        }
+        bytes
+    });
+
+    let error = backup_error(replace_backup(&target, &replace_request(&damaged)).await);
+
+    assert!(matches!(error, BackupError::ChecksumMismatch(_)), "{error:?}");
+    assert_eq!(state(&target).await, before);
+    assert_eq!(fs::read_dir(target.dir().join("backups")).expect("backups").count(), 0);
+}
+
+#[tokio::test]
+async fn a_replace_takes_the_archives_id_and_keeps_this_copys_database() {
+    let fixture = backed_up(false).await;
+    let target = replace_target(fixture.home.path()).await;
+    let manifest = || fs::read_to_string(target.dir().join("workspace.toml")).expect("manifest");
+    let database_line = manifest()
+        .lines()
+        .find(|line| line.starts_with("database_url"))
+        .expect("database_url")
+        .to_owned();
+
+    replace_backup(&target, &replace_request(&fixture.archive))
+        .await
+        .expect("replace");
+
+    assert_eq!(open(target.dir()).await.id(), fixture.source.id());
+    assert!(manifest().contains(&database_line), "{}", manifest());
+}
+
+#[tokio::test]
+async fn a_replace_adds_archived_media_but_never_overwrites_a_file() {
+    let fixture = backed_up(true).await;
+    let target = replace_target(fixture.home.path()).await;
+
+    let report = replace_backup(&target, &replace_request(&fixture.archive))
+        .await
+        .expect("replace");
+    assert_eq!(report.media_restored, 1);
+    let file = target.media_root().join("portraits/ada.jpg");
+    assert_eq!(fs::read(&file).expect("restored file"), b"not really a jpeg");
+
+    fs::write(&file, b"edited since").expect("edit");
+    save_pre_restore_backup(target.dir(), false).expect("switch off");
+    let again = replace_backup(&target, &replace_request(&fixture.archive))
+        .await
+        .expect("replace again");
+    assert_eq!(again.media_restored, 0);
+    assert_eq!(again.media_mismatched, ["media/portraits/ada.jpg"]);
+    assert_eq!(fs::read(&file).expect("kept file"), b"edited since");
 }

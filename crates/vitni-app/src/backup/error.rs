@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use crate::error::AppError;
+
 /// A backup or restore failure. Every refusal of an archive happens before the restore creates or
 /// registers anything, so a refused restore leaves no trace.
 #[derive(Debug, thiserror::Error)]
@@ -70,4 +72,13 @@ pub enum BackupError {
     /// The restore target's database already holds events.
     #[error("the target database already holds events; restore into an empty database")]
     DatabaseNotEmpty,
+    /// The automatic backup before a replace could not be written, so nothing was replaced (ADR 0044
+    /// §3).
+    #[error("the pre-restore backup to {} failed, so nothing was replaced: {source}", .path.display())]
+    PreRestoreBackup {
+        /// The backup that was being written.
+        path: PathBuf,
+        /// Why it failed.
+        source: Box<AppError>,
+    },
 }

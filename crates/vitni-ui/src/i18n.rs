@@ -2772,6 +2772,12 @@ impl Localizer {
                 )
             }
             BackupError::DatabaseNotEmpty => fl!(self.loader, "err-backup-database-not-empty"),
+            BackupError::PreRestoreBackup { path, source } => fl!(
+                self.loader,
+                "err-backup-pre-restore",
+                path = path.display().to_string(),
+                detail = self.error(source)
+            ),
         }
     }
 

@@ -609,6 +609,7 @@ err-match-data-read = kunne ikke lese sammenligningsdataene i { $path }: { $deta
 err-match-data-parse = sammenligningsfilen { $name } er ugyldig: { $detail }
 err-match-data-id = navnekulturpakken { $name } oppgir id-en «{ $id }», som ikke er filnavnet
 err-backup-database-not-empty = måldatabasen har allerede hendelser; gjenopprett til en tom database
+err-backup-pre-restore = sikkerhetskopien av dette arbeidsområdet til { $path } feilet, så ingenting ble erstattet: { $detail }
 
 # Source · Repository slices (Phase 5 PR9)
 source-list-empty = Ingen kilder ennå.
