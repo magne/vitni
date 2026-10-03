@@ -1,11 +1,12 @@
-//! Test-only fixture plugin: proves capability gating, the fuel limit, and the memory cap.
+//! Test-only fixture plugin: proves capability gating, the fuel limit, the memory cap, and the shape of
+//! the host capabilities' results.
 
 wit_bindgen::generate!({
     world: "fixture",
     path: "../../crates/vitni-plugin-host/wit",
 });
 
-use crate::vitni::host_api::{ai, commands, log, media_store, net, present, types};
+use crate::vitni::host_api::{ai, commands, log, media_store, net, present, query, types};
 
 struct Fixture;
 
@@ -110,6 +111,29 @@ impl Guest for Fixture {
             Ok(response) => Ok(response),
             Err(error) => Err(format!("{error:?}")),
         }
+    }
+
+    /// Asks the host `query` capability for the persons at least possibly the same as `target`. On
+    /// success returns one `"human-id band score feature=outcome,…"` line per candidate; the host's
+    /// `denied`/`invalid-input` error is surfaced as the error string.
+    fn try_find_similar(target: String, limit: u32) -> Result<String, String> {
+        let similar = query::find_similar(types::EntityKind::Person, &target, types::MatchBand::Possible, limit)
+            .map_err(|error| format!("{error:?}"))?;
+        let mut lines = Vec::with_capacity(similar.len());
+        for record in &similar {
+            let mut terms = Vec::with_capacity(record.features.len());
+            for term in &record.features {
+                terms.push(format!("{:?}={:?}", term.feature, term.outcome));
+            }
+            lines.push(format!(
+                "{} {:?} {:.3} {}",
+                record.human_id,
+                record.band,
+                record.score,
+                terms.join(",")
+            ));
+        }
+        Ok(lines.join("\n"))
     }
 }
 

@@ -205,7 +205,14 @@
 // `submit` returns; the guest neither sees nor drives it. `submit-outcome` gains `skipped`, for a
 // record the user chose not to import there, and `cancelled`, for a session the user ended there;
 // either way nothing of the record was written. A breaking change to `staging`.
-package vitni:host-api@0.28.0;
+//
+// Version 0.29.0 opens the matching engine to plugins (ADR 0038 §8): `query` gains `find-similar`, the
+// records of a kind the engine judges at least a band similar to a target, most similar first, each with
+// its score, band, features (outcome, weight and the two values compared), name-culture packs and engine
+// version. It reads what `list-*` already exposes, so it is granted with `query`. The `entity-kind` enum
+// moves from `staging` to `types`, so `query` can name a kind without importing `staging`; `staging`
+// uses it from there. Additive to `query` and `types`.
+package vitni:host-api@0.29.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `vitni_core::name::NameType`.
@@ -732,6 +739,149 @@ interface types {
         original-text: option<string>,
     }
 
+    // The kinds of record an importer stages and the matching engine compares (ADR 0038 §2, ADR 0040 §1).
+    enum entity-kind {
+        person,
+        family,
+        event,
+        place,
+        source,
+        citation,
+        media,
+        note,
+        repository,
+        tag,
+    }
+
+    // How sure the matching engine is that two records describe one individual (ADR 0038 §3, §6),
+    // mirroring `vitni_core::matching::MatchBand`, weakest first. `deterministic` is established
+    // identity (a shared record origin or external id, a pair decided the same), never a score.
+    enum match-band {
+        unlikely,
+        possible,
+        probable,
+        deterministic,
+    }
+
+    // A feature the matching engine compares, mirroring `vitni_core::matching::Feature`.
+    enum match-feature {
+        given-name,
+        surname,
+        sex,
+        birth,
+        death,
+        birth-place,
+        death-place,
+        lifespan,
+        father,
+        mother,
+        partners,
+        children,
+        patronymic,
+        occupation,
+        %record,       // two different items of one source record
+        partner,       // a family's partner, scored by the pair's own person assessment
+        marriage,
+        marriage-place,
+        event-type,
+        date,
+        place,
+        principal,
+        participants,
+        place-name,
+        place-type,
+        enclosure,
+        coordinates,
+        title,
+        author,
+        publication,
+        repository,
+        name,
+        address,
+        source,        // a citation's source, scored by the pair's own source assessment
+        page,
+        checksum,
+        path,
+        text,
+    }
+
+    // How a feature's two values compared, mirroring `vitni_core::matching::Outcome`. `partial` carries
+    // the similarity in `0..1`.
+    variant match-outcome {
+        agree,
+        partial(f64),
+        disagree,
+        missing,
+        conflict,
+    }
+
+    // Which vital event a compared date is of, mirroring `vitni_core::matching::profile::VitalKind`.
+    enum vital-kind {
+        birth,
+        baptism,
+        death,
+        burial,
+    }
+
+    // A vital event's date, as a feature value.
+    record vital-date {
+        kind: vital-kind,
+        date: genealogical-date,
+    }
+
+    // A relative's name and birth date, as a feature value.
+    record relative-value {
+        name: string,
+        born: option<genealogical-date>,
+    }
+
+    // A point in decimal degrees (north and east positive).
+    record coordinates {
+        latitude: f64,
+        longitude: f64,
+    }
+
+    // A value compared, as the record states it, mirroring `vitni_core::matching::FeatureValue`. An event
+    // type with no `event-type` slot is `text`; a media path is its file path or URL.
+    variant feature-value {
+        name(string),
+        date(vital-date),
+        place(string),
+        when(genealogical-date),
+        event-type(event-type),
+        sex(sex),
+        relative(relative-value),
+        text(string),
+        origin(origin-key),
+        place-type(place-type),
+        coordinates(coordinates),
+        address(address),
+        path(string),
+    }
+
+    // One term of the match weight: the feature, its outcome, its log2 weight, and the target's (`left`)
+    // and the candidate's (`right`) values.
+    record feature-comparison {
+        feature: match-feature,
+        outcome: match-outcome,
+        weight: f64,
+        left: option<feature-value>,
+        right: option<feature-value>,
+    }
+
+    // A record the engine judges similar to a target (ADR 0038 §3): its human id (a tag's id), the score
+    // in `0..=1`, the band, every term of the match weight, the name-culture packs applied (`universal`
+    // first) and the engine version. A family's partner assessments and a citation's source assessment,
+    // which its `partner` and `source` terms summarise, are not carried.
+    record similar-record {
+        human-id: string,
+        score: f64,
+        band: match-band,
+        features: list<feature-comparison>,
+        cultures: list<string>,
+        engine: u32,
+    }
+
     // Why a capability call failed. `denied` is the deny-by-default signal (ADR 0011 §2): the
     // capability was not granted to this instance. `backend` carries an I/O or infrastructure
     // failure message (a missing file, an unreadable stream).
@@ -756,7 +906,7 @@ interface log {
 
 // Read views as frontend-neutral DTOs (ADR 0007 §6 `query`).
 interface query {
-    use types.{person-dto, family-dto, event-dto, source-dto, citation-dto, media-dto, note-dto, repository-dto, tag-dto, place-dto, capability-error};
+    use types.{entity-kind, match-band, similar-record, person-dto, family-dto, event-dto, source-dto, citation-dto, media-dto, note-dto, repository-dto, tag-dto, place-dto, capability-error};
 
     list-persons: func() -> result<list<person-dto>, capability-error>;
     list-families: func() -> result<list<family-dto>, capability-error>;
@@ -768,6 +918,13 @@ interface query {
     list-repositories: func() -> result<list<repository-dto>, capability-error>;
     list-tags: func() -> result<list<tag-dto>, capability-error>;
     list-places: func() -> result<list<place-dto>, capability-error>;
+
+    // The records of `kind` the matching engine judges at least `min-band` similar to the record
+    // `target` (a human id; a tag's id), most similar first, at most `limit` of them (ADR 0038 §8). A
+    // merged target is matched as its cluster's root; the target itself, a merged record and a record
+    // the user already decided about against it are never among them. `invalid-input` when `target`
+    // does not exist; `backend` when the matching data or settings cannot be loaded.
+    find-similar: func(kind: entity-kind, target: string, min-band: match-band, limit: u32) -> result<list<similar-record>, capability-error>;
 }
 
 // Submit domain commands through `vitni-app` use-cases (ADR 0007 §6 `commands`). Every change
@@ -890,21 +1047,7 @@ interface commands {
 // its name, and matches the rest against the workspace, so a re-import of an unchanged document writes
 // nothing. Granted with the `commands` capability.
 interface staging {
-    use types.{person-name, sex, fact, external-id, restriction, event-type, genealogical-date, address, place-type, confidence, note-type, participant-role, age, attribute, association-role, child-relationship, media-crop, source-media-type, origin-key, capability-error};
-
-    // The kinds of record a graph holds.
-    enum entity-kind {
-        person,
-        family,
-        event,
-        place,
-        source,
-        citation,
-        media,
-        note,
-        repository,
-        tag,
-    }
+    use types.{entity-kind, person-name, sex, fact, external-id, restriction, event-type, genealogical-date, address, place-type, confidence, note-type, participant-role, age, attribute, association-role, child-relationship, media-crop, source-media-type, origin-key, capability-error};
 
     // Another graph's entity, by its origin: its kind, its record and its item.
     record origin-ref {
@@ -1343,6 +1486,7 @@ world assisted-import {
 // present) without GEDCOM.
 world fixture {
     import log;
+    import query;
     import commands;
     import net;
     import media-store;
@@ -1375,4 +1519,8 @@ world fixture {
     // Present `request` once through `present.show` and return the response as the session summary (or
     // the host error). A minimal `assisted-import`-shaped export that drives `run_assisted_import`.
     export run-assisted: func(request: string) -> result<string, string>;
+    // Ask `query.find-similar` for at most `limit` persons at least possibly the same as `target`; returns
+    // one line per candidate, "human-id band score feature=outcome,…" (or the host error). Proves the
+    // `query` grant and the shape of an assessment across the boundary.
+    export try-find-similar: func(target: string, limit: u32) -> result<string, string>;
 }

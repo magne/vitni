@@ -769,6 +769,12 @@ per assertion from the `record_origins` index (`Store::assertion_origins`). `unl
 merge that linked a member on whichever record holds it, so the member and every record linked through
 it are listed again. The person screen gains a *Linked records* tab with *Unlink* behind a reason panel,
 and *Why we believe* names the record a claim was read from, linking out to Digitalarkivet's page for it.
+✅ `find-similar` for plugins (ADR 0038 §8, #417): host-api 0.29.0 adds `query.find-similar(kind, target,
+min-band, limit)`, which answers through `vitni_app::find_similar` — each candidate with its human id,
+score, band, every feature term (outcome, weight and the two values compared), the name-culture packs
+applied and the engine version. It reads only what `list-*` already exposes, so it is granted with
+`query`, deny-by-default like every capability. `entity-kind` moves from `staging` to `types`, so an
+exporter can name a kind without importing `staging`.
 
 ## Risk register
 

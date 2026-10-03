@@ -30,6 +30,7 @@ mod present;
 mod review;
 mod run;
 pub mod signing;
+mod similar;
 mod staging;
 mod state;
 mod trust;
@@ -854,6 +855,45 @@ impl PluginHost {
         let outcome = bindings.call_try_present(&mut store, payload).await;
         let response = interpret_result(outcome)?;
         Ok((response, store.into_data().into_workspace()))
+    }
+
+    /// Instantiates the fixture and invokes `try-find-similar` (proves the `query` grant and an
+    /// assessment's shape across the boundary): at most `limit` persons at least possibly the same as
+    /// `target`. Returns the fixture's one-line-per-candidate summary and the workspace.
+    ///
+    /// # Errors
+    /// As [`run_bulk_import`](Self::run_bulk_import); a denied capability or an unknown target surfaces
+    /// as [`PluginError::Guest`].
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a fixture find-similar call carries the full invocation plus the target and the limit"
+    )]
+    pub async fn fixture_try_find_similar(
+        &self,
+        component: &Component,
+        workspace: Workspace,
+        session: Session,
+        grants: Grants,
+        budget: ResourceBudget,
+        target: &str,
+        limit: u32,
+    ) -> Result<(String, Workspace), PluginError> {
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            NetPolicy::deny_all(),
+            AiConfig::default(),
+            None,
+            BulkIo::none(),
+        )?;
+        let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
+            .await
+            .map_err(|error| PluginError::Runtime(error.to_string()))?;
+        let outcome = bindings.call_try_find_similar(&mut store, target, limit).await;
+        let summary = interpret_result(outcome)?;
+        Ok((summary, store.into_data().into_workspace()))
     }
 }
 

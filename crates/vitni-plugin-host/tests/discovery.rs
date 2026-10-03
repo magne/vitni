@@ -279,6 +279,7 @@ fn a_manifest_under_declaring_a_capability_fails_the_cross_check() {
         &bundle,
         vec![
             "log".to_owned(),
+            "query".to_owned(),
             "net".to_owned(),
             "media-store".to_owned(),
             "ai".to_owned(),
@@ -304,6 +305,7 @@ fn a_manifest_over_declaring_a_capability_is_accepted() {
         &bundle,
         vec![
             "log".to_owned(),
+            "query".to_owned(),
             "commands".to_owned(),
             "net".to_owned(),
             "media-store".to_owned(),
