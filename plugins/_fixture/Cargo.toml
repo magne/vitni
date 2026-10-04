@@ -21,7 +21,7 @@ host_api = "0.29.0"
 capabilities = ["log", "query", "commands", "net", "media-store", "ai", "present"]
 
 [dependencies]
-wit-bindgen = "0.57.1"
+wit-bindgen = "0.62.0"
 
 [lints.clippy]
 # The host-target workspace lints don't apply here; this crate is linted on the wasm target via

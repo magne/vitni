@@ -30,14 +30,14 @@ repository = "https://github.com/magne/vitni"
 [workspace.dependencies]
 # domain / shared
 cqrs-es = "0.5.0"
-async-trait = "0.1.91"
+async-trait = "0.1.92"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-uuid = { version = "1.24.0", features = ["v7", "serde"] }
-thiserror = "2.0.19"
-time = { version = "0.3.54", features = ["serde", "serde-well-known", "macros"] }
+uuid = { version = "1.27.0", features = ["v7", "serde"] }
+thiserror = "2.0.21"
+time = { version = "0.3.55", features = ["serde", "serde-well-known", "macros"] }
 sqlx = { version = "0.8.6", features = ["sqlite", "postgres", "runtime-tokio", "json"] }
-tracing = "0.1.41"
+tracing = "0.1.44"
 # record matching (ADR 0038): Jaro–Winkler and diacritic folding; both already in the tree via clap/url.
 strsim = "0.11.1"
 unicode-normalization = "0.1.25"
@@ -55,14 +55,14 @@ wasmtime = "49.0.2"
 wasmtime-wasi = "49.0.2"
 # plugin bundle signing (vitni-plugin-host, xtask; ADR 0014): ed25519 detached signatures over a
 # sha2 digest, verified against an embedded trust root. Held at the pre-release: 3.0.0 requires
-# curve25519-dalek ^5.0.0, while `russh` (via the `testcontainers` dev-dependency) requires
-# curve25519-dalek =5.0.0-pre.6, and the russh version cargo falls back to does not compile against
-# the pkcs5 that ed25519-dalek 3.0.0 pulls in. Re-evaluate when testcontainers ships a russh on
-# stable curve25519-dalek.
+# curve25519-dalek ^5.0.0, while `russh` (dev-only, via `test-containers-util` → `testcontainers`
+# 0.27) requires curve25519-dalek =5.0.0-pre.6, and the russh version cargo falls back to does not
+# compile against the pkcs5 that ed25519-dalek 3.0.0 pulls in. Re-evaluate when testcontainers ships
+# a russh on stable curve25519-dalek (0.28's russh 0.61 still pins =5.0.0-rc.0).
 ed25519-dalek = "=3.0.0-pre.6"
 # assisted-import host capabilities (vitni-plugin-host; ADR 0017): host-mediated HTTP,
 # media-library storage with SHA-256 checksums, and content-type sniffing.
-reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "gzip", "stream", "json"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "gzip", "stream", "json"] }
 sha2 = "0.11.0"
 # the `.vitni-backup` archive (vitni-app; ADR 0041 §1). Deflate only, through the flate2 already in the
 # tree; no default features, so no encryption, bzip2/zstd/lzma or clock-dependent timestamps.
@@ -71,18 +71,18 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2
 strum = { version = "0.28.0", default-features = false, features = ["derive"] }
 mime_guess = "2.0.5"
 # base64-encodes the media file into the OpenAI-compatible vision request (ADR 0017 §4).
-base64 = "0.23.0"
+base64 = "0.23.1"
 wiremock = "0.6.5"
 # scoped environment-variable guard for the ai vision-api key tests (ADR 0017 §4); serializes env
 # mutation so parallel tests don't race the process environment.
 temp-env = { version = "0.3.6", features = ["async_closure"] }
 # async runtime / test support
-tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
-tempfile = "3.24.0"
+tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread"] }
+tempfile = "3.27.0"
 # framework-free boundary guard (vitni-ui dev-only; ADR 0008 dependency-tree assertion)
 cargo_metadata = "0.23.1"
 # property-based tests for the pure crop/media-naming view-model math (vitni-ui dev-only; ADR 0017)
-proptest = "1.8.0"
+proptest = "1.11.0"
 # performance benchmarks (vitni-db dev-only; Phase 11 workstream B). default-features off drops
 # the plotters/rayon HTML-report tree; only the `cargo bench` harness support is needed.
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
@@ -91,15 +91,15 @@ figment = { version = "0.10.19", features = ["toml", "env"] }
 directories = "6.0.0"
 # `.env` fallback for API keys named by `api-key-env`/`api_key_env` (#296); parsed, never loaded into the process env.
 dotenvy = "0.15.7"
-whoami = "2.1.2"
-toml = "1.1.3"
+whoami = "2.1.3"
+toml = "1.1.6"
 # import/export formats (vitni-gedcom, vitni-gramps-xml; plugins)
 quick-xml = "0.42.0"
 # place geometry (ADR 0024): geo-types + geozero convert to GeoPackage WKB behind the vitni-db
 # spatial index; geojson is the import/export interchange (vitni-gedcom, vitni-gramps-xml).
 # geozero's own `with-wkb`/`with-gpkg` features cover GeoPackage encoding, so the standalone `wkb`
 # crate is not also depended on (would be a redundant WKB implementation).
-geo-types = "0.7.19"
+geo-types = "0.7.20"
 geozero = { version = "0.15.1", default-features = false, features = ["with-geo", "with-gpkg"] }
 geojson = "1.0.0"
 # Digitalarkivet HTML parsing (vitni-digitalarkivet; ADR 0017). Pure CSS-selector scraping
@@ -107,24 +107,24 @@ geojson = "1.0.0"
 # both verified to build for wasm32-wasip2 (the plugin target).
 scraper = "0.27.0"
 url = "2.5.8"
-flate2 = { version = "1.1.5", default-features = false, features = ["rust_backend"] }
+flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 # cli frontend
-clap = { version = "4.6.4", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive"] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 anyhow = "1.0.104"
 # localization (vitni-cli; ADR 0003)
 i18n-embed = { version = "0.16.0", features = ["fluent-system", "desktop-requester", "filesystem-assets"] }
 i18n-embed-fl = "0.10.1"
-rust-embed = "8.11.0"
+rust-embed = "8.12.0"
 unic-langid = "0.9.6"
 # localized date/number formatting (vitni-cli; ICU 2.x, compiled CLDR data — roadmap Spike A)
-icu = "2.2.0"
+icu = "2.3.1"
 assert_cmd = "2.2.2"
 predicates = "3.1.4"
 # ui renderer (vitni-ui-dioxus; ADR 0008). The desktop renderer is opted into per-crate via a
 # `desktop` feature, so default builds (and the SSR interpreter test) need no webview system libs.
-dioxus = "0.7.8"
-dioxus-ssr = "0.7.8"
+dioxus = "0.7.10"
+dioxus-ssr = "0.7.10"
 # OS appearance detection for the "System" theme mode (vitni-ui-dioxus, desktop only)
 dark-light = "3.0.0"
 # internal crates
