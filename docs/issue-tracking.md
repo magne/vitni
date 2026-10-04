@@ -1,11 +1,11 @@
 # Issue tracking on GitHub
 
-- **Status:** **Applied 2026-07-27; updated 2026-10-01**: `0.9.1 — Fixture provenance` landed
-  (2026-09-30: that milestone; 2026-09-27: the `0.10` milestone and two area labels). 42 labels and the
+- **Status:** **Applied 2026-07-27; updated 2026-10-04**: the unfiled `0.9` and `0.10` bullets filed
+  (2026-10-01: `0.9.1 — Fixture provenance` landed; 2026-09-30: that milestone; 2026-09-27: the `0.10` milestone and two area labels). 42 labels and the
   issue-template forms exist, alongside `.github/labels.toml` and `cargo xtask issue-sync`. `0.8 — UI
   parity` and `0.9.1 — Fixture provenance` shipped; the three remaining gates are `0.9`, `0.10` and
   `1.0`.
-- **Date:** 2026-07-27 (updated 2026-10-01)
+- **Date:** 2026-07-27 (updated 2026-10-04)
 - **Audience:** anyone filing, triaging, or closing an issue
 - **Companion:** [`issues.md`](issues.md) is the backlog this describes; [`roadmap.md`](roadmap.md)
   owns phase detail.
@@ -176,7 +176,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: a save run that hangs when its target leaves the strip (#302), and the shared record tabs having no common layout contract (#303). |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: attaching a note or media on seven record kinds discarding the attach form's provenance (#424). |
 | **`0.10 — Record matching`** | Import that never duplicates and never guesses: record origins and import runs, the matching engine, identity decisions, staged import with side-by-side review, and versioned workspace backup (ADRs 0037–0041). Groomed in full in §4, in dependency order. |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end on the first real tag, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. Also the deletion of the pre-1.0 backup upgraders, which freezes backup format v1 (#392, ADR 0041 §4). |
 
@@ -193,7 +193,7 @@ arithmetic.
 The remaining pre-1.0 gates, itemized from `issues.md` as they stand. Each is small enough to groom,
 which is the point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (14 open)
+### `0.9 — UI stabilization` (6 open)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended, and the 2026-08-12
 walkthrough is the proof.** Every issue in the previous round closed, leaving the milestone empty — and
@@ -201,7 +201,23 @@ one pass through the real GUI, looking at nothing but what a user sees, refilled
 those are defects no SSR test could have caught, because they are about what reaches the DOM, the
 stylesheet or the webview rather than what the view logic decided. Treat the count as a floor again.
 
+**Open now (2026-10-04).** #424 and #382 are what is left of that round. The other four were filed on
+2026-10-04 from bullets already in `issues.md`: one shipped screen that contradicts its mockup, two
+mockup/sheet drifts against the rule that the mockups describe shipped behaviour, and the `gui-pass`
+flakes that make every scenario's first assertion unreliable.
+
 | Item | Why it gates a release |
+| --- | --- |
+| [Attaching a note or media on seven record kinds discards the attach form's provenance](https://github.com/magne/vitni/issues/424) | The reason, surety and citations a user enters are silently lost from History, so the audit trail records less than the user asserted |
+| [A date row's four controls stack instead of sitting on one line](https://github.com/magne/vitni/issues/500) | Every date field on all 13 record screens draws a 5-row block where the mockup draws one row |
+| [Ten mockups quote a History note no shipped string says](https://github.com/magne/vitni/issues/501) | The mockups advertise a competitor claim the product does not make |
+| [The mockup sheet is only partly the superset it is documented to be](https://github.com/magne/vitni/issues/502) | 24 app rules have no mockup counterpart and nothing gates the sheet as a whole; needs a decided rule first |
+| [Fast typing can lose characters in record text fields](https://github.com/magne/vitni/issues/382) | Typed text silently differs from what was entered; unconfirmed outside Xvfb |
+| [`gui-pass` occasionally grabs a blank first shot](https://github.com/magne/vitni/issues/503) | The harness that tests this milestone's class of defect is flaky at its first assertion |
+
+The 2026-08-12 round, closed except #424:
+
+| Item | Why it gated a release |
 | --- | --- |
 | [A save run whose target leaves the strip hangs](https://github.com/magne/vitni/issues/302) | Save all can wedge the quit/close path with no way out and no message |
 | [Attaching a note or media on seven record kinds discards the attach form's provenance](https://github.com/magne/vitni/issues/424) | The reason, surety and citations a user enters are silently lost from History, so the audit trail records less than the user asserted |
@@ -239,7 +255,7 @@ a hit-test bug (#285), the map needs a repaint rather than a resize (#252), and 
 ever blanked the canvas. The code changes themselves are in the PRs and the commit log, which is where
 §6 says they belong.
 
-### `0.10 — Record matching` (28 open)
+### `0.10 — Record matching` (12 open)
 
 Ordered by dependency, not severity. Backup goes first, so every later event change passes its
 fixture guard. Then come the origins, and the xref-collision bug with them, because its fix *is* the
@@ -264,7 +280,30 @@ The count is 28 because the *More name-culture packs* bullet is unfiled by desig
 freeze (v1, #392) is filed in `1.0`. Issues were numbered before the order was checked, so two sit
 out of sequence. #389 follows #394, because once xrefs and Gramps ids stop being `ExternalId`s only
 resolve-by-origin can find a re-imported person. #401 follows #403, because the duplicate check
-excludes decided pairs. Every other stage is in number order.
+excludes decided pairs. Every other stage is in number order. All 28, and the defects found while
+landing them, are closed.
+
+**Residuals (filed 2026-10-04).** What the first round left open: the bullets under *Record matching &
+identity* are failures of the milestone's own promise — a crash or an interrupted open that lets a
+re-import duplicate, a *Same* that drops data, and lookups that do not scale to the 100k persons the
+engine targets. The three *Bulk import, export & sync* items are ADR 0029 reconciliation, which a
+re-import leans on once it no longer duplicates. #486 is here because a failed projection write lets
+the ADR 0044 replace commit a workspace with records missing.
+
+| Item | Area | Why it gates |
+| --- | --- | --- |
+| [An interrupted `record_origins` backfill is never resumed](https://github.com/magne/vitni/issues/489) | matching | Re-import misses earlier imports' origins and duplicates until `vitni rebuild` |
+| [The origin index is written after the event commit](https://github.com/magne/vitni/issues/490) | matching | A kill between the two makes the next import create the record again |
+| [A record decided *Same* as a stored place, source or repository adds nothing to it](https://github.com/magne/vitni/issues/491) | matching | The incoming record's fields are dropped without notice |
+| [Projection write errors are dropped](https://github.com/magne/vitni/issues/486) | cross-aggregate | A rebuild or replace finishes `Ok` with records missing |
+| [`find_similar` reads every profile view](https://github.com/magne/vitni/issues/492) | matching | One lookup costs ~0.9 s at 100k persons |
+| [The all-pairs duplicate scan does not scale to 100k persons](https://github.com/magne/vitni/issues/493) | matching | The Dashboard runs it on every show |
+| [Blocking loses a given name that is only similar](https://github.com/magne/vitni/issues/494) | matching | The engine shows a pair blocking can never find |
+| [Planning an import costs a workspace-wide load](https://github.com/magne/vitni/issues/495) | matching | Once per record in an assisted session |
+| [An abandoned import run cannot be resumed from History](https://github.com/magne/vitni/issues/496) | matching | ADR 0040 §5's resume has no GUI entry point |
+| [Gramps `<header created>` is never threaded to `begin-run`](https://github.com/magne/vitni/issues/497) | bulk | A Gramps re-import gets no timestamp gating |
+| [Source merge/sync reconciliation prerequisite](https://github.com/magne/vitni/issues/498) | bulk | A re-import cannot reconcile a source's bibliographic fields |
+| [Place merge/sync reconciliation prerequisite](https://github.com/magne/vitni/issues/499) | bulk | A re-import cannot reconcile a place's fields |
 
 ### Not in any milestone
 
