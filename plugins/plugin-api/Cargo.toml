@@ -14,7 +14,7 @@ publish = false
 # because it builds only for `wasm32-wasip2`.
 
 [dependencies]
-wit-bindgen = "0.57.1"
+wit-bindgen = "0.62.0"
 vitni-interchange = { path = "../../crates/vitni-interchange" }
 
 [lints.clippy]

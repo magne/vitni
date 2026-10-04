@@ -20,7 +20,7 @@ host_api = "0.29.0"
 capabilities = ["log", "query", "progress", "export-sink"]
 
 [dependencies]
-wit-bindgen = "0.57.1"
+wit-bindgen = "0.62.0"
 vitni-plugin-api = { path = "../plugin-api" }
 vitni-gramps-xml = { path = "../../crates/vitni-gramps-xml" }
 vitni-interchange = { path = "../../crates/vitni-interchange" }

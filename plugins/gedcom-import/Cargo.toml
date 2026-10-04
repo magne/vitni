@@ -28,7 +28,7 @@ scheme = "gedcom"
 scope = "lineage"
 
 [dependencies]
-wit-bindgen = "0.57.1"
+wit-bindgen = "0.62.0"
 vitni-plugin-api = { path = "../plugin-api" }
 vitni-gedcom = { path = "../../crates/vitni-gedcom" }
 
