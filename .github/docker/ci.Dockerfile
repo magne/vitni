@@ -8,7 +8,7 @@
 #
 # Rust is pinned to match rust-toolchain.toml's resolved stable at image-build time. The
 # toolchain file still governs at runtime; baking the same version avoids a re-download.
-FROM rust:1.96.1-bookworm
+FROM rust:1.99.0-bookworm
 
 # arm64-ready: buildx sets TARGETARCH per platform. Today only linux/amd64 is published
 # (see ci-image.yml); the arch-aware steps below already handle arm64 when it is added.
@@ -43,6 +43,6 @@ RUN case "$TARGETARCH" in \
         arm64) NX_PLATFORM=linux-arm ;; \
         *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac \
-    && curl -LsSf "https://get.nexte.st/0.9.138/${NX_PLATFORM}" | tar zxf - -C "${CARGO_HOME}/bin"
+    && curl -LsSf "https://get.nexte.st/0.9.146/${NX_PLATFORM}" | tar zxf - -C "${CARGO_HOME}/bin"
 
 ENV CARGO_TERM_COLOR=always
