@@ -96,18 +96,6 @@ already filed against it keep resolving their [`#tags`](#tags) anchor.
 
 ### Media
 
-- **A media preview whose filename is not ASCII never loaded** — the `<img src>` carried raw UTF-8, the
-  webview percent-encoded it in the request, and nothing decoded it, so `resolve_media_path` looked for a
-  file whose name contains a literal `%C3%B8` and 404'd. Spaces failed the same way (`%20`); `#`, `?` and
-  `%` failed before the request, taking on their URL meanings. Systemic, not exotic: `slugify`
-  (`media_save.rs`) and the plugin host's `sanitize_component` both deliberately keep `æøå`, so the app's
-  own naming conventions produced paths it could never serve. #301 shipped without catching it because
-  `media-preview`'s fixture was `portraits/portrait.png` — ASCII, no spaces — and because the two causes
-  that PR fixed (no inferred MIME, the doubled `media/` prefix) genuinely fire on that fixture, while the
-  operator's own records have a recorded MIME and an unprefixed path, so neither explained the symptom
-  that was reported. Fixed by making the `/media/<rel>` URL space encoded end to end
-  (`media_url_path`/`media_url_decode` in `vitni_core::media_path`), with the gui-pass fixture gaining
-  a second record named in the real data's alphabet.
 - **"Add file to media library" action.** The media-save dialog and the pure naming logic
   (`suggest_filename`/`slugify`) ship and are SSR-tested; the app-layer copy use-case that writes an
   external file into `media/<target>` and creates the Media record is deferred.
@@ -233,7 +221,7 @@ which is what makes them worth fixing in the shared code rather than per screen.
   does not flatten a multi-control row, which is a CSS decision on all 13 record screens rather than a
   local fix. Found while re-measuring `picker-sees-new-record` for #310: the succession form's
   provenance block runs past a 1200px window because of it, so that scenario now scrolls its panel
-  before clicking.
+  before clicking. — #500
 - **Import run rows cannot be expanded.** An import run is one History row (#393): `group_runs`
   (`vitni-app/src/history.rs`) folds a run's entries into `ActivityDetail::ImportRun`, whose `children`
   the `ActivityVm`/`HistoryEntryVm` carry, and the row shows its count muted beside it. Nothing renders
@@ -400,20 +388,20 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   `staging.begin-run`). `plugins/gramps-import/src/lib.rs` goes straight from
   `parse` to the person loop and never reads `db.header`, though `vitni-gramps-xml/src/parse.rs:400`
   does parse the date — so a Gramps re-import gets no timestamp gating at all. Found while verifying
-  the Phase 10 completion claim, which described both formats as wired.
+  the Phase 10 completion claim, which described both formats as wired. — #497
 - **Source merge/sync reconciliation prerequisite** — `set-source-title`/`set-source-abbrev` WIT verbs,
   GEDCOM `ABBR` / Gramps `<sabbrev>` round-trip, and a field-level `AssertionId` + `occurred_at` read
   path. The ADR 0029 timestamp-gated rule cannot target Source's bibliographic fields
   (`title`/`author`/`pub_info`/`abbrev`) without them. Resolve-or-create itself is done by origin
   (#394), and an imported value is now reconciled against the earlier import's assertion, whose id
   and time `record_origins` holds; a value the user typed has no origin row, so the gap is reconciling
-  against that.
+  against that. — #498
 - **Place merge/sync reconciliation prerequisite** — the same remaining gaps for Place: no WIT verbs for
   most Place fields, and no read path exposing a field's live `AssertionId` **together with** that
   assertion's `occurred_at`, without which the timestamp gate cannot be evaluated at all. Place's dated
   multi-valued fields do have the natural match key `Fact` lacks: the effective-from `date`. See
   [`research/gis-norway.md`](research/gis-norway.md). Resolve-or-create itself is done by origin
-  (#394): a re-import no longer duplicates its places.
+  (#394): a re-import no longer duplicates its places. — #499
 - **Lift `prepare_import_target`** into `vitni-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
 - **No merge/conflict mockup for reconciled fields** — the Phase 10 plan required a merge/conflict view
@@ -475,13 +463,13 @@ does.
   if that open fails or is killed mid-replay, the next open finds the table and skips the backfill;
   re-import then misses the earlier imports' origins until `vitni rebuild`. *Shape:* a completion
   marker written after the replay, or the backfill in one transaction. *Exit:* a test that interrupts
-  the backfill and reopens gets the full index.
+  the backfill and reopens gets the full index. — #489
 - **`find_similar` reads every profile view** — each lookup builds its candidates' profiles from
   `Profiles::load`, which lists every person, event, place and family (`vitni-app/src/profile.rs`), so
   one lookup costs about 0.9 s at 100k persons (`cargo bench -p vitni-app --bench similar`) though it
   scores only the few hundred candidates the index yields. A picker or a manual-entry hint needs it
   sublinear. *Shape:* load the target's and the candidates' views, their events, places and family
-  links by id. *Exit:* `find_similar` at 100k persons under 100 ms in the bench.
+  links by id. *Exit:* `find_similar` at 100k persons under 100 ms in the bench. — #492
 - **The all-pairs duplicate scan does not scale to 100k persons** — `similar_pairs` scores every
   candidate pair (about 86 per person on the bench's name pools, rising with the workspace) and holds
   every pair's `MatchAssessment`; at 100k persons one scan took 452 s on one core before it was spread
@@ -489,7 +477,7 @@ does.
   every matchable kind and the Matches tool for every decidable kind, on every show. *Shape:* keep the pairs as a
   projection refreshed from the dirty records like `match_keys`, or keep only the pair ids and score on
   display. *Exit:* the Dashboard opens a 100k-person workspace in under a
-  second.
+  second. — #493
 - **Blocking loses a given name that is only similar, not keyed alike** — the proptest
   `every_pair_the_engine_shows_meets` (`vitni-core/src/matching/keys/tests.rs`), at 2000 cases, finds
   *Katherine Haugen* (born 1857 by a census age) and *Kari Olsen* (baptised 1853), both in Norway: the
@@ -497,24 +485,24 @@ does.
   one meets the other — the names share no normalized, phonetic or class key and the patronymic
   surnames differ. The default 256 cases rarely reach it. *Shape:* a key the Jaro–Winkler floor
   implies (a short prefix of the normalized given name), or *Katherine* in the same class as *Kari*.
-  *Exit:* the proptest passes at 10 000 cases.
+  *Exit:* the proptest passes at 10 000 cases. — #494
 - **The origin index is written after the event commit** — ADR 0040 §5. `RecordOriginsQuery`
   (`vitni-db/src/record_origins/sqlite.rs:75`) indexes an aggregate's events in a cqrs-es query run
   after the events commit, logging a failure. A process killed between the two leaves an aggregate no
   origin resolves to, so the next run of the import creates it again. A cancel stops between two writes
   and is safe. *Shape:* index in the event transaction, or rebuild the index for the newest events on
   open. *Exit:* a test that kills the commit between an event and its index row re-runs without a
-  duplicate.
+  duplicate. — #490
 - **An abandoned import run cannot be resumed from History** — ADR 0040 §5. Re-running the import
   finishes an interrupted commit, but History only lists the abandoned run. *Shape:* *Resume* on an
   abandoned bulk run, re-running its plugin over its source with its dataset. *Exit:* a gui-pass scenario
-  that cancels a bulk import while writing and resumes it from History.
+  that cancels a bulk import while writing and resumes it from History. — #496
 - **Planning an import costs a workspace-wide load** — ADR 0040 §2. Each plan loads the profiles of
   every kind it matches (`Matcher::load`, `vitni-app/src/similar.rs`), which is about 0.9 s at 100k
   persons — once per bulk import, but once per record in an assisted session — and dry-runs every write
   of every record a re-import resolves. *Shape:* the by-id profile loading the `find_similar` bullet
   above describes, and a cached matcher across an assisted session's submits. *Exit:* planning one
-  assisted record at 100k persons under 100 ms in a bench.
+  assisted record at 100k persons under 100 ms in a bench. — #495
 - **A record decided the same as a stored place, source or repository adds nothing to it** — ADR 0040
   §3. *Same* on a place, source or repository reuses the stored record and records the resolution, but
   writes none of the incoming fields, so a source's author or a place's type the stored record lacks is
@@ -522,7 +510,7 @@ does.
   than adding them, so they cannot be reused as they are. *Shape:* an additive write per kind that fills
   only an empty single-valued field and adds a list value not already recorded, with the origin.
   *Exit:* deciding *Same* on a stored source without an author adds the incoming author and leaves its
-  title unchanged.
+  title unchanged. — #491
 - **More name-culture packs** — ADR 0038 §5. `pl` and `pl-en`, `sv`, `de`, `fi` …, each one a TOML file
   plus corpus cases, with no code change. File one when a user's data needs it. Unfiled by design.
 
@@ -670,7 +658,7 @@ The `area/docs` label already existed with no `###` home; this is it.
   is not the app's grid), which is why closing this needs a decided rule and a gate over the whole sheet,
   not a diff someone reads once. One method trap for whoever writes that gate: comparing selector *text*
   produces false positives — six `.rail .nav-item*` rules read as missing until you notice the mockup
-  groups each with `.subnav .nav-item`, so it has to compare selector atoms, not selector lists.
+  groups each with `.subnav .nav-item`, so it has to compare selector atoms, not selector lists. — #502
 - **Ten mockups quote a History note no shipped string says.** `source.html`, `event.html`,
   `citation.html`, `place.html`, `repository.html`, `person.html`, `dna-test.html`, `family.html`,
   `dna-match.html` and `note.html` all carry "This audit trail comes for free from the event-sourced
@@ -679,7 +667,7 @@ The `area/docs` label already existed with no `###` home; this is it.
   event-sourced core" and makes no competitor claim. Found while auditing `media.html` for #309, which
   fixed that one page only — the other ten are a mechanical sweep, and worth doing in one pass so the
   mockups stop advertising something the product does not say. Nothing gates prose against the
-  catalogue, which is why all eleven drifted together.
+  catalogue, which is why all eleven drifted together. — #501
 - **`gui-pass` occasionally grabs a blank first shot.** Once in roughly a dozen runs the first `shot` of
   a scenario comes back uniform (`… is blank (standard deviation 0) — the webview painted nothing`) and
   the run aborts, passing on a re-run with nothing changed. The startup handshake in
@@ -693,7 +681,7 @@ The `area/docs` label already existed with no `###` home; this is it.
   1`, and `overlay-dismiss` failed its first `differ` at RMSE 0.0000 because `⌘K` opened no palette —
   both passed on an immediate re-run of the scenario alone, so the window was not yet focusable when the
   harness aimed at it. All three are the same missing capability: the harness waits a fixed time instead
-  of waiting for the thing it is about to assert on — a paint, or a window that will take input.
+  of waiting for the thing it is about to assert on — a paint, or a window that will take input. — #503
 - **`main` is protected without required status checks, and that is a choice.** `ci.yml` filters
   `docs/**`, `*.md` and `LICENSE*` out of its triggers, so a documentation-only pull request starts no
   run at all — a required context would sit unfulfilled forever on exactly the changes this repository
