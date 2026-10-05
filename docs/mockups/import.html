@@ -743,7 +743,9 @@
     <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">One pair at a time, best candidate first.
       <b>Same</b> on a person imports the record as its own persona and merges it into the person in your tree, so the
       record's evidence stays a unit you can unlink later; on a place, source or repository it reuses the one in your
-      tree, and the next run resolves the record onto it. <b>Not the same</b> records that the two differ and shows
+      tree, adds what the record has and it lacks — a source's missing author, a place's unset type, another name or
+      restriction — without replacing anything it already has, and the next run resolves the record onto it.
+      <b>Not the same</b> records that the two differ and shows
       the next candidate, if any. <b>Decide later</b> imports the record as new and leaves the pair for the review
       queue. <b>Skip record</b> imports nothing of this record; <b>Cancel import</b> ends the session. Each decision is
       yours, recorded with its reason, confidence and the assessment shown — the imported claims stay the importer's.</div>

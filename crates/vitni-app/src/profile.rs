@@ -943,7 +943,7 @@ impl PlaceLookup {
         PlaceProfile {
             id: Some(place_id),
             names: view.names().into_iter().cloned().collect(),
-            place_type: view.place_type().cloned(),
+            place_type: crate::place::stated_place_type(view).cloned(),
             enclosing,
             country,
             coordinates: view.coordinates().copied(),

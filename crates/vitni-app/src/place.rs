@@ -341,6 +341,24 @@ pub(crate) async fn resolve_place_id_public(store: &Store, human_id: &str) -> Re
     resolve_place_id(store, human_id).await
 }
 
+/// The text of the custom type a place is created with when its record states none, since every
+/// place has a type.
+const UNSTATED_PLACE_TYPE: &str = "place";
+
+/// The type to create a place with when its record states none.
+#[must_use]
+pub fn unstated_place_type() -> PlaceType {
+    PlaceType::Custom(UNSTATED_PLACE_TYPE.to_owned())
+}
+
+/// The place's type, or `None` when it has only [`unstated_place_type`].
+pub(crate) fn stated_place_type(view: &PlaceView) -> Option<&PlaceType> {
+    match view.place_type() {
+        Some(PlaceType::Custom(text)) if text == UNSTATED_PLACE_TYPE => None,
+        place_type => place_type,
+    }
+}
+
 /// Sets (or changes) an existing place's type, identified by `human_id`.
 ///
 /// # Errors

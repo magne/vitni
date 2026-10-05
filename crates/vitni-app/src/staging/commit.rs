@@ -157,9 +157,9 @@ impl Commit<'_> {
             for (index, entity) in self.plan.entities.iter().enumerate() {
                 let writes = match (&entity.disposition, entity.scope) {
                     (_, WriteScope::Withheld) | (Disposition::Unchanged { .. }, WriteScope::Full) => false,
-                    (Disposition::Link { .. }, WriteScope::Full) => self.plan.persona(entity),
                     (
                         Disposition::New
+                        | Disposition::Link { .. }
                         | Disposition::Candidates(_)
                         | Disposition::Update { .. }
                         | Disposition::Duplicate { .. },
@@ -254,13 +254,15 @@ impl Commit<'_> {
                         .await?;
                 }
             }
+            (Disposition::Link { target, .. }, WriteScope::Full) => {
+                self.writer.enrich(record, entity, &target.human_id).await?;
+            }
             (disposition, WriteScope::Identity) => {
                 if let Some(target) = disposition.target() {
                     self.writer.identity(record, entity, &target.human_id).await?;
                 }
             }
-            (Disposition::Unchanged { .. } | Disposition::Link { .. }, WriteScope::Full)
-            | (_, WriteScope::Withheld) => {}
+            (Disposition::Unchanged { .. }, WriteScope::Full) | (_, WriteScope::Withheld) => {}
         }
         Ok(())
     }
