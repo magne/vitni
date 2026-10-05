@@ -6,7 +6,9 @@
 //! name, a source's title); an existing entity re-asserts that value instead, which the origin gate
 //! makes a no-op when it is already on record from the same item.
 
-use vitni_core::enums::{EvidenceLevel, PlaceType};
+use std::collections::BTreeSet;
+
+use vitni_core::enums::{EvidenceLevel, Restriction};
 use vitni_core::ids::ImportRunId;
 use vitni_core::matching::MatchableKind;
 use vitni_core::origin::{DatasetId, RecordOrigin};
@@ -17,7 +19,9 @@ use crate::event::{ImportedMediaRef, NewEvent};
 use crate::import::ImportedChild;
 use crate::person::{NewParticipation, NewPerson};
 use crate::session::Session;
-use crate::staging::graph::{EntityFields, EntityRef, LinkKind, StagedEntity, StagedPerson};
+use crate::staging::graph::{
+    EntityFields, EntityRef, LinkKind, StagedEntity, StagedPerson, StagedPlace, StagedRepository, StagedSource,
+};
 use crate::use_case::{MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 use crate::{
@@ -151,7 +155,7 @@ impl Writer<'_> {
                 let new = NewPlace {
                     human_id: None,
                     // The type, when the record states one, is its own assertion below.
-                    place_type: PlaceType::Custom("place".to_owned()),
+                    place_type: place::unstated_place_type(),
                     name: Some(fields.name.clone()),
                 };
                 place::create_place(ws, session, new, provenance, &[]).await?
@@ -255,6 +259,106 @@ impl Writer<'_> {
         };
         let (ws, session) = (self.workspace, self.session);
         import::import_assert_sex(ws, session, human_id, sex, self.file_asserted_at, provenance).await
+    }
+
+    /// The writes a place, source or repository resolved onto a stored record makes (ADR 0040 §3): each
+    /// field the record lacks — a single value it has none of, a name or restriction not already on it
+    /// — and never one that replaces what it has.
+    pub(crate) async fn enrich(&self, record: &str, entity: &StagedEntity, human_id: &str) -> Result<(), AppError> {
+        let item = entity.item.as_deref();
+        match &entity.fields {
+            EntityFields::Place(fields) => self.enrich_place(record, item, fields, human_id).await,
+            EntityFields::Source(fields) => self.enrich_source(record, item, fields, human_id).await,
+            EntityFields::Repository(fields) => self.enrich_repository(record, item, fields, human_id).await,
+            EntityFields::Person(_)
+            | EntityFields::Family(_)
+            | EntityFields::Event(_)
+            | EntityFields::Citation(_)
+            | EntityFields::Media(_)
+            | EntityFields::Note(_)
+            | EntityFields::Tag(_) => Ok(()),
+        }
+    }
+
+    async fn enrich_place(
+        &self,
+        record: &str,
+        item: Option<&str>,
+        fields: &StagedPlace,
+        human_id: &str,
+    ) -> Result<(), AppError> {
+        let (ws, session) = (self.workspace, self.session);
+        let meta = || self.meta(record, item);
+        let view = ws
+            .store()
+            .find_place(human_id)
+            .await?
+            .ok_or_else(|| AppError::PlaceNotFound(human_id.to_owned()))?;
+        if !view.names().iter().any(|name| name.text == fields.name) {
+            place::add_place_name(ws, session, human_id, fields.name.clone(), meta()).await?;
+        }
+        if let (None, Some(place_type)) = (place::stated_place_type(&view), &fields.place_type) {
+            place::set_place_type(ws, session, human_id, place_type.clone(), meta()).await?;
+        }
+        if let Some(restrictions) = widened(view.restrictions(), &fields.restrictions) {
+            place::set_restrictions(ws, session, human_id, restrictions, meta()).await?;
+        }
+        Ok(())
+    }
+
+    async fn enrich_source(
+        &self,
+        record: &str,
+        item: Option<&str>,
+        fields: &StagedSource,
+        human_id: &str,
+    ) -> Result<(), AppError> {
+        let (ws, session) = (self.workspace, self.session);
+        let meta = || self.meta(record, item);
+        let view = ws
+            .store()
+            .find_source(human_id)
+            .await?
+            .ok_or_else(|| AppError::SourceNotFound(human_id.to_owned()))?;
+        if let Some(title) = lacking(view.title(), fields.title.as_ref()) {
+            source::set_title(ws, session, human_id, title, meta()).await?;
+        }
+        if let Some(author) = lacking(view.author(), fields.author.as_ref()) {
+            source::set_source_author(ws, session, human_id, author, meta()).await?;
+        }
+        if let Some(pub_info) = lacking(view.pub_info(), fields.pub_info.as_ref()) {
+            source::set_source_pub_info(ws, session, human_id, pub_info, meta()).await?;
+        }
+        if let Some(abbrev) = lacking(view.abbrev(), fields.abbrev.as_ref()) {
+            source::set_source_abbrev(ws, session, human_id, abbrev, meta()).await?;
+        }
+        if let Some(restrictions) = widened(view.restrictions(), &fields.restrictions) {
+            source::set_restrictions(ws, session, human_id, restrictions, meta()).await?;
+        }
+        Ok(())
+    }
+
+    async fn enrich_repository(
+        &self,
+        record: &str,
+        item: Option<&str>,
+        fields: &StagedRepository,
+        human_id: &str,
+    ) -> Result<(), AppError> {
+        let (ws, session) = (self.workspace, self.session);
+        let meta = || self.meta(record, item);
+        let view = ws
+            .store()
+            .find_repository(human_id)
+            .await?
+            .ok_or_else(|| AppError::RepositoryNotFound(human_id.to_owned()))?;
+        if let Some(name) = lacking(view.name(), Some(&fields.name)) {
+            repository::set_repository_name(ws, session, human_id, name, meta()).await?;
+        }
+        if let Some(restrictions) = widened(view.restrictions(), &fields.restrictions) {
+            repository::set_restrictions(ws, session, human_id, restrictions, meta()).await?;
+        }
+        Ok(())
     }
 
     /// Every field of `entity` its create does not carry.
@@ -508,4 +612,20 @@ impl Writer<'_> {
         }
         Ok(())
     }
+}
+
+/// The incoming value of a single-valued field the stored record has none of.
+fn lacking(stored: Option<&str>, incoming: Option<&String>) -> Option<String> {
+    match (stored, incoming) {
+        (None, Some(value)) => Some(value.clone()),
+        (Some(_), _) | (None, None) => None,
+    }
+}
+
+/// The stored restrictions with the incoming ones added, when that adds any.
+fn widened(stored: &BTreeSet<Restriction>, incoming: &BTreeSet<Restriction>) -> Option<BTreeSet<Restriction>> {
+    if incoming.is_subset(stored) {
+        return None;
+    }
+    Some(stored.union(incoming).copied().collect())
 }

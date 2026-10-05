@@ -433,7 +433,7 @@ impl commands::Host for HostState {
             NewPlace {
                 human_id: None,
                 // GEDCOM `PLAC` carries no granularity; record it as a custom type.
-                place_type: PlaceType::Custom("place".to_owned()),
+                place_type: vitni_app::unstated_place_type(),
                 name: Some(name),
             },
             self.provenance(),

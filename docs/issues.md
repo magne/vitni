@@ -496,14 +496,15 @@ does.
   of every record a re-import resolves. *Shape:* the by-id profile loading the `find_similar` bullet
   above describes, and a cached matcher across an assisted session's submits. *Exit:* planning one
   assisted record at 100k persons under 100 ms in a bench. — #495
-- **A record decided the same as a stored place, source or repository adds nothing to it** — ADR 0040
-  §3. *Same* on a place, source or repository reuses the stored record and records the resolution, but
-  writes none of the incoming fields, so a source's author or a place's type the stored record lacks is
-  lost. The plan's update writes (`Writer::update`) set a source's title and a repository's name rather
-  than adding them, so they cannot be reused as they are. *Shape:* an additive write per kind that fills
-  only an empty single-valued field and adds a list value not already recorded, with the origin.
-  *Exit:* deciding *Same* on a stored source without an author adds the incoming author and leaves its
-  title unchanged. — #491
+- **The plan does not show what reusing a record adds to it** — ADR 0040 §2, §3. A place, source or
+  repository that resolves onto a stored record (`Disposition::Link`) gets the fields the record lacks at
+  commit (`Writer::enrich`, `vitni-app/src/staging/write.rs`, #491). The plan only dry-runs `Unchanged`
+  entities (`dry_run_entities`, `plan.rs`), so the review shows the record as reused with no field list.
+  That breaks the rule in `write.rs`'s module header that what the dry run reports is what the commit
+  writes. *Shape:* `Disposition::Link` carries the fields its write asserts, the dry run covers `Link`
+  entities through `Writer::enrich`, and the GUI review summary and the CLI `--plan` show them
+  ("reused · adds author"). *Exit:* the plan for a source decided *Same* that lacks an author lists
+  `source.AuthorSet` on that entity, and the commit writes exactly that. — #509
 - **More name-culture packs** — ADR 0038 §5. `pl` and `pl-en`, `sv`, `de`, `fi` …, each one a TOML file
   plus corpus cases, with no code change. File one when a user's data needs it. Unfiled by design.
 

@@ -211,7 +211,7 @@ pub use place::{
     create_place, distinguish_places, import_attach_place_media, import_attach_place_note, list_places,
     list_places_as_of, merge_places, place_claim_owner, place_pair_decision, set_place_code, set_place_human_id,
     set_place_type, set_restrictions as set_place_restrictions, show_place, show_place_as_of, tag_place,
-    undo_place_distinction_and_merge, update_place_media_ref,
+    undo_place_distinction_and_merge, unstated_place_type, update_place_media_ref,
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
 pub use plugins::{PluginTrust, plugin_layers, resolve_bundle, resolve_bundles};

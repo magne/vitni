@@ -6,7 +6,7 @@
 //!   the commit, so the record's evidence stays a unit (ADR 0039).
 //! - *Same* on a place, source or repository reuses the candidate: the import is planned again with the
 //!   decision, which resolves the entity onto it, records the resolution on the run, and reassesses the
-//!   rest of the plan with it as evidence.
+//!   rest of the plan with it as evidence. The commit adds the fields the candidate lacks.
 //! - *Not the same* moves on to the next candidate; once the entity is written, it is distinguished
 //!   from each candidate rejected. An entity with every candidate rejected is simply new.
 //! - *Decide later* imports it as new with the pairs left for the review queue.

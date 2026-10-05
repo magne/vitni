@@ -15,7 +15,7 @@ use vitni_app::{
     StagedEntity, StagedEvent, StagedFamily, StagedLink, StagedPerson, StagedPlace, StagedSource, StagedTag, Workspace,
     WorkspaceDefaults, WriteScope, commit_import, gregorian_date, plan_import, record_origin,
 };
-use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Sex};
+use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Restriction, Sex};
 use vitni_core::ids::AgentId;
 use vitni_core::matching::{MatchBand, MatchableKind};
 use vitni_core::person::PersonView;
@@ -1075,6 +1075,151 @@ async fn a_person_decided_same_is_imported_and_merged_into_the_candidate() {
         Some(PairDecision::SameCluster)
     );
     assert_eq!(outcome.deferred, 0);
+}
+
+/// Plans `graphs` for dataset 1, answers *Same* to every question and commits.
+async fn decide_same(workspace: &Workspace, graphs: Vec<RecordGraph>) -> (Session, CommitOutcome) {
+    let session = importer(dataset(1));
+    let mut review = review(workspace, &session, graphs).await;
+    let mut asked = 0;
+    while review.next_question(workspace).await.expect("question").is_some() {
+        review
+            .answer(workspace, &session, PairAnswer::Same(decided()))
+            .await
+            .expect("answer");
+        asked += 1;
+    }
+    assert!(asked > 0, "the stored record is a candidate");
+    let outcome = commit_review(workspace, &session, review).await;
+    (session, outcome)
+}
+
+/// Finishes the run `session` committed `outcome` in, recording its resolutions.
+async fn finish(workspace: &Workspace, session: &Session, outcome: CommitOutcome) {
+    let run = session.import_run().expect("a run");
+    run.ensure_started(workspace.store()).await.expect("start");
+    vitni_app::finish_import_run(workspace, &human(), run.id(), outcome.resolved, ImportCounts::default())
+        .await
+        .expect("finish");
+}
+
+async fn stored_source(workspace: &Workspace, title: &str) -> String {
+    let new = NewSource {
+        human_id: None,
+        title: Some(title.to_owned()),
+    };
+    vitni_app::create_source(workspace, &human(), new, Provenance::default(), &[])
+        .await
+        .expect("source")
+}
+
+async fn source_summary(workspace: &Workspace, human_id: &str) -> vitni_app::SourceSummary {
+    vitni_app::show_source(workspace, human_id)
+        .await
+        .expect("show")
+        .expect("source")
+}
+
+#[tokio::test]
+async fn a_source_decided_same_gains_the_author_it_lacks_and_keeps_its_title() {
+    let (workspace, _dir) = workspace().await;
+    let stored = stored_source(&workspace, "Folketelling 1900 for Mandal").await;
+    let (_, outcome) = decide_same(&workspace, vec![census("S1", "Folketelling 1900 Mandal")]).await;
+
+    assert_eq!(committed_id(&outcome, 0), stored);
+    let source = source_summary(&workspace, &stored).await;
+    assert_eq!(source.title.as_deref(), Some("Folketelling 1900 for Mandal"));
+    assert_eq!(source.author.as_deref(), Some("Statistisk sentralbyrå"));
+    assert_eq!(source.pub_info.as_deref(), Some("Kristiania"));
+}
+
+#[tokio::test]
+async fn a_source_decided_same_keeps_the_author_it_has() {
+    let (workspace, _dir) = workspace().await;
+    let stored = stored_source(&workspace, "Folketelling 1900 for Mandal").await;
+    vitni_app::set_source_author(&workspace, &human(), &stored, "SSB".to_owned(), MutationMeta::default())
+        .await
+        .expect("author");
+    decide_same(&workspace, vec![census("S1", "Folketelling 1900 for Mandal")]).await;
+
+    let source = source_summary(&workspace, &stored).await;
+    assert_eq!(source.author.as_deref(), Some("SSB"));
+    assert_eq!(source.pub_info.as_deref(), Some("Kristiania"));
+}
+
+#[tokio::test]
+async fn a_record_reused_on_the_next_run_writes_nothing_again() {
+    let (workspace, _dir) = workspace().await;
+    stored_source(&workspace, "Folketelling 1900 for Mandal").await;
+    let graph = || vec![census("S1", "Folketelling 1900 for Mandal")];
+    let (session, outcome) = decide_same(&workspace, graph()).await;
+    finish(&workspace, &session, outcome).await;
+    let before = events(&workspace).await;
+
+    import(&workspace, &importer(dataset(1)), graph()).await;
+    assert_eq!(events(&workspace).await, before);
+}
+
+/// A place `name` of type `place_type` the record states.
+fn typed_place(record: &str, name: &str, place_type: PlaceType) -> RecordGraph {
+    let mut graph = place(record, name);
+    if let EntityFields::Place(fields) = &mut graph.entities[0].fields {
+        fields.place_type = Some(place_type);
+    }
+    graph
+}
+
+async fn place_summary(workspace: &Workspace, human_id: &str) -> vitni_app::PlaceSummary {
+    vitni_app::show_place(workspace, human_id)
+        .await
+        .expect("show")
+        .expect("place")
+}
+
+#[tokio::test]
+async fn a_place_decided_same_gains_the_type_an_import_left_unset() {
+    let (workspace, _dir) = workspace().await;
+    let other = importer(dataset(2));
+    import(&workspace, &other, vec![place("plac:Mandal", "Mandal")]).await;
+    let stored = vitni_app::list_places(&workspace).await.expect("places")[0]
+        .human_id
+        .clone();
+    decide_same(&workspace, vec![typed_place("plac:Mandal", "Mandal", PlaceType::City)]).await;
+
+    let place = place_summary(&workspace, &stored).await;
+    assert_eq!(place.place_type, Some(PlaceType::City));
+    assert_eq!(place.names.len(), 1, "the name it already has is not added again");
+}
+
+#[tokio::test]
+async fn a_repository_decided_same_gains_the_restriction_it_lacks() {
+    let (workspace, _dir) = workspace().await;
+    let new = vitni_app::NewRepository {
+        human_id: None,
+        name: Some("Statsarkivet i Kristiansand".to_owned()),
+    };
+    let stored = vitni_app::create_repository(&workspace, &human(), new, Provenance::default(), &[])
+        .await
+        .expect("repository");
+    let graph = RecordGraph {
+        record: "R1".to_owned(),
+        entities: vec![StagedEntity {
+            local_id: 0,
+            item: None,
+            fields: EntityFields::Repository(vitni_app::StagedRepository {
+                name: "Statsarkivet i Kristiansand".to_owned(),
+                restrictions: BTreeSet::from([Restriction::Confidential]),
+            }),
+        }],
+        links: Vec::new(),
+    };
+    decide_same(&workspace, vec![graph]).await;
+
+    let repository = vitni_app::show_repository(&workspace, &stored)
+        .await
+        .expect("show")
+        .expect("repository");
+    assert_eq!(repository.restrictions, BTreeSet::from([Restriction::Confidential]));
 }
 
 #[tokio::test]
