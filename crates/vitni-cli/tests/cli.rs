@@ -928,6 +928,33 @@ fn a_plan_of_a_re_import_reports_every_record_unchanged_and_writes_nothing() {
 }
 
 #[test]
+fn a_plan_of_a_re_import_names_what_it_changes_on_each_record() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    import_tree(dir.path(), &[]).success();
+    let farmer = TREE.replace("1 NAME John /Smith/\n", "1 NAME John /Smith/\n1 OCCU Farmer\n");
+
+    let text = stdout(&import_text(dir.path(), &farmer, &["--yes", "--dataset", "tree.ged", "--plan"]).success());
+    assert!(text.contains("persons: 1 updated"), "{text}");
+    assert!(text.contains("John Smith (I0001): updates occupation"), "{text}");
+
+    let json = stdout(
+        &import_text(
+            dir.path(),
+            &farmer,
+            &["--yes", "--dataset", "tree.ged", "--plan", "--json"],
+        )
+        .success(),
+    );
+    let plan: serde_json::Value = serde_json::from_str(json.trim()).unwrap();
+    assert_eq!(plan["records"][0]["change"], "updates", "{json}");
+    assert_eq!(
+        plan["records"][0]["fields"][0], "person.FactAsserted.Occupation",
+        "{json}"
+    );
+}
+
+#[test]
 fn a_plan_of_a_first_import_shows_its_records_as_new_and_writes_none_of_them() {
     let dir = TempDir::new().unwrap();
     init(dir.path());

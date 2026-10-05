@@ -37,7 +37,9 @@ use super::prelude::*;
 use crate::components::Modal;
 use crate::i18n::Chrome;
 use crate::screens::shared::confidence_choices;
-use crate::screens::{BulkPlanStage, BulkReviewStage, bulk_plan_labels, bulk_review_labels};
+use crate::screens::{
+    BulkConfirmStage, BulkPlanStage, BulkReviewStage, bulk_confirm_labels, bulk_plan_labels, bulk_review_labels,
+};
 use crate::services::{
     BulkImportHandle, DatasetQuestion, PluginRow, Services, discover_plugins, probe_import_target, start_bulk_import,
 };
@@ -232,6 +234,8 @@ enum ReviewResponder {
     Plan(oneshot::Sender<PlanStep>),
     /// The answer to one possible match.
     Match(oneshot::Sender<ReviewReply>),
+    /// Whether to commit the plan as the review's answers leave it.
+    Confirm(oneshot::Sender<bool>),
 }
 
 impl Asking {
@@ -325,6 +329,12 @@ pub fn BulkImportBody() -> Element {
                 stage: *stage,
                 confidence_options: confidence_choices(state.data_loc()),
                 onanswer: move |reply| answer_review(reply, session, asking.review),
+            }
+        },
+        BulkImportStage::Confirm(summary) => rsx! {
+            BulkConfirmStage {
+                labels: bulk_confirm_labels(&chrome, &summary),
+                onconfirm: move |commit| answer_confirm(commit, session, asking.review),
             }
         },
         BulkImportStage::Summary(summary) => rsx! {
@@ -941,7 +951,7 @@ fn bulk_stage_index(stage: &BulkImportStage) -> usize {
         BulkImportStage::Source | BulkImportStage::Cancelled => 0,
         BulkImportStage::Running(_) => 1,
         BulkImportStage::Plan(_) => 2,
-        BulkImportStage::Review(_) => REVIEW_STEP,
+        BulkImportStage::Review(_) | BulkImportStage::Confirm(_) => REVIEW_STEP,
         BulkImportStage::Summary(_) | BulkImportStage::Error(_) => 4,
     }
 }
@@ -974,6 +984,21 @@ fn answer_review(
     // A dropped receiver means the import already ended; there is nothing left to answer.
     let _ = responder.send(reply);
     if cancelled {
+        session.write().cancel();
+    }
+}
+
+/// Sends whether to commit the reviewed plan on screen. Cancelling cancels the wizard, as the import
+/// writes nothing; importing moves on to writing.
+fn answer_confirm(commit: bool, mut session: Signal<BulkImportSession>, mut review: Signal<Option<ReviewResponder>>) {
+    let Some(ReviewResponder::Confirm(reply)) = review.write().take() else {
+        return;
+    };
+    // A dropped receiver means the import already ended; there is nothing left to answer.
+    let _ = reply.send(commit);
+    if commit {
+        session.write().resume();
+    } else {
         session.write().cancel();
     }
 }
@@ -1116,6 +1141,10 @@ impl BulkDrive {
             ReviewRequest::Match { question, reply } => {
                 session.write().on_match(&question, &self.loc);
                 review.set(Some(ReviewResponder::Match(reply)));
+            }
+            ReviewRequest::Confirm { summary, reply } => {
+                session.write().on_confirm(summary);
+                review.set(Some(ReviewResponder::Confirm(reply)));
             }
         }
     }

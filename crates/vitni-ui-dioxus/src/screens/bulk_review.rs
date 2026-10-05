@@ -1,12 +1,13 @@
 //! The bulk-import wizard's Plan and Review stages (ADR 0040 §3, §4; `import.html`).
 //!
 //! Once the file is read, the host plans it and the wizard shows the plan: what the import would write,
-//! kind by kind. With possible matches the operator reviews them, or imports them all as new and decides
-//! later; without, the plan is imported as it stands. The Review stage puts one pair at a time in the
+//! kind by kind, and under the counts each record it adds to with what it gains. With possible matches
+//! the operator reviews them, or imports them all as new and decides later; without, the plan is
+//! imported as it stands. After a review the plan is shown once more, as the answers leave it. The Review stage puts one pair at a time in the
 //! shared compare view, as the assisted import's Match stage does, and adds the bulk answers: *Treat all
 //! N probable matches of this kind as the same*, and *Decide the rest later*.
 
-use vitni_app::{PlanStep, PlanSummary, ReviewReply};
+use vitni_app::{PlanStep, PlanSummary, PlannedChange, PlannedRecord, ReviewReply};
 use vitni_ui::{CompareDecision, MatchStageVm, PairJudgment, plan_writes_nothing};
 
 use super::prelude::*;
@@ -23,6 +24,26 @@ pub struct PlanRowLabels {
     pub counts: [u32; 6],
 }
 
+/// One record a plan adds to: its name, its id in the tree and what it gains.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanRecordLabels {
+    /// The incoming record's label, or its id when it has none.
+    pub name: String,
+    /// The record's human id.
+    pub human_id: String,
+    /// "updates occupation" or "reused · adds author".
+    pub change: String,
+}
+
+/// The records of one kind a plan adds to, under a heading: "Persons · 2 records change".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanRecordGroupLabels {
+    /// The heading.
+    pub heading: String,
+    /// The records, in plan order.
+    pub records: Vec<PlanRecordLabels>,
+}
+
 /// The Plan stage's labels, already localized.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BulkPlanLabels {
@@ -34,6 +55,10 @@ pub struct BulkPlanLabels {
     pub columns: [String; 6],
     /// One row per kind the file holds.
     pub rows: Vec<PlanRowLabels>,
+    /// The records each kind adds to, for the kinds that have any.
+    pub records: Vec<PlanRecordGroupLabels>,
+    /// Whether the record lists are unfolded: they are once the plan is reviewed.
+    pub unfolded: bool,
     /// What the plan comes to: nothing to write, an empty file, or how many records may match.
     pub note: Option<String>,
     /// *Import*, or *Review N possible matches* when the plan has some.
@@ -87,6 +112,8 @@ pub fn bulk_plan_labels(chrome: &Chrome, summary: &PlanSummary) -> BulkPlanLabel
         kind_heading: chrome.bulk_import_plan_kind_heading(),
         columns: chrome.bulk_import_plan_columns(),
         rows,
+        records: record_groups(chrome, summary),
+        unfolded: false,
         note,
         primary,
         defer,
@@ -94,38 +121,70 @@ pub fn bulk_plan_labels(chrome: &Chrome, summary: &PlanSummary) -> BulkPlanLabel
     }
 }
 
-/// The Plan stage: the plan's counts by kind, and what to do with it. The primary action reviews the
-/// possible matches, or imports the plan when it has none; *Cancel* writes nothing.
+/// The labels of the plan as the review's answers leave it: its counts and records, unfolded, with
+/// *Import* and *Cancel* only.
+#[must_use]
+pub fn bulk_confirm_labels(chrome: &Chrome, summary: &PlanSummary) -> BulkPlanLabels {
+    BulkPlanLabels {
+        heading: chrome.bulk_import_confirm_heading(),
+        unfolded: true,
+        note: None,
+        primary: chrome.bulk_import_plan_import(),
+        defer: None,
+        ..bulk_plan_labels(chrome, summary)
+    }
+}
+
+/// The records `summary` adds to, grouped by kind in the order its kinds are written.
+fn record_groups(chrome: &Chrome, summary: &PlanSummary) -> Vec<PlanRecordGroupLabels> {
+    let mut groups = Vec::new();
+    for row in &summary.kinds {
+        let records: Vec<PlanRecordLabels> = summary
+            .records
+            .iter()
+            .filter(|record| record.kind == row.kind)
+            .map(|record| record_labels(chrome, record))
+            .collect();
+        if records.is_empty() {
+            continue;
+        }
+        groups.push(PlanRecordGroupLabels {
+            heading: chrome.bulk_import_plan_records(row.kind.as_str(), records.len()),
+            records,
+        });
+    }
+    groups
+}
+
+fn record_labels(chrome: &Chrome, record: &PlannedRecord) -> PlanRecordLabels {
+    let fields: Vec<String> = record
+        .fields
+        .iter()
+        .map(|field| chrome.bulk_import_plan_field(field))
+        .collect();
+    let fields = fields.join(", ");
+    PlanRecordLabels {
+        name: if record.label.is_empty() {
+            record.human_id.clone()
+        } else {
+            record.label.clone()
+        },
+        human_id: record.human_id.clone(),
+        change: match record.change {
+            PlannedChange::Updates => chrome.bulk_import_plan_updates(&fields),
+            PlannedChange::Reuses => chrome.bulk_import_plan_reuses(&fields),
+        },
+    }
+}
+
+/// The Plan stage: the plan's counts by kind and the records it adds to, and what to do with it. The
+/// primary action reviews the possible matches, or imports the plan when it has none; *Cancel* writes
+/// nothing.
 #[component]
 pub fn BulkPlanStage(labels: BulkPlanLabels, onstep: EventHandler<PlanStep>) -> Element {
     rsx! {
         Card {
-            h3 { "{labels.heading}" }
-            div { style: "overflow-x:auto",
-                table { class: "tbl",
-                    thead {
-                        tr {
-                            th { scope: "col", "{labels.kind_heading}" }
-                            for column in labels.columns.iter() {
-                                th { scope: "col", class: "num", "{column}" }
-                            }
-                        }
-                    }
-                    tbody {
-                        for row in labels.rows.iter() {
-                            tr {
-                                td { "{row.kind}" }
-                                for count in row.counts {
-                                    td { class: if count == 0 { "num faint" } else { "num" }, "{count}" }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if let Some(note) = &labels.note {
-                p { class: "muted", role: "status", "{note}" }
-            }
+            PlanBody { labels: labels.clone() }
             div { class: "wrap", style: "gap:var(--sp-2);margin-top:var(--sp-3)",
                 Button { label: labels.cancel.clone(), onclick: move |_| onstep.call(PlanStep::Discard) }
                 div { class: "spacer" }
@@ -138,6 +197,72 @@ pub fn BulkPlanStage(labels: BulkPlanLabels, onstep: EventHandler<PlanStep>) -> 
                     onclick: move |_| onstep.call(PlanStep::Review),
                 }
             }
+        }
+    }
+}
+
+/// The plan as the review's answers leave it: *Import* commits it, *Cancel* writes nothing.
+#[component]
+pub fn BulkConfirmStage(labels: BulkPlanLabels, onconfirm: EventHandler<bool>) -> Element {
+    rsx! {
+        Card {
+            PlanBody { labels: labels.clone() }
+            div { class: "wrap", style: "gap:var(--sp-2);margin-top:var(--sp-3)",
+                Button { label: labels.cancel.clone(), onclick: move |_| onconfirm.call(false) }
+                div { class: "spacer" }
+                Button {
+                    label: labels.primary.clone(),
+                    variant: ButtonVariant::Primary,
+                    onclick: move |_| onconfirm.call(true),
+                }
+            }
+        }
+    }
+}
+
+/// A plan's heading, counts by kind, the records each kind adds to, and what it comes to.
+#[component]
+fn PlanBody(labels: BulkPlanLabels) -> Element {
+    rsx! {
+        h3 { "{labels.heading}" }
+        div { style: "overflow-x:auto",
+            table { class: "tbl",
+                thead {
+                    tr {
+                        th { scope: "col", "{labels.kind_heading}" }
+                        for column in labels.columns.iter() {
+                            th { scope: "col", class: "num", "{column}" }
+                        }
+                    }
+                }
+                tbody {
+                    for row in labels.rows.iter() {
+                        tr {
+                            td { "{row.kind}" }
+                            for count in row.counts {
+                                td { class: if count == 0 { "num faint" } else { "num" }, "{count}" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for group in labels.records.iter() {
+            details { class: "plan-records", open: labels.unfolded,
+                summary { "{group.heading}" }
+                div { class: "stack",
+                    for record in group.records.iter() {
+                        div { class: "fact-row",
+                            span { class: "grow", "{record.name}" }
+                            span { class: "badge", "{record.human_id}" }
+                            span { class: "muted", "{record.change}" }
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(note) = &labels.note {
+            p { class: "muted", role: "status", "{note}" }
         }
     }
 }

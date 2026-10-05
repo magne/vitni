@@ -612,6 +612,58 @@ bulk-import-plan-review = { $count ->
 }
 bulk-import-plan-defer = Decide all later and import
 bulk-import-plan-cancel = Cancel
+bulk-import-plan-records = { $kind } · { $count ->
+    [one] 1 record changes
+   *[other] { $count } records change
+}
+bulk-import-plan-updates = updates { $fields }
+bulk-import-plan-reuses = reused · adds { $fields }
+bulk-import-confirm-heading = Ready to import
+bulk-import-plan-field-name = name
+bulk-import-plan-field-sex = sex
+bulk-import-plan-field-custom-fact = fact
+bulk-import-plan-field-event = event
+bulk-import-plan-field-association = association
+bulk-import-plan-field-partner = partner
+bulk-import-plan-field-child = child
+bulk-import-plan-field-child-relationship = child relationship
+bulk-import-plan-field-date = date
+bulk-import-plan-field-address = address
+bulk-import-plan-field-place = place
+bulk-import-plan-field-type = type
+bulk-import-plan-field-enclosure = location
+bulk-import-plan-field-title = title
+bulk-import-plan-field-author = author
+bulk-import-plan-field-publication = publication
+bulk-import-plan-field-abbreviation = abbreviation
+bulk-import-plan-field-repository = repository
+bulk-import-plan-field-page = page
+bulk-import-plan-field-confidence = confidence
+bulk-import-plan-field-mime = file type
+bulk-import-plan-field-text = text
+bulk-import-plan-field-restrictions = restrictions
+bulk-import-plan-field-citation = citation
+bulk-import-plan-field-media = media
+bulk-import-plan-field-note = note
+bulk-import-plan-field-tag = tag
+bulk-import-plan-field-other = other details
+bulk-import-plan-field-fact = { $fact ->
+    [Occupation] occupation
+    [Residence] residence
+    [Religion] religion
+    [Caste] caste
+    [PhysicalDescription] physical description
+    [Education] education
+    [Ethnicity] ethnicity
+    [NationalId] national id
+    [Nationality] nationality
+    [NumberOfChildren] number of children
+    [NumberOfMarriages] number of marriages
+    [Property] property
+    [SocialSecurityNumber] social security number
+    [NobilityTitle] nobility title
+   *[other] fact
+}
 bulk-import-review-incoming-caption = from this file
 bulk-import-review-group = { $count ->
     [one] Treat the last probable { $kind } match as the same

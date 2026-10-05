@@ -611,6 +611,58 @@ bulk-import-plan-review = { $count ->
 }
 bulk-import-plan-defer = Avgjør alle senere og importer
 bulk-import-plan-cancel = Avbryt
+bulk-import-plan-records = { $kind } · { $count ->
+    [one] 1 post endres
+   *[other] { $count } poster endres
+}
+bulk-import-plan-updates = oppdaterer { $fields }
+bulk-import-plan-reuses = gjenbrukt · legger til { $fields }
+bulk-import-confirm-heading = Klar til import
+bulk-import-plan-field-name = navn
+bulk-import-plan-field-sex = kjønn
+bulk-import-plan-field-custom-fact = opplysning
+bulk-import-plan-field-event = hendelse
+bulk-import-plan-field-association = tilknytning
+bulk-import-plan-field-partner = partner
+bulk-import-plan-field-child = barn
+bulk-import-plan-field-child-relationship = barnerelasjon
+bulk-import-plan-field-date = dato
+bulk-import-plan-field-address = adresse
+bulk-import-plan-field-place = sted
+bulk-import-plan-field-type = type
+bulk-import-plan-field-enclosure = beliggenhet
+bulk-import-plan-field-title = tittel
+bulk-import-plan-field-author = forfatter
+bulk-import-plan-field-publication = utgivelse
+bulk-import-plan-field-abbreviation = forkortelse
+bulk-import-plan-field-repository = arkiv
+bulk-import-plan-field-page = side
+bulk-import-plan-field-confidence = sikkerhet
+bulk-import-plan-field-mime = filtype
+bulk-import-plan-field-text = tekst
+bulk-import-plan-field-restrictions = begrensninger
+bulk-import-plan-field-citation = kildehenvisning
+bulk-import-plan-field-media = medium
+bulk-import-plan-field-note = notat
+bulk-import-plan-field-tag = etikett
+bulk-import-plan-field-other = andre opplysninger
+bulk-import-plan-field-fact = { $fact ->
+    [Occupation] yrke
+    [Residence] bosted
+    [Religion] religion
+    [Caste] kaste
+    [PhysicalDescription] utseende
+    [Education] utdanning
+    [Ethnicity] etnisitet
+    [NationalId] nasjonalt id-nummer
+    [Nationality] nasjonalitet
+    [NumberOfChildren] antall barn
+    [NumberOfMarriages] antall ekteskap
+    [Property] eiendom
+    [SocialSecurityNumber] personnummer
+    [NobilityTitle] adelstittel
+   *[other] opplysning
+}
 bulk-import-review-incoming-caption = fra denne filen
 bulk-import-review-group = { $count ->
     [one] Behandle det siste sannsynlige treffet av typen { $kind } som det samme

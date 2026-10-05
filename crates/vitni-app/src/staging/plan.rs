@@ -32,11 +32,13 @@ use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::identity::PersonClusters;
 use crate::origin_gate::DryRun;
+use crate::person::{build_name, render_name};
 use crate::session::Session;
 use crate::similar::SimilarRecord;
 use crate::staging::candidates;
 use crate::staging::commit::KIND_ORDER;
 use crate::staging::graph::{EntityFields, EntityRef, GraphError, LinkKind, LocalId, RecordGraph};
+use crate::staging::planned::{PlannedChange, PlannedField, PlannedRecord};
 use crate::staging::write::{LinkError, Resolve, Writer};
 use crate::use_case::Provenance;
 use crate::workspace::Workspace;
@@ -229,11 +231,17 @@ impl ImportPlan {
     /// plan has no entity of.
     #[must_use]
     pub fn summary(&self) -> PlanSummary {
+        self.summary_of(&self.entities)
+    }
+
+    /// The summary of this plan's graphs with `entities` in place of its own: the same entities, their
+    /// dispositions as a review's answers leave them.
+    pub(crate) fn summary_of(&self, entities: &[PlannedEntity]) -> PlanSummary {
         let mut kinds = Vec::new();
         for kind in KIND_ORDER {
             let mut counts = PlanCounts::default();
             let mut any = false;
-            for entity in self.entities.iter().filter(|entity| entity.kind == kind) {
+            for entity in entities.iter().filter(|entity| entity.kind == kind) {
                 any = true;
                 counts.add(entity);
             }
@@ -242,7 +250,46 @@ impl ImportPlan {
             }
         }
         let candidates = kinds.iter().map(|row| row.counts.candidates).sum();
-        PlanSummary { kinds, candidates }
+        PlanSummary {
+            kinds,
+            candidates,
+            records: self.records(entities),
+        }
+    }
+
+    /// Each of `entities` whose writes add fields to an existing record, kind by kind in commit order.
+    fn records(&self, entities: &[PlannedEntity]) -> Vec<PlannedRecord> {
+        let mut records = Vec::new();
+        for kind in KIND_ORDER {
+            for (index, entity) in entities.iter().enumerate() {
+                if entity.kind != kind || entity.scope == WriteScope::Withheld {
+                    continue;
+                }
+                let (target, change, keys) = match &entity.disposition {
+                    Disposition::Update { target, fields } => (target, PlannedChange::Updates, fields),
+                    Disposition::Link { target, fields, .. } => (target, PlannedChange::Reuses, fields),
+                    Disposition::Unchanged { .. }
+                    | Disposition::Duplicate { .. }
+                    | Disposition::Candidates(_)
+                    | Disposition::New => continue,
+                };
+                if keys.is_empty() {
+                    continue;
+                }
+                records.push(PlannedRecord {
+                    kind,
+                    label: self
+                        .staged(index)
+                        .map(|(_, staged)| staged_label(&staged.fields))
+                        .unwrap_or_default(),
+                    human_id: target.human_id.clone(),
+                    change,
+                    fields: PlannedField::all(keys),
+                    keys: keys.clone(),
+                });
+            }
+        }
+        records
     }
 
     /// The staged entity a planned one stands for.
@@ -341,13 +388,15 @@ impl PlanCounts {
     }
 }
 
-/// A plan's counts by kind (ADR 0040 §4): what its Plan stage shows.
+/// A plan's counts by kind and the records it changes (ADR 0040 §4): what its Plan stage shows.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PlanSummary {
     /// Each kind the plan has entities of, in the order the commit writes them.
     pub kinds: Vec<KindCounts>,
     /// How many entities, of every kind, have candidates to review.
     pub candidates: u32,
+    /// Each record the plan updates or reuses and adds fields to, in the order the commit writes them.
+    pub records: Vec<PlannedRecord>,
 }
 
 /// One kind's counts in a [`PlanSummary`].
@@ -1145,4 +1194,25 @@ async fn tag_names(workspace: &Workspace) -> Result<HashMap<String, String>, App
         }
     }
     Ok(names)
+}
+
+/// A staged entity's display label: a person's first name, a place's or repository's name, a source's
+/// title.
+pub(crate) fn staged_label(fields: &EntityFields) -> String {
+    match fields {
+        EntityFields::Person(person) => person
+            .names
+            .first()
+            .map(|name| render_name(&build_name(name.clone())))
+            .unwrap_or_default(),
+        EntityFields::Place(place) => place.name.clone(),
+        EntityFields::Source(source) => source.title.clone().unwrap_or_default(),
+        EntityFields::Repository(repository) => repository.name.clone(),
+        EntityFields::Family(_)
+        | EntityFields::Event(_)
+        | EntityFields::Citation(_)
+        | EntityFields::Media(_)
+        | EntityFields::Note(_)
+        | EntityFields::Tag(_) => String::new(),
+    }
 }

@@ -26,6 +26,57 @@ import-plan-review-hint = { $count ->
     [one] 1 post har mulige treff: importer i en terminal for å gå gjennom det, eller bruk --defer-matches for å avgjøre det senere.
    *[other] { $count } poster har mulige treff: importer i en terminal for å gå gjennom dem, eller bruk --defer-matches for å avgjøre dem senere.
 }
+import-plan-reviewed-heading = Plan for { $source }, etter gjennomgangen:
+import-plan-confirm = Importere denne planen? [y] ja, [n] nei:
+import-plan-record = { $record }: { $change }
+import-plan-record-name = { $label } ({ $id })
+import-plan-updates = oppdaterer { $fields }
+import-plan-reuses = gjenbrukt · legger til { $fields }
+import-plan-field-name = navn
+import-plan-field-sex = kjønn
+import-plan-field-fact = { $fact ->
+    [Occupation] yrke
+    [Residence] bosted
+    [Religion] religion
+    [Caste] kaste
+    [PhysicalDescription] utseende
+    [Education] utdanning
+    [Ethnicity] etnisitet
+    [NationalId] nasjonalt id-nummer
+    [Nationality] nasjonalitet
+    [NumberOfChildren] antall barn
+    [NumberOfMarriages] antall ekteskap
+    [Property] eiendom
+    [SocialSecurityNumber] personnummer
+    [NobilityTitle] adelstittel
+   *[other] opplysning
+}
+import-plan-field-custom-fact = opplysning
+import-plan-field-event = hendelse
+import-plan-field-association = tilknytning
+import-plan-field-partner = partner
+import-plan-field-child = barn
+import-plan-field-child-relationship = barnerelasjon
+import-plan-field-date = dato
+import-plan-field-address = adresse
+import-plan-field-place = sted
+import-plan-field-type = type
+import-plan-field-enclosure = beliggenhet
+import-plan-field-title = tittel
+import-plan-field-author = forfatter
+import-plan-field-publication = utgivelse
+import-plan-field-abbreviation = forkortelse
+import-plan-field-repository = arkiv
+import-plan-field-page = side
+import-plan-field-confidence = sikkerhet
+import-plan-field-mime = filtype
+import-plan-field-text = tekst
+import-plan-field-restrictions = begrensninger
+import-plan-field-citation = kildehenvisning
+import-plan-field-media = medium
+import-plan-field-note = notat
+import-plan-field-tag = etikett
+import-plan-field-other = andre opplysninger
 import-review-kind = { $kind ->
     [person] person
     [place] sted

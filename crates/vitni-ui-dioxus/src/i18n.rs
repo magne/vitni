@@ -11,7 +11,7 @@ use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed_fl::fl;
 use rust_embed::RustEmbed;
 use unic_langid::LanguageIdentifier;
-use vitni_app::{DateFormat, NumberFormat, config};
+use vitni_app::{DateFormat, NumberFormat, PlannedField, config};
 use vitni_ui::{RowSort, ShortcutGroup};
 
 #[derive(RustEmbed)]
@@ -2297,6 +2297,71 @@ impl Chrome {
     #[must_use]
     pub fn bulk_import_plan_cancel(&self) -> String {
         fl!(self.loader, "bulk-import-plan-cancel")
+    }
+
+    /// The heading of the records a plan changes of one kind: "Persons · 2 records change".
+    #[must_use]
+    pub fn bulk_import_plan_records(&self, kind: &str, count: usize) -> String {
+        let kind = self.bulk_import_plan_kind(kind);
+        fl!(self.loader, "bulk-import-plan-records", kind = kind, count = count)
+    }
+
+    /// What a plan writes on a record this file made: "updates occupation, residence".
+    #[must_use]
+    pub fn bulk_import_plan_updates(&self, fields: &str) -> String {
+        fl!(self.loader, "bulk-import-plan-updates", fields = fields)
+    }
+
+    /// What a plan adds to a record already in the tree: "reused · adds author".
+    #[must_use]
+    pub fn bulk_import_plan_reuses(&self, fields: &str) -> String {
+        fl!(self.loader, "bulk-import-plan-reuses", fields = fields)
+    }
+
+    /// The name of one field a planned write adds: "occupation".
+    #[must_use]
+    pub fn bulk_import_plan_field(&self, field: &PlannedField) -> String {
+        match field {
+            PlannedField::Name => fl!(self.loader, "bulk-import-plan-field-name"),
+            PlannedField::Sex => fl!(self.loader, "bulk-import-plan-field-sex"),
+            PlannedField::Fact(_) => fl!(
+                self.loader,
+                "bulk-import-plan-field-fact",
+                fact = field.fact_name().unwrap_or_default()
+            ),
+            PlannedField::CustomFact => fl!(self.loader, "bulk-import-plan-field-custom-fact"),
+            PlannedField::Event => fl!(self.loader, "bulk-import-plan-field-event"),
+            PlannedField::Association => fl!(self.loader, "bulk-import-plan-field-association"),
+            PlannedField::Partner => fl!(self.loader, "bulk-import-plan-field-partner"),
+            PlannedField::Child => fl!(self.loader, "bulk-import-plan-field-child"),
+            PlannedField::ChildRelationship => fl!(self.loader, "bulk-import-plan-field-child-relationship"),
+            PlannedField::Date => fl!(self.loader, "bulk-import-plan-field-date"),
+            PlannedField::Address => fl!(self.loader, "bulk-import-plan-field-address"),
+            PlannedField::Place => fl!(self.loader, "bulk-import-plan-field-place"),
+            PlannedField::Type => fl!(self.loader, "bulk-import-plan-field-type"),
+            PlannedField::Enclosure => fl!(self.loader, "bulk-import-plan-field-enclosure"),
+            PlannedField::Title => fl!(self.loader, "bulk-import-plan-field-title"),
+            PlannedField::Author => fl!(self.loader, "bulk-import-plan-field-author"),
+            PlannedField::Publication => fl!(self.loader, "bulk-import-plan-field-publication"),
+            PlannedField::Abbreviation => fl!(self.loader, "bulk-import-plan-field-abbreviation"),
+            PlannedField::Repository => fl!(self.loader, "bulk-import-plan-field-repository"),
+            PlannedField::Page => fl!(self.loader, "bulk-import-plan-field-page"),
+            PlannedField::Confidence => fl!(self.loader, "bulk-import-plan-field-confidence"),
+            PlannedField::Mime => fl!(self.loader, "bulk-import-plan-field-mime"),
+            PlannedField::Text => fl!(self.loader, "bulk-import-plan-field-text"),
+            PlannedField::Restrictions => fl!(self.loader, "bulk-import-plan-field-restrictions"),
+            PlannedField::Citation => fl!(self.loader, "bulk-import-plan-field-citation"),
+            PlannedField::Media => fl!(self.loader, "bulk-import-plan-field-media"),
+            PlannedField::Note => fl!(self.loader, "bulk-import-plan-field-note"),
+            PlannedField::Tag => fl!(self.loader, "bulk-import-plan-field-tag"),
+            PlannedField::Other => fl!(self.loader, "bulk-import-plan-field-other"),
+        }
+    }
+
+    /// The heading of the plan as the review's answers leave it.
+    #[must_use]
+    pub fn bulk_import_confirm_heading(&self) -> String {
+        fl!(self.loader, "bulk-import-confirm-heading")
     }
 
     /// Where the Review stage's incoming record comes from.

@@ -58,7 +58,7 @@ pub struct BulkImportSummary {
 
 /// Where a bulk-import session currently is. It starts at [`Source`](Self::Source) and runs through
 /// [`Running`](Self::Running), [`Plan`](Self::Plan) and, when the plan has possible matches,
-/// [`Review`](Self::Review), to one of the three terminal stages.
+/// [`Review`](Self::Review) and [`Confirm`](Self::Confirm), to one of the three terminal stages.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BulkImportStage {
     /// The initial stage: the operator picks a plugin, a source file, and a target workspace.
@@ -69,6 +69,8 @@ pub enum BulkImportStage {
     Plan(PlanSummary),
     /// One possible match of the plan, compared side by side.
     Review(Box<MatchStageVm>),
+    /// The plan as the review's answers leave it, to import or cancel (ADR 0040 §4).
+    Confirm(PlanSummary),
     /// The import finished and read records.
     Summary(BulkImportSummary),
     /// The import failed; the payload is the localized message to show.
@@ -145,6 +147,14 @@ impl BulkImportSession {
             return;
         }
         self.stage = BulkImportStage::Review(Box::new(MatchStageVm::build(question, loc)));
+    }
+
+    /// Shows the plan as the review's answers leave it. Ignored once the session is finished.
+    pub fn on_confirm(&mut self, summary: PlanSummary) {
+        if self.is_finished() {
+            return;
+        }
+        self.stage = BulkImportStage::Confirm(summary);
     }
 
     /// Moves on to writing once the operator answered the plan or the last pair, until the host's first
@@ -356,7 +366,26 @@ mod tests {
                 counts,
             }],
             candidates: counts.candidates,
+            records: Vec::new(),
         }
+    }
+
+    #[test]
+    fn a_reviewed_plan_is_shown_again_before_it_is_written() {
+        let mut session = BulkImportSession::new();
+        session.start();
+        session.on_match(&question(), &Localizer::for_test("en"));
+        let reviewed = plan(PlanCounts {
+            new: 1,
+            ..PlanCounts::default()
+        });
+        session.on_confirm(reviewed.clone());
+        assert_eq!(*session.stage(), BulkImportStage::Confirm(reviewed));
+        assert!(!session.is_finished());
+
+        session.cancel();
+        session.on_confirm(PlanSummary::default());
+        assert_eq!(*session.stage(), BulkImportStage::Cancelled, "no late reviewed plan");
     }
 
     #[test]

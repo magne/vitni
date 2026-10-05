@@ -1142,6 +1142,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 .run-progress-fill { height: 100%; background: var(--accent); transition: width 120ms linear; }
 /* No known total yet: the bar is full but faded, so it reads as "running", not "done". */
 .run-progress.indeterminate .run-progress-fill { opacity: 0.4; }
+/* The records an import plan adds to, folded under its counts, one disclosure per kind (import.html). */
+.plan-records { margin-top: var(--sp-3); }
+.plan-records > summary { cursor: pointer; color: var(--muted); font-size: var(--fs-sm); }
+.plan-records > .stack { margin-top: var(--sp-2); }
 
 /* ---- Crop overlay (import confirm + media viewer) ----
    `.crop-frame` is the positioned scan container the overlay is measured against;

@@ -26,12 +26,13 @@ use vitni_core::provenance::Timestamp;
 use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::identity::IdentityDecision;
-use crate::person::{build_name, render_name};
 use crate::session::Session;
 use crate::similar::SimilarRecord;
 use crate::staging::commit::{CommitControl, CommitFailure, CommitOutcome, commit_import};
-use crate::staging::graph::{EntityFields, RecordGraph};
-use crate::staging::plan::{DecidedMatch, Disposition, ImportPlan, PlanError, PlanSummary, plan_decided};
+use crate::staging::graph::RecordGraph;
+use crate::staging::plan::{
+    DecidedMatch, Disposition, ImportPlan, PlanError, PlanSummary, PlannedEntity, plan_decided, staged_label,
+};
 use crate::use_case::Provenance;
 use crate::workspace::Workspace;
 
@@ -177,10 +178,13 @@ impl ImportReview {
         })
     }
 
-    /// The plan's counts by kind, as the answers so far leave it.
+    /// The plan's counts by kind and the records it changes, as the answers so far leave it: a pair
+    /// answered *Same* or rejected counts as the new record the commit writes for it.
     #[must_use]
     pub fn summary(&self) -> PlanSummary {
-        self.plan.summary()
+        let mut entities = self.plan.entities.clone();
+        settle(&self.answers, &mut entities);
+        self.plan.summary_of(&entities)
     }
 
     /// The plan as the answers so far leave it.
@@ -350,17 +354,7 @@ impl ImportReview {
         template: &Provenance,
         control: &mut dyn CommitControl,
     ) -> Result<CommitOutcome, CommitFailure> {
-        for (index, answers) in self.answers.iter().enumerate() {
-            let entity = &mut self.plan.entities[index];
-            let decided = match answers.settled {
-                Some(Settled::Merge(..)) => true,
-                Some(Settled::Later | Settled::Reused) => false,
-                None => !answers.rejected.is_empty(),
-            };
-            if decided && has_candidates(&entity.disposition) {
-                entity.disposition = Disposition::New;
-            }
-        }
+        settle(&self.answers, &mut self.plan.entities);
         let outcome = commit_import(workspace, session, &self.plan, template, control).await?;
         match self.decide(workspace, operator, &outcome).await {
             Ok(()) => Ok(outcome),
@@ -517,24 +511,18 @@ async fn distinguish(
     }
 }
 
-/// A staged entity's display label: a person's first name, a place's or repository's name, a source's
-/// title.
-fn staged_label(fields: &EntityFields) -> String {
-    match fields {
-        EntityFields::Person(person) => person
-            .names
-            .first()
-            .map(|name| render_name(&build_name(name.clone())))
-            .unwrap_or_default(),
-        EntityFields::Place(place) => place.name.clone(),
-        EntityFields::Source(source) => source.title.clone().unwrap_or_default(),
-        EntityFields::Repository(repository) => repository.name.clone(),
-        EntityFields::Family(_)
-        | EntityFields::Event(_)
-        | EntityFields::Citation(_)
-        | EntityFields::Media(_)
-        | EntityFields::Note(_)
-        | EntityFields::Tag(_) => String::new(),
+/// Gives each entity whose candidates are answered for the disposition the commit writes it with.
+fn settle(answers: &[Answers], entities: &mut [PlannedEntity]) {
+    for (index, answers) in answers.iter().enumerate() {
+        let entity = &mut entities[index];
+        let decided = match answers.settled {
+            Some(Settled::Merge(..)) => true,
+            Some(Settled::Later | Settled::Reused) => false,
+            None => !answers.rejected.is_empty(),
+        };
+        if decided && has_candidates(&entity.disposition) {
+            entity.disposition = Disposition::New;
+        }
     }
 }
 

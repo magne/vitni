@@ -3,8 +3,9 @@
 //! Once the guest has submitted every record graph and the run's dataset is decided, the host plans the
 //! import and shows the plan to the frontend's [`PlanReviewer`]: commit it, asking about each possible
 //! match, commit it leaving every match for later, or write nothing. While reviewing, the frontend
-//! answers one pair at a time, or with a bulk answer (ADR 0040 §3). The plugin takes no part in either
-//! stage.
+//! answers one pair at a time, or with a bulk answer (ADR 0040 §3). Once a review has asked anything,
+//! the plan as the answers leave it is shown once more, to commit or write nothing. The plugin takes no
+//! part in either stage.
 //!
 //! A frontend that answers on its own task takes the [`channel_reviewer`]: each question arrives on a
 //! channel as a [`ReviewRequest`] carrying where to send the answer.
@@ -27,6 +28,10 @@ pub trait PlanReviewer: Send {
     /// Puts one possible match to the user and resolves with their reply, or a [`PresentError`] if the
     /// frontend could not be reached.
     async fn review_match(&mut self, question: MatchQuestion) -> Result<ReviewReply, PresentError>;
+
+    /// Shows `summary`, the plan as the review's answers leave it, and resolves with whether to commit
+    /// it, or a [`PresentError`] if the frontend could not be reached.
+    async fn confirm(&mut self, summary: PlanSummary) -> Result<bool, PresentError>;
 }
 
 impl fmt::Debug for dyn PlanReviewer {
@@ -49,6 +54,10 @@ impl PlanReviewer for DeferMatches {
     async fn review_match(&mut self, _question: MatchQuestion) -> Result<ReviewReply, PresentError> {
         Ok(ReviewReply::DeferRest)
     }
+
+    async fn confirm(&mut self, _summary: PlanSummary) -> Result<bool, PresentError> {
+        Ok(true)
+    }
 }
 
 /// One question a [`channel_reviewer`] puts to its frontend, with where to send the answer.
@@ -67,6 +76,13 @@ pub enum ReviewRequest {
         question: Box<MatchQuestion>,
         /// Where the answer goes.
         reply: oneshot::Sender<ReviewReply>,
+    },
+    /// Show the plan as the review's answers leave it and say whether to commit it.
+    Confirm {
+        /// The reviewed plan's counts by kind and the records it changes.
+        summary: PlanSummary,
+        /// Where the answer goes: `true` to commit.
+        reply: oneshot::Sender<bool>,
     },
 }
 
@@ -93,6 +109,11 @@ impl PlanReviewer for ChannelReviewer {
         let (reply, answer) = oneshot::channel();
         let question = Box::new(question);
         self.ask(ReviewRequest::Match { question, reply }, answer).await
+    }
+
+    async fn confirm(&mut self, summary: PlanSummary) -> Result<bool, PresentError> {
+        let (reply, answer) = oneshot::channel();
+        self.ask(ReviewRequest::Confirm { summary, reply }, answer).await
     }
 }
 
@@ -128,6 +149,19 @@ mod tests {
         let step = reviewer.plan(PlanSummary::default()).await;
         assert_eq!(step.ok(), Some(PlanStep::Discard));
         assert_eq!(frontend.await.ok().flatten(), Some(PlanSummary::default()));
+    }
+
+    #[tokio::test]
+    async fn a_channel_reviewer_forwards_the_reviewed_plan_and_returns_whether_to_commit() {
+        let (mut reviewer, mut requests) = channel_reviewer();
+        let frontend = tokio::spawn(async move {
+            let Some(ReviewRequest::Confirm { reply, .. }) = requests.recv().await else {
+                return None;
+            };
+            reply.send(false).ok()
+        });
+        assert_eq!(reviewer.confirm(PlanSummary::default()).await.ok(), Some(false));
+        assert_eq!(frontend.await.ok().flatten(), Some(()));
     }
 
     #[tokio::test]

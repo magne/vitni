@@ -11,9 +11,10 @@ use vitni_app::{
     AppDefaults, CommitControl, CommitOutcome, DatasetId, DateParts, Disposition, EntityFields, EntityRef, ExternalId,
     IdentityDecision, ImportCounts, ImportPlan, ImportReview, LinkBasis, LinkKind, MatchGroup, MutationMeta, NewEvent,
     NewFact, NewImportRun, NewParticipation, NewPerson, NewPlace, NewSource, OperatorConfig, PairAnswer, PairDecision,
-    PendingRun, PersonNameParts, PlaceType, PlanCounts, Provenance, RecordGraph, ResolutionDecision, RunToEnd, Session,
-    StagedEntity, StagedEvent, StagedFamily, StagedLink, StagedPerson, StagedPlace, StagedSource, StagedTag, Workspace,
-    WorkspaceDefaults, WriteScope, commit_import, gregorian_date, plan_import, record_origin,
+    PendingRun, PersonNameParts, PlaceType, PlanCounts, PlannedChange, PlannedField, PlannedRecord, Provenance,
+    RecordGraph, ResolutionDecision, RunToEnd, Session, StagedEntity, StagedEvent, StagedFamily, StagedLink,
+    StagedPerson, StagedPlace, StagedSource, StagedTag, Workspace, WorkspaceDefaults, WriteScope, commit_import,
+    gregorian_date, plan_import, record_origin,
 };
 use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Restriction, Sex};
 use vitni_core::ids::AgentId;
@@ -356,6 +357,30 @@ async fn a_new_fact_plans_an_update_naming_its_field() {
     };
     assert_eq!(fields, &["person.FactAsserted.Occupation".to_owned()]);
     assert_eq!(plan.counts().unchanged, 5);
+}
+
+#[tokio::test]
+async fn the_plan_summary_lists_each_record_it_updates_with_its_fields() {
+    let (workspace, _dir) = workspace().await;
+    import(&workspace, &importer(dataset(1)), tree()).await;
+
+    let mut graphs = tree();
+    graphs[0].entities[0] = with_occupation(graphs[0].entities[0].clone(), "Farmer");
+    let plan = plan(&workspace, &importer(dataset(1)), graphs).await;
+    let Disposition::Update { target, .. } = disposition(&plan, 0, 0) else {
+        panic!("expected an update: {:?}", disposition(&plan, 0, 0));
+    };
+    assert_eq!(
+        plan.summary().records,
+        vec![PlannedRecord {
+            kind: MatchableKind::Person,
+            label: "Ole Hansen".to_owned(),
+            human_id: target.human_id.clone(),
+            change: PlannedChange::Updates,
+            fields: vec![PlannedField::Fact(FactType::Occupation)],
+            keys: vec!["person.FactAsserted.Occupation".to_owned()],
+        }]
+    );
 }
 
 #[tokio::test]
@@ -1162,6 +1187,42 @@ async fn a_record_reused_on_the_next_run_writes_nothing_again() {
     };
     assert!(fields.is_empty(), "the next run plans nothing: {fields:?}");
     assert_eq!(events(&workspace).await, before);
+}
+
+#[tokio::test]
+async fn the_reviewed_summary_lists_what_a_same_adds_and_counts_a_merged_person_as_new() {
+    let (workspace, _dir) = workspace().await;
+    let stored = stored_source(&workspace, "Folketelling 1900 for Mandal").await;
+    stored_person(&workspace, "Ole", 1850, None).await;
+    let session = importer(dataset(1));
+    let graphs = vec![census("S1", "Folketelling 1900 for Mandal"), individual("I1", "Ole")];
+    let mut review = review(&workspace, &session, graphs).await;
+    while review.next_question(&workspace).await.expect("question").is_some() {
+        review
+            .answer(&workspace, &session, PairAnswer::Same(decided()))
+            .await
+            .expect("answer");
+    }
+
+    let summary = review.summary();
+    assert_eq!(
+        summary.records,
+        vec![PlannedRecord {
+            kind: MatchableKind::Source,
+            label: "Folketelling 1900 for Mandal".to_owned(),
+            human_id: stored,
+            change: PlannedChange::Reuses,
+            fields: vec![PlannedField::Author, PlannedField::Publication],
+            keys: vec!["source.AuthorSet".to_owned(), "source.PubInfoSet".to_owned()],
+        }]
+    );
+    let person = summary
+        .kinds
+        .iter()
+        .find(|row| row.kind == MatchableKind::Person)
+        .expect("persons");
+    assert_eq!((person.counts.candidates, person.counts.new), (0, 1));
+    assert_eq!(summary.candidates, 0);
 }
 
 #[tokio::test]

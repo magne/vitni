@@ -46,8 +46,8 @@ pub use bulk_import::{
     bulk_step_indicator, dataset_question,
 };
 pub use bulk_review::{
-    BulkPlanLabels, BulkPlanStage, BulkReviewLabels, BulkReviewStage, PlanRowLabels, bulk_plan_labels,
-    bulk_review_labels,
+    BulkConfirmStage, BulkPlanLabels, BulkPlanStage, BulkReviewLabels, BulkReviewStage, PlanRecordGroupLabels,
+    PlanRecordLabels, PlanRowLabels, bulk_confirm_labels, bulk_plan_labels, bulk_review_labels,
 };
 pub use citation::{
     CitationEditForm, citation_attributes_table, citation_create_fields, citation_overview, citation_record_fields,

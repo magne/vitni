@@ -1110,12 +1110,15 @@ async fn each_rerun_fixture_keys_every_item_alike_and_its_re_run_is_proposed_bac
 struct Seen {
     plans: Vec<PlanSummary>,
     questions: Vec<MatchQuestion>,
+    confirmed: Vec<PlanSummary>,
 }
 
-/// A reviewer that answers the plan with `step` and every pair with `reply`, noting what it was shown.
+/// A reviewer that answers the plan with `step`, every pair with `reply` and the reviewed plan with
+/// `confirm`, noting what it was shown.
 struct Scripted {
     step: PlanStep,
     reply: fn(&MatchQuestion) -> ReviewReply,
+    confirm: bool,
     seen: Arc<Mutex<Seen>>,
 }
 
@@ -1131,6 +1134,11 @@ impl PlanReviewer for Scripted {
         self.seen.lock().expect("lock").questions.push(question);
         Ok(reply)
     }
+
+    async fn confirm(&mut self, summary: PlanSummary) -> Result<bool, PresentError> {
+        self.seen.lock().expect("lock").confirmed.push(summary);
+        Ok(self.confirm)
+    }
 }
 
 fn same(_: &MatchQuestion) -> ReviewReply {
@@ -1141,13 +1149,13 @@ fn cancel(_: &MatchQuestion) -> ReviewReply {
     ReviewReply::Cancel
 }
 
-/// Imports the GEDCOM test file as `gedcom:<n>`, its plan and pairs answered as `step` and `reply`
-/// say; returns the workspace and what the reviewer was shown.
+/// Imports the GEDCOM test file as `gedcom:<n>`, its plan, pairs and reviewed plan answered as `step`,
+/// `reply` and `confirm` say; returns the workspace and what the reviewer was shown.
 async fn import_reviewed(
     workspace: Workspace,
     dir: &Path,
     n: u128,
-    (step, reply): (PlanStep, fn(&MatchQuestion) -> ReviewReply),
+    (step, reply, confirm): (PlanStep, fn(&MatchQuestion) -> ReviewReply, bool),
 ) -> (Workspace, Seen) {
     let seen = Arc::new(Mutex::new(Seen::default()));
     let mut run = spec(
@@ -1158,6 +1166,7 @@ async fn import_reviewed(
     run.reviewer = Box::new(Scripted {
         step,
         reply,
+        confirm,
         seen: Arc::clone(&seen),
     });
     let (_, workspace) = common::host()
@@ -1185,7 +1194,7 @@ async fn a_re_import_plans_every_record_unchanged() {
         GEDCOM,
     )
     .await;
-    let (_, seen) = import_reviewed(workspace, dir.path(), 5, (PlanStep::Discard, cancel)).await;
+    let (_, seen) = import_reviewed(workspace, dir.path(), 5, (PlanStep::Discard, cancel, true)).await;
     let plan = &seen.plans[0];
     assert!(!plan.kinds.is_empty(), "the plan lists the file's kinds");
     for row in &plan.kinds {
@@ -1200,8 +1209,13 @@ async fn a_re_import_plans_every_record_unchanged() {
 #[tokio::test]
 async fn a_discarded_plan_writes_nothing_and_leaves_no_run() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let (workspace, seen) =
-        import_reviewed(workspace(dir.path()).await, dir.path(), 5, (PlanStep::Discard, cancel)).await;
+    let (workspace, seen) = import_reviewed(
+        workspace(dir.path()).await,
+        dir.path(),
+        5,
+        (PlanStep::Discard, cancel, true),
+    )
+    .await;
     let persons = seen.plans[0]
         .kinds
         .iter()
@@ -1227,7 +1241,7 @@ async fn a_reviewed_import_asks_about_each_match_and_merges_a_person_decided_sam
         GEDCOM,
     )
     .await;
-    let (workspace, seen) = import_reviewed(workspace, dir.path(), 6, (PlanStep::Review, same)).await;
+    let (workspace, seen) = import_reviewed(workspace, dir.path(), 6, (PlanStep::Review, same, true)).await;
     assert_eq!(seen.plans.len(), 1);
     assert!(
         seen.plans[0].candidates > 0,
@@ -1245,6 +1259,30 @@ async fn a_reviewed_import_asks_about_each_match_and_merges_a_person_decided_sam
         .filter(|(_, event_type, _)| event_type == "PersonsMerged")
         .count();
     assert_eq!(merges, persons);
+    assert_eq!(
+        seen.confirmed.len(),
+        1,
+        "the reviewed plan is shown once before the commit"
+    );
+    assert_eq!(seen.confirmed[0].candidates, 0, "every pair is answered for");
+}
+
+#[tokio::test]
+async fn declining_the_reviewed_plan_writes_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let workspace = import_as(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        5,
+        dir.path(),
+        "tree.ged",
+        GEDCOM,
+    )
+    .await;
+    let events = event_count(&workspace).await;
+    let (workspace, seen) = import_reviewed(workspace, dir.path(), 6, (PlanStep::Review, same, false)).await;
+    assert_eq!(seen.confirmed.len(), 1);
+    assert_eq!(event_count(&workspace).await, events);
 }
 
 #[tokio::test]
@@ -1260,7 +1298,7 @@ async fn cancelling_the_review_writes_nothing() {
     )
     .await;
     let events = event_count(&workspace).await;
-    let (workspace, seen) = import_reviewed(workspace, dir.path(), 6, (PlanStep::Review, cancel)).await;
+    let (workspace, seen) = import_reviewed(workspace, dir.path(), 6, (PlanStep::Review, cancel, true)).await;
     assert_eq!(seen.questions.len(), 1, "the review ends at the first pair");
     assert_eq!(event_count(&workspace).await, events);
     assert_eq!(
@@ -1282,7 +1320,11 @@ async fn deferring_the_matches_commits_every_candidate_as_new_without_asking() {
         GEDCOM,
     )
     .await;
-    let (workspace, seen) = import_reviewed(workspace, dir.path(), 6, (PlanStep::DeferMatches, same)).await;
+    let (workspace, seen) = import_reviewed(workspace, dir.path(), 6, (PlanStep::DeferMatches, same, true)).await;
     assert!(seen.questions.is_empty(), "deferred matches are never asked about");
+    assert!(
+        seen.confirmed.is_empty(),
+        "a plan nothing was asked about is not shown again"
+    );
     assert_eq!(workspace_counts(&workspace).await.expect("counts").person, 4);
 }

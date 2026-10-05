@@ -496,19 +496,18 @@ does.
   of every record a re-import resolves. *Shape:* the by-id profile loading the `find_similar` bullet
   above describes, and a cached matcher across an assisted session's submits. *Exit:* planning one
   assisted record at 100k persons under 100 ms in a bench. — #495
-- **The import plan shows no record's fields** — ADR 0040 §2. The plan's dry run names the fields each
-  record's writes assert: `Disposition::Update { fields }` for a record this dataset made, and
-  `Disposition::Link { fields }` for one an entity was resolved onto, which a reused place, source or
-  repository fills in (#509). Neither list reaches the user. The bulk Plan stage and `vitni import --plan`
-  show counts per kind only (`bulk_plan_labels`, `vitni-ui-dioxus/src/screens/bulk_review.rs`;
-  `plan_lines`/`plan_json`, `vitni-cli/src/commands/review.rs`), and the assisted Summary lists records
-  without what was added. A field list also only exists for a decided *Same* after the review re-plans,
-  which comes after the Plan stage. *Shape:* per-record rows under each kind, with the fields as
-  localized labels ("reused · adds author", "updates occupation") from a field-key mapping beside
-  `event_type_summary` (`vitni-ui/src/i18n.rs`), in the GUI plan and review summary and in `--plan` and
-  its `--json`, with the mockups first. *Exit:* a re-import that adds an occupation shows "updates
-  occupation" on that person in the GUI plan and in `--plan`, and a source decided *Same* that lacks an
-  author shows "reused · adds author" before the commit. — #510
+- **An assisted import shows nothing of what it adds before it commits** — ADR 0040 §4. A bulk import
+  shows each record it adds to, with the fields it gains, on its Plan stage and again, once reviewed,
+  before it writes (#510). An assisted (one-record) import shows neither. A record with no candidates
+  commits as soon as the plugin submits it (`HostState::commit_now`, `vitni-plugin-host/src/staging.rs`).
+  After a *Same*, the commit starts right after the answer. The Summary is the plugin's own payload
+  (`SummaryPayload`, `vitni-ui/src/import_payload.rs`), so the host cannot add to it. *Shape:* a
+  host-originated step before `commit_now` commits. It would be a `Presenter` request carrying the
+  record's `PlanSummary.records`, shown with the bulk wizard's record rows (`PlanBody`,
+  `vitni-ui-dioxus/src/screens/bulk_review.rs`) in a new assisted stage, with the mockup first. Or the
+  same rows on the Match stage once its last pair is answered. *Exit:* an assisted import of a census
+  whose source is decided *Same* and lacks an author shows "reused · adds author" before anything is
+  written. — #512
 - **More name-culture packs** — ADR 0038 §5. `pl` and `pl-en`, `sv`, `de`, `fi` …, each one a TOML file
   plus corpus cases, with no code change. File one when a user's data needs it. Unfiled by design.
 

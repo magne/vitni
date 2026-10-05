@@ -1,6 +1,8 @@
 //! The import plan and the interactive review of its possible matches (ADR 0040 §4).
 
-use vitni_app::{KindCounts, MatchBand, MatchQuestion, MatchableKind, Outcome};
+use vitni_app::{
+    KindCounts, MatchBand, MatchQuestion, MatchableKind, Outcome, PlannedChange, PlannedField, PlannedRecord,
+};
 
 use super::{Localizer, fl};
 
@@ -44,6 +46,82 @@ impl Localizer {
         .collect();
         let kind = fl!(self.loader, "import-plan-kind", kind = row.kind.as_str());
         fl!(self.loader, "import-plan-row", kind = kind, counts = parts.join(", "))
+    }
+
+    /// The heading of the plan as a review's answers leave it: `Plan for tree.ged, as reviewed:`.
+    #[must_use]
+    pub fn import_plan_reviewed_heading(&self, source: &str) -> String {
+        fl!(self.loader, "import-plan-reviewed-heading", source = source)
+    }
+
+    /// The question whether to import the reviewed plan.
+    #[must_use]
+    pub fn import_plan_confirm(&self) -> String {
+        fl!(self.loader, "import-plan-confirm")
+    }
+
+    /// What the plan changes on one record: `Ole Hansen (I0001): updates occupation`.
+    #[must_use]
+    pub fn import_plan_record(&self, record: &PlannedRecord) -> String {
+        let fields: Vec<String> = record
+            .fields
+            .iter()
+            .map(|field| self.import_plan_field(field))
+            .collect();
+        let fields = fields.join(", ");
+        let change = match record.change {
+            PlannedChange::Updates => fl!(self.loader, "import-plan-updates", fields = fields),
+            PlannedChange::Reuses => fl!(self.loader, "import-plan-reuses", fields = fields),
+        };
+        let name = if record.label.is_empty() {
+            record.human_id.clone()
+        } else {
+            fl!(
+                self.loader,
+                "import-plan-record-name",
+                label = record.label.as_str(),
+                id = record.human_id.as_str()
+            )
+        };
+        fl!(self.loader, "import-plan-record", record = name, change = change)
+    }
+
+    fn import_plan_field(&self, field: &PlannedField) -> String {
+        match field {
+            PlannedField::Name => fl!(self.loader, "import-plan-field-name"),
+            PlannedField::Sex => fl!(self.loader, "import-plan-field-sex"),
+            PlannedField::Fact(_) => fl!(
+                self.loader,
+                "import-plan-field-fact",
+                fact = field.fact_name().unwrap_or_default()
+            ),
+            PlannedField::CustomFact => fl!(self.loader, "import-plan-field-custom-fact"),
+            PlannedField::Event => fl!(self.loader, "import-plan-field-event"),
+            PlannedField::Association => fl!(self.loader, "import-plan-field-association"),
+            PlannedField::Partner => fl!(self.loader, "import-plan-field-partner"),
+            PlannedField::Child => fl!(self.loader, "import-plan-field-child"),
+            PlannedField::ChildRelationship => fl!(self.loader, "import-plan-field-child-relationship"),
+            PlannedField::Date => fl!(self.loader, "import-plan-field-date"),
+            PlannedField::Address => fl!(self.loader, "import-plan-field-address"),
+            PlannedField::Place => fl!(self.loader, "import-plan-field-place"),
+            PlannedField::Type => fl!(self.loader, "import-plan-field-type"),
+            PlannedField::Enclosure => fl!(self.loader, "import-plan-field-enclosure"),
+            PlannedField::Title => fl!(self.loader, "import-plan-field-title"),
+            PlannedField::Author => fl!(self.loader, "import-plan-field-author"),
+            PlannedField::Publication => fl!(self.loader, "import-plan-field-publication"),
+            PlannedField::Abbreviation => fl!(self.loader, "import-plan-field-abbreviation"),
+            PlannedField::Repository => fl!(self.loader, "import-plan-field-repository"),
+            PlannedField::Page => fl!(self.loader, "import-plan-field-page"),
+            PlannedField::Confidence => fl!(self.loader, "import-plan-field-confidence"),
+            PlannedField::Mime => fl!(self.loader, "import-plan-field-mime"),
+            PlannedField::Text => fl!(self.loader, "import-plan-field-text"),
+            PlannedField::Restrictions => fl!(self.loader, "import-plan-field-restrictions"),
+            PlannedField::Citation => fl!(self.loader, "import-plan-field-citation"),
+            PlannedField::Media => fl!(self.loader, "import-plan-field-media"),
+            PlannedField::Note => fl!(self.loader, "import-plan-field-note"),
+            PlannedField::Tag => fl!(self.loader, "import-plan-field-tag"),
+            PlannedField::Other => fl!(self.loader, "import-plan-field-other"),
+        }
     }
 
     /// The plan's closing line when it writes nothing.

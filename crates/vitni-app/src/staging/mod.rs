@@ -11,6 +11,7 @@ mod candidates;
 mod commit;
 mod graph;
 mod plan;
+mod planned;
 mod review;
 mod write;
 
@@ -24,4 +25,5 @@ pub use plan::{
     DecidedMatch, Disposition, ImportPlan, KindCounts, LinkBasis, PlanCounts, PlanError, PlanSummary, PlannedEntity,
     PlannedLink, WriteScope, plan_import,
 };
+pub use planned::{PlannedChange, PlannedField, PlannedRecord};
 pub use review::{ImportReview, MatchGroup, MatchQuestion, MatchReply, PairAnswer, PlanStep, ReviewReply};
