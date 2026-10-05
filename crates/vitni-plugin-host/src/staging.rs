@@ -96,9 +96,9 @@ impl HostState {
     }
 
     /// Plans `graphs` as one, asks the user about each possible match through the frontend (ADR 0040
-    /// §4), shows what they add to stored records (ADR 0046), and commits them at once, returning what each of their entities became — or that the user
-    /// skipped the record or cancelled the session there, writing nothing. With no frontend to ask,
-    /// every possible match is left for later.
+    /// §4), shows what they add to stored records (ADR 0046), and commits them at once, returning what
+    /// each of their entities became — or that the user skipped the record or cancelled the session
+    /// there, writing nothing. With no frontend to ask, every possible match is left for later.
     async fn commit_now(&mut self, graphs: Vec<RecordGraph>) -> Result<staging::SubmitOutcome, types::CapabilityError> {
         let template = self.provenance();
         let mut review = ImportReview::plan(&self.workspace, &self.session, graphs, self.file_asserted_at)
