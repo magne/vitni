@@ -147,16 +147,6 @@ long-standing "DNA match views in the UI" item is closed.
   checks to the other aggregates (such as a date inversion on an Event or Place) is its own item.
 - **Repository media refs (U31)** — should Repository carry media refs (e.g. archive photos)? A
   data-model question.
-- **Projection write errors are dropped** — `cqrs-es` 0.5 hands a failed view load or write, and an
-  event that fails to read or upcast during a replay, to the query's error handler, and with none set
-  it discards the error. vitni sets none: `GenericQuery` (every projection, live and on replay) and
-  `QueryReplay` (`rebuild_view`, `replay_record_origins` in `vitni-db/src/{sqlite,postgres}.rs`) never
-  call `use_error_handler`. So a command whose event commits but whose projection write fails leaves
-  the projection stale with no error. A rebuild, and the replace of ADR 0044, finish `Ok` with records
-  missing, and the replace commits that state. The side indexes (`record_origins`, `match_keys`) log
-  their own failures with `tracing::error!` but also carry on. *Exit:* a failed projection write fails
-  the rebuild or replace that caused it (which rolls the replace back), and is at least reported for a
-  live command; a test with a failing view repository proves both. — #486
 - **A projection is written after the event commit** — `cqrs-es` commits an aggregate's events, then
   writes its projection through `GenericQuery`, so a process killed between the two leaves the
   projection without the newest events until `vitni rebuild`. The `record_origins` index has the same

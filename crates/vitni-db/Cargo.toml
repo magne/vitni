@@ -9,8 +9,8 @@ repository.workspace = true
 
 [features]
 default = ["sqlite"]
-sqlite = ["dep:sqlite-es", "dep:sqlx", "dep:serde", "dep:async-trait", "dep:geo-types", "dep:geozero", "dep:sha2"]
-postgres = ["dep:postgres-es", "dep:sqlx", "dep:serde", "dep:async-trait", "dep:sha2"]
+sqlite = ["dep:sqlite-es", "dep:sqlx", "dep:serde", "dep:async-trait", "dep:geo-types", "dep:geozero", "dep:sha2", "dep:tokio"]
+postgres = ["dep:postgres-es", "dep:sqlx", "dep:serde", "dep:async-trait", "dep:sha2", "dep:tokio"]
 
 [dependencies]
 vitni-core = { workspace = true }
@@ -20,6 +20,9 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true, optional = true }
 thiserror = { workspace = true }
+# A task-local slot for the projection failures `cqrs-es` reports to a handler (`projection_failures`);
+# already in the graph through sqlx's tokio runtime.
+tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 sqlite-es = { workspace = true, optional = true }
 postgres-es = { workspace = true, optional = true }

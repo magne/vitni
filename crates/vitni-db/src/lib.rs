@@ -30,6 +30,8 @@ mod place_succession_index;
 mod postgres;
 #[cfg(feature = "postgres")]
 mod postgres_query;
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+mod projection_failures;
 mod raw;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod record_origins;

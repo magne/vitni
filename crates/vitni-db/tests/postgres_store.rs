@@ -1031,3 +1031,73 @@ async fn a_failed_replace_rolls_the_whole_swap_back_on_postgres() {
     assert_eq!(read_all_raw(&target, 10).await, before_rows);
     assert_eq!(target.projection_rows().await.unwrap(), before_projections);
 }
+
+/// Makes every write to `person_view` fail, as a view repository whose database refuses it would.
+async fn refuse_person_view_writes(db: &PostgresTestDb) {
+    let pool = PgPool::connect(db.dsn()).await.unwrap();
+    sqlx::query(
+        "CREATE FUNCTION refuse_view_write() RETURNS trigger LANGUAGE plpgsql AS \
+         $$ BEGIN RAISE EXCEPTION 'view write refused'; END $$",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER refuse_person_view BEFORE INSERT OR UPDATE ON person_view \
+         FOR EACH ROW EXECUTE FUNCTION refuse_view_write()",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_live_command_whose_projection_write_fails_reports_it_on_postgres() {
+    let (store, db) = store().await;
+    refuse_person_view_writes(&db).await;
+    let person_id = PersonId::from_uuid(Uuid::from_u128(1));
+
+    let error = store
+        .execute_person(
+            &person_id.to_string(),
+            PersonCommandEnvelope {
+                meta: meta(10),
+                command: PersonCommand::CreatePerson {
+                    person_id,
+                    human_id: HumanId::new("I0001"),
+                    evidence_level: EvidenceLevel::Conclusion,
+                    external_ids: Vec::new(),
+                },
+            },
+        )
+        .await
+        .unwrap_err();
+
+    let CommandError::Store(vitni_db::DbError::Backend(detail)) = &error else {
+        panic!("expected a backend error, got {error:?}");
+    };
+    assert!(detail.contains("person_view"), "names the projection: {detail}");
+    assert!(detail.contains("view write refused"), "carries the cause: {detail}");
+    assert_eq!(store.event_count().await.unwrap(), 1, "the event itself committed");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_replace_whose_projection_write_fails_rolls_back_on_postgres() {
+    let (store, db) = store().await;
+    create(&store, 1, "I0001").await;
+    let rows = read_all_raw(&store, 10).await;
+    create(&store, 2, "I0002").await;
+    let before_rows = read_all_raw(&store, 10).await;
+    let before_projections = store.projection_rows().await.unwrap();
+    refuse_person_view_writes(&db).await;
+
+    let error = store.replace_all_events(rows.into_iter().map(Ok)).await.unwrap_err();
+
+    assert!(error.to_string().contains("view write refused"), "{error}");
+    assert_eq!(read_all_raw(&store, 10).await, before_rows);
+    assert_eq!(store.projection_rows().await.unwrap(), before_projections);
+    assert!(
+        store.rebuild_projections().await.is_err(),
+        "a rebuild fails the same way"
+    );
+}

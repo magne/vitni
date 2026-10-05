@@ -39,22 +39,22 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 /// plain unit `Services`, a projection-reading resolver (the §9 aggregate tax), or the
 /// hand-assembled Event store that carries upcasters at load (ADR 0010).
 macro_rules! postgres_open_cqrs {
-    ($pool:ident, $repo:ident, (plain)) => {
-        postgres_cqrs($pool.clone(), vec![Box::new(GenericQuery::new($repo))], ())
+    ($pool:ident, $query:ident, (plain)) => {
+        postgres_cqrs($pool.clone(), vec![Box::new($query)], ())
     };
-    ($pool:ident, $repo:ident, (resolver $resolver:path)) => {
+    ($pool:ident, $query:ident, (resolver $resolver:path)) => {
         postgres_cqrs(
             $pool.clone(),
-            vec![Box::new(GenericQuery::new($repo))],
+            vec![Box::new($query)],
             <$resolver>::new(PostgresRefStore::shared($pool.clone())),
         )
     };
-    ($pool:ident, $repo:ident, (event $resolver:path)) => {{
+    ($pool:ident, $query:ident, (event $resolver:path)) => {{
         let store = PersistedEventStore::new_event_store(PostgresEventRepository::new($pool.clone()))
             .with_upcasters(vitni_core::event::upcasters());
         CqrsFramework::new(
             store,
-            vec![Box::new(GenericQuery::new($repo))],
+            vec![Box::new($query)],
             <$resolver>::new(PostgresRefStore::shared($pool.clone())),
         )
     }};
@@ -206,8 +206,8 @@ macro_rules! postgres_store {
                     .await
                     .map_err(|e| DbError::Backend(format!("creating record origins index: {e}")))?;
                 $(
-                    let repo = Arc::new(PostgresViewRepository::<$View, $State>::new($table_const, pool.clone()));
-                    let $snake = postgres_open_cqrs!(pool, repo, $wiring);
+                    let query = projection_query::<$View, $State>(&pool, $table_const);
+                    let $snake = postgres_open_cqrs!(pool, query, $wiring);
                     let $snake = postgres_wire_side_indexes!($snake, pool, $snake).append_query(Box::new(
                         crate::record_origins::postgres::RecordOriginsQuery::new(pool.clone(), $table_const),
                     )).append_query(Box::new(crate::match_keys::postgres::MatchDirtyQuery::new(pool.clone())));
@@ -240,7 +240,13 @@ macro_rules! postgres_store {
                     let entry = crate::record_origins::postgres::begin_write(&self.pool, <$State as Aggregate>::TYPE, aggregate_id)
                         .await
                         .map_err(CommandError::Store)?;
-                    let result = self.$snake.execute(aggregate_id, command).await.map_err(map_aggregate_error);
+                    let (result, failures) = crate::projection_failures::watch(self.$snake.execute(aggregate_id, command)).await;
+                    let result = match (result.map_err(map_aggregate_error), failures) {
+                        (Ok(()), Some(failures)) => Err(CommandError::Store(failures.into_error(
+                            "the events were committed, but their projection failed to update (a rebuild repairs it)",
+                        ))),
+                        (result, _) => result,
+                    };
                     if let Err(error) = crate::record_origins::postgres::end_write(&self.pool, entry).await {
                         tracing::warn!(%error, aggregate_id, "a write stays journalled; the next open indexes it again");
                     }
@@ -651,14 +657,14 @@ where
     crate::record_origins::postgres::RecordOriginsQuery: cqrs_es::Query<A>,
 {
     let query = crate::record_origins::postgres::RecordOriginsQuery::new(pool.clone(), view_table);
-    QueryReplay::new(
+    let mut replay = QueryReplay::new(
         PostgresEventRepository::new(pool.clone()).with_streaming_channel_size(replay_buffer),
         query,
     )
-    .with_upcasters(upcasters)
-    .replay_all()
-    .await
-    .map_err(|e| DbError::Backend(format!("rebuilding record origins from {view_table}: {e}")))
+    .with_upcasters(upcasters);
+    replay.use_error_handler(crate::projection_failures::handler(view_table));
+    let context = format!("rebuilding record origins from {view_table}");
+    crate::projection_failures::watch_replay(replay.replay_all(), &context).await
 }
 
 /// Replays one aggregate's event log through the record origins index (ADR 0037 §4); see
@@ -674,11 +680,10 @@ where
     crate::record_origins::postgres::RecordOriginsQuery: cqrs_es::Query<A>,
 {
     let query = crate::record_origins::postgres::RecordOriginsQuery::new(pool.clone(), view_table);
-    QueryReplay::new(PostgresEventRepository::new(pool.clone()), query)
-        .with_upcasters(upcasters)
-        .replay(aggregate_id)
-        .await
-        .map_err(|e| DbError::Backend(format!("indexing {view_table} {aggregate_id} again: {e}")))
+    let mut replay = QueryReplay::new(PostgresEventRepository::new(pool.clone()), query).with_upcasters(upcasters);
+    replay.use_error_handler(crate::projection_failures::handler(view_table));
+    let context = format!("indexing {view_table} {aggregate_id} again");
+    crate::projection_failures::watch_replay(replay.replay(aggregate_id), &context).await
 }
 
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).
@@ -688,7 +693,7 @@ where
 /// replay sees only its own events.
 async fn rebuild_view<A, V>(
     pool: &Pool<Postgres>,
-    table: &str,
+    table: &'static str,
     upcasters: Vec<Box<dyn EventUpcaster>>,
     replay_buffer: usize,
 ) -> Result<(), DbError>
@@ -699,14 +704,26 @@ where
     schema::clear_postgres_view_table(pool, table)
         .await
         .map_err(|e| DbError::Backend(format!("clearing projection {table}: {e}")))?;
-    let repo = Arc::new(PostgresViewRepository::<V, A>::new(table, pool.clone()));
-    let replay = QueryReplay::new(
+    let mut replay = QueryReplay::new(
         PostgresEventRepository::new(pool.clone()).with_streaming_channel_size(replay_buffer),
-        GenericQuery::new(repo),
+        projection_query::<V, A>(pool, table),
     )
     .with_upcasters(upcasters);
-    replay
-        .replay_all()
-        .await
-        .map_err(|e| DbError::Backend(format!("rebuilding projection {table}: {e}")))
+    replay.use_error_handler(crate::projection_failures::handler(table));
+    crate::projection_failures::watch_replay(replay.replay_all(), &format!("rebuilding projection {table}")).await
+}
+
+/// The `GenericQuery` writing aggregate `A`'s projection into `table`, its failures reported through
+/// [`crate::projection_failures`] rather than dropped.
+fn projection_query<V, A>(
+    pool: &Pool<Postgres>,
+    table: &'static str,
+) -> GenericQuery<PostgresViewRepository<V, A>, V, A>
+where
+    A: Aggregate,
+    V: View<A>,
+{
+    let mut query = GenericQuery::new(Arc::new(PostgresViewRepository::<V, A>::new(table, pool.clone())));
+    query.use_error_handler(crate::projection_failures::handler(table));
+    query
 }
