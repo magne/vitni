@@ -211,6 +211,7 @@ macro_rules! sqlite_store {
                 if origins_need_backfill {
                     Self::backfill_record_origins(&pool).await?;
                 }
+                Self::catch_up_record_origins(&pool).await?;
                 if identity_is_new {
                     crate::identity_links::sqlite::rebuild_index(&pool).await?;
                 }
@@ -223,7 +224,16 @@ macro_rules! sqlite_store {
                     aggregate_id: &str,
                     command: $Cmd,
                 ) -> Result<(), CommandError<$Err>> {
-                    self.$snake.execute(aggregate_id, command).await.map_err(map_aggregate_error)
+                    // Journalled until its index rows are written: the events commit first, so a
+                    // process killed in between leaves the entry for the next open to index again.
+                    let entry = crate::record_origins::sqlite::begin_write(&self.pool, <$State as Aggregate>::TYPE, aggregate_id)
+                        .await
+                        .map_err(CommandError::Store)?;
+                    let result = self.$snake.execute(aggregate_id, command).await.map_err(map_aggregate_error);
+                    if let Err(error) = crate::record_origins::sqlite::end_write(&self.pool, entry).await {
+                        tracing::warn!(%error, aggregate_id, "a write stays journalled; the next open indexes it again");
+                    }
+                    result
                 }
 
                 pub(crate) async fn $find(&self, $find_param: &str) -> Result<Option<$View>, DbError> {
@@ -299,6 +309,24 @@ macro_rules! sqlite_store {
                 }
                 .await;
                 exclusive.finish(outcome).await
+            }
+
+            /// Indexes again every aggregate a command left journalled — one whose process was killed
+            /// after its events committed and before their index rows were written. Rows are keyed by
+            /// their event, so the events already indexed add nothing.
+            async fn catch_up_record_origins(pool: &Pool<Sqlite>) -> Result<(), DbError> {
+                let pending = crate::record_origins::sqlite::pending_writes(pool).await?;
+                $(
+                    for write in &pending {
+                        if write.aggregate_type == <$State as Aggregate>::TYPE {
+                            replay_record_origins_of::<$State>(pool, $table_const, $upcasters, &write.aggregate_id).await?;
+                        }
+                    }
+                )+
+                for write in &pending {
+                    crate::record_origins::sqlite::end_write(pool, write.entry).await?;
+                }
+                Ok(())
             }
 
             /// Clears the record origins index, replays every aggregate's log into it, and marks it
@@ -632,6 +660,26 @@ where
     .replay_all()
     .await
     .map_err(|e| DbError::Backend(format!("rebuilding record origins from {view_table}: {e}")))
+}
+
+/// Replays one aggregate's event log through the record origins index (ADR 0037 §4); see
+/// [`replay_record_origins`].
+async fn replay_record_origins_of<A>(
+    pool: &Pool<Sqlite>,
+    view_table: &'static str,
+    upcasters: Vec<Box<dyn EventUpcaster>>,
+    aggregate_id: &str,
+) -> Result<(), DbError>
+where
+    A: Aggregate,
+    crate::record_origins::sqlite::RecordOriginsQuery: cqrs_es::Query<A>,
+{
+    let query = crate::record_origins::sqlite::RecordOriginsQuery::new(pool.clone(), view_table);
+    QueryReplay::new(SqliteEventRepository::new(pool.clone()), query)
+        .with_upcasters(upcasters)
+        .replay(aggregate_id)
+        .await
+        .map_err(|e| DbError::Backend(format!("indexing {view_table} {aggregate_id} again: {e}")))
 }
 
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).

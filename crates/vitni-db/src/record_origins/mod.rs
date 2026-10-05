@@ -42,6 +42,11 @@ const RECORD_ORIGINS_TABLE: &str = "record_origins";
 /// the log, so a backfill or rebuild cut short is redone on the next open.
 const RECORD_ORIGINS_STATE_TABLE: &str = "record_origins_state";
 
+/// The write journal: one row per command in flight, naming its aggregate. A command's events commit
+/// before their index rows are written, so a row left by a process killed in between names an
+/// aggregate whose newest events the next open indexes again.
+const RECORD_ORIGINS_PENDING_TABLE: &str = "record_origins_pending";
+
 /// The two index columns an event's body determines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexedField {
@@ -94,6 +99,17 @@ pub(crate) struct RowValues {
     pub(crate) digest: String,
     pub(crate) run: String,
     pub(crate) occurred_at: String,
+    /// The event the row comes from, as `{aggregate type}/{aggregate id}/{sequence}`, so indexing an
+    /// event a second time adds nothing.
+    pub(crate) event_key: String,
+}
+
+/// A [`RECORD_ORIGINS_PENDING_TABLE`] entry: a command on this aggregate began and never finished.
+#[derive(Debug)]
+pub(crate) struct PendingWrite {
+    pub(crate) entry: i64,
+    pub(crate) aggregate_type: String,
+    pub(crate) aggregate_id: String,
 }
 
 /// What one committed event means for the index: the row it adds, if any, and whether it is a
@@ -118,8 +134,9 @@ where
     for envelope in events {
         let event = &envelope.payload;
         let event_type = event.body.type_name();
+        let event_key = format!("{}/{aggregate_id}/{}", A::TYPE, envelope.sequence);
         let origin = if event_type == "ItemResolved" {
-            Some(resolution_row(event)?)
+            Some(resolution_row(event, event_key)?)
         } else {
             match (&event.context.origin, indexed_field(A::TYPE, &event.body)?) {
                 (Some(origin), Some(field)) => Some(RowValues {
@@ -133,6 +150,7 @@ where
                     digest: field.digest.as_str().to_owned(),
                     run: origin.run.to_string(),
                     occurred_at: encode_timestamp(event.context.occurred_at)?,
+                    event_key,
                 }),
                 _ => None,
             }
@@ -147,7 +165,7 @@ where
 
 /// The row an `ItemResolved` adds: filed under its payload's dataset, record and item, pointing at
 /// the aggregate it resolved onto.
-fn resolution_row<B: EventBody + Serialize>(event: &Envelope<B>) -> Result<RowValues, DbError> {
+fn resolution_row<B: EventBody + Serialize>(event: &Envelope<B>, event_key: String) -> Result<RowValues, DbError> {
     let body = serde_json::to_value(&event.body).map_err(|e| DbError::Backend(format!("serializing an event: {e}")))?;
     let text = |field: &str| {
         body.get(field)
@@ -167,6 +185,7 @@ fn resolution_row<B: EventBody + Serialize>(event: &Envelope<B>) -> Result<RowVa
         digest: digest(&[&event.body])?.as_str().to_owned(),
         run: text("run_id")?,
         occurred_at: encode_timestamp(event.context.occurred_at)?,
+        event_key,
     })
 }
 
