@@ -38,6 +38,10 @@ use crate::store::DbError;
 /// The index table.
 const RECORD_ORIGINS_TABLE: &str = "record_origins";
 
+/// The completion marker: its one row exists only while the index holds every originated event in
+/// the log, so a backfill or rebuild cut short is redone on the next open.
+const RECORD_ORIGINS_STATE_TABLE: &str = "record_origins_state";
+
 /// The two index columns an event's body determines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexedField {

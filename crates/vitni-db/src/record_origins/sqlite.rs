@@ -11,8 +11,8 @@ use vitni_core::ids::AssertionId;
 use vitni_core::origin::{ContentDigest, DatasetId, RecordOrigin};
 
 use super::{
-    IndexRow, OriginResolution, OriginRow, RECORD_ORIGINS_TABLE, created_key, decode_assertion_id, decode_run,
-    decode_timestamp, index_rows, resolved_key,
+    IndexRow, OriginResolution, OriginRow, RECORD_ORIGINS_STATE_TABLE, RECORD_ORIGINS_TABLE, created_key,
+    decode_assertion_id, decode_run, decode_timestamp, index_rows, resolved_key,
 };
 use crate::store::DbError;
 
@@ -38,22 +38,78 @@ const CREATE_RECORD_ORIGINS_KEY_INDEX: &str =
 const CREATE_RECORD_ORIGINS_AGGREGATE_INDEX: &str =
     "CREATE INDEX IF NOT EXISTS record_origins_aggregate ON record_origins (aggregate_kind, aggregate_id)";
 
-/// Creates the index table and its lookups. Idempotent. Returns whether the table is new, so the
-/// caller can fill it from an event log written before the index existed.
+const CREATE_RECORD_ORIGINS_STATE_TABLE: &str = "
+CREATE TABLE IF NOT EXISTS record_origins_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1)
+)";
+
+/// Creates the index table, its lookups and its completion marker. Idempotent. Returns whether the
+/// index needs filling from the event log: it is new, or the last fill or rebuild never finished.
 ///
 /// # Errors
 ///
 /// Returns the `sqlx` error if a statement fails.
 pub(crate) async fn create_tables(pool: &Pool<Sqlite>) -> Result<bool, sqlx::Error> {
-    let existed = sqlx::query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
-        .bind(RECORD_ORIGINS_TABLE)
-        .fetch_optional(pool)
-        .await?
-        .is_some();
     sqlx::query(CREATE_RECORD_ORIGINS_TABLE).execute(pool).await?;
     sqlx::query(CREATE_RECORD_ORIGINS_KEY_INDEX).execute(pool).await?;
     sqlx::query(CREATE_RECORD_ORIGINS_AGGREGATE_INDEX).execute(pool).await?;
-    Ok(!existed)
+    sqlx::query(CREATE_RECORD_ORIGINS_STATE_TABLE).execute(pool).await?;
+    let complete = sqlx::query(&format!("SELECT 1 FROM {RECORD_ORIGINS_STATE_TABLE}"))
+        .fetch_optional(pool)
+        .await?
+        .is_some();
+    Ok(!complete)
+}
+
+/// Locks the index for a refill inside the caller's transaction, then reads whether it is complete
+/// after all — another process may have filled it while this one waited.
+///
+/// A write, so SQLite takes its one write lock here: a second process opening the workspace waits on
+/// it (up to the busy timeout), and so does any commit, whose index row the refill would otherwise miss.
+///
+/// # Errors
+///
+/// A [`DbError`] if a statement fails.
+pub(crate) async fn lock_for_refill(pool: &Pool<Sqlite>) -> Result<bool, DbError> {
+    sqlx::query(&format!("UPDATE {RECORD_ORIGINS_STATE_TABLE} SET id = id"))
+        .execute(pool)
+        .await
+        .map_err(|e| DbError::Backend(format!("locking record origins: {e}")))?;
+    let complete = sqlx::query(&format!("SELECT 1 FROM {RECORD_ORIGINS_STATE_TABLE}"))
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| DbError::Backend(format!("reading the record origins marker: {e}")))?
+        .is_some();
+    Ok(complete)
+}
+
+/// Records that the index now holds every originated event in the log.
+///
+/// # Errors
+///
+/// A [`DbError`] if the statement fails.
+pub(crate) async fn mark_complete(pool: &Pool<Sqlite>) -> Result<(), DbError> {
+    sqlx::query(&format!(
+        "INSERT INTO {RECORD_ORIGINS_STATE_TABLE} (id) VALUES (1) ON CONFLICT DO NOTHING"
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("marking record origins complete: {e}")))?;
+    Ok(())
+}
+
+/// Withdraws [`mark_complete`] before the index is cleared, so a rebuild cut short is redone on the
+/// next open.
+///
+/// # Errors
+///
+/// A [`DbError`] if the statement fails.
+pub(crate) async fn mark_incomplete(pool: &Pool<Sqlite>) -> Result<(), DbError> {
+    sqlx::query(&format!("DELETE FROM {RECORD_ORIGINS_STATE_TABLE}"))
+        .execute(pool)
+        .await
+        .map_err(|e| DbError::Backend(format!("marking record origins incomplete: {e}")))?;
+    Ok(())
 }
 
 /// Deletes every row — the rebuild's clearing step (ADR 0010).

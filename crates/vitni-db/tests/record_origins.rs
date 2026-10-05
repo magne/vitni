@@ -340,6 +340,22 @@ async fn a_preview_returns_the_events_and_writes_nothing(store: &Store) {
     assert!(rows.is_empty(), "nothing indexed");
 }
 
+/// Writes two indexed events and returns the index they make.
+async fn seed_two_origins(store: &Store) -> Vec<Vec<String>> {
+    create_person(store).await;
+    person(store, 11, Some(origin("I1", None)), assert_sex(Sex::Female)).await;
+    let rows = store.record_origins_dump().await.unwrap();
+    assert_eq!(rows.len(), 2, "created, sex: {rows:?}");
+    rows
+}
+
+/// The state an open killed mid-backfill leaves: the index table exists, holds only the rows the
+/// replay got through, and was never marked complete.
+const INTERRUPT_BACKFILL: [&str; 2] = [
+    "DELETE FROM record_origins_state",
+    "DELETE FROM record_origins WHERE id = (SELECT MAX(id) FROM record_origins)",
+];
+
 #[cfg(feature = "sqlite")]
 mod sqlite {
     use vitni_db::Store;
@@ -387,11 +403,48 @@ mod sqlite {
         drop(store);
 
         let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
-        sqlx::query("DROP TABLE record_origins").execute(&pool).await.unwrap();
+        for table in ["record_origins", "record_origins_state"] {
+            sqlx::query(&format!("DROP TABLE {table}"))
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
         pool.close().await;
 
         let store = Store::open(&url).await.unwrap();
         assert_eq!(store.record_origins_dump().await.unwrap(), before);
+    }
+
+    /// A workspace whose backfill was cut short, its URL, and the index a full backfill makes.
+    async fn interrupted_workspace() -> (tempfile::TempDir, String, Vec<Vec<String>>) {
+        let dir = tempfile::tempdir().unwrap();
+        let url = format!("sqlite://{}", dir.path().join("ws.sqlite3").display());
+        let store = Store::open(&url).await.unwrap();
+        let before = super::seed_two_origins(&store).await;
+        drop(store);
+
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        for statement in super::INTERRUPT_BACKFILL {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+        pool.close().await;
+        (dir, url, before)
+    }
+
+    #[tokio::test]
+    async fn an_interrupted_backfill_is_resumed_on_the_next_open() {
+        let (_dir, url, before) = interrupted_workspace().await;
+        let store = Store::open(&url).await.unwrap();
+        assert_eq!(store.record_origins_dump().await.unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn two_opens_resuming_one_backfill_index_each_origin_once() {
+        let (_dir, url, before) = interrupted_workspace().await;
+        let (first, second) = tokio::join!(Store::open(&url), Store::open(&url));
+        let (first, second) = (first.unwrap(), second.unwrap());
+        assert_eq!(first.record_origins_dump().await.unwrap(), before);
+        assert_eq!(second.record_origins_dump().await.unwrap(), before);
     }
 }
 
@@ -433,4 +486,34 @@ mod postgres {
         a_preview_returns_the_events_and_writes_nothing,
         the_records_each_dataset_already_holds_are_counted,
     );
+
+    /// A database whose backfill was cut short, and the index a full backfill makes.
+    async fn interrupted_database() -> (PostgresTestDb, Vec<Vec<String>>) {
+        let (store, db) = store().await;
+        let before = super::seed_two_origins(&store).await;
+        drop(store);
+
+        let pool = sqlx::PgPool::connect(db.dsn()).await.unwrap();
+        for statement in super::INTERRUPT_BACKFILL {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+        pool.close().await;
+        (db, before)
+    }
+
+    #[tokio::test]
+    async fn an_interrupted_backfill_is_resumed_on_the_next_open() {
+        let (db, before) = interrupted_database().await;
+        let store = Store::open(db.dsn()).await.unwrap();
+        assert_eq!(store.record_origins_dump().await.unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn two_opens_resuming_one_backfill_index_each_origin_once() {
+        let (db, before) = interrupted_database().await;
+        let (first, second) = tokio::join!(Store::open(db.dsn()), Store::open(db.dsn()));
+        let (first, second) = (first.unwrap(), second.unwrap());
+        assert_eq!(first.record_origins_dump().await.unwrap(), before);
+        assert_eq!(second.record_origins_dump().await.unwrap(), before);
+    }
 }
