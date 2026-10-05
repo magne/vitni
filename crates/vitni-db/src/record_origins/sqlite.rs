@@ -11,8 +11,8 @@ use vitni_core::ids::AssertionId;
 use vitni_core::origin::{ContentDigest, DatasetId, RecordOrigin};
 
 use super::{
-    IndexRow, OriginResolution, OriginRow, RECORD_ORIGINS_STATE_TABLE, RECORD_ORIGINS_TABLE, created_key,
-    decode_assertion_id, decode_run, decode_timestamp, index_rows, resolved_key,
+    IndexRow, OriginResolution, OriginRow, PendingWrite, RECORD_ORIGINS_PENDING_TABLE, RECORD_ORIGINS_STATE_TABLE,
+    RECORD_ORIGINS_TABLE, created_key, decode_assertion_id, decode_run, decode_timestamp, index_rows, resolved_key,
 };
 use crate::store::DbError;
 
@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS record_origins (
     digest          TEXT    NOT NULL,
     run             TEXT    NOT NULL,
     occurred_at     TEXT    NOT NULL,
-    live            INTEGER NOT NULL
+    live            INTEGER NOT NULL,
+    event_key       TEXT    NOT NULL
 )";
 
 const CREATE_RECORD_ORIGINS_KEY_INDEX: &str =
@@ -38,22 +39,48 @@ const CREATE_RECORD_ORIGINS_KEY_INDEX: &str =
 const CREATE_RECORD_ORIGINS_AGGREGATE_INDEX: &str =
     "CREATE INDEX IF NOT EXISTS record_origins_aggregate ON record_origins (aggregate_kind, aggregate_id)";
 
+const CREATE_RECORD_ORIGINS_EVENT_INDEX: &str =
+    "CREATE UNIQUE INDEX IF NOT EXISTS record_origins_event ON record_origins (event_key)";
+
+const CREATE_RECORD_ORIGINS_PENDING_TABLE: &str = "
+CREATE TABLE IF NOT EXISTS record_origins_pending (
+    id             INTEGER PRIMARY KEY,
+    aggregate_type TEXT    NOT NULL,
+    aggregate_id   TEXT    NOT NULL
+)";
+
 const CREATE_RECORD_ORIGINS_STATE_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS record_origins_state (
     id INTEGER PRIMARY KEY CHECK (id = 1)
 )";
 
-/// Creates the index table, its lookups and its completion marker. Idempotent. Returns whether the
-/// index needs filling from the event log: it is new, or the last fill or rebuild never finished.
+/// Creates the index table, its lookups, its completion marker and its write journal. Idempotent. A
+/// table from before rows carried their event's key is dropped and recreated empty. Returns whether
+/// the index needs filling from the event log: it is new, or the last fill or rebuild never finished.
 ///
 /// # Errors
 ///
 /// Returns the `sqlx` error if a statement fails.
 pub(crate) async fn create_tables(pool: &Pool<Sqlite>) -> Result<bool, sqlx::Error> {
+    sqlx::query(CREATE_RECORD_ORIGINS_STATE_TABLE).execute(pool).await?;
+    sqlx::query(CREATE_RECORD_ORIGINS_PENDING_TABLE).execute(pool).await?;
     sqlx::query(CREATE_RECORD_ORIGINS_TABLE).execute(pool).await?;
+    let keyed = sqlx::query("SELECT 1 FROM pragma_table_info('record_origins') WHERE name = 'event_key'")
+        .fetch_optional(pool)
+        .await?
+        .is_some();
+    if !keyed {
+        sqlx::query(&format!("DELETE FROM {RECORD_ORIGINS_STATE_TABLE}"))
+            .execute(pool)
+            .await?;
+        sqlx::query(&format!("DROP TABLE {RECORD_ORIGINS_TABLE}"))
+            .execute(pool)
+            .await?;
+        sqlx::query(CREATE_RECORD_ORIGINS_TABLE).execute(pool).await?;
+    }
     sqlx::query(CREATE_RECORD_ORIGINS_KEY_INDEX).execute(pool).await?;
     sqlx::query(CREATE_RECORD_ORIGINS_AGGREGATE_INDEX).execute(pool).await?;
-    sqlx::query(CREATE_RECORD_ORIGINS_STATE_TABLE).execute(pool).await?;
+    sqlx::query(CREATE_RECORD_ORIGINS_EVENT_INDEX).execute(pool).await?;
     let complete = sqlx::query(&format!("SELECT 1 FROM {RECORD_ORIGINS_STATE_TABLE}"))
         .fetch_optional(pool)
         .await?
@@ -112,6 +139,60 @@ pub(crate) async fn mark_incomplete(pool: &Pool<Sqlite>) -> Result<(), DbError> 
     Ok(())
 }
 
+/// Journals a command about to run on the aggregate, before its events commit; returns the entry
+/// for [`end_write`].
+///
+/// # Errors
+///
+/// A [`DbError`] if the statement fails.
+pub(crate) async fn begin_write(pool: &Pool<Sqlite>, aggregate_type: &str, aggregate_id: &str) -> Result<i64, DbError> {
+    sqlx::query_scalar(&format!(
+        "INSERT INTO {RECORD_ORIGINS_PENDING_TABLE} (aggregate_type, aggregate_id) VALUES (?, ?) RETURNING id"
+    ))
+    .bind(aggregate_type)
+    .bind(aggregate_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("journalling a write to {aggregate_type} {aggregate_id}: {e}")))
+}
+
+/// Withdraws a [`begin_write`] entry once its command's events and index rows are written.
+///
+/// # Errors
+///
+/// A [`DbError`] if the statement fails.
+pub(crate) async fn end_write(pool: &Pool<Sqlite>, entry: i64) -> Result<(), DbError> {
+    sqlx::query(&format!("DELETE FROM {RECORD_ORIGINS_PENDING_TABLE} WHERE id = ?"))
+        .bind(entry)
+        .execute(pool)
+        .await
+        .map_err(|e| DbError::Backend(format!("ending a journalled write: {e}")))?;
+    Ok(())
+}
+
+/// Every journal entry left by a command that never finished.
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails.
+pub(crate) async fn pending_writes(pool: &Pool<Sqlite>) -> Result<Vec<PendingWrite>, DbError> {
+    let rows = sqlx::query(&format!(
+        "SELECT id, aggregate_type, aggregate_id FROM {RECORD_ORIGINS_PENDING_TABLE} ORDER BY id"
+    ))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("reading the write journal: {e}")))?;
+    let mut writes = Vec::with_capacity(rows.len());
+    for row in rows {
+        writes.push(PendingWrite {
+            entry: row.get("id"),
+            aggregate_type: row.get("aggregate_type"),
+            aggregate_id: row.get("aggregate_id"),
+        });
+    }
+    Ok(writes)
+}
+
 /// Deletes every row — the rebuild's clearing step (ADR 0010).
 ///
 /// # Errors
@@ -163,6 +244,11 @@ where
         };
         if let Err(error) = result {
             tracing::error!(aggregate_type = A::TYPE, aggregate_id, %error, "failed to update the record origins index");
+            // Journalled again, so the next open indexes the aggregate even after its command withdraws
+            // its own entry.
+            if let Err(error) = begin_write(&self.pool, A::TYPE, aggregate_id).await {
+                tracing::error!(aggregate_type = A::TYPE, aggregate_id, %error, "failed to journal the aggregate for the next open");
+            }
         }
     }
 }
@@ -173,7 +259,7 @@ async fn insert_row(pool: &Pool<Sqlite>, row: &IndexRow) -> Result<(), DbError> 
     };
     sqlx::query(&format!(
         "INSERT INTO {RECORD_ORIGINS_TABLE} (dataset, record, item, field_key, aggregate_kind, aggregate_id, \
-         assertion_id, digest, run, occurred_at, live) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)"
+         assertion_id, digest, run, occurred_at, live, event_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) ON CONFLICT (event_key) DO NOTHING"
     ))
     .bind(&origin.dataset)
     .bind(&origin.record)
@@ -185,6 +271,7 @@ async fn insert_row(pool: &Pool<Sqlite>, row: &IndexRow) -> Result<(), DbError> 
     .bind(&origin.digest)
     .bind(&origin.run)
     .bind(&origin.occurred_at)
+    .bind(&origin.event_key)
     .execute(pool)
     .await
     .map_err(|e| DbError::Backend(format!("inserting a record origin: {e}")))?;

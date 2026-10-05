@@ -356,6 +356,48 @@ const INTERRUPT_BACKFILL: [&str; 2] = [
     "DELETE FROM record_origins WHERE id = (SELECT MAX(id) FROM record_origins)",
 ];
 
+/// The state a write killed after its events committed and before its index rows leaves: the write
+/// journal still names the aggregate, and the index holds none of its rows.
+const KILL_BEFORE_INDEX: [&str; 2] = [
+    "INSERT INTO record_origins_pending (aggregate_type, aggregate_id) \
+     VALUES ('person', '00000000-0000-0000-0000-000000000001')",
+    "DELETE FROM record_origins",
+];
+
+/// The state a write killed after its index rows and before its journal entry was withdrawn leaves.
+const KILL_BEFORE_JOURNAL_END: [&str; 1] = [KILL_BEFORE_INDEX[0]];
+
+/// How many writes the journal says may still lack their index rows.
+const PENDING_WRITES: &str = "SELECT COUNT(*) FROM record_origins_pending";
+
+/// Writes [`seed_two_origins`]' events while every index insert fails, and checks none was indexed.
+async fn seed_while_the_index_fails(store: &Store) {
+    create_person(store).await;
+    person(store, 11, Some(origin("I1", None)), assert_sex(Sex::Female)).await;
+    assert_eq!(store.record_origins_dump().await.unwrap(), Vec::<Vec<String>>::new());
+}
+
+/// After the failing index is fixed and the workspace reopened, both writes are indexed.
+async fn the_failed_writes_are_indexed(store: &Store) {
+    assert_eq!(store.record_origins_dump().await.unwrap().len(), 2, "created, sex");
+    let resolution = store
+        .resolve_origin(dataset().as_str(), "I1", None, "person")
+        .await
+        .unwrap();
+    assert!(resolution.is_some(), "the record resolves onto the person");
+}
+
+/// After a reopen, the index is the one the writes made, and a re-run of the import resolves the
+/// record onto the person it made instead of creating it again.
+async fn the_index_is_whole(store: &Store, before: &[Vec<String>]) {
+    assert_eq!(store.record_origins_dump().await.unwrap(), before);
+    let resolution = store
+        .resolve_origin(dataset().as_str(), "I1", None, "person")
+        .await
+        .unwrap();
+    assert!(resolution.is_some(), "the record resolves onto the person");
+}
+
 #[cfg(feature = "sqlite")]
 mod sqlite {
     use vitni_db::Store;
@@ -415,8 +457,9 @@ mod sqlite {
         assert_eq!(store.record_origins_dump().await.unwrap(), before);
     }
 
-    /// A workspace whose backfill was cut short, its URL, and the index a full backfill makes.
-    async fn interrupted_workspace() -> (tempfile::TempDir, String, Vec<Vec<String>>) {
+    /// A seeded workspace closed and then changed by `statements`, its URL, the index the seeding
+    /// made, and how many journal entries the seeding left behind.
+    async fn damaged_workspace(statements: &[&str]) -> (tempfile::TempDir, String, Vec<Vec<String>>, i64) {
         let dir = tempfile::tempdir().unwrap();
         let url = format!("sqlite://{}", dir.path().join("ws.sqlite3").display());
         let store = Store::open(&url).await.unwrap();
@@ -424,11 +467,72 @@ mod sqlite {
         drop(store);
 
         let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
-        for statement in super::INTERRUPT_BACKFILL {
+        let pending: i64 = sqlx::query_scalar(super::PENDING_WRITES)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        for statement in statements {
             sqlx::query(statement).execute(&pool).await.unwrap();
         }
         pool.close().await;
+        (dir, url, before, pending)
+    }
+
+    async fn interrupted_workspace() -> (tempfile::TempDir, String, Vec<Vec<String>>) {
+        let (dir, url, before, _) = damaged_workspace(&super::INTERRUPT_BACKFILL).await;
         (dir, url, before)
+    }
+
+    #[tokio::test]
+    async fn a_finished_write_leaves_no_journal_entry() {
+        let (_dir, _url, _before, pending) = damaged_workspace(&[]).await;
+        assert_eq!(pending, 0, "every open would replay a write that finished");
+    }
+
+    #[tokio::test]
+    async fn a_write_killed_before_its_index_rows_is_indexed_on_the_next_open() {
+        let (_dir, url, before, _) = damaged_workspace(&super::KILL_BEFORE_INDEX).await;
+        let store = Store::open(&url).await.unwrap();
+        super::the_index_is_whole(&store, &before).await;
+    }
+
+    #[tokio::test]
+    async fn a_journalled_write_already_indexed_is_not_indexed_twice() {
+        let (_dir, url, before, _) = damaged_workspace(&super::KILL_BEFORE_JOURNAL_END).await;
+        let store = Store::open(&url).await.unwrap();
+        super::the_index_is_whole(&store, &before).await;
+    }
+
+    #[tokio::test]
+    async fn a_failed_index_write_is_indexed_on_the_next_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let url = format!("sqlite://{}", dir.path().join("ws.sqlite3").display());
+        let store = Store::open(&url).await.unwrap();
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        sqlx::query(
+            "CREATE TRIGGER fail_index BEFORE INSERT ON record_origins BEGIN SELECT RAISE(ABORT, 'disk full'); END",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        super::seed_while_the_index_fails(&store).await;
+        drop(store);
+        sqlx::query("DROP TRIGGER fail_index").execute(&pool).await.unwrap();
+        pool.close().await;
+
+        let store = Store::open(&url).await.unwrap();
+        super::the_failed_writes_are_indexed(&store).await;
+    }
+
+    #[tokio::test]
+    async fn an_index_without_event_keys_is_rebuilt() {
+        let without_keys = [
+            "DROP INDEX record_origins_event",
+            "ALTER TABLE record_origins DROP COLUMN event_key",
+        ];
+        let (_dir, url, before, _) = damaged_workspace(&without_keys).await;
+        let store = Store::open(&url).await.unwrap();
+        super::the_index_is_whole(&store, &before).await;
     }
 
     #[tokio::test]
@@ -487,18 +591,77 @@ mod postgres {
         the_records_each_dataset_already_holds_are_counted,
     );
 
-    /// A database whose backfill was cut short, and the index a full backfill makes.
-    async fn interrupted_database() -> (PostgresTestDb, Vec<Vec<String>>) {
+    /// A seeded database closed and then changed by `statements`, the index the seeding made, and
+    /// how many journal entries the seeding left behind.
+    async fn damaged_database(statements: &[&str]) -> (PostgresTestDb, Vec<Vec<String>>, i64) {
         let (store, db) = store().await;
         let before = super::seed_two_origins(&store).await;
         drop(store);
 
         let pool = sqlx::PgPool::connect(db.dsn()).await.unwrap();
-        for statement in super::INTERRUPT_BACKFILL {
+        let pending: i64 = sqlx::query_scalar(super::PENDING_WRITES)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        for statement in statements {
             sqlx::query(statement).execute(&pool).await.unwrap();
         }
         pool.close().await;
+        (db, before, pending)
+    }
+
+    async fn interrupted_database() -> (PostgresTestDb, Vec<Vec<String>>) {
+        let (db, before, _) = damaged_database(&super::INTERRUPT_BACKFILL).await;
         (db, before)
+    }
+
+    #[tokio::test]
+    async fn a_finished_write_leaves_no_journal_entry() {
+        let (_db, _before, pending) = damaged_database(&[]).await;
+        assert_eq!(pending, 0, "every open would replay a write that finished");
+    }
+
+    #[tokio::test]
+    async fn a_write_killed_before_its_index_rows_is_indexed_on_the_next_open() {
+        let (db, before, _) = damaged_database(&super::KILL_BEFORE_INDEX).await;
+        let store = Store::open(db.dsn()).await.unwrap();
+        super::the_index_is_whole(&store, &before).await;
+    }
+
+    #[tokio::test]
+    async fn a_journalled_write_already_indexed_is_not_indexed_twice() {
+        let (db, before, _) = damaged_database(&super::KILL_BEFORE_JOURNAL_END).await;
+        let store = Store::open(db.dsn()).await.unwrap();
+        super::the_index_is_whole(&store, &before).await;
+    }
+
+    #[tokio::test]
+    async fn a_failed_index_write_is_indexed_on_the_next_open() {
+        let (store, db) = store().await;
+        let pool = sqlx::PgPool::connect(db.dsn()).await.unwrap();
+        for statement in [
+            "CREATE FUNCTION fail_index() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'disk full'; END $$ LANGUAGE plpgsql",
+            "CREATE TRIGGER fail_index BEFORE INSERT ON record_origins FOR EACH ROW EXECUTE FUNCTION fail_index()",
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+        super::seed_while_the_index_fails(&store).await;
+        drop(store);
+        sqlx::query("DROP TRIGGER fail_index ON record_origins")
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+
+        let store = Store::open(db.dsn()).await.unwrap();
+        super::the_failed_writes_are_indexed(&store).await;
+    }
+
+    #[tokio::test]
+    async fn an_index_without_event_keys_is_rebuilt() {
+        let (db, before, _) = damaged_database(&["ALTER TABLE record_origins DROP COLUMN event_key"]).await;
+        let store = Store::open(db.dsn()).await.unwrap();
+        super::the_index_is_whole(&store, &before).await;
     }
 
     #[tokio::test]

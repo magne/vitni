@@ -157,6 +157,13 @@ long-standing "DNA match views in the UI" item is closed.
   their own failures with `tracing::error!` but also carry on. *Exit:* a failed projection write fails
   the rebuild or replace that caused it (which rolls the replace back), and is at least reported for a
   live command; a test with a failing view repository proves both. — #486
+- **A projection is written after the event commit** — `cqrs-es` commits an aggregate's events, then
+  writes its projection through `GenericQuery`, so a process killed between the two leaves the
+  projection without the newest events until `vitni rebuild`. The `record_origins` index has the same
+  window and closes it with a write journal that the next open replays (`record_origins_pending`,
+  `vitni-db/src/{sqlite,postgres}.rs`); a projection cannot reuse it as is, because its replay applies
+  the events onto the stored view and would apply them twice. *Exit:* a test that kills a commit
+  between its events and its projection write finds the projection whole on the next open.
 
 ## Frontend & interaction
 
@@ -479,13 +486,6 @@ does.
   surnames differ. The default 256 cases rarely reach it. *Shape:* a key the Jaro–Winkler floor
   implies (a short prefix of the normalized given name), or *Katherine* in the same class as *Kari*.
   *Exit:* the proptest passes at 10 000 cases. — #494
-- **The origin index is written after the event commit** — ADR 0040 §5. `RecordOriginsQuery`
-  (`vitni-db/src/record_origins/sqlite.rs:75`) indexes an aggregate's events in a cqrs-es query run
-  after the events commit, logging a failure. A process killed between the two leaves an aggregate no
-  origin resolves to, so the next run of the import creates it again. A cancel stops between two writes
-  and is safe. *Shape:* index in the event transaction, or rebuild the index for the newest events on
-  open. *Exit:* a test that kills the commit between an event and its index row re-runs without a
-  duplicate. — #490
 - **An abandoned import run cannot be resumed from History** — ADR 0040 §5. Re-running the import
   finishes an interrupted commit, but History only lists the abandoned run. *Shape:* *Resume* on an
   abandoned bulk run, re-running its plugin over its source with its dataset. *Exit:* a gui-pass scenario
