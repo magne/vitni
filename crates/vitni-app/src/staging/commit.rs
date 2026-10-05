@@ -114,6 +114,7 @@ pub async fn commit_import(
         template,
         run: run.map(|run| (run.dataset(), run.id())),
         file_asserted_at: plan.file_asserted_at,
+        held: std::sync::Mutex::default(),
     };
     let mut commit = Commit {
         plan,

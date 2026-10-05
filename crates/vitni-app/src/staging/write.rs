@@ -6,7 +6,8 @@
 //! name, a source's title); an existing entity re-asserts that value instead, which the origin gate
 //! makes a no-op when it is already on record from the same item.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Mutex, PoisonError};
 
 use vitni_core::enums::{EvidenceLevel, Restriction};
 use vitni_core::ids::ImportRunId;
@@ -39,6 +40,83 @@ pub(crate) struct Writer<'a> {
     pub run: Option<(&'a DatasetId, ImportRunId)>,
     /// The document's own export date (ADR 0029 §2).
     pub file_asserted_at: Option<Timestamp>,
+    /// What each record [`Writer::enrich`] wrote onto holds once it has, by kind and human id. Read
+    /// back for the next entity resolved onto the same record, so a dry run, which writes nothing,
+    /// plans each missing field once, as the commit writes it.
+    pub held: Mutex<BTreeMap<(&'static str, String), Held>>,
+}
+
+/// What a reused record holds of the fields [`Writer::enrich`] fills.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Held {
+    /// The single-valued fields that have a value.
+    filled: BTreeSet<&'static str>,
+    /// Its names' texts.
+    names: BTreeSet<String>,
+    restrictions: BTreeSet<Restriction>,
+}
+
+impl Held {
+    fn place(view: &vitni_core::place::PlaceView) -> Self {
+        let mut held = Self {
+            names: view.names().into_iter().map(|name| name.text.clone()).collect(),
+            restrictions: view.restrictions().clone(),
+            ..Self::default()
+        };
+        if place::stated_place_type(view).is_some() {
+            held.filled.insert("place_type");
+        }
+        held
+    }
+
+    fn source(view: &vitni_core::source::SourceView) -> Self {
+        let mut held = Self {
+            restrictions: view.restrictions().clone(),
+            ..Self::default()
+        };
+        for (field, value) in [
+            ("title", view.title()),
+            ("author", view.author()),
+            ("pub_info", view.pub_info()),
+            ("abbrev", view.abbrev()),
+        ] {
+            if value.is_some() {
+                held.filled.insert(field);
+            }
+        }
+        held
+    }
+
+    fn repository(view: &vitni_core::repository::RepositoryView) -> Self {
+        let mut held = Self {
+            restrictions: view.restrictions().clone(),
+            ..Self::default()
+        };
+        if view.name().is_some() {
+            held.filled.insert("name");
+        }
+        held
+    }
+
+    /// The incoming value of a single-valued `field` the record has none of, now counted as held.
+    fn fill(&mut self, field: &'static str, incoming: Option<&String>) -> Option<String> {
+        let value = incoming?;
+        self.filled.insert(field).then(|| value.clone())
+    }
+
+    /// Whether `name` is new to the record, now counted as held.
+    fn name(&mut self, name: &str) -> bool {
+        self.names.insert(name.to_owned())
+    }
+
+    /// The record's restrictions with `incoming` added, when that adds any.
+    fn widen(&mut self, incoming: &BTreeSet<Restriction>) -> Option<BTreeSet<Restriction>> {
+        if incoming.is_subset(&self.restrictions) {
+            return None;
+        }
+        self.restrictions.extend(incoming.iter().copied());
+        Some(self.restrictions.clone())
+    }
 }
 
 /// The human id each reference of one write resolves to.
@@ -289,20 +367,27 @@ impl Writer<'_> {
     ) -> Result<(), AppError> {
         let (ws, session) = (self.workspace, self.session);
         let meta = || self.meta(record, item);
-        let view = ws
-            .store()
-            .find_place(human_id)
-            .await?
-            .ok_or_else(|| AppError::PlaceNotFound(human_id.to_owned()))?;
-        if !view.names().iter().any(|name| name.text == fields.name) {
+        let key = ("place", human_id.to_owned());
+        let mut held = match self.take_held(&key) {
+            Some(held) => held,
+            None => Held::place(
+                &ws.store()
+                    .find_place(human_id)
+                    .await?
+                    .ok_or_else(|| AppError::PlaceNotFound(human_id.to_owned()))?,
+            ),
+        };
+        if held.name(&fields.name) {
             place::add_place_name(ws, session, human_id, fields.name.clone(), meta()).await?;
         }
-        if let (None, Some(place_type)) = (place::stated_place_type(&view), &fields.place_type) {
+        let place_type = fields.place_type.as_ref().filter(|_| held.filled.insert("place_type"));
+        if let Some(place_type) = place_type {
             place::set_place_type(ws, session, human_id, place_type.clone(), meta()).await?;
         }
-        if let Some(restrictions) = widened(view.restrictions(), &fields.restrictions) {
+        if let Some(restrictions) = held.widen(&fields.restrictions) {
             place::set_restrictions(ws, session, human_id, restrictions, meta()).await?;
         }
+        self.keep_held(key, held);
         Ok(())
     }
 
@@ -315,26 +400,32 @@ impl Writer<'_> {
     ) -> Result<(), AppError> {
         let (ws, session) = (self.workspace, self.session);
         let meta = || self.meta(record, item);
-        let view = ws
-            .store()
-            .find_source(human_id)
-            .await?
-            .ok_or_else(|| AppError::SourceNotFound(human_id.to_owned()))?;
-        if let Some(title) = lacking(view.title(), fields.title.as_ref()) {
+        let key = ("source", human_id.to_owned());
+        let mut held = match self.take_held(&key) {
+            Some(held) => held,
+            None => Held::source(
+                &ws.store()
+                    .find_source(human_id)
+                    .await?
+                    .ok_or_else(|| AppError::SourceNotFound(human_id.to_owned()))?,
+            ),
+        };
+        if let Some(title) = held.fill("title", fields.title.as_ref()) {
             source::set_title(ws, session, human_id, title, meta()).await?;
         }
-        if let Some(author) = lacking(view.author(), fields.author.as_ref()) {
+        if let Some(author) = held.fill("author", fields.author.as_ref()) {
             source::set_source_author(ws, session, human_id, author, meta()).await?;
         }
-        if let Some(pub_info) = lacking(view.pub_info(), fields.pub_info.as_ref()) {
+        if let Some(pub_info) = held.fill("pub_info", fields.pub_info.as_ref()) {
             source::set_source_pub_info(ws, session, human_id, pub_info, meta()).await?;
         }
-        if let Some(abbrev) = lacking(view.abbrev(), fields.abbrev.as_ref()) {
+        if let Some(abbrev) = held.fill("abbrev", fields.abbrev.as_ref()) {
             source::set_source_abbrev(ws, session, human_id, abbrev, meta()).await?;
         }
-        if let Some(restrictions) = widened(view.restrictions(), &fields.restrictions) {
+        if let Some(restrictions) = held.widen(&fields.restrictions) {
             source::set_restrictions(ws, session, human_id, restrictions, meta()).await?;
         }
+        self.keep_held(key, held);
         Ok(())
     }
 
@@ -347,18 +438,35 @@ impl Writer<'_> {
     ) -> Result<(), AppError> {
         let (ws, session) = (self.workspace, self.session);
         let meta = || self.meta(record, item);
-        let view = ws
-            .store()
-            .find_repository(human_id)
-            .await?
-            .ok_or_else(|| AppError::RepositoryNotFound(human_id.to_owned()))?;
-        if let Some(name) = lacking(view.name(), Some(&fields.name)) {
+        let key = ("repository", human_id.to_owned());
+        let mut held = match self.take_held(&key) {
+            Some(held) => held,
+            None => Held::repository(
+                &ws.store()
+                    .find_repository(human_id)
+                    .await?
+                    .ok_or_else(|| AppError::RepositoryNotFound(human_id.to_owned()))?,
+            ),
+        };
+        if let Some(name) = held.fill("name", Some(&fields.name)) {
             repository::set_repository_name(ws, session, human_id, name, meta()).await?;
         }
-        if let Some(restrictions) = widened(view.restrictions(), &fields.restrictions) {
+        if let Some(restrictions) = held.widen(&fields.restrictions) {
             repository::set_restrictions(ws, session, human_id, restrictions, meta()).await?;
         }
+        self.keep_held(key, held);
         Ok(())
+    }
+
+    fn take_held(&self, key: &(&'static str, String)) -> Option<Held> {
+        self.held.lock().unwrap_or_else(PoisonError::into_inner).remove(key)
+    }
+
+    fn keep_held(&self, key: (&'static str, String), held: Held) {
+        self.held
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(key, held);
     }
 
     /// Every field of `entity` its create does not carry.
@@ -612,20 +720,4 @@ impl Writer<'_> {
         }
         Ok(())
     }
-}
-
-/// The incoming value of a single-valued field the stored record has none of.
-fn lacking(stored: Option<&str>, incoming: Option<&String>) -> Option<String> {
-    match (stored, incoming) {
-        (None, Some(value)) => Some(value.clone()),
-        (Some(_), _) | (None, None) => None,
-    }
-}
-
-/// The stored restrictions with the incoming ones added, when that adds any.
-fn widened(stored: &BTreeSet<Restriction>, incoming: &BTreeSet<Restriction>) -> Option<BTreeSet<Restriction>> {
-    if incoming.is_subset(stored) {
-        return None;
-    }
-    Some(stored.union(incoming).copied().collect())
 }
