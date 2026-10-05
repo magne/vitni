@@ -457,13 +457,6 @@ through the engine (#401), persona clusters (#404), merge and distinguish for ev
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
-- **An interrupted `record_origins` backfill is never resumed** — when a workspace whose log predates
-  the index is opened, `Store::open` creates the table and replays the log into it
-  (`vitni-db/src/sqlite.rs`, `postgres.rs`, `origins_are_new`). "New" is "the table did not exist", so
-  if that open fails or is killed mid-replay, the next open finds the table and skips the backfill;
-  re-import then misses the earlier imports' origins until `vitni rebuild`. *Shape:* a completion
-  marker written after the replay, or the backfill in one transaction. *Exit:* a test that interrupts
-  the backfill and reopens gets the full index. — #489
 - **`find_similar` reads every profile view** — each lookup builds its candidates' profiles from
   `Profiles::load`, which lists every person, event, place and family (`vitni-app/src/profile.rs`), so
   one lookup costs about 0.9 s at 100k persons (`cargo bench -p vitni-app --bench similar`) though it

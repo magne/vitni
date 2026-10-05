@@ -189,8 +189,6 @@ macro_rules! postgres_store {
                 place_succession_index::postgres::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating place succession index: {e}")))?;
-                // The record origins index (ADR 0037 §4) is fed by every aggregate. A workspace
-                // whose log predates it gets it filled from that log below.
                 // The match keys blocking index (ADR 0038 §7): every commit marks the matchable
                 // aggregate it touched, and the app layer rekeys it before the next lookup.
                 crate::match_keys::postgres::create_tables(&pool)
@@ -202,7 +200,9 @@ macro_rules! postgres_store {
                 let identity_is_new = crate::identity_links::postgres::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating identity index: {e}")))?;
-                let origins_are_new = crate::record_origins::postgres::create_tables(&pool)
+                // The record origins index (ADR 0037 §4) is fed by every aggregate. One that is new, or
+                // whose last fill or rebuild never finished, is refilled from the log below.
+                let origins_need_backfill = crate::record_origins::postgres::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating record origins index: {e}")))?;
                 $(
@@ -218,10 +218,10 @@ macro_rules! postgres_store {
                         );
                         rebuild_view::<$State, $View>(&pool, $table_const, $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
                     }
-                    if origins_are_new {
-                        replay_record_origins::<$State>(&pool, $table_const, $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
-                    }
                 )+
+                if origins_need_backfill {
+                    Self::backfill_record_origins(&pool).await?;
+                }
                 if identity_is_new {
                     crate::identity_links::postgres::rebuild_index(&pool).await?;
                 }
@@ -286,16 +286,38 @@ macro_rules! postgres_store {
                 // The identity clusters (ADR 0039 §4) are derived from the rebuilt projections of every
                 // matchable kind.
                 crate::identity_links::postgres::rebuild_index(pool).await?;
-                // The record origins index is replayed from the raw events, after the projections
-                // its `live` flags are read from.
-                crate::record_origins::postgres::clear_table(pool).await?;
                 // The match keys need the name-culture packs, which only the app layer has: forgetting
                 // what the index was built under makes it rebuild on next use.
                 crate::match_keys::postgres::clear_state(pool).await?;
+                // The record origins index is replayed from the raw events, after the projections
+                // its `live` flags are read from. Unmarked first, so a rebuild cut short is redone by
+                // the next open.
+                crate::record_origins::postgres::mark_incomplete(pool).await?;
+                Self::refill_record_origins_on(pool, replay_buffer).await
+            }
+
+            /// Fills the record origins index from the log in one transaction, so an open cut short
+            /// leaves it as it was, still unmarked; a second open waiting on the lock finds it filled.
+            async fn backfill_record_origins(pool: &Pool<Postgres>) -> Result<(), DbError> {
+                let exclusive = crate::exclusive::ExclusivePool::begin(pool).await?;
+                let outcome = async {
+                    if crate::record_origins::postgres::lock_for_refill(exclusive.pool()).await? {
+                        return Ok(());
+                    }
+                    Self::refill_record_origins_on(exclusive.pool(), crate::exclusive::EXCLUSIVE_REPLAY_BUFFER).await
+                }
+                .await;
+                exclusive.finish(outcome).await
+            }
+
+            /// Clears the record origins index, replays every aggregate's log into it, and marks it
+            /// complete.
+            async fn refill_record_origins_on(pool: &Pool<Postgres>, replay_buffer: usize) -> Result<(), DbError> {
+                crate::record_origins::postgres::clear_table(pool).await?;
                 $(
                     replay_record_origins::<$State>(pool, $table_const, $upcasters, replay_buffer).await?;
                 )+
-                Ok(())
+                crate::record_origins::postgres::mark_complete(pool).await
             }
         }
     };
