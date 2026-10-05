@@ -198,9 +198,9 @@ impl HostState {
         }
     }
 
-    /// Shows `review`'s plan to `reviewer` and answers its possible matches as the reviewer does.
-    /// Returns `false` when the reviewer discarded the plan or cancelled the review, so nothing is
-    /// written.
+    /// Shows `review`'s plan to `reviewer` and answers its possible matches as the reviewer does, then,
+    /// when anything was asked, shows the plan as the answers leave it. Returns `false` when the reviewer
+    /// discarded either plan or cancelled the review, so nothing is written.
     async fn settle(&self, review: &mut ImportReview, reviewer: &mut dyn PlanReviewer) -> Result<bool, PluginError> {
         let unreachable = |error: PresentError| PluginError::Runtime(error.to_string());
         match reviewer.plan(review.summary()).await.map_err(unreachable)? {
@@ -211,11 +211,13 @@ impl HostState {
             }
             PlanStep::Review => {}
         }
+        let mut asked = false;
         while let Some(question) = review
             .next_question(&self.workspace)
             .await
             .map_err(|error| PluginError::Commit(error.to_string()))?
         {
+            asked = true;
             let answered = match reviewer.review_match(question).await.map_err(unreachable)? {
                 ReviewReply::Pair(answer) => review.answer(&self.workspace, &self.session, *answer).await,
                 ReviewReply::SameForGroup(decision) => {
@@ -229,7 +231,10 @@ impl HostState {
             };
             answered.map_err(plan_plugin_error)?;
         }
-        Ok(true)
+        if !asked {
+            return Ok(true);
+        }
+        reviewer.confirm(review.summary()).await.map_err(unreachable)
     }
 }
 

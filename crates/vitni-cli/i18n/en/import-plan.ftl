@@ -26,6 +26,57 @@ import-plan-review-hint = { $count ->
     [one] 1 record has possible matches: import on a terminal to review it, or pass --defer-matches to decide it later.
    *[other] { $count } records have possible matches: import on a terminal to review them, or pass --defer-matches to decide them later.
 }
+import-plan-reviewed-heading = Plan for { $source }, as reviewed:
+import-plan-confirm = Import this plan? [y] yes, [n] no:
+import-plan-record = { $record }: { $change }
+import-plan-record-name = { $label } ({ $id })
+import-plan-updates = updates { $fields }
+import-plan-reuses = reused · adds { $fields }
+import-plan-field-name = name
+import-plan-field-sex = sex
+import-plan-field-fact = { $fact ->
+    [Occupation] occupation
+    [Residence] residence
+    [Religion] religion
+    [Caste] caste
+    [PhysicalDescription] physical description
+    [Education] education
+    [Ethnicity] ethnicity
+    [NationalId] national id
+    [Nationality] nationality
+    [NumberOfChildren] number of children
+    [NumberOfMarriages] number of marriages
+    [Property] property
+    [SocialSecurityNumber] social security number
+    [NobilityTitle] nobility title
+   *[other] fact
+}
+import-plan-field-custom-fact = fact
+import-plan-field-event = event
+import-plan-field-association = association
+import-plan-field-partner = partner
+import-plan-field-child = child
+import-plan-field-child-relationship = child relationship
+import-plan-field-date = date
+import-plan-field-address = address
+import-plan-field-place = place
+import-plan-field-type = type
+import-plan-field-enclosure = location
+import-plan-field-title = title
+import-plan-field-author = author
+import-plan-field-publication = publication
+import-plan-field-abbreviation = abbreviation
+import-plan-field-repository = repository
+import-plan-field-page = page
+import-plan-field-confidence = confidence
+import-plan-field-mime = file type
+import-plan-field-text = text
+import-plan-field-restrictions = restrictions
+import-plan-field-citation = citation
+import-plan-field-media = media
+import-plan-field-note = note
+import-plan-field-tag = tag
+import-plan-field-other = other details
 import-review-kind = { $kind ->
     [person] person
     [place] place

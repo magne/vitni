@@ -9,7 +9,9 @@ use std::io::{BufRead, Write};
 
 use serde::Serialize;
 use tokio::sync::mpsc;
-use vitni_app::{IdentityDecision, MatchQuestion, PairAnswer, PlanStep, PlanSummary, Provenance, ReviewReply};
+use vitni_app::{
+    IdentityDecision, MatchQuestion, PairAnswer, PlanStep, PlanSummary, PlannedChange, Provenance, ReviewReply,
+};
 use vitni_plugin_host::ReviewRequest;
 
 use crate::i18n::Localizer;
@@ -106,6 +108,16 @@ pub async fn answer<I: BufRead, E: Write, O: Write>(
                 }
                 let _ = reply.send(answer);
             }
+            ReviewRequest::Confirm { summary, reply } => {
+                let mut lines = vec![localizer.import_plan_reviewed_heading(source)];
+                lines.extend(plan_body(localizer, &summary));
+                write_lines(&mut terminal.prompts, &lines);
+                let commit = confirm(localizer, &mut terminal.input, &mut terminal.prompts);
+                if !commit {
+                    reviewed = Reviewed::Cancelled;
+                }
+                let _ = reply.send(commit);
+            }
         }
     }
     reviewed
@@ -136,14 +148,13 @@ fn show_plan<I, E: Write, O: Write>(
     }
 }
 
-/// The plan of importing `source` as lines: a heading, one line per kind, and what it comes to. A
-/// `printed` plan with possible matches ends saying how to review them.
+/// The plan of importing `source` as lines: a heading, one line per kind followed by what it changes
+/// on each record, and what it comes to. A `printed` plan with possible matches ends saying how to
+/// review them.
 #[must_use]
 pub fn plan_lines(localizer: &Localizer, source: &str, summary: &PlanSummary, printed: bool) -> Vec<String> {
     let mut lines = vec![localizer.import_plan_heading(source)];
-    for row in &summary.kinds {
-        lines.push(format!("  {}", localizer.import_plan_row(row)));
-    }
+    lines.extend(plan_body(localizer, summary));
     let writes = summary.kinds.iter().any(|row| {
         let counts = row.counts;
         counts.new + counts.updated + counts.linked + counts.candidates > 0
@@ -158,8 +169,20 @@ pub fn plan_lines(localizer: &Localizer, source: &str, summary: &PlanSummary, pr
     lines
 }
 
+/// One line per kind, each followed by what the plan changes on that kind's records.
+fn plan_body(localizer: &Localizer, summary: &PlanSummary) -> Vec<String> {
+    let mut lines = Vec::new();
+    for row in &summary.kinds {
+        lines.push(format!("  {}", localizer.import_plan_row(row)));
+        for record in summary.records.iter().filter(|record| record.kind == row.kind) {
+            lines.push(format!("    {}", localizer.import_plan_record(record)));
+        }
+    }
+    lines
+}
+
 /// The plan of importing `source` as one JSON object, for scripts and agents: its kinds' counts under
-/// their stable names.
+/// their stable names, and each record it changes with the field keys its writes assert.
 #[must_use]
 pub fn plan_json(source: &str, summary: &PlanSummary) -> String {
     #[derive(Serialize)]
@@ -167,6 +190,15 @@ pub fn plan_json(source: &str, summary: &PlanSummary) -> String {
         source: &'a str,
         kinds: Vec<Row>,
         candidates: u32,
+        records: Vec<Record<'a>>,
+    }
+    #[derive(Serialize)]
+    struct Record<'a> {
+        kind: &'static str,
+        label: &'a str,
+        human_id: &'a str,
+        change: &'static str,
+        fields: &'a [String],
     }
     #[derive(Serialize)]
     struct Row {
@@ -191,10 +223,25 @@ pub fn plan_json(source: &str, summary: &PlanSummary) -> String {
             withheld: row.counts.withheld,
         })
         .collect();
+    let records = summary
+        .records
+        .iter()
+        .map(|record| Record {
+            kind: record.kind.as_str(),
+            label: &record.label,
+            human_id: &record.human_id,
+            change: match record.change {
+                PlannedChange::Updates => "updates",
+                PlannedChange::Reuses => "reuses",
+            },
+            fields: &record.keys,
+        })
+        .collect();
     let plan = Plan {
         source,
         kinds,
         candidates: summary.candidates,
+        records,
     };
     // A struct of strings and integers always serializes.
     serde_json::to_string(&plan).unwrap_or_default()
@@ -224,6 +271,27 @@ pub fn ask(
         }
         if let Some(reply) = parse_answer(answer.trim(), question) {
             return reply;
+        }
+    }
+}
+
+/// Asks the operator whether to import the reviewed plan, until they answer. The end of input declines,
+/// so nothing is written on an answer never given.
+fn confirm(localizer: &Localizer, input: &mut impl BufRead, prompts: &mut impl Write) -> bool {
+    let prompt = localizer.import_plan_confirm();
+    loop {
+        // A prompt that cannot be written still waits for its answer, as `ask` does.
+        drop(write!(prompts, "{prompt} "));
+        drop(prompts.flush());
+        let mut answer = String::new();
+        match input.read_line(&mut answer) {
+            Ok(0) | Err(_) => return false,
+            Ok(_) => {}
+        }
+        match answer.trim().to_lowercase().as_str() {
+            "y" | "j" => return true,
+            "n" => return false,
+            _ => {}
         }
     }
 }
@@ -258,12 +326,15 @@ fn write_lines(out: &mut impl Write, lines: &[String]) {
 mod tests {
     use std::io::Cursor;
 
+    use tokio::sync::{mpsc, oneshot};
     use vitni_app::{
         AggRef, ENGINE_VERSION, KindCounts, MatchAssessment, MatchBand, MatchGroup, MatchQuestion, MatchableKind,
-        PairAnswer, PlanCounts, PlanSummary, ReviewReply,
+        PairAnswer, PlanCounts, PlanSummary, PlannedChange, PlannedField, PlannedRecord, ReviewReply,
     };
+    use vitni_core::enums::FactType;
+    use vitni_plugin_host::ReviewRequest;
 
-    use super::{PlanFlags, PlanFormat, ReviewMode, ask, plan_json, plan_lines, review_mode};
+    use super::{PlanFlags, PlanFormat, ReviewMode, Terminal, answer, ask, plan_json, plan_lines, review_mode};
     use crate::i18n::Localizer;
 
     fn question(group: Option<MatchGroup>) -> MatchQuestion {
@@ -309,7 +380,131 @@ mod tests {
                 counts,
             }],
             candidates: counts.candidates,
+            records: Vec::new(),
         }
+    }
+
+    /// A plan that updates Ole Hansen's occupation and a family's partner, and reuses a census that
+    /// lacks an author.
+    fn changes() -> PlanSummary {
+        let row = |kind, counts| KindCounts { kind, counts };
+        let updated = PlanCounts {
+            updated: 1,
+            ..PlanCounts::default()
+        };
+        let linked = PlanCounts {
+            linked: 1,
+            ..PlanCounts::default()
+        };
+        let record = |kind, label: &str, human_id: &str, change, fields, keys: &[&str]| PlannedRecord {
+            kind,
+            label: label.to_owned(),
+            human_id: human_id.to_owned(),
+            change,
+            fields,
+            keys: keys.iter().map(|key| (*key).to_owned()).collect(),
+        };
+        PlanSummary {
+            kinds: vec![
+                row(MatchableKind::Source, linked),
+                row(MatchableKind::Person, updated),
+                row(MatchableKind::Family, updated),
+            ],
+            candidates: 0,
+            records: vec![
+                record(
+                    MatchableKind::Source,
+                    "1900 census",
+                    "S0001",
+                    PlannedChange::Reuses,
+                    vec![PlannedField::Author, PlannedField::Publication],
+                    &["source.AuthorSet", "source.PubInfoSet"],
+                ),
+                record(
+                    MatchableKind::Person,
+                    "Ole Hansen",
+                    "I0001",
+                    PlannedChange::Updates,
+                    vec![PlannedField::Fact(FactType::Occupation)],
+                    &["person.FactAsserted.Occupation"],
+                ),
+                record(
+                    MatchableKind::Family,
+                    "",
+                    "F0001",
+                    PlannedChange::Updates,
+                    vec![PlannedField::Partner],
+                    &["family.PartnerAdded"],
+                ),
+            ],
+        }
+    }
+
+    #[test]
+    fn a_plan_lists_what_it_changes_on_each_record_under_its_kind() {
+        assert_eq!(
+            plan_lines(&Localizer::english(), "tree.ged", &changes(), true),
+            vec![
+                "Plan for tree.ged:".to_owned(),
+                "  sources: 1 already in the tree".to_owned(),
+                "    1900 census (S0001): reused · adds author, publication".to_owned(),
+                "  persons: 1 updated".to_owned(),
+                "    Ole Hansen (I0001): updates occupation".to_owned(),
+                "  families: 1 updated".to_owned(),
+                "    F0001: updates partner".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_json_plan_lists_each_changed_record_with_its_field_keys() {
+        let json = plan_json("tree.ged", &changes());
+        assert!(
+            json.contains(
+                r#""records":[{"kind":"source","label":"1900 census","human_id":"S0001","change":"reuses","fields":["source.AuthorSet","source.PubInfoSet"]},"#
+            ),
+            "{json}"
+        );
+    }
+
+    /// What an interactive review answers to the reviewed plan `changes()` given `input`, and what it
+    /// wrote to the operator.
+    async fn confirmed(input: &str) -> (Option<bool>, String) {
+        let (requests, received) = mpsc::channel(1);
+        let (reply, answered) = oneshot::channel();
+        requests
+            .send(ReviewRequest::Confirm {
+                summary: changes(),
+                reply,
+            })
+            .await
+            .expect("send");
+        drop(requests);
+        let mut terminal = Terminal {
+            input: Cursor::new(input.to_owned()),
+            prompts: Vec::new(),
+            output: Vec::new(),
+        };
+        answer(
+            received,
+            &Localizer::english(),
+            (ReviewMode::Interactive, "tree.ged"),
+            &mut terminal,
+        )
+        .await;
+        let prompts = String::from_utf8_lossy(&terminal.prompts).into_owned();
+        (answered.await.ok(), prompts)
+    }
+
+    #[tokio::test]
+    async fn a_reviewed_plan_is_shown_and_committed_only_when_the_operator_says_so() {
+        let (commit, prompts) = confirmed("x\ny\n").await;
+        assert_eq!(commit, Some(true), "asked again until answered");
+        assert!(prompts.contains("Plan for tree.ged, as reviewed:"), "{prompts}");
+        assert!(prompts.contains("Ole Hansen (I0001): updates occupation"), "{prompts}");
+        assert!(prompts.contains("Import this plan? [y] yes, [n] no:"), "{prompts}");
+        assert_eq!(confirmed("n\n").await.0, Some(false));
+        assert_eq!(confirmed("").await.0, Some(false), "no answer writes nothing");
     }
 
     #[test]
@@ -416,7 +611,7 @@ mod tests {
         );
         assert_eq!(
             json,
-            r#"{"source":"tree.ged","kinds":[{"kind":"person","new":0,"unchanged":2,"updated":0,"linked":0,"candidates":0,"withheld":0}],"candidates":0}"#
+            r#"{"source":"tree.ged","kinds":[{"kind":"person","new":0,"unchanged":2,"updated":0,"linked":0,"candidates":0,"withheld":0}],"candidates":0,"records":[]}"#
         );
     }
 }

@@ -3,7 +3,8 @@
 # record as new and imports at Import; the second, as a different tree, finds two places and the person
 # without an external id possibly the same as the first import's (Anders, linked by his `_UID`, comes in
 # as a persona carrying his own birthplace — #477), and the Review stage puts each pair
-# in the compare view, its Review step showing only while the stage is up. SSR renders each stage
+# in the compare view, its Review step showing only while the stage is up; after the last pair the plan
+# as the answers leave it is shown once more, and Import writes it. SSR renders each stage
 # alone; only the live app shows the driver loop handing the host's plan and pairs to the wizard and
 # their answers back, and focus landing on the compare view so y / l decide.
 #
@@ -129,6 +130,15 @@ chord = "l"
 label = "l: Decide later"
 
 [[step]]
+do = "shot"
+name = "reviewed"
+
+[[step]]
+do = "click"
+at = [1730, 696]
+label = "Ready to import: Import"
+
+[[step]]
 do = "wait"
 seconds = 3
 label = "let the import finish"
@@ -158,7 +168,12 @@ shots = ["second-pair", "third-pair"]
 because = "answering the second pair must bring up the third"
 
 [[assert]]
+kind = "differ"
+shots = ["third-pair", "reviewed"]
+because = "answering the last pair must show the plan as the answers leave it"
+
+[[assert]]
 kind = "match"
 shots = ["first-done", "second-done"]
 region = [248, 230, 1536, 300]
-because = "answering the last pair must write the import and end on its summary, as the first did"
+because = "importing the reviewed plan must write the import and end on its summary, as the first did"

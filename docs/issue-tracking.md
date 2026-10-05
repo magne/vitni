@@ -297,6 +297,7 @@ the ADR 0044 replace commit a workspace with records missing.
 | [A record decided *Same* as a stored place, source or repository adds nothing to it](https://github.com/magne/vitni/issues/491) | matching | The incoming record's fields are dropped without notice |
 | [The plan does not show what reusing a record adds to it](https://github.com/magne/vitni/issues/509) | matching | The review cannot show what a *Same* writes |
 | [The import plan shows no record's fields](https://github.com/magne/vitni/issues/510) | matching | The user cannot see what a re-import or a *Same* changes before committing |
+| [An assisted import shows nothing of what it adds before it commits](https://github.com/magne/vitni/issues/512) | matching | A one-record import writes what a *Same* adds unseen |
 | [Projection write errors are dropped](https://github.com/magne/vitni/issues/486) | cross-aggregate | A rebuild or replace finishes `Ok` with records missing |
 | [`find_similar` reads every profile view](https://github.com/magne/vitni/issues/492) | matching | One lookup costs ~0.9 s at 100k persons |
 | [The all-pairs duplicate scan does not scale to 100k persons](https://github.com/magne/vitni/issues/493) | matching | The Dashboard runs it on every show |

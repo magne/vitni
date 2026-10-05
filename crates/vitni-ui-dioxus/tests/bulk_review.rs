@@ -8,11 +8,14 @@ use dioxus::prelude::*;
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
     EngineVersion, KindCounts, MatchBand, MatchEvidence, MatchGroup, MatchableKind, PlanCounts, PlanSummary,
+    PlannedChange, PlannedField, PlannedRecord,
 };
+use vitni_core::enums::FactType;
 use vitni_ui::{BulkImportStage, CompareSideVm, MatchCompareVm, MatchStageVm};
 use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::screens::{
-    BulkImportWizardLabels, BulkPlanStage, BulkReviewStage, bulk_plan_labels, bulk_review_labels, bulk_step_indicator,
+    BulkConfirmStage, BulkImportWizardLabels, BulkPlanStage, BulkReviewStage, bulk_confirm_labels, bulk_plan_labels,
+    bulk_review_labels, bulk_step_indicator,
 };
 use vitni_ui_dioxus::shell::ChromeCtx;
 
@@ -43,7 +46,95 @@ fn summary(person: PlanCounts) -> PlanSummary {
             },
         ],
         candidates: person.candidates,
+        records: Vec::new(),
     }
+}
+
+fn record(
+    kind: MatchableKind,
+    label: &str,
+    human_id: &str,
+    change: PlannedChange,
+    fields: Vec<PlannedField>,
+) -> PlannedRecord {
+    PlannedRecord {
+        kind,
+        label: label.to_owned(),
+        human_id: human_id.to_owned(),
+        change,
+        fields,
+        keys: Vec::new(),
+    }
+}
+
+fn plan_with_updates() -> Element {
+    let mut summary = summary(PlanCounts {
+        updated: 1,
+        ..PlanCounts::default()
+    });
+    summary.records = vec![record(
+        MatchableKind::Person,
+        "Ole Hansen",
+        "I0001",
+        PlannedChange::Updates,
+        vec![PlannedField::Fact(FactType::Occupation)],
+    )];
+    let labels = bulk_plan_labels(&chrome(), &summary);
+    rsx! {
+        BulkPlanStage { labels, onstep: |_| {} }
+    }
+}
+
+fn reviewed_plan() -> Element {
+    let mut summary = summary(PlanCounts {
+        new: 1,
+        ..PlanCounts::default()
+    });
+    summary.kinds.push(KindCounts {
+        kind: MatchableKind::Source,
+        counts: PlanCounts {
+            linked: 1,
+            ..PlanCounts::default()
+        },
+    });
+    summary.records = vec![record(
+        MatchableKind::Source,
+        "1920 census",
+        "S0002",
+        PlannedChange::Reuses,
+        vec![PlannedField::Author, PlannedField::Publication],
+    )];
+    let labels = bulk_confirm_labels(&chrome(), &summary);
+    rsx! {
+        BulkConfirmStage { labels, onconfirm: |_| {} }
+    }
+}
+
+#[test]
+fn the_plan_lists_each_kind_s_changed_records_folded_under_its_counts() {
+    let html = render(plan_with_updates);
+    let table = html.find("</table>").expect("the table");
+    let list = html.find(r#"class="plan-records""#).expect("the records list:\n{html}");
+    assert!(table < list, "under the counts:\n{html}");
+    assert!(html.contains("Persons · 1 record changes"), "{html}");
+    assert!(html.contains("Ole Hansen"), "{html}");
+    assert!(html.contains("I0001"), "{html}");
+    assert!(html.contains("updates occupation"), "{html}");
+    assert!(!html.contains("open"), "folded at the plan:\n{html}");
+}
+
+#[test]
+fn the_reviewed_plan_shows_what_a_same_adds_and_offers_import_or_cancel() {
+    let html = render(reviewed_plan);
+    assert!(html.contains("Ready to import"), "heading:\n{html}");
+    assert!(html.contains("1920 census"), "{html}");
+    assert!(html.contains("reused · adds author, publication"), "{html}");
+    assert!(html.contains("open"), "unfolded once reviewed:\n{html}");
+    assert!(html.contains(">Import<") && html.contains("Cancel"), "{html}");
+    assert!(
+        !html.contains("Review") && !html.contains("Decide all later"),
+        "nothing left to review:\n{html}"
+    );
 }
 
 fn plan_view(person: PlanCounts) -> Element {
@@ -214,6 +305,10 @@ fn steps_at_review() -> Element {
     bulk_step_indicator(&wizard_labels(), &BulkImportStage::Review(Box::new(stage(None))))
 }
 
+fn steps_at_confirm() -> Element {
+    bulk_step_indicator(&wizard_labels(), &BulkImportStage::Confirm(PlanSummary::default()))
+}
+
 fn steps_at_plan() -> Element {
     bulk_step_indicator(&wizard_labels(), &BulkImportStage::Plan(PlanSummary::default()))
 }
@@ -228,6 +323,12 @@ fn the_review_step_shows_only_while_the_review_is_up() {
     assert!(
         at_review.contains(r#"<span class="num">5</span> Summary"#),
         "{at_review}"
+    );
+
+    let at_confirm = render(steps_at_confirm);
+    assert!(
+        at_confirm.contains(r#"<span class="num">4</span> Review"#) && at_confirm.contains(r#"aria-current="step""#),
+        "the reviewed plan keeps the review step current:\n{at_confirm}"
     );
 
     let at_plan = render(steps_at_plan);
