@@ -14,7 +14,8 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, MatchQuestion, MatchReply, OperatorConfig, PairAnswer, Session, Workspace, WorkspaceDefaults,
+    AppDefaults, MatchQuestion, MatchReply, OperatorConfig, PairAnswer, PlanReply, PlanSummary, Session, Workspace,
+    WorkspaceDefaults,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
@@ -107,6 +108,10 @@ impl Presenter for ScriptedPresenter {
 
     async fn review_match(&mut self, _question: MatchQuestion) -> Result<MatchReply, PresentError> {
         Ok(MatchReply::Pair(Box::new(PairAnswer::Later)))
+    }
+
+    async fn confirm_plan(&mut self, _summary: PlanSummary) -> Result<PlanReply, PresentError> {
+        Ok(PlanReply::Import)
     }
 }
 

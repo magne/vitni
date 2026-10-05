@@ -12,7 +12,7 @@
 //! stage. The stages carry the parsed payload structs directly; resolving their Fluent chrome labels
 //! against the plugin catalogue is the renderer's job (PR8), not this state machine's.
 
-use vitni_app::{MatchGroup, MatchQuestion, MatchReply, MatchableKind, PairAnswer, ReviewReply};
+use vitni_app::{MatchGroup, MatchQuestion, MatchReply, MatchableKind, PairAnswer, PlanSummary, ReviewReply};
 
 use crate::i18n::Localizer;
 use crate::import_payload::{
@@ -39,6 +39,9 @@ pub enum ImportStage {
     SaveScan(SaveScanPayload),
     /// The host's own stage: a possible match of the record being imported (ADR 0040 §4).
     Match(Box<MatchStageVm>),
+    /// The host's own stage: the stored records the record being imported adds to, with the fields
+    /// each gains, before it is written (ADR 0046).
+    Plan(PlanSummary),
     /// The session summary (`present` [`ImportPayload::Summary`]).
     Summary(SummaryPayload),
     /// The plugin sent a payload the wizard could not parse.
@@ -97,6 +100,11 @@ impl ImportSession {
     /// Moves the session to the host's match stage for `question`.
     pub fn on_match(&mut self, question: &MatchQuestion, loc: &Localizer) {
         self.stage = ImportStage::Match(Box::new(MatchStageVm::build(question, loc)));
+    }
+
+    /// Moves the session to the host's ready-to-import stage for `summary`.
+    pub fn on_plan(&mut self, summary: PlanSummary) {
+        self.stage = ImportStage::Plan(summary);
     }
 
     /// Cancels the session from any stage.
@@ -205,7 +213,8 @@ pub(crate) mod tests {
     use crate::shortcuts::CompareDecision;
     use vitni_app::{
         AggRef, DatasetId, Feature, FeatureComparison, FeatureValue, ImportRunId, MatchAssessment, MatchBand,
-        MatchGroup, MatchQuestion, MatchReply, MatchableKind, Outcome, PairAnswer, RecordOrigin, ReviewReply,
+        MatchGroup, MatchQuestion, MatchReply, MatchableKind, Outcome, PairAnswer, PlanSummary, RecordOrigin,
+        ReviewReply,
     };
 
     /// A possible match of an incoming person with a stored one.
@@ -340,6 +349,15 @@ pub(crate) mod tests {
         };
         assert_eq!(summary.skipped, 2);
         assert!(session.is_finished());
+    }
+
+    #[test]
+    fn a_plan_moves_to_the_host_s_ready_to_import_stage() {
+        let mut session = ImportSession::new();
+        let summary = PlanSummary::default();
+        session.on_plan(summary.clone());
+        assert_eq!(*session.stage(), ImportStage::Plan(summary));
+        assert!(!session.is_finished());
     }
 
     #[test]

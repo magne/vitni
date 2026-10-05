@@ -11,9 +11,10 @@ import shows neither. Each `submit` plans one record and the host commits it as 
 possible match is answered, or at once when there are none, because ADR 0040 §4 says that "with no
 candidates there is no extra stage at all".
 
-So a census record whose source is decided *Same* writes the author it carries onto the stored source,
-and the user learns of it only from the source's history. The plugin's own Summary cannot report it:
-its payload is the plugin's, and the plugin never sees the plan (#512).
+So a census record whose source is decided *Same* writes onto the stored source what it lacks (the
+repository that holds it, an author, a publication), and the user learns of it only from the source's
+history. The plugin's own Summary cannot report it: its payload is the plugin's, and the plugin never
+sees the plan (#512).
 
 ## Decision
 
@@ -21,7 +22,7 @@ its payload is the plugin's, and the plugin never sees the plan (#512).
    one.** After the record's last possible match is answered, the host takes the reviewed plan's
    summary. If any stored record would gain a field (`PlanSummary.records` is not empty), the host puts
    it to the frontend through the same ADR 0017 §5 channel as the Match stage. The stage lists those
-   records with the fields each gains, in the bulk wizard's rows ("reused · adds author").
+   records with the fields each gains, in the bulk wizard's rows ("reused · adds repository").
 
 2. **The user imports the record, skips it, or cancels the session**, as on the Match stage. A skip
    or a cancel writes nothing of the record, and the plugin learns only `skipped` or `cancelled`.
@@ -38,7 +39,7 @@ its payload is the plugin's, and the plugin never sees the plan (#512).
   unchanged, writes nothing the user has not already seen on the plugin's Confirm stage. Stopping on
   it would add a click to every record of a long session for nothing.
 - **Candidates are not the trigger.** A source reused through its record origin, with no question
-  asked, can still gain an author, so asking only after a Match stage would miss it.
+  asked, can still gain a field, so asking only after a Match stage would miss it.
 - **The host owns the stage.** The plan is the host's (ADR 0040 §2), so the plugin protocol and its
   payloads stay as they are.
 

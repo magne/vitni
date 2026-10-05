@@ -8,8 +8,10 @@
 //! fetch) → Records (a picker table) → Confirm (a split view: the scan with the PR6 crop tool on the
 //! left, the editable transcribed fields + a provenance preview on the right) → Save scan (the PR6
 //! media-save dialog, once per source page) → Match (the host's own stage, only when a record may
-//! already be in the tree; `import_match.rs`) → Summary. The plugin drives which of its stages shows;
-//! the wizard answers each payload, and each of the host's match questions, over the presenter channel.
+//! already be in the tree; `import_match.rs`) → Plan (the host's own ready-to-import stage, only when a
+//! record adds to a record already in the tree; `import_plan.rs`) → Summary. The plugin drives which of
+//! its stages shows; the wizard answers each payload, and each of the host's questions, over the
+//! presenter channel.
 //!
 //! Each stage is a pure component over already-localized label structs and the parsed payload; it
 //! emits the user's answer as an [`ImportResponse`] through `onrespond`, so it renders in isolation
@@ -24,7 +26,7 @@ use std::collections::HashMap;
 
 use serde_json::json;
 use tokio::sync::oneshot;
-use vitni_app::MatchReply;
+use vitni_app::{MatchReply, PlanReply};
 use vitni_plugin_host::PluginRole;
 use vitni_ui::{
     ConfirmRecordPayload, CropRegion, FieldValue, HouseholdPosition, HouseholdPreview, ImportResponse, ImportSession,
@@ -39,6 +41,7 @@ use crate::components::{
 };
 use crate::i18n::Chrome;
 use crate::screens::import_match::{MatchStage, match_stage_labels};
+use crate::screens::import_plan::{ImportPlanStage, import_plan_labels};
 use crate::screens::shared::{confidence_choices, media_crop_labels, media_viewer_labels};
 use crate::services::{PluginRow, PresentRequest, discover_plugins, start_assisted_import};
 
@@ -54,26 +57,32 @@ pub enum ImportRowStatus {
     Skipped,
 }
 
-/// The wizard chrome shared across stages: the heading and the six step names.
+/// The wizard chrome shared across stages: the heading and the seven step names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WizardLabels {
     /// The wizard heading.
     pub heading: String,
-    /// The six stage names (Source, Records, Confirm, Save scan, Match, Summary); Match shows only
-    /// while its stage is up.
-    pub stages: [String; 6],
+    /// The seven stage names (Source, Records, Confirm, Save scan, Match, Plan, Summary); Match and
+    /// Plan show only while their stage is up.
+    pub stages: [String; 7],
 }
 
 /// The step index of the host's match stage, shown only while it is up.
 const MATCH_STEP: usize = 4;
 
+/// The step index of the host's ready-to-import stage, shown only while it is up.
+const PLAN_STEP: usize = 5;
+
 /// Where the wizard answers the request it is showing: a plugin payload with an
-/// [`ImportResponse`] JSON string, the host's match stage with a [`MatchReply`].
+/// [`ImportResponse`] JSON string, the host's match stage with a [`MatchReply`], its ready-to-import
+/// stage with a [`PlanReply`].
 enum Responder {
     /// A plugin payload's channel.
     Payload(oneshot::Sender<String>),
     /// The match stage's channel.
     Match(oneshot::Sender<MatchReply>),
+    /// The ready-to-import stage's channel.
+    Plan(oneshot::Sender<PlanReply>),
 }
 
 /// The Source-stage labels.
@@ -280,6 +289,12 @@ pub fn ImportScreen() -> Element {
                 }
             }
         }
+        ImportStage::Plan(summary) => rsx! {
+            ImportPlanStage {
+                labels: import_plan_labels(&chrome, &summary),
+                onanswer: move |reply: PlanReply| answer_plan(reply, responder, statuses, active_row),
+            }
+        },
         ImportStage::Summary(payload) => rsx! {
             SummaryStage {
                 labels: summary_labels(&chrome, payload.imported.len(), payload.skipped),
@@ -804,13 +819,14 @@ pub fn SummaryStage(labels: SummaryLabels, imported: Vec<ImportedRecord>, onrest
 }
 
 /// The wizard step indicator: the stage names, numbered in order, the current one marked
-/// `aria-current`. The host's Match step shows only while its stage is up — a record with no possible
-/// match never meets it.
+/// `aria-current`. The host's Match and Plan steps show only while their stage is up — a record with
+/// no possible match never meets the one, a record adding to no stored record never the other.
 pub fn step_indicator(labels: &WizardLabels, stage: &ImportStage) -> Element {
     let current = stage_index(stage);
     let mut steps = Vec::with_capacity(labels.stages.len());
     for (index, name) in labels.stages.iter().enumerate() {
-        if index != MATCH_STEP || current == MATCH_STEP {
+        let host_step = index == MATCH_STEP || index == PLAN_STEP;
+        if !host_step || index == current {
             steps.push((index, name.clone()));
         }
     }
@@ -837,7 +853,8 @@ fn stage_index(stage: &ImportStage) -> usize {
         ImportStage::Confirm(_) => 2,
         ImportStage::SaveScan(_) => 3,
         ImportStage::Match(_) => MATCH_STEP,
-        ImportStage::Summary(_) | ImportStage::Error(_) => 5,
+        ImportStage::Plan(_) => PLAN_STEP,
+        ImportStage::Summary(_) | ImportStage::Error(_) => 6,
     }
 }
 
@@ -870,6 +887,9 @@ async fn drive(
             match request {
                 PresentRequest::Payload { responder: reply, .. } => drop(reply.send(cancel_json())),
                 PresentRequest::Match { responder: reply, .. } => drop(reply.send(MatchReply::Cancel)),
+                PresentRequest::Plan { responder: reply, .. } => {
+                    reply.send(PlanReply::Cancel).ok();
+                }
             }
             continue;
         }
@@ -890,6 +910,13 @@ async fn drive(
             } => {
                 session.write().on_match(&question, state.data_loc());
                 responder.set(Some(Responder::Match(reply)));
+            }
+            PresentRequest::Plan {
+                summary,
+                responder: reply,
+            } => {
+                session.write().on_plan(summary);
+                responder.set(Some(Responder::Plan(reply)));
             }
         }
     }
@@ -948,8 +975,8 @@ fn respond_with(
     reply(responder, response);
 }
 
-/// Sends `response` back over the current presenter channel (a no-op if none is live). The match
-/// stage takes only a cancel from here; its decisions go through [`answer_match`].
+/// Sends `response` back over the current presenter channel (a no-op if none is live). The host's
+/// stages take only a cancel from here; their answers go through [`answer_match`] and [`answer_plan`].
 fn reply(mut responder: Signal<Option<Responder>>, response: &ImportResponse) {
     match responder.write().take() {
         Some(Responder::Payload(reply)) => {
@@ -960,6 +987,11 @@ fn reply(mut responder: Signal<Option<Responder>>, response: &ImportResponse) {
         Some(Responder::Match(reply)) => {
             if let ImportResponse::Cancel = response {
                 drop(reply.send(MatchReply::Cancel));
+            }
+        }
+        Some(Responder::Plan(reply)) => {
+            if let ImportResponse::Cancel = response {
+                reply.send(PlanReply::Cancel).ok();
             }
         }
         None => {}
@@ -978,6 +1010,22 @@ fn answer_match(
     }
     if let Some(Responder::Match(reply)) = responder.write().take() {
         drop(reply.send(answer));
+    }
+}
+
+/// Answers the ready-to-import stage with `answer`, marking the active record skipped when the user
+/// skips it.
+fn answer_plan(
+    answer: PlanReply,
+    mut responder: Signal<Option<Responder>>,
+    mut statuses: Signal<HashMap<String, ImportRowStatus>>,
+    active_row: Signal<Option<String>>,
+) {
+    if let (PlanReply::Skip, Some(row)) = (answer, active_row()) {
+        statuses.write().insert(row, ImportRowStatus::Skipped);
+    }
+    if let Some(Responder::Plan(reply)) = responder.write().take() {
+        reply.send(answer).ok();
     }
 }
 

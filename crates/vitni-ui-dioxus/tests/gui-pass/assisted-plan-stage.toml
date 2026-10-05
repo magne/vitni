@@ -1,0 +1,183 @@
+# #512: an assisted record that adds to a record already in the tree stops at the host's own
+# Ready-to-import stage before anything of it is written (ADR 0046), and Import writes it. SSR renders
+# the stage alone; only the live app shows the host pausing the plugin's submit on it after the last
+# Match answer.
+#
+# The fixture seeds no sources or repositories, so the scenario enters the census record's source and
+# its repository by hand, unlinked. Both are then possible matches; Same on each reuses them, and the
+# stored source gains the repository the record holds it in: "reused · adds repository". (A link to a
+# repository the import creates is not planned, so the repository has to be in the tree too.)
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "A record that adds to a stored record shows what it adds before it is written (#512)"
+
+[[step]]
+do = "click"
+at = [90, 394]
+label = "rail: Repositories"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Repository draft"
+
+[[step]]
+do = "click"
+at = [1226, 436]
+label = "field: Name"
+
+[[step]]
+do = "text"
+text = "Digitalarkivet "
+label = "type: Digitalarkivet"
+
+[[step]]
+do = "key"
+chord = "parenleft"
+label = "key: ("
+
+[[step]]
+do = "text"
+text = "Arkivverket"
+label = "type: Arkivverket"
+
+[[step]]
+do = "key"
+chord = "parenright"
+label = "key: )"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New repository: Save"
+
+[[step]]
+do = "click"
+at = [85, 319]
+label = "rail: Sources"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Source draft"
+
+[[step]]
+do = "click"
+at = [1226, 386]
+label = "field: Title"
+
+[[step]]
+do = "text"
+text = "Folketelling 1920 for 9901 Eksempelvik herred"
+label = "type: the census source's title"
+
+[[step]]
+do = "click"
+at = [1754, 151]
+label = "New source: Save"
+
+[[step]]
+do = "click"
+at = [70, 786]
+label = "rail: Import"
+
+[[step]]
+do = "click"
+at = [455, 169]
+label = "mode: Assisted online import"
+
+[[step]]
+do = "click"
+at = [1394, 435]
+label = "field: Record or search URL"
+
+[[step]]
+do = "text"
+text = "https://www.digitalarkivet.no/census/person/pf01099901000101"
+label = "type: the census person's URL"
+
+[[step]]
+do = "click"
+at = [297, 482]
+label = "Fetch"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the plugin fetch the record"
+
+[[step]]
+do = "click"
+at = [1706, 775]
+label = "Confirm: Import & next"
+
+[[step]]
+do = "click"
+at = [1168, 596]
+label = "Save scan"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the host plan the record"
+
+[[step]]
+do = "shot"
+name = "match-1"
+
+[[step]]
+do = "key"
+chord = "y"
+label = "y: Same"
+
+[[step]]
+do = "wait"
+seconds = 2
+label = "let the host ask about the next pair"
+
+[[step]]
+do = "shot"
+name = "match-2"
+
+[[step]]
+do = "key"
+chord = "y"
+label = "y: Same"
+
+[[step]]
+do = "wait"
+seconds = 2
+label = "let the host re-plan the record"
+
+[[step]]
+do = "shot"
+name = "plan"
+
+[[step]]
+do = "click"
+at = [1730, 476]
+label = "Ready to import: Import"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the record commit"
+
+[[step]]
+do = "shot"
+name = "summary"
+
+[[assert]]
+kind = "differ"
+shots = ["match-1", "match-2"]
+because = "the first Same moves the Match stage on to the record's other possible match"
+
+[[assert]]
+kind = "differ"
+shots = ["match-2", "plan"]
+because = "after the last answer the host shows the Ready-to-import stage, since the source gains a repository"
+
+[[assert]]
+kind = "differ"
+shots = ["plan", "summary"]
+because = "Import answers the stage and the record is written, so the session moves on to its summary"

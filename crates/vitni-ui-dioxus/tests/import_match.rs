@@ -119,7 +119,7 @@ fn the_match_stage_offers_three_decisions_skip_and_cancel() {
 fn wizard_labels() -> WizardLabels {
     WizardLabels {
         heading: "Import stages".to_owned(),
-        stages: ["Source", "Records", "Confirm", "Save scan", "Match", "Summary"].map(str::to_owned),
+        stages: ["Source", "Records", "Confirm", "Save scan", "Match", "Plan", "Summary"].map(str::to_owned),
     }
 }
 

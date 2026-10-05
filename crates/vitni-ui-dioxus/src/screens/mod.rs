@@ -19,6 +19,7 @@ mod geography;
 mod help;
 mod import;
 mod import_match;
+mod import_plan;
 mod map_shared;
 mod match_compare;
 mod matches;
@@ -88,6 +89,7 @@ pub use import::{
     RecordsStage, SaveStage, SourceLabels, SourceStage, SummaryLabels, SummaryStage, WizardLabels, step_indicator,
 };
 pub use import_match::{MatchStage, MatchStageLabels, match_stage_labels};
+pub use import_plan::{ImportPlanLabels, ImportPlanStage, import_plan_labels};
 pub use map_shared::{DrawTool, MapControlLabels, MapDraft, MapZoomReadout, MovedCamera, effective_date_choice};
 pub use match_compare::{DecisionDraft, MatchCompare, decision_foot};
 pub use matches::{

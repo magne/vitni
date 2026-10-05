@@ -9,11 +9,13 @@
 //! `capability-error::backend`.
 //!
 //! The host presents a stage of its own on the same channel (ADR 0040 §4): before an assisted record
-//! with possible matches is written, [`Presenter::review_match`] puts each pair to the user. The plugin
-//! neither sees nor drives it; it learns only whether the record was written, skipped or cancelled.
+//! with possible matches is written, [`Presenter::review_match`] puts each pair to the user, and before
+//! an assisted record that adds to a stored record is written, [`Presenter::confirm_plan`] shows what it
+//! adds (ADR 0046). The plugin neither sees nor drives either; it learns only whether the record was
+//! written, skipped or cancelled.
 
 use async_trait::async_trait;
-use vitni_app::{MatchQuestion, MatchReply};
+use vitni_app::{MatchQuestion, MatchReply, PlanReply, PlanSummary};
 
 /// Why presenting to the frontend failed. Every variant maps onto `capability-error::backend` — a
 /// `present` failure is always an infrastructure fault (the frontend is gone or the channel dropped),
@@ -40,4 +42,8 @@ pub trait Presenter: Send {
     /// Puts one possible match of the record being imported to the user and resolves with their reply,
     /// or a [`PresentError`] if the frontend could not be reached.
     async fn review_match(&mut self, question: MatchQuestion) -> Result<MatchReply, PresentError>;
+
+    /// Shows the stored records the record being imported adds to, with the fields each gains, and
+    /// resolves with whether to write it, or a [`PresentError`] if the frontend could not be reached.
+    async fn confirm_plan(&mut self, summary: PlanSummary) -> Result<PlanReply, PresentError>;
 }

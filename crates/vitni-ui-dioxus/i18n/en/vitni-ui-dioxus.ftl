@@ -481,6 +481,7 @@ import-stage-confirm = Confirm
 import-stage-save = Save scan
 import-stage-summary = Summary
 import-stage-match = Match
+import-stage-plan = Plan
 import-match-position = Possible match { $position } of { $total }
 import-match-heading = { $kind ->
     [person] Is this person already in your tree?

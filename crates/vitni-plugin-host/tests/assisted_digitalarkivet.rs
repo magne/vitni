@@ -23,10 +23,10 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 use vitni_app::{
     AiConfig, AppDefaults, ChosenDataset, Confidence, DatasetId, EventSummary, ExternalId, IdentityDecision,
-    ImportRunStatus, MatchQuestion, MatchReply, NewPerson, OperatorConfig, PairAnswer, PairDecision, PersonNameParts,
-    Provenance, Rect, Session, Workspace, WorkspaceDefaults, change_log_for_person, create_person, list_citations,
-    list_events, list_families, list_import_runs, list_media, list_persons, list_places, list_repositories,
-    list_sources,
+    ImportRunStatus, MatchQuestion, MatchReply, NewPerson, NewRepository, NewSource, OperatorConfig, PairAnswer,
+    PairDecision, PersonNameParts, PlanReply, PlanSummary, PlannedChange, PlannedField, Provenance, Rect, Session,
+    Workspace, WorkspaceDefaults, change_log_for_person, create_person, list_citations, list_events, list_families,
+    list_import_runs, list_media, list_persons, list_places, list_repositories, list_sources,
 };
 use vitni_core::date::{DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::enums::EvidenceLevel;
@@ -204,12 +204,15 @@ type Reply = Box<dyn FnMut(&str) -> Result<String, PresentError> + Send>;
 type MatchAnswer = Box<dyn FnMut(&MatchQuestion) -> MatchReply + Send>;
 
 /// A presenter scripted by a reply closure over the payload's `kind`, recording every payload it saw,
-/// and answering every match question *Decide later* unless told otherwise.
+/// answering every match question *Decide later* and importing every plan it is shown unless told
+/// otherwise.
 struct ScriptedPresenter {
     seen: Arc<Mutex<Vec<String>>>,
     reply: Reply,
     questions: Arc<Mutex<Vec<MatchQuestion>>>,
     answer: MatchAnswer,
+    plans: Arc<Mutex<Vec<PlanSummary>>>,
+    plan_reply: PlanReply,
 }
 
 impl ScriptedPresenter {
@@ -223,6 +226,8 @@ impl ScriptedPresenter {
                 reply: Box::new(reply),
                 questions: Arc::new(Mutex::new(Vec::new())),
                 answer: Box::new(|_| MatchReply::Pair(Box::new(PairAnswer::Later))),
+                plans: Arc::new(Mutex::new(Vec::new())),
+                plan_reply: PlanReply::Import,
             },
             seen,
         )
@@ -237,6 +242,13 @@ impl ScriptedPresenter {
         let questions = Arc::clone(&self.questions);
         (self, questions)
     }
+
+    /// This presenter, answering each plan it is shown with `reply`; returns the plans it is shown.
+    fn planning(mut self, reply: PlanReply) -> (Self, Arc<Mutex<Vec<PlanSummary>>>) {
+        self.plan_reply = reply;
+        let plans = Arc::clone(&self.plans);
+        (self, plans)
+    }
 }
 
 #[async_trait]
@@ -250,6 +262,11 @@ impl Presenter for ScriptedPresenter {
         let reply = (self.answer)(&question);
         self.questions.lock().expect("questions lock").push(question);
         Ok(reply)
+    }
+
+    async fn confirm_plan(&mut self, summary: PlanSummary) -> Result<PlanReply, PresentError> {
+        self.plans.lock().expect("plans lock").push(summary);
+        Ok(self.plan_reply)
     }
 }
 
@@ -1482,4 +1499,166 @@ async fn cancelling_at_the_match_stage_ends_the_session_writing_nothing() {
         0,
         "no source written"
     );
+}
+
+// ----- the host's ready-to-import stage (ADR 0046) -----
+
+/// The census record's source and its repository, entered by hand and not linked: two possible
+/// matches, the source's lacking the repository the record holds it in. Returns the source.
+async fn stored_census_source(workspace: &Workspace) -> String {
+    let human = Session::new(Agent {
+        kind: AgentKind::Human,
+        id: AgentId::from_uuid(Uuid::from_u128(1)),
+        display: Some("Tester".to_owned()),
+    });
+    let new = NewSource {
+        human_id: None,
+        title: Some("Folketelling 1920 for 9901 Eksempelvik herred".to_owned()),
+    };
+    let repository = NewRepository {
+        human_id: None,
+        name: Some("Digitalarkivet (Arkivverket)".to_owned()),
+    };
+    vitni_app::create_repository(workspace, &human, repository, Provenance::default(), &[])
+        .await
+        .expect("repository");
+    vitni_app::create_source(workspace, &human, new, Provenance::default(), &[])
+        .await
+        .expect("source")
+}
+
+/// How many repositories the one stored source is held in.
+async fn imported_source_repositories(workspace: &Workspace) -> usize {
+    let sources = list_sources(workspace).await.expect("sources");
+    assert_eq!(sources.len(), 1, "one source: {sources:?}");
+    sources.first().map_or(0, |source| source.repositories.len())
+}
+
+/// Answers *Same* about the source and the repository, and *Decide later* about every other pair.
+fn same_source(question: &MatchQuestion) -> MatchReply {
+    let answer = if matches!(question.kind, MatchableKind::Source | MatchableKind::Repository) {
+        PairAnswer::Same(IdentityDecision::default())
+    } else {
+        PairAnswer::Later
+    };
+    MatchReply::Pair(Box::new(answer))
+}
+
+#[tokio::test]
+async fn a_source_decided_same_shows_what_the_record_adds_to_it_before_it_is_written() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    let workspace = open_workspace(&root).await;
+    let stored = stored_census_source(&workspace).await;
+    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(unedited_reply(payload)));
+    let (presenter, _questions) = presenter.answering(same_source);
+    let (presenter, plans) = presenter.planning(PlanReply::Import);
+
+    run((workspace, grants(&[])), &server, "census-person", presenter)
+        .await
+        .expect("assisted import runs");
+
+    let plans = plans.lock().expect("plans").clone();
+    assert_eq!(plans.len(), 1, "shown the plan once: {plans:?}");
+    let records: Vec<_> = plans
+        .iter()
+        .flat_map(|plan| &plan.records)
+        .map(|record| {
+            (
+                record.kind,
+                record.human_id.clone(),
+                record.change,
+                record.fields.clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        records,
+        vec![(
+            MatchableKind::Source,
+            stored,
+            PlannedChange::Reuses,
+            vec![PlannedField::Repository]
+        )],
+        "the source is reused and gains the repository it lacks"
+    );
+    let workspace = open_workspace(&root).await;
+    assert!(imported_person(&workspace).await.is_some(), "imported once accepted");
+    assert_eq!(
+        list_sources(&workspace).await.expect("sources").len(),
+        1,
+        "the source reused"
+    );
+}
+
+#[tokio::test]
+async fn skipping_the_plan_writes_nothing_of_the_record() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    let workspace = open_workspace(&root).await;
+    stored_census_source(&workspace).await;
+    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(unedited_reply(payload)));
+    let (presenter, _questions) = presenter.answering(same_source);
+    let (presenter, plans) = presenter.planning(PlanReply::Skip);
+
+    let summary = run((workspace, grants(&[])), &server, "census-person", presenter)
+        .await
+        .expect("assisted import runs");
+
+    assert_eq!(plans.lock().expect("plans").len(), 1, "shown the plan");
+    assert!(
+        summary.contains("\"skipped\":1"),
+        "the record counts as skipped: {summary}"
+    );
+    let workspace = open_workspace(&root).await;
+    assert_eq!(imported_person(&workspace).await, None);
+    assert_eq!(
+        imported_source_repositories(&workspace).await,
+        0,
+        "no repository link written"
+    );
+}
+
+#[tokio::test]
+async fn cancelling_at_the_plan_ends_the_session_writing_nothing() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    let workspace = open_workspace(&root).await;
+    stored_census_source(&workspace).await;
+    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(unedited_reply(payload)));
+    let (presenter, _questions) = presenter.answering(same_source);
+    let (presenter, _plans) = presenter.planning(PlanReply::Cancel);
+
+    let summary = run((workspace, grants(&[])), &server, "census-person", presenter)
+        .await
+        .expect("assisted import runs");
+
+    assert!(summary.contains("\"imported\":[]"), "nothing imported: {summary}");
+    let workspace = open_workspace(&root).await;
+    assert_eq!(list_persons(&workspace).await.expect("persons").len(), 0);
+    assert_eq!(
+        imported_source_repositories(&workspace).await,
+        0,
+        "no repository link written"
+    );
+}
+
+#[tokio::test]
+async fn a_record_that_adds_to_no_stored_record_is_written_without_a_plan() {
+    let (root, _dir) = init_workspace();
+    let server = census_server().await;
+    let (presenter, _seen) = ScriptedPresenter::new(|payload| Ok(unedited_reply(payload)));
+    let (presenter, plans) = presenter.planning(PlanReply::Cancel);
+
+    run(
+        (open_workspace(&root).await, grants(&[])),
+        &server,
+        "census-person",
+        presenter,
+    )
+    .await
+    .expect("assisted import runs");
+
+    assert!(plans.lock().expect("plans").is_empty(), "no plan shown");
+    assert!(imported_person(&open_workspace(&root).await).await.is_some());
 }

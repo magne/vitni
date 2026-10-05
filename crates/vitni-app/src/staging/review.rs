@@ -98,6 +98,18 @@ pub enum MatchReply {
     Cancel,
 }
 
+/// What the user answers when an assisted import shows what a record adds to the records already in the
+/// tree before it is written (ADR 0046).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanReply {
+    /// Write the record.
+    Import,
+    /// Import nothing of this record.
+    Skip,
+    /// End the import session, importing nothing of this record.
+    Cancel,
+}
+
 /// What the user does with a bulk import's plan once it is shown (ADR 0040 §4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlanStep {
