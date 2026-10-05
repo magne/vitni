@@ -20,10 +20,11 @@ use unic_langid::LanguageIdentifier;
 use vitni_app::{
     AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetProposal,
     DatasetScope, FileConfigStore, IdFormats, LocaleDefaults, MapConfig, MapProvider, MapSource, MatchQuestion,
-    MatchReply, PluginTrust, PluginTrustConfig, PreferenceLayers, ReplaceReport, ReplaceRequest, ResolvedLocale,
-    RestoreReport, RestoreRequest, Session, ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace,
-    WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers,
-    read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides, workspace_counts,
+    MatchReply, PlanReply, PlanSummary, PluginTrust, PluginTrustConfig, PreferenceLayers, ReplaceReport,
+    ReplaceRequest, ResolvedLocale, RestoreReport, RestoreRequest, Session, ShortcutConfig, SuretyLabelOverrides,
+    TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
+    read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides,
+    workspace_counts,
 };
 use vitni_plugin_host::{
     Capability, DeferMatches, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PlanReviewer,
@@ -874,6 +875,14 @@ pub enum PresentRequest {
         /// The channel the wizard answers on.
         responder: oneshot::Sender<MatchReply>,
     },
+    /// The host's ready-to-import stage (ADR 0046): the stored records the record being imported adds
+    /// to, which the wizard answers with whether to write it.
+    Plan {
+        /// What the record adds, record by record.
+        summary: PlanSummary,
+        /// The channel the wizard answers on.
+        responder: oneshot::Sender<PlanReply>,
+    },
 }
 
 /// The handle the wizard screen (PR8) consumes to drive an assisted-import session: a stream of
@@ -905,6 +914,11 @@ impl Presenter for ChannelPresenter {
         let (responder, response) = oneshot::channel();
         let question = Box::new(question);
         self.ask(PresentRequest::Match { question, responder }, response).await
+    }
+
+    async fn confirm_plan(&mut self, summary: PlanSummary) -> Result<PlanReply, PresentError> {
+        let (responder, response) = oneshot::channel();
+        self.ask(PresentRequest::Plan { summary, responder }, response).await
     }
 }
 
@@ -1902,6 +1916,31 @@ mod tests {
         };
         let reply = presenter.review_match(question).await.expect("the wizard answers");
         assert_eq!(reply, MatchReply::Skip);
+        wizard.await.expect("wizard task");
+    }
+
+    /// The host's ready-to-import stage reaches the wizard as its own request, and its reply comes back.
+    #[tokio::test]
+    async fn channel_presenter_round_trips_a_plan_and_reply() {
+        let (request_tx, mut request_rx) = mpsc::channel::<PresentRequest>(1);
+        let mut presenter = ChannelPresenter { requests: request_tx };
+        let summary = vitni_app::PlanSummary {
+            candidates: 2,
+            ..vitni_app::PlanSummary::default()
+        };
+
+        let wizard = tokio::spawn(async move {
+            let Some(PresentRequest::Plan { summary, responder }) = request_rx.recv().await else {
+                panic!("a plan request arrives");
+            };
+            assert_eq!(summary.candidates, 2);
+            responder
+                .send(vitni_app::PlanReply::Skip)
+                .expect("the presenter is still awaiting");
+        });
+
+        let reply = presenter.confirm_plan(summary).await.expect("the wizard answers");
+        assert_eq!(reply, vitni_app::PlanReply::Skip);
         wizard.await.expect("wizard task");
     }
 

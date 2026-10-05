@@ -1800,15 +1800,17 @@ impl Chrome {
         fl!(self.loader, "import-heading")
     }
 
-    /// The six wizard stage names, in order (Source, Records, Confirm, Save scan, Match, Summary).
+    /// The seven wizard stage names, in order (Source, Records, Confirm, Save scan, Match, Plan,
+    /// Summary).
     #[must_use]
-    pub fn import_stages(&self) -> [String; 6] {
+    pub fn import_stages(&self) -> [String; 7] {
         [
             fl!(self.loader, "import-stage-source"),
             fl!(self.loader, "import-stage-records"),
             fl!(self.loader, "import-stage-confirm"),
             fl!(self.loader, "import-stage-save"),
             fl!(self.loader, "import-stage-match"),
+            fl!(self.loader, "import-stage-plan"),
             fl!(self.loader, "import-stage-summary"),
         ]
     }

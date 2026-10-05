@@ -26,4 +26,4 @@ pub use plan::{
     PlannedLink, WriteScope, plan_import,
 };
 pub use planned::{PlannedChange, PlannedField, PlannedRecord};
-pub use review::{ImportReview, MatchGroup, MatchQuestion, MatchReply, PairAnswer, PlanStep, ReviewReply};
+pub use review::{ImportReview, MatchGroup, MatchQuestion, MatchReply, PairAnswer, PlanReply, PlanStep, ReviewReply};

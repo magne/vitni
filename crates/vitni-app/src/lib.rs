@@ -252,10 +252,10 @@ pub use source_change_set::{SourceChangeSet, commit_source_change_set};
 pub use staging::{
     CommitControl, CommitFailure, CommitOutcome, CommittedEntity, DecidedMatch, Disposition, EntityFields, EntityRef,
     GraphError, ImportPlan, ImportReview, KindCounts, LinkBasis, LinkKind, LocalId, MatchGroup, MatchQuestion,
-    MatchReply, PairAnswer, PlanCounts, PlanError, PlanStep, PlanSummary, PlannedChange, PlannedEntity, PlannedField,
-    PlannedLink, PlannedRecord, RecordGraph, ReviewReply, RunToEnd, StagedCitation, StagedEntity, StagedEvent,
-    StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson, StagedPlace, StagedRepository, StagedSource,
-    StagedTag, WriteScope, commit_import, plan_import,
+    MatchReply, PairAnswer, PlanCounts, PlanError, PlanReply, PlanStep, PlanSummary, PlannedChange, PlannedEntity,
+    PlannedField, PlannedLink, PlannedRecord, RecordGraph, ReviewReply, RunToEnd, StagedCitation, StagedEntity,
+    StagedEvent, StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson, StagedPlace, StagedRepository,
+    StagedSource, StagedTag, WriteScope, commit_import, plan_import,
 };
 pub use tag::{
     TagSummary, create_tag, list_tags, rename_tag, set_restrictions as set_tag_restrictions, set_tag_color,

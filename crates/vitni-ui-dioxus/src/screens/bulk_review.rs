@@ -112,7 +112,7 @@ pub fn bulk_plan_labels(chrome: &Chrome, summary: &PlanSummary) -> BulkPlanLabel
         kind_heading: chrome.bulk_import_plan_kind_heading(),
         columns: chrome.bulk_import_plan_columns(),
         rows,
-        records: record_groups(chrome, summary),
+        records: plan_record_groups(chrome, summary),
         unfolded: false,
         note,
         primary,
@@ -136,7 +136,8 @@ pub fn bulk_confirm_labels(chrome: &Chrome, summary: &PlanSummary) -> BulkPlanLa
 }
 
 /// The records `summary` adds to, grouped by kind in the order its kinds are written.
-fn record_groups(chrome: &Chrome, summary: &PlanSummary) -> Vec<PlanRecordGroupLabels> {
+#[must_use]
+pub fn plan_record_groups(chrome: &Chrome, summary: &PlanSummary) -> Vec<PlanRecordGroupLabels> {
     let mut groups = Vec::new();
     for row in &summary.kinds {
         let records: Vec<PlanRecordLabels> = summary
@@ -247,8 +248,19 @@ fn PlanBody(labels: BulkPlanLabels) -> Element {
                 }
             }
         }
-        for group in labels.records.iter() {
-            details { class: "plan-records", open: labels.unfolded,
+        PlanRecords { groups: labels.records.clone(), unfolded: labels.unfolded }
+        if let Some(note) = &labels.note {
+            p { class: "muted", role: "status", "{note}" }
+        }
+    }
+}
+
+/// The records a plan adds to, one folding group per kind, unfolded when `unfolded`.
+#[component]
+pub fn PlanRecords(groups: Vec<PlanRecordGroupLabels>, unfolded: bool) -> Element {
+    rsx! {
+        for group in groups.iter() {
+            details { class: "plan-records", open: unfolded,
                 summary { "{group.heading}" }
                 div { class: "stack",
                     for record in group.records.iter() {
@@ -260,9 +272,6 @@ fn PlanBody(labels: BulkPlanLabels) -> Element {
                     }
                 }
             }
-        }
-        if let Some(note) = &labels.note {
-            p { class: "muted", role: "status", "{note}" }
         }
     }
 }

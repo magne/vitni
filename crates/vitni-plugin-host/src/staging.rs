@@ -9,9 +9,9 @@
 
 use vitni_app::{
     CommitControl, CommitOutcome, EntityFields, EntityRef, ImportPlan, ImportReview, LinkKind, MatchReply, NewFact,
-    PairAnswer, PlanError, PlanStep, RecordGraph, ReviewReply, RunToEnd, StagedCitation, StagedEntity, StagedEvent,
-    StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson, StagedPlace, StagedRepository, StagedSource,
-    StagedTag, Timestamp,
+    PairAnswer, PlanError, PlanReply, PlanStep, RecordGraph, ReviewReply, RunToEnd, StagedCitation, StagedEntity,
+    StagedEvent, StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson, StagedPlace, StagedRepository,
+    StagedSource, StagedTag, Timestamp,
 };
 use vitni_core::matching::MatchableKind;
 
@@ -96,9 +96,9 @@ impl HostState {
     }
 
     /// Plans `graphs` as one, asks the user about each possible match through the frontend (ADR 0040
-    /// §4), and commits them at once, returning what each of their entities became — or that the user
-    /// skipped the record or cancelled the session there, writing nothing. With no frontend to ask,
-    /// every possible match is left for later.
+    /// §4), shows what they add to stored records (ADR 0046), and commits them at once, returning what
+    /// each of their entities became — or that the user skipped the record or cancelled the session
+    /// there, writing nothing. With no frontend to ask, every possible match is left for later.
     async fn commit_now(&mut self, graphs: Vec<RecordGraph>) -> Result<staging::SubmitOutcome, types::CapabilityError> {
         let template = self.provenance();
         let mut review = ImportReview::plan(&self.workspace, &self.session, graphs, self.file_asserted_at)
@@ -126,6 +126,11 @@ impl HostState {
                 .await
                 .map_err(|error| plan_capability_error(&error))?;
         }
+        match self.confirm_plan(&review).await? {
+            PlanReply::Import => {}
+            PlanReply::Skip => return Ok(staging::SubmitOutcome::Skipped),
+            PlanReply::Cancel => return Ok(staging::SubmitOutcome::Cancelled),
+        }
         let operator = self
             .run
             .as_ref()
@@ -144,6 +149,23 @@ impl HostState {
                 Err(to_capability_error(&failure.error))
             }
         }
+    }
+
+    /// Shows the frontend the stored records `review` adds to, with the fields each gains, and returns
+    /// whether to write them (ADR 0046). A record that adds to no stored record, or one with no
+    /// frontend to ask, is imported without asking.
+    async fn confirm_plan(&mut self, review: &ImportReview) -> Result<PlanReply, types::CapabilityError> {
+        let summary = review.summary();
+        let Some(presenter) = self.io.presenter.as_mut() else {
+            return Ok(PlanReply::Import);
+        };
+        if summary.records.is_empty() {
+            return Ok(PlanReply::Import);
+        }
+        presenter
+            .confirm_plan(summary)
+            .await
+            .map_err(|error| types::CapabilityError::Backend(error.to_string()))
     }
 
     /// Plans every graph the guest submitted, shows the plan to the frontend's reviewer and reviews its

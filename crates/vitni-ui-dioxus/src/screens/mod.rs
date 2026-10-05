@@ -19,6 +19,7 @@ mod geography;
 mod help;
 mod import;
 mod import_match;
+mod import_plan;
 mod map_shared;
 mod match_compare;
 mod matches;
@@ -47,7 +48,8 @@ pub use bulk_import::{
 };
 pub use bulk_review::{
     BulkConfirmStage, BulkPlanLabels, BulkPlanStage, BulkReviewLabels, BulkReviewStage, PlanRecordGroupLabels,
-    PlanRecordLabels, PlanRowLabels, bulk_confirm_labels, bulk_plan_labels, bulk_review_labels,
+    PlanRecordLabels, PlanRecords, PlanRowLabels, bulk_confirm_labels, bulk_plan_labels, bulk_review_labels,
+    plan_record_groups,
 };
 pub use citation::{
     CitationEditForm, citation_attributes_table, citation_create_fields, citation_overview, citation_record_fields,
@@ -87,6 +89,7 @@ pub use import::{
     RecordsStage, SaveStage, SourceLabels, SourceStage, SummaryLabels, SummaryStage, WizardLabels, step_indicator,
 };
 pub use import_match::{MatchStage, MatchStageLabels, match_stage_labels};
+pub use import_plan::{ImportPlanLabels, ImportPlanStage, import_plan_labels};
 pub use map_shared::{DrawTool, MapControlLabels, MapDraft, MapZoomReadout, MovedCamera, effective_date_choice};
 pub use match_compare::{DecisionDraft, MatchCompare, decision_foot};
 pub use matches::{

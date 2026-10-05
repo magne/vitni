@@ -480,6 +480,7 @@ import-stage-confirm = Bekreft
 import-stage-save = Lagre skann
 import-stage-summary = Oppsummering
 import-stage-match = Treff
+import-stage-plan = Plan
 import-match-position = Mulig treff { $position } av { $total }
 import-match-heading = { $kind ->
     [person] Er denne personen allerede i treet ditt?
