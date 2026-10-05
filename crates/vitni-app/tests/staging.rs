@@ -370,7 +370,7 @@ async fn a_known_external_id_links_a_person_through_a_persona_of_its_own() {
     };
     let session = importer(dataset(2));
     let plan = plan(&workspace, &session, vec![graph]).await;
-    let Disposition::Link { target, basis } = disposition(&plan, 0, 0) else {
+    let Disposition::Link { target, basis, .. } = disposition(&plan, 0, 0) else {
         panic!("expected a link: {:?}", disposition(&plan, 0, 0));
     };
     assert_eq!(
@@ -621,7 +621,7 @@ async fn a_tag_links_by_its_case_folded_name() {
         links: Vec::new(),
     };
     let plan = import(&workspace, &importer(dataset(1)), vec![graph]).await;
-    let Disposition::Link { target, basis } = disposition(&plan, 0, 0) else {
+    let Disposition::Link { target, basis, .. } = disposition(&plan, 0, 0) else {
         panic!("expected a link: {:?}", disposition(&plan, 0, 0));
     };
     assert_eq!((target.id.as_str(), *basis), (existing.as_str(), LinkBasis::TagName));
@@ -1156,8 +1156,73 @@ async fn a_record_reused_on_the_next_run_writes_nothing_again() {
     finish(&workspace, &session, outcome).await;
     let before = events(&workspace).await;
 
-    import(&workspace, &importer(dataset(1)), graph()).await;
+    let again = import(&workspace, &importer(dataset(1)), graph()).await;
+    let Disposition::Link { fields, .. } = disposition(&again, 0, 0) else {
+        panic!("expected a link: {:?}", disposition(&again, 0, 0));
+    };
+    assert!(fields.is_empty(), "the next run plans nothing: {fields:?}");
     assert_eq!(events(&workspace).await, before);
+}
+
+#[tokio::test]
+async fn two_records_reusing_one_source_plan_its_missing_author_once() {
+    let (workspace, _dir) = workspace().await;
+    let stored = stored_source(&workspace, "Folketelling 1900 for Mandal").await;
+    let session = importer(dataset(1));
+    let graphs = vec![
+        census("S1", "Folketelling 1900 for Mandal"),
+        census("S2", "Folketelling 1900 for Mandal"),
+    ];
+    let mut review = review(&workspace, &session, graphs).await;
+    while review.next_question(&workspace).await.expect("question").is_some() {
+        review
+            .answer(&workspace, &session, PairAnswer::Same(decided()))
+            .await
+            .expect("answer");
+    }
+    let planned = |graph| match disposition(review.plan_so_far(), graph, 0) {
+        Disposition::Link { target, fields, .. } => (target.human_id.clone(), fields.clone()),
+        other => panic!("expected a link: {other:?}"),
+    };
+    assert_eq!(
+        planned(0),
+        (
+            stored.clone(),
+            vec!["source.AuthorSet".to_owned(), "source.PubInfoSet".to_owned()]
+        )
+    );
+    assert_eq!(planned(1), (stored, Vec::new()), "the first record already fills them");
+}
+
+#[tokio::test]
+async fn a_same_on_a_source_plans_the_fields_it_adds() {
+    let (workspace, _dir) = workspace().await;
+    let stored = stored_source(&workspace, "Folketelling 1900 for Mandal").await;
+    let session = importer(dataset(1));
+    let mut review = review(&workspace, &session, vec![census("S1", "Folketelling 1900 Mandal")]).await;
+    review
+        .answer(&workspace, &session, PairAnswer::Same(decided()))
+        .await
+        .expect("answer");
+    let Disposition::Link { fields, .. } = disposition(review.plan_so_far(), 0, 0) else {
+        panic!("expected a link: {:?}", disposition(review.plan_so_far(), 0, 0));
+    };
+    assert_eq!(fields, &["source.AuthorSet", "source.PubInfoSet"]);
+
+    commit_review(&workspace, &session, review).await;
+    let source = source_summary(&workspace, &stored).await;
+    assert_eq!(
+        (
+            source.title.as_deref(),
+            source.author.as_deref(),
+            source.pub_info.as_deref()
+        ),
+        (
+            Some("Folketelling 1900 for Mandal"),
+            Some("Statistisk sentralbyrå"),
+            Some("Kristiania")
+        )
+    );
 }
 
 /// A place `name` of type `place_type` the record states.
@@ -1269,7 +1334,7 @@ async fn a_place_decided_same_is_reused_and_resolves_so_on_the_next_run() {
     .await
     .expect("finish");
     let again = plan(&workspace, &importer(dataset(1)), vec![place("plac:Mandal", "Mandal")]).await;
-    let Disposition::Link { target, basis } = disposition(&again, 0, 0) else {
+    let Disposition::Link { target, basis, .. } = disposition(&again, 0, 0) else {
         panic!("expected a link: {:?}", disposition(&again, 0, 0));
     };
     assert_eq!(

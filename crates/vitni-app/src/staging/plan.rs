@@ -62,6 +62,9 @@ pub enum Disposition {
         target: AggRef,
         /// How it was established.
         basis: LinkBasis,
+        /// The fields the entity's writes add to the record, as for [`Disposition::Update`] — what a
+        /// reused place, source or repository fills in that the record lacks.
+        fields: Vec<String>,
     },
     /// The record an earlier entity of the plan is — one with the same external id, or a tag of the
     /// same case-folded name — which the commit writes first.
@@ -523,6 +526,7 @@ impl<'a> Planner<'a> {
                     Disposition::Link {
                         target,
                         basis: LinkBasis::Recorded,
+                        fields: Vec::new(),
                     }
                 };
                 continue;
@@ -585,7 +589,11 @@ impl<'a> Planner<'a> {
                     decision,
                 });
             }
-            self.plan.entities[index].disposition = Disposition::Link { target, basis };
+            self.plan.entities[index].disposition = Disposition::Link {
+                target,
+                basis,
+                fields: Vec::new(),
+            };
         }
         Ok(())
     }
@@ -866,6 +874,7 @@ impl<'a> Planner<'a> {
             template: &template,
             run: dataset.as_ref().zip(run),
             file_asserted_at,
+            held: std::sync::Mutex::default(),
         };
         let ids = self.plan.initial_ids();
         let mut fields: BTreeMap<usize, Vec<String>> = BTreeMap::new();
@@ -875,27 +884,45 @@ impl<'a> Planner<'a> {
             written.sort();
             written.dedup();
             let planned = &mut self.plan.entities[index];
-            if let Disposition::Unchanged { target } = &planned.disposition {
-                planned.disposition = Disposition::Update {
-                    target: target.clone(),
-                    fields: written,
-                };
+            match &mut planned.disposition {
+                Disposition::Unchanged { target } => {
+                    planned.disposition = Disposition::Update {
+                        target: target.clone(),
+                        fields: written,
+                    };
+                }
+                Disposition::Link { fields, .. } => *fields = written,
+                Disposition::Update { .. }
+                | Disposition::Duplicate { .. }
+                | Disposition::Candidates(_)
+                | Disposition::New => {}
             }
         }
         Ok(())
     }
 
-    /// Dry-runs the writes of every record this dataset made, collecting what each would write.
+    /// Dry-runs the writes of every record this dataset made, and of every record an entity was resolved
+    /// onto (as the commit does, a persona aside), collecting what each would write.
     async fn dry_run_entities(&self, writer: &Writer<'_>, dry_run: &DryRun, fields: &mut BTreeMap<usize, Vec<String>>) {
         for index in 0..self.plan.entities.len() {
             let planned = &self.plan.entities[index];
-            let (Disposition::Unchanged { target }, WriteScope::Full) = (&planned.disposition, planned.scope) else {
+            if planned.scope != WriteScope::Full {
                 continue;
-            };
+            }
             let Some((graph, entity)) = self.plan.staged(index) else {
                 continue;
             };
-            let outcome = writer.update(&graph.record, entity, &target.human_id).await;
+            let outcome = match &planned.disposition {
+                Disposition::Unchanged { target } => writer.update(&graph.record, entity, &target.human_id).await,
+                Disposition::Link { target, .. } if !self.plan.persona(planned) => {
+                    writer.enrich(&graph.record, entity, &target.human_id).await
+                }
+                Disposition::Link { .. }
+                | Disposition::Update { .. }
+                | Disposition::Duplicate { .. }
+                | Disposition::Candidates(_)
+                | Disposition::New => continue,
+            };
             let mut written: Vec<String> = dry_run
                 .take()
                 .into_iter()
