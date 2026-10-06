@@ -1,6 +1,6 @@
-use super::{ActivityVm, ChangeLogEntry, HashMap, Localizer, PersonSummary, QueuedMatchVm, RecordRef, WorkspaceCounts};
+use super::{ActivityVm, ChangeLogEntry, HashMap, Localizer, QueuedMatchVm, RecordRef, WorkspaceCounts};
 use crate::navigation::Category;
-use vitni_app::{AggRef, CheckFinding, DataQuality, DecidableKind, MatchableKind};
+use vitni_app::{ActivityDetail, AggRef, CheckFinding, DataQuality, DecidableKind, EvidenceHealth, MatchableKind};
 
 /// A quick entry point on the dashboard ("Jump back in") — a recently touched record.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,20 +32,10 @@ impl DashboardStats {
     /// Evidence health is the share of facts carrying at least one citation; with no facts it is
     /// reported as 100% (nothing is unsourced).
     #[must_use]
-    pub fn build(counts: WorkspaceCounts, persons: &[PersonSummary]) -> Self {
-        let mut facts_total = 0usize;
-        let mut facts_with_source = 0usize;
-        for person in persons {
-            for fact in &person.facts {
-                facts_total += 1;
-                if !fact.citations.is_empty() {
-                    facts_with_source += 1;
-                }
-            }
-        }
+    pub fn build(counts: WorkspaceCounts, health: EvidenceHealth) -> Self {
         // With no facts, nothing is unsourced — report full health (checked_div yields None at 0).
-        let evidence_health_pct = (facts_with_source * 100)
-            .checked_div(facts_total)
+        let evidence_health_pct = (health.sourced * 100)
+            .checked_div(health.facts)
             .and_then(|pct| u8::try_from(pct).ok())
             .unwrap_or(100);
         Self {
@@ -53,8 +43,8 @@ impl DashboardStats {
             families: counts.family,
             events: counts.event,
             evidence_health_pct,
-            facts_without_source: facts_total - facts_with_source,
-            facts_total,
+            facts_without_source: health.facts - health.sourced,
+            facts_total: health.facts,
         }
     }
 }
@@ -75,25 +65,44 @@ pub struct DashboardVm {
 }
 
 impl DashboardVm {
-    /// Assembles the dashboard from counts, the persons (for evidence health), and recent activity.
+    /// The persons `activity` names, its import runs' children included: those whose display names
+    /// [`build`](Self::build) labels its rows with.
+    #[must_use]
+    pub fn persons_named(activity: &[ChangeLogEntry]) -> Vec<String> {
+        fn gather(activity: &[ChangeLogEntry], persons: &mut Vec<String>) {
+            for entry in activity {
+                if entry.aggregate_kind == "person"
+                    && let Some(human_id) = &entry.aggregate_human_id
+                    && !persons.contains(human_id)
+                {
+                    persons.push(human_id.clone());
+                }
+                if let Some(ActivityDetail::ImportRun { children, .. }) = &entry.detail {
+                    gather(children, persons);
+                }
+            }
+        }
+        let mut persons = Vec::new();
+        gather(activity, &mut persons);
+        persons
+    }
+
+    /// Assembles the dashboard from its stats and recent activity, labelling each person by its display
+    /// name in `names` (by `human_id`).
     ///
     /// "Jump back in" is the distinct navigable records drawn from the most recent activity, capped
     /// at `jump_limit`.
     #[must_use]
     pub fn build(
-        counts: WorkspaceCounts,
-        persons: &[PersonSummary],
+        stats: DashboardStats,
         activity: &[ChangeLogEntry],
+        names: &HashMap<String, String>,
         loc: &Localizer,
         jump_limit: usize,
     ) -> Self {
-        let names: HashMap<String, String> = persons
-            .iter()
-            .filter_map(|person| person.display_name.clone().map(|name| (person.human_id.clone(), name)))
-            .collect();
         let recent: Vec<ActivityVm> = activity
             .iter()
-            .map(|entry| ActivityVm::from_entry(entry, loc, &names))
+            .map(|entry| ActivityVm::from_entry(entry, loc, names))
             .collect();
         let mut jump_back = Vec::new();
         let mut seen = std::collections::BTreeSet::new();
@@ -107,7 +116,7 @@ impl DashboardVm {
             }
         }
         Self {
-            stats: DashboardStats::build(counts, persons),
+            stats,
             recent,
             jump_back,
         }
@@ -135,24 +144,48 @@ pub struct DataQualityVm {
 pub const DASHBOARD_MATCHES: usize = 5;
 
 impl DataQualityVm {
-    /// Groups the data-quality findings into the per-check shapes the card renders, resolving each
-    /// flagged person's display name from `persons`.
+    /// The persons `quality`'s findings flag: those whose display names [`build`](Self::build) labels
+    /// its rows with.
     #[must_use]
-    pub fn build(persons: &[PersonSummary], quality: &DataQuality, loc: &Localizer) -> Self {
-        let names: HashMap<String, String> = persons
-            .iter()
-            .filter_map(|person| person.display_name.clone().map(|name| (person.human_id.clone(), name)))
-            .collect();
+    pub fn persons_named(quality: &DataQuality) -> Vec<String> {
+        let mut persons: Vec<String> = Vec::new();
+        let mut add = |record: &AggRef| {
+            if !persons.contains(&record.human_id) {
+                persons.push(record.human_id.clone());
+            }
+        };
+        for finding in &quality.findings {
+            match finding {
+                CheckFinding::DeathBeforeBirth(record) => add(record),
+                CheckFinding::PossibleDuplicate {
+                    kind: MatchableKind::Person,
+                    a,
+                    b,
+                    ..
+                } => {
+                    add(a);
+                    add(b);
+                }
+                CheckFinding::PossibleDuplicate { .. } => {}
+            }
+        }
+        persons
+    }
+
+    /// Groups the data-quality findings into the per-check shapes the card renders, labelling each
+    /// flagged person by its display name in `names` (by `human_id`).
+    #[must_use]
+    pub fn build(quality: &DataQuality, names: &HashMap<String, String>, loc: &Localizer) -> Self {
         let mut death_before_birth = Vec::new();
         let mut matches = Vec::new();
         for finding in &quality.findings {
             match finding {
                 CheckFinding::DeathBeforeBirth(record) => {
-                    death_before_birth.push(record_ref(MatchableKind::Person, record, &names));
+                    death_before_birth.push(record_ref(MatchableKind::Person, record, names));
                 }
                 CheckFinding::PossibleDuplicate { kind, a, b, assessment } => {
                     if let Some(kind) = DecidableKind::from_matchable(*kind) {
-                        matches.push(QueuedMatchVm::build(kind, (a, b), assessment, &names, loc));
+                        matches.push(QueuedMatchVm::build(kind, (a, b), assessment, names, loc));
                     }
                 }
             }

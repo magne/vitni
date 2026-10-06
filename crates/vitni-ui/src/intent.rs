@@ -20,8 +20,8 @@ use vitni_app::{
     import_attach_event_media, import_attach_event_note, import_attach_media_note, import_attach_place_media,
     import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
     link_family_event, link_place, link_source_repository, linked_records, list_citations, list_event_rows,
-    list_family_rows, list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories,
-    list_sources, media_claim_owner, note_claim_owner, place_claim_owner, recent_activity, record_origin, remove_child,
+    list_family_rows, list_media, list_notes, list_person_rows, list_places, list_repositories, list_sources,
+    media_claim_owner, note_claim_owner, place_claim_owner, recent_activity, record_origin, remove_child,
     repository_claim_owner, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
     set_event_restrictions, set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text,
     set_note_type, set_page, set_place_restrictions, set_repository_restrictions, set_restrictions,
@@ -36,8 +36,9 @@ use vitni_app::{
     commit_person_change_set, set_person_human_id,
 };
 use vitni_app::{
-    DecidableKind, MatchQueueFilter, MatchVerdict, ancestors, assess, check_records, decide_match, descendants,
-    list_import_runs, match_pair_decision, match_queue, relationship, undo_match_distinction_and_merge,
+    DecidableKind, MatchQueueFilter, MatchVerdict, ancestors, assess, decide_match, descendants, evidence_health,
+    list_import_runs, match_pair_decision, match_queue, person_names, relationship, run_checks,
+    undo_match_distinction_and_merge,
 };
 use vitni_app::{
     DraftRecord, MatchBand, MatchableKind, SimilarRecord, assess_draft, find_similar, find_similar_to_draft,
@@ -88,12 +89,12 @@ use crate::navigation::{
     ResearchNoteEdit, SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest,
 };
 use crate::view_model::{
-    CitationDetail, CompareSide, DASHBOARD_MATCHES, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail,
-    EventDetail, FamilyDetail, FamilyVm, GeographyVm, LISTED_MATCHES, MatchCompareVm, MatchQueueVm, MediaDetail,
-    MediaRefVm, NoteDetail, PedigreeVm, PersonDetail, PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail,
-    ResearchNoteDetail, SimilarHitVm, SimilarVm, SourceDetail, TagDetail, citation_row, collapse_history,
-    dna_match_row, dna_test_row, event_list_row, event_row, family_list_row, family_row, media_row, note_row,
-    person_list_row, place_row, repository_row, research_note_row, source_row, tag_row,
+    CitationDetail, CompareSide, DASHBOARD_MATCHES, DashboardStats, DashboardVm, DataQualityVm, DnaMatchDetail,
+    DnaTestDetail, EventDetail, FamilyDetail, FamilyVm, GeographyVm, LISTED_MATCHES, MatchCompareVm, MatchQueueVm,
+    MediaDetail, MediaRefVm, NoteDetail, PedigreeVm, PersonDetail, PlaceDetail, ProvenanceDraft, RelationshipVm,
+    RepositoryDetail, ResearchNoteDetail, SimilarHitVm, SimilarVm, SourceDetail, TagDetail, citation_row,
+    collapse_history, dna_match_row, dna_test_row, event_list_row, event_row, family_list_row, family_row, media_row,
+    note_row, person_list_row, place_row, repository_row, research_note_row, source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -287,21 +288,22 @@ async fn show_geography_view(
 ///
 /// Deliberately does *not* run the whole-workspace data-quality checks — those fill the data-quality
 /// card via a separate [`Intent::ShowDataQuality`] load so the dashboard renders without waiting on
-/// them. Loads the person projection once (shared by evidence health and activity name resolution).
+/// them. Composes no person summary: evidence health reads the Person projection, and only the persons
+/// the activity names are read for their names (#519).
 async fn show_dashboard(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
-    let counts = workspace_counts(workspace).await?;
-    let persons = list_persons(workspace).await?;
+    let stats = DashboardStats::build(workspace_counts(workspace).await?, evidence_health(workspace).await?);
     let activity = recent_activity(workspace, ACTIVITY_LIMIT).await?;
-    let dashboard = DashboardVm::build(counts, &persons, &activity, loc, JUMP_BACK_LIMIT);
+    let names = person_names(workspace, &DashboardVm::persons_named(&activity)).await?;
+    let dashboard = DashboardVm::build(stats, &activity, &names, loc, JUMP_BACK_LIMIT);
     Ok(IntentOutcome::Dashboard(Box::new(dashboard)))
 }
 
-/// Runs the dashboard's data-quality checks over a single shared person load and groups them into the
-/// [`DataQualityVm`] the data-quality card renders.
+/// Runs the dashboard's data-quality checks and groups them into the [`DataQualityVm`] the
+/// data-quality card renders, reading only the flagged persons' names.
 async fn show_data_quality(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
-    let persons = list_persons(workspace).await?;
-    let quality = check_records(workspace, &persons, DASHBOARD_MATCHES).await?;
-    let data_quality = DataQualityVm::build(&persons, &quality, loc);
+    let quality = run_checks(workspace, DASHBOARD_MATCHES).await?;
+    let names = person_names(workspace, &DataQualityVm::persons_named(&quality)).await?;
+    let data_quality = DataQualityVm::build(&quality, &names, loc);
     Ok(IntentOutcome::DataQuality(Box::new(data_quality)))
 }
 

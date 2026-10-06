@@ -88,7 +88,7 @@ pub use backup::{
     create_backup, projection_digest, replace_backup, restore_backup,
 };
 pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
-pub use checks::{CheckFinding, DataQuality, check_records, run_checks};
+pub use checks::{CheckFinding, DataQuality, run_checks};
 pub use citation::{
     CitationAttributeRef, CitationMergeResult, CitationSummary, NewCitation, TagRef, add_citation_attribute,
     assert_citation_date, assert_citation_date_value, attach_citation_media, attach_citation_note,
@@ -196,11 +196,11 @@ pub use pedigree::{
     PersonRef as PedigreePersonRef, RelationshipResult, ancestors, descendants, relationship,
 };
 pub use person::{
-    AssociationSummary, FactSummary, MergeResult, NameSummary, NewFact, NewParticipation, NewPerson, ParticipationRef,
-    PersonNameParts, PersonRow, PersonSummary, add_name, add_person_citation, assert_association, assert_fact,
-    assert_participation, assert_sex, attach_person_media, attach_person_note, claim_owner, create_person,
-    distinguish_persons, list_person_rows, list_persons, merge_persons, pair_decision, record_birth,
-    set_person_human_id, set_restrictions, show_person, tag_person, undo_distinction_and_merge,
+    AssociationSummary, EvidenceHealth, FactSummary, MergeResult, NameSummary, NewFact, NewParticipation, NewPerson,
+    ParticipationRef, PersonNameParts, PersonRow, PersonSummary, add_name, add_person_citation, assert_association,
+    assert_fact, assert_participation, assert_sex, attach_person_media, attach_person_note, claim_owner, create_person,
+    distinguish_persons, evidence_health, list_person_rows, list_persons, merge_persons, pair_decision, person_names,
+    record_birth, set_person_human_id, set_restrictions, show_person, tag_person, undo_distinction_and_merge,
     update_person_media_ref,
 };
 pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};

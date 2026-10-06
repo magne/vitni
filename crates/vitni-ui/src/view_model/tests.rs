@@ -1,20 +1,31 @@
 use super::{
-    AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, DataQualityVm, MediaRefVm,
-    PersonDetail, PersonDraft, ProvenanceDraft, RecordDraft, TagDetail, TagDraft, TimelineKind, citation_row,
-    citation_tabs, evidence_axes, person_row, person_tabs,
+    AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DataQualityVm,
+    MediaRefVm, PersonDetail, PersonDraft, ProvenanceDraft, RecordDraft, TagDetail, TagDraft, TimelineKind,
+    citation_row, citation_tabs, evidence_axes, person_row, person_tabs,
 };
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
 use crate::presentation::EvidenceAxis;
 use crate::presentation::RestrictionKind;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use vitni_app::ImportRunId;
 use vitni_app::{
     ActivityDetail, AssociationRole, AssociationSummary, Calendar, ChangeLogEntry, CitationSummary, Confidence,
-    DateModifier, DatePoint, DateQuality, EvidenceAnalysis, EvidenceKind, EvidenceLevel, Fact, FactSummary, FactType,
-    GenealogicalDate, GenealogicalDateBody, InformationKind, NameSummary, NameType, OperatorKind, PersonName,
-    PersonRow, PersonSummary, Restriction, RunRef, Sex, SourceQuality, Surname, TagRef, WorkspaceCounts,
+    DateModifier, DatePoint, DateQuality, EvidenceAnalysis, EvidenceHealth, EvidenceKind, EvidenceLevel, Fact,
+    FactSummary, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, NameSummary, NameType,
+    OperatorKind, PersonName, PersonRow, PersonSummary, Restriction, RunRef, Sex, SourceQuality, Surname, TagRef,
+    WorkspaceCounts,
 };
+
+/// The display names the dashboard tests label persons with: I0001 is "Ada Lovelace".
+fn ada() -> HashMap<String, String> {
+    HashMap::from([("I0001".to_owned(), "Ada Lovelace".to_owned())])
+}
+
+/// The stats of an empty workspace.
+fn no_stats() -> DashboardStats {
+    DashboardStats::build(WorkspaceCounts::default(), EvidenceHealth { facts: 0, sourced: 0 })
+}
 
 /// A change-log entry for the activity-feed tests.
 fn log_entry(kind: &str, human_id: Option<&str>, operator: OperatorKind, who: &str) -> ChangeLogEntry {
@@ -59,8 +70,7 @@ fn imported(human_id: &str, assertion_id: &str, can_undo: bool) -> ChangeLogEntr
 #[test]
 fn dashboard_renders_an_import_run_row_and_labels_records_by_name() {
     let loc = Localizer::for_test("en");
-    // `summary()` is the person I0001 / "Ada Lovelace".
-    let person = summary();
+    // `ada()` names the person I0001 "Ada Lovelace".
     // The app folds an import run into one row; then a human edit on a person.
     let children = vec![imported("I0002", "c", false), imported("I0003", "b", false)];
     let mut import = log_entry("", None, OperatorKind::Software, "gedcom-import");
@@ -71,7 +81,7 @@ fn dashboard_renders_an_import_run_row_and_labels_records_by_name() {
         children,
     });
     let activity = vec![import, log_entry("person", Some("I0001"), OperatorKind::Human, "magne")];
-    let vm = DashboardVm::build(WorkspaceCounts::default(), &[person], &activity, &loc, 4);
+    let vm = DashboardVm::build(no_stats(), &activity, &ada(), &loc, 4);
 
     assert_eq!(vm.recent.len(), 2);
     assert_eq!(vm.recent[0].what, "Imported from tree.ged");
@@ -93,6 +103,34 @@ fn dashboard_renders_an_import_run_row_and_labels_records_by_name() {
 }
 
 #[test]
+fn the_dashboard_reads_the_names_of_the_persons_its_activity_names() {
+    let children = vec![imported("I0002", "c", false), imported("I0001", "b", false)];
+    let mut import = log_entry("", None, OperatorKind::Software, "gedcom-import");
+    import.detail = Some(ActivityDetail::ImportRun {
+        run: run_ref(Some(2)),
+        count: 2,
+        children,
+    });
+    let activity = vec![
+        log_entry("person", Some("I0001"), OperatorKind::Human, "magne"),
+        log_entry("family", Some("F0001"), OperatorKind::Human, "magne"),
+        import,
+        log_entry("person", None, OperatorKind::Human, "magne"),
+    ];
+    assert_eq!(DashboardVm::persons_named(&activity), ["I0001", "I0002"]);
+}
+
+#[test]
+fn evidence_health_is_the_share_of_sourced_facts() {
+    let stats = DashboardStats::build(WorkspaceCounts::default(), EvidenceHealth { facts: 8, sourced: 6 });
+    assert_eq!(
+        (stats.evidence_health_pct, stats.facts_without_source, stats.facts_total),
+        (75, 2, 8)
+    );
+    assert_eq!(no_stats().evidence_health_pct, 100, "nothing is unsourced");
+}
+
+#[test]
 fn dashboard_summary_names_the_fact_kind() {
     let loc = Localizer::for_test("en");
     let mut entry = log_entry("person", Some("I0001"), OperatorKind::Human, "magne");
@@ -100,7 +138,7 @@ fn dashboard_summary_names_the_fact_kind() {
     entry.detail = Some(ActivityDetail::Fact {
         fact_type: FactType::Occupation,
     });
-    let vm = DashboardVm::build(WorkspaceCounts::default(), &[summary()], &[entry], &loc, 4);
+    let vm = DashboardVm::build(no_stats(), &[entry], &ada(), &loc, 4);
     assert_eq!(
         vm.recent[0].what, "Occupation asserted",
         "a fact assertion names its kind"
@@ -160,7 +198,7 @@ fn quality(
 fn data_quality_maps_check_findings_to_navigable_rows() {
     use vitni_app::{CheckFinding, Feature, MatchBand, MatchableKind, OutcomeEvidence};
     let loc = Localizer::for_test("en");
-    // `summary()` is person I0001 / "Ada Lovelace"; the findings flag her lifespan and one dup pair.
+    // `ada()` names person I0001 "Ada Lovelace"; the findings flag her lifespan and one dup pair.
     let findings = vec![
         CheckFinding::DeathBeforeBirth(agg("I0001", "I0001")),
         duplicate(
@@ -174,7 +212,7 @@ fn data_quality_maps_check_findings_to_navigable_rows() {
             ),
         ),
     ];
-    let vm = DataQualityVm::build(&[summary()], &quality(findings, &[]), &loc);
+    let vm = DataQualityVm::build(&quality(findings, &[]), &ada(), &loc);
 
     assert_eq!(vm.death_before_birth.len(), 1);
     // The flagged person is a navigable People record labelled by display name, not the id.
@@ -188,6 +226,22 @@ fn data_quality_maps_check_findings_to_navigable_rows() {
     assert_eq!(pair.percent, 97);
     assert_eq!(pair.band, "probable match");
     assert_eq!(pair.reasons, ["Same given name (+3.0)"]);
+}
+
+#[test]
+fn the_data_quality_card_reads_the_names_of_the_persons_it_flags() {
+    use vitni_app::{CheckFinding, MatchBand, MatchableKind};
+    let pair =
+        |kind, a: &str, b: &str| duplicate(kind, agg(a, a), agg(b, b), evidence(7_000, MatchBand::Possible, &[]));
+    let findings = vec![
+        CheckFinding::DeathBeforeBirth(agg("I0003", "I0003")),
+        pair(MatchableKind::Person, "I0001", "I0003"),
+        pair(MatchableKind::Place, "P0001", "P0002"),
+    ];
+    assert_eq!(
+        DataQualityVm::persons_named(&quality(findings, &[])),
+        ["I0003", "I0001"]
+    );
 }
 
 #[test]
@@ -209,7 +263,7 @@ fn a_place_duplicate_is_a_place_row_with_its_reasons() {
             ],
         ),
     )];
-    let vm = DataQualityVm::build(&[summary()], &quality(findings, &[]), &loc);
+    let vm = DataQualityVm::build(&quality(findings, &[]), &ada(), &loc);
 
     let pair = &vm.matches[0];
     assert_eq!(pair.a.category, crate::navigation::Category::Places);
@@ -236,7 +290,7 @@ fn a_tag_pair_is_no_possible_match() {
         agg("Emigrants", "0190-tag-b"),
         evidence(7_000, MatchBand::Possible, &[]),
     )];
-    let vm = DataQualityVm::build(&[], &quality(findings, &[(MatchableKind::Tag, 1)]), &loc);
+    let vm = DataQualityVm::build(&quality(findings, &[(MatchableKind::Tag, 1)]), &HashMap::new(), &loc);
     assert!(
         vm.matches.is_empty(),
         "a tag is never decided as a pair: {:?}",
@@ -254,7 +308,7 @@ fn the_possible_matches_are_counted_per_kind() {
         |kind, a: &str, b: &str| duplicate(kind, agg(a, a), agg(b, b), evidence(7_000, MatchBand::Possible, &[]));
     let findings = vec![pair(MatchableKind::Place, "P0001", "P0002")];
     let counts = [(MatchableKind::Place, 2), (MatchableKind::Person, 3)];
-    let vm = DataQualityVm::build(&[], &quality(findings, &counts), &loc);
+    let vm = DataQualityVm::build(&quality(findings, &counts), &HashMap::new(), &loc);
     assert_eq!(vm.match_counts, ["Person: 3", "Place: 2"], "every pair, in kind order");
     assert_eq!(vm.match_total, 5, "every pair, not only those listed");
     assert_eq!(vm.matches.len(), 1, "only those listed");
@@ -343,7 +397,7 @@ fn every_feature_and_outcome_has_a_reason_in_each_language() {
 
 #[test]
 fn data_quality_reports_zero_counts_with_no_findings() {
-    let vm = DataQualityVm::build(&[summary()], &quality(Vec::new(), &[]), &Localizer::for_test("en"));
+    let vm = DataQualityVm::build(&quality(Vec::new(), &[]), &ada(), &Localizer::for_test("en"));
     assert!(vm.death_before_birth.is_empty(), "{:?}", vm.death_before_birth);
     assert!(vm.matches.is_empty(), "{:?}", vm.matches);
 }
