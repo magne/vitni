@@ -9,7 +9,11 @@
 //! rules — or never, or before a projection rebuild — it is built from scratch. Otherwise only the
 //! records committed to since they were last keyed are rekeyed, with the records whose profiles carry
 //! theirs: an event's principals (their birth decade is its date), a person's events and families, a
-//! place's events, a source's citations.
+//! place's events, a source's citations — found through the record links index (ADR 0047).
+//!
+//! A lookup — [`find_similar`], the draft hint, [`assess`] — reads only its target and the candidates
+//! the index yields. [`similar_pairs`] and an import's matcher score every record, so they read their
+//! kinds whole.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -22,14 +26,14 @@ use vitni_core::matching::{
     assess_families, assess_media, assess_notes, assess_persons, assess_places, assess_repositories, assess_sources,
     assess_tags, prefix_end,
 };
-use vitni_db::{DirtyRecord, KeyedRecord};
+use vitni_db::{DirtyRecord, KeyedRecord, RecordLink, Store};
 
 use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::matching::Matching;
 use crate::person::{PersonNameParts, build_name};
-use crate::profile::{Profile, Profiles, place_name};
+use crate::profile::{Decisions, Profile, Profiles, aggregate_id_of, linking, place_name};
 use crate::workspace::Workspace;
 
 /// A record similar to the target, with the engine's assessment of the pair.
@@ -69,39 +73,31 @@ pub async fn find_similar(
     min_band: MatchBand,
     limit: usize,
 ) -> Result<Vec<SimilarRecord>, AppError> {
-    let matching = workspace.matching()?;
-    let keys = BlockingKeys::new(&matching.data);
-    let profiles = refreshed_profiles(workspace, &keys, &[kind]).await?;
-    let decisions = profiles.decisions(kind);
-    let target_id = profiles
-        .aggregate_id_of(kind, target)
-        .map(|id| decisions.root(&id))
+    let store = workspace.store();
+    let mut matcher = Matcher::by_record(workspace).await?;
+    let found = aggregate_id_of(store, kind, target)
+        .await?
         .ok_or_else(|| not_found(kind, target))?;
-    let target_profile = profiles
+    matcher
+        .profiles
+        .include(store, kind, std::slice::from_ref(&found))
+        .await?;
+    let target_id = matcher.profiles.decisions(kind).root(&found);
+    let profile = matcher
+        .profiles
         .profile(kind, &target_id)
         .ok_or_else(|| not_found(kind, target))?;
-    let probe = Probe::of(&keys_of(&keys, &target_profile));
-    let mut similar = Vec::new();
-    for candidate in workspace.store().match_candidates(kind, &probe).await? {
-        if candidate == target_id || decisions.exclude(&target_id, &candidate) {
-            continue;
-        }
-        let Some(profile) = profiles.profile(kind, &candidate) else {
-            continue;
-        };
-        let Some(assessment) = assess_pair(&target_profile, &profile, matching) else {
-            continue;
-        };
-        if assessment.band >= min_band {
-            similar.push(SimilarRecord {
-                record: agg_ref(&profiles, kind, &candidate),
-                assessment,
-            });
-        }
-    }
-    similar.sort_by(|x, y| rank(&x.assessment, &y.assessment).then_with(|| x.record.human_id.cmp(&y.record.human_id)));
-    similar.truncate(limit);
-    Ok(similar)
+    let lookup = Lookup {
+        kind,
+        profile: &profile,
+        min_band,
+        limit,
+    };
+    matcher
+        .similar_by_record(workspace, &lookup, |decisions, candidate| {
+            candidate == target_id || decisions.exclude(&target_id, candidate)
+        })
+        .await
 }
 
 /// The engine's assessment of the records `a` and `b` of `kind` (human ids; a tag's id).
@@ -113,14 +109,19 @@ pub async fn find_similar(
 /// failure.
 pub async fn assess(workspace: &Workspace, kind: MatchableKind, a: &str, b: &str) -> Result<MatchAssessment, AppError> {
     let matching = workspace.matching()?;
-    let profiles = Profiles::load(workspace.store(), &[kind]).await?;
-    let profile_of = |human_id: &str| {
-        profiles
-            .aggregate_id_of(kind, human_id)
-            .and_then(|id| profiles.profile(kind, &id))
+    let store = workspace.store();
+    let resolve = async |human_id: &str| {
+        aggregate_id_of(store, kind, human_id)
+            .await?
             .ok_or_else(|| not_found(kind, human_id))
     };
-    let (left, right) = (profile_of(a)?, profile_of(b)?);
+    let (left_id, right_id) = (resolve(a).await?, resolve(b).await?);
+    let mut profiles = Profiles::default();
+    profiles
+        .include(store, kind, &[left_id.clone(), right_id.clone()])
+        .await?;
+    let left = profiles.profile(kind, &left_id).ok_or_else(|| not_found(kind, a))?;
+    let right = profiles.profile(kind, &right_id).ok_or_else(|| not_found(kind, b))?;
     assess_pair(&left, &right, matching).ok_or_else(|| not_found(kind, b))
 }
 
@@ -330,10 +331,18 @@ pub async fn find_similar_to_draft(
     if draft.is_empty() {
         return Ok(Vec::new());
     }
-    let kind = draft.kind();
-    let matcher = Matcher::load(workspace, &[kind]).await?;
+    let profile = draft.profile();
+    let lookup = Lookup {
+        kind: draft.kind(),
+        profile: &profile,
+        min_band,
+        limit,
+    };
+    let mut matcher = Matcher::by_record(workspace).await?;
     matcher
-        .similar(workspace, kind, &draft.profile(), &HashSet::new(), min_band, limit)
+        .similar_by_record(workspace, &lookup, |decisions, candidate| {
+            decisions.root(candidate) != candidate
+        })
         .await
 }
 
@@ -351,12 +360,14 @@ pub async fn assess_draft(
     human_id: &str,
 ) -> Result<MatchAssessment, AppError> {
     let matching = workspace.matching()?;
+    let store = workspace.store();
     let kind = draft.kind();
-    let profiles = Profiles::load(workspace.store(), &[kind]).await?;
-    let stored = profiles
-        .aggregate_id_of(kind, human_id)
-        .and_then(|id| profiles.profile(kind, &id))
+    let id = aggregate_id_of(store, kind, human_id)
+        .await?
         .ok_or_else(|| not_found(kind, human_id))?;
+    let mut profiles = Profiles::default();
+    profiles.include(store, kind, std::slice::from_ref(&id)).await?;
+    let stored = profiles.profile(kind, &id).ok_or_else(|| not_found(kind, human_id))?;
     assess_pair(&draft.profile(), &stored, matching).ok_or_else(|| not_found(kind, human_id))
 }
 
@@ -365,17 +376,27 @@ pub(crate) fn rank(x: &MatchAssessment, y: &MatchAssessment) -> std::cmp::Orderi
     y.band.cmp(&x.band).then_with(|| y.score.total_cmp(&x.score))
 }
 
-/// Matches records that are not yet in the workspace — an import's staged entities (ADR 0040 §2) —
-/// against those that are, with the index brought up to date and the profiles read once.
+/// What one lookup asks for: the records of `kind` at least `min_band` similar to `profile`, at most
+/// `limit` of them.
+pub(crate) struct Lookup<'p> {
+    kind: MatchableKind,
+    profile: &'p Profile,
+    min_band: MatchBand,
+    limit: usize,
+}
+
+/// Matches a profile against the workspace's records over the index, brought up to date when the
+/// matcher is made.
 pub(crate) struct Matcher<'a> {
     matching: &'a Matching,
     keys: BlockingKeys<'a>,
-    /// The profiles of the kinds the matcher was loaded for.
+    /// The profiles read: of the kinds the matcher was loaded for, or of the records looked up so far.
     pub(crate) profiles: Profiles,
 }
 
 impl<'a> Matcher<'a> {
-    /// A matcher over `workspace`'s records of `kinds`.
+    /// A matcher over `workspace`'s records of `kinds`, read whole — for matching many records that are
+    /// not yet in the workspace, an import's staged entities (ADR 0040 §2).
     pub(crate) async fn load(workspace: &'a Workspace, kinds: &[MatchableKind]) -> Result<Self, AppError> {
         let matching = workspace.matching()?;
         let keys = BlockingKeys::new(&matching.data);
@@ -387,8 +408,14 @@ impl<'a> Matcher<'a> {
         })
     }
 
+    /// A matcher that reads only the records a lookup scores — for one lookup at a time.
+    async fn by_record(workspace: &'a Workspace) -> Result<Self, AppError> {
+        Self::load(workspace, &[]).await
+    }
+
     /// The records of `kind` at least `min_band` similar to `profile`, most similar first, at most
-    /// `limit` of them, leaving out `excluded` (aggregate ids) and every merged record.
+    /// `limit` of them, leaving out `excluded` (aggregate ids) and every merged record. The matcher
+    /// must have been [loaded](Self::load) for `kind`.
     pub(crate) async fn similar(
         &self,
         workspace: &Workspace,
@@ -398,38 +425,75 @@ impl<'a> Matcher<'a> {
         min_band: MatchBand,
         limit: usize,
     ) -> Result<Vec<SimilarRecord>, AppError> {
+        let lookup = Lookup {
+            kind,
+            profile,
+            min_band,
+            limit,
+        };
+        let candidates = self.candidates(workspace, &lookup).await?;
         let decisions = self.profiles.decisions(kind);
-        let probe = Probe::of(&keys_of(&self.keys, profile));
+        Ok(self.ranked(&lookup, candidates, |candidate| {
+            excluded.contains(candidate) || decisions.root(candidate) != candidate
+        }))
+    }
+
+    /// [`Self::similar`] for a matcher made [by record](Self::by_record): the candidates are read before
+    /// they are scored, and `skip` names those the lookup leaves out under the identity decisions.
+    async fn similar_by_record(
+        &mut self,
+        workspace: &Workspace,
+        lookup: &Lookup<'_>,
+        skip: impl Fn(&Decisions, &str) -> bool,
+    ) -> Result<Vec<SimilarRecord>, AppError> {
+        let candidates = self.candidates(workspace, lookup).await?;
+        self.profiles
+            .include(workspace.store(), lookup.kind, &candidates)
+            .await?;
+        let decisions = self.profiles.decisions(lookup.kind);
+        Ok(self.ranked(lookup, candidates, |candidate| skip(&decisions, candidate)))
+    }
+
+    /// The records of the lookup's kind sharing a key with its profile.
+    async fn candidates(&self, workspace: &Workspace, lookup: &Lookup<'_>) -> Result<Vec<String>, AppError> {
+        let probe = Probe::of(&keys_of(&self.keys, lookup.profile));
+        Ok(workspace.store().match_candidates(lookup.kind, &probe).await?)
+    }
+
+    /// The `candidates` not skipped that are at least the lookup's band similar to its profile, most
+    /// similar first, at most its limit of them.
+    fn ranked(&self, lookup: &Lookup<'_>, candidates: Vec<String>, skip: impl Fn(&str) -> bool) -> Vec<SimilarRecord> {
         let mut similar = Vec::new();
-        for candidate in workspace.store().match_candidates(kind, &probe).await? {
-            if excluded.contains(&candidate) || decisions.root(&candidate) != candidate {
+        for candidate in candidates {
+            if skip(&candidate) {
                 continue;
             }
-            let Some(other) = self.profiles.profile(kind, &candidate) else {
+            let Some(other) = self.profiles.profile(lookup.kind, &candidate) else {
                 continue;
             };
-            let Some(assessment) = assess_pair(profile, &other, self.matching) else {
+            let Some(assessment) = assess_pair(lookup.profile, &other, self.matching) else {
                 continue;
             };
-            if assessment.band >= min_band {
+            if assessment.band >= lookup.min_band {
                 similar.push(SimilarRecord {
-                    record: agg_ref(&self.profiles, kind, &candidate),
+                    record: agg_ref(&self.profiles, lookup.kind, &candidate),
                     assessment,
                 });
             }
         }
         similar
             .sort_by(|x, y| rank(&x.assessment, &y.assessment).then_with(|| x.record.human_id.cmp(&y.record.human_id)));
-        similar.truncate(limit);
-        Ok(similar)
+        similar.truncate(lookup.limit);
+        similar
     }
 }
 
-/// Brings the index up to date, and returns the profiles of `wanted` — read once for both.
+/// Brings the index up to date, and returns the profiles of `whole` read whole, with those of the records
+/// it rekeyed.
 async fn refreshed_profiles(
     workspace: &Workspace,
     keys: &BlockingKeys<'_>,
-    wanted: &[MatchableKind],
+    whole: &[MatchableKind],
 ) -> Result<Profiles, AppError> {
     let store = workspace.store();
     let dirty = store.match_dirty().await?;
@@ -444,16 +508,10 @@ async fn refreshed_profiles(
         store.reset_match_keys(keys.fingerprint(), &records, &dirty).await?;
         return Ok(profiles);
     }
-    let mut kinds = wanted.to_vec();
-    for record in &dirty {
-        kinds.extend(affected_kinds(record.kind));
-    }
-    kinds.sort_unstable();
-    kinds.dedup();
-    let profiles = Profiles::load(store, &kinds).await?;
+    let mut profiles = Profiles::load(store, whole).await?;
     if !dirty.is_empty() {
         let mut records = Vec::new();
-        for (each, id) in affected(&profiles, &dirty) {
+        for (each, id) in affected(store, &mut profiles, &dirty).await? {
             records.push(keyed(&profiles, keys, each, id));
         }
         store.rekey_matches(&records, &dirty).await?;
@@ -461,41 +519,46 @@ async fn refreshed_profiles(
     Ok(profiles)
 }
 
-/// The kinds whose profiles a commit to a record of `kind` can change.
-fn affected_kinds(kind: MatchableKind) -> Vec<MatchableKind> {
-    use MatchableKind::{Citation, Event, Family, Media, Note, Person, Place, Repository, Source, Tag};
-    match kind {
-        Person | Family | Event | Place => vec![Person, Family, Event, Place],
-        Source => vec![Source, Citation],
-        Repository | Citation | Media | Note | Tag => vec![kind],
-    }
-}
-
-/// The dirty records, and every record whose keys carry one of theirs.
-fn affected(profiles: &Profiles, dirty: &[DirtyRecord]) -> BTreeSet<(MatchableKind, String)> {
-    let of_kind = |kind: MatchableKind| -> HashSet<String> {
+/// The dirty records, and every record whose keys carry one of theirs, each read into `profiles`.
+async fn affected(
+    store: &Store,
+    profiles: &mut Profiles,
+    dirty: &[DirtyRecord],
+) -> Result<BTreeSet<(MatchableKind, String)>, AppError> {
+    let of_kind = |kind: MatchableKind| -> Vec<String> {
         dirty
             .iter()
             .filter(|record| record.kind == kind)
             .map(|record| record.aggregate_id.clone())
             .collect()
     };
+    let mut events: BTreeSet<String> = of_kind(MatchableKind::Event).into_iter().collect();
+    events.extend(linking(store, RecordLink::EventPlace, &of_kind(MatchableKind::Place)).await?);
+    let mut persons: BTreeSet<String> = of_kind(MatchableKind::Person).into_iter().collect();
+    persons.extend(linking(store, RecordLink::Participation, &Vec::from_iter(events.clone())).await?);
+    let persons = Vec::from_iter(persons);
+    profiles.include(store, MatchableKind::Person, &persons).await?;
+    events.extend(profiles.events_of_persons(&persons));
+    let families = linking(store, RecordLink::FamilyPartner, &persons).await?;
+    let citations = linking(store, RecordLink::CitationSource, &of_kind(MatchableKind::Source)).await?;
+
     let mut out: BTreeSet<(MatchableKind, String)> = dirty
         .iter()
         .map(|record| (record.kind, record.aggregate_id.clone()))
         .collect();
-    let mut events = of_kind(MatchableKind::Event);
-    events.extend(profiles.events_at(&of_kind(MatchableKind::Place)));
-    let mut persons = of_kind(MatchableKind::Person);
-    persons.extend(profiles.participants_of(&events));
-    let (person_events, families) = profiles.dependents_of_persons(&persons);
-    events.extend(person_events);
     out.extend(persons.into_iter().map(|id| (MatchableKind::Person, id)));
     out.extend(events.into_iter().map(|id| (MatchableKind::Event, id)));
     out.extend(families.into_iter().map(|id| (MatchableKind::Family, id)));
-    let citations = profiles.citations_of(&of_kind(MatchableKind::Source));
     out.extend(citations.into_iter().map(|id| (MatchableKind::Citation, id)));
-    out
+    for kind in MatchableKind::ALL {
+        let ids: Vec<String> = out
+            .iter()
+            .filter(|(each, _)| *each == kind)
+            .map(|(_, id)| id.clone())
+            .collect();
+        profiles.include(store, kind, &ids).await?;
+    }
+    Ok(out)
 }
 
 /// The index row of the record `aggregate_id`; no keys when its profile cannot be built.
