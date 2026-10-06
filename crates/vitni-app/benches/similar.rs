@@ -1,7 +1,7 @@
 //! Record-matching benchmarks at scale (ADR 0038 §7, *Consequences*; ADR 0048): the `match_keys`
 //! index build, one `find_similar` over a fresh index, one edit followed by the lookup that rekeys it,
-//! the `match_pairs` build that scores every pair, the Dashboard's data-quality checks over built
-//! pairs, and one edit followed by those checks.
+//! the `match_pairs` build that scores every pair, the Dashboard's two loads — its stats and activity,
+//! and its data-quality checks over built pairs — and one edit followed by those checks.
 //!
 //! Each size is seeded, measured and dropped before the next, so only one workspace is in memory. The
 //! pairs build is measured only up to [`PAIRS_SAMPLED_UP_TO`]: at 100k persons one build takes minutes,
@@ -24,8 +24,9 @@ use tempfile::TempDir;
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, DateParts, MatchBand, MatchableKind, MutationMeta, OperatorConfig, Session, Workspace,
-    WorkspaceDefaults, assert_event_date, find_similar, run_checks,
+    AppDefaults, CheckFinding, DateParts, MatchBand, MatchableKind, MutationMeta, OperatorConfig, Session, Workspace,
+    WorkspaceDefaults, assert_event_date, evidence_health, find_similar, person_names, recent_activity, run_checks,
+    workspace_counts,
 };
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
@@ -49,6 +50,9 @@ const PAIRS_SAMPLED_UP_TO: usize = 10_000;
 
 /// How many of the strongest possible matches the checks list, as the Dashboard does.
 const SHOWN: usize = 5;
+
+/// How many activity rows the Dashboard lists.
+const ACTIVITY: u32 = 12;
 
 /// Persons whose rows are built and inserted together while seeding, bounding the rows held at once.
 const SEED_CHUNK: usize = 10_000;
@@ -456,12 +460,43 @@ fn bench_edit_then_lookup(c: &mut Criterion, rt: &tokio::runtime::Runtime, datas
     group.finish();
 }
 
+/// The Dashboard's first load: the counts, evidence health and recent activity with its persons' names.
+async fn dashboard(dataset: &Dataset) -> usize {
+    let workspace = &dataset.workspace;
+    workspace_counts(workspace).await.expect("counts");
+    evidence_health(workspace).await.expect("evidence health");
+    let mut persons = Vec::new();
+    for entry in recent_activity(workspace, ACTIVITY).await.expect("activity") {
+        if entry.aggregate_kind == "person" {
+            persons.extend(entry.aggregate_human_id);
+        }
+    }
+    person_names(workspace, &persons).await.expect("names").len()
+}
+
+/// The Dashboard's second load: the data-quality checks with the flagged persons' names.
 async fn checks(dataset: &Dataset) -> usize {
-    run_checks(&dataset.workspace, SHOWN)
-        .await
-        .expect("run checks")
-        .duplicates
-        .len()
+    let quality = run_checks(&dataset.workspace, SHOWN).await.expect("run checks");
+    let mut persons = Vec::new();
+    for finding in &quality.findings {
+        match finding {
+            CheckFinding::DeathBeforeBirth(record) => persons.push(record.human_id.clone()),
+            CheckFinding::PossibleDuplicate { a, b, .. } => {
+                persons.extend([a.human_id.clone(), b.human_id.clone()]);
+            }
+        }
+    }
+    person_names(&dataset.workspace, &persons).await.expect("names");
+    quality.duplicates.len()
+}
+
+fn bench_dashboard(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Dataset) {
+    let mut group = c.benchmark_group("dashboard_load");
+    group.sample_size(10);
+    group.bench_with_input(BenchmarkId::from_parameter(dataset.persons), dataset, |b, dataset| {
+        b.iter(|| rt.block_on(dashboard(dataset)));
+    });
+    group.finish();
 }
 
 fn bench_pairs_build(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Dataset) {
@@ -486,7 +521,7 @@ fn bench_pairs_build(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &
 }
 
 fn bench_checks(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Dataset) {
-    let mut group = c.benchmark_group("data_quality_checks");
+    let mut group = c.benchmark_group("data_quality_load");
     group.sample_size(10);
     {
         rt.block_on(checks(dataset));
@@ -498,7 +533,7 @@ fn bench_checks(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Datas
 }
 
 fn bench_edit_then_checks(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Dataset) {
-    let mut group = c.benchmark_group("edit_then_data_quality_checks");
+    let mut group = c.benchmark_group("edit_then_data_quality_load");
     group.sample_size(10);
     {
         let mut next_year = 1800;
@@ -532,6 +567,7 @@ fn benches(c: &mut Criterion) {
         bench_index_build(c, &rt, &dataset);
         bench_find_similar(c, &rt, &dataset);
         bench_edit_then_lookup(c, &rt, &dataset);
+        bench_dashboard(c, &rt, &dataset);
         if persons <= PAIRS_SAMPLED_UP_TO {
             bench_pairs_build(c, &rt, &dataset);
         }

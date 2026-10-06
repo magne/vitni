@@ -460,17 +460,11 @@ index with `find_similar` (#400), the evaluation corpus with `cargo xtask match-
 `PersonsDistinguished` with the assessment on identity decisions (#403), the duplicate check
 through the engine (#401), persona clusters (#404), merge and distinguish for events and families
 (#405) and for places, sources, citations, repositories, notes and media (#406), profiles read by
-record over the record links index (#492), and the match pairs projection (#493), which have landed.
+record over the record links index (#492), the match pairs projection (#493) and the Dashboard's
+narrow person reads (#519), which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
-- **The Dashboard reads every person summary on each show** — both Dashboard loads call
-  `list_persons` (`vitni-ui/src/intent.rs`): the main one for the stats and activity names, and the
-  data-quality one for the death-before-birth check and person labels. Each call composes a summary of
-  every person cluster, and at 100k persons that takes 1.80 s, which alone keeps the Dashboard over #493's
-  one-second exit. The pairs inside the checks now read in about 0 ms. *Shape:* the stats,
-  death-before-birth years and names the Dashboard shows, read from a derived index or narrow queries.
-  *Exit:* both Dashboard loads at 100k persons under one second in a bench. — #519
 - **Blocking loses a given name that is only similar, not keyed alike** — the proptest
   `every_pair_the_engine_shows_meets` (`vitni-core/src/matching/keys/tests.rs`), at 2000 cases, finds
   *Katherine Haugen* (born 1857 by a census age) and *Kari Olsen* (baptised 1853), both in Norway: the
