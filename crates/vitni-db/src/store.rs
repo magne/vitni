@@ -609,6 +609,36 @@ impl Store {
         }
     }
 
+    /// Every live distinction between two records of `kind`, as `(record, other)` with `record` the one
+    /// it is recorded on, ordered (ADR 0039 §4). Neither need be a cluster root.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn identity_distinctions(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+    ) -> Result<Vec<(String, String)>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.identity_distinctions(kind).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.identity_distinctions(kind).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = kind;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
     /// Every merged record of `kind` with the root of its cluster, ordered by member (ADR 0039 §4) — the
     /// transitive closure of the live merge decisions.
     ///

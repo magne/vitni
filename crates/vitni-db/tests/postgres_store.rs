@@ -618,6 +618,41 @@ async fn identity_links_follow_merges_retractions_and_rebuild_on_postgres() {
 }
 
 #[tokio::test]
+async fn identity_distinctions_follow_decisions_retractions_and_rebuild_on_postgres() {
+    let (store, _db) = store().await;
+    for (n, human_id) in [(1, "I0001"), (2, "I0002")] {
+        create(&store, n, human_id).await;
+    }
+    let id = |n: u128| PersonId::from_uuid(Uuid::from_u128(n));
+    let kind = vitni_core::matching::MatchableKind::Person;
+    let distinguish = PersonCommand::DistinguishPersons {
+        person: id(2),
+        other: id(1),
+        assessment: None,
+    };
+    person_command(&store, 2, 200, distinguish).await;
+    let held = vec![(id(2).to_string(), id(1).to_string())];
+    assert_eq!(store.identity_distinctions(kind).await.unwrap(), held);
+
+    store.rebuild_projections().await.unwrap();
+    assert_eq!(
+        store.identity_distinctions(kind).await.unwrap(),
+        held,
+        "rebuild reproduces them"
+    );
+
+    let retract = PersonCommand::RetractAssertion {
+        person_id: id(2),
+        target: AssertionId::from_uuid(Uuid::from_u128(200)),
+    };
+    person_command(&store, 2, 201, retract).await;
+    assert_eq!(
+        store.identity_distinctions(kind).await.unwrap(),
+        Vec::<(String, String)>::new()
+    );
+}
+
+#[tokio::test]
 async fn event_and_family_merges_are_indexed_under_their_own_kind_on_postgres() {
     use vitni_core::enums::EventType;
     use vitni_core::event::{EventCommand, EventCommandEnvelope};

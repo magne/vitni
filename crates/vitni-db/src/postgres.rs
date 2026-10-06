@@ -639,6 +639,14 @@ impl PostgresStore {
         crate::record_origins::postgres::all_rows(&self.pool).await
     }
 
+    /// Every live `kind` distinction as `(record, other)` (ADR 0039 §4).
+    pub(crate) async fn identity_distinctions(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+    ) -> Result<Vec<(String, String)>, DbError> {
+        crate::identity_links::postgres::distinctions(&self.pool, kind).await
+    }
+
     /// Every member of a `kind` cluster with its root (ADR 0039 §4).
     pub(crate) async fn identity_links(
         &self,

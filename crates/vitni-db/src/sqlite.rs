@@ -515,6 +515,14 @@ impl SqliteStore {
         crate::geo_index::places_in_bbox(&self.pool, min_lat, min_lon, max_lat, max_lon).await
     }
 
+    /// Every live `kind` distinction as `(record, other)` (ADR 0039 §4).
+    pub(crate) async fn identity_distinctions(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+    ) -> Result<Vec<(String, String)>, DbError> {
+        crate::identity_links::sqlite::distinctions(&self.pool, kind).await
+    }
+
     /// Every member of a `kind` cluster with its root (ADR 0039 §4).
     pub(crate) async fn identity_links(
         &self,
@@ -1812,6 +1820,60 @@ mod tests {
         assert_eq!(person_links(&store).await, vec![(c.to_string(), b.to_string())]);
     }
 
+    #[tokio::test]
+    async fn identity_distinctions_follow_decisions_retractions_and_rebuild() {
+        let (store, _dir) = store().await;
+        let (a, b) = (
+            PersonId::from_uuid(Uuid::from_u128(1)),
+            PersonId::from_uuid(Uuid::from_u128(2)),
+        );
+        for (n, person_id, human_id) in [(10, a, "I0001"), (11, b, "I0002")] {
+            person_command(
+                &store,
+                person_id,
+                n,
+                PersonCommand::CreatePerson {
+                    person_id,
+                    human_id: HumanId::new(human_id),
+                    evidence_level: EvidenceLevel::Persona,
+                    external_ids: Vec::new(),
+                },
+            )
+            .await;
+        }
+        let kind = vitni_core::matching::MatchableKind::Person;
+        assert_eq!(
+            store.identity_distinctions(kind).await.unwrap(),
+            Vec::<(String, String)>::new()
+        );
+
+        let distinguish = PersonCommand::DistinguishPersons {
+            person: b,
+            other: a,
+            assessment: None,
+        };
+        person_command(&store, b, 20, distinguish).await;
+        let held = vec![(b.to_string(), a.to_string())];
+        assert_eq!(store.identity_distinctions(kind).await.unwrap(), held);
+
+        store.rebuild_projections().await.unwrap();
+        assert_eq!(
+            store.identity_distinctions(kind).await.unwrap(),
+            held,
+            "rebuild reproduces them"
+        );
+
+        let retract = PersonCommand::RetractAssertion {
+            person_id: b,
+            target: AssertionId::from_uuid(Uuid::from_u128(20)),
+        };
+        person_command(&store, b, 21, retract).await;
+        assert!(
+            store.identity_distinctions(kind).await.unwrap().is_empty(),
+            "an undone decision is gone"
+        );
+    }
+
     /// The `kind` clusters as `(member, root)` pairs.
     async fn links_of(store: &SqliteStore, kind: vitni_core::matching::MatchableKind) -> Vec<(String, String)> {
         store
@@ -2104,7 +2166,7 @@ mod tests {
             },
         )
         .await;
-        for table in ["identity_links", "identity_edges"] {
+        for table in ["identity_links", "identity_edges", "identity_distinctions"] {
             sqlx::query(&format!("DROP TABLE {table}"))
                 .execute(&store.pool)
                 .await
