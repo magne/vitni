@@ -1063,6 +1063,133 @@ pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, A
     Ok(summaries)
 }
 
+/// How many facts the persons assert, and how many of them cite a source: the Dashboard's evidence
+/// health (data-model §8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EvidenceHealth {
+    /// Every live fact of every person, merged members' included.
+    pub facts: usize,
+    /// The facts citing at least one citation.
+    pub sourced: usize,
+}
+
+/// Counts the persons' facts and those citing a source, from the Person projection alone.
+///
+/// A citation is never deleted, so a fact citing one is sourced: no citation is loaded. A merged
+/// member's facts are counted, as its cluster's summary reads them (ADR 0039 §5).
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn evidence_health(workspace: &Workspace) -> Result<EvidenceHealth, AppError> {
+    let mut health = EvidenceHealth { facts: 0, sourced: 0 };
+    for view in workspace.store().list_persons().await? {
+        for attributed in view.facts_with_assertions() {
+            health.facts += 1;
+            if attributed
+                .value
+                .citations
+                .iter()
+                .any(|cited| cited.as_citation().is_some())
+            {
+                health.sourced += 1;
+            }
+        }
+    }
+    Ok(health)
+}
+
+/// The display names of the persons `human_ids` names, by `human_id`, read person by person. A person
+/// with no name takes the first name in its cluster, root first, as its summary does (ADR 0039 §5);
+/// an unknown or unnamed person is left out.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn person_names(workspace: &Workspace, human_ids: &[String]) -> Result<HashMap<String, String>, AppError> {
+    let store = workspace.store();
+    let clusters = PersonClusters::load(store).await?;
+    let mut names = HashMap::new();
+    for human_id in human_ids {
+        if names.contains_key(human_id) {
+            continue;
+        }
+        let Some(view) = store.find_person(human_id).await? else {
+            continue;
+        };
+        let mut name = primary_name_fields(view.names().first().copied()).display_name;
+        if name.is_none()
+            && let Some(id) = view.person_id()
+        {
+            let cluster = clusters.cluster(clusters.root(id));
+            if cluster.len() > 1 {
+                name = identity::views(store, &cluster)
+                    .await?
+                    .iter()
+                    .find_map(|member| primary_name_fields(member.names().first().copied()).display_name);
+            }
+        }
+        if let Some(name) = name {
+            names.insert(human_id.clone(), name);
+        }
+    }
+    Ok(names)
+}
+
+/// A listed person's birth and death year, as its summary reads them.
+pub(crate) struct PersonVitals {
+    /// The person's `human_id`.
+    pub(crate) human_id: String,
+    /// The year of the birth date, if it has one.
+    pub(crate) birth_year: Option<i32>,
+    /// The year of the death date, if it has one.
+    pub(crate) death_year: Option<i32>,
+}
+
+/// Every listed person's vital years, read from the Person and Event projections without composing
+/// a summary: a cluster takes each vital date from its root, else from its first member with one, as
+/// [`list_persons`] does (ADR 0039 §5).
+pub(crate) async fn person_vitals(store: &Store) -> Result<Vec<PersonVitals>, AppError> {
+    let views = store.list_persons().await?;
+    let clusters = PersonClusters::load(store).await?;
+    let events = event_joins(store, &HashMap::new()).await?;
+    let vitals_of = |view: &PersonView| {
+        (
+            vital_event_date(view, &events, &EventType::Birth),
+            vital_event_date(view, &events, &EventType::Death),
+        )
+    };
+    let mut own = HashMap::with_capacity(views.len());
+    for view in &views {
+        if let Some(id) = view.person_id() {
+            own.insert(id, vitals_of(view));
+        }
+    }
+    let mut vitals = Vec::with_capacity(views.len());
+    for view in &views {
+        let (mut birth, mut death) = (None, None);
+        match view.person_id() {
+            Some(id) if clusters.is_member(id) => continue,
+            Some(id) => {
+                for member in clusters.cluster(id) {
+                    let Some((member_birth, member_death)) = own.get(&member) else {
+                        continue;
+                    };
+                    birth = birth.or_else(|| member_birth.clone());
+                    death = death.or_else(|| member_death.clone());
+                }
+            }
+            None => (birth, death) = vitals_of(view),
+        }
+        vitals.push(PersonVitals {
+            human_id: view.human_id().map(|id| id.as_str().to_owned()).unwrap_or_default(),
+            birth_year: birth.as_ref().and_then(crate::dto::year_of),
+            death_year: death.as_ref().and_then(crate::dto::year_of),
+        });
+    }
+    Ok(vitals)
+}
+
 /// A lightweight person list row (data-model §7): only the fields a list view renders — the primary
 /// name parts and sex — read from the Person projection alone.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1207,6 +1334,15 @@ async fn event_lookups(store: &Store) -> Result<HashMap<EventId, EventJoin>, App
     crate::identity::PlaceClusters::load(store)
         .await?
         .redirect(&mut place_names);
+    event_joins(store, &place_names).await
+}
+
+/// The `EventId -> EventJoin` lookup from the Event projection, each event's place named from
+/// `place_names` (left unnamed when it is not there), a merged event reading as its cluster's root.
+async fn event_joins(
+    store: &Store,
+    place_names: &HashMap<PlaceId, String>,
+) -> Result<HashMap<EventId, EventJoin>, AppError> {
     let mut own = HashMap::new();
     for view in store.list_events().await? {
         let (Some(id), Some(human_id)) = (view.event_id(), view.human_id()) else {
@@ -1248,13 +1384,17 @@ async fn event_lookups(store: &Store) -> Result<HashMap<EventId, EventJoin>, App
 /// The date of the first Birth/Death (etc.) event this person is a `Primary` participant in — the
 /// canonical derivation of a vital date now that vitals are Events, not Facts (ADR 0021 §2). Returns
 /// the first matching event that has a date; a non-Primary role (e.g. `Witness`) never contributes.
-fn vital_event_date(view: &PersonView, lookups: &Lookups, wanted: &EventType) -> Option<GenealogicalDate> {
+fn vital_event_date(
+    view: &PersonView,
+    events: &HashMap<EventId, EventJoin>,
+    wanted: &EventType,
+) -> Option<GenealogicalDate> {
     view.participations_with_assertions().iter().find_map(|attributed| {
         let participation = &attributed.value.value;
         if participation.role != ParticipantRole::Primary {
             return None;
         }
-        let join = lookups.events.get(&participation.event_id)?;
+        let join = events.get(&participation.event_id)?;
         (join.event_type.as_ref() == Some(wanted))
             .then(|| join.date.clone())
             .flatten()
@@ -1495,8 +1635,8 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         })
         .collect();
     let participations = merged_participations(view, lookups);
-    let birth_date = vital_event_date(view, lookups, &EventType::Birth);
-    let death_date = vital_event_date(view, lookups, &EventType::Death);
+    let birth_date = vital_event_date(view, &lookups.events, &EventType::Birth);
+    let death_date = vital_event_date(view, &lookups.events, &EventType::Death);
     let (citations, media, notes) = person_attachments(view, lookups);
     let (tags, tag_refs) = person_tags(view, lookups);
     PersonSummary {

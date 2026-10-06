@@ -2749,6 +2749,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_activity_feed_walks_the_recency_index_without_sorting() {
+        let (store, _dir) = store().await;
+        let plan = explain_query_plan(&store.pool, crate::sqlite_query::RECENT_EVENTS).await;
+        assert!(
+            plan.iter()
+                .any(|step| step.contains("USING INDEX events_occurred_at_idx")),
+            "expected the recency index, got {plan:?}"
+        );
+        assert!(
+            !plan.iter().any(|step| step.contains("USE TEMP B-TREE")),
+            "the recency index should already provide the order, got {plan:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn the_human_id_lookup_and_allocator_queries_use_their_indexes() {
         let (store, _dir) = store().await;
         let person_id = PersonId::from_uuid(Uuid::from_u128(1));

@@ -80,7 +80,7 @@ last resort: it forces every dependency to rebuild.
 
 ```bash
 cargo bench -p vitni-db --features sqlite
-cargo bench -p vitni-app --bench similar    # record matching at 10k and 100k persons
+cargo bench -p vitni-app --bench similar    # record matching and the Dashboard loads at 10k and 100k persons
 ```
 
 The matching bench seeds a 100k-person workspace of several gigabytes under `target/`, so it keeps it

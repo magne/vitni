@@ -255,20 +255,21 @@ pub async fn recent_activity(workspace: &Workspace, limit: u32) -> Result<Vec<Ch
 /// arbitrarily long import burst forcing an unbounded read.
 const MAX_ACTIVITY_SCAN: u32 = 4096;
 
-/// Builds [`ChangeLogEntry`]s from raw events, resolving each aggregate's `human_id` (cached per
-/// kind). Activity rows are display-only, so `can_undo` is always `false`.
+/// Builds [`ChangeLogEntry`]s from raw events, resolving each aggregate's `human_id` one aggregate at a
+/// time (cached), so a feed of a few rows never reads a whole kind's index. Activity rows are
+/// display-only, so `can_undo` is always `false`.
 async fn build_entries(store: &Store, events: &[StoredEvent]) -> Result<Vec<ChangeLogEntry>, AppError> {
-    let mut indexes: HashMap<String, HashMap<String, String>> = HashMap::new();
+    let mut human_ids: HashMap<(&str, &str), Option<String>> = HashMap::new();
     let mut entries = Vec::with_capacity(events.len());
     for event in events {
         let header = parse_header(event)?;
-        if !indexes.contains_key(&event.aggregate_type) {
-            let index = load_human_id_index(store, &event.aggregate_type).await?;
-            indexes.insert(event.aggregate_type.clone(), index);
-        }
-        let human_id = indexes
-            .get(&event.aggregate_type)
-            .and_then(|index| index.get(&event.aggregate_id).cloned());
+        let key = (event.aggregate_type.as_str(), event.aggregate_id.as_str());
+        let human_id = match human_ids.entry(key) {
+            Entry::Occupied(known) => known.get().clone(),
+            Entry::Vacant(unknown) => unknown
+                .insert(human_id_of(store, &event.aggregate_type, &event.aggregate_id).await?)
+                .clone(),
+        };
         entries.push(entry(event, &header, human_id, false));
     }
     label_runs(store, entries).await
@@ -1439,12 +1440,12 @@ pub(crate) fn operator_kind(kind: &AgentKind) -> OperatorKind {
     }
 }
 
-/// Loads the aggregate-id → `human_id` map for one aggregate kind, or an empty map for a kind
-/// without a human id (e.g. Tag) or an unknown kind.
-async fn load_human_id_index(store: &Store, aggregate_type: &str) -> Result<HashMap<String, String>, AppError> {
-    match store.human_id_index(aggregate_type).await {
-        Ok(pairs) => Ok(pairs.into_iter().collect()),
-        Err(DbError::Malformed(_)) => Ok(HashMap::new()),
+/// The `human_id` of the `aggregate_type` instance `aggregate_id`, or `None` for one without (e.g. a
+/// Tag), a missing one, or an unknown kind.
+async fn human_id_of(store: &Store, aggregate_type: &str, aggregate_id: &str) -> Result<Option<String>, AppError> {
+    match store.human_id_of(aggregate_type, aggregate_id).await {
+        Ok(human_id) => Ok(human_id),
+        Err(DbError::Malformed(_)) => Ok(None),
         Err(other) => Err(AppError::Db(other)),
     }
 }

@@ -21,7 +21,7 @@ use vitni_core::matching::{MatchBand, MatchEvidence, MatchableKind};
 use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::match_queue::DecidableKind;
-use crate::person::{PersonSummary, list_persons};
+use crate::person::{PersonVitals, person_vitals};
 use crate::similar::{assessed_pairs, refresh_pairs};
 use crate::workspace::Workspace;
 
@@ -60,40 +60,23 @@ pub struct DataQuality {
 /// Runs every data-quality check against the workspace, listing the `shown` strongest possible
 /// duplicates among its findings and counting them all.
 ///
-/// A scan over projections plus the matching engine — no new events.
+/// A scan over projections plus the matching engine — no new events. The persons' vital years are
+/// read from the Person and Event projections, never from composed summaries (#519). The
+/// death-before-birth findings come first, then the `shown` strongest duplicates of any kind, the most
+/// similar first.
 ///
 /// # Errors
 ///
 /// A store/read-model error, or the matching engine's error when its data or settings cannot be
 /// loaded.
 pub async fn run_checks(workspace: &Workspace, shown: usize) -> Result<DataQuality, AppError> {
-    let persons = list_persons(workspace).await?;
-    check_records(workspace, &persons, shown).await
-}
-
-/// Runs every data-quality check, reading the persons from an already-loaded projection.
-///
-/// The core of [`run_checks`], exposed so a caller that already holds the person list (the dashboard,
-/// which also needs it for evidence health and activity names) runs the checks without a second
-/// [`list_persons`] load. The death-before-birth findings come first, then the `shown` strongest
-/// duplicates of any kind, the most similar first.
-///
-/// # Errors
-///
-/// A store/read-model error, or the matching engine's error when its data or settings cannot be
-/// loaded.
-pub async fn check_records(
-    workspace: &Workspace,
-    persons: &[PersonSummary],
-    shown: usize,
-) -> Result<DataQuality, AppError> {
     Box::pin(refresh_pairs(workspace)).await?;
     let store = workspace.store();
     let kinds = DecidableKind::ALL.map(DecidableKind::matchable);
     let mut duplicates = store.match_pair_counts(MatchBand::Possible).await?;
     duplicates.retain(|(kind, _)| kinds.contains(kind));
     let strongest = store.match_pairs(&kinds, MatchBand::Possible, Some(shown)).await?;
-    let mut findings = death_before_birth(persons);
+    let mut findings = death_before_birth(&person_vitals(store).await?);
     for pair in assessed_pairs(workspace, strongest).await? {
         findings.push(CheckFinding::PossibleDuplicate {
             kind: pair.kind,
@@ -108,10 +91,10 @@ pub async fn check_records(
 /// Flags each person whose known death year precedes their known birth year.
 ///
 /// A person with an unknown birth or death year is never flagged — the check needs both to compare.
-fn death_before_birth(persons: &[PersonSummary]) -> Vec<CheckFinding> {
+fn death_before_birth(persons: &[PersonVitals]) -> Vec<CheckFinding> {
     let mut findings = Vec::new();
     for person in persons {
-        let (Some(birth), Some(death)) = (person.birth_year(), person.death_year()) else {
+        let (Some(birth), Some(death)) = (person.birth_year, person.death_year) else {
             continue;
         };
         if death < birth {
@@ -130,7 +113,7 @@ mod tests {
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
     use crate::event::{DateParts, NewEvent, assert_event_date, create_event};
     use crate::person::{
-        NewParticipation, NewPerson, PersonNameParts, assert_participation, create_person, list_persons,
+        NewParticipation, NewPerson, PersonNameParts, assert_participation, create_person, person_vitals,
     };
     use crate::session::Session;
     use crate::use_case::{MutationMeta, Provenance};
@@ -264,7 +247,7 @@ mod tests {
         with_vital_year(&workspace, &session, &subject, EventType::Birth, 1900).await;
         with_vital_year(&workspace, &session, &subject, EventType::Death, 1880).await;
 
-        let persons = list_persons(&workspace).await.expect("list");
+        let persons = person_vitals(workspace.store()).await.expect("vitals");
         let findings = death_before_birth(&persons);
         assert_eq!(
             findings.len(),
@@ -284,7 +267,7 @@ mod tests {
         with_vital_year(&workspace, &session, &subject, EventType::Birth, 1880).await;
         with_vital_year(&workspace, &session, &subject, EventType::Death, 1950).await;
 
-        let persons = list_persons(&workspace).await.expect("list");
+        let persons = person_vitals(workspace.store()).await.expect("vitals");
         let checked = death_before_birth(&persons);
         assert!(checked.is_empty(), "{checked:?}");
     }
@@ -296,7 +279,7 @@ mod tests {
         with_vital_year(&workspace, &session, &subject, EventType::Birth, 1900).await;
         with_vital_year(&workspace, &session, &subject, EventType::Death, 1900).await;
 
-        let persons = list_persons(&workspace).await.expect("list");
+        let persons = person_vitals(workspace.store()).await.expect("vitals");
         let checked = death_before_birth(&persons);
         assert!(checked.is_empty(), "{checked:?}");
     }
@@ -310,7 +293,7 @@ mod tests {
         with_vital_year(&workspace, &session, &death_only, EventType::Death, 1880).await;
         person(&workspace, &session, "Fi", "Neither").await;
 
-        let persons = list_persons(&workspace).await.expect("list");
+        let persons = person_vitals(workspace.store()).await.expect("vitals");
         let checked = death_before_birth(&persons);
         assert!(checked.is_empty(), "{checked:?}");
     }

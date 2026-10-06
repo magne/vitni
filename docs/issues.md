@@ -460,7 +460,8 @@ index with `find_similar` (#400), the evaluation corpus with `cargo xtask match-
 `PersonsDistinguished` with the assessment on identity decisions (#403), the duplicate check
 through the engine (#401), persona clusters (#404), merge and distinguish for events and families
 (#405) and for places, sources, citations, repositories, notes and media (#406), profiles read by
-record over the record links index (#492), and the match pairs projection (#493), which have landed.
+record over the record links index (#492), the match pairs projection (#493) and the Dashboard's
+narrow person reads (#519), which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
