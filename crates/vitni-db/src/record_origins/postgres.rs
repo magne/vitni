@@ -450,6 +450,38 @@ pub(crate) async fn created(pool: &Pool<Postgres>, kind: &str) -> Result<Vec<(St
     .fetch_all(pool)
     .await
     .map_err(|e| DbError::Backend(format!("reading creating origins: {e}")))?;
+    created_rows(&rows)
+}
+
+/// The origin of the creating event of each of the aggregates `ids` of `kind` that was imported, as
+/// `(aggregate_id, origin)`, oldest first — [`created`] for named aggregates.
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails or a row does not decode.
+pub(crate) async fn created_among(
+    pool: &Pool<Postgres>,
+    kind: &str,
+    ids: &[String],
+) -> Result<Vec<(String, RecordOrigin)>, DbError> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let rows = sqlx::query(&format!(
+        "SELECT aggregate_id, dataset, record, item, run FROM {RECORD_ORIGINS_TABLE} \
+         WHERE aggregate_kind = $1 AND field_key = $2 AND aggregate_id = ANY($3) ORDER BY id"
+    ))
+    .bind(kind)
+    .bind(created_key(kind))
+    .bind(ids)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("reading creating origins: {e}")))?;
+    created_rows(&rows)
+}
+
+/// Decodes `(aggregate_id, origin)` from rows of `aggregate_id, dataset, record, item, run`.
+fn created_rows(rows: &[sqlx::postgres::PgRow]) -> Result<Vec<(String, RecordOrigin)>, DbError> {
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
         let origin = RecordOrigin {

@@ -9,7 +9,10 @@
 //! [`registry`](crate::registry); the backend delegation pattern is identical for every aggregate.
 
 use crate::raw::{ProjectionRow, RawEvent, RawEventKey};
-use crate::registry::{for_each_db_aggregate, for_each_db_external_id_aggregate, for_each_db_human_id_aggregate};
+use crate::registry::{
+    for_each_db_aggregate, for_each_db_by_ids_aggregate, for_each_db_external_id_aggregate,
+    for_each_db_human_id_aggregate,
+};
 
 /// One stored event, read raw from the log for the audit/change-log path (Phase 5 PR 5).
 ///
@@ -755,6 +758,48 @@ impl Store {
         }
     }
 
+    /// Every `(source, target)` reference of `relation` whose target is one of `targets`, ordered by
+    /// source then target (ADR 0047) — a family's partners and children, a person's events, an event's
+    /// place and a citation's source, read backwards.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn linking(
+        &self,
+        relation: crate::record_links::RecordLink,
+        targets: &[String],
+    ) -> Result<Vec<(String, String)>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.linking(relation, targets).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.linking(relation, targets).await,
+        }
+    }
+
+    /// The origin of the creating event of each of the aggregates `ids` of `kind` that an import made,
+    /// as `(aggregate_id, origin)`, oldest first (ADR 0037 §4) — [`Self::created_origins`] for named
+    /// aggregates. The origins carry no content digest.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn created_origins_of(
+        &self,
+        kind: &str,
+        ids: &[String],
+    ) -> Result<Vec<(String, vitni_core::origin::RecordOrigin)>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.created_origins_of(kind, ids).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.created_origins_of(kind, ids).await,
+        }
+    }
+
     /// The origin of the creating event of the aggregate `aggregate_id` of `kind`, or `None` when no
     /// import created it (ADR 0037 §4). The origin carries no content digest.
     ///
@@ -1134,6 +1179,39 @@ macro_rules! store_external_id_methods {
 }
 
 for_each_db_external_id_aggregate!(store_external_id_methods);
+
+/// Generates the per-aggregate `*_by_ids` facade methods for the kinds the matching profiles read by id.
+macro_rules! store_by_ids_methods {
+    ($(($snake:ident, $by_ids:ident, $table_const:ident, $View:ty)),+ $(,)?) => {
+        impl Store {
+            $(
+                #[doc = concat!("Loads the ", stringify!($snake), " projections of the aggregates `ids`, in id order, skipping an id with none.")]
+                ///
+                /// # Errors
+                ///
+                /// [`DbError`] on a read-model failure.
+                pub async fn $by_ids(&self, ids: &[String]) -> Result<Vec<$View>, DbError> {
+                    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+                    {
+                        match &self.backend {
+                            #[cfg(feature = "sqlite")]
+                            Backend::Sqlite(s) => s.$by_ids(ids).await,
+                            #[cfg(feature = "postgres")]
+                            Backend::Postgres(p) => p.$by_ids(ids).await,
+                        }
+                    }
+                    #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+                    {
+                        let _ = ids;
+                        Err(DbError::Unsupported("no backend compiled in".to_owned()))
+                    }
+                }
+            )+
+        }
+    };
+}
+
+for_each_db_by_ids_aggregate!(store_by_ids_methods);
 
 /// Generates the per-aggregate `next_*_human_id` allocators (every aggregate but Tag).
 macro_rules! store_next_methods {

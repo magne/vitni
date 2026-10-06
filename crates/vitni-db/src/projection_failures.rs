@@ -50,13 +50,17 @@ impl Failures {
 /// An error handler for a query or replay over `table`. Inside [`watch`] it records the failure for
 /// the watcher to report; outside one it logs it, so no failure is ever dropped.
 pub(crate) fn handler(table: &'static str) -> Box<QueryErrorHandler> {
-    Box::new(move |error: PersistenceError| {
-        let failure = format!("{table}: {error}");
-        let recorded = FAILURES.try_with(|slot| Failures::record(&mut slot.borrow_mut(), failure.clone()));
-        if recorded.is_err() {
-            tracing::error!(%failure, "a projection failed to update outside any command or replay");
-        }
-    })
+    Box::new(move |error: PersistenceError| report(table, &error))
+}
+
+/// Records that `table` failed to update with `error` — for a derived index whose query reports its own
+/// failures. Inside [`watch`] the watcher reports it; outside one it is logged.
+pub(crate) fn report(table: &str, error: &dyn std::fmt::Display) {
+    let failure = format!("{table}: {error}");
+    let recorded = FAILURES.try_with(|slot| Failures::record(&mut slot.borrow_mut(), failure.clone()));
+    if recorded.is_err() {
+        tracing::error!(%failure, "a projection failed to update outside any command or replay");
+    }
 }
 
 /// Runs `future`, returning its output and whatever the [`handler`]s it reached recorded.

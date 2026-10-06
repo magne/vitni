@@ -17,7 +17,10 @@ use sqlx::{Pool, Postgres};
 
 use crate::place_succession_index;
 use crate::postgres_query;
-use crate::registry::{for_each_db_aggregate, for_each_db_external_id_aggregate, for_each_db_human_id_aggregate};
+use crate::registry::{
+    for_each_db_aggregate, for_each_db_by_ids_aggregate, for_each_db_external_id_aggregate,
+    for_each_db_human_id_aggregate,
+};
 use crate::resolver::PostgresRefStore;
 use crate::schema;
 use crate::store::{CommandError, DbError, map_aggregate_error};
@@ -70,19 +73,31 @@ macro_rules! postgres_open_cqrs {
 /// sqlite-only, so the Postgres mirror is a separate follow-up (ADR 0024 §3).
 macro_rules! postgres_wire_side_indexes {
     (person, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
-            vitni_core::person::PersonView,
-        >::new($pool.clone())))
+        $framework
+            .append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+                vitni_core::person::PersonView,
+            >::new($pool.clone())))
+            .append_query(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+                vitni_core::person::PersonView,
+            >::new($pool.clone())))
     };
     (event, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
-            vitni_core::event::EventView,
-        >::new($pool.clone())))
+        $framework
+            .append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+                vitni_core::event::EventView,
+            >::new($pool.clone())))
+            .append_query(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+                vitni_core::event::EventView,
+            >::new($pool.clone())))
     };
     (family, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
-            vitni_core::family::FamilyView,
-        >::new($pool.clone())))
+        $framework
+            .append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+                vitni_core::family::FamilyView,
+            >::new($pool.clone())))
+            .append_query(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+                vitni_core::family::FamilyView,
+            >::new($pool.clone())))
     };
     (place, $pool:expr, $framework:expr) => {
         $framework
@@ -99,9 +114,13 @@ macro_rules! postgres_wire_side_indexes {
         >::new($pool.clone())))
     };
     (citation, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
-            vitni_core::citation::CitationView,
-        >::new($pool.clone())))
+        $framework
+            .append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+                vitni_core::citation::CitationView,
+            >::new($pool.clone())))
+            .append_query(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+                vitni_core::citation::CitationView,
+            >::new($pool.clone())))
     };
     (repository, $pool:expr, $framework:expr) => {
         $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
@@ -197,6 +216,12 @@ macro_rules! postgres_store {
                 // The identity cluster index (ADR 0039 §4) is derived from the projections of every
                 // matchable kind; its `Query` is appended to those frameworks below, and a workspace that
                 // predates it gets it filled once the projections are open.
+                // The record links index (ADR 0047) mirrors the references the person, family, event and
+                // citation projections hold; its `Query` is appended to those frameworks below, and a
+                // workspace that predates it gets it filled once the projections are open.
+                let links_are_new = crate::record_links::postgres::create_tables(&pool)
+                    .await
+                    .map_err(|e| DbError::Backend(format!("creating record links index: {e}")))?;
                 let identity_is_new = crate::identity_links::postgres::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating identity index: {e}")))?;
@@ -225,6 +250,9 @@ macro_rules! postgres_store {
                 Self::catch_up_record_origins(&pool).await?;
                 if identity_is_new {
                     crate::identity_links::postgres::rebuild_index(&pool).await?;
+                }
+                if links_are_new {
+                    crate::record_links::postgres::rebuild_index(&pool).await?;
                 }
                 Ok(Self { $($snake,)+ pool })
             }
@@ -302,6 +330,9 @@ macro_rules! postgres_store {
                 // The identity clusters (ADR 0039 §4) are derived from the rebuilt projections of every
                 // matchable kind.
                 crate::identity_links::postgres::rebuild_index(pool).await?;
+                // The record links (ADR 0047) are derived from the rebuilt person, family, event and
+                // citation projections.
+                crate::record_links::postgres::rebuild_index(pool).await?;
                 // The match keys need the name-culture packs, which only the app layer has: forgetting
                 // what the index was built under makes it rebuild on next use.
                 crate::match_keys::postgres::clear_state(pool).await?;
@@ -389,6 +420,20 @@ macro_rules! postgres_external_id_methods {
 }
 
 for_each_db_external_id_aggregate!(postgres_external_id_methods);
+
+macro_rules! postgres_by_ids_methods {
+    ($(($snake:ident, $by_ids:ident, $table_const:ident, $View:ty)),+ $(,)?) => {
+        impl PostgresStore {
+            $(
+                pub(crate) async fn $by_ids(&self, ids: &[String]) -> Result<Vec<$View>, DbError> {
+                    postgres_query::views_by_ids(&self.pool, $table_const, ids).await
+                }
+            )+
+        }
+    };
+}
+
+for_each_db_by_ids_aggregate!(postgres_by_ids_methods);
 
 /// The change-log / count read path (Phase 5 PR 5): the Postgres twin of the SQLite backend's
 /// hand-written raw-event and aggregate-count reads.
@@ -485,6 +530,24 @@ impl PostgresStore {
         kind: &str,
     ) -> Result<Option<crate::record_origins::OriginResolution>, DbError> {
         crate::record_origins::postgres::resolve(&self.pool, dataset, record, item, kind).await
+    }
+
+    /// The creating origin of each imported aggregate of `kind` among `ids` (ADR 0037 §4).
+    pub(crate) async fn created_origins_of(
+        &self,
+        kind: &str,
+        ids: &[String],
+    ) -> Result<Vec<(String, vitni_core::origin::RecordOrigin)>, DbError> {
+        crate::record_origins::postgres::created_among(&self.pool, kind, ids).await
+    }
+
+    /// Every `(source, target)` of `relation` whose target is one of `targets` (ADR 0047).
+    pub(crate) async fn linking(
+        &self,
+        relation: crate::record_links::RecordLink,
+        targets: &[String],
+    ) -> Result<Vec<(String, String)>, DbError> {
+        crate::record_links::postgres::linking(&self.pool, relation, targets).await
     }
 
     /// The creating origin of every imported aggregate of `kind` (ADR 0037 §4).
