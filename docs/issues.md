@@ -460,19 +460,11 @@ index with `find_similar` (#400), the evaluation corpus with `cargo xtask match-
 `PersonsDistinguished` with the assessment on identity decisions (#403), the duplicate check
 through the engine (#401), persona clusters (#404), merge and distinguish for events and families
 (#405) and for places, sources, citations, repositories, notes and media (#406), profiles read by
-record over the record links index (#492), the match pairs projection (#493) and the Dashboard's
-narrow person reads (#519), which have landed.
+record over the record links index (#492), the match pairs projection (#493), the Dashboard's
+narrow person reads (#519) and the given-name prefix key (#494), which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
-- **Blocking loses a given name that is only similar, not keyed alike** — the proptest
-  `every_pair_the_engine_shows_meets` (`vitni-core/src/matching/keys/tests.rs`), at 2000 cases, finds
-  *Katherine Haugen* (born 1857 by a census age) and *Kari Olsen* (baptised 1853), both in Norway: the
-  engine scores the given names `Partial` by Jaro–Winkler and shows the pair as possible, but no key of
-  one meets the other — the names share no normalized, phonetic or class key and the patronymic
-  surnames differ. The default 256 cases rarely reach it. *Shape:* a key the Jaro–Winkler floor
-  implies (a short prefix of the normalized given name), or *Katherine* in the same class as *Kari*.
-  *Exit:* the proptest passes at 10 000 cases. — #494
 - **An abandoned import run cannot be resumed from History** — ADR 0040 §5. Re-running the import
   finishes an interrupted commit, but History only lists the abandoned run. *Shape:* *Resume* on an
   abandoned bulk run, re-running its plugin over its source with its dataset. *Exit:* a gui-pass scenario
