@@ -11,8 +11,9 @@
 //! theirs: an event's principals (their birth decade is its date), a person's events and families, a
 //! place's events, a source's citations — found through the record links index (ADR 0047).
 //!
-//! A lookup — [`find_similar`], the draft hint, [`assess`] — reads only its target and the candidates
-//! the index yields. An import's matcher scores every record it stages, so it reads its kinds whole.
+//! A lookup — [`find_similar`], the draft hint, [`assess`], an import's plan — reads only its target and
+//! the candidates the index yields. An import staging [`WHOLE_KIND`] or more records of a kind reads that
+//! kind whole instead, which costs less than a candidate query per record.
 //!
 //! [`similar_pairs`] reads the `match_pairs` projection (ADR 0048), refreshed first from the records
 //! committed to since: each one's pairs are scored again against the candidates the index yields, with
@@ -76,9 +77,13 @@ pub(crate) struct AssessedPair {
     pub assessment: MatchAssessment,
 }
 
-/// The fewest records of one kind a refresh scores whole rather than one by one: past it, reading the
-/// kind and scoring it across the cores costs less than a candidate query per record.
-const WHOLE_KIND: usize = 1000;
+/// The fewest records of one kind a refresh scores, or an import plan matches, whole rather than one by
+/// one: past it, reading the kind costs less than a candidate query per record.
+pub(crate) const WHOLE_KIND: usize = 1000;
+
+/// The fewest candidates one thread scores in a lookup: a smaller share costs more to hand off than to
+/// score.
+const RANK_CHUNK: usize = 64;
 
 /// The records of `kind` the engine judges at least `min_band` similar to the record `target` (a human
 /// id; a tag's id), most similar first, at most `limit` of them. A merged target is matched as its
@@ -682,8 +687,9 @@ pub(crate) struct Matcher<'a> {
 }
 
 impl<'a> Matcher<'a> {
-    /// A matcher over `workspace`'s records of `kinds`, read whole — for matching many records that are
-    /// not yet in the workspace, an import's staged entities (ADR 0040 §2).
+    /// A matcher over `workspace`'s records, with those of `kinds` read whole — for matching many records
+    /// of a kind that are not yet in the workspace, an import's staged entities (ADR 0040 §2). Every other
+    /// kind is read by record, as its lookups need.
     pub(crate) async fn load(workspace: &'a Workspace, kinds: &[MatchableKind]) -> Result<Self, AppError> {
         let matching = workspace.matching()?;
         let keys = BlockingKeys::new(&matching.data);
@@ -701,10 +707,9 @@ impl<'a> Matcher<'a> {
     }
 
     /// The records of `kind` at least `min_band` similar to `profile`, most similar first, at most
-    /// `limit` of them, leaving out `excluded` (aggregate ids) and every merged record. The matcher
-    /// must have been [loaded](Self::load) for `kind`.
+    /// `limit` of them, leaving out `excluded` (aggregate ids) and every merged record.
     pub(crate) async fn similar(
-        &self,
+        &mut self,
         workspace: &Workspace,
         kind: MatchableKind,
         profile: &Profile,
@@ -718,15 +723,14 @@ impl<'a> Matcher<'a> {
             min_band,
             limit,
         };
-        let candidates = self.candidates(workspace, &lookup).await?;
-        let decisions = self.profiles.decisions(kind);
-        Ok(self.ranked(&lookup, candidates, |candidate| {
+        self.similar_by_record(workspace, &lookup, |decisions, candidate| {
             excluded.contains(candidate) || decisions.root(candidate) != candidate
-        }))
+        })
+        .await
     }
 
-    /// [`Self::similar`] for a matcher made [by record](Self::by_record): the candidates are read before
-    /// they are scored, and `skip` names those the lookup leaves out under the identity decisions.
+    /// The lookup's candidates, read unless their kind was read whole, scored and ranked; `skip` names
+    /// those the lookup leaves out under the identity decisions.
     async fn similar_by_record(
         &mut self,
         workspace: &Workspace,
@@ -748,14 +752,36 @@ impl<'a> Matcher<'a> {
     }
 
     /// The `candidates` not skipped that are at least the lookup's band similar to its profile, most
-    /// similar first, at most its limit of them.
+    /// similar first, at most its limit of them. A crowded bucket is scored across the cores.
     fn ranked(&self, lookup: &Lookup<'_>, candidates: Vec<String>, skip: impl Fn(&str) -> bool) -> Vec<SimilarRecord> {
+        let candidates: Vec<String> = candidates.into_iter().filter(|candidate| !skip(candidate)).collect();
+        let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+        let chunk = candidates.len().div_ceil(threads).max(RANK_CHUNK);
+        let mut similar = if candidates.len() <= chunk {
+            self.scored(lookup, &candidates)
+        } else {
+            std::thread::scope(|scope| {
+                let workers: Vec<_> = candidates
+                    .chunks(chunk)
+                    .map(|part| scope.spawn(|| self.scored(lookup, part)))
+                    .collect();
+                workers
+                    .into_iter()
+                    .flat_map(|worker| worker.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
+                    .collect()
+            })
+        };
+        similar
+            .sort_by(|x, y| rank(&x.assessment, &y.assessment).then_with(|| x.record.human_id.cmp(&y.record.human_id)));
+        similar.truncate(lookup.limit);
+        similar
+    }
+
+    /// The `candidates` at least the lookup's band similar to its profile, in no order.
+    fn scored(&self, lookup: &Lookup<'_>, candidates: &[String]) -> Vec<SimilarRecord> {
         let mut similar = Vec::new();
         for candidate in candidates {
-            if skip(&candidate) {
-                continue;
-            }
-            let Some(other) = self.profiles.profile(lookup.kind, &candidate) else {
+            let Some(other) = self.profiles.profile(lookup.kind, candidate) else {
                 continue;
             };
             let Some(assessment) = assess_pair(lookup.profile, &other, self.matching) else {
@@ -763,14 +789,11 @@ impl<'a> Matcher<'a> {
             };
             if assessment.band >= lookup.min_band {
                 similar.push(SimilarRecord {
-                    record: agg_ref(&self.profiles, lookup.kind, &candidate),
+                    record: agg_ref(&self.profiles, lookup.kind, candidate),
                     assessment,
                 });
             }
         }
-        similar
-            .sort_by(|x, y| rank(&x.assessment, &y.assessment).then_with(|| x.record.human_id.cmp(&y.record.human_id)));
-        similar.truncate(lookup.limit);
         similar
     }
 }

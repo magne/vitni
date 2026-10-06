@@ -1185,12 +1185,13 @@ fn fold(name: &str) -> String {
     name.trim().to_lowercase()
 }
 
-/// Every tag of the workspace, by its folded name.
+/// Every tag of the workspace, by its folded name — read from the tag views alone, without the usage
+/// counts [`crate::tag::list_tags`] scans every record for.
 async fn tag_names(workspace: &Workspace) -> Result<HashMap<String, String>, AppError> {
     let mut names = HashMap::new();
-    for tag in crate::tag::list_tags(workspace).await? {
-        if let Some(name) = &tag.name {
-            names.entry(fold(name)).or_insert(tag.id);
+    for view in workspace.store().list_tags().await? {
+        if let (Some(name), Some(id)) = (view.name(), view.tag_id()) {
+            names.entry(fold(name)).or_insert_with(|| id.to_string());
         }
     }
     Ok(names)

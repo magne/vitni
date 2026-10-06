@@ -737,6 +737,56 @@ async fn a_resolved_father_raises_the_childs_match() {
     assert!(resolved > unresolved, "resolved {resolved} vs unresolved {unresolved}");
 }
 
+/// The best candidate score of `I7`, Ole Hansen born 1850, in a later run of the dataset that made the
+/// stored Ole and Mandal — his birth at Mandal staged again (`Staged`), only named (`Named`), or not
+/// placed at all.
+async fn later_oles_best_score(workspace: &Workspace, place: Option<BirthPlace>) -> Option<f64> {
+    let mut later = individual("I7", "Ole");
+    let mut graphs = Vec::new();
+    match place {
+        Some(BirthPlace::Staged) => graphs.push(place_graph()),
+        Some(BirthPlace::Named) => {}
+        None => later.links.truncate(1),
+    }
+    graphs.insert(0, later);
+    let plan = plan(workspace, &importer(dataset(1)), graphs).await;
+    if let Disposition::Candidates(similar) = disposition(&plan, 0, 0) {
+        similar.first().map(|best| best.assessment.score)
+    } else {
+        None
+    }
+}
+
+/// How a staged birth reaches its stored place.
+#[derive(Clone, Copy)]
+enum BirthPlace {
+    /// Its place staged in the same import, resolving onto the stored one by origin.
+    Staged,
+    /// Its place only named by origin, standing for the stored one.
+    Named,
+}
+
+fn place_graph() -> RecordGraph {
+    place("plac:Mandal", "Mandal")
+}
+
+#[tokio::test]
+async fn a_resolved_birth_place_counts_in_the_persons_match() {
+    let (workspace, _dir) = workspace().await;
+    import(
+        &workspace,
+        &importer(dataset(1)),
+        vec![individual("I1", "Ole"), place_graph()],
+    )
+    .await;
+
+    let unplaced = later_oles_best_score(&workspace, None).await.expect("candidates");
+    for how in [BirthPlace::Staged, BirthPlace::Named] {
+        let placed = later_oles_best_score(&workspace, Some(how)).await.expect("candidates");
+        assert!(placed > unplaced, "placed {placed} vs unplaced {unplaced}");
+    }
+}
+
 /// A person another dataset made, carrying `UID-1`, and an import of `I1` with that uid, an occupation
 /// and a birth at Mandal.
 async fn linked_elsewhere(workspace: &Workspace) -> ImportPlan {

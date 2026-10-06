@@ -19,8 +19,8 @@ use vitni_core::origin::{DatasetId, RecordOrigin};
 
 use crate::error::AppError;
 use crate::person::build_name;
-use crate::profile::{Profile, place_name, vital_kind};
-use crate::similar::{Matcher, SimilarRecord};
+use crate::profile::{Profile, Profiles, place_name, vital_kind};
+use crate::similar::{Matcher, SimilarRecord, WHOLE_KIND};
 use crate::staging::graph::{EntityFields, LinkKind, StagedPerson};
 use crate::staging::plan::{CANDIDATE_BAND, Disposition, Endpoint, ImportPlan, PlannedEntity, WriteScope};
 use crate::workspace::Workspace;
@@ -38,29 +38,38 @@ pub(crate) const MATCHED: [MatchableKind; 4] = [
 const LIMIT: usize = 5;
 
 /// The candidates of every new entity of a matched kind, by its index in the plan.
+///
+/// The workspace is read by record: the stored relatives and places the profiles carry, then each
+/// entity's candidates. A kind with [`WHOLE_KIND`] or more wanted entities is read whole instead.
 pub(crate) async fn find(
     workspace: &Workspace,
     plan: &ImportPlan,
     origin: Option<(&DatasetId, ImportRunId)>,
 ) -> Result<Vec<(usize, Vec<SimilarRecord>)>, AppError> {
-    let mut kinds: Vec<MatchableKind> = Vec::new();
-    for entity in &plan.entities {
-        if is_wanted(entity) && !kinds.contains(&entity.kind) {
-            kinds.push(entity.kind);
-        }
-    }
-    let matcher = Matcher::load(workspace, &kinds).await?;
-    let builder = Builder::new(plan, &matcher, origin);
+    let wanted: Vec<usize> = (0..plan.entities.len())
+        .filter(|index| is_wanted(&plan.entities[*index]))
+        .collect();
+    let mut matcher = Matcher::load(workspace, &crowded_kinds(plan, &wanted)).await?;
+    let links = Links::of(plan);
+    let (persons, places) = links.stored(plan, &wanted);
+    let store = workspace.store();
+    matcher.profiles.include(store, MatchableKind::Person, &persons).await?;
+    matcher.profiles.include(store, MatchableKind::Place, &places).await?;
+    let builder = Builder {
+        plan,
+        links: &links,
+        profiles: &matcher.profiles,
+        origin,
+    };
+    let profiles: Vec<(usize, Profile)> = wanted
+        .iter()
+        .filter_map(|index| Some((*index, builder.profile(*index)?)))
+        .collect();
     let claimed = claimed_by_graph(plan);
     let unclaimed = HashSet::new();
     let mut found = Vec::new();
-    for (index, entity) in plan.entities.iter().enumerate() {
-        if !is_wanted(entity) {
-            continue;
-        }
-        let Some(profile) = builder.profile(index) else {
-            continue;
-        };
+    for (index, profile) in profiles {
+        let entity = &plan.entities[index];
         let excluded = claimed.get(&entity.graph).unwrap_or(&unclaimed);
         let similar = matcher
             .similar(workspace, entity.kind, &profile, excluded, CANDIDATE_BAND, LIMIT)
@@ -68,6 +77,21 @@ pub(crate) async fn find(
         found.push((index, similar));
     }
     Ok(found)
+}
+
+/// The kinds with at least [`WHOLE_KIND`] of the `wanted` entities, which are read whole.
+fn crowded_kinds(plan: &ImportPlan, wanted: &[usize]) -> Vec<MatchableKind> {
+    let mut counts: HashMap<MatchableKind, usize> = HashMap::new();
+    for index in wanted {
+        *counts.entry(plan.entities[*index].kind).or_default() += 1;
+    }
+    let mut crowded: Vec<MatchableKind> = counts
+        .into_iter()
+        .filter(|(_, count)| *count >= WHOLE_KIND)
+        .map(|(kind, _)| kind)
+        .collect();
+    crowded.sort();
+    crowded
 }
 
 /// Whether the entity is new, written in full and of a matched kind.
@@ -130,11 +154,8 @@ fn families(plan: &ImportPlan) -> Vec<Family> {
     families
 }
 
-/// Builds the profiles of staged entities.
-struct Builder<'a> {
-    plan: &'a ImportPlan,
-    matcher: &'a Matcher<'a>,
-    origin: Option<(&'a DatasetId, ImportRunId)>,
+/// The plan's links a profile follows, indexed once.
+struct Links {
     families: Vec<Family>,
     /// The families each person endpoint is a partner or child of, by index in `families`.
     memberships: HashMap<Endpoint, Vec<usize>>,
@@ -144,9 +165,9 @@ struct Builder<'a> {
     event_places: HashMap<usize, Endpoint>,
 }
 
-impl<'a> Builder<'a> {
-    /// A builder over `plan`, with its family, participation and place links indexed once.
-    fn new(plan: &'a ImportPlan, matcher: &'a Matcher<'a>, origin: Option<(&'a DatasetId, ImportRunId)>) -> Self {
+impl Links {
+    /// The family, participation and place links of `plan`.
+    fn of(plan: &ImportPlan) -> Self {
         let families = families(plan);
         let mut memberships: HashMap<Endpoint, Vec<usize>> = HashMap::new();
         for (position, family) in families.iter().enumerate() {
@@ -191,9 +212,6 @@ impl<'a> Builder<'a> {
             }
         }
         Self {
-            plan,
-            matcher,
-            origin,
             families,
             memberships,
             primary_events,
@@ -201,6 +219,47 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// The stored persons and places (aggregate ids) the profiles of the `wanted` entities read: their
+    /// relatives that are, or resolved onto, stored persons, and the places of their own vital events. A
+    /// relative is compared without a place, so a staged relative's places are not read.
+    fn stored(&self, plan: &ImportPlan, wanted: &[usize]) -> (Vec<String>, Vec<String>) {
+        let target = |endpoint: &Endpoint| match endpoint {
+            Endpoint::Planned(index) => plan.entities.get(*index)?.disposition.target().map(|t| t.id.clone()),
+            Endpoint::Stored { aggregate_id, .. } => Some(aggregate_id.clone()),
+            Endpoint::Dangling => None,
+        };
+        let (mut persons, mut places) = (Vec::new(), Vec::new());
+        for &index in wanted {
+            if plan.entities[index].kind != MatchableKind::Person {
+                continue;
+            }
+            persons.extend(self.relatives(&Endpoint::Planned(index)).filter_map(target));
+            for event in self.primary_events.get(&index).map(Vec::as_slice).unwrap_or_default() {
+                places.extend(self.event_places.get(event).and_then(target));
+            }
+        }
+        (persons, places)
+    }
+
+    /// Every member of every family `me` is a partner or child of, `me` among them.
+    fn relatives<'s>(&'s self, me: &'s Endpoint) -> impl Iterator<Item = &'s Endpoint> {
+        let memberships = self.memberships.get(me).map(Vec::as_slice).unwrap_or_default();
+        memberships
+            .iter()
+            .filter_map(|position| self.families.get(*position))
+            .flat_map(|family| family.partners.iter().chain(&family.children))
+    }
+}
+
+/// Builds the profiles of staged entities, with the stored records they read.
+struct Builder<'a> {
+    plan: &'a ImportPlan,
+    links: &'a Links,
+    profiles: &'a Profiles,
+    origin: Option<(&'a DatasetId, ImportRunId)>,
+}
+
+impl Builder<'_> {
     /// The profile of the entity `index`, if it is of a matched kind.
     fn profile(&self, index: usize) -> Option<Profile> {
         let (graph, entity) = self.plan.staged(index)?;
@@ -255,8 +314,11 @@ impl<'a> Builder<'a> {
             external_ids: person.external_ids.clone(),
             ..PersonProfile::default()
         };
-        let memberships = self.memberships.get(&me).map(Vec::as_slice).unwrap_or_default();
-        for family in memberships.iter().filter_map(|position| self.families.get(*position)) {
+        let memberships = self.links.memberships.get(&me).map(Vec::as_slice).unwrap_or_default();
+        for family in memberships
+            .iter()
+            .filter_map(|position| self.links.families.get(*position))
+        {
             let is_partner = family.partners.contains(&me);
             if family.children.contains(&me) {
                 profile
@@ -279,7 +341,13 @@ impl<'a> Builder<'a> {
     /// The vital events of the plan the person `index` is the primary participant in.
     fn vitals(&self, index: usize) -> Vec<VitalEvent> {
         let mut vitals = Vec::new();
-        for &event_index in self.primary_events.get(&index).map(Vec::as_slice).unwrap_or_default() {
+        for &event_index in self
+            .links
+            .primary_events
+            .get(&index)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+        {
             let Some((_, staged)) = self.plan.staged(event_index) else {
                 continue;
             };
@@ -301,11 +369,11 @@ impl<'a> Builder<'a> {
 
     /// The place of the planned event `event`, through its first place link.
     fn place_of(&self, event: usize) -> Option<PlaceProfile> {
-        match self.event_places.get(&event)? {
+        match self.links.event_places.get(&event)? {
             Endpoint::Planned(place) => self.planned_place(*place),
             Endpoint::Stored { aggregate_id, .. } => {
                 let id = Uuid::parse_str(aggregate_id).ok()?;
-                self.matcher.profiles.place(PlaceId::from_uuid(id))
+                self.profiles.place(PlaceId::from_uuid(id))
             }
             Endpoint::Dangling => None,
         }
@@ -314,7 +382,7 @@ impl<'a> Builder<'a> {
     fn planned_place(&self, index: usize) -> Option<PlaceProfile> {
         if let Some(target) = self.plan.entities.get(index)?.disposition.target() {
             let id = Uuid::parse_str(&target.id).ok()?;
-            return self.matcher.profiles.place(PlaceId::from_uuid(id));
+            return self.profiles.place(PlaceId::from_uuid(id));
         }
         let (_, staged) = self.plan.staged(index)?;
         let EntityFields::Place(place) = &staged.fields else {
@@ -332,7 +400,7 @@ impl<'a> Builder<'a> {
     fn relative(&self, endpoint: &Endpoint) -> Option<Relative> {
         let stored = |id: &str| {
             let id = Uuid::parse_str(id).ok()?;
-            self.matcher.profiles.relative(PersonId::from_uuid(id))
+            self.profiles.relative(PersonId::from_uuid(id))
         };
         match endpoint {
             Endpoint::Planned(index) => {

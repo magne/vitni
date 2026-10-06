@@ -233,6 +233,45 @@ async fn results_are_ranked_and_bounded_by_band_and_limit() {
 }
 
 #[tokio::test]
+async fn a_crowded_bucket_is_ranked_as_one() {
+    let records = Records::new().await;
+    let (target, _) = records.born("Ole", "Olsen", 1850).await;
+    let mut crowd = Vec::new();
+    for year in (1830..1850).cycle().take(150) {
+        crowd.push(records.born("Ole", "Olsen", year).await.0);
+    }
+    let (twin, _) = records.born("Ole", "Olsen", 1850).await;
+    let all = find_similar(
+        &records.workspace,
+        MatchableKind::Person,
+        &target,
+        MatchBand::Unlikely,
+        500,
+    )
+    .await
+    .expect("find similar");
+    assert_eq!(all.len(), crowd.len() + 1, "every namesake is scored once");
+    assert_eq!(all[0].record.human_id, twin, "the twin first: {:?}", all[0]);
+    assert!(all.windows(2).all(|pair| {
+        let (x, y) = (&pair[0].assessment, &pair[1].assessment);
+        (x.band, x.score) >= (y.band, y.score)
+    }));
+    let top = find_similar(
+        &records.workspace,
+        MatchableKind::Person,
+        &target,
+        MatchBand::Unlikely,
+        10,
+    )
+    .await
+    .expect("find similar");
+    let human_ids = |found: &[vitni_app::SimilarRecord]| -> Vec<String> {
+        found.iter().map(|similar| similar.record.human_id.clone()).collect()
+    };
+    assert_eq!(human_ids(&top), human_ids(&all[..10]), "the limit keeps the best");
+}
+
+#[tokio::test]
 async fn a_result_names_the_record_by_human_id_and_aggregate_id() {
     let records = Records::new().await;
     let (a, _) = records.born("Ole", "Olsen", 1850).await;
