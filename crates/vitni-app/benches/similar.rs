@@ -1,7 +1,8 @@
 //! Record-matching benchmarks at scale (ADR 0038 §7, *Consequences*; ADR 0048): the `match_keys`
 //! index build, one `find_similar` over a fresh index, one edit followed by the lookup that rekeys it,
 //! the `match_pairs` build that scores every pair, the Dashboard's two loads — its stats and activity,
-//! and its data-quality checks over built pairs — and one edit followed by those checks.
+//! and its data-quality checks over built pairs — one edit followed by those checks, and the plan of
+//! one record an assisted import submits (ADR 0040 §2).
 //!
 //! Each size is seeded, measured and dropped before the next, so only one workspace is in memory. The
 //! pairs build is measured only up to [`PAIRS_SAMPLED_UP_TO`]: at 100k persons one build takes minutes,
@@ -16,6 +17,8 @@
 
 #![expect(clippy::expect_used, reason = "benchmark setup aborts on failure")]
 
+use std::collections::BTreeSet;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use cqrs_es::DomainEvent;
@@ -24,9 +27,10 @@ use tempfile::TempDir;
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, CheckFinding, DateParts, MatchBand, MatchableKind, MutationMeta, OperatorConfig, Session, Workspace,
-    WorkspaceDefaults, assert_event_date, evidence_health, find_similar, person_names, recent_activity, run_checks,
-    workspace_counts,
+    AppDefaults, CheckFinding, DatasetId, DateParts, EntityFields, EntityRef, ImportReview, LinkKind, MatchBand,
+    MatchableKind, MutationMeta, NewImportRun, OperatorConfig, PendingRun, PersonNameParts, RecordGraph, Session,
+    StagedEntity, StagedEvent, StagedLink, StagedPerson, StagedPlace, Workspace, WorkspaceDefaults, assert_event_date,
+    evidence_health, find_similar, gregorian_date, person_names, recent_activity, run_checks, workspace_counts,
 };
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
@@ -560,6 +564,106 @@ fn bench_edit_then_checks(c: &mut Criterion, rt: &tokio::runtime::Runtime, datas
     group.finish();
 }
 
+/// An assisted importer's session for `operator`, writing a run of one dataset.
+fn importer(operator: &Session) -> Session {
+    let run = Arc::new(PendingRun::new(
+        operator.clone(),
+        NewImportRun {
+            plugin: "bench-import".to_owned(),
+            plugin_version: "0.1.0".to_owned(),
+            dataset: DatasetId::lineage("bench", Uuid::from_u128(0xB)),
+            dataset_label: "bench".to_owned(),
+            source_label: "bench".to_owned(),
+            file_asserted_at: None,
+            dataset_hint: None,
+        },
+    ));
+    Session::software("bench-import", "0.1.0").with_import_run(run)
+}
+
+/// One record as an assisted import submits it: a person born in 1850 in Norway, with the place its
+/// own entity, so the plan matches both a person and a place.
+fn record() -> RecordGraph {
+    let entity = |local_id: u32, item: &str, fields: EntityFields| StagedEntity {
+        local_id,
+        item: Some(item.to_owned()),
+        fields,
+    };
+    let person = StagedPerson {
+        names: vec![PersonNameParts::simple(
+            Some("Ole".to_owned()),
+            Some("Hansen".to_owned()),
+        )],
+        sex: Some(Sex::Male),
+        ..StagedPerson::default()
+    };
+    let birth = StagedEvent {
+        event_type: EventType::Birth,
+        date: Some(gregorian_date(DateParts {
+            year: 1850,
+            month: None,
+            day: None,
+        })),
+        addresses: Vec::new(),
+        restrictions: BTreeSet::default(),
+    };
+    let place = StagedPlace {
+        name: "Norge".to_owned(),
+        place_type: None,
+        restrictions: BTreeSet::default(),
+    };
+    RecordGraph {
+        record: "bench:1".to_owned(),
+        entities: vec![
+            entity(0, "person", EntityFields::Person(person)),
+            entity(1, "birth", EntityFields::Event(birth)),
+            entity(2, "place", EntityFields::Place(place)),
+        ],
+        links: vec![
+            StagedLink {
+                item: Some("birth".to_owned()),
+                link: LinkKind::Participation {
+                    person: EntityRef::Local(0),
+                    event: EntityRef::Local(1),
+                    role: ParticipantRole::Primary,
+                    age: None,
+                    attributes: Vec::new(),
+                    notes: Vec::new(),
+                    citations: Vec::new(),
+                },
+            },
+            StagedLink {
+                item: Some("birth-place".to_owned()),
+                link: LinkKind::EventPlace {
+                    event: EntityRef::Local(1),
+                    place: EntityRef::Local(2),
+                },
+            },
+        ],
+    }
+}
+
+/// The plan of one assisted record, as each submit makes it: its candidates found, nothing written.
+async fn plan_record(dataset: &Dataset, session: &Session) -> usize {
+    let review = ImportReview::plan(&dataset.workspace, session, vec![record()], None)
+        .await
+        .expect("plan");
+    review.plan_so_far().entities.len()
+}
+
+fn bench_plan_record(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Dataset) {
+    let mut group = c.benchmark_group("plan_assisted_record");
+    group.sample_size(10);
+    {
+        let session = importer(&dataset.session);
+        rt.block_on(plan_record(dataset, &session));
+        group.bench_with_input(BenchmarkId::from_parameter(dataset.persons), dataset, |b, dataset| {
+            b.iter(|| rt.block_on(plan_record(dataset, &session)));
+        });
+    }
+    group.finish();
+}
+
 fn benches(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     for persons in SIZES {
@@ -567,6 +671,7 @@ fn benches(c: &mut Criterion) {
         bench_index_build(c, &rt, &dataset);
         bench_find_similar(c, &rt, &dataset);
         bench_edit_then_lookup(c, &rt, &dataset);
+        bench_plan_record(c, &rt, &dataset);
         bench_dashboard(c, &rt, &dataset);
         if persons <= PAIRS_SAMPLED_UP_TO {
             bench_pairs_build(c, &rt, &dataset);
