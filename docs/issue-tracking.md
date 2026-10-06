@@ -301,6 +301,7 @@ the ADR 0044 replace commit a workspace with records missing.
 | [Projection write errors are dropped](https://github.com/magne/vitni/issues/486) | cross-aggregate | A rebuild or replace finishes `Ok` with records missing |
 | [`find_similar` reads every profile view](https://github.com/magne/vitni/issues/492) | matching | One lookup costs ~0.9 s at 100k persons |
 | [The all-pairs duplicate scan does not scale to 100k persons](https://github.com/magne/vitni/issues/493) | matching | The Dashboard runs it on every show |
+| [The Dashboard reads every person summary on each show](https://github.com/magne/vitni/issues/519) | matching | 1.8 s at 100k persons on each Dashboard load |
 | [Blocking loses a given name that is only similar](https://github.com/magne/vitni/issues/494) | matching | The engine shows a pair blocking can never find |
 | [Planning an import costs a workspace-wide load](https://github.com/magne/vitni/issues/495) | matching | Once per record in an assisted session |
 | [An abandoned import run cannot be resumed from History](https://github.com/magne/vitni/issues/496) | matching | ADR 0040 §5's resume has no GUI entry point |
