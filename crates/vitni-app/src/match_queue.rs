@@ -1,10 +1,12 @@
 //! The possible-matches review queue (ADR 0039 §3): every pair the matching engine proposes across the
-//! kinds a user can decide, computed on demand, never stored.
+//! kinds a user can decide.
 //!
-//! A suggestion is a function of the current data, so the queue is [`similar_pairs`] of each
-//! [`DecidableKind`] — which already leaves out every pair decided either way — narrowed to one kind,
-//! a minimum band, or the records one import run created. An import's *Decide later* writes nothing
-//! but the records (ADR 0040 §4), so a run's deferred pairs are exactly the pairs its records are in.
+//! A suggestion is a function of the current data, so the queue is read from the `match_pairs`
+//! projection (ADR 0048), refreshed first and leaving out every pair decided either way, narrowed to
+//! one kind, a minimum band, or the records one import run created. Every pair is counted; only the
+//! strongest a caller lists are assessed again for the terms behind their scores. An import's *Decide
+//! later* writes nothing but the records (ADR 0040 §4), so a run's deferred pairs are exactly the pairs
+//! its records are in.
 //! Deciding a pair ([`decide_match`]) is the kind's own merge or distinguish use-case, after which the
 //! pair is gone from the queue.
 
@@ -12,12 +14,13 @@ use std::collections::HashSet;
 
 use vitni_core::ids::ImportRunId;
 use vitni_core::matching::{MatchAssessment, MatchBand, MatchableKind};
+use vitni_db::MatchPair;
 
 use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::identity::{IdentityDecision, PairDecision};
 use crate::session::Session;
-use crate::similar::{rank, similar_pairs};
+use crate::similar::{assessed_pairs, refresh_pairs};
 use crate::workspace::Workspace;
 
 /// A kind of record a user can decide the identity of (ADR 0039 §1): every [`MatchableKind`] but
@@ -126,41 +129,94 @@ pub enum MatchVerdict {
     Distinct,
 }
 
-/// Every undecided pair `filter` admits, the most similar first whatever its kind.
+/// The undecided pairs a filter admits: how many there are, and the strongest of them assessed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchQueue {
+    /// How many undecided pairs the filter admits.
+    pub total: usize,
+    /// The strongest of them, the most similar first whatever their kind — every one when no limit was
+    /// asked for.
+    pub pairs: Vec<QueuedMatch>,
+}
+
+/// The undecided pairs `filter` admits: all counted, and the `limit` most similar of them, whatever
+/// their kind, listed with the engine's assessment — every one when `limit` is `None`.
 ///
 /// # Errors
 ///
 /// [`AppError::MatchData`] or [`AppError::Config`] if the matching data or settings cannot be loaded,
 /// or [`AppError`] on a store failure.
-pub async fn match_queue(workspace: &Workspace, filter: &MatchQueueFilter) -> Result<Vec<QueuedMatch>, AppError> {
-    let mut queue = Vec::new();
+pub async fn match_queue(
+    workspace: &Workspace,
+    filter: &MatchQueueFilter,
+    limit: Option<usize>,
+) -> Result<MatchQueue, AppError> {
+    Box::pin(refresh_pairs(workspace)).await?;
+    let mut kinds = Vec::new();
     for kind in DecidableKind::ALL {
-        if filter.kind.is_some_and(|wanted| wanted != kind) {
-            continue;
-        }
-        let created = match filter.run {
-            Some(run) => Some(created_by(workspace, kind, run).await?),
-            None => None,
-        };
-        for pair in similar_pairs(workspace, kind.matchable(), filter.min_band).await? {
-            if let Some(created) = &created
-                && !created.contains(&pair.a.id)
-                && !created.contains(&pair.b.id)
-            {
-                continue;
-            }
-            queue.push(QueuedMatch {
-                kind,
-                a: pair.a,
-                b: pair.b,
-                assessment: pair.assessment,
-            });
+        if filter.kind.is_none_or(|wanted| wanted == kind) {
+            kinds.push(kind);
         }
     }
-    queue.sort_by(|x, y| {
-        rank(&x.assessment, &y.assessment).then_with(|| (x.kind, &x.a.id, &x.b.id).cmp(&(y.kind, &y.a.id, &y.b.id)))
-    });
-    Ok(queue)
+    let (total, listed) = if let Some(run) = filter.run {
+        of_run(workspace, &kinds, run, filter.min_band, limit).await?
+    } else {
+        of_kinds(workspace, &kinds, filter.min_band, limit).await?
+    };
+    let mut pairs = Vec::with_capacity(listed.len());
+    for pair in assessed_pairs(workspace, listed).await? {
+        let Some(kind) = DecidableKind::from_matchable(pair.kind) else {
+            continue;
+        };
+        pairs.push(QueuedMatch {
+            kind,
+            a: pair.a,
+            b: pair.b,
+            assessment: pair.assessment,
+        });
+    }
+    Ok(MatchQueue { total, pairs })
+}
+
+/// How many undecided pairs of `kinds` from `min_band` up there are, and the `limit` strongest of them.
+async fn of_kinds(
+    workspace: &Workspace,
+    kinds: &[DecidableKind],
+    min_band: MatchBand,
+    limit: Option<usize>,
+) -> Result<(usize, Vec<MatchPair>), AppError> {
+    let store = workspace.store();
+    let matchable: Vec<MatchableKind> = kinds.iter().map(|kind| kind.matchable()).collect();
+    let mut total = 0;
+    for (kind, count) in store.match_pair_counts(min_band).await? {
+        if matchable.contains(&kind) {
+            total += count;
+        }
+    }
+    Ok((total, store.match_pairs(&matchable, min_band, limit).await?))
+}
+
+/// How many undecided pairs of `kinds` from `min_band` up have a record the run `run` created, and the
+/// `limit` strongest of them.
+async fn of_run(
+    workspace: &Workspace,
+    kinds: &[DecidableKind],
+    run: ImportRunId,
+    min_band: MatchBand,
+    limit: Option<usize>,
+) -> Result<(usize, Vec<MatchPair>), AppError> {
+    let mut created = HashSet::new();
+    for kind in kinds {
+        created.extend(created_by(workspace, *kind, run).await?);
+    }
+    let matchable: Vec<MatchableKind> = kinds.iter().map(|kind| kind.matchable()).collect();
+    let mut pairs = workspace.store().match_pairs(&matchable, min_band, None).await?;
+    pairs.retain(|pair| created.contains(&pair.a) || created.contains(&pair.b));
+    let total = pairs.len();
+    if let Some(limit) = limit {
+        pairs.truncate(limit);
+    }
+    Ok((total, pairs))
 }
 
 /// The aggregate ids of the records of `kind` the run `run` created.

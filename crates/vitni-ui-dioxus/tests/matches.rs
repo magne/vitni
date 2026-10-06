@@ -71,8 +71,36 @@ fn matches_table() -> Element {
         queued(DecidableKind::Place, "Place", ("P0003", "P0007"), "possible match", 55),
     ];
     rsx! {
-        MatchesTable { pairs, oncompare: move |_| {} }
+        MatchesTable { total: 2, pairs, oncompare: move |_| {} }
     }
+}
+
+/// The table listing one pair of the 250 its filter admits.
+fn a_long_queue() -> Element {
+    use_context_provider(NavState::new);
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let pairs = vec![queued(
+        DecidableKind::Person,
+        "Person",
+        ("I0042", "I0099"),
+        "probable match",
+        94,
+    )];
+    rsx! {
+        MatchesTable { total: 250, pairs, oncompare: move |_| {} }
+    }
+}
+
+#[test]
+fn a_long_queue_counts_every_pair_and_says_how_many_it_does_not_list() {
+    let mut vdom = VirtualDom::new(a_long_queue);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(html.contains("250 undecided pairs"), "every pair is counted:\n{html}");
+    assert!(
+        html.contains("+249 more pairs — decide some or narrow the filter"),
+        "the pairs not listed are counted below the table:\n{html}"
+    );
 }
 
 #[test]
@@ -95,6 +123,7 @@ fn matches_table_renders_an_accessible_table_with_a_kind_and_a_compare_button_pe
         "both records of each pair render:\n{html}"
     );
     assert!(html.contains("2 undecided pairs"), "the pairs are counted:\n{html}");
+    assert!(!html.contains("more pairs"), "every pair is listed:\n{html}");
     assert!(html.contains("probable match"), "the band renders:\n{html}");
     assert!(
         html.contains("Same given name (+3.0) · Similar birth (+1.2)"),
@@ -292,7 +321,7 @@ fn empty_matches() -> Element {
     use_context_provider(NavState::new);
     use_context_provider(|| ChromeCtx(chrome(LABEL_LANG.with(std::cell::Cell::get))));
     rsx! {
-        MatchesTable { pairs: Vec::<QueuedMatchVm>::new(), oncompare: move |_| {} }
+        MatchesTable { total: 0, pairs: Vec::<QueuedMatchVm>::new(), oncompare: move |_| {} }
     }
 }
 

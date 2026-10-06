@@ -88,7 +88,7 @@ pub use backup::{
     create_backup, projection_digest, replace_backup, restore_backup,
 };
 pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
-pub use checks::{CheckFinding, check_records, run_checks};
+pub use checks::{CheckFinding, DataQuality, check_records, run_checks};
 pub use citation::{
     CitationAttributeRef, CitationMergeResult, CitationSummary, NewCitation, TagRef, add_citation_attribute,
     assert_citation_date, assert_citation_date_value, attach_citation_media, attach_citation_note,
@@ -172,8 +172,8 @@ pub use import_run::{
 pub use linked_records::{LinkedRecord, LinkedRecords, OriginRef, linked_records, record_url, unlink_person};
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
 pub use match_queue::{
-    DecidableKind, IdentityRefusal, MatchQueueFilter, MatchVerdict, QueuedMatch, decide_match, match_pair_decision,
-    match_queue, undo_match_distinction_and_merge,
+    DecidableKind, IdentityRefusal, MatchQueue, MatchQueueFilter, MatchVerdict, QueuedMatch, decide_match,
+    match_pair_decision, match_queue, undo_match_distinction_and_merge,
 };
 pub use matching::{MatchDataError, load_match_data};
 pub use media::{

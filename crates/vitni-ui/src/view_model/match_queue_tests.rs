@@ -1,7 +1,7 @@
 use super::{MatchQueueVm, MergeFailure};
 use crate::i18n::Localizer;
 use crate::navigation::Category;
-use vitni_app::{AggRef, DecidableKind, MatchAssessment, MatchBand, QueuedMatch};
+use vitni_app::{AggRef, DecidableKind, MatchAssessment, MatchBand, MatchQueue, QueuedMatch};
 
 fn agg(human_id: &str) -> AggRef {
     AggRef {
@@ -33,7 +33,11 @@ fn queued(kind: DecidableKind, a: &str, b: &str, score: f64) -> QueuedMatch {
 #[test]
 fn a_queued_pair_shows_its_kind_the_engine_score_as_a_percentage_and_its_band() {
     let loc = Localizer::for_test("en");
-    let vm = MatchQueueVm::build(&[queued(DecidableKind::Person, "I0042", "I0099", 0.936)], &[], &loc);
+    let queue = MatchQueue {
+        total: 1,
+        pairs: vec![queued(DecidableKind::Person, "I0042", "I0099", 0.936)],
+    };
+    let vm = MatchQueueVm::build(&queue, &[], &loc);
     let pair = &vm.pairs[0];
     assert_eq!(pair.kind, DecidableKind::Person);
     assert_eq!(pair.kind_label, "Person");
@@ -50,16 +54,31 @@ fn a_queued_pair_shows_its_kind_the_engine_score_as_a_percentage_and_its_band() 
 #[test]
 fn a_queued_pair_of_any_kind_links_to_its_own_category() {
     let loc = Localizer::for_test("en");
-    let queue = [
-        queued(DecidableKind::Place, "P0001", "P0002", 0.8),
-        queued(DecidableKind::Source, "S0001", "S0002", 0.7),
-        queued(DecidableKind::Media, "O0001", "O0002", 0.6),
-    ];
+    let queue = MatchQueue {
+        total: 3,
+        pairs: vec![
+            queued(DecidableKind::Place, "P0001", "P0002", 0.8),
+            queued(DecidableKind::Source, "S0001", "S0002", 0.7),
+            queued(DecidableKind::Media, "O0001", "O0002", 0.6),
+        ],
+    };
     let vm = MatchQueueVm::build(&queue, &[], &loc);
     let categories: Vec<Category> = vm.pairs.iter().map(|pair| pair.b.category).collect();
     assert_eq!(categories, [Category::Places, Category::Sources, Category::Media]);
     let labels: Vec<&str> = vm.pairs.iter().map(|pair| pair.kind_label.as_str()).collect();
     assert_eq!(labels, ["Place", "Source", "Media object"]);
+}
+
+#[test]
+fn the_queue_counts_the_pairs_it_does_not_list() {
+    let loc = Localizer::for_test("en");
+    let queue = MatchQueue {
+        total: 250,
+        pairs: vec![queued(DecidableKind::Person, "I0001", "I0002", 0.9)],
+    };
+    let vm = MatchQueueVm::build(&queue, &[], &loc);
+    assert_eq!((vm.total, vm.pairs.len()), (250, 1));
+    assert_eq!(vm.unlisted(), 249);
 }
 
 #[test]

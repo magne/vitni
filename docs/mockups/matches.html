@@ -11,11 +11,12 @@
 <div id="workarea">
   <div style="padding:var(--sp-6);overflow:auto;height:100%">
 
-    <!-- The possible-matches queue (ADR 0039 §3): computed on demand, never stored -->
+    <!-- The possible-matches queue (ADR 0039 §3): read from the match pairs projection (ADR 0048), the
+         strongest 100 listed with their reasons, every pair counted -->
     <div class="section-note">
       <b>A queue you can empty.</b> Every pair the matching engine proposes, of every kind but tags, the most
-      similar first. Nothing is stored: the queue is worked out from the current records, so a record that
-      gains a fact moves up or down. Filter it to one import run to finish the pairs that import left for
+      similar first. The pairs are kept up to date with the records, so a record that gains a fact moves up
+      or down. The strongest hundred are listed; a longer queue counts the rest below the table. Filter it to one import run to finish the pairs that import left for
       later (<i>Decide later</i>, <i>Decide all later and import</i>, <span class="mono">vitni import
       --defer-matches</span>); the same list is <span class="mono">vitni match list --run &lt;id&gt;</span>.
     </div>
@@ -77,6 +78,8 @@
           </tr>
         </tbody>
       </table>
+      <!-- Only when the filter admits more pairs than the hundred listed, e.g. of 248: -->
+      <p class="muted" style="margin-top:var(--sp-3)">+148 more pairs — decide some or narrow the filter</p>
       <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-2)">A run's pairs are those with a
         record that run created. A pair you merged or marked as <i>not the same</i> never reappears here;
         undoing the decision in History brings it back. A run whose pairs are all decided lists none:

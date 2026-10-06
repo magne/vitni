@@ -192,7 +192,7 @@ fn all() -> MatchQueueFilter {
 /// The queue under `filter`, as `(kind, sorted human-id pair)`s.
 async fn queued(workspace: &Workspace, filter: &MatchQueueFilter) -> BTreeSet<(DecidableKind, String, String)> {
     let mut pairs = BTreeSet::new();
-    for queued in match_queue(workspace, filter).await.expect("queue") {
+    for queued in match_queue(workspace, filter, None).await.expect("queue").pairs {
         let (a, b) = if queued.a.human_id <= queued.b.human_id {
             (queued.a.human_id, queued.b.human_id)
         } else {
@@ -227,7 +227,7 @@ async fn the_queue_lists_pairs_of_every_kind_the_most_similar_first() {
     let nordas = farm(&workspace, "Nordås").await;
     farm(&workspace, "Bergen").await;
 
-    let queue = match_queue(&workspace, &all()).await.expect("queue");
+    let queue = match_queue(&workspace, &all(), None).await.expect("queue").pairs;
     for window in queue.windows(2) {
         let (first, second) = (&window[0].assessment, &window[1].assessment);
         assert!((first.band, first.score) >= (second.band, second.score), "{queue:?}");
@@ -260,13 +260,13 @@ async fn the_queue_is_filtered_by_kind_and_band() {
         queued(&workspace, &persons).await,
         BTreeSet::from([pair(DecidableKind::Person, &ole, &ole_again)])
     );
-    let queue = match_queue(&workspace, &all()).await.expect("queue");
+    let queue = match_queue(&workspace, &all(), None).await.expect("queue").pairs;
     let strongest = queue.first().expect("a pair").assessment.band;
     let banded = MatchQueueFilter {
         min_band: strongest,
         ..all()
     };
-    for queued in match_queue(&workspace, &banded).await.expect("queue") {
+    for queued in match_queue(&workspace, &banded, None).await.expect("queue").pairs {
         assert!(queued.assessment.band >= strongest);
     }
     let deterministic = MatchQueueFilter {
@@ -274,6 +274,25 @@ async fn the_queue_is_filtered_by_kind_and_band() {
         ..all()
     };
     assert!(queued(&workspace, &deterministic).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_limited_queue_lists_the_strongest_pairs_and_counts_them_all() {
+    let (workspace, _dir) = workspace().await;
+    for _ in 0..3 {
+        stored_person(&workspace, "Ole").await;
+    }
+    farm(&workspace, "Nordaas").await;
+    farm(&workspace, "Nordås").await;
+    let every = match_queue(&workspace, &all(), None).await.expect("queue");
+    assert!(
+        every.total > 2,
+        "three persons, their births and two farms pair up: {every:?}"
+    );
+    assert_eq!(every.pairs.len(), every.total);
+    let limited = match_queue(&workspace, &all(), Some(2)).await.expect("queue");
+    assert_eq!(limited.total, every.total);
+    assert_eq!(limited.pairs[..], every.pairs[..2], "the strongest, in the same order");
 }
 
 #[tokio::test]

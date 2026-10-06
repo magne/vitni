@@ -88,12 +88,12 @@ use crate::navigation::{
     ResearchNoteEdit, SourceChangeSetRequest, SourceEdit, SubjectRequest, TagChangeSetRequest,
 };
 use crate::view_model::{
-    CitationDetail, CompareSide, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, EventDetail, FamilyDetail,
-    FamilyVm, GeographyVm, MatchCompareVm, MatchQueueVm, MediaDetail, MediaRefVm, NoteDetail, PedigreeVm, PersonDetail,
-    PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, ResearchNoteDetail, SimilarHitVm, SimilarVm,
-    SourceDetail, TagDetail, citation_row, collapse_history, dna_match_row, dna_test_row, event_list_row, event_row,
-    family_list_row, family_row, media_row, note_row, person_list_row, place_row, repository_row, research_note_row,
-    source_row, tag_row,
+    CitationDetail, CompareSide, DASHBOARD_MATCHES, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail,
+    EventDetail, FamilyDetail, FamilyVm, GeographyVm, LISTED_MATCHES, MatchCompareVm, MatchQueueVm, MediaDetail,
+    MediaRefVm, NoteDetail, PedigreeVm, PersonDetail, PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail,
+    ResearchNoteDetail, SimilarHitVm, SimilarVm, SourceDetail, TagDetail, citation_row, collapse_history,
+    dna_match_row, dna_test_row, event_list_row, event_row, family_list_row, family_row, media_row, note_row,
+    person_list_row, place_row, repository_row, research_note_row, source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -300,8 +300,8 @@ async fn show_dashboard(workspace: &Workspace, loc: &Localizer) -> Result<Intent
 /// [`DataQualityVm`] the data-quality card renders.
 async fn show_data_quality(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
     let persons = list_persons(workspace).await?;
-    let findings = check_records(workspace, &persons).await?;
-    let data_quality = DataQualityVm::build(&persons, &findings, loc);
+    let quality = check_records(workspace, &persons, DASHBOARD_MATCHES).await?;
+    let data_quality = DataQualityVm::build(&persons, &quality, loc);
     Ok(IntentOutcome::DataQuality(Box::new(data_quality)))
 }
 
@@ -312,7 +312,7 @@ async fn list_matches(
     loc: &Localizer,
     filter: &MatchQueueFilter,
 ) -> Result<IntentOutcome, AppError> {
-    let queue = match_queue(workspace, filter).await?;
+    let queue = match_queue(workspace, filter, Some(LISTED_MATCHES)).await?;
     let runs = list_import_runs(workspace).await?;
     Ok(IntentOutcome::MatchQueue(Box::new(MatchQueueVm::build(
         &queue, &runs, loc,

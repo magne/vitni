@@ -79,7 +79,7 @@ pub fn dashboard_view(
 ) -> Element {
     let stats = &dashboard.stats;
     let (deaths, duplicates) = data_quality.map_or((0, 0), |quality| {
-        (quality.death_before_birth.len(), quality.matches.len())
+        (quality.death_before_birth.len(), quality.match_total)
     });
     rsx! {
         div { style: "padding:var(--sp-6);overflow:auto;height:100%",
@@ -220,39 +220,39 @@ fn data_quality_card(loc: &Localizer, facts_without_source: usize, data_quality:
 
 /// The *Possible matches* card (ADR 0039 §3): how many undecided pairs each kind has, the strongest of
 /// them, and *Review*, which opens the Matches tool. Loads with the data-quality check pass, which
-/// computes the same pairs.
+/// reads the same pairs.
 fn possible_matches_card(loc: &Localizer, data_quality: Option<&DataQualityVm>) -> Element {
     let Some(data_quality) = data_quality else {
         return rsx! {
             p { class: "loading", style: "margin-top:4px", "{loc.dashboard_label(\"data-quality-loading\")}" }
         };
     };
-    if data_quality.matches.is_empty() {
+    if data_quality.match_total == 0 {
         return rsx! {
             p { class: "muted", "{loc.dashboard_label(\"no-matches\")}" }
         };
     }
     rsx! {
         div { class: "wrap",
-            span { "{loc.dashboard_matches_count(data_quality.matches.len())}" }
+            span { "{loc.dashboard_matches_count(data_quality.match_total)}" }
             span { class: "muted", "{data_quality.match_counts.join(\" · \")}" }
             ReviewButton {
                 label: loc.dashboard_label("review"),
                 aria_label: loc.dashboard_label("review-label"),
             }
         }
-        {match_pairs(loc, &data_quality.matches)}
+        {match_pairs(loc, &data_quality.matches, data_quality.match_total)}
     }
 }
 
-/// The strongest possible matches, capped at [`MAX_FLAGGED_LINKS`] with a muted `+N more` for the
-/// rest: both records as links, the engine's probability and band, and its reasons.
-fn match_pairs(loc: &Localizer, pairs: &[QueuedMatchVm]) -> Element {
-    let overflow = pairs.len().saturating_sub(MAX_FLAGGED_LINKS);
+/// The strongest possible matches, with a muted `+N more` for the rest of the `total`: both records as
+/// links, the engine's probability and band, and its reasons.
+fn match_pairs(loc: &Localizer, pairs: &[QueuedMatchVm], total: usize) -> Element {
+    let overflow = total.saturating_sub(pairs.len());
     let tooltip = loc.dashboard_label("score-tooltip");
     rsx! {
         div { class: "stack", style: "margin-top:var(--sp-2)",
-            for pair in pairs.iter().take(MAX_FLAGGED_LINKS) {
+            for pair in pairs {
                 div {
                     div { class: "wrap",
                         RecordLink {

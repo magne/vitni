@@ -8,15 +8,18 @@
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_core::citation::command::{CitationCommand, CitationCommandEnvelope};
-use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType};
+use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, SourceMediaType};
 use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
 use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use vitni_core::ids::{
-    AgentId, AssertionId, CitationId, EventId, FamilyId, HumanId, PersonId, PlaceId, SourceId, TagId,
+    AgentId, AssertionId, CitationId, EventId, FamilyId, HumanId, PersonId, PlaceId, RepositoryId, SourceId, TagId,
 };
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+use vitni_core::place_ref::PlaceRef;
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, EventContext, Timestamp};
+use vitni_core::repo_ref::RepoRef;
+use vitni_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
 use vitni_core::source::command::{SourceCommand, SourceCommandEnvelope};
 use vitni_core::tag::command::{TagCommand, TagCommandEnvelope};
 use vitni_db::{RecordLink, Store};
@@ -122,6 +125,46 @@ async fn create_place(store: &Store, n: u128) {
         },
     };
     store.execute_place(&id(n).to_string(), envelope).await.unwrap();
+}
+
+async fn enclose(store: &Store, n: u128, enclosing: u128, assertion: u128) {
+    let envelope = PlaceCommandEnvelope {
+        meta: meta(assertion),
+        command: PlaceCommand::AssertEnclosedBy {
+            place_id: PlaceId::from_uuid(id(n)),
+            enclosed_by: PlaceRef {
+                place_id: PlaceId::from_uuid(id(enclosing)),
+                date: None,
+            },
+        },
+    };
+    store.execute_place(&id(n).to_string(), envelope).await.unwrap();
+}
+
+async fn create_repository(store: &Store, n: u128) {
+    let envelope = RepositoryCommandEnvelope {
+        meta: meta(n * 100),
+        command: RepositoryCommand::CreateRepository {
+            repository_id: RepositoryId::from_uuid(id(n)),
+            human_id: HumanId::new(format!("R{n:04}")),
+        },
+    };
+    store.execute_repository(&id(n).to_string(), envelope).await.unwrap();
+}
+
+async fn hold(store: &Store, source: u128, repository: u128, assertion: u128) {
+    let envelope = SourceCommandEnvelope {
+        meta: meta(assertion),
+        command: SourceCommand::LinkRepository {
+            source_id: SourceId::from_uuid(id(source)),
+            repo_ref: RepoRef {
+                repository_id: RepositoryId::from_uuid(id(repository)),
+                call_number: None,
+                media_type: SourceMediaType::Book,
+            },
+        },
+    };
+    store.execute_source(&id(source).to_string(), envelope).await.unwrap();
 }
 
 async fn create_source(store: &Store, n: u128) {
@@ -309,14 +352,97 @@ async fn an_event_links_to_its_place_and_a_citation_to_its_source(store: &Store)
     assert_eq!(linking(store, RecordLink::CitationSource, &[]).await, pairs(&[]));
 }
 
+async fn a_place_links_to_its_enclosing_places_until_retracted(store: &Store) {
+    for n in [30, 31, 32] {
+        create_place(store, n).await;
+    }
+    enclose(store, 30, 31, 3001).await;
+    enclose(store, 30, 32, 3002).await;
+    assert_eq!(
+        linking(store, RecordLink::PlaceEnclosure, &[31, 32]).await,
+        pairs(&[(30, 31), (30, 32)])
+    );
+    let envelope = PlaceCommandEnvelope {
+        meta: meta(3003),
+        command: PlaceCommand::RetractAssertion {
+            place_id: PlaceId::from_uuid(id(30)),
+            target: AssertionId::from_uuid(id(3001)),
+        },
+    };
+    store.execute_place(&id(30).to_string(), envelope).await.unwrap();
+    assert_eq!(
+        linking(store, RecordLink::PlaceEnclosure, &[31, 32]).await,
+        pairs(&[(30, 32)])
+    );
+}
+
+async fn a_family_links_to_its_events_and_a_source_to_its_repositories(store: &Store) {
+    create_event(store, 20).await;
+    create_family(store, 10).await;
+    let link = FamilyCommand::LinkFamilyEvent {
+        family_id: FamilyId::from_uuid(id(10)),
+        event_id: EventId::from_uuid(id(20)),
+    };
+    family(store, 10, 1001, link).await;
+    assert_eq!(linking(store, RecordLink::FamilyEvent, &[20]).await, pairs(&[(10, 20)]));
+
+    create_repository(store, 60).await;
+    create_source(store, 40).await;
+    hold(store, 40, 60, 4001).await;
+    assert_eq!(
+        linking(store, RecordLink::SourceRepository, &[60]).await,
+        pairs(&[(40, 60)])
+    );
+}
+
+async fn a_dropped_reference_marks_its_target_for_rematching(store: &Store) {
+    create_event(store, 20).await;
+    create_person(store, 1).await;
+    take_part(store, 1, 20, 101).await;
+    let keys = store.match_dirty().await.unwrap();
+    store.rekey_matches(&[], &keys).await.unwrap();
+    let pairs = store.match_pairs_dirty().await.unwrap();
+    store.refresh_match_pairs(&[], &pairs).await.unwrap();
+
+    let retract = PersonCommand::RetractAssertion {
+        person_id: PersonId::from_uuid(id(1)),
+        target: AssertionId::from_uuid(id(101)),
+    };
+    person(store, 1, 102, retract).await;
+    let event = id(20).to_string();
+    for dirty in [
+        store.match_dirty().await.unwrap(),
+        store.match_pairs_dirty().await.unwrap(),
+    ] {
+        assert!(
+            dirty.iter().any(|record| record.aggregate_id == event),
+            "the event its participant left is marked: {dirty:?}"
+        );
+    }
+}
+
 async fn a_rebuild_reproduces_the_links(store: &Store) {
     create_event(store, 20).await;
     create_person(store, 1).await;
     take_part(store, 1, 20, 101).await;
+    create_place(store, 30).await;
+    create_place(store, 31).await;
+    enclose(store, 30, 31, 3001).await;
+    create_repository(store, 60).await;
+    create_source(store, 40).await;
+    hold(store, 40, 60, 4001).await;
     store.rebuild_projections().await.unwrap();
     assert_eq!(
         linking(store, RecordLink::Participation, &[20]).await,
         pairs(&[(1, 20)])
+    );
+    assert_eq!(
+        linking(store, RecordLink::PlaceEnclosure, &[31]).await,
+        pairs(&[(30, 31)])
+    );
+    assert_eq!(
+        linking(store, RecordLink::SourceRepository, &[60]).await,
+        pairs(&[(40, 60)])
     );
 }
 
@@ -348,6 +474,9 @@ mod sqlite {
         a_familys_partners_and_children_link_to_it_while_they_are_members,
         a_persons_participations_link_it_to_their_events_until_retracted,
         an_event_links_to_its_place_and_a_citation_to_its_source,
+        a_place_links_to_its_enclosing_places_until_retracted,
+        a_family_links_to_its_events_and_a_source_to_its_repositories,
+        a_dropped_reference_marks_its_target_for_rematching,
         a_rebuild_reproduces_the_links,
     );
 
@@ -405,6 +534,9 @@ mod postgres {
         a_familys_partners_and_children_link_to_it_while_they_are_members,
         a_persons_participations_link_it_to_their_events_until_retracted,
         an_event_links_to_its_place_and_a_citation_to_its_source,
+        a_place_links_to_its_enclosing_places_until_retracted,
+        a_family_links_to_its_events_and_a_source_to_its_repositories,
+        a_dropped_reference_marks_its_target_for_rematching,
         a_rebuild_reproduces_the_links,
     );
 }

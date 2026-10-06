@@ -14,6 +14,7 @@ use super::{
     DirtyRecord, INSERT_CHUNK, KeyedRecord, MATCH_DIRTY_TABLE, MATCH_KEYS_STATE_TABLE, MATCH_KEYS_TABLE, kind_of,
     probe_query,
 };
+use crate::match_pairs::MATCH_PAIRS_DIRTY_TABLE;
 use crate::store::DbError;
 
 const CREATE_MATCH_KEYS_TABLE: &str = r#"
@@ -76,7 +77,16 @@ pub(crate) async fn clear_state(pool: &Pool<Postgres>) -> Result<(), DbError> {
     Ok(())
 }
 
-/// A `cqrs-es` query marking every matchable aggregate a commit touches as dirty.
+/// The statement marking one record dirty in `table`, bumping its generation if it already is.
+fn mark_sql(table: &str) -> String {
+    format!(
+        "INSERT INTO {table} (aggregate_type, aggregate_id, generation) VALUES ($1, $2, 1) \
+         ON CONFLICT (aggregate_type, aggregate_id) DO UPDATE SET generation = {table}.generation + 1"
+    )
+}
+
+/// A `cqrs-es` query marking every matchable aggregate a commit touches as dirty, for its keys and for
+/// its pairs.
 pub(crate) struct MatchDirtyQuery {
     pool: Pool<Postgres>,
 }
@@ -94,18 +104,39 @@ impl<A: Aggregate> Query<A> for MatchDirtyQuery {
         if events.is_empty() || MatchableKind::parse(A::TYPE).is_none() {
             return;
         }
-        let result = sqlx::query(&format!(
-            "INSERT INTO {MATCH_DIRTY_TABLE} (aggregate_type, aggregate_id, generation) VALUES ($1, $2, 1) \
-             ON CONFLICT (aggregate_type, aggregate_id) DO UPDATE SET generation = {MATCH_DIRTY_TABLE}.generation + 1"
-        ))
-        .bind(A::TYPE)
-        .bind(aggregate_id)
-        .execute(&self.pool)
-        .await;
-        if let Err(error) = result {
-            tracing::error!(aggregate_type = A::TYPE, aggregate_id, %error, "failed to mark a record for rekeying");
+        for table in [MATCH_DIRTY_TABLE, MATCH_PAIRS_DIRTY_TABLE] {
+            let result = sqlx::query(&mark_sql(table))
+                .bind(A::TYPE)
+                .bind(aggregate_id)
+                .execute(&self.pool)
+                .await;
+            if let Err(error) = result {
+                tracing::error!(aggregate_type = A::TYPE, aggregate_id, %error, "failed to mark a record dirty");
+            }
         }
     }
+}
+
+/// Marks the record `aggregate_id` of `kind` dirty for its keys and its pairs within `tx`: a change
+/// another record's commit made to what its profile reads.
+///
+/// # Errors
+///
+/// A [`DbError`] if a statement fails.
+pub(crate) async fn mark_dirty(
+    tx: &mut Transaction<'_, Postgres>,
+    kind: MatchableKind,
+    aggregate_id: &str,
+) -> Result<(), DbError> {
+    for table in [MATCH_DIRTY_TABLE, MATCH_PAIRS_DIRTY_TABLE] {
+        sqlx::query(&mark_sql(table))
+            .bind(kind.as_str())
+            .bind(aggregate_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(backend("marking a record dirty"))?;
+    }
+    Ok(())
 }
 
 /// The fingerprint the index was built under, or `None` when it must be built.
@@ -123,14 +154,14 @@ pub(crate) async fn fingerprint(pool: &Pool<Postgres>) -> Result<Option<String>,
     Ok(row.map(|row| row.get("fingerprint")))
 }
 
-/// Every record touched since it was keyed.
+/// Every record touched since it was keyed, in the dirty table `table` — the keys' or the pairs'.
 ///
 /// # Errors
 ///
 /// A [`DbError`] on a read failure.
-pub(crate) async fn dirty(pool: &Pool<Postgres>) -> Result<Vec<DirtyRecord>, DbError> {
+pub(crate) async fn dirty(table: &str, pool: &Pool<Postgres>) -> Result<Vec<DirtyRecord>, DbError> {
     let rows = sqlx::query(&format!(
-        "SELECT aggregate_type, aggregate_id, generation FROM {MATCH_DIRTY_TABLE} ORDER BY aggregate_type, aggregate_id"
+        "SELECT aggregate_type, aggregate_id, generation FROM {table} ORDER BY aggregate_type, aggregate_id"
     ))
     .fetch_all(pool)
     .await
@@ -168,7 +199,7 @@ pub(crate) async fn rekey(
         .map_err(backend("deleting a record's match keys"))?;
     }
     insert(&mut tx, records).await?;
-    clear_dirty(&mut tx, cleared).await?;
+    clear_dirty(&mut tx, MATCH_DIRTY_TABLE, cleared).await?;
     tx.commit().await.map_err(backend("committing a rekey"))
 }
 
@@ -206,7 +237,7 @@ pub(crate) async fn reset(
         .await
         .map_err(backend("clearing the match keys"))?;
     insert(&mut tx, records).await?;
-    clear_dirty(&mut tx, cleared).await?;
+    clear_dirty(&mut tx, MATCH_DIRTY_TABLE, cleared).await?;
     sqlx::query(&format!(
         "INSERT INTO {MATCH_KEYS_STATE_TABLE} (id, fingerprint) VALUES (1, $1) \
          ON CONFLICT (id) DO UPDATE SET fingerprint = EXCLUDED.fingerprint"
@@ -246,14 +277,18 @@ async fn insert(tx: &mut Transaction<'_, Postgres>, records: &[KeyedRecord]) -> 
     Ok(())
 }
 
-/// Clears each of `cleared` at the generation read. A row at another generation, or already gone,
-/// means another commit or another refresh reached the record meanwhile, and the keys just written may
-/// be older than theirs: the record is marked dirty again, so the next lookup rekeys it from fresh
-/// views rather than trusting keys whose views it cannot vouch for.
-async fn clear_dirty(tx: &mut Transaction<'_, Postgres>, cleared: &[DirtyRecord]) -> Result<(), DbError> {
+/// Clears each of `cleared` from the dirty table `table` at the generation read. A row at another
+/// generation, or already gone, means another commit or another refresh reached the record meanwhile,
+/// and what was just written may be older than theirs: the record is marked dirty again, so the next
+/// refresh redoes it from fresh views rather than trusting rows whose views it cannot vouch for.
+pub(crate) async fn clear_dirty(
+    tx: &mut Transaction<'_, Postgres>,
+    table: &str,
+    cleared: &[DirtyRecord],
+) -> Result<(), DbError> {
     for record in cleared {
         let deleted = sqlx::query(&format!(
-            "DELETE FROM {MATCH_DIRTY_TABLE} WHERE aggregate_type = $1 AND aggregate_id = $2 AND generation = $3"
+            "DELETE FROM {table} WHERE aggregate_type = $1 AND aggregate_id = $2 AND generation = $3"
         ))
         .bind(record.kind.as_str())
         .bind(&record.aggregate_id)
@@ -264,8 +299,8 @@ async fn clear_dirty(tx: &mut Transaction<'_, Postgres>, cleared: &[DirtyRecord]
         .rows_affected();
         if deleted == 0 {
             sqlx::query(&format!(
-                "INSERT INTO {MATCH_DIRTY_TABLE} (aggregate_type, aggregate_id, generation) VALUES ($1, $2, 1) \
-                 ON CONFLICT (aggregate_type, aggregate_id) DO UPDATE SET generation = {MATCH_DIRTY_TABLE}.generation + 1"
+                "INSERT INTO {table} (aggregate_type, aggregate_id, generation) VALUES ($1, $2, 1) \
+                 ON CONFLICT (aggregate_type, aggregate_id) DO UPDATE SET generation = {table}.generation + 1"
             ))
             .bind(record.kind.as_str())
             .bind(&record.aggregate_id)

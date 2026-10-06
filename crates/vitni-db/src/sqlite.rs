@@ -95,11 +95,18 @@ macro_rules! sqlite_wire_side_indexes {
             .append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
                 vitni_core::place::PlaceView,
             >::new($pool.clone())))
+            .append_query(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
+                vitni_core::place::PlaceView,
+            >::new($pool.clone())))
     };
     (source, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
-            vitni_core::source::SourceView,
-        >::new($pool.clone())))
+        $framework
+            .append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+                vitni_core::source::SourceView,
+            >::new($pool.clone())))
+            .append_query(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
+                vitni_core::source::SourceView,
+            >::new($pool.clone())))
     };
     (citation, $pool:expr, $framework:expr) => {
         $framework
@@ -202,6 +209,10 @@ macro_rules! sqlite_store {
                 crate::match_keys::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating match keys index: {e}")))?;
+                // The match pairs projection (ADR 0048), marked dirty by the same query.
+                crate::match_pairs::sqlite::create_tables(&pool)
+                    .await
+                    .map_err(|e| DbError::Backend(format!("creating match pairs: {e}")))?;
                 // The identity cluster index (ADR 0039 §4) is derived from the projections of every
                 // matchable kind; its `Query` is appended to those frameworks below, and a workspace that
                 // predates it gets it filled once the projections are open.
@@ -322,6 +333,7 @@ macro_rules! sqlite_store {
                 // The match keys need the name-culture packs, which only the app layer has: forgetting
                 // what the index was built under makes it rebuild on next use.
                 crate::match_keys::sqlite::clear_state(pool).await?;
+                crate::match_pairs::sqlite::clear_state(pool).await?;
                 // The record origins index is replayed from the raw events, after the projections
                 // its `live` flags are read from. Unmarked first, so a rebuild cut short is redone by
                 // the next open.
@@ -508,6 +520,14 @@ impl SqliteStore {
         crate::geo_index::places_in_bbox(&self.pool, min_lat, min_lon, max_lat, max_lon).await
     }
 
+    /// Every live `kind` distinction as `(record, other)` (ADR 0039 §4).
+    pub(crate) async fn identity_distinctions(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+    ) -> Result<Vec<(String, String)>, DbError> {
+        crate::identity_links::sqlite::distinctions(&self.pool, kind).await
+    }
+
     /// Every member of a `kind` cluster with its root (ADR 0039 §4).
     pub(crate) async fn identity_links(
         &self,
@@ -616,7 +636,7 @@ impl SqliteStore {
 
     /// Every matchable record touched since it was keyed.
     pub(crate) async fn match_dirty(&self) -> Result<Vec<crate::match_keys::DirtyRecord>, DbError> {
-        crate::match_keys::sqlite::dirty(&self.pool).await
+        crate::match_keys::sqlite::dirty(crate::match_keys::MATCH_DIRTY_TABLE, &self.pool).await
     }
 
     /// Replaces the keys of `records` and clears `cleared`.
@@ -648,6 +668,53 @@ impl SqliteStore {
     }
 
     /// Every `(aggregate_id, key)` of `kind`.
+    /// The fingerprint the match pairs were scored under, if any (ADR 0048).
+    pub(crate) async fn match_pairs_fingerprint(&self) -> Result<Option<String>, DbError> {
+        crate::match_pairs::sqlite::fingerprint(&self.pool).await
+    }
+
+    /// Every matchable record touched since its pairs were refreshed.
+    pub(crate) async fn match_pairs_dirty(&self) -> Result<Vec<crate::match_keys::DirtyRecord>, DbError> {
+        crate::match_pairs::sqlite::dirty(&self.pool).await
+    }
+
+    /// Replaces the pairs each refresh covers, and clears `cleared` at the generations read.
+    pub(crate) async fn refresh_match_pairs(
+        &self,
+        refreshes: &[crate::match_pairs::PairRefresh],
+        cleared: &[crate::match_keys::DirtyRecord],
+    ) -> Result<(), DbError> {
+        crate::match_pairs::sqlite::refresh(&self.pool, refreshes, cleared).await
+    }
+
+    /// Replaces every match pair, unless another rebuild already scored them under `fingerprint`.
+    pub(crate) async fn reset_match_pairs(
+        &self,
+        fingerprint: &str,
+        pairs: &[crate::match_pairs::MatchPair],
+        cleared: &[crate::match_keys::DirtyRecord],
+    ) -> Result<(), DbError> {
+        crate::match_pairs::sqlite::reset(&self.pool, fingerprint, pairs, cleared).await
+    }
+
+    /// The undecided match pairs from `min_band` up, strongest first.
+    pub(crate) async fn match_pairs(
+        &self,
+        kinds: &[vitni_core::matching::MatchableKind],
+        min_band: vitni_core::matching::MatchBand,
+        limit: Option<usize>,
+    ) -> Result<Vec<crate::match_pairs::MatchPair>, DbError> {
+        crate::match_pairs::sqlite::pairs(&self.pool, kinds, min_band, limit).await
+    }
+
+    /// How many undecided match pairs from `min_band` up each kind holds.
+    pub(crate) async fn match_pair_counts(
+        &self,
+        min_band: vitni_core::matching::MatchBand,
+    ) -> Result<Vec<(vitni_core::matching::MatchableKind, usize)>, DbError> {
+        crate::match_pairs::sqlite::counts(&self.pool, min_band).await
+    }
+
     pub(crate) async fn match_keys_of_kind(
         &self,
         kind: vitni_core::matching::MatchableKind,
@@ -1805,6 +1872,60 @@ mod tests {
         assert_eq!(person_links(&store).await, vec![(c.to_string(), b.to_string())]);
     }
 
+    #[tokio::test]
+    async fn identity_distinctions_follow_decisions_retractions_and_rebuild() {
+        let (store, _dir) = store().await;
+        let (a, b) = (
+            PersonId::from_uuid(Uuid::from_u128(1)),
+            PersonId::from_uuid(Uuid::from_u128(2)),
+        );
+        for (n, person_id, human_id) in [(10, a, "I0001"), (11, b, "I0002")] {
+            person_command(
+                &store,
+                person_id,
+                n,
+                PersonCommand::CreatePerson {
+                    person_id,
+                    human_id: HumanId::new(human_id),
+                    evidence_level: EvidenceLevel::Persona,
+                    external_ids: Vec::new(),
+                },
+            )
+            .await;
+        }
+        let kind = vitni_core::matching::MatchableKind::Person;
+        assert_eq!(
+            store.identity_distinctions(kind).await.unwrap(),
+            Vec::<(String, String)>::new()
+        );
+
+        let distinguish = PersonCommand::DistinguishPersons {
+            person: b,
+            other: a,
+            assessment: None,
+        };
+        person_command(&store, b, 20, distinguish).await;
+        let held = vec![(b.to_string(), a.to_string())];
+        assert_eq!(store.identity_distinctions(kind).await.unwrap(), held);
+
+        store.rebuild_projections().await.unwrap();
+        assert_eq!(
+            store.identity_distinctions(kind).await.unwrap(),
+            held,
+            "rebuild reproduces them"
+        );
+
+        let retract = PersonCommand::RetractAssertion {
+            person_id: b,
+            target: AssertionId::from_uuid(Uuid::from_u128(20)),
+        };
+        person_command(&store, b, 21, retract).await;
+        assert!(
+            store.identity_distinctions(kind).await.unwrap().is_empty(),
+            "an undone decision is gone"
+        );
+    }
+
     /// The `kind` clusters as `(member, root)` pairs.
     async fn links_of(store: &SqliteStore, kind: vitni_core::matching::MatchableKind) -> Vec<(String, String)> {
         store
@@ -2097,7 +2218,7 @@ mod tests {
             },
         )
         .await;
-        for table in ["identity_links", "identity_edges"] {
+        for table in ["identity_links", "identity_edges", "identity_distinctions"] {
             sqlx::query(&format!("DROP TABLE {table}"))
                 .execute(&store.pool)
                 .await

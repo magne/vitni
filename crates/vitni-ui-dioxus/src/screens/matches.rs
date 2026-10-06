@@ -211,6 +211,7 @@ fn queue_body(
             onchange: move |changed| filter.set(changed),
         }
         MatchesTable {
+            total: queue.total,
             pairs: queue.pairs.clone(),
             oncompare: move |(kind, left, right): (DecidableKind, String, String)| mode
                 .set(MatchesMode::Compare { kind, left, right }),
@@ -329,11 +330,14 @@ pub fn MatchFilters(
 }
 
 /// The possible-matches table (`matches.html`'s `.tbl`): Kind / Record A / Record B / Why / Match score
-/// / a per-row Compare button. Pure over its props (no context but the chrome), so an SSR test renders
-/// it directly over a hand-built [`QueuedMatchVm`] list.
+/// / a per-row Compare button, then how many pairs the filter admits beyond those listed. Pure over its
+/// props (no context but the chrome), so an SSR test renders it directly over a hand-built
+/// [`QueuedMatchVm`] list.
 #[component]
 pub fn MatchesTable(
-    /// The pairs to show, the most similar first.
+    /// How many undecided pairs the filter admits, listed or not.
+    total: usize,
+    /// The pairs to show, the strongest the filter admits, the most similar first.
     pairs: Vec<QueuedMatchVm>,
     /// Fired with `(kind, left_human_id, right_human_id)` when a row's Compare button is activated.
     oncompare: EventHandler<(DecidableKind, String, String)>,
@@ -347,7 +351,7 @@ pub fn MatchesTable(
             div {
                 style: "display:flex;align-items:baseline;gap:var(--sp-3);margin-bottom:var(--sp-3)",
                 h3 { "{chrome.0.merge_duplicates_heading()}" }
-                span { class: "muted", "{chrome.0.merge_duplicates_count(pairs.len())}" }
+                span { class: "muted", "{chrome.0.merge_duplicates_count(total)}" }
             }
             Table {
                 caption: chrome.0.merge_duplicates_heading(),
@@ -405,6 +409,11 @@ pub fn MatchesTable(
                             }
                         }
                     }
+                }
+            }
+            if total > pairs.len() {
+                p { class: "muted", style: "margin-top:var(--sp-3)",
+                    "{chrome.0.merge_duplicates_unlisted(total - pairs.len())}"
                 }
             }
         }

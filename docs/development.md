@@ -291,6 +291,13 @@ by `similar.rs` before each lookup.
   aggregate). A lookup rekeys them together with the records whose keys carry theirs — an event's
   principals, a person's events and families, a place's events, a source's citations
   (`similar::affected`). A new key that reads another record's data needs its dependency added there.
+- **The pairs are a projection too** (ADR 0048). `similar_pairs`, the duplicate check and the review
+  queue read `match_pairs` (`crates/vitni-db/src/match_pairs/`), refreshed first by
+  `similar::refresh_pairs` from its own dirty set, `match_pairs_dirty`. Each dirty record's pairs are
+  scored again with those of every record whose profile reads it (`similar::pair_dependents`), found
+  through the record links index, which marks the target of every reference it drops. A profile that comes to read another record needs that step added,
+  and an edit along it in `tests/match_pairs.rs`, which checks the refreshed pairs against a rebuild.
+  Only the band and score are stored: a consumer assesses the pairs it lists for their terms.
 - **`[matching]`** in `workspace.toml`, or `[workspace-defaults.matching]` in the global config, sets
   `default_cultures` (pack ids beside `universal`) and the `probable`/`possible` thresholds as whole
   percentages, which a pair must score above (a pair whose evidence nets to nothing sits exactly at the

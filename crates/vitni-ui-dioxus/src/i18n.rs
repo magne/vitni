@@ -1620,6 +1620,16 @@ impl Chrome {
         )
     }
 
+    /// The "+{n} more pairs" line below the table, for the pairs the filter admits beyond those listed.
+    #[must_use]
+    pub fn merge_duplicates_unlisted(&self, count: usize) -> String {
+        fl!(
+            self.loader,
+            "merge-duplicates-unlisted",
+            count = u64::try_from(count).unwrap_or(u64::MAX)
+        )
+    }
+
     /// The matches table's "Kind" column header.
     #[must_use]
     pub fn merge_col_kind(&self) -> String {

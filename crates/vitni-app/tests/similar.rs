@@ -139,7 +139,11 @@ impl Records {
     /// Every person pair the duplicate check reports, as sorted human-id pairs.
     async fn duplicate_findings(&self) -> BTreeSet<(String, String)> {
         let mut pairs = BTreeSet::new();
-        for finding in run_checks(&self.workspace).await.expect("run checks") {
+        for finding in run_checks(&self.workspace, usize::MAX)
+            .await
+            .expect("run checks")
+            .findings
+        {
             if let CheckFinding::PossibleDuplicate {
                 kind: MatchableKind::Person,
                 a,
@@ -523,7 +527,7 @@ async fn the_duplicate_check_reports_a_place_pair_with_the_engines_evidence() {
         .evidence();
 
     let mut places = Vec::new();
-    for finding in run_checks(ws).await.expect("run checks") {
+    for finding in run_checks(ws, usize::MAX).await.expect("run checks").findings {
         if let CheckFinding::PossibleDuplicate {
             kind: MatchableKind::Place,
             a,
@@ -560,7 +564,7 @@ async fn the_duplicate_check_ranks_pairs_across_kinds() {
     }
     let mut ranks = Vec::new();
     let mut kinds = Vec::new();
-    for finding in run_checks(ws).await.expect("run checks") {
+    for finding in run_checks(ws, usize::MAX).await.expect("run checks").findings {
         if let CheckFinding::PossibleDuplicate {
             kind,
             a: _,

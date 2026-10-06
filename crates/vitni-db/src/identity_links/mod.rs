@@ -9,8 +9,10 @@
 //!
 //! `identity_edges` holds one row per live merge edge `(surviving, member)`, mirrored per survivor
 //! from its projection. `identity_links` holds the transitive closure: one row per merged record,
-//! naming its cluster's root — the survivor that is not itself merged. Both are keyed by the
-//! [`MatchableKind`] so every matchable kind shares the tables.
+//! naming its cluster's root — the survivor that is not itself merged. `identity_distinctions` holds
+//! one row per live distinction `(record, other)`, mirrored per record from the projection it is
+//! recorded on, so the pairs a decision keeps out of every suggestion are read without reading every
+//! projection. All three are keyed by the [`MatchableKind`] so every matchable kind shares the tables.
 //!
 //! The app layer refuses cycles and double membership before it writes (ADR 0039 §4), but the index
 //! stays well-defined without that guarantee: [`closure`] picks the lowest survivor id when a record is
@@ -46,10 +48,12 @@ use crate::tables::{
 const IDENTITY_EDGES_TABLE: &str = "identity_edges";
 /// The transitive closure: one row per `(kind, member)`, naming the member's root.
 const IDENTITY_LINKS_TABLE: &str = "identity_links";
+/// The live distinctions: one row per `(kind, record, other)`, `record` the one it is recorded on.
+const IDENTITY_DISTINCTIONS_TABLE: &str = "identity_distinctions";
 
-/// A projection the index mirrors merge edges from: its aggregate, its table, and which of its events
-/// can change the survivor's live edges — a merge adds one, and a retraction or supersession may remove
-/// one.
+/// A projection the index mirrors identity decisions from: its aggregate, its table, and which of its
+/// events can change the record's live merge edges or distinctions — a merge or distinction adds one,
+/// and a retraction or supersession may remove one.
 pub(crate) trait IndexedRecord: ClusterRecord + DeserializeOwned + Send + Sync + 'static {
     /// The aggregate the projection folds.
     type State: Aggregate;
@@ -57,8 +61,8 @@ pub(crate) trait IndexedRecord: ClusterRecord + DeserializeOwned + Send + Sync +
     /// The projection table the view is read from.
     const VIEW_TABLE: &'static str;
 
-    /// Whether `event` can change the survivor's live merge edges.
-    fn changes_edges(event: &<Self::State as Aggregate>::Event) -> bool;
+    /// Whether `event` can change the record's live merge edges or distinctions.
+    fn changes_decisions(event: &<Self::State as Aggregate>::Event) -> bool;
 }
 
 impl IndexedRecord for PersonView {
@@ -66,9 +70,10 @@ impl IndexedRecord for PersonView {
 
     const VIEW_TABLE: &'static str = PERSON_VIEW_TABLE;
 
-    fn changes_edges(event: &PersonEvent) -> bool {
+    fn changes_decisions(event: &PersonEvent) -> bool {
         match &event.body {
             PersonEventBody::PersonsMerged { .. }
+            | PersonEventBody::PersonsDistinguished { .. }
             | PersonEventBody::AssertionRetracted { .. }
             | PersonEventBody::AssertionSuperseded { .. } => true,
             PersonEventBody::PersonCreated { .. }
@@ -84,8 +89,7 @@ impl IndexedRecord for PersonView {
             | PersonEventBody::Tagged { .. }
             | PersonEventBody::Untagged { .. }
             | PersonEventBody::RestrictionsChanged { .. }
-            | PersonEventBody::HumanIdChanged { .. }
-            | PersonEventBody::PersonsDistinguished { .. } => false,
+            | PersonEventBody::HumanIdChanged { .. } => false,
         }
     }
 }
@@ -95,9 +99,10 @@ impl IndexedRecord for EventView {
 
     const VIEW_TABLE: &'static str = EVENT_VIEW_TABLE;
 
-    fn changes_edges(event: &vitni_core::event::EventEvent) -> bool {
+    fn changes_decisions(event: &vitni_core::event::EventEvent) -> bool {
         match &event.body {
             EventEventBody::EventsMerged { .. }
+            | EventEventBody::EventsDistinguished { .. }
             | EventEventBody::AssertionRetracted { .. }
             | EventEventBody::AssertionSuperseded { .. } => true,
             EventEventBody::EventCreated { .. }
@@ -112,8 +117,7 @@ impl IndexedRecord for EventView {
             | EventEventBody::Tagged { .. }
             | EventEventBody::Untagged { .. }
             | EventEventBody::RestrictionsChanged { .. }
-            | EventEventBody::HumanIdChanged { .. }
-            | EventEventBody::EventsDistinguished { .. } => false,
+            | EventEventBody::HumanIdChanged { .. } => false,
         }
     }
 }
@@ -123,9 +127,10 @@ impl IndexedRecord for FamilyView {
 
     const VIEW_TABLE: &'static str = FAMILY_VIEW_TABLE;
 
-    fn changes_edges(event: &vitni_core::family::FamilyEvent) -> bool {
+    fn changes_decisions(event: &vitni_core::family::FamilyEvent) -> bool {
         match &event.body {
             FamilyEventBody::FamiliesMerged { .. }
+            | FamilyEventBody::FamiliesDistinguished { .. }
             | FamilyEventBody::AssertionRetracted { .. }
             | FamilyEventBody::AssertionSuperseded { .. } => true,
             FamilyEventBody::FamilyCreated { .. }
@@ -142,8 +147,7 @@ impl IndexedRecord for FamilyView {
             | FamilyEventBody::Tagged { .. }
             | FamilyEventBody::Untagged { .. }
             | FamilyEventBody::ExternalIdAdded { .. }
-            | FamilyEventBody::HumanIdChanged { .. }
-            | FamilyEventBody::FamiliesDistinguished { .. } => false,
+            | FamilyEventBody::HumanIdChanged { .. } => false,
         }
     }
 }
@@ -153,9 +157,10 @@ impl IndexedRecord for PlaceView {
 
     const VIEW_TABLE: &'static str = PLACE_VIEW_TABLE;
 
-    fn changes_edges(event: &PlaceEvent) -> bool {
+    fn changes_decisions(event: &PlaceEvent) -> bool {
         match &event.body {
             PlaceEventBody::PlacesMerged { .. }
+            | PlaceEventBody::PlacesDistinguished { .. }
             | PlaceEventBody::AssertionRetracted { .. }
             | PlaceEventBody::AssertionSuperseded { .. } => true,
             PlaceEventBody::PlaceCreated { .. }
@@ -172,8 +177,7 @@ impl IndexedRecord for PlaceView {
             | PlaceEventBody::Tagged { .. }
             | PlaceEventBody::Untagged { .. }
             | PlaceEventBody::RestrictionsChanged { .. }
-            | PlaceEventBody::HumanIdChanged { .. }
-            | PlaceEventBody::PlacesDistinguished { .. } => false,
+            | PlaceEventBody::HumanIdChanged { .. } => false,
         }
     }
 }
@@ -183,9 +187,10 @@ impl IndexedRecord for SourceView {
 
     const VIEW_TABLE: &'static str = SOURCE_VIEW_TABLE;
 
-    fn changes_edges(event: &SourceEvent) -> bool {
+    fn changes_decisions(event: &SourceEvent) -> bool {
         match &event.body {
             SourceEventBody::SourcesMerged { .. }
+            | SourceEventBody::SourcesDistinguished { .. }
             | SourceEventBody::AssertionRetracted { .. }
             | SourceEventBody::AssertionSuperseded { .. } => true,
             SourceEventBody::SourceCreated { .. }
@@ -200,8 +205,7 @@ impl IndexedRecord for SourceView {
             | SourceEventBody::Tagged { .. }
             | SourceEventBody::Untagged { .. }
             | SourceEventBody::RestrictionsChanged { .. }
-            | SourceEventBody::HumanIdChanged { .. }
-            | SourceEventBody::SourcesDistinguished { .. } => false,
+            | SourceEventBody::HumanIdChanged { .. } => false,
         }
     }
 }
@@ -211,9 +215,10 @@ impl IndexedRecord for CitationView {
 
     const VIEW_TABLE: &'static str = CITATION_VIEW_TABLE;
 
-    fn changes_edges(event: &CitationEvent) -> bool {
+    fn changes_decisions(event: &CitationEvent) -> bool {
         match &event.body {
             CitationEventBody::CitationsMerged { .. }
+            | CitationEventBody::CitationsDistinguished { .. }
             | CitationEventBody::AssertionRetracted { .. }
             | CitationEventBody::AssertionSuperseded { .. } => true,
             CitationEventBody::CitationCreated { .. }
@@ -227,8 +232,7 @@ impl IndexedRecord for CitationView {
             | CitationEventBody::Tagged { .. }
             | CitationEventBody::Untagged { .. }
             | CitationEventBody::RestrictionsChanged { .. }
-            | CitationEventBody::HumanIdChanged { .. }
-            | CitationEventBody::CitationsDistinguished { .. } => false,
+            | CitationEventBody::HumanIdChanged { .. } => false,
         }
     }
 }
@@ -238,9 +242,10 @@ impl IndexedRecord for RepositoryView {
 
     const VIEW_TABLE: &'static str = REPOSITORY_VIEW_TABLE;
 
-    fn changes_edges(event: &RepositoryEvent) -> bool {
+    fn changes_decisions(event: &RepositoryEvent) -> bool {
         match &event.body {
             RepositoryEventBody::RepositoriesMerged { .. }
+            | RepositoryEventBody::RepositoriesDistinguished { .. }
             | RepositoryEventBody::AssertionRetracted { .. }
             | RepositoryEventBody::AssertionSuperseded { .. } => true,
             RepositoryEventBody::RepositoryCreated { .. }
@@ -252,8 +257,7 @@ impl IndexedRecord for RepositoryView {
             | RepositoryEventBody::Tagged { .. }
             | RepositoryEventBody::Untagged { .. }
             | RepositoryEventBody::RestrictionsChanged { .. }
-            | RepositoryEventBody::HumanIdChanged { .. }
-            | RepositoryEventBody::RepositoriesDistinguished { .. } => false,
+            | RepositoryEventBody::HumanIdChanged { .. } => false,
         }
     }
 }
@@ -263,9 +267,10 @@ impl IndexedRecord for NoteView {
 
     const VIEW_TABLE: &'static str = NOTE_VIEW_TABLE;
 
-    fn changes_edges(event: &NoteEvent) -> bool {
+    fn changes_decisions(event: &NoteEvent) -> bool {
         match &event.body {
             NoteEventBody::NotesMerged { .. }
+            | NoteEventBody::NotesDistinguished { .. }
             | NoteEventBody::AssertionRetracted { .. }
             | NoteEventBody::AssertionSuperseded { .. } => true,
             NoteEventBody::NoteCreated { .. }
@@ -274,8 +279,7 @@ impl IndexedRecord for NoteView {
             | NoteEventBody::Tagged { .. }
             | NoteEventBody::Untagged { .. }
             | NoteEventBody::RestrictionsChanged { .. }
-            | NoteEventBody::HumanIdChanged { .. }
-            | NoteEventBody::NotesDistinguished { .. } => false,
+            | NoteEventBody::HumanIdChanged { .. } => false,
         }
     }
 }
@@ -285,9 +289,10 @@ impl IndexedRecord for MediaView {
 
     const VIEW_TABLE: &'static str = MEDIA_VIEW_TABLE;
 
-    fn changes_edges(event: &MediaEvent) -> bool {
+    fn changes_decisions(event: &MediaEvent) -> bool {
         match &event.body {
             MediaEventBody::MediaMerged { .. }
+            | MediaEventBody::MediaDistinguished { .. }
             | MediaEventBody::AssertionRetracted { .. }
             | MediaEventBody::AssertionSuperseded { .. } => true,
             MediaEventBody::MediaCreated { .. }
@@ -301,8 +306,7 @@ impl IndexedRecord for MediaView {
             | MediaEventBody::Tagged { .. }
             | MediaEventBody::Untagged { .. }
             | MediaEventBody::RestrictionsChanged { .. }
-            | MediaEventBody::HumanIdChanged { .. }
-            | MediaEventBody::MediaDistinguished { .. } => false,
+            | MediaEventBody::HumanIdChanged { .. } => false,
         }
     }
 }

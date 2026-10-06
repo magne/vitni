@@ -408,6 +408,10 @@ merge-duplicates-count = { $count ->
     [one] 1 uavgjort par
    *[other] { $count } uavgjorte par
 }
+merge-duplicates-unlisted = { $count ->
+    [one] +1 par til — avgjør noen eller snevre inn filteret
+   *[other] +{ $count } par til — avgjør noen eller snevre inn filteret
+}
 merge-col-kind = Type
 matches-filter-run = Importkjøring
 matches-filter-all-runs = Alle kjøringer

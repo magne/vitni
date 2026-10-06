@@ -148,7 +148,7 @@ pub async fn run(
                 kind: kind.map(Into::into),
                 min_band: band.into(),
             };
-            let queue = match_queue(workspace, &filter).await?;
+            let queue = match_queue(workspace, &filter, None).await?.pairs;
             if json {
                 println!("{}", queue_json(&queue));
                 return Ok(());

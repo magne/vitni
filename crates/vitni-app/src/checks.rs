@@ -10,16 +10,19 @@
 //! Two checks ship here:
 //! - [`CheckFinding::DeathBeforeBirth`] — a per-person date-sanity scan flagging anyone whose known
 //!   death year precedes their known birth year.
-//! - [`CheckFinding::PossibleDuplicate`] — the matching engine's [`similar_pairs`] of every
-//!   [`MatchableKind`] at least [`MatchBand::Possible`], one finding per pair with the engine's evidence
-//!   (ADR 0038 §8). A pair the user already decided is left out (ADR 0039 §3).
+//! - [`CheckFinding::PossibleDuplicate`] — the matching engine's pairs of every [`DecidableKind`] at
+//!   least [`MatchBand::Possible`] (a tag resolves by its name and is never proposed), read from the
+//!   `match_pairs` projection (ADR 0048): every pair is counted, and the strongest few the caller shows
+//!   each become a finding with the engine's evidence (ADR 0038 §8). A pair the user already decided is
+//!   left out (ADR 0039 §3).
 
 use vitni_core::matching::{MatchBand, MatchEvidence, MatchableKind};
 
 use crate::dto::AggRef;
 use crate::error::AppError;
+use crate::match_queue::DecidableKind;
 use crate::person::{PersonSummary, list_persons};
-use crate::similar::similar_pairs;
+use crate::similar::{assessed_pairs, refresh_pairs};
 use crate::workspace::Workspace;
 
 /// A single data-quality finding: which check fired, the record(s) it flags, and what it found.
@@ -43,7 +46,19 @@ pub enum CheckFinding {
     },
 }
 
-/// Runs every data-quality check against the workspace, returning one [`CheckFinding`] per flag.
+/// What the data-quality checks found: the findings, and how many possible duplicates each kind holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataQuality {
+    /// The death-before-birth findings, then a possible-duplicate finding for each of the strongest
+    /// pairs asked for, the most similar first.
+    pub findings: Vec<CheckFinding>,
+    /// How many possible duplicates each kind holds, for the kinds holding any, in kind name order —
+    /// every pair, not only those listed among the findings.
+    pub duplicates: Vec<(MatchableKind, usize)>,
+}
+
+/// Runs every data-quality check against the workspace, listing the `shown` strongest possible
+/// duplicates among its findings and counting them all.
 ///
 /// A scan over projections plus the matching engine — no new events.
 ///
@@ -51,35 +66,43 @@ pub enum CheckFinding {
 ///
 /// A store/read-model error, or the matching engine's error when its data or settings cannot be
 /// loaded.
-pub async fn run_checks(workspace: &Workspace) -> Result<Vec<CheckFinding>, AppError> {
+pub async fn run_checks(workspace: &Workspace, shown: usize) -> Result<DataQuality, AppError> {
     let persons = list_persons(workspace).await?;
-    check_records(workspace, &persons).await
+    check_records(workspace, &persons, shown).await
 }
 
 /// Runs every data-quality check, reading the persons from an already-loaded projection.
 ///
 /// The core of [`run_checks`], exposed so a caller that already holds the person list (the dashboard,
 /// which also needs it for evidence health and activity names) runs the checks without a second
-/// [`list_persons`] load. The death-before-birth findings come first, then the duplicates of every
-/// kind, the most similar first.
+/// [`list_persons`] load. The death-before-birth findings come first, then the `shown` strongest
+/// duplicates of any kind, the most similar first.
 ///
 /// # Errors
 ///
 /// A store/read-model error, or the matching engine's error when its data or settings cannot be
 /// loaded.
-pub async fn check_records(workspace: &Workspace, persons: &[PersonSummary]) -> Result<Vec<CheckFinding>, AppError> {
-    let mut duplicates = Vec::new();
-    for kind in MatchableKind::ALL {
-        for pair in similar_pairs(workspace, kind, MatchBand::Possible).await? {
-            duplicates.push((kind, pair.a, pair.b, pair.assessment.evidence()));
-        }
-    }
-    duplicates.sort_by_key(|(_, _, _, evidence)| std::cmp::Reverse((evidence.band, evidence.score_bp)));
+pub async fn check_records(
+    workspace: &Workspace,
+    persons: &[PersonSummary],
+    shown: usize,
+) -> Result<DataQuality, AppError> {
+    Box::pin(refresh_pairs(workspace)).await?;
+    let store = workspace.store();
+    let kinds = DecidableKind::ALL.map(DecidableKind::matchable);
+    let mut duplicates = store.match_pair_counts(MatchBand::Possible).await?;
+    duplicates.retain(|(kind, _)| kinds.contains(kind));
+    let strongest = store.match_pairs(&kinds, MatchBand::Possible, Some(shown)).await?;
     let mut findings = death_before_birth(persons);
-    for (kind, a, b, assessment) in duplicates {
-        findings.push(CheckFinding::PossibleDuplicate { kind, a, b, assessment });
+    for pair in assessed_pairs(workspace, strongest).await? {
+        findings.push(CheckFinding::PossibleDuplicate {
+            kind: pair.kind,
+            a: pair.a,
+            b: pair.b,
+            assessment: pair.assessment.evidence(),
+        });
     }
-    Ok(findings)
+    Ok(DataQuality { findings, duplicates })
 }
 
 /// Flags each person whose known death year precedes their known birth year.
@@ -295,8 +318,25 @@ mod tests {
     #[tokio::test]
     async fn empty_workspace_has_no_findings() {
         let (workspace, _session, _dir) = setup().await;
-        let checked = run_checks(&workspace).await.expect("run checks");
-        assert!(checked.is_empty(), "{checked:?}");
+        let checked = run_checks(&workspace, 5).await.expect("run checks");
+        assert!(checked.findings.is_empty(), "{checked:?}");
+        assert!(checked.duplicates.is_empty(), "{checked:?}");
+    }
+
+    #[tokio::test]
+    async fn only_the_strongest_duplicates_asked_for_are_listed_but_every_one_is_counted() {
+        let (workspace, session, _dir) = setup().await;
+        for _ in 0..3 {
+            person(&workspace, &session, "John", "Smith").await;
+        }
+        let checked = run_checks(&workspace, 1).await.expect("run checks");
+        let listed = checked
+            .findings
+            .iter()
+            .filter(|finding| matches!(finding, CheckFinding::PossibleDuplicate { .. }))
+            .count();
+        assert_eq!(listed, 1, "{checked:?}");
+        assert_eq!(checked.duplicates, [(MatchableKind::Person, 3)]);
     }
 
     #[tokio::test]
@@ -308,9 +348,10 @@ mod tests {
         let duplicates = crate::similar::similar_pairs(&workspace, MatchableKind::Person, MatchBand::Possible)
             .await
             .expect("duplicates");
-        let findings = run_checks(&workspace).await.expect("run checks");
+        let checked = run_checks(&workspace, 5).await.expect("run checks");
+        let findings = &checked.findings;
         let mut duplicate_findings = Vec::new();
-        for finding in &findings {
+        for finding in findings {
             if let CheckFinding::PossibleDuplicate {
                 kind: MatchableKind::Person,
                 a: first,
@@ -322,6 +363,7 @@ mod tests {
             }
         }
         assert_eq!(duplicate_findings.len(), duplicates.len());
+        assert_eq!(checked.duplicates, [(MatchableKind::Person, duplicates.len())]);
         assert!(
             duplicate_findings.iter().any(|(first, second, assessment)| {
                 ((*first == a && *second == b) || (*first == b && *second == a))

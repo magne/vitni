@@ -459,19 +459,11 @@ family and event profiles (#398), the other seven kinds' profiles (#399), the `m
 index with `find_similar` (#400), the evaluation corpus with `cargo xtask match-eval` (#402) and
 `PersonsDistinguished` with the assessment on identity decisions (#403), the duplicate check
 through the engine (#401), persona clusters (#404), merge and distinguish for events and families
-(#405) and for places, sources, citations, repositories, notes and media (#406), and profiles read by
-record over the record links index (#492), which have landed.
+(#405) and for places, sources, citations, repositories, notes and media (#406), profiles read by
+record over the record links index (#492), and the match pairs projection (#493), which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
-- **The all-pairs duplicate scan does not scale to 100k persons** — `similar_pairs` scores every
-  candidate pair (about 86 per person on the bench's name pools, rising with the workspace) and holds
-  every pair's `MatchAssessment`; at 100k persons one scan took 452 s on one core before it was spread
-  over the cores, and its pairs run to gigabytes. The Dashboard's data-quality card runs it for
-  every matchable kind and the Matches tool for every decidable kind, on every show. *Shape:* keep the pairs as a
-  projection refreshed from the dirty records like `match_keys`, or keep only the pair ids and score on
-  display. *Exit:* the Dashboard opens a 100k-person workspace in under a
-  second. — #493
 - **Blocking loses a given name that is only similar, not keyed alike** — the proptest
   `every_pair_the_engine_shows_meets` (`vitni-core/src/matching/keys/tests.rs`), at 2000 cases, finds
   *Katherine Haugen* (born 1857 by a census age) and *Kari Olsen* (baptised 1853), both in Norway: the

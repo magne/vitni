@@ -1,10 +1,11 @@
-//! Record-matching benchmarks at scale (ADR 0038 §7, *Consequences*): the `match_keys` index build,
-//! one `find_similar` over a fresh index, one edit followed by the lookup that rekeys it, and the
-//! all-pairs `similar_pairs` scan the duplicate check runs.
+//! Record-matching benchmarks at scale (ADR 0038 §7, *Consequences*; ADR 0048): the `match_keys`
+//! index build, one `find_similar` over a fresh index, one edit followed by the lookup that rekeys it,
+//! the `match_pairs` build that scores every pair, the Dashboard's data-quality checks over built
+//! pairs, and one edit followed by those checks.
 //!
 //! Each size is seeded, measured and dropped before the next, so only one workspace is in memory. The
-//! all-pairs scan is measured only up to [`PAIRS_SAMPLED_UP_TO`]: at 100k persons it holds millions of
-//! assessments at once.
+//! pairs build is measured only up to [`PAIRS_SAMPLED_UP_TO`]: at 100k persons one build takes minutes,
+//! and the checks after it are what a user waits for.
 //!
 //! The workspace is seeded with persons, each with a dated birth event in Norway, whose names and years
 //! are drawn from Norwegian-style pools with spelling variants, so blocking buckets are realistically
@@ -24,7 +25,7 @@ use time::macros::datetime;
 use uuid::Uuid;
 use vitni_app::{
     AppDefaults, DateParts, MatchBand, MatchableKind, MutationMeta, OperatorConfig, Session, Workspace,
-    WorkspaceDefaults, assert_event_date, find_similar, similar_pairs,
+    WorkspaceDefaults, assert_event_date, find_similar, run_checks,
 };
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
@@ -43,8 +44,11 @@ use vitni_db::{DbError, RawEvent};
 /// The person counts benchmarked; the largest is the ADR's 100k.
 const SIZES: [usize; 2] = [10_000, 100_000];
 
-/// The largest size the all-pairs scan is measured at.
+/// The largest size the pairs build is measured at.
 const PAIRS_SAMPLED_UP_TO: usize = 10_000;
+
+/// How many of the strongest possible matches the checks list, as the Dashboard does.
+const SHOWN: usize = 5;
 
 /// Persons whose rows are built and inserted together while seeding, bounding the rows held at once.
 const SEED_CHUNK: usize = 10_000;
@@ -452,21 +456,70 @@ fn bench_edit_then_lookup(c: &mut Criterion, rt: &tokio::runtime::Runtime, datas
     group.finish();
 }
 
-fn bench_similar_pairs(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Dataset) {
-    let mut group = c.benchmark_group("similar_pairs");
+async fn checks(dataset: &Dataset) -> usize {
+    run_checks(&dataset.workspace, SHOWN)
+        .await
+        .expect("run checks")
+        .duplicates
+        .len()
+}
+
+fn bench_pairs_build(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Dataset) {
+    let mut group = c.benchmark_group("match_pairs_build");
     group.sample_size(10);
     {
-        let pairs = || {
-            rt.block_on(similar_pairs(
-                &dataset.workspace,
-                MatchableKind::Person,
-                MatchBand::Possible,
-            ))
-            .expect("similar pairs")
-            .len()
-        };
-        group.bench_with_input(BenchmarkId::from_parameter(dataset.persons), dataset, |b, _| {
-            b.iter(pairs);
+        group.bench_with_input(BenchmarkId::from_parameter(dataset.persons), dataset, |b, dataset| {
+            b.iter_custom(|iterations| {
+                let mut total = Duration::ZERO;
+                for _ in 0..iterations {
+                    rt.block_on(dataset.workspace.rebuild_projections()).expect("rebuild");
+                    rt.block_on(lookup(dataset));
+                    let start = Instant::now();
+                    rt.block_on(checks(dataset));
+                    total += start.elapsed();
+                }
+                total
+            });
+        });
+    }
+    group.finish();
+}
+
+fn bench_checks(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Dataset) {
+    let mut group = c.benchmark_group("data_quality_checks");
+    group.sample_size(10);
+    {
+        rt.block_on(checks(dataset));
+        group.bench_with_input(BenchmarkId::from_parameter(dataset.persons), dataset, |b, dataset| {
+            b.iter(|| rt.block_on(checks(dataset)));
+        });
+    }
+    group.finish();
+}
+
+fn bench_edit_then_checks(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Dataset) {
+    let mut group = c.benchmark_group("edit_then_data_quality_checks");
+    group.sample_size(10);
+    {
+        let mut next_year = 1800;
+        group.bench_with_input(BenchmarkId::from_parameter(dataset.persons), dataset, |b, dataset| {
+            b.iter(|| {
+                next_year = if next_year == 1800 { 1801 } else { 1800 };
+                let date = DateParts {
+                    year: next_year,
+                    month: None,
+                    day: None,
+                };
+                rt.block_on(assert_event_date(
+                    &dataset.workspace,
+                    &dataset.session,
+                    "E0000002",
+                    date,
+                    MutationMeta::default(),
+                ))
+                .expect("edit a birth");
+                rt.block_on(checks(dataset))
+            });
         });
     }
     group.finish();
@@ -480,8 +533,10 @@ fn benches(c: &mut Criterion) {
         bench_find_similar(c, &rt, &dataset);
         bench_edit_then_lookup(c, &rt, &dataset);
         if persons <= PAIRS_SAMPLED_UP_TO {
-            bench_similar_pairs(c, &rt, &dataset);
+            bench_pairs_build(c, &rt, &dataset);
         }
+        bench_checks(c, &rt, &dataset);
+        bench_edit_then_checks(c, &rt, &dataset);
     }
 }
 

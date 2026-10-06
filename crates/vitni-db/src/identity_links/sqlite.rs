@@ -18,7 +18,7 @@ use vitni_core::place::PlaceView;
 use vitni_core::repository::RepositoryView;
 use vitni_core::source::SourceView;
 
-use super::{IDENTITY_EDGES_TABLE, IDENTITY_LINKS_TABLE, IndexedRecord, closure};
+use super::{IDENTITY_DISTINCTIONS_TABLE, IDENTITY_EDGES_TABLE, IDENTITY_LINKS_TABLE, IndexedRecord, closure};
 use crate::sqlite_query;
 use crate::store::{DbError, IdentityLink};
 
@@ -38,29 +38,39 @@ CREATE TABLE IF NOT EXISTS identity_links (
     PRIMARY KEY (kind, member)
 )";
 
+const CREATE_IDENTITY_DISTINCTIONS_TABLE: &str = "
+CREATE TABLE IF NOT EXISTS identity_distinctions (
+    kind    TEXT NOT NULL,
+    record  TEXT NOT NULL,
+    other   TEXT NOT NULL,
+    PRIMARY KEY (kind, record, other)
+)";
+
 /// Wraps a `sqlx` error with what the index was doing.
 fn backend(action: &'static str) -> impl Fn(sqlx::Error) -> DbError {
     move |error| DbError::Backend(format!("{action}: {error}"))
 }
 
-/// Creates the identity index tables. Idempotent. Returns whether they are new, so a workspace whose
-/// log predates them gets them filled from its projections.
+/// Creates the identity index tables. Idempotent. Returns whether they are new — judged by the newest,
+/// `identity_distinctions` — so a workspace whose log predates them gets them filled from its
+/// projections.
 ///
 /// # Errors
 ///
 /// Returns the `sqlx` error if a statement fails.
 pub(crate) async fn create_tables(pool: &Pool<Sqlite>) -> Result<bool, sqlx::Error> {
     let existed = sqlx::query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
-        .bind(IDENTITY_LINKS_TABLE)
+        .bind(IDENTITY_DISTINCTIONS_TABLE)
         .fetch_optional(pool)
         .await?
         .is_some();
     sqlx::query(CREATE_IDENTITY_EDGES_TABLE).execute(pool).await?;
     sqlx::query(CREATE_IDENTITY_LINKS_TABLE).execute(pool).await?;
+    sqlx::query(CREATE_IDENTITY_DISTINCTIONS_TABLE).execute(pool).await?;
     Ok(!existed)
 }
 
-/// A `cqrs-es` query that keeps one kind's edges and clusters in step with its projection. Must be
+/// A `cqrs-es` query that keeps one kind's edges, clusters and distinctions in step with its projection. Must be
 /// appended *after* that aggregate's `GenericQuery`, so the projection it reads is already up to date.
 pub(crate) struct IdentityLinksQuery<V> {
     pool: Pool<Sqlite>,
@@ -80,17 +90,18 @@ impl<V> IdentityLinksQuery<V> {
 #[async_trait]
 impl<V: IndexedRecord> Query<V::State> for IdentityLinksQuery<V> {
     async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<V::State>]) {
-        if !events.iter().any(|envelope| V::changes_edges(&envelope.payload)) {
+        if !events.iter().any(|envelope| V::changes_decisions(&envelope.payload)) {
             return;
         }
-        if let Err(error) = reindex_survivor::<V>(&self.pool, aggregate_id).await {
+        if let Err(error) = reindex_record::<V>(&self.pool, aggregate_id).await {
             tracing::error!(kind = V::KIND.as_str(), aggregate_id, %error, "failed to update the identity index");
         }
     }
 }
 
-/// Mirrors one survivor's live merge edges from its projection, then recomputes its kind's clusters.
-async fn reindex_survivor<V: IndexedRecord>(pool: &Pool<Sqlite>, surviving: &str) -> Result<(), DbError> {
+/// Mirrors one record's live merge edges and distinctions from its projection, then recomputes its
+/// kind's clusters.
+async fn reindex_record<V: IndexedRecord>(pool: &Pool<Sqlite>, surviving: &str) -> Result<(), DbError> {
     let kind = V::KIND.as_str();
     let view = sqlite_query::find_view_by_id::<V>(pool, V::VIEW_TABLE, surviving).await?;
     let mut tx = pool
@@ -105,8 +116,17 @@ async fn reindex_survivor<V: IndexedRecord>(pool: &Pool<Sqlite>, surviving: &str
     .execute(&mut *tx)
     .await
     .map_err(backend("clearing a survivor's identity edges"))?;
+    sqlx::query(&format!(
+        "DELETE FROM {IDENTITY_DISTINCTIONS_TABLE} WHERE kind = ? AND record = ?"
+    ))
+    .bind(kind)
+    .bind(surviving)
+    .execute(&mut *tx)
+    .await
+    .map_err(backend("clearing a record's distinctions"))?;
     if let Some(view) = view {
         insert_edges(&mut tx, kind, surviving, &view).await?;
+        insert_distinctions(&mut tx, kind, surviving, &view).await?;
     }
     recompute_links(&mut tx, kind).await?;
     tx.commit().await.map_err(backend("committing the identity index"))
@@ -129,6 +149,27 @@ async fn insert_edges<V: ClusterRecord>(
         .execute(&mut **tx)
         .await
         .map_err(backend("inserting an identity edge"))?;
+    }
+    Ok(())
+}
+
+/// Inserts one row per record `view` is held distinct from.
+async fn insert_distinctions<V: ClusterRecord>(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    kind: &str,
+    record: &str,
+    view: &V,
+) -> Result<(), DbError> {
+    for other in view.distinguished_with_assertions() {
+        sqlx::query(&format!(
+            "INSERT OR IGNORE INTO {IDENTITY_DISTINCTIONS_TABLE} (kind, record, other) VALUES (?, ?, ?)"
+        ))
+        .bind(kind)
+        .bind(record)
+        .bind(other.value.to_string())
+        .execute(&mut **tx)
+        .await
+        .map_err(backend("inserting an identity distinction"))?;
     }
     Ok(())
 }
@@ -196,9 +237,15 @@ async fn rebuild_kind<V: IndexedRecord>(pool: &Pool<Sqlite>) -> Result<(), DbErr
         .execute(&mut *tx)
         .await
         .map_err(backend("clearing the identity edges"))?;
+    sqlx::query(&format!("DELETE FROM {IDENTITY_DISTINCTIONS_TABLE} WHERE kind = ?"))
+        .bind(kind)
+        .execute(&mut *tx)
+        .await
+        .map_err(backend("clearing the identity distinctions"))?;
     for view in &views {
         let Some(id) = view.record_id() else { continue };
         insert_edges(&mut tx, kind, &id.to_string(), view).await?;
+        insert_distinctions(&mut tx, kind, &id.to_string(), view).await?;
     }
     recompute_links(&mut tx, kind).await?;
     tx.commit().await.map_err(backend("committing the identity index"))
@@ -224,4 +271,21 @@ pub(crate) async fn links(pool: &Pool<Sqlite>, kind: MatchableKind) -> Result<Ve
             root: row.get("root"),
         })
         .collect())
+}
+
+/// Every live `kind` distinction as `(record, other)`, `record` the one it is recorded on, in that
+/// order.
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails.
+pub(crate) async fn distinctions(pool: &Pool<Sqlite>, kind: MatchableKind) -> Result<Vec<(String, String)>, DbError> {
+    let rows = sqlx::query(&format!(
+        "SELECT record, other FROM {IDENTITY_DISTINCTIONS_TABLE} WHERE kind = ? ORDER BY record, other"
+    ))
+    .bind(kind.as_str())
+    .fetch_all(pool)
+    .await
+    .map_err(backend("reading the identity distinctions"))?;
+    Ok(rows.iter().map(|row| (row.get("record"), row.get("other"))).collect())
 }
