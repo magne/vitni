@@ -205,12 +205,6 @@ macro_rules! sqlite_store {
                 // The identity cluster index (ADR 0039 §4) is derived from the projections of every
                 // matchable kind; its `Query` is appended to those frameworks below, and a workspace that
                 // predates it gets it filled once the projections are open.
-                // The record links index (ADR 0047) mirrors the references the person, family, event and
-                // citation projections hold; its `Query` is appended to those frameworks below, and a
-                // workspace that predates it gets it filled once the projections are open.
-                let links_are_new = crate::record_links::sqlite::create_tables(&pool)
-                    .await
-                    .map_err(|e| DbError::Backend(format!("creating record links index: {e}")))?;
                 let identity_is_new = crate::identity_links::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating identity index: {e}")))?;
@@ -240,9 +234,10 @@ macro_rules! sqlite_store {
                 if identity_is_new {
                     crate::identity_links::sqlite::rebuild_index(&pool).await?;
                 }
-                if links_are_new {
-                    crate::record_links::sqlite::rebuild_index(&pool).await?;
-                }
+                // The record links index (ADR 0047) mirrors the references the person, family, event and
+                // citation projections hold; its `Query` is appended to those frameworks above, and a
+                // workspace that predates it gets it created and filled from the open projections.
+                crate::record_links::sqlite::create_filled(&pool).await?;
                 Ok(Self { $($snake,)+ pool })
             }
 

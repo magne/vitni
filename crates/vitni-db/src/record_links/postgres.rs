@@ -31,21 +31,55 @@ fn backend(action: &'static str) -> impl Fn(sqlx::Error) -> DbError {
     move |error| DbError::Backend(format!("{action}: {error}"))
 }
 
-/// Creates the record links table. Idempotent. Returns whether it is new, so a workspace whose
-/// projections predate it gets it filled from them.
+/// Creates the record links table filled from the projections, unless it exists — so a workspace whose
+/// projections predate it gets it filled. The table is created and filled in one transaction: an open
+/// cut short leaves no table, never an empty one the next open would take for filled.
 ///
 /// # Errors
 ///
-/// Returns the `sqlx` error if a statement fails.
-pub(crate) async fn create_tables(pool: &Pool<Postgres>) -> Result<bool, sqlx::Error> {
+/// A [`DbError`] if reading a projection or writing the index fails.
+pub(crate) async fn create_filled(pool: &Pool<Postgres>) -> Result<(), DbError> {
     let existed: bool = sqlx::query("SELECT to_regclass($1) IS NOT NULL AS existed")
         .bind(RECORD_LINKS_TABLE)
         .fetch_one(pool)
-        .await?
+        .await
+        .map_err(backend("looking for the record links table"))?
         .get("existed");
-    sqlx::query(CREATE_RECORD_LINKS_TABLE).execute(pool).await?;
-    sqlx::query(CREATE_RECORD_LINKS_TARGET_INDEX).execute(pool).await?;
-    Ok(!existed)
+    if existed {
+        return Ok(());
+    }
+    let mut links = Vec::new();
+    links.extend(links_of::<PersonView>(pool).await?);
+    links.extend(links_of::<FamilyView>(pool).await?);
+    links.extend(links_of::<EventView>(pool).await?);
+    links.extend(links_of::<CitationView>(pool).await?);
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(backend("opening a record links transaction"))?;
+    for statement in [CREATE_RECORD_LINKS_TABLE, CREATE_RECORD_LINKS_TARGET_INDEX] {
+        sqlx::query(statement)
+            .execute(&mut *tx)
+            .await
+            .map_err(backend("creating the record links table"))?;
+    }
+    for (relation, source, target) in &links {
+        insert_link(&mut tx, *relation, source, target).await?;
+    }
+    tx.commit().await.map_err(backend("committing the record links"))
+}
+
+/// Every `(relation, source, target)` the projections of one kind hold.
+async fn links_of<V: LinkingRecord>(pool: &Pool<Postgres>) -> Result<Vec<(RecordLink, String, String)>, DbError> {
+    let views: Vec<V> = postgres_query::list_views(pool, V::VIEW_TABLE).await?;
+    let mut links = Vec::new();
+    for view in &views {
+        let Some(source) = view.linking_id() else { continue };
+        for (relation, target) in view.links() {
+            links.push((relation, source.clone(), target));
+        }
+    }
+    Ok(links)
 }
 
 /// A `cqrs-es` query that keeps one kind's references in step with its projection. Must be appended
@@ -107,16 +141,27 @@ async fn insert_links<V: LinkingRecord>(
     view: &V,
 ) -> Result<(), DbError> {
     for (relation, target) in view.links() {
-        sqlx::query(&format!(
-            "INSERT INTO {RECORD_LINKS_TABLE} (relation, source, target) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
-        ))
-        .bind(relation.as_str())
-        .bind(source)
-        .bind(target)
-        .execute(&mut **tx)
-        .await
-        .map_err(backend("inserting a record link"))?;
+        insert_link(tx, relation, source, &target).await?;
     }
+    Ok(())
+}
+
+/// Inserts one reference, unless it is there already.
+async fn insert_link(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    relation: RecordLink,
+    source: &str,
+    target: &str,
+) -> Result<(), DbError> {
+    sqlx::query(&format!(
+        "INSERT INTO {RECORD_LINKS_TABLE} (relation, source, target) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
+    ))
+    .bind(relation.as_str())
+    .bind(source)
+    .bind(target)
+    .execute(&mut **tx)
+    .await
+    .map_err(backend("inserting a record link"))?;
     Ok(())
 }
 
