@@ -1,5 +1,7 @@
 //! The SQLite half of the `match_keys` index — see the [module header](super).
 
+use std::collections::BTreeSet;
+
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, EventEnvelope, Query};
 use sqlx::{Pool, Row, Sqlite, Transaction};
@@ -7,7 +9,7 @@ use vitni_core::matching::{MatchableKind, Probe};
 
 use super::{
     DirtyRecord, INSERT_CHUNK, KeyedRecord, MATCH_DIRTY_TABLE, MATCH_KEYS_STATE_TABLE, MATCH_KEYS_TABLE, kind_of,
-    probe_condition,
+    probe_query,
 };
 use crate::store::DbError;
 
@@ -276,12 +278,9 @@ pub(crate) async fn candidates(
     kind: MatchableKind,
     probe: &Probe,
 ) -> Result<Vec<String>, DbError> {
-    let Some((condition, values)) = probe_condition(probe, 1, |_| "?".to_owned()) else {
+    let Some((sql, values)) = probe_query(probe, |i| format!("?{i}")) else {
         return Ok(Vec::new());
     };
-    let sql = format!(
-        "SELECT DISTINCT aggregate_id FROM {MATCH_KEYS_TABLE} WHERE kind = ? AND {condition} ORDER BY aggregate_id"
-    );
     let mut query = sqlx::query(&sql).bind(kind.as_str());
     for value in &values {
         query = query.bind(value);
@@ -290,7 +289,11 @@ pub(crate) async fn candidates(
         .fetch_all(pool)
         .await
         .map_err(backend("reading match candidates"))?;
-    Ok(rows.into_iter().map(|row| row.get("aggregate_id")).collect())
+    let mut ids = BTreeSet::new();
+    for row in rows {
+        ids.insert(row.get::<String, _>("aggregate_id"));
+    }
+    Ok(ids.into_iter().collect())
 }
 
 /// Every `(aggregate_id, key)` of `kind`, by id then key.

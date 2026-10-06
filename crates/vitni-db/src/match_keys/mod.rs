@@ -56,29 +56,38 @@ pub struct KeyedRecord {
     pub keys: Vec<String>,
 }
 
-/// The `WHERE` condition over `key` a probe meets, with its bound values in order, each placeholder
-/// spelled by `placeholder` from its 1-based position after `offset`; `None` when the probe meets
-/// nothing.
-fn probe_condition(probe: &Probe, offset: usize, placeholder: fn(usize) -> String) -> Option<(String, Vec<String>)> {
+/// The query of the `aggregate_id` of every key of a kind `probe` meets, with the values to bind after
+/// the kind, which is the first parameter. Each exact-key list and each prefix range is its own
+/// `SELECT`, joined by `UNION ALL`: SQLite plans an `OR` of them as a scan of every key of the kind,
+/// but each branch alone as a search of the `(kind, key)` primary key. A record meeting several
+/// branches appears once per branch; `None` when the probe meets nothing.
+fn probe_query(probe: &Probe, placeholder: fn(usize) -> String) -> Option<(String, Vec<String>)> {
     let mut values: Vec<String> = Vec::new();
-    let mut clauses = Vec::new();
     let bind = |value: String, values: &mut Vec<String>| {
         values.push(value);
-        placeholder(offset + values.len())
+        placeholder(1 + values.len())
     };
+    let kind = placeholder(1);
+    let mut branches = Vec::new();
     if !probe.exact.is_empty() {
         let mut list = Vec::with_capacity(probe.exact.len());
         for key in &probe.exact {
             list.push(bind(key.clone(), &mut values));
         }
-        clauses.push(format!("key IN ({})", list.join(", ")));
+        branches.push(format!("key IN ({})", list.join(", ")));
     }
     for prefix in &probe.prefixes {
         let lo = bind(prefix.clone(), &mut values);
         let hi = bind(prefix_end(prefix), &mut values);
-        clauses.push(format!("(key >= {lo} AND key < {hi})"));
+        branches.push(format!("key >= {lo} AND key < {hi}"));
     }
-    (!clauses.is_empty()).then(|| (format!("({})", clauses.join(" OR ")), values))
+    let mut selects = Vec::with_capacity(branches.len());
+    for branch in branches {
+        selects.push(format!(
+            "SELECT aggregate_id FROM {MATCH_KEYS_TABLE} WHERE kind = {kind} AND {branch}"
+        ));
+    }
+    (!selects.is_empty()).then(|| (selects.join(" UNION ALL "), values))
 }
 
 /// The kind named by a stored aggregate type.
@@ -91,17 +100,21 @@ fn kind_of(aggregate_type: &str) -> Result<MatchableKind, crate::store::DbError>
 mod tests {
     use vitni_core::matching::Probe;
 
-    use super::probe_condition;
+    use super::probe_query;
 
     #[test]
-    fn a_probe_becomes_one_condition_with_its_values_in_order() {
+    fn a_probe_becomes_one_indexed_select_per_branch_with_its_values_in_order() {
         let probe = Probe {
             exact: vec!["a".to_owned(), "b".to_owned()],
             prefixes: vec!["c@".to_owned()],
         };
-        let (sql, values) = probe_condition(&probe, 1, |i| format!("${i}")).unwrap();
-        assert_eq!(sql, "(key IN ($2, $3) OR (key >= $4 AND key < $5))");
+        let (sql, values) = probe_query(&probe, |i| format!("${i}")).unwrap();
+        assert_eq!(
+            sql,
+            "SELECT aggregate_id FROM match_keys WHERE kind = $1 AND key IN ($2, $3) \
+             UNION ALL SELECT aggregate_id FROM match_keys WHERE kind = $1 AND key >= $4 AND key < $5"
+        );
         assert_eq!(values, ["a", "b", "c@", "cA"]);
-        assert_eq!(probe_condition(&Probe::default(), 0, |_| "?".to_owned()), None);
+        assert_eq!(probe_query(&Probe::default(), |i| format!("?{i}")), None);
     }
 }
