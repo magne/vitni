@@ -3,7 +3,7 @@
 
 use super::dashboard::record_ref;
 use super::{HashMap, Localizer, RecordRef};
-use vitni_app::{AggRef, DecidableKind, ImportRunId, ImportRunSummary, MatchEvidence, QueuedMatch};
+use vitni_app::{AggRef, DecidableKind, ImportRunId, ImportRunSummary, MatchEvidence, MatchQueue};
 
 /// One undecided pair: both records, navigable, the kind, and the engine's view of them.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,11 +56,16 @@ pub struct RunOptionVm {
     pub label: String,
 }
 
+/// How many of the strongest undecided pairs the Matches tool lists; the rest are counted.
+pub const LISTED_MATCHES: usize = 100;
+
 /// The Matches tool's table: the queued pairs under the current filter, and the runs it can be
 /// narrowed to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchQueueVm {
-    /// The undecided pairs, the most similar first.
+    /// How many undecided pairs the filter admits, listed or not.
+    pub total: usize,
+    /// The strongest undecided pairs, at most [`LISTED_MATCHES`], the most similar first.
     pub pairs: Vec<QueuedMatchVm>,
     /// Every import run, oldest first.
     pub runs: Vec<RunOptionVm>,
@@ -69,10 +74,10 @@ pub struct MatchQueueVm {
 impl MatchQueueVm {
     /// Builds the table from the app's queue and import runs.
     #[must_use]
-    pub fn build(queue: &[QueuedMatch], runs: &[ImportRunSummary], loc: &Localizer) -> Self {
+    pub fn build(queue: &MatchQueue, runs: &[ImportRunSummary], loc: &Localizer) -> Self {
         let names = HashMap::new();
-        let mut pairs = Vec::with_capacity(queue.len());
-        for queued in queue {
+        let mut pairs = Vec::with_capacity(queue.pairs.len());
+        for queued in &queue.pairs {
             pairs.push(QueuedMatchVm::build(
                 queued.kind,
                 (&queued.a, &queued.b),
@@ -88,6 +93,16 @@ impl MatchQueueVm {
                 label: loc.match_run_option(&run.source_label, &run.started_at.into_inner().date().to_string()),
             });
         }
-        Self { pairs, runs: options }
+        Self {
+            total: queue.total,
+            pairs,
+            runs: options,
+        }
+    }
+
+    /// How many undecided pairs the filter admits beyond those listed.
+    #[must_use]
+    pub fn unlisted(&self) -> usize {
+        self.total.saturating_sub(self.pairs.len())
     }
 }

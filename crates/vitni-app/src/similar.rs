@@ -12,8 +12,13 @@
 //! place's events, a source's citations — found through the record links index (ADR 0047).
 //!
 //! A lookup — [`find_similar`], the draft hint, [`assess`] — reads only its target and the candidates
-//! the index yields. [`similar_pairs`] and an import's matcher score every record, so they read their
-//! kinds whole.
+//! the index yields. An import's matcher scores every record it stages, so it reads its kinds whole.
+//!
+//! [`similar_pairs`] reads the `match_pairs` projection (ADR 0048), refreshed first from the records
+//! committed to since: each one's pairs are scored again against the candidates the index yields, with
+//! those of every record whose profile reads it ([`pair_dependents`]). A kind with many such records,
+//! and every kind when the keys, engine or settings changed, is scored whole across the cores. Only the
+//! pairs a consumer shows are assessed again for their terms.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -22,18 +27,18 @@ use vitni_core::matching::profile::{
     PersonProfile, PlaceProfile, RepositoryProfile, SourceProfile, VitalEvent, VitalKind,
 };
 use vitni_core::matching::{
-    BlockingKeys, DateBasis, MatchAssessment, MatchBand, MatchableKind, Probe, assess_citations, assess_events,
-    assess_families, assess_media, assess_notes, assess_persons, assess_places, assess_repositories, assess_sources,
-    assess_tags, prefix_end,
+    BlockingKeys, DateBasis, ENGINE_VERSION, MatchAssessment, MatchBand, MatchableKind, Probe, assess_citations,
+    assess_events, assess_families, assess_media, assess_notes, assess_persons, assess_places, assess_repositories,
+    assess_sources, assess_tags, prefix_end,
 };
-use vitni_db::{DirtyRecord, KeyedRecord, RecordLink, Store};
+use vitni_db::{DirtyRecord, KeyedRecord, MatchPair, PairRefresh, PairScope, RecordLink, Store};
 
 use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::matching::Matching;
 use crate::person::{PersonNameParts, build_name};
-use crate::profile::{Decisions, Profile, Profiles, aggregate_id_of, linking, place_name};
+use crate::profile::{Decisions, Profile, Profiles, aggregate_id_of, linking, ordered_pair, place_name};
 use crate::workspace::Workspace;
 
 /// A record similar to the target, with the engine's assessment of the pair.
@@ -45,9 +50,24 @@ pub struct SimilarRecord {
     pub assessment: MatchAssessment,
 }
 
-/// Two records of one kind the engine judged similar.
+/// Two records of one kind the engine judged similar, as the `match_pairs` projection holds them.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SimilarPair {
+    /// The first record, the lower aggregate id.
+    pub a: AggRef,
+    /// The second record.
+    pub b: AggRef,
+    /// The band the engine put the pair in.
+    pub band: MatchBand,
+    /// The engine's score, in `0..=1`.
+    pub score: f64,
+}
+
+/// Two records of one kind with the engine's assessment of them, scored when shown.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct AssessedPair {
+    /// The kind of both records.
+    pub kind: MatchableKind,
     /// The first record, the lower aggregate id.
     pub a: AggRef,
     /// The second record.
@@ -55,6 +75,10 @@ pub struct SimilarPair {
     /// The assessment of the pair.
     pub assessment: MatchAssessment,
 }
+
+/// The fewest records of one kind a refresh scores whole rather than one by one: past it, reading the
+/// kind and scoring it across the cores costs less than a candidate query per record.
+const WHOLE_KIND: usize = 1000;
 
 /// The records of `kind` the engine judges at least `min_band` similar to the record `target` (a human
 /// id; a tag's id), most similar first, at most `limit` of them. A merged target is matched as its
@@ -137,12 +161,222 @@ pub async fn similar_pairs(
     kind: MatchableKind,
     min_band: MatchBand,
 ) -> Result<Vec<SimilarPair>, AppError> {
+    Box::pin(refresh_pairs(workspace)).await?;
+    let stored = workspace.store().match_pairs(&[kind], min_band, None).await?;
+    let mut pairs = Vec::with_capacity(stored.len());
+    for (_, pair) in named_pairs(workspace.store(), stored).await? {
+        pairs.push(pair);
+    }
+    Ok(pairs)
+}
+
+/// `stored` with each record's human id, in the same order.
+pub(crate) async fn named_pairs(
+    store: &Store,
+    stored: Vec<MatchPair>,
+) -> Result<Vec<(MatchableKind, SimilarPair)>, AppError> {
+    let profiles = read_pairs(store, &stored).await?;
+    let mut named = Vec::with_capacity(stored.len());
+    for pair in stored {
+        let (a, b) = (
+            agg_ref(&profiles, pair.kind, &pair.a),
+            agg_ref(&profiles, pair.kind, &pair.b),
+        );
+        named.push((
+            pair.kind,
+            SimilarPair {
+                a,
+                b,
+                band: pair.band,
+                score: pair.score,
+            },
+        ));
+    }
+    Ok(named)
+}
+
+/// `stored` assessed again for the terms behind each score, in the same order.
+pub(crate) async fn assessed_pairs(
+    workspace: &Workspace,
+    stored: Vec<MatchPair>,
+) -> Result<Vec<AssessedPair>, AppError> {
+    let matching = workspace.matching()?;
+    let profiles = read_pairs(workspace.store(), &stored).await?;
+    let mut assessed = Vec::with_capacity(stored.len());
+    for pair in stored {
+        let (Some(left), Some(right)) = (
+            profiles.profile(pair.kind, &pair.a),
+            profiles.profile(pair.kind, &pair.b),
+        ) else {
+            continue;
+        };
+        let Some(assessment) = assess_pair(&left, &right, matching) else {
+            continue;
+        };
+        assessed.push(AssessedPair {
+            kind: pair.kind,
+            a: agg_ref(&profiles, pair.kind, &pair.a),
+            b: agg_ref(&profiles, pair.kind, &pair.b),
+            assessment,
+        });
+    }
+    Ok(assessed)
+}
+
+/// The profiles of both records of every pair in `pairs`.
+async fn read_pairs(store: &Store, pairs: &[MatchPair]) -> Result<Profiles, AppError> {
+    let mut by_kind: BTreeMap<MatchableKind, BTreeSet<String>> = BTreeMap::new();
+    for pair in pairs {
+        let ids = by_kind.entry(pair.kind).or_default();
+        ids.insert(pair.a.clone());
+        ids.insert(pair.b.clone());
+    }
+    let mut profiles = Profiles::default();
+    for (kind, ids) in by_kind {
+        profiles.include(store, kind, &Vec::from_iter(ids)).await?;
+    }
+    Ok(profiles)
+}
+
+/// Brings the keys index and the `match_pairs` projection up to date (ADR 0048): every kind scored whole
+/// when the pairs were scored under other keys, engine or settings, or never; otherwise the pairs of the
+/// records committed to since, and of every record whose profile reads one of them, scored again.
+///
+/// # Errors
+///
+/// [`AppError::MatchData`] or [`AppError::Config`] if the matching data or settings cannot be loaded,
+/// or [`AppError`] on a store failure.
+pub(crate) async fn refresh_pairs(workspace: &Workspace) -> Result<(), AppError> {
     let matching = workspace.matching()?;
     let keys = BlockingKeys::new(&matching.data);
-    let profiles = refreshed_profiles(workspace, &keys, &[kind]).await?;
+    let mut profiles = refreshed_profiles(workspace, &keys, &[]).await?;
+    let store = workspace.store();
+    let fingerprint = format!(
+        "{}|engine {}|{:?}",
+        keys.fingerprint(),
+        ENGINE_VERSION.0,
+        matching.settings
+    );
+    let dirty = store.match_pairs_dirty().await?;
+    if store.match_pairs_fingerprint().await?.as_deref() != Some(fingerprint.as_str()) {
+        let profiles = Profiles::load(store, &MatchableKind::ALL).await?;
+        let mut pairs = Vec::new();
+        for kind in MatchableKind::ALL {
+            pairs.extend(score_kind(store, &profiles, kind, matching).await?);
+        }
+        store.reset_match_pairs(&fingerprint, &pairs, &dirty).await?;
+        return Ok(());
+    }
+    if dirty.is_empty() {
+        return Ok(());
+    }
+    let mut refreshes = Vec::new();
+    for (kind, ids) in pair_dependents(store, &dirty).await? {
+        let refresh = if ids.len() >= WHOLE_KIND {
+            let whole = Profiles::load(store, &[kind]).await?;
+            PairRefresh {
+                kind,
+                scope: PairScope::Kind,
+                pairs: score_kind(store, &whole, kind, matching).await?,
+            }
+        } else {
+            let ids = Vec::from_iter(ids);
+            PairRefresh {
+                kind,
+                pairs: score_records(store, &mut profiles, kind, &ids, (&keys, matching)).await?,
+                scope: PairScope::Records(ids),
+            }
+        };
+        refreshes.push(refresh);
+    }
+    store.refresh_match_pairs(&refreshes, &dirty).await?;
+    Ok(())
+}
+
+/// The records whose pairs a change to the `dirty` ones can change, by kind: each dirty record, and every
+/// record whose profile reads one (ADR 0048 §2) — the places a place encloses, the events at them, the
+/// people taking part, those people's events, families and relatives, the families linking the events,
+/// and the sources and citations a repository or source reaches.
+async fn pair_dependents(
+    store: &Store,
+    dirty: &[DirtyRecord],
+) -> Result<BTreeMap<MatchableKind, BTreeSet<String>>, AppError> {
+    let of_kind = |kind: MatchableKind| -> BTreeSet<String> {
+        dirty
+            .iter()
+            .filter(|record| record.kind == kind)
+            .map(|record| record.aggregate_id.clone())
+            .collect()
+    };
+    let mut places = of_kind(MatchableKind::Place);
+    let mut next = Vec::from_iter(places.clone());
+    while !next.is_empty() {
+        let enclosed = linking(store, RecordLink::PlaceEnclosure, &next).await?;
+        next = enclosed
+            .into_iter()
+            .filter(|place| places.insert(place.clone()))
+            .collect();
+    }
+    let mut events = of_kind(MatchableKind::Event);
+    events.extend(linking(store, RecordLink::EventPlace, &Vec::from_iter(places.clone())).await?);
+    let mut persons = of_kind(MatchableKind::Person);
+    persons.extend(linking(store, RecordLink::Participation, &Vec::from_iter(events.clone())).await?);
+    let changed = Vec::from_iter(persons.clone());
+    for view in store.persons_by_ids(&changed).await? {
+        events.extend(view.participations().iter().map(|p| p.event_id.to_string()));
+    }
+    let mut families = of_kind(MatchableKind::Family);
+    families.extend(linking(store, RecordLink::FamilyEvent, &Vec::from_iter(events.clone())).await?);
+    families.extend(families_of(store, &changed).await?);
+    for family in store.families_by_ids(&Vec::from_iter(families.clone())).await? {
+        persons.extend(family.partners().iter().map(ToString::to_string));
+        persons.extend(family.children().iter().map(|child| child.child_id.to_string()));
+    }
+    families.extend(families_of(store, &Vec::from_iter(persons.clone())).await?);
+    let mut sources = of_kind(MatchableKind::Source);
+    let repositories = Vec::from_iter(of_kind(MatchableKind::Repository));
+    sources.extend(linking(store, RecordLink::SourceRepository, &repositories).await?);
+    let mut citations = of_kind(MatchableKind::Citation);
+    citations.extend(linking(store, RecordLink::CitationSource, &Vec::from_iter(sources.clone())).await?);
+
+    let mut out = BTreeMap::new();
+    for kind in MatchableKind::ALL {
+        let ids = match kind {
+            MatchableKind::Person => persons.clone(),
+            MatchableKind::Family => families.clone(),
+            MatchableKind::Event => events.clone(),
+            MatchableKind::Place => places.clone(),
+            MatchableKind::Source => sources.clone(),
+            MatchableKind::Citation => citations.clone(),
+            MatchableKind::Repository | MatchableKind::Media | MatchableKind::Note | MatchableKind::Tag => {
+                of_kind(kind)
+            }
+        };
+        if !ids.is_empty() {
+            out.insert(kind, ids);
+        }
+    }
+    Ok(out)
+}
+
+/// The families any of `persons` is a partner or child in.
+async fn families_of(store: &Store, persons: &[String]) -> Result<Vec<String>, AppError> {
+    let mut families = linking(store, RecordLink::FamilyPartner, persons).await?;
+    families.extend(linking(store, RecordLink::FamilyChild, persons).await?);
+    Ok(families)
+}
+
+/// Every pair of `kind` at least possibly the same, from `profiles` read whole for the kind, each pair
+/// once, scored across the cores.
+async fn score_kind(
+    store: &Store,
+    profiles: &Profiles,
+    kind: MatchableKind,
+    matching: &Matching,
+) -> Result<Vec<MatchPair>, AppError> {
     let mut by_key: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut by_record: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (aggregate_id, key) in workspace.store().match_keys_of_kind(kind).await? {
+    for (aggregate_id, key) in store.match_keys_of_kind(kind).await? {
         by_key.entry(key.clone()).or_default().push(aggregate_id.clone());
         by_record.entry(aggregate_id).or_default().push(key);
     }
@@ -155,38 +389,28 @@ pub async fn similar_pairs(
     let records: Vec<(&String, &Vec<String>)> = by_record.iter().collect();
     let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
     let chunk = records.len().div_ceil(threads).max(1);
-    let scored: Vec<Vec<(String, String, MatchAssessment)>> = std::thread::scope(|scope| {
+    let scored: Vec<Vec<MatchPair>> = std::thread::scope(|scope| {
         let workers: Vec<_> = records
             .chunks(chunk)
-            .map(|part| scope.spawn(|| pairs_from(part, &by_key, &built, matching, min_band)))
+            .map(|part| scope.spawn(|| pairs_from(kind, part, &by_key, &built, matching)))
             .collect();
         workers
             .into_iter()
             .map(|worker| worker.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
             .collect()
     });
-    let decisions = profiles.decisions(kind);
-    let mut pairs = Vec::new();
-    for (a, b, assessment) in scored.into_iter().flatten() {
-        if decisions.exclude(&a, &b) {
-            continue;
-        }
-        let (a, b) = (agg_ref(&profiles, kind, &a), agg_ref(&profiles, kind, &b));
-        pairs.push(SimilarPair { a, b, assessment });
-    }
-    pairs.sort_by(|x, y| rank(&x.assessment, &y.assessment).then_with(|| (&x.a.id, &x.b.id).cmp(&(&y.a.id, &y.b.id))));
-    Ok(pairs)
+    Ok(scored.into_iter().flatten().collect())
 }
 
-/// The pairs each record of `records` forms, at least `min_band` similar, with the candidates its keys
+/// The pairs each record of `records` forms, at least possibly the same, with the candidates its keys
 /// meet that sort after it — so every pair is scored once across all the parts.
 fn pairs_from(
+    kind: MatchableKind,
     records: &[(&String, &Vec<String>)],
     by_key: &BTreeMap<String, Vec<String>>,
     built: &BTreeMap<String, Profile>,
     matching: &Matching,
-    min_band: MatchBand,
-) -> Vec<(String, String, MatchAssessment)> {
+) -> Vec<MatchPair> {
     let mut pairs = Vec::new();
     for (id, record_keys) in records {
         let Some(profile) = built.get(*id) else {
@@ -199,12 +423,74 @@ fn pairs_from(
             let Some(assessment) = built.get(&other).and_then(|o| assess_pair(profile, o, matching)) else {
                 continue;
             };
-            if assessment.band >= min_band {
-                pairs.push(((*id).clone(), other, assessment));
+            if assessment.band >= MatchBand::Possible {
+                pairs.push(MatchPair {
+                    kind,
+                    a: (*id).clone(),
+                    b: other,
+                    band: assessment.band,
+                    score: assessment.score,
+                });
             }
         }
     }
     pairs
+}
+
+/// Every pair of `kind` at least possibly the same that one of `ids` is in, each pair once, against the
+/// candidates the index yields for it. The meet of two records' keys is symmetric, so each record's own
+/// candidates find every pair it is in.
+async fn score_records(
+    store: &Store,
+    profiles: &mut Profiles,
+    kind: MatchableKind,
+    ids: &[String],
+    (keys, matching): (&BlockingKeys<'_>, &Matching),
+) -> Result<Vec<MatchPair>, AppError> {
+    profiles.include(store, kind, ids).await?;
+    let mut candidates_of = Vec::with_capacity(ids.len());
+    let mut every = BTreeSet::new();
+    for id in ids {
+        let Some(profile) = profiles.profile(kind, id) else {
+            continue;
+        };
+        let found = store
+            .match_candidates(kind, &Probe::of(&keys_of(keys, &profile)))
+            .await?;
+        every.extend(found.iter().cloned());
+        candidates_of.push((id, profile, found));
+    }
+    profiles.include(store, kind, &Vec::from_iter(every)).await?;
+    let mut pairs = BTreeMap::new();
+    for (id, profile, found) in candidates_of {
+        for other in found {
+            let (a, b) = ordered_pair(id.clone(), other);
+            if a == b || pairs.contains_key(&(a.clone(), b.clone())) {
+                continue;
+            }
+            let other = if &a == id { &b } else { &a };
+            let Some(assessment) = profiles
+                .profile(kind, other)
+                .and_then(|other| assess_pair(&profile, &other, matching))
+            else {
+                continue;
+            };
+            if assessment.band >= MatchBand::Possible {
+                pairs.insert((a, b), (assessment.band, assessment.score));
+            }
+        }
+    }
+    let mut out = Vec::with_capacity(pairs.len());
+    for ((a, b), (band, score)) in pairs {
+        out.push(MatchPair {
+            kind,
+            a,
+            b,
+            band,
+            score,
+        });
+    }
+    Ok(out)
 }
 
 /// The records in `by_key` holding a key `probe` meets.

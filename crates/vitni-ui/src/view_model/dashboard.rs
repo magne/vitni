@@ -1,6 +1,6 @@
 use super::{ActivityVm, ChangeLogEntry, HashMap, Localizer, PersonSummary, QueuedMatchVm, RecordRef, WorkspaceCounts};
 use crate::navigation::Category;
-use vitni_app::{AggRef, CheckFinding, DecidableKind, MatchableKind};
+use vitni_app::{AggRef, CheckFinding, DataQuality, DecidableKind, MatchableKind};
 
 /// A quick entry point on the dashboard ("Jump back in") — a recently touched record.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,26 +121,31 @@ pub struct DataQualityVm {
     /// Persons flagged by the death-before-birth check, as navigable record references (the Review
     /// action lists these; the row count is their number).
     pub death_before_birth: Vec<RecordRef>,
-    /// The undecided possible matches of every decidable kind, the most similar first (the
-    /// *Possible matches* card lists the strongest and opens the Matches tool).
+    /// The strongest undecided possible matches, at most [`DASHBOARD_MATCHES`], the most similar first
+    /// (the *Possible matches* card lists them and opens the Matches tool).
     pub matches: Vec<QueuedMatchVm>,
-    /// How many of [`matches`](Self::matches) each kind has, already localized ("Place: 2"), in
-    /// kind order, kinds without one left out.
+    /// How many undecided possible matches there are, listed or not.
+    pub match_total: usize,
+    /// How many of them each kind has, already localized ("Place: 2"), in kind order, kinds without
+    /// one left out.
     pub match_counts: Vec<String>,
 }
 
+/// How many of the strongest possible matches the Dashboard lists; the rest are counted.
+pub const DASHBOARD_MATCHES: usize = 5;
+
 impl DataQualityVm {
-    /// Groups the data-quality `findings` into the per-check shapes the card renders, resolving each
+    /// Groups the data-quality findings into the per-check shapes the card renders, resolving each
     /// flagged person's display name from `persons`.
     #[must_use]
-    pub fn build(persons: &[PersonSummary], findings: &[CheckFinding], loc: &Localizer) -> Self {
+    pub fn build(persons: &[PersonSummary], quality: &DataQuality, loc: &Localizer) -> Self {
         let names: HashMap<String, String> = persons
             .iter()
             .filter_map(|person| person.display_name.clone().map(|name| (person.human_id.clone(), name)))
             .collect();
         let mut death_before_birth = Vec::new();
         let mut matches = Vec::new();
-        for finding in findings {
+        for finding in &quality.findings {
             match finding {
                 CheckFinding::DeathBeforeBirth(record) => {
                     death_before_birth.push(record_ref(MatchableKind::Person, record, &names));
@@ -152,16 +157,22 @@ impl DataQualityVm {
                 }
             }
         }
-        let mut match_counts = Vec::new();
+        let (mut match_total, mut match_counts) = (0, Vec::new());
         for kind in DecidableKind::ALL {
-            let count = matches.iter().filter(|queued| queued.kind == kind).count();
+            let count = quality
+                .duplicates
+                .iter()
+                .find(|(counted, _)| *counted == kind.matchable())
+                .map_or(0, |(_, count)| *count);
             if count > 0 {
+                match_total += count;
                 match_counts.push(loc.match_kind_count(kind, count));
             }
         }
         Self {
             death_before_birth,
             matches,
+            match_total,
             match_counts,
         }
     }

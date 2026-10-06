@@ -129,7 +129,9 @@ fn list_query(placeholder: fn(usize) -> String, kinds: usize, limit: Option<usiz
         listed.push(placeholder(kind + 2));
     }
     let kind_filter = format!(" AND p.kind IN ({})", listed.join(", "));
-    let limit = limit.map(|limit| format!(" LIMIT {limit}")).unwrap_or_default();
+    let limit = limit
+        .map(|limit| format!(" LIMIT {}", i64::try_from(limit).unwrap_or(i64::MAX)))
+        .unwrap_or_default();
     format!(
         "{HELD}SELECT p.kind, p.a, p.b, p.band, p.score {} \
          ORDER BY p.band DESC, p.score DESC, p.kind, p.a, p.b{limit}",
@@ -177,5 +179,7 @@ mod tests {
         );
         let one = list_query(|i| format!("${i}"), 1, Some(5));
         assert!(one.contains("p.kind IN ($2)") && one.ends_with("LIMIT 5"), "{one}");
+        let unbounded = list_query(|i| format!("${i}"), 1, Some(usize::MAX));
+        assert!(unbounded.ends_with(&format!("LIMIT {}", i64::MAX)), "{unbounded}");
     }
 }

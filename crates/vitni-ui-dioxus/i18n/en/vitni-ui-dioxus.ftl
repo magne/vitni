@@ -409,6 +409,10 @@ merge-duplicates-count = { $count ->
     [one] 1 undecided pair
    *[other] { $count } undecided pairs
 }
+merge-duplicates-unlisted = { $count ->
+    [one] +1 more pair — decide some or narrow the filter
+   *[other] +{ $count } more pairs — decide some or narrow the filter
+}
 merge-col-kind = Kind
 matches-filter-run = Import run
 matches-filter-all-runs = Every run

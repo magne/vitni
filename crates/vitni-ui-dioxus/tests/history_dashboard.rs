@@ -97,7 +97,8 @@ fn record(category: Category, human_id: &str, label: &str) -> RecordRef {
     }
 }
 
-/// Six possible matches, the strongest a place pair: one more than the card lists.
+/// The five strongest of six possible matches, the strongest a place pair: the card lists five and
+/// counts the sixth.
 fn matches() -> Vec<QueuedMatchVm> {
     let mut pairs = vec![QueuedMatchVm {
         kind: DecidableKind::Place,
@@ -108,7 +109,7 @@ fn matches() -> Vec<QueuedMatchVm> {
         band: "probable match".to_owned(),
         reasons: vec!["Same place name (+5.0)".to_owned(), "Same place type (+1.0)".to_owned()],
     }];
-    for n in 0..5 {
+    for n in 0..4 {
         pairs.push(QueuedMatchVm {
             kind: DecidableKind::Person,
             kind_label: "Person".to_owned(),
@@ -173,6 +174,7 @@ fn dashboard() -> Element {
             label: "Jane Reversed".to_owned(),
         }],
         matches: matches(),
+        match_total: 6,
         match_counts: vec!["Person: 5".to_owned(), "Place: 1".to_owned()],
     };
     dashboard_view(&loc, &[], &vm, Some(&data_quality))
@@ -197,6 +199,7 @@ fn dashboard_with_recents() -> Element {
     let data_quality = DataQualityVm {
         death_before_birth: vec![],
         matches: vec![],
+        match_total: 0,
         match_counts: vec![],
     };
     let recent = vec![RecentItem::Record {
