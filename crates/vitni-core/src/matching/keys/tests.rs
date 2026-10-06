@@ -1,7 +1,7 @@
 //! The blocking keys' cases, and the property that blocking loses no pair the engine would show (ADR
 //! 0038 §7).
 
-use proptest::prelude::{Just, Strategy, prop, prop_assert, prop_oneof, proptest};
+use proptest::prelude::{Just, ProptestConfig, Strategy, prop, prop_assert, prop_oneof, proptest};
 
 use super::{BlockingKeys, MatchableKind, Probe, prefix_end};
 use crate::enums::{EventType, ParticipantRole, Sex};
@@ -133,6 +133,33 @@ fn a_given_name_recorded_differently_meets_on_the_surname() {
         &norwegian("Katherine", "Olsen", 1874),
         &norwegian("Kari", "Olsen", 1880)
     ));
+}
+
+#[test]
+fn a_given_name_only_similar_meets_on_its_prefix() {
+    let census = person(
+        "Katherine",
+        "Haugen",
+        Sex::Male,
+        vec![vital(
+            VitalKind::Birth,
+            point(1857, None, None),
+            DateBasis::FromAge,
+            Some("Norway"),
+        )],
+    );
+    let baptised = person(
+        "Kari",
+        "Olsen",
+        Sex::Male,
+        vec![vital(
+            VitalKind::Baptism,
+            point(1853, None, None),
+            DateBasis::Recorded,
+            Some("Norway"),
+        )],
+    );
+    assert!(persons_meet(&census, &baptised));
 }
 
 #[test]
@@ -404,6 +431,8 @@ fn profiles() -> impl Strategy<Value = PersonProfile> {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig::with_cases(10_000))]
+
     /// Every pair the engine would show is a candidate: blocking never loses recall.
     #[test]
     fn every_pair_the_engine_shows_meets(a in profiles(), b in profiles()) {

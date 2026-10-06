@@ -279,9 +279,10 @@ by `similar.rs` before each lookup.
 
 - **Keys are loose on purpose.** A person is keyed by each given-name and surname token — normalized
   under every pack, by phonetic key and every phonetic key one letter shorter, and by the classes of
-  every installed pack — each qualified by the birth decade (`t:ole@185`, or `@?` when undated). A
-  `Probe` meets the neighbouring decades and the unknown one. Other kinds key their names, titles,
-  checksum or folded tag name, and every kind its record origins and external ids. The proptest
+  every installed pack, and each given name also by its first two letters (`g:ka`), so a name close only
+  by Jaro–Winkler (*Katherine* ↔ *Kari*) still meets — each qualified by the birth decade (`t:ole@185`,
+  or `@?` when undated). A `Probe` meets the neighbouring decades and the unknown one. Other kinds key
+  their names, titles, checksum or folded tag name, and every kind its record origins and external ids. The proptest
   `every_pair_the_engine_shows_meets` and the app test `blocking_loses_no_pair_a_score_of_every_pair_would_show`
   hold blocking to "no pair the engine would show is lost"; a key change that fails them loses recall.
 - **A change to how keys are made bumps `KEYS_VERSION`** in `keys.rs`. It is part of the fingerprint

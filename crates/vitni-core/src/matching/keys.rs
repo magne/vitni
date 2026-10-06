@@ -3,8 +3,10 @@
 //!
 //! Blocking must never be the reason a true match goes unscored, so a record is indexed under several
 //! deliberately loose keys. A person is keyed by each given-name token — normalized, by phonetic key
-//! (and every phonetic key one letter shorter, so a one-letter slip still meets), and by the given-name
-//! equivalence classes of **every** installed pack — each qualified by the decade of the birth estimate.
+//! (and every phonetic key one letter shorter, so a one-letter slip still meets), by the given-name
+//! equivalence classes of **every** installed pack, and by the first two letters of each given name, so a
+//! name only close by Jaro–Winkler (*Katherine* ↔ *Kari*) still meets — each qualified by the decade of
+//! the birth estimate.
 //! Its surnames are keyed the same way, but a surname is never *required*: a patronymic or a farm name
 //! that changed after a move still meets on the given name, and a given name recorded differently still
 //! meets on the surname. Other kinds have their own keys: a place's name tokens, a source's title words, a media
@@ -36,7 +38,7 @@ use crate::origin::RecordOrigin;
 use crate::text::ExternalId;
 
 /// The version of the keying rules; bumping it rebuilds every index.
-pub const KEYS_VERSION: u32 = 1;
+pub const KEYS_VERSION: u32 = 2;
 
 /// The qualifier of a key whose decade is not known.
 const UNKNOWN: &str = "?";
@@ -49,6 +51,9 @@ const PAGE: char = '#';
 
 /// A phonetic key at least this long is also keyed by every key one letter shorter.
 const MIN_DELETION: usize = 4;
+
+/// A given name is also keyed by its first this many letters.
+const GIVEN_PREFIX: usize = 2;
 
 /// A date whose interval spans more years than this says nothing about the decade.
 const MAX_SPAN_YEARS: i32 = 200;
@@ -407,6 +412,18 @@ impl<'d> BlockingKeys<'d> {
         for name in names {
             for given in [&name.given, &name.call_name, &name.nickname].into_iter().flatten() {
                 self.token_bases(given, bases);
+                self.prefix_bases(given, bases);
+            }
+        }
+    }
+
+    /// The prefix bases of every token of a given name: names close by Jaro–Winkler usually share
+    /// their first letters even when no other key of theirs meets.
+    fn prefix_bases(&self, text: &str, bases: &mut BTreeSet<String>) {
+        for applied in &self.normalizations {
+            for token in applied.tokens(text) {
+                let prefix: String = token.chars().take(GIVEN_PREFIX).collect();
+                bases.insert(format!("g:{prefix}"));
             }
         }
     }
