@@ -80,7 +80,7 @@ last resort: it forces every dependency to rebuild.
 
 ```bash
 cargo bench -p vitni-db --features sqlite
-cargo bench -p vitni-app --bench similar    # record matching and the Dashboard loads at 10k and 100k persons
+cargo bench -p vitni-app --bench similar    # record matching, an assisted record's plan and the Dashboard loads, at 10k and 100k persons
 ```
 
 The matching bench seeds a 100k-person workspace of several gigabytes under `target/`, so it keeps it
@@ -292,6 +292,13 @@ by `similar.rs` before each lookup.
   aggregate). A lookup rekeys them together with the records whose keys carry theirs — an event's
   principals, a person's events and families, a place's events, a source's citations
   (`similar::affected`). A new key that reads another record's data needs its dependency added there.
+- **An import plan reads by record too** (`staging/candidates.rs`). It reads the stored relatives and
+  places its staged profiles carry, then each staged entity's candidates, so planning one assisted record
+  costs a few queries, and any lookup scores a bucket of more than `RANK_CHUNK` (64) candidates across
+  the cores. A kind with `WHOLE_KIND` (1000) or more staged records is read whole instead. A
+  profile that comes to read another stored record needs it added to `Links::stored`; the staging tests
+  `a_resolved_father_raises_the_childs_match` and `a_resolved_birth_place_counts_in_the_persons_match`
+  fail when one is missed.
 - **The pairs are a projection too** (ADR 0048). `similar_pairs`, the duplicate check and the review
   queue read `match_pairs` (`crates/vitni-db/src/match_pairs/`), refreshed first by
   `similar::refresh_pairs` from its own dirty set, `match_pairs_dirty`. Each dirty record's pairs are

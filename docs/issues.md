@@ -461,7 +461,8 @@ index with `find_similar` (#400), the evaluation corpus with `cargo xtask match-
 through the engine (#401), persona clusters (#404), merge and distinguish for events and families
 (#405) and for places, sources, citations, repositories, notes and media (#406), profiles read by
 record over the record links index (#492), the match pairs projection (#493), the Dashboard's
-narrow person reads (#519) and the given-name prefix key (#494), which have landed.
+narrow person reads (#519), the given-name prefix key (#494) and import plans read by record (#495),
+which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
@@ -469,12 +470,6 @@ does.
   finishes an interrupted commit, but History only lists the abandoned run. *Shape:* *Resume* on an
   abandoned bulk run, re-running its plugin over its source with its dataset. *Exit:* a gui-pass scenario
   that cancels a bulk import while writing and resumes it from History. — #496
-- **Planning an import costs a workspace-wide load** — ADR 0040 §2. Each plan loads the profiles of
-  every kind it matches (`Matcher::load`, `vitni-app/src/similar.rs`), which is about 0.9 s at 100k
-  persons — once per bulk import, but once per record in an assisted session — and dry-runs every write
-  of every record a re-import resolves. *Shape:* the by-id profile loading the `find_similar` bullet
-  above describes, and a cached matcher across an assisted session's submits. *Exit:* planning one
-  assisted record at 100k persons under 100 ms in a bench. — #495
 - **More name-culture packs** — ADR 0038 §5. `pl` and `pl-en`, `sv`, `de`, `fi` …, each one a TOML file
   plus corpus cases, with no code change. File one when a user's data needs it. Unfiled by design.
 
