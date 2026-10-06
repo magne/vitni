@@ -1040,7 +1040,7 @@ impl Store {
         }
     }
 
-    /// The undecided match pairs from `min_band` up, of `kind` or of every kind, strongest first (by
+    /// The undecided match pairs from `min_band` up, of `kinds`, strongest first (by
     /// band, then score), at most `limit` of them. A pair with a merged member, or of two clusters held
     /// distinct, is left out (ADR 0039 §3).
     ///
@@ -1050,15 +1050,15 @@ impl Store {
     #[cfg(any(feature = "sqlite", feature = "postgres"))]
     pub async fn match_pairs(
         &self,
-        kind: Option<vitni_core::matching::MatchableKind>,
+        kinds: &[vitni_core::matching::MatchableKind],
         min_band: vitni_core::matching::MatchBand,
         limit: Option<usize>,
     ) -> Result<Vec<crate::match_pairs::MatchPair>, DbError> {
         match &self.backend {
             #[cfg(feature = "sqlite")]
-            Backend::Sqlite(s) => s.match_pairs(kind, min_band, limit).await,
+            Backend::Sqlite(s) => s.match_pairs(kinds, min_band, limit).await,
             #[cfg(feature = "postgres")]
-            Backend::Postgres(p) => p.match_pairs(kind, min_band, limit).await,
+            Backend::Postgres(p) => p.match_pairs(kinds, min_band, limit).await,
         }
     }
 

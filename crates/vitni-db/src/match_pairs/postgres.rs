@@ -235,20 +235,23 @@ async fn insert(tx: &mut Transaction<'_, Postgres>, pairs: &[MatchPair]) -> Resu
     Ok(())
 }
 
-/// The undecided pairs from `min_band` up, of `kind` or every kind, strongest first, at most `limit`.
+/// The undecided pairs from `min_band` up, of `kinds`, strongest first, at most `limit`.
 ///
 /// # Errors
 ///
 /// A [`DbError`] on a read failure.
 pub(crate) async fn pairs(
     pool: &Pool<Postgres>,
-    kind: Option<MatchableKind>,
+    kinds: &[MatchableKind],
     min_band: MatchBand,
     limit: Option<usize>,
 ) -> Result<Vec<MatchPair>, DbError> {
-    let sql = list_query(placeholder, kind.is_some(), limit);
+    if kinds.is_empty() {
+        return Ok(Vec::new());
+    }
+    let sql = list_query(placeholder, kinds.len(), limit);
     let mut query = sqlx::query(&sql).bind(band_rank(min_band));
-    if let Some(kind) = kind {
+    for kind in kinds {
         query = query.bind(kind.as_str());
     }
     let rows = query

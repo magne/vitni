@@ -121,14 +121,14 @@ const HELD: &str = "WITH held AS MATERIALIZED ( \
      LEFT JOIN identity_links lr ON lr.kind = d.kind AND lr.member = d.record \
      LEFT JOIN identity_links lo ON lo.kind = d.kind AND lo.member = d.other) ";
 
-/// The query listing the undecided pairs from band `$1` up, strongest first, of the kind `$2` when
-/// `by_kind`, at most `limit`.
-fn list_query(placeholder: fn(usize) -> String, by_kind: bool, limit: Option<usize>) -> String {
-    let kind_filter = if by_kind {
-        format!(" AND p.kind = {}", placeholder(2))
-    } else {
-        String::new()
-    };
+/// The query listing the undecided pairs from band `$1` up of the `kinds` bound from `$2` on, strongest
+/// first, at most `limit`.
+fn list_query(placeholder: fn(usize) -> String, kinds: usize, limit: Option<usize>) -> String {
+    let mut listed = Vec::with_capacity(kinds);
+    for kind in 0..kinds {
+        listed.push(placeholder(kind + 2));
+    }
+    let kind_filter = format!(" AND p.kind IN ({})", listed.join(", "));
     let limit = limit.map(|limit| format!(" LIMIT {limit}")).unwrap_or_default();
     format!(
         "{HELD}SELECT p.kind, p.a, p.b, p.band, p.score {} \
@@ -169,10 +169,13 @@ mod tests {
     }
 
     #[test]
-    fn a_list_filters_by_kind_and_limits_only_when_asked() {
-        let every = list_query(|i| format!("${i}"), false, None);
-        assert!(!every.contains("$2") && !every.contains("LIMIT"), "{every}");
-        let one = list_query(|i| format!("${i}"), true, Some(5));
-        assert!(one.contains("p.kind = $2") && one.ends_with("LIMIT 5"), "{one}");
+    fn a_list_names_its_kinds_and_limits_only_when_asked() {
+        let every = list_query(|i| format!("${i}"), 2, None);
+        assert!(
+            every.contains("p.kind IN ($2, $3)") && !every.contains("LIMIT"),
+            "{every}"
+        );
+        let one = list_query(|i| format!("${i}"), 1, Some(5));
+        assert!(one.contains("p.kind IN ($2)") && one.ends_with("LIMIT 5"), "{one}");
     }
 }

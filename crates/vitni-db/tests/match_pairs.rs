@@ -80,7 +80,7 @@ fn pair(a: u128, b: u128, band: MatchBand, score: f64) -> MatchPair {
 /// The pairs read back, as `(a, b)` numbers.
 async fn listed(store: &Store, min_band: MatchBand, limit: Option<usize>) -> Vec<(String, String)> {
     let pairs = store
-        .match_pairs(Some(MatchableKind::Person), min_band, limit)
+        .match_pairs(&[MatchableKind::Person], min_band, limit)
         .await
         .unwrap();
     pairs.into_iter().map(|pair| (pair.a, pair.b)).collect()
@@ -114,12 +114,15 @@ async fn pairs_are_read_strongest_first_from_a_band_up(store: &Store) {
     );
     assert_eq!(
         store
-            .match_pairs(Some(MatchableKind::Place), MatchBand::Possible, None)
+            .match_pairs(&[MatchableKind::Place], MatchBand::Possible, None)
             .await
             .unwrap(),
         []
     );
-    let read = store.match_pairs(None, MatchBand::Possible, Some(1)).await.unwrap();
+    let read = store
+        .match_pairs(&MatchableKind::ALL, MatchBand::Possible, Some(1))
+        .await
+        .unwrap();
     assert_eq!(
         read,
         [pair(2, 3, MatchBand::Probable, 0.9)],

@@ -663,11 +663,11 @@ impl PostgresStore {
     /// The undecided match pairs from `min_band` up, strongest first.
     pub(crate) async fn match_pairs(
         &self,
-        kind: Option<vitni_core::matching::MatchableKind>,
+        kinds: &[vitni_core::matching::MatchableKind],
         min_band: vitni_core::matching::MatchBand,
         limit: Option<usize>,
     ) -> Result<Vec<crate::match_pairs::MatchPair>, DbError> {
-        crate::match_pairs::postgres::pairs(&self.pool, kind, min_band, limit).await
+        crate::match_pairs::postgres::pairs(&self.pool, kinds, min_band, limit).await
     }
 
     /// How many undecided match pairs from `min_band` up each kind holds.
