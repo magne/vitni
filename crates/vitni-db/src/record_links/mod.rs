@@ -4,8 +4,12 @@
 //! A family names its partners, children and events, a person the events they take part in, an event
 //! its place, a place the places enclosing it, a source its repositories, a citation its source — each
 //! on its own projection. Reading a person's families, an event's participants, a place's events or a
-//! source's citations from those projections means reading every one of them. This derived, rebuildable index (ADR 0010) holds one row per live reference,
-//! `(relation, source, target)`, mirrored per source record from its projection, and is read by target.
+//! source's citations from those projections means reading every one of them. This derived, rebuildable
+//! index (ADR 0010) holds one row per live reference, `(relation, source, target)`, mirrored per source
+//! record from its projection, and is read by target.
+//!
+//! A reference a record drops can no longer be followed back from its target, so the target is marked
+//! dirty for its match keys and pairs (ADR 0048) when it is dropped: its profile read the reference.
 
 #[cfg(feature = "postgres")]
 pub(crate) mod postgres;
@@ -17,6 +21,7 @@ use serde::de::DeserializeOwned;
 use vitni_core::citation::{CitationEvent, CitationEventBody, CitationState, CitationView};
 use vitni_core::event::{EventEvent, EventEventBody, EventState, EventView};
 use vitni_core::family::{FamilyEvent, FamilyEventBody, FamilyState, FamilyView};
+use vitni_core::matching::MatchableKind;
 use vitni_core::person::event::{PersonEvent, PersonEventBody};
 use vitni_core::person::{PersonState, PersonView};
 use vitni_core::place::{PlaceEvent, PlaceEventBody, PlaceState, PlaceView};
@@ -51,6 +56,17 @@ pub enum RecordLink {
 }
 
 impl RecordLink {
+    /// The kind of record the relation points at.
+    pub(crate) const fn target_kind(self) -> MatchableKind {
+        match self {
+            Self::FamilyPartner | Self::FamilyChild => MatchableKind::Person,
+            Self::FamilyEvent | Self::Participation => MatchableKind::Event,
+            Self::EventPlace | Self::PlaceEnclosure => MatchableKind::Place,
+            Self::SourceRepository => MatchableKind::Repository,
+            Self::CitationSource => MatchableKind::Source,
+        }
+    }
+
     /// The relation as the index stores it.
     pub(crate) const fn as_str(self) -> &'static str {
         match self {

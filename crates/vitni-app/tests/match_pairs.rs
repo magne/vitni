@@ -12,8 +12,8 @@ use vitni_app::{
     Session, Workspace, WorkspaceDefaults, add_child, add_partner, assert_event_date, assert_participation,
     assert_place_enclosed_by, assert_sex, change_log_for_event, change_log_for_person, change_log_for_place,
     create_citation, create_event, create_family, create_person, create_place, create_repository, create_source,
-    distinguish_persons, link_family_event, link_place, link_source_repository, merge_persons, set_repository_name,
-    set_title, similar_pairs, undo_assertion, undo_event_assertion, undo_place_assertion,
+    distinguish_persons, link_family_event, link_place, link_source_repository, merge_persons, remove_child,
+    set_repository_name, set_title, similar_pairs, undo_assertion, undo_event_assertion, undo_place_assertion,
 };
 use vitni_core::enums::{
     ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex, SourceMediaType,
@@ -428,4 +428,42 @@ async fn the_pairs_follow_every_record_a_score_reads() {
     .await
     .expect("merge the fathers");
     records.assert_refreshed_as_rebuilt("the fathers were merged").await;
+}
+
+/// A removed reference is gone from the record links index, so the record it pointed at cannot be found
+/// from the record that held it: it is marked for a refresh when the reference goes.
+#[tokio::test]
+async fn a_removed_reference_refreshes_the_record_it_pointed_at() {
+    let records = Records::new().await;
+    let (ws, session) = (&records.workspace, &records.session);
+    let mut families = Vec::new();
+    let mut sons = Vec::new();
+    for _ in 0..2 {
+        let father = records.person("Ole", "Olsen", Sex::Male).await;
+        let mother = records.person("Kari", "Hansdatter", Sex::Female).await;
+        let son = records.person("Hans", "Olsen", Sex::Male).await;
+        let birth = records.event(EventType::Birth, 1880).await;
+        records.take_part(&son, &birth).await;
+        families.push(records.family(&father, &mother, &son).await);
+        sons.push(son);
+    }
+    records.assert_refreshed_as_rebuilt("the records were made").await;
+
+    remove_child(ws, session, &families[1], &sons[1], MutationMeta::default())
+        .await
+        .expect("remove a son");
+    records
+        .assert_refreshed_as_rebuilt("a son was removed from his family")
+        .await;
+
+    let born = latest(
+        change_log_for_person(ws, &sons[0]).await.expect("log"),
+        "ParticipationAsserted",
+    );
+    undo_assertion(ws, session, &sons[0], &born, None)
+        .await
+        .expect("undo a son's part in his birth");
+    records
+        .assert_refreshed_as_rebuilt("a son's part in his birth was undone")
+        .await;
 }

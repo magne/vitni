@@ -11,9 +11,10 @@
 //! - [`CheckFinding::DeathBeforeBirth`] — a per-person date-sanity scan flagging anyone whose known
 //!   death year precedes their known birth year.
 //! - [`CheckFinding::PossibleDuplicate`] — the matching engine's pairs of every [`DecidableKind`] at
-//!   least [`MatchBand::Possible`] (a tag resolves by its name and is never proposed), read from the `match_pairs` projection (ADR 0048): every pair is
-//!   counted, and the strongest few the caller shows each become a finding with the engine's evidence
-//!   (ADR 0038 §8). A pair the user already decided is left out (ADR 0039 §3).
+//!   least [`MatchBand::Possible`] (a tag resolves by its name and is never proposed), read from the
+//!   `match_pairs` projection (ADR 0048): every pair is counted, and the strongest few the caller shows
+//!   each become a finding with the engine's evidence (ADR 0038 §8). A pair the user already decided is
+//!   left out (ADR 0039 §3).
 
 use vitni_core::matching::{MatchBand, MatchEvidence, MatchableKind};
 

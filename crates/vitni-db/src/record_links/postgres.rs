@@ -1,6 +1,7 @@
 //! The Postgres half of the record links index (ADR 0047) — see the [module header](super) for what the
 //! table holds and why the index exists.
 
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use async_trait::async_trait;
@@ -115,25 +116,36 @@ impl<V: LinkingRecord> Query<V::State> for RecordLinksQuery<V> {
     }
 }
 
-/// Mirrors one record's references from its projection.
+/// Mirrors one record's references from its projection, marking each target it no longer references
+/// dirty for its match keys and pairs.
 async fn reindex_source<V: LinkingRecord>(pool: &Pool<Postgres>, source: &str) -> Result<(), DbError> {
     let view = postgres_query::find_view_by_id::<V>(pool, V::VIEW_TABLE, source).await?;
     let mut tx = pool
         .begin()
         .await
         .map_err(backend("opening a record links transaction"))?;
+    let mut dropped = BTreeSet::new();
     for relation in V::RELATIONS {
-        sqlx::query(&format!(
-            "DELETE FROM {RECORD_LINKS_TABLE} WHERE relation = $1 AND source = $2"
+        let rows = sqlx::query(&format!(
+            "DELETE FROM {RECORD_LINKS_TABLE} WHERE relation = $1 AND source = $2 RETURNING target"
         ))
         .bind(relation.as_str())
         .bind(source)
-        .execute(&mut *tx)
+        .fetch_all(&mut *tx)
         .await
         .map_err(backend("clearing a record's links"))?;
+        for row in rows {
+            dropped.insert((*relation, row.get::<String, _>("target")));
+        }
     }
     if let Some(view) = view {
+        for link in view.links() {
+            dropped.remove(&link);
+        }
         insert_links(&mut tx, source, &view).await?;
+    }
+    for (relation, target) in &dropped {
+        crate::match_keys::postgres::mark_dirty(&mut tx, relation.target_kind(), target).await?;
     }
     tx.commit().await.map_err(backend("committing the record links"))
 }

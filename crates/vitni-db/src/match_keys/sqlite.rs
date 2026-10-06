@@ -74,6 +74,14 @@ pub(crate) async fn clear_state(pool: &Pool<Sqlite>) -> Result<(), DbError> {
     Ok(())
 }
 
+/// The statement marking one record dirty in `table`, bumping its generation if it already is.
+fn mark_sql(table: &str) -> String {
+    format!(
+        "INSERT INTO {table} (aggregate_type, aggregate_id, generation) VALUES (?, ?, 1) \
+         ON CONFLICT (aggregate_type, aggregate_id) DO UPDATE SET generation = generation + 1"
+    )
+}
+
 /// A `cqrs-es` query marking every matchable aggregate a commit touches as dirty, for its keys and for
 /// its pairs.
 pub(crate) struct MatchDirtyQuery {
@@ -94,19 +102,38 @@ impl<A: Aggregate> Query<A> for MatchDirtyQuery {
             return;
         }
         for table in [MATCH_DIRTY_TABLE, MATCH_PAIRS_DIRTY_TABLE] {
-            let result = sqlx::query(&format!(
-                "INSERT INTO {table} (aggregate_type, aggregate_id, generation) VALUES (?, ?, 1) \
-                 ON CONFLICT (aggregate_type, aggregate_id) DO UPDATE SET generation = generation + 1"
-            ))
-            .bind(A::TYPE)
-            .bind(aggregate_id)
-            .execute(&self.pool)
-            .await;
+            let result = sqlx::query(&mark_sql(table))
+                .bind(A::TYPE)
+                .bind(aggregate_id)
+                .execute(&self.pool)
+                .await;
             if let Err(error) = result {
-                tracing::error!(aggregate_type = A::TYPE, aggregate_id, %error, "failed to mark a record for rematching");
+                tracing::error!(aggregate_type = A::TYPE, aggregate_id, %error, "failed to mark a record dirty");
             }
         }
     }
+}
+
+/// Marks the record `aggregate_id` of `kind` dirty for its keys and its pairs within `tx`: a change
+/// another record's commit made to what its profile reads.
+///
+/// # Errors
+///
+/// A [`DbError`] if a statement fails.
+pub(crate) async fn mark_dirty(
+    tx: &mut Transaction<'_, Sqlite>,
+    kind: MatchableKind,
+    aggregate_id: &str,
+) -> Result<(), DbError> {
+    for table in [MATCH_DIRTY_TABLE, MATCH_PAIRS_DIRTY_TABLE] {
+        sqlx::query(&mark_sql(table))
+            .bind(kind.as_str())
+            .bind(aggregate_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(backend("marking a record dirty"))?;
+    }
+    Ok(())
 }
 
 /// The fingerprint the index was built under, or `None` when it must be built.

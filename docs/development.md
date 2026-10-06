@@ -295,7 +295,7 @@ by `similar.rs` before each lookup.
   queue read `match_pairs` (`crates/vitni-db/src/match_pairs/`), refreshed first by
   `similar::refresh_pairs` from its own dirty set, `match_pairs_dirty`. Each dirty record's pairs are
   scored again with those of every record whose profile reads it (`similar::pair_dependents`), found
-  through the record links index. A profile that comes to read another record needs that step added,
+  through the record links index, which marks the target of every reference it drops. A profile that comes to read another record needs that step added,
   and an edit along it in `tests/match_pairs.rs`, which checks the refreshed pairs against a rebuild.
   Only the band and score are stored: a consumer assesses the pairs it lists for their terms.
 - **`[matching]`** in `workspace.toml`, or `[workspace-defaults.matching]` in the global config, sets

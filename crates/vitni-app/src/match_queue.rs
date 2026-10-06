@@ -4,8 +4,9 @@
 //! A suggestion is a function of the current data, so the queue is read from the `match_pairs`
 //! projection (ADR 0048), refreshed first and leaving out every pair decided either way, narrowed to
 //! one kind, a minimum band, or the records one import run created. Every pair is counted; only the
-//! strongest a caller lists are assessed again for the terms behind their scores. An import's *Decide later* writes nothing
-//! but the records (ADR 0040 §4), so a run's deferred pairs are exactly the pairs its records are in.
+//! strongest a caller lists are assessed again for the terms behind their scores. An import's *Decide
+//! later* writes nothing but the records (ADR 0040 §4), so a run's deferred pairs are exactly the pairs
+//! its records are in.
 //! Deciding a pair ([`decide_match`]) is the kind's own merge or distinguish use-case, after which the
 //! pair is gone from the queue.
 

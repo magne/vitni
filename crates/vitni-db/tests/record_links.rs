@@ -395,6 +395,32 @@ async fn a_family_links_to_its_events_and_a_source_to_its_repositories(store: &S
     );
 }
 
+async fn a_dropped_reference_marks_its_target_for_rematching(store: &Store) {
+    create_event(store, 20).await;
+    create_person(store, 1).await;
+    take_part(store, 1, 20, 101).await;
+    let keys = store.match_dirty().await.unwrap();
+    store.rekey_matches(&[], &keys).await.unwrap();
+    let pairs = store.match_pairs_dirty().await.unwrap();
+    store.refresh_match_pairs(&[], &pairs).await.unwrap();
+
+    let retract = PersonCommand::RetractAssertion {
+        person_id: PersonId::from_uuid(id(1)),
+        target: AssertionId::from_uuid(id(101)),
+    };
+    person(store, 1, 102, retract).await;
+    let event = id(20).to_string();
+    for dirty in [
+        store.match_dirty().await.unwrap(),
+        store.match_pairs_dirty().await.unwrap(),
+    ] {
+        assert!(
+            dirty.iter().any(|record| record.aggregate_id == event),
+            "the event its participant left is marked: {dirty:?}"
+        );
+    }
+}
+
 async fn a_rebuild_reproduces_the_links(store: &Store) {
     create_event(store, 20).await;
     create_person(store, 1).await;
@@ -450,6 +476,7 @@ mod sqlite {
         an_event_links_to_its_place_and_a_citation_to_its_source,
         a_place_links_to_its_enclosing_places_until_retracted,
         a_family_links_to_its_events_and_a_source_to_its_repositories,
+        a_dropped_reference_marks_its_target_for_rematching,
         a_rebuild_reproduces_the_links,
     );
 
@@ -509,6 +536,7 @@ mod postgres {
         an_event_links_to_its_place_and_a_citation_to_its_source,
         a_place_links_to_its_enclosing_places_until_retracted,
         a_family_links_to_its_events_and_a_source_to_its_repositories,
+        a_dropped_reference_marks_its_target_for_rematching,
         a_rebuild_reproduces_the_links,
     );
 }

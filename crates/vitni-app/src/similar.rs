@@ -249,15 +249,16 @@ async fn read_pairs(store: &Store, pairs: &[MatchPair]) -> Result<Profiles, AppE
 pub(crate) async fn refresh_pairs(workspace: &Workspace) -> Result<(), AppError> {
     let matching = workspace.matching()?;
     let keys = BlockingKeys::new(&matching.data);
-    let mut profiles = refreshed_profiles(workspace, &keys, &[]).await?;
     let store = workspace.store();
+    // Read before any view, so a commit landing after a view is read leaves its record dirty.
+    let dirty = store.match_pairs_dirty().await?;
+    let mut profiles = refreshed_profiles(workspace, &keys, &[]).await?;
     let fingerprint = format!(
         "{}|engine {}|{:?}",
         keys.fingerprint(),
         ENGINE_VERSION.0,
         matching.settings
     );
-    let dirty = store.match_pairs_dirty().await?;
     if store.match_pairs_fingerprint().await?.as_deref() != Some(fingerprint.as_str()) {
         let profiles = Profiles::load(store, &MatchableKind::ALL).await?;
         let mut pairs = Vec::new();

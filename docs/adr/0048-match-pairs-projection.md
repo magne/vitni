@@ -39,6 +39,11 @@ not in.
    - a repository reaches the sources it holds;
    - a source reaches its citations.
 
+   A reference a record drops is gone from the index, so it cannot be followed back. When the record
+   links index drops one, it marks the record the reference pointed at, for its keys and its pairs.
+   A child removed from a family, or a person who no longer takes part in an event, is refreshed that
+   way.
+
    Each such record's pairs are deleted and scored again against the candidates its keys meet. The
    meet of two records' keys is symmetric, so a record's own candidates find every pair it is in. A
    kind with 1000 or more such records is scored whole across the cores instead.
