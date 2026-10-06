@@ -22,7 +22,10 @@ not in.
 1. **A `match_pairs` table holds every pair scored at least `Possible`: `(kind, a, b, band, score)`.**
    `a` is the lower aggregate id. Only the band and score are stored. A consumer that shows a pair's
    terms assesses that pair again, so only the pairs on screen are assessed. The Dashboard lists the
-   five strongest and the Matches tool the hundred strongest, and both count the rest.
+   five strongest and the Matches tool the hundred strongest, and both count the rest. Each kind is
+   listed through a `(kind, band, score)` index that stops at the limit. A `match_pair_counts` table
+   holds how many pairs each kind has per band, and every write keeps it current, so a count reads a
+   few rows.
 
 2. **It is refreshed from the records committed to since, and from every record whose profile reads
    one.** Every commit to a matchable record marks it in `match_pairs_dirty`, beside `match_dirty`, with
@@ -85,7 +88,8 @@ not in.
 - The Dashboard and the Matches tool read their pairs from the table. A refresh after one edit rescores
   only the few records the edit reaches. The bench numbers are in #493's pull request.
 - The first read after a projection rebuild, a pack or settings change, or a large import scores
-  every kind whole. That is the old cost, paid once rather than on every show.
+  every kind whole. That is the old cost, paid once rather than on every show. On the bench's
+  crowded name pools at 100k persons it takes minutes and stores about 9.7 million pairs.
 - A workspace opened with projections that predate the new relations is missing their rows until
   `vitni rebuild` refills the record links index.
 - A new reference that a profile follows needs a record links relation and a step in the refresh
