@@ -44,6 +44,12 @@ CREATE TABLE IF NOT EXISTS snapshots (
     PRIMARY KEY (aggregate_type, aggregate_id)
 )";
 
+/// The activity feed's order, newest first (`read_recent_events`), so it reads only the rows it lists.
+#[cfg(feature = "sqlite")]
+const CREATE_EVENTS_RECENCY_INDEX: &str = "
+CREATE INDEX IF NOT EXISTS events_occurred_at_idx
+ON events (json_extract(payload, '$.context.occurred_at') DESC, sequence DESC)";
+
 /// Creates the core event-store tables on a fresh SQLite workspace database.
 ///
 /// Idempotent (`IF NOT EXISTS`), so it is safe to call on every open. Projection/view tables are
@@ -55,6 +61,7 @@ CREATE TABLE IF NOT EXISTS snapshots (
 #[cfg(feature = "sqlite")]
 pub async fn init_sqlite(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
     sqlx::query(CREATE_EVENTS_TABLE).execute(pool).await?;
+    sqlx::query(CREATE_EVENTS_RECENCY_INDEX).execute(pool).await?;
     sqlx::query(CREATE_SNAPSHOTS_TABLE).execute(pool).await?;
     Ok(())
 }
@@ -187,6 +194,12 @@ CREATE TABLE IF NOT EXISTS snapshots (
     PRIMARY KEY (aggregate_type, aggregate_id, last_sequence)
 )";
 
+/// The Postgres twin of the SQLite activity-feed index.
+#[cfg(feature = "postgres")]
+const CREATE_EVENTS_RECENCY_INDEX_PG: &str = "
+CREATE INDEX IF NOT EXISTS events_occurred_at_idx
+ON events ((payload->'context'->>'occurred_at') DESC, sequence DESC)";
+
 /// Creates the core event-store tables on a fresh Postgres workspace database.
 ///
 /// Idempotent (`IF NOT EXISTS`), safe to call on every open. Projection/view tables are created per
@@ -198,6 +211,7 @@ CREATE TABLE IF NOT EXISTS snapshots (
 #[cfg(feature = "postgres")]
 pub async fn init_postgres(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
     sqlx::query(CREATE_EVENTS_TABLE_PG).execute(pool).await?;
+    sqlx::query(CREATE_EVENTS_RECENCY_INDEX_PG).execute(pool).await?;
     sqlx::query(CREATE_SNAPSHOTS_TABLE_PG).execute(pool).await?;
     Ok(())
 }

@@ -329,19 +329,20 @@ pub(crate) async fn read_aggregate_events(
     Ok(rows.iter().map(stored_event).collect())
 }
 
+/// The newest `?` events, walked from `events_occurred_at_idx` in order rather than sorted.
+pub(crate) const RECENT_EVENTS: &str = "SELECT aggregate_type, aggregate_id, sequence, event_type, payload \
+     FROM events ORDER BY json_extract(payload, '$.context.occurred_at') DESC, sequence DESC LIMIT ?";
+
 /// Reads the most recent events across every aggregate, newest first, capped at `limit`.
 ///
 /// The `events` table has no insert-time column, so recency is the in-payload `occurred_at` of the
 /// provenance envelope (`$.context.occurred_at`, an RFC 3339 string that sorts lexicographically).
 pub(crate) async fn read_recent_events(pool: &Pool<Sqlite>, limit: u32) -> Result<Vec<StoredEvent>, DbError> {
-    let rows = sqlx::query(
-        "SELECT aggregate_type, aggregate_id, sequence, event_type, payload \
-         FROM events ORDER BY json_extract(payload, '$.context.occurred_at') DESC, sequence DESC LIMIT ?",
-    )
-    .bind(i64::from(limit))
-    .fetch_all(pool)
-    .await
-    .map_err(|e| DbError::Backend(e.to_string()))?;
+    let rows = sqlx::query(RECENT_EVENTS)
+        .bind(i64::from(limit))
+        .fetch_all(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
     Ok(rows.iter().map(stored_event).collect())
 }
 
