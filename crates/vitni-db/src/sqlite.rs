@@ -209,6 +209,10 @@ macro_rules! sqlite_store {
                 crate::match_keys::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating match keys index: {e}")))?;
+                // The match pairs projection (ADR 0048), marked dirty by the same query.
+                crate::match_pairs::sqlite::create_tables(&pool)
+                    .await
+                    .map_err(|e| DbError::Backend(format!("creating match pairs: {e}")))?;
                 // The identity cluster index (ADR 0039 §4) is derived from the projections of every
                 // matchable kind; its `Query` is appended to those frameworks below, and a workspace that
                 // predates it gets it filled once the projections are open.
@@ -329,6 +333,7 @@ macro_rules! sqlite_store {
                 // The match keys need the name-culture packs, which only the app layer has: forgetting
                 // what the index was built under makes it rebuild on next use.
                 crate::match_keys::sqlite::clear_state(pool).await?;
+                crate::match_pairs::sqlite::clear_state(pool).await?;
                 // The record origins index is replayed from the raw events, after the projections
                 // its `live` flags are read from. Unmarked first, so a rebuild cut short is redone by
                 // the next open.
@@ -631,7 +636,7 @@ impl SqliteStore {
 
     /// Every matchable record touched since it was keyed.
     pub(crate) async fn match_dirty(&self) -> Result<Vec<crate::match_keys::DirtyRecord>, DbError> {
-        crate::match_keys::sqlite::dirty(&self.pool).await
+        crate::match_keys::sqlite::dirty(crate::match_keys::MATCH_DIRTY_TABLE, &self.pool).await
     }
 
     /// Replaces the keys of `records` and clears `cleared`.
@@ -663,6 +668,53 @@ impl SqliteStore {
     }
 
     /// Every `(aggregate_id, key)` of `kind`.
+    /// The fingerprint the match pairs were scored under, if any (ADR 0048).
+    pub(crate) async fn match_pairs_fingerprint(&self) -> Result<Option<String>, DbError> {
+        crate::match_pairs::sqlite::fingerprint(&self.pool).await
+    }
+
+    /// Every matchable record touched since its pairs were refreshed.
+    pub(crate) async fn match_pairs_dirty(&self) -> Result<Vec<crate::match_keys::DirtyRecord>, DbError> {
+        crate::match_pairs::sqlite::dirty(&self.pool).await
+    }
+
+    /// Replaces the pairs each refresh covers, and clears `cleared` at the generations read.
+    pub(crate) async fn refresh_match_pairs(
+        &self,
+        refreshes: &[crate::match_pairs::PairRefresh],
+        cleared: &[crate::match_keys::DirtyRecord],
+    ) -> Result<(), DbError> {
+        crate::match_pairs::sqlite::refresh(&self.pool, refreshes, cleared).await
+    }
+
+    /// Replaces every match pair, unless another rebuild already scored them under `fingerprint`.
+    pub(crate) async fn reset_match_pairs(
+        &self,
+        fingerprint: &str,
+        pairs: &[crate::match_pairs::MatchPair],
+        cleared: &[crate::match_keys::DirtyRecord],
+    ) -> Result<(), DbError> {
+        crate::match_pairs::sqlite::reset(&self.pool, fingerprint, pairs, cleared).await
+    }
+
+    /// The undecided match pairs from `min_band` up, strongest first.
+    pub(crate) async fn match_pairs(
+        &self,
+        kind: Option<vitni_core::matching::MatchableKind>,
+        min_band: vitni_core::matching::MatchBand,
+        limit: Option<usize>,
+    ) -> Result<Vec<crate::match_pairs::MatchPair>, DbError> {
+        crate::match_pairs::sqlite::pairs(&self.pool, kind, min_band, limit).await
+    }
+
+    /// How many undecided match pairs from `min_band` up each kind holds.
+    pub(crate) async fn match_pair_counts(
+        &self,
+        min_band: vitni_core::matching::MatchBand,
+    ) -> Result<Vec<(vitni_core::matching::MatchableKind, usize)>, DbError> {
+        crate::match_pairs::sqlite::counts(&self.pool, min_band).await
+    }
+
     pub(crate) async fn match_keys_of_kind(
         &self,
         kind: vitni_core::matching::MatchableKind,

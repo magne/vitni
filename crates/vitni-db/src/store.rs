@@ -967,6 +967,120 @@ impl Store {
         }
     }
 
+    /// The fingerprint of the keys, engine and settings the match pairs were scored under (ADR 0048),
+    /// or `None` when they must be scored: a new workspace, or rebuilt projections.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn match_pairs_fingerprint(&self) -> Result<Option<String>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.match_pairs_fingerprint().await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.match_pairs_fingerprint().await,
+        }
+    }
+
+    /// Every matchable record a commit touched since the app layer last refreshed its pairs.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn match_pairs_dirty(&self) -> Result<Vec<crate::match_keys::DirtyRecord>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.match_pairs_dirty().await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.match_pairs_dirty().await,
+        }
+    }
+
+    /// Replaces the pairs each of `refreshes` covers, and clears each of `cleared` at the generation
+    /// read, in one transaction: a record touched again meanwhile stays dirty.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn refresh_match_pairs(
+        &self,
+        refreshes: &[crate::match_pairs::PairRefresh],
+        cleared: &[crate::match_keys::DirtyRecord],
+    ) -> Result<(), DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.refresh_match_pairs(refreshes, cleared).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.refresh_match_pairs(refreshes, cleared).await,
+        }
+    }
+
+    /// Replaces every match pair with `pairs`, scored under `fingerprint`, and clears each of `cleared`
+    /// at the generation read, in one transaction — unless another rebuild already scored them under
+    /// `fingerprint`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn reset_match_pairs(
+        &self,
+        fingerprint: &str,
+        pairs: &[crate::match_pairs::MatchPair],
+        cleared: &[crate::match_keys::DirtyRecord],
+    ) -> Result<(), DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.reset_match_pairs(fingerprint, pairs, cleared).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.reset_match_pairs(fingerprint, pairs, cleared).await,
+        }
+    }
+
+    /// The undecided match pairs from `min_band` up, of `kind` or of every kind, strongest first (by
+    /// band, then score), at most `limit` of them. A pair with a merged member, or of two clusters held
+    /// distinct, is left out (ADR 0039 §3).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn match_pairs(
+        &self,
+        kind: Option<vitni_core::matching::MatchableKind>,
+        min_band: vitni_core::matching::MatchBand,
+        limit: Option<usize>,
+    ) -> Result<Vec<crate::match_pairs::MatchPair>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.match_pairs(kind, min_band, limit).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.match_pairs(kind, min_band, limit).await,
+        }
+    }
+
+    /// How many undecided match pairs from `min_band` up each kind holds, for the kinds holding any, in
+    /// kind name order — the pairs [`Self::match_pairs`] lists.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a database failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn match_pair_counts(
+        &self,
+        min_band: vitni_core::matching::MatchBand,
+    ) -> Result<Vec<(vitni_core::matching::MatchableKind, usize)>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.match_pair_counts(min_band).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.match_pair_counts(min_band).await,
+        }
+    }
+
     /// The ids of every record of `kind` holding a key `probe` meets, in id order.
     ///
     /// # Errors

@@ -25,6 +25,8 @@ mod identity_links;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod match_keys;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
+mod match_pairs;
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod place_succession_index;
 #[cfg(feature = "postgres")]
 mod postgres;
@@ -52,6 +54,8 @@ mod tables;
 
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use match_keys::{DirtyRecord, KeyedRecord};
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+pub use match_pairs::{MatchPair, PairRefresh, PairScope};
 pub use raw::{ProjectionRow, RawEvent, RawEventKey, decode_raw_event, event_variants};
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use record_links::RecordLink;

@@ -7,7 +7,8 @@
 //!
 //! - `match_keys (kind, key, aggregate_id)` — the index itself, written by the app layer;
 //! - `match_dirty (aggregate_type, aggregate_id, generation)` — every matchable aggregate a commit
-//!   touched since the app layer last keyed it, fed by [`sqlite::MatchDirtyQuery`] on every commit.
+//!   touched since the app layer last keyed it, fed by [`sqlite::MatchDirtyQuery`] on every commit,
+//!   which marks the record in `match_pairs_dirty` (ADR 0048) alike.
 //!   Each touch bumps `generation`, and the app layer clears a row only at the generation it read. A
 //!   row found at another generation, or already cleared by another refresh, is marked dirty again, so
 //!   neither a commit landing mid-rekey nor a slower refresh writing older keys is left unnoticed;
@@ -26,7 +27,7 @@ use vitni_core::matching::{MatchableKind, Probe, prefix_end};
 const MATCH_KEYS_TABLE: &str = "match_keys";
 
 /// The table of records touched since they were keyed.
-const MATCH_DIRTY_TABLE: &str = "match_dirty";
+pub(crate) const MATCH_DIRTY_TABLE: &str = "match_dirty";
 
 /// The single-row table naming what the index was built under.
 const MATCH_KEYS_STATE_TABLE: &str = "match_keys_state";
