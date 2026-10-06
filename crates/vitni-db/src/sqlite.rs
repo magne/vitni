@@ -95,11 +95,18 @@ macro_rules! sqlite_wire_side_indexes {
             .append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
                 vitni_core::place::PlaceView,
             >::new($pool.clone())))
+            .append_query(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
+                vitni_core::place::PlaceView,
+            >::new($pool.clone())))
     };
     (source, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
-            vitni_core::source::SourceView,
-        >::new($pool.clone())))
+        $framework
+            .append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+                vitni_core::source::SourceView,
+            >::new($pool.clone())))
+            .append_query(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
+                vitni_core::source::SourceView,
+            >::new($pool.clone())))
     };
     (citation, $pool:expr, $framework:expr) => {
         $framework

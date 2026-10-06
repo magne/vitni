@@ -10,6 +10,8 @@ use vitni_core::citation::CitationView;
 use vitni_core::event::EventView;
 use vitni_core::family::FamilyView;
 use vitni_core::person::PersonView;
+use vitni_core::place::PlaceView;
+use vitni_core::source::SourceView;
 
 use super::{LinkingRecord, RECORD_LINKS_TABLE, RecordLink};
 use crate::sqlite_query;
@@ -52,6 +54,8 @@ pub(crate) async fn create_filled(pool: &Pool<Sqlite>) -> Result<(), DbError> {
     links.extend(links_of::<PersonView>(pool).await?);
     links.extend(links_of::<FamilyView>(pool).await?);
     links.extend(links_of::<EventView>(pool).await?);
+    links.extend(links_of::<PlaceView>(pool).await?);
+    links.extend(links_of::<SourceView>(pool).await?);
     links.extend(links_of::<CitationView>(pool).await?);
     let mut tx = pool
         .begin()
@@ -175,6 +179,8 @@ pub(crate) async fn rebuild_index(pool: &Pool<Sqlite>) -> Result<(), DbError> {
     rebuild_kind::<PersonView>(pool).await?;
     rebuild_kind::<FamilyView>(pool).await?;
     rebuild_kind::<EventView>(pool).await?;
+    rebuild_kind::<PlaceView>(pool).await?;
+    rebuild_kind::<SourceView>(pool).await?;
     rebuild_kind::<CitationView>(pool).await
 }
 
