@@ -119,6 +119,30 @@ async fn pairs_are_read_strongest_first_from_a_band_up(store: &Store) {
             .unwrap(),
         []
     );
+    let place = MatchPair {
+        kind: MatchableKind::Place,
+        ..pair(1, 2, MatchBand::Probable, 0.85)
+    };
+    let both = [pairs.to_vec(), vec![place]].concat();
+    store.reset_match_pairs("f2", &both, &[]).await.unwrap();
+    let across = store
+        .match_pairs(&MatchableKind::ALL, MatchBand::Possible, Some(3))
+        .await
+        .unwrap();
+    let ranked: Vec<(MatchableKind, f64)> = across.iter().map(|pair| (pair.kind, pair.score)).collect();
+    assert_eq!(
+        ranked,
+        [
+            (MatchableKind::Person, 0.9),
+            (MatchableKind::Place, 0.85),
+            (MatchableKind::Person, 0.8)
+        ],
+        "kinds interleave by strength"
+    );
+    assert_eq!(
+        store.match_pair_counts(MatchBand::Possible).await.unwrap(),
+        [(MatchableKind::Person, 3), (MatchableKind::Place, 1)]
+    );
     let read = store
         .match_pairs(&MatchableKind::ALL, MatchBand::Possible, Some(1))
         .await
@@ -148,6 +172,15 @@ async fn a_refresh_replaces_only_the_pairs_of_its_records(store: &Store) {
         [(id(2), id(4)), (id(3), id(4))],
         "both pairs naming the record went, the other stayed"
     );
+    assert_eq!(
+        store.match_pair_counts(MatchBand::Possible).await.unwrap(),
+        [(MatchableKind::Person, 2)],
+        "the counts follow a refresh"
+    );
+    assert_eq!(
+        store.match_pair_counts(MatchBand::Probable).await.unwrap(),
+        [(MatchableKind::Person, 1)]
+    );
     let whole = PairRefresh {
         kind: MatchableKind::Person,
         scope: PairScope::Kind,
@@ -155,6 +188,10 @@ async fn a_refresh_replaces_only_the_pairs_of_its_records(store: &Store) {
     };
     store.refresh_match_pairs(&[whole], &[]).await.unwrap();
     assert_eq!(listed(store, MatchBand::Possible, None).await, [(id(1), id(4))]);
+    assert_eq!(
+        store.match_pair_counts(MatchBand::Possible).await.unwrap(),
+        [(MatchableKind::Person, 1)]
+    );
 }
 
 async fn a_refresh_clears_only_the_generation_it_read(store: &Store) {
@@ -182,6 +219,17 @@ async fn a_reset_records_its_fingerprint_unless_beaten_and_a_rebuild_forgets_it(
         listed(store, MatchBand::Possible, None).await,
         [(id(1), id(2))],
         "a rebuild another one beat writes nothing"
+    );
+    assert_eq!(
+        store.match_pair_counts(MatchBand::Possible).await.unwrap(),
+        [(MatchableKind::Person, 1)],
+        "a beaten rebuild counts nothing either"
+    );
+    store.reset_match_pairs("f2", &late, &[]).await.unwrap();
+    assert_eq!(
+        store.match_pair_counts(MatchBand::Possible).await.unwrap(),
+        [(MatchableKind::Person, 1)],
+        "a rebuild replaces the counts"
     );
     store.rebuild_projections().await.unwrap();
     assert_eq!(store.match_pairs_fingerprint().await.unwrap(), None);

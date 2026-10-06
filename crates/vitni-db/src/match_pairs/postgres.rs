@@ -1,12 +1,15 @@
 //! The Postgres half of the `match_pairs` projection — see the [module header](super). A
 //! function-for-function twin of [`sqlite`](super::sqlite).
 
+use std::collections::BTreeMap;
+
 use sqlx::{Pool, Postgres, Row, Transaction};
 use vitni_core::matching::{MatchBand, MatchableKind};
 
 use super::{
-    INSERT_CHUNK, MATCH_PAIRS_DIRTY_TABLE, MATCH_PAIRS_STATE_TABLE, MATCH_PAIRS_TABLE, MatchPair, PairRefresh,
-    PairScope, band_of, band_rank, count_query, kind_of, list_query,
+    INSERT_CHUNK, MATCH_PAIR_COUNTS_TABLE, MATCH_PAIRS_DIRTY_TABLE, MATCH_PAIRS_STATE_TABLE, MATCH_PAIRS_TABLE,
+    MatchPair, PairRefresh, PairScope, band_of, band_rank, decided_query, kind_of, list_query, stored_count_query,
+    strongest, tally, undecided_counts,
 };
 use crate::match_keys::DirtyRecord;
 use crate::match_keys::postgres::clear_dirty;
@@ -22,10 +25,20 @@ CREATE TABLE IF NOT EXISTS match_pairs (
     PRIMARY KEY (kind, a, b)
 )";
 
-const CREATE_MATCH_PAIRS_B_INDEX: &str = "CREATE INDEX IF NOT EXISTS match_pairs_by_b ON match_pairs (kind, b)";
+// Finds a record's pairs by `b`, as the primary key does by `a`, with the band for a count's filter.
+const CREATE_MATCH_PAIRS_B_INDEX: &str = "CREATE INDEX IF NOT EXISTS match_pairs_by_b ON match_pairs (kind, b, band)";
 
+// Orders a kind's pairs by a list's whole `ORDER BY`.
 const CREATE_MATCH_PAIRS_RANK_INDEX: &str =
-    "CREATE INDEX IF NOT EXISTS match_pairs_by_rank ON match_pairs (band DESC, score DESC)";
+    "CREATE INDEX IF NOT EXISTS match_pairs_by_rank ON match_pairs (kind, band DESC, score DESC, a, b)";
+
+const CREATE_MATCH_PAIR_COUNTS_TABLE: &str = "
+CREATE TABLE IF NOT EXISTS match_pair_counts (
+    kind TEXT   NOT NULL,
+    band BIGINT NOT NULL,
+    n    BIGINT NOT NULL,
+    PRIMARY KEY (kind, band)
+)";
 
 const CREATE_MATCH_PAIRS_DIRTY_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS match_pairs_dirty (
@@ -49,7 +62,7 @@ fn placeholder(i: usize) -> String {
     format!("${i}")
 }
 
-/// Creates the three tables. Idempotent.
+/// Creates the four tables. Idempotent.
 ///
 /// # Errors
 ///
@@ -59,6 +72,7 @@ pub(crate) async fn create_tables(pool: &Pool<Postgres>) -> Result<(), sqlx::Err
         CREATE_MATCH_PAIRS_TABLE,
         CREATE_MATCH_PAIRS_B_INDEX,
         CREATE_MATCH_PAIRS_RANK_INDEX,
+        CREATE_MATCH_PAIR_COUNTS_TABLE,
         CREATE_MATCH_PAIRS_DIRTY_TABLE,
         CREATE_MATCH_PAIRS_STATE_TABLE,
     ] {
@@ -120,6 +134,7 @@ pub(crate) async fn refresh(
     for refresh in refreshes {
         delete_scope(&mut tx, refresh.kind, &refresh.scope).await?;
         insert(&mut tx, &refresh.pairs).await?;
+        count(&mut tx, tally(&refresh.pairs)).await?;
     }
     clear_dirty(&mut tx, MATCH_PAIRS_DIRTY_TABLE, cleared).await?;
     tx.commit().await.map_err(backend("committing a match pairs refresh"))
@@ -154,11 +169,14 @@ pub(crate) async fn reset(
             .await
             .map_err(backend("ending a superseded match pairs rebuild"));
     }
-    sqlx::query(&format!("DELETE FROM {MATCH_PAIRS_TABLE}"))
-        .execute(&mut *tx)
-        .await
-        .map_err(backend("clearing the match pairs"))?;
+    for table in [MATCH_PAIRS_TABLE, MATCH_PAIR_COUNTS_TABLE] {
+        sqlx::query(&format!("DELETE FROM {table}"))
+            .execute(&mut *tx)
+            .await
+            .map_err(backend("clearing the match pairs"))?;
+    }
     insert(&mut tx, pairs).await?;
+    count(&mut tx, tally(pairs)).await?;
     clear_dirty(&mut tx, MATCH_PAIRS_DIRTY_TABLE, cleared).await?;
     sqlx::query(&format!(
         "INSERT INTO {MATCH_PAIRS_STATE_TABLE} (id, fingerprint) VALUES (1, $1) \
@@ -171,7 +189,7 @@ pub(crate) async fn reset(
     tx.commit().await.map_err(backend("committing a match pairs rebuild"))
 }
 
-/// Deletes the stored pairs of `kind` that `scope` covers.
+/// Deletes the stored pairs of `kind` that `scope` covers, and takes them off the kept counts.
 async fn delete_scope(
     tx: &mut Transaction<'_, Postgres>,
     kind: MatchableKind,
@@ -179,22 +197,46 @@ async fn delete_scope(
 ) -> Result<(), DbError> {
     match scope {
         PairScope::Kind => {
-            sqlx::query(&format!("DELETE FROM {MATCH_PAIRS_TABLE} WHERE kind = $1"))
-                .bind(kind.as_str())
-                .execute(&mut **tx)
-                .await
-                .map_err(backend("clearing a kind's match pairs"))?;
+            for table in [MATCH_PAIRS_TABLE, MATCH_PAIR_COUNTS_TABLE] {
+                sqlx::query(&format!("DELETE FROM {table} WHERE kind = $1"))
+                    .bind(kind.as_str())
+                    .execute(&mut **tx)
+                    .await
+                    .map_err(backend("clearing a kind's match pairs"))?;
+            }
         }
         PairScope::Records(ids) => {
-            sqlx::query(&format!(
-                "DELETE FROM {MATCH_PAIRS_TABLE} WHERE kind = $1 AND (a = ANY($2) OR b = ANY($2))"
+            let rows = sqlx::query(&format!(
+                "DELETE FROM {MATCH_PAIRS_TABLE} WHERE kind = $1 AND (a = ANY($2) OR b = ANY($2)) RETURNING band"
             ))
             .bind(kind.as_str())
             .bind(ids)
-            .execute(&mut **tx)
+            .fetch_all(&mut **tx)
             .await
             .map_err(backend("clearing records' match pairs"))?;
+            let mut deleted = BTreeMap::new();
+            for row in rows {
+                *deleted.entry((kind, row.get::<i64, _>("band"))).or_insert(0) -= 1;
+            }
+            count(tx, deleted).await?;
         }
+    }
+    Ok(())
+}
+
+/// Adds `deltas`, by kind and band, to the kept counts.
+async fn count(tx: &mut Transaction<'_, Postgres>, deltas: BTreeMap<(MatchableKind, i64), i64>) -> Result<(), DbError> {
+    for ((kind, band), delta) in deltas {
+        sqlx::query(&format!(
+            "INSERT INTO {MATCH_PAIR_COUNTS_TABLE} (kind, band, n) VALUES ($1, $2, $3) \
+             ON CONFLICT (kind, band) DO UPDATE SET n = {MATCH_PAIR_COUNTS_TABLE}.n + EXCLUDED.n"
+        ))
+        .bind(kind.as_str())
+        .bind(band)
+        .bind(delta)
+        .execute(&mut **tx)
+        .await
+        .map_err(backend("counting match pairs"))?;
     }
     Ok(())
 }
@@ -214,8 +256,7 @@ async fn insert(tx: &mut Transaction<'_, Postgres>, pairs: &[MatchPair]) -> Resu
             ));
         }
         let sql = format!(
-            "INSERT INTO {MATCH_PAIRS_TABLE} (kind, a, b, band, score) VALUES {} \
-             ON CONFLICT (kind, a, b) DO UPDATE SET band = EXCLUDED.band, score = EXCLUDED.score",
+            "INSERT INTO {MATCH_PAIRS_TABLE} (kind, a, b, band, score) VALUES {}",
             values.join(", ")
         );
         let mut query = sqlx::query(&sql);
@@ -246,29 +287,26 @@ pub(crate) async fn pairs(
     min_band: MatchBand,
     limit: Option<usize>,
 ) -> Result<Vec<MatchPair>, DbError> {
-    if kinds.is_empty() {
-        return Ok(Vec::new());
-    }
-    let sql = list_query(placeholder, kinds.len(), limit);
-    let mut query = sqlx::query(&sql).bind(band_rank(min_band));
+    let sql = list_query(placeholder, limit);
+    let mut listed = Vec::new();
     for kind in kinds {
-        query = query.bind(kind.as_str());
+        let rows = sqlx::query(&sql)
+            .bind(band_rank(min_band))
+            .bind(kind.as_str())
+            .fetch_all(pool)
+            .await
+            .map_err(backend("reading the match pairs"))?;
+        for row in rows {
+            listed.push(MatchPair {
+                kind: kind_of(row.get("kind"))?,
+                a: row.get("a"),
+                b: row.get("b"),
+                band: band_of(row.get("band"))?,
+                score: row.get("score"),
+            });
+        }
     }
-    let rows = query
-        .fetch_all(pool)
-        .await
-        .map_err(backend("reading the match pairs"))?;
-    let mut pairs = Vec::with_capacity(rows.len());
-    for row in rows {
-        pairs.push(MatchPair {
-            kind: kind_of(row.get("kind"))?,
-            a: row.get("a"),
-            b: row.get("b"),
-            band: band_of(row.get("band"))?,
-            score: row.get("score"),
-        });
-    }
-    Ok(pairs)
+    Ok(strongest(listed, limit))
 }
 
 /// How many undecided pairs from `min_band` up each kind holds, for the kinds holding any, in kind
@@ -278,16 +316,21 @@ pub(crate) async fn pairs(
 ///
 /// A [`DbError`] on a read failure.
 pub(crate) async fn counts(pool: &Pool<Postgres>, min_band: MatchBand) -> Result<Vec<(MatchableKind, usize)>, DbError> {
-    let rows = sqlx::query(&count_query(placeholder))
+    let stored = per_kind(pool, &stored_count_query(placeholder), min_band).await?;
+    let decided = per_kind(pool, &decided_query(placeholder), min_band).await?;
+    undecided_counts(stored, &decided)
+}
+
+/// The `(kind, n)` rows a count query from band `min_band` up yields.
+async fn per_kind(pool: &Pool<Postgres>, sql: &str, min_band: MatchBand) -> Result<Vec<(MatchableKind, i64)>, DbError> {
+    let rows = sqlx::query(sql)
         .bind(band_rank(min_band))
         .fetch_all(pool)
         .await
         .map_err(backend("counting the match pairs"))?;
     let mut counts = Vec::with_capacity(rows.len());
     for row in rows {
-        let n: i64 = row.get("n");
-        let n = usize::try_from(n).map_err(|e| DbError::Backend(e.to_string()))?;
-        counts.push((kind_of(row.get("kind"))?, n));
+        counts.push((kind_of(row.get("kind"))?, row.get::<i64, _>("n")));
     }
     Ok(counts)
 }
