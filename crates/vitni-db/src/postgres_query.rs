@@ -238,6 +238,31 @@ pub(crate) async fn find_view_by_id<V: DeserializeOwned>(
     Ok(Some(deserialize_view(table, &payload)?))
 }
 
+/// Loads the views in `table` whose `view_id` is one of `view_ids`, in `view_id` order, skipping the
+/// ids with no view. The ids travel as one array parameter.
+pub(crate) async fn views_by_ids<V: DeserializeOwned>(
+    pool: &Pool<Postgres>,
+    table: &str,
+    view_ids: &[String],
+) -> Result<Vec<V>, DbError> {
+    if view_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let sql = format!("SELECT payload::text AS payload FROM {table} WHERE view_id = ANY($1) ORDER BY view_id");
+    let rows = sqlx::query(&sql)
+        .bind(view_ids)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+
+    let mut views = Vec::with_capacity(rows.len());
+    for row in rows {
+        let payload: String = row.get("payload");
+        views.push(deserialize_view(table, &payload)?);
+    }
+    Ok(views)
+}
+
 /// Loads every view in `table`, ordered by `human_id`.
 pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Postgres>, table: &str) -> Result<Vec<V>, DbError> {
     let sql = format!("SELECT payload::text AS payload FROM {table} ORDER BY human_id");

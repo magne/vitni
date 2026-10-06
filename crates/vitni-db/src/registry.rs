@@ -78,3 +78,24 @@ macro_rules! for_each_db_external_id_aggregate {
 }
 
 pub(crate) use for_each_db_external_id_aggregate;
+
+/// Invokes `$callback!` with one row per aggregate the matching profiles read by id (ADR 0038 §2) —
+/// the matchable kinds. Columns, in order: `(snake, by_ids_fn, table_const, View)`.
+macro_rules! for_each_db_by_ids_aggregate {
+    ($callback:ident) => {
+        $callback! {
+            (person, persons_by_ids, PERSON_VIEW_TABLE, vitni_core::person::PersonView),
+            (family, families_by_ids, FAMILY_VIEW_TABLE, vitni_core::family::FamilyView),
+            (event, events_by_ids, EVENT_VIEW_TABLE, vitni_core::event::EventView),
+            (place, places_by_ids, PLACE_VIEW_TABLE, vitni_core::place::PlaceView),
+            (source, sources_by_ids, SOURCE_VIEW_TABLE, vitni_core::source::SourceView),
+            (repository, repositories_by_ids, REPOSITORY_VIEW_TABLE, vitni_core::repository::RepositoryView),
+            (citation, citations_by_ids, CITATION_VIEW_TABLE, vitni_core::citation::CitationView),
+            (media, media_by_ids, MEDIA_VIEW_TABLE, vitni_core::media::MediaView),
+            (note, notes_by_ids, NOTE_VIEW_TABLE, vitni_core::note::NoteView),
+            (tag, tags_by_ids, TAG_VIEW_TABLE, vitni_core::tag::TagView),
+        }
+    };
+}
+
+pub(crate) use for_each_db_by_ids_aggregate;

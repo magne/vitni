@@ -9,11 +9,12 @@ use std::collections::BTreeSet;
 use uuid::Uuid;
 use vitni_app::{
     AppDefaults, AppError, CheckFinding, DateParts, DraftRecord, IdentityDecision, MatchBand, MatchableKind,
-    MutationMeta, NewEvent, NewParticipation, NewPerson, NewPlace, NewRepository, NewSource, OperatorConfig,
-    PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults, assert_event_date, assert_participation,
-    assert_sex, assess, assess_draft, change_log_for_person, create_event, create_person, create_place,
-    create_repository, create_source, create_tag, distinguish_persons, find_similar, find_similar_to_draft,
-    merge_persons, run_checks, similar_pairs, undo_assertion,
+    MutationMeta, NewCitation, NewEvent, NewParticipation, NewPerson, NewPlace, NewRepository, NewSource,
+    OperatorConfig, PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults, add_name, add_partner,
+    add_place_name, assert_event_date, assert_participation, assert_sex, assess, assess_draft, change_log_for_person,
+    create_citation, create_event, create_family, create_person, create_place, create_repository, create_source,
+    create_tag, distinguish_persons, find_similar, find_similar_to_draft, link_place, merge_persons, run_checks,
+    set_title, similar_pairs, undo_assertion,
 };
 use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
 use vitni_core::ids::AgentId;
@@ -259,6 +260,114 @@ async fn a_changed_birth_date_moves_the_person_to_its_new_decade() {
         records.similar(MatchableKind::Person, &a).await,
         [b],
         "the event's new date rekeyed its principal"
+    );
+}
+
+#[tokio::test]
+async fn a_renamed_place_moves_its_events_to_the_new_name() {
+    let records = Records::new().await;
+    let (ws, session) = (&records.workspace, &records.session);
+    let mut events = Vec::new();
+    for name in ["Nordaas", "Bergen"] {
+        let place = NewPlace {
+            human_id: None,
+            place_type: PlaceType::Farm,
+            name: Some(name.to_owned()),
+        };
+        let place = create_place(ws, session, place, Provenance::default(), &[])
+            .await
+            .expect("place");
+        let new = NewEvent {
+            human_id: None,
+            event_type: EventType::Birth,
+        };
+        let event = create_event(ws, session, new, Provenance::default(), &[])
+            .await
+            .expect("event");
+        records.date(&event, 1850).await;
+        link_place(ws, session, &event, &place, MutationMeta::default())
+            .await
+            .expect("link place");
+        events.push((event, place));
+    }
+    let checked = records.similar(MatchableKind::Event, &events[0].0).await;
+    assert!(checked.is_empty(), "{checked:?}");
+    add_place_name(ws, session, &events[1].1, "Nordaas".to_owned(), MutationMeta::default())
+        .await
+        .expect("name the place");
+    assert_eq!(
+        records.similar(MatchableKind::Event, &events[0].0).await,
+        [events[1].0.clone()],
+        "the place's new name rekeyed the event there"
+    );
+}
+
+#[tokio::test]
+async fn a_renamed_partner_moves_their_family_to_the_new_name() {
+    let records = Records::new().await;
+    let (ws, session) = (&records.workspace, &records.session);
+    let mut families = Vec::new();
+    for (given, surname) in [("Ole", "Olsen"), ("Zacharias", "Quist")] {
+        let partner = records.person(given, surname).await;
+        let family = create_family(ws, session, Provenance::default(), &[])
+            .await
+            .expect("family");
+        add_partner(ws, session, &family, &partner, MutationMeta::default())
+            .await
+            .expect("partner");
+        families.push((family, partner));
+    }
+    let checked = records.similar(MatchableKind::Family, &families[0].0).await;
+    assert!(checked.is_empty(), "{checked:?}");
+    let name = PersonNameParts::simple(Some("Ole".to_owned()), Some("Olsen".to_owned()));
+    add_name(ws, session, &families[1].1, name, MutationMeta::default())
+        .await
+        .expect("name the partner");
+    assert_eq!(
+        records.similar(MatchableKind::Family, &families[0].0).await,
+        [families[1].0.clone()],
+        "the partner's new name rekeyed their family"
+    );
+}
+
+#[tokio::test]
+async fn a_retitled_source_moves_its_citations_to_the_new_title() {
+    let records = Records::new().await;
+    let (ws, session) = (&records.workspace, &records.session);
+    let mut citations = Vec::new();
+    for title in ["Ministerialbok for Fana", "Folketelling 1865"] {
+        let source = NewSource {
+            human_id: None,
+            title: Some(title.to_owned()),
+        };
+        let source = create_source(ws, session, source, Provenance::default(), &[])
+            .await
+            .expect("source");
+        let new = NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: Some("side 12".to_owned()),
+        };
+        let citation = create_citation(ws, session, new, Provenance::default(), &[])
+            .await
+            .expect("citation");
+        citations.push((citation, source));
+    }
+    let checked = records.similar(MatchableKind::Citation, &citations[0].0).await;
+    assert!(checked.is_empty(), "{checked:?}");
+    set_title(
+        ws,
+        session,
+        &citations[1].1,
+        "Ministerialbok for Fana".to_owned(),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("retitle the source");
+    assert_eq!(
+        records.similar(MatchableKind::Citation, &citations[0].0).await,
+        [citations[1].0.clone()],
+        "the source's new title rekeyed its citations"
     );
 }
 

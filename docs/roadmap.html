@@ -636,6 +636,8 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Phase 14 (0.10)</td><td>ADR 0037, 0043</td></tr>
     <tr><td><b><a href="adr/0046-assisted-import-shows-what-it-adds.md">ADR 0046</a></b> &mdash; accepted</td><td>An assisted import shows a host-owned Ready-to-import stage listing each stored record it adds to, with the fields it gains, before it commits; a record adding to none commits with no extra stage</td>
       <td>Phase 14 (0.10)</td><td>ADR 0017, 0040</td></tr>
+    <tr><td><b><a href="adr/0047-record-links-index.md">ADR 0047</a></b> &mdash; accepted</td><td>A derived <code>record_links</code> index holds each live reference (family partner and child, participation, event place, citation source) by target, so profiles are read by record and <code>find_similar</code> reads only what it scores</td>
+      <td>Phase 14 (0.10)</td><td>ADR 0010, 0038, 0039</td></tr>
     <tr><td><b>ADR 0031</b></td><td>Place model for real-world administrative geography: reopen the <code>Multi*</code> geometry variant, add a civil/ecclesiastical/judicial <code>relation</code> to <code>PlaceRef</code>, and carry positional accuracy separately from <code>Confidence</code></td>
       <td>Phase 9 residual closure</td><td>ADR 0024, 0026, 0027</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>

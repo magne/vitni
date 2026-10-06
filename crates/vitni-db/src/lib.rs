@@ -34,6 +34,8 @@ mod postgres_query;
 mod projection_failures;
 mod raw;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
+mod record_links;
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod record_origins;
 mod registry;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
@@ -51,6 +53,8 @@ mod tables;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use match_keys::{DirtyRecord, KeyedRecord};
 pub use raw::{ProjectionRow, RawEvent, RawEventKey, decode_raw_event, event_variants};
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+pub use record_links::RecordLink;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use record_origins::{
     IndexedField, OriginRow, created_key, digest, field_key, indexed_field, resolved_key, single_valued,
