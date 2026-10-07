@@ -1857,11 +1857,9 @@ async fn a_reimport_keeps_an_author_the_user_typed_after_the_export_or_from_an_u
         let graphs = vec![census("S1", "Folketelling 1900 for Mandal")];
         let (plan, _) = dated_import(&workspace, &session, graphs, exported).await;
 
-        assert!(
-            matches!(disposition(&plan, 0, 0), Disposition::Unchanged { .. }),
-            "{exported:?}: {:?}",
-            disposition(&plan, 0, 0)
-        );
+        let Disposition::Unchanged { .. } = disposition(&plan, 0, 0) else {
+            panic!("{exported:?}: expected unchanged: {:?}", disposition(&plan, 0, 0));
+        };
         let summary = source_summary(&workspace, &source).await;
         assert_eq!(summary.author.as_deref(), Some("SSB"));
     }

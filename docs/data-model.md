@@ -710,7 +710,7 @@ file or exhaust its budget, which a re-run would repeat (ADR 0040 §5).
      field's current value, whoever set it — an earlier import, or the user at the keyboard — when the
      file's export date is at or after that value's assertion (ADR 0029 §1). It is left alone when the
      file is older or undated, when it equals the current value, and when the user already retracted
-     or superseded the value this item imported;
+     or superseded the value this item last imported;
    - a new value in a list-valued field (a name, a fact) is added, unless the user retracted or
      superseded that same value from the same item: that row is a **tombstone**, and no later run
      re-asserts the value. A different incoming value is still added, because the source changed.

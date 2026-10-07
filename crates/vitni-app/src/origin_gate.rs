@@ -6,8 +6,10 @@
 //! they assert (`vitni_db::indexed_field`, the same derivation the `record_origins` index uses), and
 //! compares with what earlier runs asserted into that field from the same item:
 //!
-//! - **Already asserted.** A live row with the same digest: the write is a no-op.
-//! - **Corrected by the user.** Single-valued rows exist but none is live: the user's correction stands.
+//! - **Already asserted.** A list-valued row with the same digest that is still live: the write is a
+//!   no-op.
+//! - **Corrected by the user.** The latest single-valued row is no longer live: the user's correction
+//!   stands.
 //! - **Single-valued field with a value.** The field's current value, whoever set it — an earlier run,
 //!   or the user at the keyboard with no row at all — is reconciled by ADR 0029 §1: the same value is a
 //!   no-op; a different one is superseded when the file is at least as recent as its assertion, and left
@@ -312,19 +314,19 @@ async fn decide_field<B: Serialize + DeserializeOwned>(
             &field.field_key,
         )
         .await?;
-    let single_valued = vitni_db::single_valued(&field.field_key);
-    // A list value an import asserted is only ever retracted or superseded by the user (imports
-    // supersede single values only), so a dead row with the same value is a tombstone.
-    if rows
-        .iter()
-        .any(|row| row.digest == field.digest && (row.live || !single_valued))
-    {
-        return Ok(Decision::Skip);
+    if !vitni_db::single_valued(&field.field_key) {
+        // A list value an import asserted is only ever retracted or superseded by the user (imports
+        // supersede single values only), so any row with the same value, live or dead, is on record.
+        return Ok(if rows.iter().any(|row| row.digest == field.digest) {
+            Decision::Skip
+        } else {
+            Decision::Write
+        });
     }
-    if !single_valued {
-        return Ok(Decision::Write);
-    }
-    if !rows.is_empty() && rows.iter().all(|row| !row.live) {
+    // An earlier row can stay live under a later value (an import superseding what the user typed
+    // over it), so only the latest row says whether the user corrected this item's claim, and only
+    // the field's current value says whether the claim is already on record.
+    if rows.last().is_some_and(|row| !row.live) {
         return Ok(Decision::Skip);
     }
     let Some(live) =
@@ -942,6 +944,61 @@ mod tests {
         describe(&workspace, &session, &run, &event, "at church").await;
         assert_eq!(events(&workspace).await, before);
         assert!(!run.started(), "nothing was written, so no run");
+    }
+
+    /// An event the file described as "at home", then the user as "in the barn", then a newer file
+    /// as "at church" — superseding the user's value and leaving the first run's row live.
+    async fn event_redescribed_over_a_typed_value(workspace: &Workspace) -> String {
+        let (session, run) = importer(None);
+        let event = event(workspace, &session, &run).await;
+        describe(workspace, &session, &run, &event, "at home").await;
+        let keyboard = Session::software("keyboard", "0");
+        set_event_description(
+            workspace,
+            &keyboard,
+            &event,
+            "in the barn".to_owned(),
+            MutationMeta::default(),
+        )
+        .await
+        .expect("user edit");
+        let (session, run) = importer(Some(Timestamp::new(datetime!(2100-01-01 00:00 UTC))));
+        describe(workspace, &session, &run, &event, "at church").await;
+        assert_eq!(description(workspace, &event).await.as_deref(), Some("at church"));
+        event
+    }
+
+    #[tokio::test]
+    async fn a_newer_file_reverting_to_an_earlier_runs_value_supersedes_the_current_one() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let event = event_redescribed_over_a_typed_value(&workspace).await;
+
+        let (session, run) = importer(Some(Timestamp::new(datetime!(2100-06-01 00:00 UTC))));
+        describe(&workspace, &session, &run, &event, "at home").await;
+        assert_eq!(description(&workspace, &event).await.as_deref(), Some("at home"));
+    }
+
+    #[tokio::test]
+    async fn a_single_value_the_user_retracted_over_an_older_live_row_is_not_reasserted() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let event = event_redescribed_over_a_typed_value(&workspace).await;
+        let rows = workspace
+            .store()
+            .origin_rows(dataset().as_str(), "I1", Some("event:BIRT:0"), "event.DescriptionSet")
+            .await
+            .expect("rows");
+        let latest = rows.last().expect("row").assertion_id.to_string();
+        let human = Session::software("keyboard", "0");
+        undo_event_assertion(&workspace, &human, &event, &latest, None)
+            .await
+            .expect("undo");
+        let before = events(&workspace).await;
+
+        let (session, run) = importer(Some(Timestamp::new(datetime!(2100-06-01 00:00 UTC))));
+        describe(&workspace, &session, &run, &event, "at church").await;
+        assert_eq!(events(&workspace).await, before, "the user's correction stands");
     }
 
     #[tokio::test]
