@@ -389,12 +389,6 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
 
 ### Bulk import, export & sync
 
-- **Place merge/sync reconciliation prerequisite** — a staged place carries only its name, type and
-  restrictions, so a re-import cannot reach most Place fields; the origin gate already reconciles any
-  single-valued field it is given against the field's current value (ADR 0029 §1). Place's dated
-  multi-valued fields do have the natural match key `Fact` lacks: the effective-from `date`. See
-  [`research/gis-norway.md`](research/gis-norway.md). Resolve-or-create itself is done by origin
-  (#394): a re-import no longer duplicates its places. — #499
 - **Lift `prepare_import_target`** into `vitni-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
 - **No merge/conflict mockup for reconciled fields** — the Phase 10 plan required a merge/conflict view
@@ -477,6 +471,14 @@ does.
 - **`Address` on the Gramps side** — `vitni-gramps-xml` has no `Address` concept at all, so
   `Address.original_text` (which round-trips on the GEDCOM side now) has nowhere to go there; and
   `original_text` has no Gramps DTD equivalent even once an Address type exists.
+- **A place's point is imported but not exported** — GEDCOM `PLAC.MAP` and Gramps `<coord>` reach the
+  place on import, but `place-dto` carries no coordinates, so both exporters write none
+  (`plugins/gedcom-export`, `plugins/gramps-export`). *Shape:* `coordinates` on `place-dto`, emitted as
+  `PLAC.MAP.LATI`/`LONG` and `<coord>`.
+- **Gramps `<placeobj><code>` is not read** — `vitni-gramps-xml` does not parse a place's code, so it
+  never reaches the single-valued `SetCode` the origin gate would reconcile on re-import. GEDCOM has no
+  equivalent. A place's dated names and enclosures need nothing more: neither format dates them, and
+  the gate's list-valued rules already add a new one and keep a retracted one out.
 
 ### Plugin-UI vocabulary
 
