@@ -707,9 +707,10 @@ file or exhaust its budget, which a re-run would repeat (ADR 0040 §5).
    - every write is previewed before it is made (`Store::preview_<aggregate>`), and one whose field
      already carries a live row with the same digest, from the same item, is not written;
    - a changed value in a single-valued field (an event's date, a source's title) supersedes the
-     imported one when the file's export date is at or after it and after the field's current value,
-     whoever set it (ADR 0029 §1). It is left alone when the file is older or undated, and when the
-     user already retracted or superseded that imported value;
+     field's current value, whoever set it — an earlier import, or the user at the keyboard — when the
+     file's export date is at or after that value's assertion (ADR 0029 §1). It is left alone when the
+     file is older or undated, when it equals the current value, and when the user already retracted
+     or superseded the value this item imported;
    - a new value in a list-valued field (a name, a fact) is added, unless the user retracted or
      superseded that same value from the same item: that row is a **tombstone**, and no later run
      re-asserts the value. A different incoming value is still added, because the source changed.
