@@ -469,6 +469,90 @@ async fn re_importing_the_same_gramps_file_emits_no_new_events() {
     );
 }
 
+/// A one-person Gramps document naming `gender` and, when `created` is given, a `<header>` whose
+/// `<created date="…">` is the file's own export date (ADR 0029 §2).
+fn reconcile_doc(created: Option<&str>, gender: &str) -> String {
+    let header = created
+        .map(|date| format!("<header><created date=\"{date}\"/></header>\n"))
+        .unwrap_or_default();
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+{header}<people>
+<person handle="_p1" id="I0001">
+<gender>{gender}</gender>
+<name><first>John</first><surname>Smith</surname></name>
+</person>
+</people>
+</database>
+"#
+    )
+}
+
+/// Imports `doc` into the fixed run dataset and returns the workspace with its one person's sex.
+async fn import_sex(workspace: Workspace, io_dir: &Path, doc: &str) -> (Workspace, Option<vitni_app::Sex>) {
+    let source = write_file(io_dir, "in.gramps", doc.as_bytes());
+    let (_, workspace) = common::host()
+        .run_bulk_import(
+            &common::component("gramps-import"),
+            run_invocation(workspace),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    let persons = list_persons(&workspace).await.expect("persons");
+    assert_eq!(persons.len(), 1, "every import resolves to the one person: {persons:?}");
+    let sex = persons[0].sex.clone();
+    (workspace, sex)
+}
+
+#[tokio::test]
+async fn reimport_reconciles_sex_only_when_the_header_created_date_is_at_least_as_recent() {
+    use vitni_app::Sex;
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+
+    let (workspace, sex) = import_sex(workspace, io_dir.path(), &reconcile_doc(None, "M")).await;
+    assert_eq!(sex, Some(Sex::Male), "first import asserts Male");
+
+    // ADR 0029 §3: a missing export date, or one naming no full day, is additive-only.
+    let (workspace, sex) = import_sex(workspace, io_dir.path(), &reconcile_doc(None, "F")).await;
+    assert_eq!(
+        sex,
+        Some(Sex::Male),
+        "a file with no <created> must not override the live sex"
+    );
+    let (workspace, sex) = import_sex(workspace, io_dir.path(), &reconcile_doc(Some("2100"), "F")).await;
+    assert_eq!(
+        sex,
+        Some(Sex::Male),
+        "a year-only <created> must not override the live sex"
+    );
+    let (workspace, sex) = import_sex(workspace, io_dir.path(), &reconcile_doc(Some("2100-06"), "F")).await;
+    assert_eq!(
+        sex,
+        Some(Sex::Male),
+        "a year-and-month <created> must not override the live sex"
+    );
+
+    // ADR 0029 §1: a stale file changes nothing, a file at least as recent supersedes.
+    let (workspace, sex) = import_sex(workspace, io_dir.path(), &reconcile_doc(Some("2000-01-01"), "F")).await;
+    assert_eq!(
+        sex,
+        Some(Sex::Male),
+        "a stale (older) <created> must not override the live sex"
+    );
+    let (_, sex) = import_sex(workspace, io_dir.path(), &reconcile_doc(Some("2100-01-01"), "F")).await;
+    assert_eq!(
+        sex,
+        Some(Sex::Female),
+        "a fresher (newer) <created> supersedes the live sex"
+    );
+}
+
 #[tokio::test]
 async fn gramps_round_trips_eventref_role_age_attributes_and_note() {
     let host = common::host();
