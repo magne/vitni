@@ -445,10 +445,10 @@ configurable, add an explicit proof-argument aggregate, and complete import beyo
   `AssertionSuperseded` + `EventContext.occurred_at` machinery: the importer threads the file's own
   export date (GEDCOM `HEAD.1 DATE` / Gramps `<header created>`) once per session via a new
   `begin-import` verb (host-api 0.20.0), and supersedes a live single-valued assertion only when its
-  `occurred_at` is at or before that date, else leaves it. First slice: `Person.sex`. Source
-  reconciliation is deferred on its own prerequisite stack (resolve-or-create identity, `ABBR`
-  round-trip, the missing WIT setters, a field-level assertion read path) — tracked in
-  [`docs/issues.md`](issues.md) under *Import, export & plugins → Bulk import, export & sync*.
+  `occurred_at` is at or before that date, else leaves it. First slice: `Person.sex`. Source's
+  bibliographic fields followed once their prerequisites landed: resolve-or-create by origin (ADR
+  0037), the `ABBR` round-trip, staged imports that re-assert every field (ADR 0040), and an origin
+  gate that reconciles against the field's current value even when the user typed it (#498).
 - **Round-trip gaps (host-api 0.21.0, no gating ADR — extends ADR 0013/0018).** GEDCOM `REPO`/`SOUR.REPO`,
   `FAM`-level `SOUR`/`OBJE`/`NOTE`, `FAMS`/`FAMC` back-refs, `OBJE.CAPT`, `Address.original_text` (plus a
   blank-`CONT`-line drop fix), Gramps `<tagref>`, Source `ABBR`/`<sabbrev>`, multiple `NAME` per person

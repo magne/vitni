@@ -20,7 +20,7 @@ use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Res
 use vitni_core::ids::AgentId;
 use vitni_core::matching::{MatchBand, MatchableKind};
 use vitni_core::person::PersonView;
-use vitni_core::provenance::{Agent, AgentKind};
+use vitni_core::provenance::{Agent, AgentKind, Timestamp};
 
 fn operator() -> OperatorConfig {
     OperatorConfig {
@@ -1782,4 +1782,86 @@ async fn same_for_the_group_on_a_pair_outside_any_group_decides_nothing() {
         .expect("question")
         .expect("S2 is still open");
     assert_eq!(second.group.map(|group| group.remaining), Some(1));
+}
+
+/// An importer's session writing a fresh run of `dataset` from a file exported at `exported`.
+fn dated_importer(dataset: DatasetId, exported: Timestamp) -> Session {
+    let session = importer(dataset);
+    session.import_run().expect("run").set_file_asserted_at(Some(exported));
+    session
+}
+
+/// Imports `graphs` from a file exported at `exported`, returning the plan and what it committed.
+async fn dated_import(
+    workspace: &Workspace,
+    session: &Session,
+    graphs: Vec<RecordGraph>,
+    exported: Option<Timestamp>,
+) -> (ImportPlan, CommitOutcome) {
+    let plan = plan_import(workspace, session, graphs, exported).await.expect("plan");
+    let outcome = commit_import(workspace, session, &plan, &Provenance::default(), &mut RunToEnd)
+        .await
+        .expect("commit");
+    (plan, outcome)
+}
+
+/// Imports a census without an author, then types the author `author` at the keyboard; returns the
+/// source.
+async fn census_with_typed_author(workspace: &Workspace, author: &str) -> String {
+    let mut graph = census("S1", "Folketelling 1900 for Mandal");
+    if let EntityFields::Source(source) = &mut graph.entities[0].fields {
+        source.author = None;
+    }
+    let (_, outcome) = dated_import(workspace, &importer(dataset(1)), vec![graph], None).await;
+    let source = committed_id(&outcome, 0);
+    vitni_app::set_source_author(workspace, &human(), &source, author.to_owned(), MutationMeta::default())
+        .await
+        .expect("author");
+    source
+}
+
+fn at_year(year: i32) -> Timestamp {
+    let date = time::Date::from_calendar_date(year, time::Month::January, 1).expect("date");
+    Timestamp::new(date.midnight().assume_utc())
+}
+
+#[tokio::test]
+async fn a_reimport_supersedes_an_author_the_user_typed_before_the_export() {
+    let (workspace, _dir) = workspace().await;
+    let source = census_with_typed_author(&workspace, "SSB").await;
+
+    let exported = at_year(2100);
+    let session = dated_importer(dataset(1), exported);
+    let graphs = vec![census("S1", "Folketelling 1900 for Mandal")];
+    let (plan, _) = dated_import(&workspace, &session, graphs, Some(exported)).await;
+
+    let Disposition::Update { fields, .. } = disposition(&plan, 0, 0) else {
+        panic!("expected an update: {:?}", disposition(&plan, 0, 0));
+    };
+    assert_eq!(fields, &["source.AuthorSet".to_owned()]);
+    let summary = source_summary(&workspace, &source).await;
+    assert_eq!(summary.author.as_deref(), Some("Statistisk sentralbyrå"));
+}
+
+#[tokio::test]
+async fn a_reimport_keeps_an_author_the_user_typed_after_the_export_or_from_an_undated_file() {
+    let (workspace, _dir) = workspace().await;
+    let source = census_with_typed_author(&workspace, "SSB").await;
+    let before = events(&workspace).await;
+
+    for exported in [Some(at_year(2000)), None] {
+        let session = match exported {
+            Some(exported) => dated_importer(dataset(1), exported),
+            None => importer(dataset(1)),
+        };
+        let graphs = vec![census("S1", "Folketelling 1900 for Mandal")];
+        let (plan, _) = dated_import(&workspace, &session, graphs, exported).await;
+
+        let Disposition::Unchanged { .. } = disposition(&plan, 0, 0) else {
+            panic!("{exported:?}: expected unchanged: {:?}", disposition(&plan, 0, 0));
+        };
+        let summary = source_summary(&workspace, &source).await;
+        assert_eq!(summary.author.as_deref(), Some("SSB"));
+    }
+    assert_eq!(events(&workspace).await, before, "nothing was written");
 }

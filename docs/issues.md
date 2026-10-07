@@ -389,16 +389,9 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
 
 ### Bulk import, export & sync
 
-- **Source merge/sync reconciliation prerequisite** — `set-source-title`/`set-source-abbrev` WIT verbs,
-  GEDCOM `ABBR` / Gramps `<sabbrev>` round-trip, and a field-level `AssertionId` + `occurred_at` read
-  path. The ADR 0029 timestamp-gated rule cannot target Source's bibliographic fields
-  (`title`/`author`/`pub_info`/`abbrev`) without them. Resolve-or-create itself is done by origin
-  (#394), and an imported value is now reconciled against the earlier import's assertion, whose id
-  and time `record_origins` holds; a value the user typed has no origin row, so the gap is reconciling
-  against that. — #498
-- **Place merge/sync reconciliation prerequisite** — the same remaining gaps for Place: no WIT verbs for
-  most Place fields, and no read path exposing a field's live `AssertionId` **together with** that
-  assertion's `occurred_at`, without which the timestamp gate cannot be evaluated at all. Place's dated
+- **Place merge/sync reconciliation prerequisite** — a staged place carries only its name, type and
+  restrictions, so a re-import cannot reach most Place fields; the origin gate already reconciles any
+  single-valued field it is given against the field's current value (ADR 0029 §1). Place's dated
   multi-valued fields do have the natural match key `Fact` lacks: the effective-from `date`. See
   [`research/gis-norway.md`](research/gis-norway.md). Resolve-or-create itself is done by origin
   (#394): a re-import no longer duplicates its places. — #499

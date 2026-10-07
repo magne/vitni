@@ -1373,24 +1373,36 @@ pub(crate) async fn assertion_occurred_at(
     Ok(None)
 }
 
-/// The `occurred_at` of the most recent uncorrected assertion into the field `field_key` (see
-/// `vitni_db::field_key`) of `aggregate_type`'s instance `aggregate_id`, whoever made it — the
-/// workspace's current value of a single-valued field, which a re-import's timestamp rule compares
-/// the file's export date against (ADR 0029 §1). `None` when no live assertion sets the field.
+/// The most recent uncorrected assertion into a field, as a re-import's timestamp rule reads it
+/// (ADR 0029 §1).
+#[derive(Debug)]
+pub(crate) struct LiveAssertion {
+    /// The assertion a supersede targets.
+    pub assertion_id: AssertionId,
+    /// When it was asserted, compared against the file's export date.
+    pub occurred_at: Timestamp,
+    /// Its stored event, to compare its value with the incoming one.
+    pub payload: String,
+}
+
+/// The most recent uncorrected assertion into the field `field_key` (see `vitni_db::field_key`) of
+/// `aggregate_type`'s instance `aggregate_id`, whoever made it — the workspace's current value of a
+/// single-valued field, which a re-import's timestamp rule reconciles against (ADR 0029 §1). `None`
+/// when no live assertion sets the field.
 ///
 /// # Errors
 ///
 /// [`AppError`] on a store/parse failure.
-pub(crate) async fn field_asserted_at(
+pub(crate) async fn live_field_assertion(
     store: &Store,
     aggregate_type: &str,
     aggregate_id: &str,
     field_key: &str,
-) -> Result<Option<Timestamp>, AppError> {
+) -> Result<Option<LiveAssertion>, AppError> {
     let events = store.read_aggregate_events(aggregate_type, aggregate_id).await?;
     let corrected = retracted_targets(&events)?;
     let mut latest = None;
-    for event in &events {
+    for event in events {
         let value: serde_json::Value = serde_json::from_str(&event.payload).map_err(|e| {
             AppError::Db(DbError::Backend(format!(
                 "decoding {} event: {e}",
@@ -1400,11 +1412,15 @@ pub(crate) async fn field_asserted_at(
         if vitni_db::field_key(aggregate_type, &value).as_deref() != Some(field_key) {
             continue;
         }
-        let header = parse_header(event)?;
+        let header = parse_header(&event)?;
         if corrected.contains(&header.assertion_id.to_string()) {
             continue;
         }
-        latest = Some(header.context.occurred_at);
+        latest = Some(LiveAssertion {
+            assertion_id: AssertionId::from_uuid(header.assertion_id),
+            occurred_at: header.context.occurred_at,
+            payload: event.payload,
+        });
     }
     Ok(latest)
 }
