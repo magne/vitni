@@ -61,6 +61,26 @@ pub struct GeoCoordinates {
     pub longitude: Microdegrees,
 }
 
+impl GeoCoordinates {
+    /// The point `latitude`/`longitude` decimal degrees name, rounded to the microdegree — the inverse
+    /// of [`Microdegrees::to_degrees`], for a boundary that carries `f64` (the plugin host's
+    /// `coordinates`). `None` unless both are finite, the latitude within ±90 and the longitude
+    /// within ±180.
+    #[must_use]
+    pub fn from_degrees(latitude: f64, longitude: f64) -> Option<Self> {
+        let within = |degrees: f64, limit: f64| degrees.is_finite() && degrees.abs() <= limit;
+        if !within(latitude, 90.0) || !within(longitude, 180.0) {
+            return None;
+        }
+        // Formatting to six places rounds to the microdegree; the decimal parser takes it from there.
+        let microdegrees = |degrees: f64| Microdegrees::from_str(&format!("{degrees:.6}")).ok();
+        Some(Self {
+            latitude: microdegrees(latitude)?,
+            longitude: microdegrees(longitude)?,
+        })
+    }
+}
+
 /// A place's geographic shape (data-model §7, ADR 0024): a point, or a polygon (an exterior ring
 /// plus optional holes), over the same integer [`Microdegrees`] coordinates as [`GeoCoordinates`] so
 /// the value keeps `Eq` and a byte-stable serialization. `Point` subsumes the historical undated
@@ -158,6 +178,33 @@ impl PlaceGeometry {
 mod tests {
     use super::{GeoCoordinates, Microdegrees, PlaceGeometry};
     use std::str::FromStr;
+
+    #[test]
+    fn degrees_round_to_the_nearest_microdegree() {
+        let point = GeoCoordinates::from_degrees(58.028, -7.000_000_4).expect("point");
+        assert_eq!(point.latitude, Microdegrees::from_microdegrees(58_028_000));
+        assert_eq!(point.longitude, Microdegrees::from_microdegrees(-7_000_000));
+        let edge = GeoCoordinates::from_degrees(-90.0, 180.0).expect("edge");
+        assert_eq!(edge.latitude.to_degrees(), -90.0);
+        assert_eq!(edge.longitude.to_degrees(), 180.0);
+    }
+
+    #[test]
+    fn degrees_out_of_range_or_not_finite_are_no_point() {
+        for (latitude, longitude) in [
+            (90.000_1, 0.0),
+            (0.0, -180.000_1),
+            (f64::NAN, 0.0),
+            (0.0, f64::INFINITY),
+            (f64::NEG_INFINITY, 0.0),
+        ] {
+            assert_eq!(
+                GeoCoordinates::from_degrees(latitude, longitude),
+                None,
+                "{latitude}, {longitude}"
+            );
+        }
+    }
 
     #[test]
     fn parses_and_renders_a_coordinate() {
