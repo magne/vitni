@@ -7,10 +7,11 @@
 //! compares with what earlier runs asserted into that field from the same item:
 //!
 //! - **Already asserted.** A live row with the same digest: the write is a no-op.
-//! - **Changed, single-valued field.** The latest live row differs: the file's claim supersedes it when
-//!   the file is at least as recent as that assertion and as the field's current value, whoever set it
-//!   (ADR 0029 §1). When the file is older, or has no export date (§3), the write is skipped.
 //! - **Corrected by the user.** Single-valued rows exist but none is live: the user's correction stands.
+//! - **Single-valued field with a value.** The field's current value, whoever set it — an earlier run,
+//!   or the user at the keyboard with no row at all — is reconciled by ADR 0029 §1: the same value is a
+//!   no-op; a different one is superseded when the file is at least as recent as its assertion, and left
+//!   alone when the file is older or has no export date (§3).
 //! - **Tombstoned.** A list-valued row with the same digest that is no longer live: the user retracted
 //!   or superseded that value, and a later run does not re-assert it.
 //! - **Otherwise** (a new item, a new value in a list-valued field): the write goes ahead.
@@ -23,15 +24,17 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use uuid::Uuid;
 use vitni_core::assertions::{Envelope, EventBody};
 use vitni_core::ids::{AssertionId, ImportRunId};
 use vitni_core::import_run::{ImportRunCommand, ImportRunCommandEnvelope, NewImportRun};
-use vitni_core::origin::{DatasetId, RecordOrigin};
+use vitni_core::origin::{ContentDigest, DatasetId, RecordOrigin};
 use vitni_core::provenance::{AssertionMeta, Timestamp};
-use vitni_db::{IndexedField, Store};
+use vitni_db::{DbError, IndexedField, Store};
 
 use crate::error::AppError;
+use crate::history::LiveAssertion;
 use crate::session::Session;
 use crate::use_case::{self, Provenance};
 
@@ -180,7 +183,7 @@ impl DryRun {
 /// imports write to.
 pub(crate) trait GatedEnvelope: Sized + Clone {
     /// The aggregate's event body.
-    type Body: EventBody + Serialize;
+    type Body: EventBody + Serialize + DeserializeOwned;
     /// The aggregate's `Aggregate::TYPE`.
     const KIND: &'static str;
 
@@ -265,7 +268,7 @@ struct Target<'a> {
 }
 
 /// Decides one write, returning the decision and the field the write asserts, if any.
-async fn decide<B: EventBody + Serialize>(
+async fn decide<B: EventBody + Serialize + DeserializeOwned>(
     store: &Store,
     session: &Session,
     meta: &mut AssertionMeta,
@@ -288,12 +291,13 @@ async fn decide<B: EventBody + Serialize>(
     let Some(field) = primary else {
         return Ok((Decision::Write, None));
     };
-    let decision = decide_field(store, session, origin, &field, target).await?;
+    let decision = decide_field::<B>(store, session, origin, &field, target).await?;
     Ok((decision, Some(field.field_key)))
 }
 
-/// Decides a write asserting `field` from `origin`, against what earlier runs asserted there.
-async fn decide_field(
+/// Decides a write asserting `field` from `origin`, against what earlier runs asserted there and,
+/// for a single-valued field, against the field's current value, whoever set it.
+async fn decide_field<B: Serialize + DeserializeOwned>(
     store: &Store,
     session: &Session,
     origin: &RecordOrigin,
@@ -320,24 +324,32 @@ async fn decide_field(
     if !single_valued {
         return Ok(Decision::Write);
     }
-    let Some(latest) = rows.iter().rev().find(|row| row.live) else {
-        return Ok(if rows.is_empty() {
-            Decision::Write
-        } else {
-            Decision::Skip
-        });
+    if !rows.is_empty() && rows.iter().all(|row| !row.live) {
+        return Ok(Decision::Skip);
+    }
+    let Some(live) =
+        crate::history::live_field_assertion(store, target.kind, target.aggregate_id, &field.field_key).await?
+    else {
+        return Ok(Decision::Write);
     };
+    if live_digest::<B>(&live)? == field.digest {
+        return Ok(Decision::Skip);
+    }
     let Some(file_asserted_at) = session.import_run().and_then(|run| run.file_asserted_at()) else {
         return Ok(Decision::Skip);
     };
-    let current_at =
-        crate::history::field_asserted_at(store, target.kind, target.aggregate_id, &field.field_key).await?;
-    let current_is_older = current_at.is_none_or(|current_at| current_at <= file_asserted_at);
-    Ok(if latest.occurred_at <= file_asserted_at && current_is_older {
-        Decision::Supersede(latest.assertion_id)
+    Ok(if live.occurred_at <= file_asserted_at {
+        Decision::Supersede(live.assertion_id)
     } else {
         Decision::Skip
     })
+}
+
+/// The digest of the value `live` asserts, comparable with an [`IndexedField`]'s.
+fn live_digest<B: Serialize + DeserializeOwned>(live: &LiveAssertion) -> Result<ContentDigest, AppError> {
+    let event: Envelope<B> = serde_json::from_str(&live.payload)
+        .map_err(|e| AppError::Db(DbError::Backend(format!("decoding a field's live assertion: {e}"))))?;
+    Ok(vitni_db::digest(&[&event.body])?)
 }
 
 /// Implements [`GatedEnvelope`] for one aggregate's command envelope. The `supersede` arm names the
@@ -861,6 +873,75 @@ mod tests {
         describe(&workspace, &session, &rerun, &event, "at church").await;
         assert_eq!(description(&workspace, &event).await.as_deref(), Some("in the barn"));
         assert_eq!(events(&workspace).await, before, "the user's later value stands");
+    }
+
+    /// An imported event whose description the user then types at the keyboard, as `text`.
+    async fn event_with_typed_description(workspace: &Workspace, text: &str) -> String {
+        let (session, run) = importer(None);
+        let event = event(workspace, &session, &run).await;
+        let keyboard = Session::software("keyboard", "0");
+        set_event_description(workspace, &keyboard, &event, text.to_owned(), MutationMeta::default())
+            .await
+            .expect("user edit");
+        event
+    }
+
+    #[tokio::test]
+    async fn a_value_the_user_typed_is_superseded_when_the_file_is_newer() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let event = event_with_typed_description(&workspace, "in the barn").await;
+
+        let (session, run) = importer(Some(Timestamp::new(datetime!(2100-01-01 00:00 UTC))));
+        describe(&workspace, &session, &run, &event, "at church").await;
+        assert_eq!(description(&workspace, &event).await.as_deref(), Some("at church"));
+        let view = workspace
+            .store()
+            .find_event(&event)
+            .await
+            .expect("find")
+            .expect("event");
+        let id = view.event_id().expect("event id").to_string();
+        let stream = workspace
+            .store()
+            .read_aggregate_events("event", &id)
+            .await
+            .expect("stream");
+        let types: Vec<&str> = stream.iter().map(|event| event.event_type.as_str()).collect();
+        assert_eq!(
+            types.get(types.len().saturating_sub(2)..),
+            Some(&["AssertionSuperseded", "DescriptionSet"][..]),
+            "the typed description was superseded, not overwritten: {types:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_value_the_user_typed_is_left_alone_when_the_file_is_older_or_undated() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let event = event_with_typed_description(&workspace, "in the barn").await;
+        let before = events(&workspace).await;
+
+        for file_asserted_at in [Some(Timestamp::new(datetime!(2000-01-01 00:00 UTC))), None] {
+            let (session, run) = importer(file_asserted_at);
+            describe(&workspace, &session, &run, &event, "at church").await;
+            assert_eq!(description(&workspace, &event).await.as_deref(), Some("in the barn"));
+            assert!(!run.started(), "nothing was written, so no run");
+        }
+        assert_eq!(events(&workspace).await, before);
+    }
+
+    #[tokio::test]
+    async fn a_value_the_user_typed_that_the_file_also_carries_is_not_written_again() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let event = event_with_typed_description(&workspace, "at church").await;
+        let before = events(&workspace).await;
+
+        let (session, run) = importer(Some(Timestamp::new(datetime!(2100-01-01 00:00 UTC))));
+        describe(&workspace, &session, &run, &event, "at church").await;
+        assert_eq!(events(&workspace).await, before);
+        assert!(!run.started(), "nothing was written, so no run");
     }
 
     #[tokio::test]
